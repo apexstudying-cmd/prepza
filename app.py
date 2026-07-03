@@ -1,4 +1,5 @@
 import os
+import re
 import base64
 import requests
 from datetime import datetime
@@ -15,6 +16,8 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
 
 db = SQLAlchemy(app)
+
+EMAIL_REGEX = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 class User(db.Model):
@@ -70,15 +73,38 @@ def db_check():
 
 @app.route("/signup", methods=["POST"])
 def signup():
-    data = request.get_json()
-    email = data.get("email")
-    password = data.get("password")
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
     year = data.get("year")
     semester = data.get("semester")
 
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
+    # --- Email validation ---
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+    if not EMAIL_REGEX.match(email):
+        return jsonify({"error": "Email format is invalid"}), 400
 
+    # --- Password validation ---
+    if not password:
+        return jsonify({"error": "Password is required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters long"}), 400
+
+    # --- Year validation (optional field, but must be valid if provided) ---
+    if year is not None:
+        if not isinstance(year, int) or year < 1 or year > 4:
+            return jsonify({"error": "Year must be a number between 1 and 4"}), 400
+
+    # --- Semester validation (optional field, but must be valid if provided) ---
+    if semester is not None:
+        if not isinstance(semester, int) or semester not in (1, 2):
+            return jsonify({"error": "Semester must be 1 or 2"}), 400
+
+    # --- Duplicate check ---
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
         return jsonify({"error": "An account with this email already exists"}), 409
@@ -97,9 +123,15 @@ def signup():
 
 @app.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
-    email = data.get("email")
-    password = data.get("password")
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
 
     user = User.query.filter_by(email=email).first()
 
