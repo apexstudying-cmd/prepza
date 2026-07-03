@@ -2,8 +2,9 @@ import os
 import base64
 import requests
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,6 +12,7 @@ load_dotenv()
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
 
 db = SQLAlchemy(app)
 
@@ -28,17 +30,14 @@ class Payment(db.Model):
     phone_number = db.Column(db.String(20), nullable=False)
     amount = db.Column(db.Integer, nullable=False)
     checkout_request_id = db.Column(db.String(100), unique=True, nullable=True)
-    status = db.Column(db.String(20), default="pending")  # pending, success, failed
+    status = db.Column(db.String(20), default="pending")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-
-# ---------- M-Pesa helper functions ----------
 
 def get_mpesa_access_token():
     consumer_key = os.environ.get("MPESA_CONSUMER_KEY")
     consumer_secret = os.environ.get("MPESA_CONSUMER_SECRET")
     url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
-
     response = requests.get(url, auth=(consumer_key, consumer_secret))
     response.raise_for_status()
     return response.json()["access_token"]
@@ -52,8 +51,6 @@ def generate_stk_password():
     password = base64.b64encode(raw.encode()).decode()
     return password, timestamp
 
-
-# ---------- Routes ----------
 
 @app.route("/")
 def home():
@@ -69,15 +66,78 @@ def db_check():
         return f"Database connection failed: {str(e)}"
 
 
+# ---------- Auth routes ----------
+
+@app.route("/signup", methods=["POST"])
+def signup():
+    data = request.get_json()
+    email = data.get("email")
+    password = data.get("password")
+    year = data.get("year")
+    semester = data.get("semester")
+
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
+
+    existing_user = User.query.filter_by(email=email).first()
+    if existing_user:
+        return jsonify({"error": "An account with this email already exists"}), 409
+
+    new_user = User(
+        email=email,
+        password_hash=generate_password_hash(password),
+        year=year,
+        semester=semester,
+    )
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({"message": "Account created successfully", "user_id": new_user.id}), 201
+
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    email = data.get("email")
+    password = data.get("password")
+
+    user = User.query.filter_by(email=email).first()
+
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({"error": "Invalid email or password"}), 401
+
+    session["user_id"] = user.id
+    return jsonify({"message": "Logged in successfully", "user_id": user.id})
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.pop("user_id", None)
+    return jsonify({"message": "Logged out successfully"})
+
+
+@app.route("/me")
+def me():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    user = User.query.get(user_id)
+    return jsonify({
+        "id": user.id,
+        "email": user.email,
+        "year": user.year,
+        "semester": user.semester,
+    })
+
+
+# ---------- M-Pesa routes ----------
+
 @app.route("/mpesa/stk-push", methods=["POST"])
 def stk_push():
-    """
-    Triggers an STK push prompt to a phone number.
-    For sandbox testing, always use: 254708374149
-    """
     data = request.get_json()
     phone_number = data.get("phone_number")
-    amount = data.get("amount", 1)  # default to 1 KES for sandbox testing
+    amount = data.get("amount", 1)
 
     try:
         access_token = get_mpesa_access_token()
@@ -102,7 +162,6 @@ def stk_push():
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
 
-        # Save a pending payment record so we can track it
         if "CheckoutRequestID" in response_data:
             payment = Payment(
                 phone_number=phone_number,
@@ -121,12 +180,8 @@ def stk_push():
 
 @app.route("/mpesa/callback", methods=["POST"])
 def mpesa_callback():
-    """
-    Safaricom calls this URL automatically after the customer
-    enters their PIN (or cancels/times out).
-    """
     data = request.get_json()
-    print("MPESA CALLBACK RECEIVED:", data)  # helpful for debugging in Render logs
+    print("MPESA CALLBACK RECEIVED:", data)
 
     try:
         stk_callback = data["Body"]["stkCallback"]
@@ -144,7 +199,6 @@ def mpesa_callback():
     except Exception as e:
         print("Callback processing error:", str(e))
 
-    # Always respond 200 — Safaricom retries aggressively if you don't
     return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 
 
