@@ -1,7 +1,10 @@
 import os
 import re
 import base64
+import secrets
+import smtplib
 import requests
+from email.mime.text import MIMEText
 from datetime import datetime
 from flask import Flask, request, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
@@ -19,6 +22,9 @@ db = SQLAlchemy(app)
 
 EMAIL_REGEX = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
+# Base URL used to build verification links - update this when you get a custom domain
+BASE_URL = os.environ.get("BASE_URL", "https://prepza-sf60.onrender.com")
+
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -26,6 +32,8 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     year = db.Column(db.Integer, nullable=True)
     semester = db.Column(db.Integer, nullable=True)
+    email_verified = db.Column(db.Boolean, default=False)
+    verification_token = db.Column(db.String(64), nullable=True)
 
 
 class Payment(db.Model):
@@ -55,6 +63,32 @@ def generate_stk_password():
     return password, timestamp
 
 
+def send_verification_email(to_email, token):
+    mail_username = os.environ.get("MAIL_USERNAME")
+    mail_password = os.environ.get("MAIL_PASSWORD")
+
+    verify_link = f"{BASE_URL}/verify-email?token={token}"
+
+    subject = "Verify your Prepza account"
+    body = f"""Welcome to Prepza!
+
+Please verify your email by clicking the link below:
+{verify_link}
+
+If you didn't sign up for Prepza, you can ignore this email.
+"""
+
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = mail_username
+    msg["To"] = to_email
+
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()
+        server.login(mail_username, mail_password)
+        server.sendmail(mail_username, to_email, msg.as_string())
+
+
 @app.route("/")
 def home():
     return "Prepza is alive!"
@@ -82,43 +116,69 @@ def signup():
     year = data.get("year")
     semester = data.get("semester")
 
-    # --- Email validation ---
     if not email:
         return jsonify({"error": "Email is required"}), 400
     if not EMAIL_REGEX.match(email):
         return jsonify({"error": "Email format is invalid"}), 400
 
-    # --- Password validation ---
     if not password:
         return jsonify({"error": "Password is required"}), 400
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters long"}), 400
 
-    # --- Year validation (optional field, but must be valid if provided) ---
     if year is not None:
         if not isinstance(year, int) or year < 1 or year > 4:
             return jsonify({"error": "Year must be a number between 1 and 4"}), 400
 
-    # --- Semester validation (optional field, but must be valid if provided) ---
     if semester is not None:
         if not isinstance(semester, int) or semester not in (1, 2):
             return jsonify({"error": "Semester must be 1 or 2"}), 400
 
-    # --- Duplicate check ---
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
         return jsonify({"error": "An account with this email already exists"}), 409
+
+    token = secrets.token_urlsafe(32)
 
     new_user = User(
         email=email,
         password_hash=generate_password_hash(password),
         year=year,
         semester=semester,
+        email_verified=False,
+        verification_token=token,
     )
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({"message": "Account created successfully", "user_id": new_user.id}), 201
+    try:
+        send_verification_email(email, token)
+        email_status = "Verification email sent"
+    except Exception as e:
+        email_status = f"Account created but verification email failed to send: {str(e)}"
+
+    return jsonify({
+        "message": "Account created successfully",
+        "user_id": new_user.id,
+        "email_status": email_status,
+    }), 201
+
+
+@app.route("/verify-email")
+def verify_email():
+    token = request.args.get("token")
+    if not token:
+        return jsonify({"error": "Missing verification token"}), 400
+
+    user = User.query.filter_by(verification_token=token).first()
+    if not user:
+        return jsonify({"error": "Invalid or expired verification link"}), 400
+
+    user.email_verified = True
+    user.verification_token = None
+    db.session.commit()
+
+    return jsonify({"message": "Email verified successfully! You can now log in."})
 
 
 @app.route("/login", methods=["POST"])
@@ -137,6 +197,9 @@ def login():
 
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({"error": "Invalid email or password"}), 401
+
+    if not user.email_verified:
+        return jsonify({"error": "Please verify your email before logging in"}), 403
 
     session["user_id"] = user.id
     return jsonify({"message": "Logged in successfully", "user_id": user.id})
@@ -160,6 +223,7 @@ def me():
         "email": user.email,
         "year": user.year,
         "semester": user.semester,
+        "email_verified": user.email_verified,
     })
 
 
