@@ -2,9 +2,7 @@ import os
 import re
 import base64
 import secrets
-import smtplib
 import requests
-from email.mime.text import MIMEText
 from datetime import datetime
 from flask import Flask, request, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
@@ -22,7 +20,6 @@ db = SQLAlchemy(app)
 
 EMAIL_REGEX = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
-# Base URL used to build verification links - update this when you get a custom domain
 BASE_URL = os.environ.get("BASE_URL", "https://prepza-sf60.onrender.com")
 
 
@@ -64,29 +61,35 @@ def generate_stk_password():
 
 
 def send_verification_email(to_email, token):
-    mail_username = os.environ.get("MAIL_USERNAME")
-    mail_password = os.environ.get("MAIL_PASSWORD")
-
+    """
+    Sends the verification email via Brevo's HTTP API instead of SMTP.
+    We switched to this because Render (and most cloud hosts) block
+    outbound SMTP ports as a common anti-spam measure - HTTPS is never
+    blocked, so an API-based email service works reliably in production.
+    """
+    api_key = os.environ.get("BREVO_API_KEY")
     verify_link = f"{BASE_URL}/verify-email?token={token}"
 
-    subject = "Verify your Prepza account"
-    body = f"""Welcome to Prepza!
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": api_key,
+        "content-type": "application/json",
+    }
+    payload = {
+        "sender": {"name": "Prepza", "email": "prepza2026@gmail.com"},
+        "to": [{"email": to_email}],
+        "subject": "Verify your Prepza account",
+        "htmlContent": f"""
+            <p>Welcome to Prepza!</p>
+            <p>Please verify your email by clicking the link below:</p>
+            <p><a href="{verify_link}">{verify_link}</a></p>
+            <p>If you didn't sign up for Prepza, you can ignore this email.</p>
+        """,
+    }
 
-Please verify your email by clicking the link below:
-{verify_link}
-
-If you didn't sign up for Prepza, you can ignore this email.
-"""
-
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = mail_username
-    msg["To"] = to_email
-
-    with smtplib.SMTP("smtp.gmail.com", 587) as server:
-        server.starttls()
-        server.login(mail_username, mail_password)
-        server.sendmail(mail_username, to_email, msg.as_string())
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()  # raises an error if Brevo rejects the request
 
 
 @app.route("/")
