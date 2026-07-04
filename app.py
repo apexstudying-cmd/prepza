@@ -4,6 +4,7 @@ import base64
 import secrets
 import requests
 from datetime import datetime
+from functools import wraps
 from flask import Flask, request, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -19,7 +20,6 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
 db = SQLAlchemy(app)
 
 EMAIL_REGEX = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-
 BASE_URL = os.environ.get("BASE_URL", "https://prepza-sf60.onrender.com")
 
 
@@ -33,8 +33,29 @@ class User(db.Model):
     verification_token = db.Column(db.String(64), nullable=True)
 
 
+class Unit(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(20), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    semester = db.Column(db.Integer, nullable=False)
+
+
+class ContentItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
+    content_type = db.Column(db.String(20), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    file_url = db.Column(db.String(500), nullable=True)
+    paper_year = db.Column(db.Integer, nullable=True)
+    is_downloadable = db.Column(db.Boolean, default=True)
+    price = db.Column(db.Integer, default=0)
+
+
 class Payment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    content_item_id = db.Column(db.Integer, db.ForeignKey("content_item.id"), nullable=True)
     phone_number = db.Column(db.String(20), nullable=False)
     amount = db.Column(db.Integer, nullable=False)
     checkout_request_id = db.Column(db.String(100), unique=True, nullable=True)
@@ -61,12 +82,6 @@ def generate_stk_password():
 
 
 def send_verification_email(to_email, token):
-    """
-    Sends the verification email via Brevo's HTTP API instead of SMTP.
-    We switched to this because Render (and most cloud hosts) block
-    outbound SMTP ports as a common anti-spam measure - HTTPS is never
-    blocked, so an API-based email service works reliably in production.
-    """
     api_key = os.environ.get("BREVO_API_KEY")
     verify_link = f"{BASE_URL}/verify-email?token={token}"
 
@@ -89,7 +104,31 @@ def send_verification_email(to_email, token):
     }
 
     response = requests.post(url, json=payload, headers=headers)
-    response.raise_for_status()  # raises an error if Brevo rejects the request
+    response.raise_for_status()
+
+
+def require_admin(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        provided_secret = request.headers.get("X-Admin-Secret")
+        real_secret = os.environ.get("ADMIN_SECRET")
+        if not provided_secret or provided_secret != real_secret:
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
+def has_access(user_id, content_item):
+    if content_item.price == 0:
+        return True
+
+    successful_payment = Payment.query.filter_by(
+        user_id=user_id,
+        content_item_id=content_item.id,
+        status="success",
+    ).first()
+
+    return successful_payment is not None
 
 
 @app.route("/")
@@ -230,13 +269,70 @@ def me():
     })
 
 
-# ---------- M-Pesa routes ----------
+# ---------- Content routes (student-facing) ----------
 
-@app.route("/mpesa/stk-push", methods=["POST"])
-def stk_push():
-    data = request.get_json()
+@app.route("/units")
+def list_units():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    user = User.query.get(user_id)
+    units = Unit.query.filter_by(year=user.year, semester=user.semester).all()
+
+    return jsonify([
+        {"id": u.id, "code": u.code, "name": u.name}
+        for u in units
+    ])
+
+
+@app.route("/units/<int:unit_id>/content")
+def unit_content(unit_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    unit = Unit.query.get(unit_id)
+    if not unit:
+        return jsonify({"error": "Unit not found"}), 404
+
+    items = ContentItem.query.filter_by(unit_id=unit_id).all()
+
+    grouped = {"past_paper": [], "notes": [], "qna": []}
+    for item in items:
+        unlocked = has_access(user_id, item)
+        grouped[item.content_type].append({
+            "id": item.id,
+            "title": item.title,
+            "paper_year": item.paper_year,
+            "price": item.price,
+            "unlocked": unlocked,
+            "file_url": item.file_url if (unlocked and item.is_downloadable) else None,
+        })
+
+    return jsonify({"unit": unit.code, "content": grouped})
+
+
+@app.route("/content/<int:content_id>/pay", methods=["POST"])
+def pay_for_content(content_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    content_item = ContentItem.query.get(content_id)
+    if not content_item:
+        return jsonify({"error": "Content not found"}), 404
+
+    if content_item.price == 0:
+        return jsonify({"error": "This content is free, no payment needed"}), 400
+
+    if has_access(user_id, content_item):
+        return jsonify({"message": "You already have access to this content"}), 200
+
+    data = request.get_json(silent=True) or {}
     phone_number = data.get("phone_number")
-    amount = data.get("amount", 1)
+    if not phone_number:
+        return jsonify({"error": "phone_number is required"}), 400
 
     try:
         access_token = get_mpesa_access_token()
@@ -249,13 +345,13 @@ def stk_push():
             "Password": password,
             "Timestamp": timestamp,
             "TransactionType": "CustomerPayBillOnline",
-            "Amount": amount,
+            "Amount": content_item.price,
             "PartyA": phone_number,
             "PartyB": os.environ.get("MPESA_SHORTCODE"),
             "PhoneNumber": phone_number,
             "CallBackURL": os.environ.get("MPESA_CALLBACK_URL"),
             "AccountReference": "Prepza",
-            "TransactionDesc": "Prepza content payment",
+            "TransactionDesc": f"Prepza - {content_item.title}",
         }
 
         response = requests.post(url, json=payload, headers=headers)
@@ -263,8 +359,10 @@ def stk_push():
 
         if "CheckoutRequestID" in response_data:
             payment = Payment(
+                user_id=user_id,
+                content_item_id=content_id,
                 phone_number=phone_number,
-                amount=amount,
+                amount=content_item.price,
                 checkout_request_id=response_data["CheckoutRequestID"],
                 status="pending",
             )
@@ -299,6 +397,111 @@ def mpesa_callback():
         print("Callback processing error:", str(e))
 
     return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+
+# ---------- Admin routes (protected) ----------
+
+@app.route("/admin/units", methods=["POST"])
+@require_admin
+def admin_add_unit():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    code = data.get("code")
+    name = data.get("name")
+    year = data.get("year")
+    semester = data.get("semester")
+
+    if not code or not name or year is None or semester is None:
+        return jsonify({"error": "code, name, year, and semester are all required"}), 400
+
+    unit = Unit(code=code, name=name, year=year, semester=semester)
+    db.session.add(unit)
+    db.session.commit()
+
+    return jsonify({"message": "Unit added", "unit_id": unit.id}), 201
+
+
+@app.route("/admin/units", methods=["GET"])
+@require_admin
+def admin_list_units():
+    units = Unit.query.all()
+    return jsonify([
+        {"id": u.id, "code": u.code, "name": u.name, "year": u.year, "semester": u.semester}
+        for u in units
+    ])
+
+
+@app.route("/admin/content", methods=["POST"])
+@require_admin
+def admin_add_content():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    unit_id = data.get("unit_id")
+    content_type = data.get("content_type")
+    title = data.get("title")
+    file_url = data.get("file_url")
+    paper_year = data.get("paper_year")
+    price = data.get("price", 0)
+
+    if not unit_id or not content_type or not title:
+        return jsonify({"error": "unit_id, content_type, and title are required"}), 400
+
+    if content_type not in ("past_paper", "notes", "qna"):
+        return jsonify({"error": "content_type must be past_paper, notes, or qna"}), 400
+
+    unit = Unit.query.get(unit_id)
+    if not unit:
+        return jsonify({"error": "Unit not found"}), 404
+
+    is_downloadable = False if content_type == "qna" else True
+
+    item = ContentItem(
+        unit_id=unit_id,
+        content_type=content_type,
+        title=title,
+        file_url=file_url,
+        paper_year=paper_year,
+        is_downloadable=is_downloadable,
+        price=price,
+    )
+    db.session.add(item)
+    db.session.commit()
+
+    return jsonify({"message": "Content added", "content_id": item.id}), 201
+
+
+@app.route("/admin/content/<int:content_id>", methods=["PATCH"])
+@require_admin
+def admin_update_content(content_id):
+    item = ContentItem.query.get(content_id)
+    if not item:
+        return jsonify({"error": "Content not found"}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    if "price" in data:
+        item.price = data["price"]
+    if "title" in data:
+        item.title = data["title"]
+    if "file_url" in data:
+        item.file_url = data["file_url"]
+    if "paper_year" in data:
+        item.paper_year = data["paper_year"]
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Content updated",
+        "content_id": item.id,
+        "price": item.price,
+        "title": item.title,
+    })
 
 
 if __name__ == "__main__":
