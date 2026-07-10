@@ -349,7 +349,7 @@ def pay_for_content(content_id):
             "PartyA": phone_number,
             "PartyB": os.environ.get("MPESA_SHORTCODE"),
             "PhoneNumber": phone_number,
-            "CallBackURL": os.environ.get("MPESA_CALLBACK_URL"),
+            "CallBackURL": f"{os.environ.get('MPESA_CALLBACK_URL')}/{os.environ.get('MPESA_CALLBACK_SECRET')}",
             "AccountReference": "Prepza",
             "TransactionDesc": f"Prepza - {content_item.title}",
         }
@@ -375,9 +375,17 @@ def pay_for_content(content_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/mpesa/callback", methods=["POST"])
-def mpesa_callback():
-    data = request.get_json()
+@app.route("/mpesa/callback/<callback_token>", methods=["POST"])
+def mpesa_callback(callback_token):
+    expected_token = os.environ.get("MPESA_CALLBACK_SECRET")
+    if not expected_token or callback_token != expected_token:
+        # Don't reveal *why* it failed - just look like a normal 404 to anyone probing the URL
+        return jsonify({"error": "Not found"}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"ResultCode": 1, "ResultDesc": "Invalid payload"}), 400
+
     print("MPESA CALLBACK RECEIVED:", data)
 
     try:
@@ -389,7 +397,7 @@ def mpesa_callback():
             checkout_request_id=checkout_request_id
         ).first()
 
-        if payment:
+        if payment and payment.status == "pending":
             payment.status = "success" if result_code == 0 else "failed"
             db.session.commit()
 
