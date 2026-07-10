@@ -349,7 +349,7 @@ def pay_for_content(content_id):
             "PartyA": phone_number,
             "PartyB": os.environ.get("MPESA_SHORTCODE"),
             "PhoneNumber": phone_number,
-            "CallBackURL": f"{os.environ.get('MPESA_CALLBACK_URL')}/{os.environ.get('MPESA_CALLBACK_SECRET')}",
+            "CallBackURL": f"{os.environ.get('MPESA_CALLBACK_URL', '').strip()}/{os.environ.get('MPESA_CALLBACK_SECRET', '').strip()}",
             "AccountReference": "Prepza",
             "TransactionDesc": f"Prepza - {content_item.title}",
         }
