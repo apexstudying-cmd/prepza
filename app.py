@@ -354,6 +354,8 @@ def pay_for_content(content_id):
             "TransactionDesc": f"Prepza - {content_item.title}",
         }
 
+        print("DEBUG CallBackURL being sent:", repr(payload["CallBackURL"]))
+
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
 
