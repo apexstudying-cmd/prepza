@@ -169,12 +169,6 @@ def has_access(user_id, content_item):
     return successful_payment is not None
 
 
-@app.route("/sentry-test")
-def sentry_test():
-    1 / 0  # Deliberately crashes to confirm Sentry catches it
-    return "unreachable"
-
-
 @app.route("/")
 def home():
     return "Prepza is alive!"
