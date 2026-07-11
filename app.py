@@ -3,7 +3,7 @@ import re
 import base64
 import secrets
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
@@ -31,6 +31,8 @@ class User(db.Model):
     semester = db.Column(db.Integer, nullable=True)
     email_verified = db.Column(db.Boolean, default=False)
     verification_token = db.Column(db.String(64), nullable=True)
+    reset_token = db.Column(db.String(64), nullable=True)
+    reset_token_expiry = db.Column(db.DateTime, nullable=True)
 
 
 class Unit(db.Model):
@@ -100,6 +102,32 @@ def send_verification_email(to_email, token):
             <p>Please verify your email by clicking the link below:</p>
             <p><a href="{verify_link}">{verify_link}</a></p>
             <p>If you didn't sign up for Prepza, you can ignore this email.</p>
+        """,
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()
+
+
+def send_reset_email(to_email, token):
+    api_key = os.environ.get("BREVO_API_KEY")
+    reset_link = f"{BASE_URL}/reset-password?token={token}"
+
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": api_key,
+        "content-type": "application/json",
+    }
+    payload = {
+        "sender": {"name": "Prepza", "email": "prepza2026@gmail.com"},
+        "to": [{"email": to_email}],
+        "subject": "Reset your Prepza password",
+        "htmlContent": f"""
+            <p>We received a request to reset your Prepza password.</p>
+            <p>Click the link below to choose a new password. This link expires in 1 hour.</p>
+            <p><a href="{reset_link}">{reset_link}</a></p>
+            <p>If you did not request this, you can safely ignore this email.</p>
         """,
     }
 
@@ -221,6 +249,66 @@ def verify_email():
     db.session.commit()
 
     return jsonify({"message": "Email verified successfully! You can now log in."})
+
+
+@app.route("/forgot-password", methods=["POST"])
+def forgot_password():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    user = User.query.filter_by(email=email).first()
+
+    # Always return the same message whether or not the account exists -
+    # this stops people from using this endpoint to check which emails are registered.
+    generic_response = jsonify({
+        "message": "If an account with that email exists, a reset link has been sent."
+    })
+
+    if not user:
+        return generic_response
+
+    token = secrets.token_urlsafe(32)
+    user.reset_token = token
+    user.reset_token_expiry = datetime.utcnow() + timedelta(hours=1)
+    db.session.commit()
+
+    try:
+        send_reset_email(email, token)
+    except Exception:
+        pass  # Don't reveal email-sending failures - keep the response generic either way
+
+    return generic_response
+
+
+@app.route("/reset-password", methods=["POST"])
+def reset_password():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    token = data.get("token") or ""
+    new_password = data.get("new_password") or ""
+
+    if not token:
+        return jsonify({"error": "Missing reset token"}), 400
+    if len(new_password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters long"}), 400
+
+    user = User.query.filter_by(reset_token=token).first()
+    if not user or not user.reset_token_expiry or user.reset_token_expiry < datetime.utcnow():
+        return jsonify({"error": "Invalid or expired reset link"}), 400
+
+    user.password_hash = generate_password_hash(new_password)
+    user.reset_token = None
+    user.reset_token_expiry = None
+    db.session.commit()
+
+    return jsonify({"message": "Password reset successfully. You can now log in."})
 
 
 @app.route("/login", methods=["POST"])
