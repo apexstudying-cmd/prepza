@@ -569,6 +569,35 @@ def admin_list_units():
     ])
 
 
+@app.route("/admin/content", methods=["GET"])
+@require_admin
+def admin_list_content():
+    unit_id = request.args.get("unit_id", type=int)
+
+    query = ContentItem.query
+    if unit_id:
+        query = query.filter_by(unit_id=unit_id)
+
+    items = query.order_by(ContentItem.id.desc()).all()
+
+    result = []
+    for item in items:
+        unit = Unit.query.get(item.unit_id)
+        result.append({
+            "id": item.id,
+            "unit_id": item.unit_id,
+            "unit_code": unit.code if unit else None,
+            "content_type": item.content_type,
+            "title": item.title,
+            "file_url": item.file_url,
+            "paper_year": item.paper_year,
+            "is_downloadable": item.is_downloadable,
+            "price": item.price,
+        })
+
+    return jsonify({"content": result})
+
+
 @app.route("/admin/content", methods=["POST"])
 @require_admin
 def admin_add_content():
