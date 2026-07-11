@@ -640,5 +640,55 @@ def admin_update_content(content_id):
     })
 
 
+@app.route("/admin/payments", methods=["GET"])
+@require_admin
+def admin_list_payments():
+    status_filter = request.args.get("status")
+
+    query = Payment.query
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+
+    payments = query.order_by(Payment.created_at.desc()).all()
+
+    result = []
+    for p in payments:
+        content_item = ContentItem.query.get(p.content_item_id)
+        result.append({
+            "id": p.id,
+            "user_id": p.user_id,
+            "content_title": content_item.title if content_item else None,
+            "phone_number": p.phone_number,
+            "amount": p.amount,
+            "status": p.status,
+            "checkout_request_id": p.checkout_request_id,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        })
+
+    return jsonify({"payments": result})
+
+
+@app.route("/admin/payments/<int:payment_id>/refund", methods=["POST"])
+@require_admin
+def admin_refund_payment(payment_id):
+    payment = Payment.query.get(payment_id)
+    if not payment:
+        return jsonify({"error": "Payment not found"}), 404
+
+    if payment.status != "success":
+        return jsonify({
+            "error": f"Only successful payments can be refunded (current status: {payment.status})"
+        }), 400
+
+    payment.status = "refunded"
+    db.session.commit()
+
+    return jsonify({
+        "message": "Payment marked as refunded. Access to this content has been revoked.",
+        "payment_id": payment.id,
+        "note": "This only updates records in Prepza. You must still send the actual M-Pesa refund manually.",
+    })
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
