@@ -357,6 +357,33 @@ def me():
     })
 
 
+@app.route("/payment-history")
+def payment_history():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    payments = (
+        Payment.query.filter_by(user_id=user_id)
+        .order_by(Payment.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for p in payments:
+        content_item = ContentItem.query.get(p.content_item_id)
+        result.append({
+            "id": p.id,
+            "content_title": content_item.title if content_item else None,
+            "amount": p.amount,
+            "status": p.status,
+            "checkout_request_id": p.checkout_request_id,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        })
+
+    return jsonify({"payments": result})
+
+
 # ---------- Content routes (student-facing) ----------
 
 @app.route("/units")
