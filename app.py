@@ -16,6 +16,7 @@ app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 db = SQLAlchemy(app)
 
@@ -331,6 +332,7 @@ def login():
     if not user.email_verified:
         return jsonify({"error": "Please verify your email before logging in"}), 403
 
+    session.permanent = True
     session["user_id"] = user.id
     return jsonify({"message": "Logged in successfully", "user_id": user.id})
 
