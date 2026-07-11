@@ -379,7 +379,7 @@ def pay_for_content(content_id):
 
 @app.route("/mpesa/callback/<callback_token>", methods=["POST"])
 def mpesa_callback(callback_token):
-    expected_token = os.environ.get("MPESA_CALLBACK_SECRET")
+    expected_token = os.environ.get("MPESA_CALLBACK_SECRET", "").strip()
     if not expected_token or callback_token != expected_token:
         # Don't reveal *why* it failed - just look like a normal 404 to anyone probing the URL
         return jsonify({"error": "Not found"}), 404
