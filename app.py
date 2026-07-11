@@ -3,6 +3,7 @@ import re
 import base64
 import secrets
 import requests
+import sentry_sdk
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify, session
@@ -11,6 +12,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 
 load_dotenv()
+
+sentry_dsn = os.environ.get("SENTRY_DSN")
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        traces_sample_rate=0,  # Error monitoring only, no performance tracing
+        send_default_pii=False,  # Skip sending user IPs/headers by default
+    )
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
