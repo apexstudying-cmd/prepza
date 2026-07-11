@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prepza — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #141A2E;
+    --ink-soft: #2A3352;
+    --paper: #F6F3EC;
+    --paper-raised: #FFFFFF;
+    --line: #E2DDD0;
+    --gold: #C89B3C;
+    --gold-soft: #F1E4C4;
+    --success: #2F7A4F;
+    --success-bg: #E4F0E8;
+    --danger: #B23A3A;
+    --danger-bg: #F6E5E4;
+    --muted: #6B7280;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--gold-soft); }
+
+  .mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Gate screen ---------- */
+  #gate {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .gate-card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 40px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 1px 3px rgba(20,26,46,0.06);
+  }
+
+  .gate-card h1 {
+    font-family: 'Source Serif 4', serif;
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+
+  .gate-card p.sub {
+    color: var(--muted);
+    font-size: 13.5px;
+    margin: 0 0 24px;
+  }
+
+  input[type="password"], input[type="text"], input[type="number"], input[type="url"], select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    background: var(--paper-raised);
+    color: var(--ink);
+  }
+
+  input:focus, select:focus {
+    outline: 2px solid var(--gold);
+    outline-offset: 1px;
+    border-color: var(--gold);
+  }
+
+  button {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 13.5px;
+    border: none;
+    border-radius: 7px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: transform 0.06s ease, opacity 0.15s ease;
+  }
+  button:active { transform: scale(0.98); }
+
+  .btn-primary { background: var(--ink); color: var(--paper); width: 100%; margin-top: 16px; }
+  .btn-primary:hover { background: var(--ink-soft); }
+
+  .btn-gold { background: var(--gold); color: var(--ink); }
+  .btn-gold:hover { opacity: 0.88; }
+
+  .btn-outline { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+  .btn-outline:hover { border-color: var(--ink); }
+
+  .btn-danger-outline { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+  .btn-danger-outline:hover { background: var(--danger-bg); }
+
+  #gate-error {
+    color: var(--danger);
+    font-size: 13px;
+    margin-top: 10px;
+    display: none;
+  }
+
+  /* ---------- App shell ---------- */
+  #app { display: none; min-height: 100vh; }
+
+  .topbar {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .topbar .brand {
+    font-family: 'Source Serif 4', serif;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+
+  .topbar .brand span { color: var(--gold); }
+
+  .topbar .logout {
+    background: transparent;
+    border: 1px solid rgba(246,243,236,0.25);
+    color: var(--paper);
+    font-size: 12.5px;
+    padding: 6px 12px;
+  }
+  .topbar .logout:hover { border-color: var(--gold); color: var(--gold); }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--paper-raised);
+    border-bottom: 1px solid var(--line);
+    padding: 0 28px;
+  }
+
+  .tab {
+    padding: 14px 6px;
+    margin-right: 24px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    user-select: none;
+  }
+
+  .tab.active { color: var(--ink); border-bottom-color: var(--gold); }
+  .tab:hover:not(.active) { color: var(--ink-soft); }
+
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px;
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 22px;
+    margin-bottom: 22px;
+  }
+
+  .card h2 {
+    font-family: 'Source Serif 4', serif;
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+
+  .card p.hint {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 18px;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-weight: 600;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(200,155,60,0.05); }
+
+  .stamp {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 20px;
+    border: 1.5px solid currentColor;
+    transform: rotate(-2deg);
+  }
+  .stamp.success { color: var(--success); background: var(--success-bg); }
+  .stamp.pending { color: var(--muted); background: #EFEDE6; border-style: dashed; }
+  .stamp.failed { color: var(--danger); background: var(--danger-bg); }
+  .stamp.refunded { color: var(--gold); background: var(--gold-soft); }
+
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar select { width: auto; min-width: 160px; }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    box-shadow: 0 4px 16px rgba(20,26,46,0.25);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+    max-width: 360px;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: var(--danger); }
+  .toast.success { background: var(--success); }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="gate-card">
+    <h1>Prepza <span style="color:var(--gold)">·</span> Admin</h1>
+    <p class="sub">Enter your admin secret to continue. It's kept only in this browser tab.</p>
+    <label for="secret-input">Admin secret</label>
+    <input type="password" id="secret-input" placeholder="••••••••••••••••" autocomplete="off">
+    <button class="btn-primary" onclick="attemptLogin()">Unlock panel</button>
+    <p id="gate-error">Incorrect secret, or the server didn't respond.</p>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="brand">Prepza <span>·</span> Admin</div>
+    <button class="logout" onclick="logout()">Lock panel</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-panel="units">Units</div>
+    <div class="tab" data-panel="content">Content</div>
+    <div class="tab" data-panel="payments">Payments</div>
+  </div>
+
+  <main>
+
+    <!-- UNITS PANEL -->
+    <section class="panel active" id="panel-units">
+      <div class="card">
+        <h2>Add a unit</h2>
+        <p class="hint">Units are the course codes students see (e.g. SMA 104).</p>
+        <div class="form-row">
+          <div><label>Code</label><input type="text" id="unit-code" placeholder="SMA 104"></div>
+          <div><label>Name</label><input type="text" id="unit-name" placeholder="Calculus II"></div>
+          <div><label>Year</label><input type="number" id="unit-year" min="1" max="4" placeholder="1"></div>
+          <div><label>Semester</label>
+            <select id="unit-semester"><option value="1">1</option><option value="2">2</option></select>
+          </div>
+        </div>
+        <button class="btn-gold" onclick="addUnit()">Add unit</button>
+      </div>
+
+      <div class="card">
+        <h2>All units</h2>
+        <div id="units-table"></div>
+      </div>
+    </section>
+
+    <!-- CONTENT PANEL -->
+    <section class="panel" id="panel-content">
+      <div class="card">
+        <h2>Add content</h2>
+        <p class="hint">Q&amp;A content is automatically set to view-only, never downloadable.</p>
+        <div class="form-row">
+          <div>
+            <label>Unit</label>
+            <select id="content-unit-id"></select>
+          </div>
+          <div>
+            <label>Type</label>
+            <select id="content-type">
+              <option value="past_paper">Past paper</option>
+              <option value="notes">Notes</option>
+              <option value="qna">Q&amp;A</option>
+            </select>
+          </div>
+          <div><label>Paper year</label><input type="number" id="content-paper-year" placeholder="2023"></div>
+          <div><label>Price (KES)</label><input type="number" id="content-price" placeholder="0" value="0"></div>
+        </div>
+        <div class="form-row" style="grid-template-columns: 2fr 1fr;">
+          <div><label>Title</label><input type="text" id="content-title" placeholder="2023 Past Paper"></div>
+          <div><label>File URL</label><input type="url" id="content-file-url" placeholder="https://..."></div>
+        </div>
+        <button class="btn-gold" onclick="addContent()">Add content</button>
+      </div>
+
+      <div class="card">
+        <h2>Content library</h2>
+        <div class="toolbar">
+          <select id="content-filter-unit" onchange="loadContent()"></select>
+        </div>
+        <div id="content-table"></div>
+      </div>
+    </section>
+
+    <!-- PAYMENTS PANEL -->
+    <section class="panel" id="panel-payments">
+      <div class="card">
+        <h2>Payments</h2>
+        <div class="toolbar">
+          <select id="payment-filter-status" onchange="loadPayments()">
+            <option value="">All statuses</option>
+            <option value="success">Success</option>
+            <option value="pending">Pending</option>
+            <option value="failed">Failed</option>
+            <option value="refunded">Refunded</option>
+          </select>
+        </div>
+        <div id="payments-table"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_BASE = window.location.origin;
+let ADMIN_SECRET = sessionStorage.getItem("prepza_admin_secret") || "";
+
+function toast(msg, type) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = "toast show" + (type ? " " + type : "");
+  setTimeout(() => { el.className = "toast" + (type ? " " + type : ""); }, 3200);
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(API_BASE + path, {
+    ...options,
+    headers: {
+      "X-Admin-Secret": ADMIN_SECRET,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
+async function attemptLogin() {
+  const input = document.getElementById("secret-input");
+  ADMIN_SECRET = input.value.trim();
+  const errorEl = document.getElementById("gate-error");
+  errorEl.style.display = "none";
+
+  if (!ADMIN_SECRET) return;
+
+  try {
+    await api("/admin/units");
+    sessionStorage.setItem("prepza_admin_secret", ADMIN_SECRET);
+    document.getElementById("gate").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    initApp();
+  } catch (e) {
+    errorEl.style.display = "block";
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem("prepza_admin_secret");
+  ADMIN_SECRET = "";
+  document.getElementById("secret-input").value = "";
+  document.getElementById("app").style.display = "none";
+  document.getElementById("gate").style.display = "flex";
+}
+
+function initApp() {
+  loadUnits();
+  loadContent();
+  loadPayments();
+}
+
+// ---------- Tabs ----------
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("panel-" + tab.dataset.panel).classList.add("active");
+  });
+});
+
+// ---------- Units ----------
+async function loadUnits() {
+  try {
+    const units = await api("/admin/units");
+    renderUnitsTable(units);
+    populateUnitDropdowns(units);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+function renderUnitsTable(units) {
+  const el = document.getElementById("units-table");
+  if (!units.length) {
+    el.innerHTML = `<div class="empty-state">No units yet. Add one above to get started.</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <table>
+      <thead><tr><th>ID</th><th>Code</th><th>Name</th><th>Year</th><th>Sem</th></tr></thead>
+      <tbody>
+        ${units.map(u => `
+          <tr>
+            <td class="mono">${u.id}</td>
+            <td class="mono">${escapeHtml(u.code)}</td>
+            <td>${escapeHtml(u.name)}</td>
+            <td class="mono">${u.year}</td>
+            <td class="mono">${u.semester}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>`;
+}
+
+function populateUnitDropdowns(units) {
+  const options = units.map(u => `<option value="${u.id}">${escapeHtml(u.code)} — ${escapeHtml(u.name)}</option>`).join("");
+  document.getElementById("content-unit-id").innerHTML = options;
+  document.getElementById("content-filter-unit").innerHTML = `<option value="">All units</option>` + options;
+}
+
+async function addUnit() {
+  const code = document.getElementById("unit-code").value.trim();
+  const name = document.getElementById("unit-name").value.trim();
+  const year = parseInt(document.getElementById("unit-year").value, 10);
+  const semester = parseInt(document.getElementById("unit-semester").value, 10);
+
+  if (!code || !name || !year) {
+    toast("Code, name, and year are required.", "error");
+    return;
+  }
+
+  try {
+    await api("/admin/units", { method: "POST", body: JSON.stringify({ code, name, year, semester }) });
+    toast(`Unit ${code} added.`, "success");
+    document.getElementById("unit-code").value = "";
+    document.getElementById("unit-name").value = "";
+    document.getElementById("unit-year").value = "";
+    loadUnits();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+// ---------- Content ----------
+async function loadContent() {
+  const unitId = document.getElementById("content-filter-unit").value;
+  const query = unitId ? `?unit_id=${unitId}` : "";
+  try {
+    const data = await api("/admin/content" + query);
+    renderContentTable(data.content);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+function renderContentTable(items) {
+  const el = document.getElementById("content-table");
+  if (!items.length) {
+    el.innerHTML = `<div class="empty-state">No content items yet.</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <table>
+      <thead><tr><th>ID</th><th>Unit</th><th>Type</th><th>Title</th><th>Price</th><th>Downloadable</th></tr></thead>
+      <tbody>
+        ${items.map(c => `
+          <tr>
+            <td class="mono">${c.id}</td>
+            <td class="mono">${escapeHtml(c.unit_code || "—")}</td>
+            <td>${escapeHtml(c.content_type)}</td>
+            <td>${escapeHtml(c.title)}</td>
+            <td class="mono">
+              <input type="number" value="${c.price}" style="width:80px;padding:5px 8px;"
+                onchange="updatePrice(${c.id}, this.value)">
+            </td>
+            <td>${c.is_downloadable ? "Yes" : "No"}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function updatePrice(contentId, newPrice) {
+  try {
+    await api(`/admin/content/${contentId}`, { method: "PATCH", body: JSON.stringify({ price: parseInt(newPrice, 10) }) });
+    toast("Price updated.", "success");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+async function addContent() {
+  const unit_id = parseInt(document.getElementById("content-unit-id").value, 10);
+  const content_type = document.getElementById("content-type").value;
+  const title = document.getElementById("content-title").value.trim();
+  const file_url = document.getElementById("content-file-url").value.trim();
+  const paper_year = document.getElementById("content-paper-year").value;
+  const price = parseInt(document.getElementById("content-price").value || "0", 10);
+
+  if (!unit_id || !title) {
+    toast("Unit and title are required.", "error");
+    return;
+  }
+
+  try {
+    await api("/admin/content", {
+      method: "POST",
+      body: JSON.stringify({
+        unit_id, content_type, title, file_url,
+        paper_year: paper_year ? parseInt(paper_year, 10) : null,
+        price,
+      }),
+    });
+    toast(`"${title}" added.`, "success");
+    document.getElementById("content-title").value = "";
+    document.getElementById("content-file-url").value = "";
+    loadContent();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+// ---------- Payments ----------
+async function loadPayments() {
+  const status = document.getElementById("payment-filter-status").value;
+  const query = status ? `?status=${status}` : "";
+  try {
+    const data = await api("/admin/payments" + query);
+    renderPaymentsTable(data.payments);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+function renderPaymentsTable(payments) {
+  const el = document.getElementById("payments-table");
+  if (!payments.length) {
+    el.innerHTML = `<div class="empty-state">No payments match this filter.</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <table>
+      <thead><tr><th>ID</th><th>User</th><th>Item</th><th>Phone</th><th>Amount</th><th>Status</th><th>Date</th><th></th></tr></thead>
+      <tbody>
+        ${payments.map(p => `
+          <tr>
+            <td class="mono">${p.id}</td>
+            <td class="mono">${p.user_id ?? "—"}</td>
+            <td>${escapeHtml(p.content_title || "—")}</td>
+            <td class="mono">${escapeHtml(p.phone_number)}</td>
+            <td class="mono">KES ${p.amount}</td>
+            <td><span class="stamp ${p.status}">${p.status}</span></td>
+            <td class="mono">${formatDate(p.created_at)}</td>
+            <td>
+              ${p.status === "success"
+                ? `<button class="btn-danger-outline" onclick="refundPayment(${p.id})">Refund</button>`
+                : ""}
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function refundPayment(paymentId) {
+  if (!confirm("Mark this payment as refunded? This revokes the student's access immediately. You still need to send the actual M-Pesa refund yourself.")) return;
+  try {
+    const data = await api(`/admin/payments/${paymentId}/refund`, { method: "POST" });
+    toast(data.message, "success");
+    loadPayments();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+// ---------- Helpers ----------
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str).replace(/[&<>"']/g, m => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[m]));
+}
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" });
+}
+
+// ---------- Boot ----------
+if (ADMIN_SECRET) {
+  api("/admin/units")
+    .then(() => {
+      document.getElementById("gate").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      initApp();
+    })
+    .catch(() => {
+      sessionStorage.removeItem("prepza_admin_secret");
+    });
+}
+
+document.getElementById("secret-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") attemptLogin();
+});
+</script>
+
+</body>
+</html>
