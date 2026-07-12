@@ -169,6 +169,41 @@ def has_access(user_id, content_item):
     return successful_payment is not None
 
 
+def get_signed_url(bucket_path, expires_in=60):
+    """
+    Generates a temporary signed URL for a file stored in the private
+    "content" bucket on Supabase Storage. Returns None if anything fails,
+    rather than raising - a missing file shouldn't crash the whole request.
+    """
+    if not bucket_path:
+        return None
+
+    supabase_url = os.environ.get("SUPABASE_URL", "").strip()
+    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
+    if not supabase_url or not service_key:
+        print("WARNING: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set")
+        return None
+
+    sign_url = f"{supabase_url}/storage/v1/object/sign/content/{bucket_path}"
+    headers = {
+        "Authorization": f"Bearer {service_key}",
+        "apikey": service_key,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response = requests.post(sign_url, json={"expiresIn": expires_in}, headers=headers)
+        response.raise_for_status()
+        signed_path = response.json().get("signedURL")
+        if not signed_path:
+            return None
+        return f"{supabase_url}/storage/v1{signed_path}"
+    except Exception as e:
+        print(f"ERROR generating signed URL for {bucket_path}: {e}")
+        return None
+
+
 @app.route("/")
 def home():
     return "Prepza is alive!"
@@ -433,7 +468,7 @@ def unit_content(unit_id):
             "paper_year": item.paper_year,
             "price": item.price,
             "unlocked": unlocked,
-            "file_url": item.file_url if (unlocked and item.is_downloadable) else None,
+            "file_url": get_signed_url(item.file_url) if (unlocked and item.is_downloadable) else None,
         })
 
     return jsonify({"unit": unit.code, "content": grouped})
