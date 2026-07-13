@@ -4,9 +4,10 @@ import base64
 import secrets
 import requests
 import sentry_sdk
+import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, Response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
@@ -202,6 +203,89 @@ def get_signed_url(bucket_path, expires_in=60):
     except Exception as e:
         print(f"ERROR generating signed URL for {bucket_path}: {e}")
         return None
+
+
+def fetch_private_file_bytes(bucket_path):
+    """
+    Downloads the raw file bytes for a path in the private "content" bucket,
+    using the service role key. This happens server-side only - the raw
+    bytes/URL are never sent to the browser, only the watermarked, rendered
+    page images are (see render_watermarked_page + the /view/page route).
+    Returns None if anything fails.
+    """
+    if not bucket_path:
+        return None
+
+    supabase_url = os.environ.get("SUPABASE_URL", "").strip()
+    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
+    if not supabase_url or not service_key:
+        print("WARNING: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set")
+        return None
+
+    download_url = f"{supabase_url}/storage/v1/object/content/{bucket_path}"
+    headers = {
+        "Authorization": f"Bearer {service_key}",
+        "apikey": service_key,
+    }
+
+    try:
+        response = requests.get(download_url, headers=headers)
+        response.raise_for_status()
+        return response.content
+    except Exception as e:
+        print(f"ERROR fetching private file {bucket_path}: {e}")
+        return None
+
+
+def render_watermarked_page(pdf_bytes, page_num, watermark_text, zoom=2.0):
+    """
+    Renders a single page of a PDF as PNG bytes with a tiled, semi-transparent
+    watermark (the viewing student's email) stamped across it.
+
+    The watermark is drawn directly onto the PDF page BEFORE rasterizing, so
+    it's baked into the same pixels as the real content - not a separate
+    layer that could be cropped or edited out afterward.
+    """
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+    if page_num < 0 or page_num >= doc.page_count:
+        total_pages = doc.page_count
+        doc.close()
+        raise ValueError(f"page_num {page_num} out of range (doc has {total_pages} pages)")
+
+    page = doc[page_num]
+    rect = page.rect
+    tile_w, tile_h = 220, 140
+    angle = 30
+    morph_matrix = fitz.Matrix(angle)
+
+    y = 20
+    row = 0
+    while y < rect.height:
+        x = -60 if row % 2 == 0 else -60 + tile_w / 2
+        while x < rect.width:
+            point = fitz.Point(x, y)
+            page.insert_text(
+                point,
+                watermark_text,
+                fontsize=11,
+                color=(0.6, 0.6, 0.6),
+                fill_opacity=0.4,
+                overlay=False,  # draw BEHIND existing content - hidden under
+                                # real text, visible only in whitespace/margins
+                morph=(point, morph_matrix),
+            )
+            x += tile_w
+        y += tile_h
+        row += 1
+
+    mat = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=mat)
+    png_bytes = pix.tobytes("png")
+    page_count = doc.page_count
+    doc.close()
+    return png_bytes, page_count
 
 
 @app.route("/")
@@ -472,6 +556,86 @@ def unit_content(unit_id):
         })
 
     return jsonify({"unit": unit.code, "content": grouped})
+
+
+@app.route("/content/<int:content_id>/view/info")
+def content_view_info(content_id):
+    """
+    For view-only Q&A content: confirms the logged-in user has paid access,
+    then returns basic info (page count) so the frontend viewer knows how
+    many pages to request. Does NOT return any file URL - the raw file is
+    never sent to the browser for this content type.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    content_item = ContentItem.query.get(content_id)
+    if not content_item:
+        return jsonify({"error": "Content not found"}), 404
+
+    if content_item.content_type != "qna":
+        return jsonify({"error": "This endpoint is only for view-only Q&A content"}), 400
+
+    if not has_access(user_id, content_item):
+        return jsonify({"error": "You don't have access to this content"}), 403
+
+    pdf_bytes = fetch_private_file_bytes(content_item.file_url)
+    if pdf_bytes is None:
+        return jsonify({"error": "Content file could not be loaded"}), 500
+
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        page_count = doc.page_count
+        doc.close()
+    except Exception as e:
+        return jsonify({"error": f"Could not read content file: {e}"}), 500
+
+    return jsonify({
+        "content_id": content_item.id,
+        "title": content_item.title,
+        "page_count": page_count,
+    })
+
+
+@app.route("/content/<int:content_id>/view/page/<int:page_num>")
+def content_view_page(content_id, page_num):
+    """
+    Returns ONE watermarked page of view-only Q&A content, rendered as a
+    PNG image. Rechecks access on every single page request - never trust
+    that a prior /view/info call means this call is still authorized.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    content_item = ContentItem.query.get(content_id)
+    if not content_item:
+        return jsonify({"error": "Content not found"}), 404
+
+    if content_item.content_type != "qna":
+        return jsonify({"error": "This endpoint is only for view-only Q&A content"}), 400
+
+    if not has_access(user_id, content_item):
+        return jsonify({"error": "You don't have access to this content"}), 403
+
+    user = User.query.get(user_id)
+    watermark_text = user.email
+
+    pdf_bytes = fetch_private_file_bytes(content_item.file_url)
+    if pdf_bytes is None:
+        return jsonify({"error": "Content file could not be loaded"}), 500
+
+    try:
+        png_bytes, page_count = render_watermarked_page(pdf_bytes, page_num, watermark_text)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": f"Could not render page: {e}"}), 500
+
+    response = Response(png_bytes, mimetype="image/png")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    return response
 
 
 @app.route("/content/<int:content_id>/pay", methods=["POST"])
