@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard - Prepza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #16233E;
+    --navy-dark: #0F1929;
+    --gold: #C9A227;
+    --crimson: #8C1D2B;
+    --page-bg: #F4F5F7;
+    --card-bg: #FFFFFF;
+    --border: #E2E4E9;
+    --text-primary: #16233E;
+    --text-secondary: #5B6478;
+    --text-muted: #8B93A3;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--page-bg);
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, .brand {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  /* ---------- Top nav ---------- */
+  nav {
+    background: var(--navy);
+    border-bottom: 3px solid var(--gold);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .brand {
+    color: #FFFFFF;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .year-badge {
+    background: rgba(201, 162, 39, 0.15);
+    color: var(--gold);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .user-email {
+    color: rgba(255,255,255,0.7);
+    font-size: 13px;
+    display: none;
+  }
+
+  @media (min-width: 640px) {
+    .user-email { display: inline; }
+  }
+
+  .logout-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #FFFFFF;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .logout-btn:hover {
+    background: rgba(255,255,255,0.08);
+  }
+
+  /* ---------- Main content ---------- */
+  main {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  .welcome {
+    font-size: 26px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .welcome-sub {
+    color: var(--text-secondary);
+    font-size: 15px;
+    margin-bottom: 36px;
+  }
+
+  .section-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 16px;
+  }
+
+  .unit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .unit-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .unit-card:hover {
+    border-color: var(--gold);
+    transform: translateY(-2px);
+  }
+
+  .unit-code {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--navy);
+    background: #EDF0F5;
+    padding: 4px 9px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+
+  .unit-name {
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  .unit-arrow {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--gold);
+    font-weight: 500;
+  }
+
+  /* ---------- States ---------- */
+  .state-box {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+  }
+
+  .state-box h3 {
+    font-size: 18px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+
+  .state-box p {
+    font-size: 14px;
+    max-width: 380px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="brand">Prepza</span>
+  <div class="nav-right">
+    <span class="year-badge" id="year-badge"></span>
+    <span class="user-email" id="user-email"></span>
+    <button class="logout-btn" id="logout-btn">Log out</button>
+  </div>
+</nav>
+
+<main>
+  <div id="content">
+    <div class="state-box">
+      <div class="spinner"></div>
+      <p>Loading your dashboard...</p>
+    </div>
+  </div>
+</main>
+
+<script>
+async function loadDashboard() {
+  const contentEl = document.getElementById('content');
+
+  let me;
+  try {
+    const meRes = await fetch('/me');
+    if (meRes.status === 401) {
+      window.location.href = '/login.html';
+      return;
+    }
+    me = await meRes.json();
+  } catch (err) {
+    contentEl.innerHTML = `
+      <div class="state-box">
+        <h3>Couldn't reach Prepza</h3>
+        <p>Check your connection and refresh the page.</p>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('user-email').textContent = me.email;
+  document.getElementById('year-badge').textContent =
+    (me.year && me.semester) ? `Year ${me.year}, Semester ${me.semester}` : 'Set your year and semester';
+
+  if (!me.year || !me.semester) {
+    contentEl.innerHTML = `
+      <div class="state-box">
+        <h3>Tell us your year and semester</h3>
+        <p>We use this to show you the right units. This will be editable from your profile soon.</p>
+      </div>`;
+    return;
+  }
+
+  let units;
+  try {
+    const unitsRes = await fetch('/units');
+    units = await unitsRes.json();
+  } catch (err) {
+    contentEl.innerHTML = `
+      <div class="state-box">
+        <h3>Couldn't load your units</h3>
+        <p>Refresh the page to try again.</p>
+      </div>`;
+    return;
+  }
+
+  const firstName = me.email.split('@')[0];
+
+  if (!units || units.length === 0) {
+    contentEl.innerHTML = `
+      <p class="welcome">Welcome, ${firstName}</p>
+      <p class="welcome-sub">Year ${me.year}, Semester ${me.semester}</p>
+      <div class="state-box">
+        <h3>No units listed yet for your year and semester</h3>
+        <p>We're adding content unit by unit. Check back soon, or reach out if a unit you need is missing.</p>
+      </div>`;
+    return;
+  }
+
+  const cardsHtml = units.map(u => `
+    <a class="unit-card" href="/static/unit.html?id=${u.id}">
+      <span class="unit-code">${escapeHtml(u.code)}</span>
+      <div class="unit-name">${escapeHtml(u.name)}</div>
+      <div class="unit-arrow">View content &rarr;</div>
+    </a>
+  `).join('');
+
+  contentEl.innerHTML = `
+    <p class="welcome">Welcome, ${escapeHtml(firstName)}</p>
+    <p class="welcome-sub">Year ${me.year}, Semester ${me.semester} &middot; ${units.length} unit${units.length === 1 ? '' : 's'} available</p>
+    <p class="section-label">Your units</p>
+    <div class="unit-grid">${cardsHtml}</div>
+  `;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await fetch('/logout', { method: 'POST' });
+  window.location.href = '/login.html';
+});
+
+loadDashboard();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log in - Prepza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #16233E;
+    --navy-dark: #0F1929;
+    --gold: #C9A227;
+    --crimson: #8C1D2B;
+    --page-bg: #F4F5F7;
+    --card-bg: #FFFFFF;
+    --border: #E2E4E9;
+    --text-primary: #16233E;
+    --text-secondary: #5B6478;
+    --text-muted: #8B93A3;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--page-bg);
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 28px;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 32px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 1px 3px rgba(22, 35, 62, 0.06);
+  }
+
+  .card-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .card-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+  }
+
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  .field {
+    margin-bottom: 16px;
+  }
+
+  input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    background: #FBFBFC;
+  }
+
+  input:focus {
+    outline: none;
+    border-color: var(--gold);
+    background: #FFFFFF;
+  }
+
+  .btn-primary {
+    width: 100%;
+    background: var(--navy);
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 11px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+
+  .btn-primary:hover {
+    background: var(--navy-dark);
+  }
+
+  .btn-primary:disabled {
+    background: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  .btn-link {
+    background: none;
+    border: none;
+    color: var(--gold);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .row-between {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 20px;
+    margin-top: -8px;
+  }
+
+  .message {
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+    display: none;
+  }
+
+  .message.error {
+    background: rgba(140, 29, 43, 0.08);
+    color: var(--crimson);
+    display: block;
+  }
+
+  .message.success {
+    background: rgba(201, 162, 39, 0.12);
+    color: #8A6D1B;
+    display: block;
+  }
+
+  .footer-link {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 20px;
+  }
+
+  .footer-link a {
+    color: var(--navy);
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .footer-link a:hover {
+    text-decoration: underline;
+  }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="brand">Prepza</div>
+
+<div class="card">
+
+  <!-- Login form -->
+  <div id="login-view">
+    <p class="card-title">Log in</p>
+    <p class="card-sub">Welcome back. Enter your details to continue.</p>
+
+    <div id="login-message" class="message"></div>
+
+    <form id="login-form">
+      <div class="field">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" required autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" required autocomplete="current-password">
+      </div>
+      <div class="row-between">
+        <button type="button" class="btn-link" id="show-forgot">Forgot password?</button>
+      </div>
+      <button type="submit" class="btn-primary" id="login-submit">Log in</button>
+    </form>
+
+    <p class="footer-link">New to Prepza? <a href="/static/signup.html">Create an account</a></p>
+  </div>
+
+  <!-- Forgot password form -->
+  <div id="forgot-view" class="hidden">
+    <p class="card-title">Reset your password</p>
+    <p class="card-sub">Enter your email and we'll send you a reset link.</p>
+
+    <div id="forgot-message" class="message"></div>
+
+    <form id="forgot-form">
+      <div class="field">
+        <label for="forgot-email">Email</label>
+        <input type="email" id="forgot-email" required autocomplete="email">
+      </div>
+      <button type="submit" class="btn-primary" id="forgot-submit">Send reset link</button>
+    </form>
+
+    <p class="footer-link"><button type="button" class="btn-link" id="back-to-login">Back to log in</button></p>
+  </div>
+
+</div>
+
+<script>
+const loginView = document.getElementById('login-view');
+const forgotView = document.getElementById('forgot-view');
+
+document.getElementById('show-forgot').addEventListener('click', () => {
+  loginView.classList.add('hidden');
+  forgotView.classList.remove('hidden');
+});
+
+document.getElementById('back-to-login').addEventListener('click', () => {
+  forgotView.classList.add('hidden');
+  loginView.classList.remove('hidden');
+});
+
+function showMessage(elId, text, type) {
+  const el = document.getElementById(elId);
+  el.textContent = text;
+  el.className = 'message ' + type;
+}
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const submitBtn = document.getElementById('login-submit');
+  const msgEl = document.getElementById('login-message');
+  msgEl.style.display = 'none';
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Logging in...';
+
+  try {
+    const res = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showMessage('login-message', data.error || 'Something went wrong. Try again.', 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Log in';
+      return;
+    }
+
+    window.location.href = '/static/dashboard.html';
+
+  } catch (err) {
+    showMessage('login-message', 'Could not reach Prepza. Check your connection.', 'error');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Log in';
+  }
+});
+
+document.getElementById('forgot-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('forgot-email').value.trim();
+  const submitBtn = document.getElementById('forgot-submit');
+  const msgEl = document.getElementById('forgot-message');
+  msgEl.style.display = 'none';
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Sending...';
+
+  try {
+    const res = await fetch('/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showMessage('forgot-message', data.error || 'Something went wrong. Try again.', 'error');
+    } else {
+      showMessage('forgot-message', data.message || 'If an account exists, a reset link has been sent.', 'success');
+    }
+  } catch (err) {
+    showMessage('forgot-message', 'Could not reach Prepza. Check your connection.', 'error');
+  }
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Send reset link';
+});
+</script>
+
+</body>
+</html>

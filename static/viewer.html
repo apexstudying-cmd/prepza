@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Viewer - Prepza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #16233E;
+    --navy-dark: #0F1929;
+    --gold: #C9A227;
+    --crimson: #8C1D2B;
+    --page-bg: #EDEEF1;
+    --border: #E2E4E9;
+    --text-primary: #16233E;
+    --text-secondary: #5B6478;
+    --text-muted: #8B93A3;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--page-bg);
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    height: 100%;
+    /* Deterrent only - not a real block, just raises friction */
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  nav {
+    background: var(--navy);
+    border-bottom: 3px solid var(--gold);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .brand {
+    font-family: 'Space Grotesk', sans-serif;
+    color: #FFFFFF;
+    font-size: 17px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .nav-title {
+    color: rgba(255,255,255,0.8);
+    font-size: 13px;
+    max-width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .page-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .page-nav button {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #FFFFFF;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+  }
+  .page-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .page-indicator {
+    color: #FFFFFF;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 12px 60px;
+    min-height: calc(100% - 60px);
+  }
+
+  #page-canvas-wrap {
+    background: #FFFFFF;
+    box-shadow: 0 2px 10px rgba(22,35,62,0.12);
+    max-width: 100%;
+    line-height: 0;
+  }
+
+  #page-canvas-wrap canvas {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    /* Deterrent only - raises friction against drag-saving the canvas */
+    pointer-events: none;
+  }
+
+  .state-box {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--text-secondary);
+  }
+  .state-box h3 { font-size: 18px; color: var(--text-primary); margin-bottom: 8px; }
+  .state-box p { font-size: 14px; max-width: 380px; margin: 0 auto; line-height: 1.6; }
+
+  .spinner {
+    width: 24px; height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .notice {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 16px;
+    max-width: 480px;
+  }
+</style>
+</head>
+<body oncontextmenu="return false;">
+
+<nav>
+  <a class="brand" href="#" onclick="history.back(); return false;">&larr; Prepza</a>
+  <span class="nav-title" id="doc-title"></span>
+  <div class="page-nav">
+    <button id="prev-btn">Prev</button>
+    <span class="page-indicator" id="page-indicator">-</span>
+    <button id="next-btn">Next</button>
+  </div>
+</nav>
+
+<main>
+  <div id="viewer-content">
+    <div class="state-box">
+      <div class="spinner"></div>
+      <p>Loading content...</p>
+    </div>
+  </div>
+</main>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const contentId = params.get('id');
+const viewerEl = document.getElementById('viewer-content');
+
+let currentPage = 0;
+let pageCount = 0;
+
+function showError(title, message) {
+  viewerEl.innerHTML = `<div class="state-box"><h3>${title}</h3><p>${message}</p></div>`;
+  document.getElementById('prev-btn').disabled = true;
+  document.getElementById('next-btn').disabled = true;
+}
+
+async function init() {
+  if (!contentId) {
+    showError('No content specified', 'Go back and pick a Q&amp;A item to view.');
+    return;
+  }
+
+  let info;
+  try {
+    const res = await fetch(`/content/${contentId}/view/info`);
+    const data = await res.json();
+
+    if (res.status === 401) {
+      window.location.href = '/static/login.html';
+      return;
+    }
+    if (!res.ok) {
+      showError('Can\'t open this content', data.error || 'You may not have access to this item.');
+      return;
+    }
+    info = data;
+  } catch (err) {
+    showError('Couldn\'t reach Prepza', 'Check your connection and refresh the page.');
+    return;
+  }
+
+  pageCount = info.page_count;
+  document.getElementById('doc-title').textContent = info.title;
+
+  viewerEl.innerHTML = `
+    <div id="page-canvas-wrap">
+      <canvas id="page-canvas"></canvas>
+    </div>
+    <p class="notice">This is a view-only document watermarked to your account. It can't be downloaded from this page.</p>
+  `;
+
+  await loadPage(0);
+}
+
+async function loadPage(pageNum) {
+  const canvas = document.getElementById('page-canvas');
+  const ctx = canvas.getContext('2d');
+
+  document.getElementById('prev-btn').disabled = (pageNum <= 0);
+  document.getElementById('next-btn').disabled = (pageNum >= pageCount - 1);
+  document.getElementById('page-indicator').textContent = `Page ${pageNum + 1} of ${pageCount}`;
+
+  try {
+    const res = await fetch(`/content/${contentId}/view/page/${pageNum}`, { cache: 'no-store' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showError('Couldn\'t load this page', data.error || 'Try again in a moment.');
+      return;
+    }
+    const blob = await res.blob();
+    const imgUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(imgUrl);
+    };
+    img.src = imgUrl;
+    currentPage = pageNum;
+  } catch (err) {
+    showError('Couldn\'t load this page', 'Check your connection and try again.');
+  }
+}
+
+document.getElementById('prev-btn').addEventListener('click', () => {
+  if (currentPage > 0) loadPage(currentPage - 1);
+});
+document.getElementById('next-btn').addEventListener('click', () => {
+  if (currentPage < pageCount - 1) loadPage(currentPage + 1);
+});
+
+// Deterrents only, not real protection - raises friction, doesn't block a determined user
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && (e.key === 'p' || e.key === 's' || e.key === 'P' || e.key === 'S')) {
+    e.preventDefault();
+  }
+});
+
+init();
+</script>
+
+</body>
+</html>

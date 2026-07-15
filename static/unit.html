@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit content - Prepza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #16233E;
+    --navy-dark: #0F1929;
+    --gold: #C9A227;
+    --crimson: #8C1D2B;
+    --page-bg: #F4F5F7;
+    --card-bg: #FFFFFF;
+    --border: #E2E4E9;
+    --text-primary: #16233E;
+    --text-secondary: #5B6478;
+    --text-muted: #8B93A3;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--page-bg);
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, .brand { font-family: 'Space Grotesk', sans-serif; }
+
+  nav {
+    background: var(--navy);
+    border-bottom: 3px solid var(--gold);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .brand { color: #FFFFFF; font-size: 20px; font-weight: 600; text-decoration: none; }
+
+  .back-link {
+    color: rgba(255,255,255,0.75);
+    font-size: 13px;
+    text-decoration: none;
+  }
+  .back-link:hover { color: #FFFFFF; }
+
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  .unit-header {
+    margin-bottom: 32px;
+  }
+
+  .unit-code-chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--navy);
+    background: #EDF0F5;
+    padding: 5px 11px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+  }
+
+  .unit-title { font-size: 24px; font-weight: 600; }
+
+  .section {
+    margin-bottom: 36px;
+  }
+
+  .section-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 14px;
+  }
+
+  .content-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .content-row {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .content-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .content-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .content-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .action-btn {
+    flex-shrink: 0;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    white-space: nowrap;
+  }
+
+  .action-btn.download {
+    background: var(--navy);
+    color: #FFFFFF;
+  }
+  .action-btn.download:hover { background: var(--navy-dark); }
+
+  .action-btn.view {
+    background: var(--navy);
+    color: #FFFFFF;
+  }
+  .action-btn.view:hover { background: var(--navy-dark); }
+
+  .action-btn.unlock {
+    background: rgba(201, 162, 39, 0.15);
+    color: #8A6D1B;
+  }
+  .action-btn.unlock:hover { background: rgba(201, 162, 39, 0.25); }
+
+  .empty-note {
+    font-size: 13px;
+    color: var(--text-muted);
+    padding: 12px 0;
+  }
+
+  .state-box {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+  }
+
+  .state-box h3 { font-size: 18px; color: var(--text-primary); margin-bottom: 8px; }
+  .state-box p { font-size: 14px; max-width: 380px; margin: 0 auto; line-height: 1.6; }
+
+  .spinner {
+    width: 24px; height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Payment modal ---------- */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(22, 35, 62, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 50;
+  }
+
+  .modal {
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 28px;
+    width: 100%;
+    max-width: 360px;
+  }
+
+  .modal h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+  .modal p.sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
+
+  .modal label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+
+  .modal input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    margin-bottom: 16px;
+  }
+  .modal input:focus { outline: none; border-color: var(--gold); }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .modal-actions button {
+    flex: 1;
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .modal-actions .cancel-btn {
+    background: #EDF0F5;
+    color: var(--text-primary);
+  }
+
+  .modal-actions .pay-btn {
+    background: var(--navy);
+    color: #FFFFFF;
+  }
+  .modal-actions .pay-btn:disabled { background: var(--text-muted); cursor: not-allowed; }
+
+  .modal-message {
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+    display: none;
+  }
+  .modal-message.error { background: rgba(140, 29, 43, 0.08); color: var(--crimson); display: block; }
+  .modal-message.success { background: rgba(201, 162, 39, 0.12); color: #8A6D1B; display: block; }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="brand" href="/static/dashboard.html">Prepza</a>
+  <a class="back-link" href="/static/dashboard.html">&larr; Back to dashboard</a>
+</nav>
+
+<main>
+  <div id="content">
+    <div class="state-box">
+      <div class="spinner"></div>
+      <p>Loading unit content...</p>
+    </div>
+  </div>
+</main>
+
+<!-- Payment modal -->
+<div class="modal-overlay hidden" id="pay-modal">
+  <div class="modal">
+    <h3 id="pay-modal-title">Unlock content</h3>
+    <p class="sub" id="pay-modal-sub">Enter the M-Pesa number to pay from.</p>
+    <div class="modal-message" id="pay-message"></div>
+    <label for="pay-phone">Phone number</label>
+    <input type="text" id="pay-phone" placeholder="2547XXXXXXXX">
+    <div class="modal-actions">
+      <button class="cancel-btn" id="pay-cancel">Cancel</button>
+      <button class="pay-btn" id="pay-submit">Pay now</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const unitId = params.get('id');
+const contentEl = document.getElementById('content');
+
+let currentPayContentId = null;
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderContentRow(item, type) {
+  let actionHtml = '';
+
+  if (item.unlocked) {
+    if (type === 'qna') {
+      actionHtml = `<a class="action-btn view" href="/static/viewer.html?id=${item.id}">View</a>`;
+    } else if (item.file_url) {
+      actionHtml = `<a class="action-btn download" href="${item.file_url}" target="_blank" rel="noopener">Download</a>`;
+    } else {
+      actionHtml = `<span class="content-meta">Unlocked</span>`;
+    }
+  } else {
+    const priceLabel = item.price > 0 ? `Unlock - KES ${item.price}` : 'Unlock';
+    actionHtml = `<button class="action-btn unlock" onclick="openPayModal(${item.id}, '${escapeHtml(item.title)}', ${item.price})">${priceLabel}</button>`;
+  }
+
+  const metaParts = [];
+  if (item.paper_year) metaParts.push(item.paper_year);
+  if (type === 'qna') metaParts.push('View-only');
+
+  return `
+    <div class="content-row">
+      <div class="content-info">
+        <span class="content-title">${escapeHtml(item.title)}</span>
+        ${metaParts.length ? `<span class="content-meta">${metaParts.join(' &middot; ')}</span>` : ''}
+      </div>
+      ${actionHtml}
+    </div>
+  `;
+}
+
+function renderSection(label, items, type) {
+  if (!items || items.length === 0) {
+    return `
+      <div class="section">
+        <p class="section-label">${label}</p>
+        <p class="empty-note">Nothing here yet.</p>
+      </div>
+    `;
+  }
+  return `
+    <div class="section">
+      <p class="section-label">${label}</p>
+      <div class="content-list">
+        ${items.map(item => renderContentRow(item, type)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+async function loadUnit() {
+  if (!unitId) {
+    contentEl.innerHTML = `
+      <div class="state-box">
+        <h3>No unit specified</h3>
+        <p>Go back to your dashboard and pick a unit.</p>
+      </div>`;
+    return;
+  }
+
+  let me;
+  try {
+    const meRes = await fetch('/me');
+    if (meRes.status === 401) {
+      window.location.href = '/static/login.html';
+      return;
+    }
+    me = await meRes.json();
+  } catch (err) {
+    contentEl.innerHTML = `<div class="state-box"><h3>Couldn't reach Prepza</h3><p>Check your connection and refresh.</p></div>`;
+    return;
+  }
+
+  let data;
+  try {
+    const res = await fetch(`/units/${unitId}/content`);
+    if (res.status === 404) {
+      contentEl.innerHTML = `<div class="state-box"><h3>Unit not found</h3><p>Go back to your dashboard and pick a unit.</p></div>`;
+      return;
+    }
+    data = await res.json();
+  } catch (err) {
+    contentEl.innerHTML = `<div class="state-box"><h3>Couldn't load this unit</h3><p>Refresh the page to try again.</p></div>`;
+    return;
+  }
+
+  contentEl.innerHTML = `
+    <div class="unit-header">
+      <span class="unit-code-chip">${escapeHtml(data.unit)}</span>
+      <h1 class="unit-title">${escapeHtml(data.unit)}</h1>
+    </div>
+    ${renderSection('Notes', data.content.notes, 'notes')}
+    ${renderSection('Past papers', data.content.past_paper, 'past_paper')}
+    ${renderSection('Q&A summaries', data.content.qna, 'qna')}
+  `;
+}
+
+function openPayModal(contentId, title, price) {
+  currentPayContentId = contentId;
+  document.getElementById('pay-modal-title').textContent = `Unlock: ${title}`;
+  document.getElementById('pay-modal-sub').textContent =
+    price > 0 ? `You'll be charged KES ${price} via M-Pesa.` : `Enter the M-Pesa number to pay from.`;
+  document.getElementById('pay-message').style.display = 'none';
+  document.getElementById('pay-phone').value = '';
+  document.getElementById('pay-modal').classList.remove('hidden');
+}
+
+document.getElementById('pay-cancel').addEventListener('click', () => {
+  document.getElementById('pay-modal').classList.add('hidden');
+});
+
+document.getElementById('pay-submit').addEventListener('click', async () => {
+  const phone = document.getElementById('pay-phone').value.trim();
+  const msgEl = document.getElementById('pay-message');
+  const submitBtn = document.getElementById('pay-submit');
+  msgEl.style.display = 'none';
+
+  if (!phone) {
+    msgEl.textContent = 'Please enter a phone number.';
+    msgEl.className = 'modal-message error';
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Sending prompt...';
+
+  try {
+    const res = await fetch(`/content/${currentPayContentId}/pay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone_number: phone })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      msgEl.textContent = data.error || 'Something went wrong. Try again.';
+      msgEl.className = 'modal-message error';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Pay now';
+      return;
+    }
+
+    msgEl.textContent = 'Check your phone and enter your M-Pesa PIN to complete payment. This page will refresh once payment is confirmed.';
+    msgEl.className = 'modal-message success';
+    submitBtn.textContent = 'Waiting for payment...';
+
+    // Poll for access every 4 seconds, up to ~2 minutes
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      const checkRes = await fetch(`/units/${unitId}/content`);
+      const checkData = await checkRes.json();
+      const allItems = [...checkData.content.notes, ...checkData.content.past_paper, ...checkData.content.qna];
+      const match = allItems.find(i => i.id === currentPayContentId);
+
+      if (match && match.unlocked) {
+        clearInterval(poll);
+        document.getElementById('pay-modal').classList.add('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Pay now';
+        loadUnit();
+      } else if (attempts >= 30) {
+        clearInterval(poll);
+        msgEl.textContent = 'Still waiting for payment confirmation. If you completed the M-Pesa prompt, refresh this page in a moment.';
+        msgEl.className = 'modal-message error';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Pay now';
+      }
+    }, 4000);
+
+  } catch (err) {
+    msgEl.textContent = 'Could not reach Prepza. Check your connection.';
+    msgEl.className = 'modal-message error';
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Pay now';
+  }
+});
+
+loadUnit();
+</script>
+
+</body>
+</html>

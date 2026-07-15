@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign up - Prepza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #16233E;
+    --navy-dark: #0F1929;
+    --gold: #C9A227;
+    --crimson: #8C1D2B;
+    --page-bg: #F4F5F7;
+    --card-bg: #FFFFFF;
+    --border: #E2E4E9;
+    --text-primary: #16233E;
+    --text-secondary: #5B6478;
+    --text-muted: #8B93A3;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--page-bg);
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 28px;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 32px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 1px 3px rgba(22, 35, 62, 0.06);
+  }
+
+  .card-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .card-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+  }
+
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  .field {
+    margin-bottom: 16px;
+  }
+
+  .field-row {
+    display: flex;
+    gap: 12px;
+  }
+  .field-row .field {
+    flex: 1;
+  }
+
+  input, select {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    background: #FBFBFC;
+  }
+
+  input:focus, select:focus {
+    outline: none;
+    border-color: var(--gold);
+    background: #FFFFFF;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .btn-primary {
+    width: 100%;
+    background: var(--navy);
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 11px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+
+  .btn-primary:hover {
+    background: var(--navy-dark);
+  }
+
+  .btn-primary:disabled {
+    background: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  .message {
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+    display: none;
+  }
+
+  .message.error {
+    background: rgba(140, 29, 43, 0.08);
+    color: var(--crimson);
+    display: block;
+  }
+
+  .message.success {
+    background: rgba(201, 162, 39, 0.12);
+    color: #8A6D1B;
+    display: block;
+  }
+
+  .footer-link {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 20px;
+  }
+
+  .footer-link a {
+    color: var(--navy);
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .footer-link a:hover {
+    text-decoration: underline;
+  }
+
+  .hidden { display: none; }
+
+  .success-box {
+    text-align: center;
+    padding: 12px 0 4px;
+  }
+
+  .success-box .icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(201, 162, 39, 0.15);
+    color: var(--gold);
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+  }
+
+  .success-box p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .success-box strong {
+    color: var(--text-primary);
+  }
+</style>
+</head>
+<body>
+
+<div class="brand">Prepza</div>
+
+<div class="card">
+
+  <div id="signup-view">
+    <p class="card-title">Create your account</p>
+    <p class="card-sub">Actuarial Science, Kenyatta University.</p>
+
+    <div id="signup-message" class="message"></div>
+
+    <form id="signup-form">
+      <div class="field">
+        <label for="signup-email">Email</label>
+        <input type="email" id="signup-email" required autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="signup-password">Password</label>
+        <input type="password" id="signup-password" required autocomplete="new-password" minlength="8">
+        <p class="hint">At least 8 characters</p>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="signup-year">Year</label>
+          <select id="signup-year" required>
+            <option value="">Select</option>
+            <option value="1">Year 1</option>
+            <option value="2">Year 2</option>
+            <option value="3">Year 3</option>
+            <option value="4">Year 4</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="signup-semester">Semester</label>
+          <select id="signup-semester" required>
+            <option value="">Select</option>
+            <option value="1">Semester 1</option>
+            <option value="2">Semester 2</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit" class="btn-primary" id="signup-submit">Create account</button>
+    </form>
+
+    <p class="footer-link">Already have an account? <a href="/static/login.html">Log in</a></p>
+  </div>
+
+  <div id="success-view" class="hidden">
+    <div class="success-box">
+      <div class="icon">&#9993;</div>
+      <p><strong>Check your email</strong><br>We've sent a verification link to your inbox. Verify your email, then log in to get started.</p>
+    </div>
+    <p class="footer-link"><a href="/static/login.html">Go to log in</a></p>
+  </div>
+
+</div>
+
+<script>
+document.getElementById('signup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const email = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const year = parseInt(document.getElementById('signup-year').value, 10);
+  const semester = parseInt(document.getElementById('signup-semester').value, 10);
+  const submitBtn = document.getElementById('signup-submit');
+  const msgEl = document.getElementById('signup-message');
+  msgEl.style.display = 'none';
+
+  if (!year || !semester) {
+    msgEl.textContent = 'Please select your year and semester.';
+    msgEl.className = 'message error';
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Creating account...';
+
+  try {
+    const res = await fetch('/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, year, semester })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      msgEl.textContent = data.error || 'Something went wrong. Try again.';
+      msgEl.className = 'message error';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create account';
+      return;
+    }
+
+    document.getElementById('signup-view').classList.add('hidden');
+    document.getElementById('success-view').classList.remove('hidden');
+
+  } catch (err) {
+    msgEl.textContent = 'Could not reach Prepza. Check your connection.';
+    msgEl.className = 'message error';
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Create account';
+  }
+});
+</script>
+
+</body>
+</html>
