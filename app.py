@@ -122,7 +122,7 @@ def send_verification_email(to_email, token):
 
 def send_reset_email(to_email, token):
     api_key = os.environ.get("BREVO_API_KEY")
-    reset_link = f"{BASE_URL}/reset-password?token={token}"
+    reset_link = f"{BASE_URL}/static/reset-password.html?token={token}"
 
     url = "https://api.brevo.com/v3/smtp/email"
     headers = {
