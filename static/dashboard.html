@@ -2,6 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script>
+(function() {
+  var theme = localStorage.getItem('prepza-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard - Prepza</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,6 +24,19 @@
     --text-primary: #16233E;
     --text-secondary: #5B6478;
     --text-muted: #8B93A3;
+  }
+
+  [data-theme="dark"] {
+    --navy: #2C3E63;
+    --navy-dark: #1B2A47;
+    --gold: #D4AF37;
+    --crimson: #E0576F;
+    --page-bg: #14181F;
+    --card-bg: #1E232D;
+    --border: #323A48;
+    --text-primary: #E8EAED;
+    --text-secondary: #A8AFBC;
+    --text-muted: #6B7280;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -200,6 +219,10 @@
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
+
+  [data-theme="dark"] .unit-code {
+    background: rgba(255, 255, 255, 0.08);
+  }
 </style>
 </head>
 <body>
@@ -230,7 +253,7 @@ async function loadDashboard() {
   try {
     const meRes = await fetch('/me');
     if (meRes.status === 401) {
-      window.location.href = '/login.html';
+      window.location.href = '/static/login.html';
       return;
     }
     me = await meRes.json();
@@ -306,7 +329,7 @@ function escapeHtml(str) {
 
 document.getElementById('logout-btn').addEventListener('click', async () => {
   await fetch('/logout', { method: 'POST' });
-  window.location.href = '/login.html';
+  window.location.href = '/static/login.html';
 });
 
 loadDashboard();

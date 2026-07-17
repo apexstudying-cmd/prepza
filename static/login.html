@@ -2,6 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script>
+(function() {
+  var theme = localStorage.getItem('prepza-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Log in - Prepza</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,6 +24,19 @@
     --text-primary: #16233E;
     --text-secondary: #5B6478;
     --text-muted: #8B93A3;
+  }
+
+  [data-theme="dark"] {
+    --navy: #2C3E63;
+    --navy-dark: #1B2A47;
+    --gold: #D4AF37;
+    --crimson: #E0576F;
+    --page-bg: #14181F;
+    --card-bg: #1E232D;
+    --border: #323A48;
+    --text-primary: #E8EAED;
+    --text-secondary: #A8AFBC;
+    --text-muted: #6B7280;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -174,6 +193,14 @@
   }
 
   .hidden { display: none; }
+
+  [data-theme="dark"] input {
+    background: var(--card-bg);
+    color: var(--text-primary);
+  }
+  [data-theme="dark"] input:focus {
+    background: var(--card-bg);
+  }
 </style>
 </head>
 <body>
