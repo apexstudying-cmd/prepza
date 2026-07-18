@@ -8,3 +8,6 @@ apply_*.py
 *_test.pdf
 content_response.json
 downloaded_test.pdf
+fix_*.py
+patch_*.py
+scratch/
