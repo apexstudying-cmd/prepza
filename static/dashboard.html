@@ -111,6 +111,16 @@
     background: rgba(255,255,255,0.08);
   }
 
+  .settings-link {
+    color: rgba(255,255,255,0.7);
+    font-size: 13px;
+    text-decoration: none;
+  }
+
+  .settings-link:hover {
+    color: #FFFFFF;
+  }
+
   /* ---------- Main content ---------- */
   main {
     max-width: 1000px;
@@ -232,6 +242,7 @@
   <div class="nav-right">
     <span class="year-badge" id="year-badge"></span>
     <span class="user-email" id="user-email"></span>
+    <a class="settings-link" href="/static/settings.html">Settings</a>
     <button class="logout-btn" id="logout-btn">Log out</button>
   </div>
 </nav>

@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+(function() {
+  var theme = localStorage.getItem('prepza-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings - Prepza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #16233E;
+    --navy-dark: #0F1929;
+    --gold: #C9A227;
+    --crimson: #8C1D2B;
+    --page-bg: #F4F5F7;
+    --card-bg: #FFFFFF;
+    --border: #E2E4E9;
+    --text-primary: #16233E;
+    --text-secondary: #5B6478;
+    --text-muted: #8B93A3;
+  }
+
+  [data-theme="dark"] {
+    --navy: #2C3E63;
+    --navy-dark: #1B2A47;
+    --gold: #D4AF37;
+    --crimson: #E0576F;
+    --page-bg: #14181F;
+    --card-bg: #1E232D;
+    --border: #323A48;
+    --text-primary: #E8EAED;
+    --text-secondary: #A8AFBC;
+    --text-muted: #6B7280;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--page-bg);
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, .brand {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  /* ---------- Top nav ---------- */
+  nav {
+    background: var(--navy);
+    border-bottom: 3px solid var(--gold);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .brand {
+    color: #FFFFFF;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .back-link {
+    color: rgba(255,255,255,0.7);
+    font-size: 13px;
+    text-decoration: none;
+  }
+
+  .back-link:hover {
+    color: #FFFFFF;
+  }
+
+  .logout-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #FFFFFF;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .logout-btn:hover {
+    background: rgba(255,255,255,0.08);
+  }
+
+  /* ---------- Layout ---------- */
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  h1.page-title {
+    font-size: 26px;
+    font-weight: 600;
+    margin-bottom: 32px;
+  }
+
+  .settings-layout {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    width: 200px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    padding-right: 16px;
+  }
+
+  .sidebar-tab {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    padding: 9px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 2px;
+  }
+
+  .sidebar-tab:hover {
+    background: var(--border);
+    color: var(--text-primary);
+  }
+
+  .sidebar-tab.active {
+    background: rgba(201, 162, 39, 0.15);
+    color: var(--navy);
+    font-weight: 600;
+  }
+
+  [data-theme="dark"] .sidebar-tab.active {
+    color: var(--gold);
+  }
+
+  /* ---------- Content panels ---------- */
+  .panel-area {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .panel {
+    display: none;
+  }
+
+  .panel.active {
+    display: block;
+  }
+
+  .panel h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .panel-sub {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-bottom: 28px;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  /* ---------- Profile form ---------- */
+  .field-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .field {
+    flex: 1;
+  }
+
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+
+  .field select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--page-bg);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+  }
+
+  .btn-primary {
+    background: var(--navy);
+    color: #FFFFFF;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .btn-primary:hover {
+    background: var(--navy-dark);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .form-msg {
+    font-size: 13px;
+    margin-top: 14px;
+  }
+
+  .form-msg.success { color: #2E7D4F; }
+  .form-msg.error { color: var(--crimson); }
+
+  /* ---------- Appearance toggle ---------- */
+  .appearance-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+  }
+
+  .appearance-label-group h3 {
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .appearance-label-group p {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .theme-switch {
+    position: relative;
+    width: 46px;
+    height: 26px;
+    flex-shrink: 0;
+  }
+
+  .theme-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .switch-track {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .switch-track::before {
+    content: "";
+    position: absolute;
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    top: 3px;
+    background: #FFFFFF;
+    border-radius: 50%;
+    transition: transform 0.15s ease;
+  }
+
+  .theme-switch input:checked + .switch-track {
+    background: var(--navy);
+  }
+
+  .theme-switch input:checked + .switch-track::before {
+    transform: translateX(20px);
+  }
+
+  .state-box {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--text-secondary);
+  }
+
+  @media (max-width: 640px) {
+    .settings-layout {
+      flex-direction: column;
+    }
+    .sidebar {
+      width: 100%;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      padding-right: 0;
+      padding-bottom: 12px;
+      display: flex;
+      gap: 6px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="brand" href="/static/dashboard.html">Prepza</a>
+  <div class="nav-right">
+    <a class="back-link" href="/static/dashboard.html">&larr; Dashboard</a>
+    <button class="logout-btn" id="logout-btn">Log out</button>
+  </div>
+</nav>
+
+<main>
+  <div id="content">
+    <div class="state-box">Loading settings...</div>
+  </div>
+</main>
+
+<script>
+let currentMe = null;
+
+async function loadSettings() {
+  const contentEl = document.getElementById('content');
+
+  try {
+    const meRes = await fetch('/me');
+    if (meRes.status === 401) {
+      window.location.href = '/static/login.html';
+      return;
+    }
+    currentMe = await meRes.json();
+  } catch (err) {
+    contentEl.innerHTML = `<div class="state-box">Couldn't reach Prepza. Check your connection and refresh the page.</div>`;
+    return;
+  }
+
+  renderSettings();
+}
+
+function renderSettings() {
+  const contentEl = document.getElementById('content');
+  const currentTheme = localStorage.getItem('prepza-theme') || 'light';
+
+  contentEl.innerHTML = `
+    <h1 class="page-title">Settings</h1>
+    <div class="settings-layout">
+      <div class="sidebar">
+        <button class="sidebar-tab active" data-tab="profile">Profile</button>
+        <button class="sidebar-tab" data-tab="appearance">Appearance</button>
+      </div>
+      <div class="panel-area">
+
+        <div class="panel active" id="panel-profile">
+          <h2>Profile</h2>
+          <p class="panel-sub">Update your year and semester. This controls which units and content you see on your dashboard.</p>
+          <div class="card">
+            <form id="profile-form">
+              <div class="field-row">
+                <div class="field">
+                  <label for="settings-year">Year</label>
+                  <select id="settings-year" required>
+                    <option value="">Select</option>
+                    <option value="1">Year 1</option>
+                    <option value="2">Year 2</option>
+                    <option value="3">Year 3</option>
+                    <option value="4">Year 4</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="settings-semester">Semester</label>
+                  <select id="settings-semester" required>
+                    <option value="">Select</option>
+                    <option value="1">Semester 1</option>
+                    <option value="2">Semester 2</option>
+                  </select>
+                </div>
+              </div>
+              <button type="submit" class="btn-primary" id="profile-submit">Save changes</button>
+              <p class="form-msg" id="profile-msg"></p>
+            </form>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-appearance">
+          <h2>Appearance</h2>
+          <p class="panel-sub">Choose how Prepza looks on this device.</p>
+          <div class="card">
+            <div class="appearance-row">
+              <div class="appearance-label-group">
+                <h3>Dark mode</h3>
+                <p>Switch between light and dark theme.</p>
+              </div>
+              <label class="theme-switch">
+                <input type="checkbox" id="theme-toggle" ${currentTheme === 'dark' ? 'checked' : ''}>
+                <span class="switch-track"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  // Pre-fill profile form with current values
+  if (currentMe.year) document.getElementById('settings-year').value = String(currentMe.year);
+  if (currentMe.semester) document.getElementById('settings-semester').value = String(currentMe.semester);
+
+  // Tab switching
+  document.querySelectorAll('.sidebar-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // Profile form submit
+  document.getElementById('profile-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const year = parseInt(document.getElementById('settings-year').value, 10);
+    const semester = parseInt(document.getElementById('settings-semester').value, 10);
+    const msgEl = document.getElementById('profile-msg');
+    const submitBtn = document.getElementById('profile-submit');
+
+    msgEl.textContent = '';
+    msgEl.className = 'form-msg';
+
+    if (!year || !semester) {
+      msgEl.textContent = 'Please select your year and semester.';
+      msgEl.className = 'form-msg error';
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+
+    try {
+      const res = await fetch('/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, semester })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        msgEl.textContent = data.error || 'Something went wrong. Please try again.';
+        msgEl.className = 'form-msg error';
+      } else {
+        currentMe.year = data.year;
+        currentMe.semester = data.semester;
+        msgEl.textContent = 'Saved.';
+        msgEl.className = 'form-msg success';
+      }
+    } catch (err) {
+      msgEl.textContent = "Couldn't reach Prepza. Check your connection and try again.";
+      msgEl.className = 'form-msg error';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Save changes';
+    }
+  });
+
+  // Appearance toggle
+  document.getElementById('theme-toggle').addEventListener('change', (e) => {
+    const newTheme = e.target.checked ? 'dark' : 'light';
+    localStorage.setItem('prepza-theme', newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+  });
+}
+
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await fetch('/logout', { method: 'POST' });
+  window.location.href = '/static/login.html';
+});
+
+loadSettings();
+</script>
+
+</body>
+</html>
