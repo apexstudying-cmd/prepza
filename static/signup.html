@@ -326,12 +326,14 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailPattern.test(email)) {
     msgEl.textContent = 'Please enter a complete email address (e.g. name@example.com).';
     msgEl.className = 'message error';
+    msgEl.style.display = 'block';
     return;
   }
 
   if (!year || !semester) {
     msgEl.textContent = 'Please select your year and semester.';
     msgEl.className = 'message error';
+    msgEl.style.display = 'block';
     return;
   }
 
@@ -349,6 +351,7 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!res.ok) {
       msgEl.textContent = data.error || 'Something went wrong. Try again.';
       msgEl.className = 'message error';
+      msgEl.style.display = 'block';
       submitBtn.disabled = false;
       submitBtn.textContent = 'Create account';
       return;
@@ -360,6 +363,7 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   } catch (err) {
     msgEl.textContent = 'Could not reach Prepza. Check your connection.';
     msgEl.className = 'message error';
+    msgEl.style.display = 'block';
     submitBtn.disabled = false;
     submitBtn.textContent = 'Create account';
   }
