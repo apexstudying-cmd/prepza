@@ -383,8 +383,31 @@ def verify_email():
     session["user_id"] = user.id
 
     return redirect("/static/dashboard.html?verified=1")
-
-
+@app.route("/resend-verification", methods=["POST"])
+def resend_verification():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+    user = User.query.filter_by(email=email).first()
+    # Always return the same generic message whether or not the account
+    # exists or is already verified - same privacy pattern as /forgot-password,
+    # so this endpoint can't be used to check which emails are registered.
+    generic_response = jsonify({
+        "message": "If an unverified account with that email exists, a new verification link has been sent."
+    })
+    if not user or user.email_verified:
+        return generic_response
+    token = secrets.token_urlsafe(32)
+    user.verification_token = token
+    db.session.commit()
+    try:
+        send_verification_email(email, token)
+    except Exception:
+        pass
+    return generic_response
 @app.route("/forgot-password", methods=["POST"])
 def forgot_password():
     data = request.get_json(silent=True)
