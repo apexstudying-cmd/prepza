@@ -5,6 +5,7 @@ __pycache__/
 cookies.txt
 apply_*.py
 *.png
+!static/images/*.png
 *_test.pdf
 content_response.json
 downloaded_test.pdf
