@@ -7,7 +7,7 @@ import sentry_sdk
 import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, request, jsonify, session, Response
+from flask import Flask, request, jsonify, session, Response, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
@@ -290,7 +290,7 @@ def render_watermarked_page(pdf_bytes, page_num, watermark_text, zoom=2.0):
 
 @app.route("/")
 def home():
-    return "Prepza is alive!"
+    return send_from_directory(app.static_folder, "landing.html")
 
 
 @app.route("/db-check")

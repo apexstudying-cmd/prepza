@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prepza - Built by KU actuarial students, for KU actuarial students</title>
+<link rel="icon" type="image/png" href="/static/images/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:ital,wght@0,500;1,500&display=swap" rel="stylesheet">
+<style>
+  /*
+    NOTE ON THEME: light theme, built around the AI-generated white/silver
+    formula-texture image as a fixed, page-wide background (same
+    background-attachment:fixed technique as before, with a mobile
+    fallback - see bottom of file). Does not read the site's dark/light
+    localStorage toggle used on login/signup/dashboard/etc.
+
+    NOTE ON THE FINAL SLIDE: it intentionally breaks from the light theme
+    with a solid navy background, for visual contrast/punctuation at the
+    end of the page rather than the whole thing being one uniform tone.
+
+    NOTE ON THE LOGO: /static/images/logo.png is a square image with the
+    rounded-icon art centered on a black canvas (not transparent - the
+    navy icon color was too close to black for a clean cutout). It's
+    displayed at small sizes with CSS border-radius clipping, which hides
+    this and reads as a clean rounded badge.
+
+    NOTE ON TERMS/PRIVACY PAGES: unchanged, still separate clean white
+    pages - already consistent with this light theme now.
+  */
+
+  :root {
+    --navy: #16233E;
+    --navy-dark: #0F1929;
+    --gold: #C9A227;
+    --gold-dark: #A9871E;
+    --border: rgba(22, 35, 62, 0.14);
+    --text-primary: #16233E;
+    --text-secondary: #4B5468;
+    --text-muted: #7A8296;
+    --glass-bg: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(22, 35, 62, 0.12);
+    --nav-height: 76px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-snap-type: y proximity;
+  }
+
+  body {
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-color: #FFFFFF;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.55)),
+      url("/static/images/page-background.jpg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, .brand {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  a { color: inherit; }
+
+  /* ================= Nav (fixed, floats over every slide) ================= */
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--nav-height);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+  }
+
+  .logo-mark-img {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    object-fit: cover;
+    flex-shrink: 0;
+    display: block;
+  }
+
+  .logo-text {
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--navy);
+    letter-spacing: -0.01em;
+  }
+
+  .nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--navy);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 9px 18px;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .btn-outline:hover {
+    border-color: var(--navy);
+    background: rgba(22, 35, 62, 0.04);
+  }
+
+  .btn-outline.on-dark {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #FFFFFF;
+  }
+
+  .btn-outline.on-dark:hover {
+    border-color: #FFFFFF;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .btn-solid {
+    background: var(--navy);
+    color: #FFFFFF;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    display: inline-block;
+    transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .btn-solid:hover {
+    background: var(--navy-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(22, 35, 62, 0.2);
+  }
+
+  .btn-solid.large {
+    padding: 14px 28px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .btn-solid.on-dark {
+    background: var(--gold);
+    color: var(--navy-dark);
+  }
+
+  .btn-solid.on-dark:hover {
+    background: var(--gold-dark);
+    box-shadow: 0 6px 18px rgba(212, 175, 55, 0.25);
+  }
+
+  /* ================= Full-screen slide sections ================= */
+  .snap-section {
+    scroll-snap-align: start;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: calc(var(--nav-height) + 40px) 32px 40px;
+    position: relative;
+  }
+
+  /* ================= Hero ================= */
+  .hero-content {
+    max-width: 700px;
+    margin: 0 auto;
+    text-align: center;
+    position: relative;
+    z-index: 2;
+  }
+
+  .hero-content h1 {
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    margin-bottom: 18px;
+  }
+
+  .hero-content .subhead {
+    font-size: 17px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 32px;
+  }
+
+  .hero-ctas {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .scroll-hint {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    animation: bob 2s ease-in-out infinite;
+  }
+
+  @keyframes bob {
+    0%, 100% { transform: translate(-50%, 0); }
+    50% { transform: translate(-50%, 6px); }
+  }
+
+  /* ================= Section content wrapper ================= */
+  .section-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .section-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--gold-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+
+  .section-heading {
+    font-size: 28px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .section-sub {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 15px;
+    max-width: 520px;
+    margin: 0 auto 40px;
+    line-height: 1.6;
+  }
+
+  .reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .reveal-on-scroll.in-view {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ---- Glass card base (used by feature cards + formula decoder + trust) ---- */
+  .glass-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  /* ---- What you get cards ---- */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+
+  .feature-card {
+    padding: 28px 24px;
+    transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .feature-card:hover {
+    border-color: var(--gold);
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(22, 35, 62, 0.1);
+  }
+
+  .feature-card .icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(201, 162, 39, 0.16);
+    color: var(--navy);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+    margin-bottom: 16px;
+  }
+
+  .feature-card h3 {
+    font-size: 17px;
+    margin-bottom: 8px;
+  }
+
+  .feature-card p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+  }
+
+  /* ---- Formula decoder (interactive, standalone from the photo) ---- */
+  .decoder-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    padding: 32px;
+  }
+
+  .decoder-item {
+    text-align: center;
+    padding: 18px 12px;
+    border-radius: 10px;
+    cursor: help;
+    transition: background 0.15s ease;
+  }
+
+  .decoder-item:hover,
+  .decoder-item:focus,
+  .decoder-item.active {
+    background: rgba(201, 162, 39, 0.14);
+    outline: none;
+  }
+
+  .decoder-item .glyph {
+    font-family: 'IBM Plex Mono', monospace;
+    font-style: italic;
+    font-size: 24px;
+    color: var(--navy);
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .decoder-item .caption {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .formula-tooltip {
+    position: fixed;
+    background: var(--navy);
+    color: #FFFFFF;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 8px 12px;
+    border-radius: 8px;
+    max-width: 240px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    z-index: 150;
+  }
+
+  .formula-tooltip.visible {
+    opacity: 1;
+  }
+
+  /* ---- Trust ---- */
+  .trust-inner {
+    max-width: 680px;
+    margin: 0 auto;
+    text-align: center;
+    padding: 40px;
+  }
+
+  .trust-inner p {
+    font-size: 16px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+
+  /* ---- Steps ---- */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 32px;
+  }
+
+  .step {
+    text-align: center;
+  }
+
+  .step .step-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--navy);
+    color: #FFFFFF;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 14px;
+  }
+
+  .step h3 {
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+
+  .step p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .pricing-note {
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 32px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ---- Final slide: solid navy, breaks from the light theme on purpose ---- */
+  .final-slide {
+    background: var(--navy);
+    color: #FFFFFF;
+    justify-content: space-between;
+    align-items: center;
+    text-align: center;
+    padding-bottom: 0;
+  }
+
+  .secondary-cta {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .secondary-cta h2 {
+    color: #FFFFFF;
+    font-size: 28px;
+    margin-bottom: 24px;
+  }
+
+  footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    padding: 40px 32px;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    width: 100%;
+  }
+
+  footer .logo-text {
+    color: #FFFFFF;
+  }
+
+  footer p {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .footer-links a {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: underline;
+  }
+
+  /* ================= Reduced motion ================= */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; scroll-snap-type: none; }
+    .reveal-on-scroll, .scroll-hint {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+
+  /* ================= Mobile ================= */
+  @media (max-width: 720px) {
+    :root { --nav-height: 64px; }
+
+    body {
+      /* iOS Safari handles fixed backgrounds poorly - fall back to normal scroll */
+      background-attachment: scroll;
+    }
+
+    nav { padding: 0 20px; }
+    .nav-actions .btn-outline { display: none; }
+
+    .snap-section { padding: calc(var(--nav-height) + 24px) 20px 32px; }
+
+    .hero-content h1 { font-size: 28px; }
+    .hero-content .subhead { font-size: 15px; }
+    .hero-ctas { flex-direction: column; }
+    .hero-ctas .btn-solid { width: 100%; text-align: center; }
+
+    .card-grid { grid-template-columns: 1fr; }
+    .decoder-grid { grid-template-columns: repeat(2, 1fr); padding: 20px; }
+    .steps { grid-template-columns: 1fr; gap: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="logo-group" href="/">
+    <img class="logo-mark-img" src="/static/images/logo.png" alt="Prepza logo">
+    <span class="logo-text">Prepza</span>
+  </a>
+  <div class="nav-actions">
+    <a class="btn-outline" href="/static/login.html">Log in</a>
+    <a class="btn-solid" href="/static/signup.html">Sign up</a>
+  </div>
+</nav>
+
+<section class="snap-section">
+  <div class="hero-content">
+    <h1 id="hero-headline"></h1>
+    <p class="subhead" id="hero-subhead"></p>
+    <div class="hero-ctas">
+      <a class="btn-solid large" id="hero-cta-primary" href="/static/signup.html"></a>
+      <a class="btn-outline" id="hero-cta-secondary" href="/static/login.html" style="padding: 13px 24px;"></a>
+    </div>
+  </div>
+
+  <div class="scroll-hint" aria-hidden="true">
+    <span>Scroll</span>
+    <span>&#8595;</span>
+  </div>
+</section>
+
+<div class="formula-tooltip" id="formula-tooltip"></div>
+
+<section class="snap-section reveal-on-scroll" id="features-section">
+  <div class="section-inner">
+    <p class="section-label">What you get</p>
+    <div class="card-grid" id="card-grid"></div>
+  </div>
+</section>
+
+<section class="snap-section reveal-on-scroll" id="decoder-section">
+  <div class="section-inner">
+    <p class="section-label">Try it yourself</p>
+    <h2 class="section-heading">Actuarial notation, decoded</h2>
+    <p class="section-sub">Hover (or tap) any formula below to see what it actually means - the same clarity Prepza brings to every past paper and note.</p>
+    <div class="decoder-grid glass-card" id="decoder-grid"></div>
+  </div>
+</section>
+
+<section class="snap-section reveal-on-scroll" id="trust-section">
+  <div class="section-inner">
+    <div class="trust-inner glass-card">
+      <h2 class="section-heading" id="trust-heading"></h2>
+      <p id="trust-body"></p>
+    </div>
+  </div>
+</section>
+
+<section class="snap-section">
+  <div class="section-inner">
+    <p class="section-label">How it works</p>
+    <div class="steps" id="steps-grid"></div>
+    <p class="pricing-note" id="pricing-note"></p>
+  </div>
+</section>
+
+<section class="snap-section final-slide">
+  <div class="secondary-cta">
+    <h2 id="secondary-cta-text"></h2>
+    <a class="btn-solid large on-dark" id="secondary-cta-button" href="/static/signup.html"></a>
+  </div>
+
+  <footer>
+    <div class="logo-group">
+      <img class="logo-mark-img" src="/static/images/logo.png" alt="Prepza logo">
+      <span class="logo-text">Prepza</span>
+    </div>
+    <p id="footer-tagline"></p>
+    <div class="footer-links">
+      <a id="footer-contact" href="#"></a>
+      <a href="/static/terms.html">Terms &amp; Conditions</a>
+      <a href="/static/privacy.html">Privacy Policy</a>
+    </div>
+  </footer>
+</section>
+
+<script>
+/* =====================================================================
+   EDITABLE CONTENT
+   Everything a person reads on this page lives in this one object.
+   To update the landing page copy later, edit the strings below -
+   nothing else on the page needs to change.
+   ===================================================================== */
+const CONTENT = {
+  hero: {
+    headline: "Built by KU actuarial students, for KU actuarial students.",
+    subhead: "Notes, past papers, and answer-annotated Q&A — the resources our own cohort wished existed.",
+    ctaPrimary: "Sign up",
+    ctaSecondary: "Log in"
+  },
+  cards: [
+    { icon: "N", title: "Notes", desc: "Organized by year, semester, and unit — so you always know where to look." },
+    { icon: "P", title: "Past Papers", desc: "Sourced and sorted so you're not hunting through group chats for a PDF someone half-remembers." },
+    { icon: "Q", title: "Q&A PDFs", desc: "Real exam trends, compiled with answers, watermarked to your account." }
+  ],
+  trust: {
+    heading: "Why Prepza exists",
+    body: "Prepza started as a class project by a KU actuarial science student who got tired of scattered PDFs and dead group chat links. Every unit is sourced, checked, and organized by someone who's sat the same exams."
+  },
+  steps: [
+    { title: "Sign up", desc: "Tell us your year and semester." },
+    { title: "Unlock your units", desc: "See exactly what's available for where you are." },
+    { title: "Study smarter", desc: "Notes, past papers, and Q&A in one place — not scattered." }
+  ],
+  pricingNote: "Browse your units for free — some notes and past papers are open to everyone, while watermarked Q&A PDFs and other premium content unlock once you sign up.",
+  secondaryCta: {
+    text: "Join the next cohort.",
+    button: "Sign up"
+  },
+  footer: {
+    tagline: "Study resources for KU actuarial science students.",
+    // TODO: replace with your real support contact before launch
+    contactEmail: "support@prepza.app"
+  }
+};
+
+/* Formulas for the standalone interactive "decoder" section - not tied to
+   the background photo, so hover targets are exact and crisp. */
+const FORMULAS = [
+  { glyph: "μ(x)", caption: "Force of mortality", translation: "Force of mortality: how quickly death risk rises with age" },
+  { glyph: "ₙpₓ", caption: "Survival probability", translation: "Survival probability: chance a person aged x survives n more years" },
+  { glyph: "äₙ", caption: "Annuity-due", translation: "Annuity-due: present value of payments made at the start of each period" },
+  { glyph: "A = P(1+i)ⁿ", caption: "Compound interest", translation: "Compound interest: how a lump sum grows over time at rate i" },
+  { glyph: "Aₓ", caption: "Actuarial present value", translation: "Actuarial present value: expected present value of a life insurance payout" },
+  { glyph: "P = Aₓ / äₓ", caption: "Net premium", translation: "Net premium: the fair periodic price of a life insurance policy" }
+];
+
+/* =====================================================================
+   RENDER CONTENT INTO THE PAGE
+   ===================================================================== */
+document.getElementById('hero-headline').textContent = CONTENT.hero.headline;
+document.getElementById('hero-subhead').textContent = CONTENT.hero.subhead;
+document.getElementById('hero-cta-primary').textContent = CONTENT.hero.ctaPrimary;
+document.getElementById('hero-cta-secondary').textContent = CONTENT.hero.ctaSecondary;
+
+const cardGrid = document.getElementById('card-grid');
+cardGrid.innerHTML = CONTENT.cards.map(c => `
+  <div class="feature-card glass-card">
+    <div class="icon">${c.icon}</div>
+    <h3>${c.title}</h3>
+    <p>${c.desc}</p>
+  </div>
+`).join('');
+
+const decoderGrid = document.getElementById('decoder-grid');
+decoderGrid.innerHTML = FORMULAS.map((f, i) => `
+  <div class="decoder-item" tabindex="0" data-translation="${f.translation}">
+    <span class="glyph">${f.glyph}</span>
+    <span class="caption">${f.caption}</span>
+  </div>
+`).join('');
+
+document.getElementById('trust-heading').textContent = CONTENT.trust.heading;
+document.getElementById('trust-body').textContent = CONTENT.trust.body;
+
+const stepsGrid = document.getElementById('steps-grid');
+stepsGrid.innerHTML = CONTENT.steps.map((s, i) => `
+  <div class="step">
+    <div class="step-num">${i + 1}</div>
+    <h3>${s.title}</h3>
+    <p>${s.desc}</p>
+  </div>
+`).join('');
+
+document.getElementById('pricing-note').textContent = CONTENT.pricingNote;
+document.getElementById('secondary-cta-text').textContent = CONTENT.secondaryCta.text;
+document.getElementById('secondary-cta-button').textContent = CONTENT.secondaryCta.button;
+document.getElementById('footer-tagline').textContent = CONTENT.footer.tagline;
+document.getElementById('footer-contact').textContent = CONTENT.footer.contactEmail;
+document.getElementById('footer-contact').href = 'mailto:' + CONTENT.footer.contactEmail;
+
+/* =====================================================================
+   INTERACTIVITY
+   1. Hover/tap-to-translate on the standalone formula decoder
+   2. Scroll-triggered reveal for sections
+   ===================================================================== */
+const tooltip = document.getElementById('formula-tooltip');
+let activeItem = null;
+
+function showTooltip(el, x, y) {
+  tooltip.textContent = el.dataset.translation;
+  tooltip.classList.add('visible');
+  const rect = tooltip.getBoundingClientRect();
+  let left = x - rect.width / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - rect.width - 8));
+  let top = y - rect.height - 14;
+  if (top < 8) top = y + 20;
+  tooltip.style.left = left + 'px';
+  tooltip.style.top = top + 'px';
+}
+
+function hideTooltip() {
+  tooltip.classList.remove('visible');
+  if (activeItem) {
+    activeItem.classList.remove('active');
+    activeItem = null;
+  }
+}
+
+document.querySelectorAll('.decoder-item').forEach(el => {
+  el.addEventListener('mouseenter', () => {
+    const rect = el.getBoundingClientRect();
+    showTooltip(el, rect.left + rect.width / 2, rect.top);
+  });
+  el.addEventListener('mouseleave', hideTooltip);
+
+  el.addEventListener('focus', () => {
+    const rect = el.getBoundingClientRect();
+    showTooltip(el, rect.left + rect.width / 2, rect.top);
+  });
+  el.addEventListener('blur', hideTooltip);
+
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (activeItem === el) {
+      hideTooltip();
+      return;
+    }
+    if (activeItem) activeItem.classList.remove('active');
+    activeItem = el;
+    el.classList.add('active');
+    const rect = el.getBoundingClientRect();
+    showTooltip(el, rect.left + rect.width / 2, rect.top);
+  });
+});
+
+document.body.addEventListener('click', () => hideTooltip());
+
+if ('IntersectionObserver' in window) {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('in-view');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.15 });
+
+  document.querySelectorAll('.reveal-on-scroll').forEach(el => observer.observe(el));
+} else {
+  document.querySelectorAll('.reveal-on-scroll').forEach(el => el.classList.add('in-view'));
+}
+</script>
+
+</body>
+</html>

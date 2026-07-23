@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy - Prepza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #16233E;
+    --navy-dark: #0F1929;
+    --gold: #C9A227;
+    --border: #E2E4E9;
+    --text-primary: #16233E;
+    --text-secondary: #5B6478;
+    --text-muted: #8B93A3;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #FFFFFF;
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+  }
+
+  h1, h2, .brand { font-family: 'Space Grotesk', sans-serif; }
+
+  a { color: var(--navy); }
+
+  nav {
+    display: flex;
+    align-items: center;
+    padding: 20px 32px;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .logo-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+  }
+
+  .logo-mark {
+    width: 34px;
+    height: 34px;
+    background: var(--navy);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gold);
+    font-size: 19px;
+    font-weight: 700;
+  }
+
+  .logo-text {
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--navy);
+  }
+
+  main {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px 32px 100px;
+  }
+
+  h1.page-title {
+    font-size: 30px;
+    margin-bottom: 8px;
+  }
+
+  .last-updated {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 40px;
+  }
+
+  h2 {
+    font-size: 18px;
+    margin-top: 36px;
+    margin-bottom: 10px;
+  }
+
+  p, li {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+
+  ul {
+    padding-left: 22px;
+    margin-bottom: 12px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 24px;
+    font-size: 14px;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  th {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-top: 40px;
+    font-size: 14px;
+    text-decoration: none;
+    color: var(--navy);
+  }
+
+  @media (max-width: 600px) {
+    nav, main { padding-left: 20px; padding-right: 20px; }
+    table, thead, tbody, th, td, tr { display: block; }
+    th { margin-top: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="logo-group" href="/">
+    <span class="logo-mark">&Sigma;</span>
+    <span class="logo-text">Prepza</span>
+  </a>
+</nav>
+
+<main>
+  <h1 class="page-title">Privacy Policy</h1>
+  <p class="last-updated">Last updated: July 18, 2026</p>
+
+  <p>This Privacy Policy explains what information Prepza collects, why, and how it's handled, in line with Kenya's Data Protection Act, 2019.</p>
+
+  <h2>1. Information we collect</h2>
+  <ul>
+    <li><strong>Account information:</strong> your email address and password (stored as a secure hash, never in plain text).</li>
+    <li><strong>Academic information:</strong> your year and semester, used to show you relevant content.</li>
+    <li><strong>Payment information:</strong> M-Pesa transaction records (amount, phone number, transaction ID) processed via Safaricom's Daraja API when you unlock paid content.</li>
+    <li><strong>Usage information:</strong> basic session data (e.g. login sessions, which expire after 7 days) and error logs if something goes wrong on the platform.</li>
+  </ul>
+
+  <h2>2. How we use your information</h2>
+  <ul>
+    <li>To create and manage your account, and verify your email.</li>
+    <li>To grant access to the content tier you've paid for.</li>
+    <li>To process M-Pesa payments and maintain a record of your payment history.</li>
+    <li>To watermark Q&amp;A PDFs with your account email, which protects the content from unauthorized sharing and is a condition of accessing that material.</li>
+    <li>To fix bugs and improve the platform (via error monitoring).</li>
+    <li>To contact you about your account or respond to support requests.</li>
+  </ul>
+
+  <h2>3. Who we share information with</h2>
+  <p>We don't sell your personal information. We do share necessary information with the service providers ("processors") that help Prepza run:</p>
+  <table>
+    <thead>
+      <tr><th>Provider</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Supabase</td><td>Database and secure storage of account data and paid content</td></tr>
+      <tr><td>Safaricom Daraja API</td><td>Processing M-Pesa payments</td></tr>
+      <tr><td>Brevo</td><td>Sending account emails (verification, password reset)</td></tr>
+      <tr><td>Sentry</td><td>Error monitoring, to help us detect and fix bugs</td></tr>
+    </tbody>
+  </table>
+  <p>Some of these providers may process data on servers located outside Kenya. Each provider is contractually restricted to using your data only to provide their service to Prepza.</p>
+
+  <h2>4. Cookies &amp; sessions</h2>
+  <p>Prepza uses a session cookie to keep you logged in. Sessions expire automatically after 7 days, after which you'll need to log in again. We don't use advertising or third-party tracking cookies.</p>
+
+  <h2>5. Data retention</h2>
+  <p>We retain your account and payment information for as long as your account is active, and as needed to comply with legal, tax, or accounting obligations after that.</p>
+
+  <h2>6. Your rights</h2>
+  <p>Under Kenya's Data Protection Act, you have the right to access, correct, or request deletion of your personal information. To exercise any of these rights, contact us at <a href="mailto:support@prepza.app">support@prepza.app</a>.</p>
+
+  <h2>7. Security</h2>
+  <p>We take reasonable measures to protect your information, including password hashing, time-limited signed URLs for accessing paid content, and secure, watermarked delivery of sensitive Q&amp;A material. No system is 100% secure, but we work to keep yours as safe as possible.</p>
+
+  <h2>8. Children's privacy</h2>
+  <p>Prepza is intended for university students and is not directed at children under 18.</p>
+
+  <h2>9. Changes to this policy</h2>
+  <p>We may update this Privacy Policy from time to time. We'll update the "Last updated" date above when we do.</p>
+
+  <h2>10. Contact</h2>
+  <p>Questions about this Privacy Policy or your data can be sent to <a href="mailto:support@prepza.app">support@prepza.app</a>.</p>
+
+  <a class="back-link" href="/">&larr; Back to Prepza</a>
+</main>
+
+</body>
+</html>
