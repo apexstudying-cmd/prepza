@@ -243,6 +243,29 @@
     opacity: 0.6;
     cursor: not-allowed;
   }
+  .btn-danger {
+    background: #8C1D2B;
+    color: #FFFFFF;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .btn-danger:hover {
+    background: #6e1620;
+  }
+  .btn-danger:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .danger-zone-card {
+    border: 1px solid #8C1D2B;
+    border-radius: 8px;
+    padding: 16px;
+  }
 
   .form-msg {
     font-size: 13px;
@@ -385,6 +408,7 @@ function renderSettings() {
       <div class="sidebar">
         <button class="sidebar-tab active" data-tab="profile">Profile</button>
         <button class="sidebar-tab" data-tab="appearance">Appearance</button>
+        <button class="sidebar-tab" data-tab="account">Account</button>
       </div>
       <div class="panel-area">
 
@@ -433,6 +457,16 @@ function renderSettings() {
                 <span class="switch-track"></span>
               </label>
             </div>
+          </div>
+        </div>
+        <div class="panel" id="panel-account">
+          <h2>Account</h2>
+          <p class="panel-sub">Manage your account.</p>
+          <div class="card danger-zone-card">
+            <h3 style="margin-top:0;">Delete account</h3>
+            <p>This permanently deletes your account and all associated data. This cannot be undone.</p>
+            <button type="button" class="btn-danger" id="delete-account-btn">Delete my account</button>
+            <p class="form-msg" id="delete-account-msg"></p>
           </div>
         </div>
 
@@ -511,6 +545,33 @@ function renderSettings() {
 document.getElementById('logout-btn').addEventListener('click', async () => {
   await fetch('/logout', { method: 'POST' });
   window.location.href = '/static/login.html';
+});
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'delete-account-btn') {
+    const confirmed = window.confirm('Are you sure you want to permanently delete your account? This cannot be undone.');
+    if (!confirmed) return;
+    const btn = e.target;
+    const msgEl = document.getElementById('delete-account-msg');
+    btn.disabled = true;
+    btn.textContent = 'Deleting...';
+    try {
+      const res = await fetch('/delete-account', { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        msgEl.textContent = data.error || 'Something went wrong. Try again.';
+        msgEl.className = 'form-msg error';
+        btn.disabled = false;
+        btn.textContent = 'Delete my account';
+        return;
+      }
+      window.location.href = '/static/login.html';
+    } catch (err) {
+      msgEl.textContent = 'Could not reach Prepza. Check your connection.';
+      msgEl.className = 'form-msg error';
+      btn.disabled = false;
+      btn.textContent = 'Delete my account';
+    }
+  }
 });
 
 loadSettings();
