@@ -505,7 +505,7 @@ def me():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     return jsonify({
         "id": user.id,
         "email": user.email,
@@ -513,6 +513,23 @@ def me():
         "semester": user.semester,
         "email_verified": user.email_verified,
     })
+@app.route("/delete-account", methods=["DELETE"])
+def delete_account():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    user = db.session.get(User, user_id)
+    if not user:
+        session.pop("user_id", None)
+        return jsonify({"error": "Account not found"}), 404
+    # Preserve payment/financial records for accounting and any M-Pesa
+    # dispute purposes - just disassociate them from the deleted user
+    # instead of deleting the rows outright.
+    Payment.query.filter_by(user_id=user.id).update({"user_id": None})
+    db.session.delete(user)
+    db.session.commit()
+    session.pop("user_id", None)
+    return jsonify({"message": "Account deleted successfully"})
 
 
 @app.route("/profile", methods=["PATCH"])
@@ -542,7 +559,7 @@ def update_profile():
     if not isinstance(semester, int) or semester not in (1, 2):
         return jsonify({"error": "Semester must be 1 or 2"}), 400
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     user.year = year
     user.semester = semester
     db.session.commit()
@@ -568,7 +585,7 @@ def payment_history():
 
     result = []
     for p in payments:
-        content_item = ContentItem.query.get(p.content_item_id)
+        content_item = db.session.get(ContentItem, p.content_item_id)
         result.append({
             "id": p.id,
             "content_title": content_item.title if content_item else None,
@@ -589,7 +606,7 @@ def list_units():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     units = Unit.query.filter_by(year=user.year, semester=user.semester).all()
 
     return jsonify([
@@ -604,7 +621,7 @@ def unit_content(unit_id):
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    unit = Unit.query.get(unit_id)
+    unit = db.session.get(Unit, unit_id)
     if not unit:
         return jsonify({"error": "Unit not found"}), 404
 
@@ -637,7 +654,7 @@ def content_view_info(content_id):
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    content_item = ContentItem.query.get(content_id)
+    content_item = db.session.get(ContentItem, content_id)
     if not content_item:
         return jsonify({"error": "Content not found"}), 404
 
@@ -676,7 +693,7 @@ def content_view_page(content_id, page_num):
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    content_item = ContentItem.query.get(content_id)
+    content_item = db.session.get(ContentItem, content_id)
     if not content_item:
         return jsonify({"error": "Content not found"}), 404
 
@@ -686,7 +703,7 @@ def content_view_page(content_id, page_num):
     if not has_access(user_id, content_item):
         return jsonify({"error": "You don't have access to this content"}), 403
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     watermark_text = user.email
 
     pdf_bytes = fetch_private_file_bytes(content_item.file_url)
@@ -711,7 +728,7 @@ def pay_for_content(content_id):
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    content_item = ContentItem.query.get(content_id)
+    content_item = db.session.get(ContentItem, content_id)
     if not content_item:
         return jsonify({"error": "Content not found"}), 404
 
@@ -848,7 +865,7 @@ def admin_list_content():
 
     result = []
     for item in items:
-        unit = Unit.query.get(item.unit_id)
+        unit = db.session.get(Unit, item.unit_id)
         result.append({
             "id": item.id,
             "unit_id": item.unit_id,
@@ -884,7 +901,7 @@ def admin_add_content():
     if content_type not in ("past_paper", "notes", "qna"):
         return jsonify({"error": "content_type must be past_paper, notes, or qna"}), 400
 
-    unit = Unit.query.get(unit_id)
+    unit = db.session.get(Unit, unit_id)
     if not unit:
         return jsonify({"error": "Unit not found"}), 404
 
@@ -908,7 +925,7 @@ def admin_add_content():
 @app.route("/admin/content/<int:content_id>", methods=["PATCH"])
 @require_admin
 def admin_update_content(content_id):
-    item = ContentItem.query.get(content_id)
+    item = db.session.get(ContentItem, content_id)
     if not item:
         return jsonify({"error": "Content not found"}), 404
 
@@ -948,7 +965,7 @@ def admin_list_payments():
 
     result = []
     for p in payments:
-        content_item = ContentItem.query.get(p.content_item_id)
+        content_item = db.session.get(ContentItem, p.content_item_id)
         result.append({
             "id": p.id,
             "user_id": p.user_id,
@@ -966,7 +983,7 @@ def admin_list_payments():
 @app.route("/admin/payments/<int:payment_id>/refund", methods=["POST"])
 @require_admin
 def admin_refund_payment(payment_id):
-    payment = Payment.query.get(payment_id)
+    payment = db.session.get(Payment, payment_id)
     if not payment:
         return jsonify({"error": "Payment not found"}), 404
 
