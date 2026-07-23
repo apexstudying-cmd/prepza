@@ -7,7 +7,7 @@ import sentry_sdk
 import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, request, jsonify, session, Response, send_from_directory
+from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
@@ -367,17 +367,22 @@ def signup():
 def verify_email():
     token = request.args.get("token")
     if not token:
-        return jsonify({"error": "Missing verification token"}), 400
+        return redirect("/static/login.html?verify_error=missing_token")
 
     user = User.query.filter_by(verification_token=token).first()
     if not user:
-        return jsonify({"error": "Invalid or expired verification link"}), 400
+        return redirect("/static/login.html?verify_error=invalid_token")
 
     user.email_verified = True
     user.verification_token = None
     db.session.commit()
 
-    return jsonify({"message": "Email verified successfully! You can now log in."})
+    # Auto-login: set the session the same way /login does, so the user
+    # lands straight in the dashboard instead of having to log in again.
+    session.permanent = True
+    session["user_id"] = user.id
+
+    return redirect("/static/dashboard.html?verified=1")
 
 
 @app.route("/forgot-password", methods=["POST"])
