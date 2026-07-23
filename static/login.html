@@ -215,6 +215,7 @@
     <p class="card-sub">Welcome back. Enter your details to continue.</p>
 
     <div id="login-message" class="message"></div>
+    <button type="button" id="resend-verification-btn" style="display:none; background:none; border:none; color:#8C1D2B; text-decoration:underline; cursor:pointer; padding:0 0 12px 0; font-size:14px;">Resend verification email</button>
 
     <form id="login-form">
       <div class="field">
@@ -327,6 +328,13 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
       showMessage('login-message', data.error || 'Something went wrong. Try again.', 'error');
       submitBtn.disabled = false;
       submitBtn.textContent = 'Log in';
+      const resendBtn = document.getElementById('resend-verification-btn');
+      if (data.error === 'Please verify your email before logging in') {
+        resendBtn.style.display = 'inline-block';
+        resendBtn.dataset.email = email;
+      } else {
+        resendBtn.style.display = 'none';
+      }
       return;
     }
 
@@ -337,6 +345,25 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     submitBtn.disabled = false;
     submitBtn.textContent = 'Log in';
   }
+});
+document.getElementById('resend-verification-btn').addEventListener('click', async function() {
+  const email = this.dataset.email;
+  this.disabled = true;
+  this.textContent = 'Sending...';
+  try {
+    const res = await fetch('/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    showMessage('login-message', data.message || 'If an unverified account with that email exists, a new verification link has been sent.', 'success');
+  } catch (err) {
+    showMessage('login-message', 'Could not reach Prepza. Check your connection.', 'error');
+  }
+  this.style.display = 'none';
+  this.disabled = false;
+  this.textContent = 'Resend verification email';
 });
 
 document.getElementById('forgot-form').addEventListener('submit', async (e) => {
