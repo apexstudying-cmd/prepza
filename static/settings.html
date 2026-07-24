@@ -665,6 +665,14 @@ document.getElementById('menu-toggle').addEventListener('click', () => {
   document.body.classList.remove('sidebar-collapsed');
   localStorage.setItem('prepza-sidebar-collapsed', 'false');
 });
+document.querySelectorAll('.sidebar-link').forEach(function(link) {
+  link.addEventListener('click', function() {
+    if (window.innerWidth <= 720) {
+      document.body.classList.add('sidebar-collapsed');
+      localStorage.setItem('prepza-sidebar-collapsed', 'true');
+    }
+  });
+});
 document.getElementById('logout-btn').addEventListener('click', async () => {
   await fetch('/logout', { method: 'POST' });
   window.location.href = '/static/login.html';
