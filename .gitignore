@@ -12,3 +12,6 @@ downloaded_test.pdf
 fix_*.py
 patch_*.py
 scratch/
+add_sidebar_dashboard.py
+patch_settings_sidebar.py
+add_*.py
