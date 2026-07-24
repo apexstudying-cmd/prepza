@@ -50,28 +50,155 @@
 
   h1, h2, h3, .brand { font-family: 'Space Grotesk', sans-serif; }
 
-  nav {
+  /* ---------- Sidebar ---------- */
+  #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 240px;
     background: var(--navy);
-    border-bottom: 3px solid var(--gold);
-    padding: 16px 32px;
+    border-right: 3px solid var(--gold);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    z-index: 100;
+    transition: transform 0.2s ease;
+  }
+  body.sidebar-collapsed #sidebar {
+    transform: translateX(-240px);
+  }
+  .sidebar-top {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    padding: 0 20px 20px;
   }
-
-  .brand { color: #FFFFFF; font-size: 20px; font-weight: 600; text-decoration: none; }
-
-  .back-link {
-    color: rgba(255,255,255,0.75);
-    font-size: 13px;
+  .brand {
+    color: #FFFFFF;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
     text-decoration: none;
   }
-  .back-link:hover { color: #FFFFFF; }
+  #sidebar-toggle {
+    background: transparent;
+    border: none;
+    color: #FFFFFF;
+    cursor: pointer;
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #menu-toggle {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 101;
+    background: var(--navy);
+    border: none;
+    color: #FFFFFF;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  body.sidebar-collapsed #menu-toggle {
+    display: flex;
+  }
+  .sidebar-info {
+    padding: 0 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 12px;
+  }
+  .year-badge {
+    background: rgba(201, 162, 39, 0.15);
+    color: var(--gold);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 20px;
+    white-space: nowrap;
+    width: fit-content;
+  }
+  .user-email {
+    color: rgba(255,255,255,0.7);
+    font-size: 13px;
+    word-break: break-all;
+  }
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 12px;
+    flex: 1;
+  }
+  .sidebar-link {
+    color: rgba(255,255,255,0.7);
+    font-size: 14px;
+    text-decoration: none;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-family: 'Inter', sans-serif;
+  }
+  .sidebar-link:hover {
+    background: rgba(255,255,255,0.08);
+    color: #FFFFFF;
+  }
+  .sidebar-link.active {
+    background: rgba(201, 162, 39, 0.15);
+    color: var(--gold);
+    font-weight: 500;
+  }
+  .logout-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #FFFFFF;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    margin: 12px;
+  }
+  .logout-btn:hover {
+    background: rgba(255,255,255,0.08);
+  }
 
+  /* ---------- Layout ---------- */
   main {
     max-width: 900px;
     margin: 0 auto;
     padding: 40px 24px 80px;
+    margin-left: 240px;
+    transition: margin-left 0.2s ease;
+  }
+  body.sidebar-collapsed main {
+    margin-left: 0;
+  }
+  @media (max-width: 720px) {
+    #sidebar {
+      transform: translateX(-240px);
+    }
+    body:not(.sidebar-collapsed) #sidebar {
+      transform: translateX(0);
+    }
+    body:not(.sidebar-collapsed) #menu-toggle {
+      display: none;
+    }
+    #menu-toggle {
+      display: flex;
+    }
+    main {
+      margin-left: 0;
+    }
   }
 
   .unit-header {
@@ -292,10 +419,26 @@
 </head>
 <body>
 
-<nav>
-  <a class="brand" href="/static/dashboard.html">Prepza</a>
-  <a class="back-link" href="/static/dashboard.html">&larr; Back to dashboard</a>
-</nav>
+<button id="menu-toggle" aria-label="Open menu">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+</button>
+<div id="sidebar">
+  <div class="sidebar-top">
+    <a class="brand" href="/static/dashboard.html">Prepza</a>
+    <button id="sidebar-toggle" aria-label="Collapse menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    </button>
+  </div>
+  <div class="sidebar-info">
+    <span class="year-badge" id="year-badge"></span>
+    <span class="user-email" id="user-email"></span>
+  </div>
+  <div class="sidebar-nav">
+    <a class="sidebar-link active" href="/static/dashboard.html">Dashboard</a>
+    <a class="sidebar-link" href="/static/settings.html">Settings</a>
+  </div>
+  <button class="logout-btn" id="logout-btn">Log out</button>
+</div>
 
 <main>
   <div id="content">
@@ -407,6 +550,10 @@ async function loadUnit() {
     return;
   }
 
+  document.getElementById('user-email').textContent = me.email;
+  document.getElementById('year-badge').textContent =
+    (me.year && me.semester) ? `Year ${me.year}, Semester ${me.semester}` : 'Set your year and semester';
+
   let data;
   try {
     const res = await fetch(`/units/${unitId}/content`);
@@ -510,6 +657,23 @@ document.getElementById('pay-submit').addEventListener('click', async () => {
     submitBtn.disabled = false;
     submitBtn.textContent = 'Pay now';
   }
+});
+
+(function() {
+  var collapsed = localStorage.getItem('prepza-sidebar-collapsed') === 'true';
+  if (collapsed) document.body.classList.add('sidebar-collapsed');
+})();
+document.getElementById('sidebar-toggle').addEventListener('click', () => {
+  document.body.classList.add('sidebar-collapsed');
+  localStorage.setItem('prepza-sidebar-collapsed', 'true');
+});
+document.getElementById('menu-toggle').addEventListener('click', () => {
+  document.body.classList.remove('sidebar-collapsed');
+  localStorage.setItem('prepza-sidebar-collapsed', 'false');
+});
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await fetch('/logout', { method: 'POST' });
+  window.location.href = '/static/login.html';
 });
 
 loadUnit();
