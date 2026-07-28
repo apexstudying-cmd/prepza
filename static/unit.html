@@ -470,6 +470,7 @@ const unitId = params.get('id');
 const contentEl = document.getElementById('content');
 
 let currentPayContentId = null;
+let csrfToken = null;
 
 contentEl.addEventListener('click', (e) => {
   const btn = e.target.closest('.action-btn.unlock');
@@ -554,6 +555,7 @@ async function loadUnit() {
       return;
     }
     me = await meRes.json();
+    csrfToken = me.csrf_token;
   } catch (err) {
     contentEl.innerHTML = `<div class="state-box"><h3>Couldn't reach Prepza</h3><p>Check your connection and refresh.</p></div>`;
     return;
@@ -619,7 +621,7 @@ document.getElementById('pay-submit').addEventListener('click', async () => {
   try {
     const res = await fetch(`/content/${currentPayContentId}/pay`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
       body: JSON.stringify({ phone_number: phone })
     });
     const data = await res.json();

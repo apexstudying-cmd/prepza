@@ -622,7 +622,7 @@ function renderSettings() {
     try {
       const res = await fetch('/profile', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': currentMe.csrf_token },
         body: JSON.stringify({ year, semester })
       });
       const data = await res.json();
@@ -686,7 +686,10 @@ document.addEventListener('click', async (e) => {
     btn.disabled = true;
     btn.textContent = 'Deleting...';
     try {
-      const res = await fetch('/delete-account', { method: 'DELETE' });
+      const res = await fetch('/delete-account', {
+        method: 'DELETE',
+        headers: { 'X-CSRF-Token': currentMe.csrf_token }
+      });
       const data = await res.json();
       if (!res.ok) {
         msgEl.textContent = data.error || 'Something went wrong. Try again.';

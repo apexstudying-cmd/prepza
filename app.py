@@ -174,6 +174,22 @@ def require_admin(f):
     return decorated
 
 
+def require_csrf(f):
+    """
+    Requires a valid X-CSRF-Token header matching this session's token.
+    Only meaningful for endpoints that also check session["user_id"] -
+    this does not replace login checks, it supplements them.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        provided = request.headers.get("X-CSRF-Token")
+        expected = session.get("csrf_token")
+        if not provided or not expected or not hmac.compare_digest(provided, expected):
+            return jsonify({"error": "Missing or invalid CSRF token"}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
 def has_access(user_id, content_item):
     if content_item.price == 0:
         return True
@@ -517,6 +533,9 @@ def me():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_urlsafe(32)
+
     user = db.session.get(User, user_id)
     return jsonify({
         "id": user.id,
@@ -524,8 +543,10 @@ def me():
         "year": user.year,
         "semester": user.semester,
         "email_verified": user.email_verified,
+        "csrf_token": session["csrf_token"],
     })
 @app.route("/delete-account", methods=["DELETE"])
+@require_csrf
 def delete_account():
     user_id = session.get("user_id")
     if not user_id:
@@ -545,6 +566,7 @@ def delete_account():
 
 
 @app.route("/profile", methods=["PATCH"])
+@require_csrf
 def update_profile():
     """
     Lets a logged-in student update their own year and semester -
@@ -739,6 +761,7 @@ def content_view_page(content_id, page_num):
     "1 per 20 seconds",
     key_func=lambda: f"pay:{session.get('user_id', get_remote_address())}",
 )
+@require_csrf
 def pay_for_content(content_id):
     user_id = session.get("user_id")
     if not user_id:
