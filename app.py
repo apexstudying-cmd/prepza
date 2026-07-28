@@ -763,8 +763,6 @@ def pay_for_content(content_id):
             "TransactionDesc": f"Prepza - {content_item.title}",
         }
 
-        print("DEBUG CallBackURL being sent:", repr(payload["CallBackURL"]))
-
         response = requests.post(url, json=payload, headers=headers)
         response_data = response.json()
 
@@ -797,8 +795,6 @@ def mpesa_callback(callback_token):
     if not data:
         return jsonify({"ResultCode": 1, "ResultDesc": "Invalid payload"}), 400
 
-    print("MPESA CALLBACK RECEIVED:", data)
-
     try:
         stk_callback = data["Body"]["stkCallback"]
         checkout_request_id = stk_callback["CheckoutRequestID"]
@@ -809,7 +805,22 @@ def mpesa_callback(callback_token):
         ).first()
 
         if payment and payment.status == "pending":
-            payment.status = "success" if result_code == 0 else "failed"
+            if result_code == 0:
+                callback_amount = next(
+                    (item.get("Value") for item in
+                     stk_callback.get("CallbackMetadata", {}).get("Item", [])
+                     if item.get("Name") == "Amount"),
+                    None,
+                )
+                if callback_amount is not None and int(callback_amount) != payment.amount:
+                    # Amount mismatch - do NOT grant access, flag for manual review
+                    print(f"MPESA amount mismatch on payment {payment.id}: "
+                          f"expected {payment.amount}, callback said {callback_amount}")
+                    payment.status = "failed"
+                else:
+                    payment.status = "success"
+            else:
+                payment.status = "failed"
             db.session.commit()
 
     except Exception as e:
