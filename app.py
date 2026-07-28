@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
 from flask_sqlalchemy import SQLAlchemy
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 
@@ -23,6 +25,7 @@ if sentry_dsn:
     )
 
 app = Flask(__name__)
+limiter = Limiter(get_remote_address, app=app, default_limits=[])
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
@@ -318,6 +321,7 @@ def db_check():
 # ---------- Auth routes ----------
 
 @app.route("/signup", methods=["POST"])
+@limiter.limit("5 per hour")
 def signup():
     data = request.get_json(silent=True)
     if not data:
@@ -397,6 +401,7 @@ def verify_email():
 
     return redirect("/static/dashboard.html?verified=1")
 @app.route("/resend-verification", methods=["POST"])
+@limiter.limit("5 per hour")
 def resend_verification():
     data = request.get_json(silent=True)
     if not data:
@@ -422,6 +427,7 @@ def resend_verification():
         pass
     return generic_response
 @app.route("/forgot-password", methods=["POST"])
+@limiter.limit("5 per hour")
 def forgot_password():
     data = request.get_json(silent=True)
     if not data:
@@ -482,6 +488,7 @@ def reset_password():
 
 
 @app.route("/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def login():
     data = request.get_json(silent=True)
     if not data:
@@ -736,6 +743,10 @@ def content_view_page(content_id, page_num):
 
 
 @app.route("/content/<int:content_id>/pay", methods=["POST"])
+@limiter.limit(
+    "1 per 20 seconds",
+    key_func=lambda: f"pay:{session.get('user_id', get_remote_address())}",
+)
 def pay_for_content(content_id):
     user_id = session.get("user_id")
     if not user_id:
