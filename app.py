@@ -2,6 +2,7 @@ import os
 import re
 import base64
 import secrets
+import hmac
 import requests
 import sentry_sdk
 import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
@@ -36,7 +37,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 db = SQLAlchemy(app)
 
-EMAIL_REGEX = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+EMAIL_REGEX = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 BASE_URL = os.environ.get("BASE_URL", "https://prepza-sf60.onrender.com")
 
 
@@ -167,7 +168,7 @@ def require_admin(f):
     def decorated(*args, **kwargs):
         provided_secret = request.headers.get("X-Admin-Secret")
         real_secret = os.environ.get("ADMIN_SECRET")
-        if not provided_secret or provided_secret != real_secret:
+        if not provided_secret or not real_secret or not hmac.compare_digest(provided_secret, real_secret):
             return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
     return decorated
@@ -307,15 +308,6 @@ def render_watermarked_page(pdf_bytes, page_num, watermark_text, zoom=2.0):
 @app.route("/")
 def home():
     return send_from_directory(app.static_folder, "landing.html")
-
-
-@app.route("/db-check")
-def db_check():
-    try:
-        count = User.query.count()
-        return f"Database connected! Current user count: {count}"
-    except Exception as e:
-        return f"Database connection failed: {str(e)}"
 
 
 # ---------- Auth routes ----------
@@ -811,7 +803,7 @@ def pay_for_content(content_id):
 @app.route("/mpesa/callback/<callback_token>", methods=["POST"])
 def mpesa_callback(callback_token):
     expected_token = os.environ.get("MPESA_CALLBACK_SECRET", "").strip()
-    if not expected_token or callback_token != expected_token:
+    if not expected_token or not hmac.compare_digest(callback_token, expected_token):
         # Don't reveal *why* it failed - just look like a normal 404 to anyone probing the URL
         return jsonify({"error": "Not found"}), 404
 
