@@ -471,6 +471,15 @@ const contentEl = document.getElementById('content');
 
 let currentPayContentId = null;
 
+contentEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.action-btn.unlock');
+  if (!btn) return;
+  const contentId = Number(btn.dataset.contentId);
+  const title = btn.dataset.title;
+  const price = Number(btn.dataset.price);
+  openPayModal(contentId, title, price);
+});
+
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
@@ -490,7 +499,7 @@ function renderContentRow(item, type) {
     }
   } else {
     const priceLabel = item.price > 0 ? `Unlock - KES ${item.price}` : 'Unlock';
-    actionHtml = `<button class="action-btn unlock" onclick="openPayModal(${item.id}, '${escapeHtml(item.title)}', ${item.price})">${priceLabel}</button>`;
+    actionHtml = `<button class="action-btn unlock" data-content-id="${item.id}" data-title="${escapeHtml(item.title)}" data-price="${item.price}">${priceLabel}</button>`;
   }
 
   const metaParts = [];
