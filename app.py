@@ -40,6 +40,29 @@ db = SQLAlchemy(app)
 EMAIL_REGEX = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 BASE_URL = os.environ.get("BASE_URL", "https://prepza-sf60.onrender.com")
 
+COMMON_WEAK_PASSWORDS = {
+    "password", "password1", "password12", "password123",
+    "12345678", "123456789", "1234567890", "qwerty123", "qwertyuiop",
+    "letmein123", "iloveyou1", "iloveyou123", "admin1234", "welcome123",
+    "abc123456", "11111111", "00000000", "changeme1", "monkey123",
+    "football1", "sunshine1", "princess1", "dragon123",
+}
+
+
+def password_strength_error(password):
+    """
+    Lightweight strength check (no external dependency). Returns an
+    error message string if the password is too weak, or None if it's
+    acceptable. Caller is expected to have already checked length.
+    """
+    if password.lower() in COMMON_WEAK_PASSWORDS:
+        return "That password is too common - please choose something more unique."
+    if not re.search(r"[A-Za-z]", password):
+        return "Password must include at least one letter."
+    if not re.search(r"\d", password):
+        return "Password must include at least one number."
+    return None
+
 
 @app.after_request
 def set_security_headers(response):
@@ -349,6 +372,9 @@ def signup():
         return jsonify({"error": "Password is required"}), 400
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters long"}), 400
+    strength_error = password_strength_error(password)
+    if strength_error:
+        return jsonify({"error": strength_error}), 400
 
     if year is not None:
         if not isinstance(year, int) or year < 1 or year > 4:
@@ -498,6 +524,9 @@ def reset_password():
         return jsonify({"error": "Missing reset token"}), 400
     if len(new_password) < 8:
         return jsonify({"error": "Password must be at least 8 characters long"}), 400
+    strength_error = password_strength_error(new_password)
+    if strength_error:
+        return jsonify({"error": strength_error}), 400
 
     user = User.query.filter_by(reset_token=token).first()
     if not user or not user.reset_token_expiry or user.reset_token_expiry < datetime.utcnow():
