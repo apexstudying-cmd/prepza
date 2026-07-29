@@ -390,13 +390,26 @@ def signup():
 
 @app.route("/verify-email")
 def verify_email():
-    token = request.args.get("token")
+    """
+    Serves a lightweight landing page instead of verifying directly on
+    this GET request. Email link scanners fetch this URL but don't run
+    JavaScript, so they can no longer silently consume the token - the
+    actual verification happens via the JS-triggered POST below, from
+    static/verify-confirm.html.
+    """
+    return send_from_directory(app.static_folder, "verify-confirm.html")
+
+
+@app.route("/verify-email/confirm", methods=["POST"])
+def verify_email_confirm():
+    data = request.get_json(silent=True) or {}
+    token = data.get("token")
     if not token:
-        return redirect("/static/login.html?verify_error=missing_token")
+        return jsonify({"error": "Missing verification token"}), 400
 
     user = User.query.filter_by(verification_token=token).first()
     if not user:
-        return redirect("/static/login.html?verify_error=invalid_token")
+        return jsonify({"error": "This link is invalid or has already been used"}), 400
 
     user.email_verified = True
     user.verification_token = None
@@ -407,7 +420,10 @@ def verify_email():
     session.permanent = True
     session["user_id"] = user.id
 
-    return redirect("/static/dashboard.html?verified=1")
+    return jsonify({
+        "message": "Email verified successfully",
+        "redirect": "/static/dashboard.html?verified=1",
+    })
 @app.route("/resend-verification", methods=["POST"])
 @limiter.limit("5 per hour")
 def resend_verification():

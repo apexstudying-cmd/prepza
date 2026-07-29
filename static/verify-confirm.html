@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+(function() {
+  var theme = localStorage.getItem('prepza-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verifying your email - Prepza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #16233E;
+    --gold: #C9A227;
+    --page-bg: #EDEEF1;
+    --border: #E2E4E9;
+    --text-primary: #16233E;
+    --text-secondary: #5B6478;
+  }
+  [data-theme="dark"] {
+    --navy: #2C3E63;
+    --gold: #D4AF37;
+    --page-bg: #14181F;
+    --border: #323A48;
+    --text-primary: #E8EAED;
+    --text-secondary: #A8AFBC;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--page-bg);
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    text-align: center;
+    padding: 40px 32px;
+    max-width: 380px;
+  }
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+  p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .spinner {
+    width: 24px; height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="spinner" id="spinner"></div>
+  <h1 id="title">Verifying your email...</h1>
+  <p id="message">Just a moment.</p>
+</div>
+
+<script>
+const token = new URLSearchParams(window.location.search).get('token');
+
+async function run() {
+  if (!token) {
+    window.location.href = '/static/login.html?verify_error=missing_token';
+    return;
+  }
+
+  try {
+    const res = await fetch('/verify-email/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('title').textContent = "Couldn't verify your email";
+      document.getElementById('message').textContent =
+        data.error || 'This link may have expired or already been used.';
+      setTimeout(() => {
+        window.location.href = '/static/login.html?verify_error=invalid_token';
+      }, 2500);
+      return;
+    }
+
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('title').textContent = 'Email verified!';
+    document.getElementById('message').textContent = 'Taking you to your dashboard...';
+    window.location.href = data.redirect || '/static/dashboard.html?verified=1';
+  } catch (err) {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('title').textContent = "Couldn't reach Prepza";
+    document.getElementById('message').textContent = 'Check your connection and refresh this page.';
+  }
+}
+
+run();
+</script>
+</body>
+</html>
