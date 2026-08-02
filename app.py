@@ -71,6 +71,15 @@ def set_security_headers(response):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+
+    # Long-lived caching for static assets (images, CSS, JS) so repeat
+    # visitors don't re-download unchanged files on every page load.
+    # Unrelated to the "no-store" header on the watermarked PDF viewer route
+    # below - that one intentionally stays uncached since it's private,
+    # paid content.
+    if request.path.startswith(("/static/images/", "/static/css/", "/static/js/")):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+
     return response
 
 
