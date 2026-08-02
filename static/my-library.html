@@ -365,7 +365,6 @@ function escapeHtml(str) {
 
 function renderItem(item, type) {
   const metaParts = [];
-  if (item.unit_code) metaParts.push(item.unit_code);
   if (item.paper_year) metaParts.push(item.paper_year);
 
   let actionHtml;
@@ -380,7 +379,7 @@ function renderItem(item, type) {
   return `
     <div class="content-row">
       <div class="content-info">
-        <span class="content-title">${escapeHtml(item.title)}</span>
+        <span class="content-title">${item.unit_code ? `<span class="unit-tag">${escapeHtml(item.unit_code)}</span>` : ''}${escapeHtml(item.title)}</span>
         ${metaParts.length ? `<span class="content-meta">${metaParts.map(escapeHtml).join(' &middot; ')}</span>` : ''}
       </div>
       ${actionHtml}
@@ -466,7 +465,7 @@ async function loadLibrary() {
 
   contentEl.innerHTML = `
     <p class="page-title">My Library</p>
-    <p class="page-sub">Everything you've unlocked, in one place.</p>
+    <p class="page-sub">Everything you've unlocked, in one place - ${totalItems} item${totalItems === 1 ? '' : 's'}.</p>
     ${renderGroup('My Notes', notes, 'notes')}
     ${renderGroup('My Past Papers', pastPapers, 'past_paper')}
     ${renderGroup('My Q&As', qnas, 'qna')}

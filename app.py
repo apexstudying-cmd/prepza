@@ -769,12 +769,20 @@ def my_library():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
+    payments = Payment.query.filter_by(user_id=user_id, status="success").all()
+    unlocked_at = {}
+    for p in payments:
+        existing = unlocked_at.get(p.content_item_id)
+        if existing is None or (p.created_at and p.created_at > existing):
+            unlocked_at[p.content_item_id] = p.created_at
+
     items = ContentItem.query.all()
     grouped = {"past_paper": [], "notes": [], "qna": []}
     for item in items:
         if not has_access(user_id, item):
             continue
         unit = db.session.get(Unit, item.unit_id)
+        item_unlocked_at = unlocked_at.get(item.id)
         grouped[item.content_type].append({
             "id": item.id,
             "title": item.title,
@@ -782,7 +790,11 @@ def my_library():
             "unit_id": item.unit_id,
             "unit_code": unit.code if unit else None,
             "file_url": get_signed_url(item.file_url) if item.is_downloadable else None,
+            "unlocked_at": item_unlocked_at.isoformat() if item_unlocked_at else None,
         })
+
+    for content_type in grouped:
+        grouped[content_type].sort(key=lambda x: x["unlocked_at"] or "", reverse=True)
 
     return jsonify({"content": grouped})
 
