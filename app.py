@@ -763,6 +763,30 @@ def unit_content(unit_id):
     return jsonify({"unit": unit.code, "content": grouped})
 
 
+@app.route("/library")
+def my_library():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    items = ContentItem.query.all()
+    grouped = {"past_paper": [], "notes": [], "qna": []}
+    for item in items:
+        if not has_access(user_id, item):
+            continue
+        unit = db.session.get(Unit, item.unit_id)
+        grouped[item.content_type].append({
+            "id": item.id,
+            "title": item.title,
+            "paper_year": item.paper_year,
+            "unit_id": item.unit_id,
+            "unit_code": unit.code if unit else None,
+            "file_url": get_signed_url(item.file_url) if item.is_downloadable else None,
+        })
+
+    return jsonify({"content": grouped})
+
+
 @app.route("/content/<int:content_id>/view/info")
 def content_view_info(content_id):
     """
