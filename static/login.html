@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#16233E">
+<link rel="apple-touch-icon" href="/static/images/icon-192.png">
 <script>
 (function() {
   var theme = localStorage.getItem('prepza-theme') || 'light';
@@ -398,5 +401,14 @@ document.getElementById('forgot-form').addEventListener('submit', async (e) => {
 });
 </script>
 
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js').catch(function(err) {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+</script>
 </body>
 </html>

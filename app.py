@@ -358,6 +358,20 @@ def home():
     return send_from_directory(app.static_folder, "landing.html")
 
 
+@app.route("/sw.js")
+def service_worker():
+    """
+    Served at the root URL (not /static/sw.js) so its scope covers the
+    whole site, not just the static folder. Deliberately not cached
+    long-term, unlike images/CSS/JS, so browsers pick up updates to this
+    file quickly.
+    """
+    response = send_from_directory(app.static_folder, "sw.js")
+    response.headers["Content-Type"] = "application/javascript"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.route("/health")
 @limiter.exempt
 def health():

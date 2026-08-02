@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#16233E">
+<link rel="apple-touch-icon" href="/static/images/icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Terms & Conditions - Prepza</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -177,5 +180,14 @@
   <a class="back-link" href="/">&larr; Back to Prepza</a>
 </main>
 
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js').catch(function(err) {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+</script>
 </body>
 </html>
