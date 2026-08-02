@@ -349,6 +349,25 @@ def home():
     return send_from_directory(app.static_folder, "landing.html")
 
 
+@app.route("/health")
+@limiter.exempt
+def health():
+    """
+    Lightweight status check. Pinged automatically every ~10 minutes by a
+    GitHub Actions workflow to prevent Render's free tier from spinning down
+    and Supabase's free tier from auto-pausing due to inactivity.
+
+    Deliberately excluded from rate limiting (it's an automated, low-value
+    target for abuse) and returns no sensitive data.
+    """
+    from sqlalchemy import text
+    try:
+        db.session.execute(text("SELECT 1"))
+        return jsonify({"status": "ok"}), 200
+    except Exception:
+        return jsonify({"status": "error"}), 503
+
+
 # ---------- Auth routes ----------
 
 @app.route("/signup", methods=["POST"])
