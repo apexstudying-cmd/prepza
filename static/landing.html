@@ -1,16 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<style>
+html.auth-check { visibility: hidden; }
+</style>
 <script>
+document.documentElement.classList.add('auth-check');
+
 (function() {
+  var revealed = false;
+  function reveal() {
+    if (revealed) return;
+    revealed = true;
+    document.documentElement.classList.remove('auth-check'); document.body.style.display = '';
+  }
+
+  // Safety net: never let a slow/failed request leave the page blank.
+  var safetyTimer = setTimeout(reveal, 1500);
+
   fetch('/me', { credentials: 'same-origin' })
     .then(function(res) {
       if (res.ok) {
         window.location.replace('/static/dashboard.html');
+        // Intentionally not revealing - we're navigating away.
+      } else {
+        clearTimeout(safetyTimer);
+        reveal();
       }
     })
     .catch(function() {
-      // Network error or not logged in - just stay on the landing page.
+      // Network error - just show the landing page normally.
+      clearTimeout(safetyTimer);
+      reveal();
     });
 })();
 </script>
@@ -567,7 +588,7 @@
   }
 </style>
 </head>
-<body>
+<body style="display:none">
 
 <nav>
   <a class="logo-group" href="/">
