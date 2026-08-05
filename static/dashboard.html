@@ -217,6 +217,31 @@
     margin-bottom: 36px;
   }
 
+  .search-wrap {
+    margin-bottom: 24px;
+  }
+
+  .unit-search {
+    width: 100%;
+    max-width: 360px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+  }
+
+  .unit-search:focus {
+    outline: none;
+    border-color: var(--gold);
+  }
+
+  .unit-search::placeholder {
+    color: var(--text-muted);
+  }
+
   .section-label {
     font-size: 13px;
     font-weight: 500;
@@ -347,6 +372,44 @@
 </main>
 
 <script>
+let allUnits = [];
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderUnitCards(list) {
+  if (list.length === 0) {
+    return `
+      <div class="state-box">
+        <h3>No units match your search</h3>
+        <p>Try a different unit code or name.</p>
+      </div>`;
+  }
+  return `<div class="unit-grid">${list.map(u => `
+    <a class="unit-card" href="/static/unit.html?id=${u.id}">
+      <span class="unit-code">${escapeHtml(u.code)}</span>
+      <div class="unit-name">${escapeHtml(u.name)}</div>
+      <div class="unit-arrow">View content &rarr;</div>
+    </a>
+  `).join('')}</div>`;
+}
+
+function filterUnits(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return allUnits;
+  return allUnits.filter(u =>
+    u.code.toLowerCase().includes(q) || u.name.toLowerCase().includes(q)
+  );
+}
+
+function handleSearchInput(e) {
+  const filtered = filterUnits(e.target.value);
+  document.getElementById('unit-grid-wrap').innerHTML = renderUnitCards(filtered);
+}
+
 async function loadDashboard() {
   const contentEl = document.getElementById('content');
 
@@ -406,26 +469,24 @@ async function loadDashboard() {
     return;
   }
 
-  const cardsHtml = units.map(u => `
-    <a class="unit-card" href="/static/unit.html?id=${u.id}">
-      <span class="unit-code">${escapeHtml(u.code)}</span>
-      <div class="unit-name">${escapeHtml(u.name)}</div>
-      <div class="unit-arrow">View content &rarr;</div>
-    </a>
-  `).join('');
+  allUnits = units;
+
+  const searchHtml = units.length > 5 ? `
+    <div class="search-wrap">
+      <input type="text" id="unit-search" class="unit-search" placeholder="Search units by code or name..." autocomplete="off">
+    </div>` : '';
 
   contentEl.innerHTML = `
     <p class="welcome">Welcome, ${escapeHtml(firstName)}</p>
     <p class="welcome-sub">Year ${me.year}, Semester ${me.semester} &middot; ${units.length} unit${units.length === 1 ? '' : 's'} available</p>
+    ${searchHtml}
     <p class="section-label">Your units</p>
-    <div class="unit-grid">${cardsHtml}</div>
+    <div id="unit-grid-wrap">${renderUnitCards(units)}</div>
   `;
-}
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  if (units.length > 5) {
+    document.getElementById('unit-search').addEventListener('input', handleSearchInput);
+  }
 }
 
 (function() {
