@@ -26,6 +26,8 @@ if sentry_dsn:
     )
 
 app = Flask(__name__)
+import logging
+app.logger.setLevel(logging.INFO)
 limiter = Limiter(get_remote_address, app=app, default_limits=[])
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -616,8 +618,16 @@ def logout():
 
 @app.route("/me")
 def me():
+    app.logger.info(
+        "[/me DEBUG] raw Cookie header: %r", request.headers.get("Cookie")
+    )
+    app.logger.info(
+        "[/me DEBUG] session contents: %r", dict(session)
+    )
     user_id = session.get("user_id")
+    app.logger.info("[/me DEBUG] user_id from session: %r", user_id)
     if not user_id:
+        app.logger.info("[/me DEBUG] -> returning 401 Not logged in")
         return jsonify({"error": "Not logged in"}), 401
 
     if "csrf_token" not in session:
