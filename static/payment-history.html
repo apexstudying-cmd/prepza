@@ -12,7 +12,7 @@
 })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard - Prepza</title>
+<title>Payment History - Prepza</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
@@ -21,6 +21,7 @@
     --navy-dark: #0F1929;
     --gold: #C9A227;
     --crimson: #8C1D2B;
+    --success: #2E7D4F;
     --page-bg: #F4F5F7;
     --card-bg: #FFFFFF;
     --border: #E2E4E9;
@@ -34,6 +35,7 @@
     --navy-dark: #1B2A47;
     --gold: #D4AF37;
     --crimson: #E0576F;
+    --success: #4CAF77;
     --page-bg: #14181F;
     --card-bg: #1E232D;
     --border: #323A48;
@@ -51,11 +53,8 @@
     min-height: 100vh;
   }
 
-  h1, h2, h3, .brand {
-    font-family: 'Space Grotesk', sans-serif;
-  }
+  h1, h2, h3, .brand { font-family: 'Space Grotesk', sans-serif; }
 
-  /* ---------- Sidebar ---------- */
   #sidebar {
     position: fixed;
     top: 0;
@@ -176,9 +175,9 @@
   .logout-btn:hover {
     background: rgba(255,255,255,0.08);
   }
-  /* ---------- Main content ---------- */
+
   main {
-    max-width: 1000px;
+    max-width: 900px;
     margin: 0 auto;
     padding: 40px 24px 80px;
     margin-left: 240px;
@@ -205,111 +204,123 @@
     }
   }
 
-  .welcome {
+  .page-title {
     font-size: 26px;
     font-weight: 600;
     margin-bottom: 6px;
   }
 
-  .welcome-sub {
+  .page-sub {
     color: var(--text-secondary);
     font-size: 15px;
     margin-bottom: 36px;
   }
 
-  .section-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 16px;
+  .payment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  .unit-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 16px;
-  }
-
-  .unit-card {
+  .payment-row {
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    text-decoration: none;
-    color: inherit;
-    display: block;
-    transition: border-color 0.15s ease, transform 0.15s ease;
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
   }
 
-  .unit-card:hover {
-    border-color: var(--gold);
-    transform: translateY(-2px);
+  .payment-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
   }
 
-  .unit-code {
-    display: inline-block;
+  .payment-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .payment-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .payment-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+
+  .payment-amount {
     font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+
+  .status-badge {
+    display: inline-block;
     font-size: 12px;
     font-weight: 500;
-    color: var(--navy);
-    background: #EDF0F5;
-    padding: 4px 9px;
-    border-radius: 6px;
-    margin-bottom: 12px;
+    padding: 5px 11px;
+    border-radius: 20px;
+    white-space: nowrap;
   }
 
-  .unit-name {
-    font-size: 16px;
-    font-weight: 500;
-    line-height: 1.4;
+  .status-badge.success {
+    background: rgba(46, 125, 79, 0.12);
+    color: var(--success);
+  }
+  .status-badge.pending {
+    background: rgba(201, 162, 39, 0.15);
+    color: #8A6D1B;
+  }
+  .status-badge.failed {
+    background: rgba(140, 29, 43, 0.08);
+    color: var(--crimson);
+  }
+  .status-badge.refunded {
+    background: rgba(139, 147, 163, 0.15);
+    color: var(--text-muted);
   }
 
-  .unit-arrow {
-    margin-top: 14px;
-    font-size: 13px;
+  [data-theme="dark"] .status-badge.pending {
     color: var(--gold);
-    font-weight: 500;
   }
 
-  /* ---------- States ---------- */
+  .empty-note {
+    font-size: 13px;
+    color: var(--text-muted);
+    padding: 12px 0;
+  }
+
   .state-box {
     text-align: center;
     padding: 60px 20px;
     color: var(--text-secondary);
   }
 
-  .state-box h3 {
-    font-size: 18px;
-    color: var(--text-primary);
-    margin-bottom: 8px;
-  }
-
-  .state-box p {
-    font-size: 14px;
-    max-width: 380px;
-    margin: 0 auto;
-    line-height: 1.6;
-  }
+  .state-box h3 { font-size: 18px; color: var(--text-primary); margin-bottom: 8px; }
+  .state-box p { font-size: 14px; max-width: 380px; margin: 0 auto; line-height: 1.6; }
 
   .spinner {
-    width: 24px;
-    height: 24px;
+    width: 24px; height: 24px;
     border: 3px solid var(--border);
     border-top-color: var(--gold);
     border-radius: 50%;
     margin: 0 auto 16px;
     animation: spin 0.7s linear infinite;
   }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  [data-theme="dark"] .unit-code {
-    background: rgba(255, 255, 255, 0.08);
-  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -329,9 +340,9 @@
     <span class="user-email" id="user-email"></span>
   </div>
   <div class="sidebar-nav">
-    <a class="sidebar-link active" href="/static/dashboard.html">Dashboard</a>
+    <a class="sidebar-link" href="/static/dashboard.html">Dashboard</a>
     <a class="sidebar-link" href="/static/my-library.html">My Library</a>
-    <a class="sidebar-link" href="/static/payment-history.html">Payment History</a>
+    <a class="sidebar-link active" href="/static/payment-history.html">Payment History</a>
     <a class="sidebar-link" href="/static/settings.html">Settings</a>
   </div>
   <button class="logout-btn" id="logout-btn">Log out</button>
@@ -341,13 +352,53 @@
   <div id="content">
     <div class="state-box">
       <div class="spinner"></div>
-      <p>Loading your dashboard...</p>
+      <p>Loading your payment history...</p>
     </div>
   </div>
 </main>
 
 <script>
-async function loadDashboard() {
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+const STATUS_LABELS = {
+  success: 'Success',
+  pending: 'Pending',
+  failed: 'Failed',
+  refunded: 'Refunded',
+};
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) +
+    ' at ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderPayment(p) {
+  const label = STATUS_LABELS[p.status] || p.status;
+  const badgeClass = STATUS_LABELS[p.status] ? p.status : '';
+  const title = p.content_title || 'Unknown item';
+
+  return `
+    <div class="payment-row">
+      <div class="payment-info">
+        <span class="payment-title">${escapeHtml(title)}</span>
+        <span class="payment-meta">${escapeHtml(formatDate(p.created_at))}</span>
+      </div>
+      <div class="payment-right">
+        <span class="payment-amount">KES ${escapeHtml(String(p.amount))}</span>
+        <span class="status-badge ${badgeClass}">${escapeHtml(label)}</span>
+      </div>
+    </div>
+  `;
+}
+
+async function loadPaymentHistory() {
   const contentEl = document.getElementById('content');
 
   let me;
@@ -371,61 +422,43 @@ async function loadDashboard() {
   document.getElementById('year-badge').textContent =
     (me.year && me.semester) ? `Year ${me.year}, Semester ${me.semester}` : 'Set your year and semester';
 
-  if (!me.year || !me.semester) {
-    contentEl.innerHTML = `
-      <div class="state-box">
-        <h3>Tell us your year and semester</h3>
-        <p>We use this to show you the right units. This will be editable from your profile soon.</p>
-      </div>`;
-    return;
-  }
-
-  let units;
+  let data;
   try {
-    const unitsRes = await fetch('/units');
-    units = await unitsRes.json();
+    const res = await fetch('/payment-history');
+    if (res.status === 401) {
+      window.location.href = '/static/login.html';
+      return;
+    }
+    data = await res.json();
   } catch (err) {
     contentEl.innerHTML = `
       <div class="state-box">
-        <h3>Couldn't load your units</h3>
+        <h3>Couldn't load your payment history</h3>
         <p>Refresh the page to try again.</p>
       </div>`;
     return;
   }
 
-  const firstName = me.email.split('@')[0];
+  const payments = data.payments || [];
 
-  if (!units || units.length === 0) {
+  if (payments.length === 0) {
     contentEl.innerHTML = `
-      <p class="welcome">Welcome, ${firstName}</p>
-      <p class="welcome-sub">Year ${me.year}, Semester ${me.semester}</p>
+      <p class="page-title">Payment History</p>
+      <p class="page-sub">Every payment you've made on Prepza, in one place.</p>
       <div class="state-box">
-        <h3>No units listed yet for your year and semester</h3>
-        <p>We're adding content unit by unit. Check back soon, or reach out if a unit you need is missing.</p>
+        <h3>No payments yet</h3>
+        <p>Once you unlock notes, past papers, or Q&amp;As, your payment history will show up here.</p>
       </div>`;
     return;
   }
 
-  const cardsHtml = units.map(u => `
-    <a class="unit-card" href="/static/unit.html?id=${u.id}">
-      <span class="unit-code">${escapeHtml(u.code)}</span>
-      <div class="unit-name">${escapeHtml(u.name)}</div>
-      <div class="unit-arrow">View content &rarr;</div>
-    </a>
-  `).join('');
-
   contentEl.innerHTML = `
-    <p class="welcome">Welcome, ${escapeHtml(firstName)}</p>
-    <p class="welcome-sub">Year ${me.year}, Semester ${me.semester} &middot; ${units.length} unit${units.length === 1 ? '' : 's'} available</p>
-    <p class="section-label">Your units</p>
-    <div class="unit-grid">${cardsHtml}</div>
+    <p class="page-title">Payment History</p>
+    <p class="page-sub">${payments.length} payment${payments.length === 1 ? '' : 's'} on record.</p>
+    <div class="payment-list">
+      ${payments.map(renderPayment).join('')}
+    </div>
   `;
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }
 
 (function() {
@@ -453,7 +486,7 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
   window.location.href = '/static/login.html';
 });
 
-loadDashboard();
+loadPaymentHistory();
 </script>
 
 <script>
