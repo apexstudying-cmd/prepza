@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+(function() {
+  fetch('/me', { credentials: 'same-origin' })
+    .then(function(res) {
+      if (res.ok) {
+        window.location.replace('/static/dashboard.html');
+      }
+    })
+    .catch(function() {
+      // Network error or not logged in - just stay on the landing page.
+    });
+})();
+</script>
 <meta charset="UTF-8">
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#16233E">
