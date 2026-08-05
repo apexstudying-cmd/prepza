@@ -127,6 +127,17 @@ class Payment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class ViewProgress(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    content_item_id = db.Column(db.Integer, db.ForeignKey("content_item.id"), nullable=False)
+    page_num = db.Column(db.Integer, default=0)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "content_item_id", name="uq_view_progress_user_item"),
+    )
+
+
 def get_mpesa_access_token():
     consumer_key = os.environ.get("MPESA_CONSUMER_KEY")
     consumer_secret = os.environ.get("MPESA_CONSUMER_SECRET")
@@ -842,10 +853,16 @@ def content_view_info(content_id):
     except Exception as e:
         return jsonify({"error": f"Could not read content file: {e}"}), 500
 
+    progress = ViewProgress.query.filter_by(
+        user_id=user_id, content_item_id=content_item.id
+    ).first()
+    last_page = progress.page_num if progress else 0
+
     return jsonify({
         "content_id": content_item.id,
         "title": content_item.title,
         "page_count": page_count,
+        "last_page": last_page,
     })
 
 
@@ -887,6 +904,46 @@ def content_view_page(content_id, page_num):
     response = Response(png_bytes, mimetype="image/png")
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
     return response
+
+
+@app.route("/content/<int:content_id>/view/progress", methods=["POST"])
+def content_view_progress(content_id):
+    """
+    Saves the last-viewed page number for a Q&A content item so the
+    viewer can resume there next time. Upserts a ViewProgress row.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    content_item = db.session.get(ContentItem, content_id)
+    if not content_item:
+        return jsonify({"error": "Content not found"}), 404
+
+    if content_item.content_type != "qna":
+        return jsonify({"error": "This endpoint is only for view-only Q&A content"}), 400
+
+    if not has_access(user_id, content_item):
+        return jsonify({"error": "You don't have access to this content"}), 403
+
+    data = request.get_json(silent=True) or {}
+    page_num = data.get("page_num")
+    if not isinstance(page_num, int) or page_num < 0:
+        return jsonify({"error": "page_num must be a non-negative integer"}), 400
+
+    progress = ViewProgress.query.filter_by(
+        user_id=user_id, content_item_id=content_item.id
+    ).first()
+    if progress:
+        progress.page_num = page_num
+    else:
+        progress = ViewProgress(
+            user_id=user_id, content_item_id=content_item.id, page_num=page_num
+        )
+        db.session.add(progress)
+    db.session.commit()
+
+    return jsonify({"ok": True})
 
 
 @app.route("/content/<int:content_id>/pay", methods=["POST"])
