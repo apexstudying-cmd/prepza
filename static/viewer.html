@@ -225,7 +225,20 @@ async function init() {
     <p class="notice">This is a view-only document watermarked to your account. It can't be downloaded from this page.</p>
   `;
 
-  await loadPage(0);
+  const startPage = (typeof info.last_page === 'number' && info.last_page >= 0 && info.last_page < pageCount)
+    ? info.last_page
+    : 0;
+  await loadPage(startPage);
+}
+
+function saveProgress(pageNum) {
+  // Fire-and-forget: resume position is a convenience, not critical enough
+  // to block the UI or surface errors on.
+  fetch(`/content/${contentId}/view/progress`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ page_num: pageNum })
+  }).catch(() => {});
 }
 
 async function loadPage(pageNum) {
@@ -254,6 +267,7 @@ async function loadPage(pageNum) {
     };
     img.src = imgUrl;
     currentPage = pageNum;
+    saveProgress(pageNum);
   } catch (err) {
     showError('Couldn\'t load this page', 'Check your connection and try again.');
   }
