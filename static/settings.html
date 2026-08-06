@@ -117,10 +117,29 @@
   .sidebar-info {
     padding: 0 20px 20px;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    gap: 10px;
     border-bottom: 1px solid rgba(255,255,255,0.1);
     margin-bottom: 12px;
+  }
+  .sidebar-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .sidebar-info-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
   }
   .year-badge {
     background: rgba(201, 162, 39, 0.15);
@@ -290,6 +309,41 @@
     padding: 24px;
   }
 
+  /* ---------- Profile avatar row ---------- */
+  .avatar-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .profile-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 24px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .avatar-row-text .avatar-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .avatar-row-text .avatar-email {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
   /* ---------- Profile form ---------- */
   .field-row {
     display: flex;
@@ -309,7 +363,15 @@
     margin-bottom: 6px;
   }
 
-  .field select {
+  .field-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .field select,
+  .field input[type="text"],
+  .field textarea {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--border);
@@ -318,6 +380,22 @@
     color: var(--text-primary);
     font-family: 'Inter', sans-serif;
     font-size: 14px;
+  }
+
+  .field textarea {
+    resize: vertical;
+    min-height: 64px;
+  }
+
+  .field-section-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 24px 0 4px;
+  }
+
+  .field-section-label:first-child {
+    margin-top: 0;
   }
 
   .btn-primary {
@@ -471,8 +549,11 @@
     </button>
   </div>
   <div class="sidebar-info">
-    <span class="year-badge" id="year-badge"></span>
-    <span class="user-email" id="user-email"></span>
+    <div class="sidebar-avatar" id="sidebar-avatar"></div>
+    <div class="sidebar-info-text">
+      <span class="year-badge" id="year-badge"></span>
+      <span class="user-email" id="user-email"></span>
+    </div>
   </div>
   <div class="sidebar-nav">
     <a class="sidebar-link" href="/static/dashboard.html">Dashboard</a>
@@ -490,6 +571,34 @@
 </main>
 
 <script>
+// ---------- Shared avatar helper ----------
+// Deterministic initials + color, no storage needed.
+const AVATAR_PALETTE = ['#16233E', '#8C1D2B', '#C9A227', '#2C3E63', '#5B6478'];
+
+function avatarInitials(displayName, email) {
+  const source = (displayName && displayName.trim()) ? displayName.trim() : (email || '');
+  if (!source) return '?';
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (displayName && parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return source[0].toUpperCase();
+}
+
+function avatarColor(email) {
+  const str = email || '';
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+}
+
+function renderAvatar(el, displayName, email) {
+  el.textContent = avatarInitials(displayName, email);
+  el.style.background = avatarColor(email);
+}
+
 let currentMe = null;
 
 async function loadSettings() {
@@ -510,6 +619,7 @@ async function loadSettings() {
   document.getElementById('user-email').textContent = currentMe.email;
   document.getElementById('year-badge').textContent =
     (currentMe.year && currentMe.semester) ? `Year ${currentMe.year}, Semester ${currentMe.semester}` : 'Set your year and semester';
+  renderAvatar(document.getElementById('sidebar-avatar'), currentMe.display_name, currentMe.email);
 
   renderSettings();
 }
@@ -530,9 +640,28 @@ function renderSettings() {
 
         <div class="panel active" id="panel-profile">
           <h2>Profile</h2>
-          <p class="panel-sub">Update your year and semester. This controls which units and content you see on your dashboard.</p>
+          <p class="panel-sub">Update how your name and bio appear, and manage your year and semester.</p>
           <div class="card">
+            <div class="avatar-row">
+              <div class="profile-avatar" id="profile-avatar"></div>
+              <div class="avatar-row-text">
+                <div class="avatar-name" id="avatar-name-preview">${currentMe.display_name ? currentMe.display_name : 'No display name set'}</div>
+                <div class="avatar-email">${currentMe.email}</div>
+              </div>
+            </div>
             <form id="profile-form">
+              <div class="field-section-label">About you</div>
+              <div class="field" style="margin-bottom: 20px;">
+                <label for="settings-display-name">Display name</label>
+                <input type="text" id="settings-display-name" maxlength="50" placeholder="e.g. Arnold Mwangi">
+              </div>
+              <div class="field" style="margin-bottom: 20px;">
+                <label for="settings-bio">Bio</label>
+                <textarea id="settings-bio" maxlength="160" placeholder="A short line about you"></textarea>
+                <div class="field-hint"><span id="bio-char-count">0</span>/160</div>
+              </div>
+
+              <div class="field-section-label">Programme</div>
               <div class="field-row">
                 <div class="field">
                   <label for="settings-year">Year</label>
@@ -593,6 +722,20 @@ function renderSettings() {
   // Pre-fill profile form with current values
   if (currentMe.year) document.getElementById('settings-year').value = String(currentMe.year);
   if (currentMe.semester) document.getElementById('settings-semester').value = String(currentMe.semester);
+  if (currentMe.display_name) document.getElementById('settings-display-name').value = currentMe.display_name;
+  if (currentMe.bio) document.getElementById('settings-bio').value = currentMe.bio;
+
+  renderAvatar(document.getElementById('profile-avatar'), currentMe.display_name, currentMe.email);
+  document.getElementById('bio-char-count').textContent = String((currentMe.bio || '').length);
+
+  // Live-update avatar preview + char count as the user types
+  document.getElementById('settings-display-name').addEventListener('input', (e) => {
+    renderAvatar(document.getElementById('profile-avatar'), e.target.value, currentMe.email);
+    document.getElementById('avatar-name-preview').textContent = e.target.value.trim() ? e.target.value : 'No display name set';
+  });
+  document.getElementById('settings-bio').addEventListener('input', (e) => {
+    document.getElementById('bio-char-count').textContent = String(e.target.value.length);
+  });
 
   // Tab switching
   document.querySelectorAll('.sidebar-tab').forEach(tab => {
@@ -609,6 +752,8 @@ function renderSettings() {
     e.preventDefault();
     const year = parseInt(document.getElementById('settings-year').value, 10);
     const semester = parseInt(document.getElementById('settings-semester').value, 10);
+    const displayName = document.getElementById('settings-display-name').value.trim();
+    const bio = document.getElementById('settings-bio').value.trim();
     const msgEl = document.getElementById('profile-msg');
     const submitBtn = document.getElementById('profile-submit');
 
@@ -620,6 +765,16 @@ function renderSettings() {
       msgEl.className = 'form-msg error';
       return;
     }
+    if (displayName.length > 50) {
+      msgEl.textContent = 'Display name must be 50 characters or fewer.';
+      msgEl.className = 'form-msg error';
+      return;
+    }
+    if (bio.length > 160) {
+      msgEl.textContent = 'Bio must be 160 characters or fewer.';
+      msgEl.className = 'form-msg error';
+      return;
+    }
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Saving...';
@@ -628,7 +783,7 @@ function renderSettings() {
       const res = await fetch('/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': currentMe.csrf_token },
-        body: JSON.stringify({ year, semester })
+        body: JSON.stringify({ year, semester, display_name: displayName, bio })
       });
       const data = await res.json();
 
@@ -638,6 +793,9 @@ function renderSettings() {
       } else {
         currentMe.year = data.year;
         currentMe.semester = data.semester;
+        currentMe.display_name = data.display_name;
+        currentMe.bio = data.bio;
+        renderAvatar(document.getElementById('sidebar-avatar'), currentMe.display_name, currentMe.email);
         msgEl.textContent = 'Saved.';
         msgEl.className = 'form-msg success';
       }
