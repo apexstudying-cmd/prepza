@@ -115,10 +115,31 @@
   .sidebar-info {
     padding: 0 20px 20px;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    gap: 10px;
     border-bottom: 1px solid rgba(255,255,255,0.1);
     margin-bottom: 12px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .sidebar-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .sidebar-info-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
   }
   .year-badge {
     background: rgba(201, 162, 39, 0.15);
@@ -432,10 +453,13 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
     </button>
   </div>
-  <div class="sidebar-info">
-    <span class="year-badge" id="year-badge"></span>
-    <span class="user-email" id="user-email"></span>
-  </div>
+  <a class="sidebar-info" href="/static/settings.html" title="Edit your profile">
+    <div class="sidebar-avatar" id="sidebar-avatar"></div>
+    <div class="sidebar-info-text">
+      <span class="year-badge" id="year-badge"></span>
+      <span class="user-email" id="user-email"></span>
+    </div>
+  </a>
   <div class="sidebar-nav">
     <a class="sidebar-link active" href="/static/dashboard.html">Dashboard</a>
     <a class="sidebar-link" href="/static/my-library.html">My Library</a>
@@ -569,6 +593,22 @@ async function loadUnit() {
   document.getElementById('user-email').textContent = me.email;
   document.getElementById('year-badge').textContent =
     (me.year && me.semester) ? `Year ${me.year}, Semester ${me.semester}` : 'Set your year and semester';
+  (function() {
+    var palette = ['#16233E', '#8C1D2B', '#C9A227', '#2C3E63', '#5B6478'];
+    var source = (me.display_name && me.display_name.trim()) ? me.display_name.trim() : (me.email || '');
+    var initials = '?';
+    if (source) {
+      var parts = source.split(/\s+/).filter(Boolean);
+      initials = (me.display_name && parts.length >= 2) ? (parts[0][0] + parts[1][0]).toUpperCase() : source[0].toUpperCase();
+    }
+    var str = me.email || '';
+    var hash = 0;
+    for (var i = 0; i < str.length; i++) { hash = str.charCodeAt(i) + ((hash << 5) - hash); }
+    var color = palette[Math.abs(hash) % palette.length];
+    var avatarEl = document.getElementById('sidebar-avatar');
+    avatarEl.textContent = initials;
+    avatarEl.style.background = color;
+  })();
 
   let data;
   try {
