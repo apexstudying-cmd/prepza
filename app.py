@@ -95,6 +95,7 @@ class User(db.Model):
     verification_token = db.Column(db.String(64), nullable=True)
     reset_token = db.Column(db.String(64), nullable=True)
     reset_token_expiry = db.Column(db.DateTime, nullable=True)
+    is_admin = db.Column(db.Boolean, nullable=False, default=False)
 
 
 class Unit(db.Model):
@@ -211,10 +212,12 @@ def send_reset_email(to_email, token):
 def require_admin(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        provided_secret = request.headers.get("X-Admin-Secret")
-        real_secret = os.environ.get("ADMIN_SECRET")
-        if not provided_secret or not real_secret or not hmac.compare_digest(provided_secret, real_secret):
-            return jsonify({"error": "Unauthorized"}), 401
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        user = db.session.get(User, user_id)
+        if not user or not user.is_admin:
+            return jsonify({"error": "Forbidden"}), 403
         return f(*args, **kwargs)
     return decorated
 
@@ -645,6 +648,7 @@ def me():
         "display_name": user.display_name,
         "bio": user.bio,
         "email_verified": user.email_verified,
+        "is_admin": user.is_admin,
         "csrf_token": session["csrf_token"],
     })
 @app.route("/delete-account", methods=["DELETE"])
@@ -1076,6 +1080,7 @@ def mpesa_callback(callback_token):
 # ---------- Admin routes (protected) ----------
 
 @app.route("/admin/units", methods=["POST"])
+@require_csrf
 @require_admin
 def admin_add_unit():
     data = request.get_json(silent=True)
@@ -1137,6 +1142,7 @@ def admin_list_content():
 
 
 @app.route("/admin/content", methods=["POST"])
+@require_csrf
 @require_admin
 def admin_add_content():
     data = request.get_json(silent=True)
@@ -1178,6 +1184,7 @@ def admin_add_content():
 
 
 @app.route("/admin/content/<int:content_id>", methods=["PATCH"])
+@require_csrf
 @require_admin
 def admin_update_content(content_id):
     item = db.session.get(ContentItem, content_id)
@@ -1236,6 +1243,7 @@ def admin_list_payments():
 
 
 @app.route("/admin/payments/<int:payment_id>/refund", methods=["POST"])
+@require_csrf
 @require_admin
 def admin_refund_payment(payment_id):
     payment = db.session.get(Payment, payment_id)
