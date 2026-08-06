@@ -89,6 +89,8 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     year = db.Column(db.Integer, nullable=True)
     semester = db.Column(db.Integer, nullable=True)
+    display_name = db.Column(db.String(50), nullable=True)
+    bio = db.Column(db.String(160), nullable=True)
     email_verified = db.Column(db.Boolean, default=False)
     verification_token = db.Column(db.String(64), nullable=True)
     reset_token = db.Column(db.String(64), nullable=True)
@@ -640,6 +642,8 @@ def me():
         "email": user.email,
         "year": user.year,
         "semester": user.semester,
+        "display_name": user.display_name,
+        "bio": user.bio,
         "email_verified": user.email_verified,
         "csrf_token": session["csrf_token"],
     })
@@ -691,15 +695,32 @@ def update_profile():
     if not isinstance(semester, int) or semester not in (1, 2):
         return jsonify({"error": "Semester must be 1 or 2"}), 400
 
+    display_name = data.get("display_name", None)
+    bio = data.get("bio", None)
+    if display_name is not None:
+        display_name = display_name.strip()
+        if len(display_name) > 50:
+            return jsonify({"error": "Display name must be 50 characters or fewer"}), 400
+    if bio is not None:
+        bio = bio.strip()
+        if len(bio) > 160:
+            return jsonify({"error": "Bio must be 160 characters or fewer"}), 400
+
     user = db.session.get(User, user_id)
     user.year = year
     user.semester = semester
+    if display_name is not None:
+        user.display_name = display_name or None
+    if bio is not None:
+        user.bio = bio or None
     db.session.commit()
 
     return jsonify({
         "message": "Profile updated",
         "year": user.year,
         "semester": user.semester,
+        "display_name": user.display_name,
+        "bio": user.bio,
     })
 
 
