@@ -843,6 +843,8 @@ def content_view_info(content_id):
     except Exception as e:
         return jsonify({"error": f"Could not read content file: {e}"}), 500
 
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_urlsafe(32)
     progress = ViewProgress.query.filter_by(
         user_id=user_id, content_item_id=content_item.id
     ).first()
@@ -853,6 +855,7 @@ def content_view_info(content_id):
         "title": content_item.title,
         "page_count": page_count,
         "last_page": last_page,
+        "csrf_token": session["csrf_token"],
     })
 
 
@@ -897,6 +900,7 @@ def content_view_page(content_id, page_num):
 
 
 @app.route("/content/<int:content_id>/view/progress", methods=["POST"])
+@require_csrf
 def content_view_progress(content_id):
     """
     Saves the last-viewed page number for a Q&A content item so the

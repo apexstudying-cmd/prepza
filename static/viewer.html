@@ -183,6 +183,7 @@ const viewerEl = document.getElementById('viewer-content');
 
 let currentPage = 0;
 let pageCount = 0;
+let csrfToken = null;
 
 function showError(title, message) {
   viewerEl.innerHTML = `<div class="state-box"><h3>${title}</h3><p>${message}</p></div>`;
@@ -216,6 +217,7 @@ async function init() {
   }
 
   pageCount = info.page_count;
+  csrfToken = info.csrf_token;
   document.getElementById('doc-title').textContent = info.title;
 
   viewerEl.innerHTML = `
@@ -236,7 +238,7 @@ function saveProgress(pageNum) {
   // to block the UI or surface errors on.
   fetch(`/content/${contentId}/view/progress`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
     body: JSON.stringify({ page_num: pageNum })
   }).catch(() => {});
 }
