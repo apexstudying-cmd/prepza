@@ -629,6 +629,9 @@ def login():
     if not user.email_verified:
         return jsonify({"error": "Please verify your email before logging in"}), 403
 
+    if user.is_suspended:
+        return jsonify({"error": "This account has been suspended"}), 403
+
     session.permanent = True
     session["user_id"] = user.id
     return jsonify({"message": "Logged in successfully", "user_id": user.id})
@@ -650,6 +653,11 @@ def me():
         session["csrf_token"] = secrets.token_urlsafe(32)
 
     user = db.session.get(User, user_id)
+
+    if not user or user.is_suspended:
+        session.pop("user_id", None)
+        return jsonify({"error": "Not logged in"}), 401
+
     return jsonify({
         "id": user.id,
         "email": user.email,
