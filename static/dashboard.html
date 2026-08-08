@@ -896,6 +896,14 @@ document.querySelectorAll('[data-tab]').forEach(function(tab) {
   });
 });
 
+(function() {
+  var hash = window.location.hash.replace('#', '');
+  if (['forums', 'opportunities', 'chats'].indexOf(hash) !== -1) {
+    var targetTab = document.querySelector('[data-tab="' + hash + '"]');
+    if (targetTab) targetTab.click();
+  }
+})();
+
 loadDashboard();
 </script>
 

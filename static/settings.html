@@ -196,6 +196,168 @@
     background: rgba(255,255,255,0.08);
   }
 
+  /* ---------- Mobile header, dropdown, bottom nav ---------- */
+  .mobile-header {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 84px;
+    background: var(--navy);
+    border-bottom: 3px solid var(--gold);
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    z-index: 110;
+  }
+  .mobile-header-brand {
+    color: #FFFFFF;
+    font-size: 27px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+  }
+  .mobile-header-hamburger {
+    background: transparent;
+    border: none;
+    color: #FFFFFF;
+    cursor: pointer;
+    padding: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mobile-dropdown {
+    display: none;
+    position: fixed;
+    top: 92px;
+    right: 12px;
+    width: 240px;
+    background: var(--navy);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 8px;
+    z-index: 109;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .mobile-dropdown.open {
+    display: block;
+  }
+  .mobile-dropdown-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 8px;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 6px;
+  }
+  .mobile-dropdown-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .mobile-dropdown-profile-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+  .mobile-dropdown-email {
+    color: #FFFFFF;
+    font-size: 13px;
+    word-break: break-all;
+  }
+  .mobile-dropdown-edit {
+    color: var(--gold);
+    font-size: 12px;
+  }
+  .mobile-dropdown-link {
+    display: block;
+    width: 100%;
+    text-align: left;
+    color: rgba(255,255,255,0.85);
+    font-size: 14px;
+    text-decoration: none;
+    padding: 10px 8px;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+  }
+  .mobile-dropdown-link:hover {
+    background: rgba(255,255,255,0.08);
+    color: #FFFFFF;
+  }
+  .mobile-dropdown-logout {
+    margin-top: 4px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 12px;
+  }
+  .bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--navy);
+    border-top: 3px solid var(--gold);
+    z-index: 110;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    padding: 8px 4px 10px;
+    cursor: pointer;
+    color: rgba(255,255,255,0.6);
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .bottom-nav-item.active {
+    color: var(--gold);
+  }
+  .bottom-back {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--navy);
+    border-top: 3px solid var(--gold);
+    z-index: 110;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    color: #FFFFFF;
+    text-decoration: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .bottom-back:hover {
+    color: var(--gold);
+  }
+
   /* ---------- Layout ---------- */
   main {
     max-width: 900px;
@@ -209,19 +371,21 @@
   }
   @media (max-width: 720px) {
     #sidebar {
-      transform: translateX(-240px);
-    }
-    body:not(.sidebar-collapsed) #sidebar {
-      transform: translateX(0);
-    }
-    body:not(.sidebar-collapsed) #menu-toggle {
       display: none;
     }
     #menu-toggle {
-      display: flex;
+      display: none;
     }
     main {
       margin-left: 0;
+      padding-top: 108px;
+      padding-bottom: 88px;
+    }
+    .mobile-header {
+      display: flex;
+    }
+    .bottom-back {
+      display: flex;
     }
   }
 
@@ -538,6 +702,27 @@
 </head>
 <body>
 
+<header class="mobile-header">
+  <a class="mobile-header-brand" href="/static/dashboard.html">Prepza</a>
+  <button class="mobile-header-hamburger" id="mobile-menu-toggle" aria-label="Open menu" aria-expanded="false">
+    <svg width="33" height="33" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+  </button>
+</header>
+
+<div class="mobile-dropdown" id="mobile-dropdown">
+  <a class="mobile-dropdown-profile" href="/static/settings.html">
+    <div class="mobile-dropdown-avatar" id="mobile-dropdown-avatar"></div>
+    <div class="mobile-dropdown-profile-text">
+      <span class="mobile-dropdown-email" id="mobile-dropdown-email"></span>
+      <span class="mobile-dropdown-edit">Edit profile</span>
+    </div>
+  </a>
+  <a class="mobile-dropdown-link" href="/static/my-library.html">My Library</a>
+  <a class="mobile-dropdown-link" href="/static/payment-history.html">Payment History</a>
+  <a class="mobile-dropdown-link" href="/static/settings.html">Settings</a>
+  <button class="mobile-dropdown-link mobile-dropdown-logout" id="mobile-logout-btn">Log out</button>
+</div>
+
 <button id="menu-toggle" aria-label="Open menu">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
 </button>
@@ -563,6 +748,12 @@
   </div>
   <button class="logout-btn" id="logout-btn">Log out</button>
 </div>
+
+
+<a class="bottom-back" href="/static/dashboard.html">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+  <span>Back to Dashboard</span>
+</a>
 
 <main>
   <div id="content">
@@ -617,9 +808,11 @@ async function loadSettings() {
   }
 
   document.getElementById('user-email').textContent = currentMe.email;
+  document.getElementById('mobile-dropdown-email').textContent = currentMe.email;
   document.getElementById('year-badge').textContent =
     (currentMe.year && currentMe.semester) ? `Year ${currentMe.year}, Semester ${currentMe.semester}` : 'Set your year and semester';
   renderAvatar(document.getElementById('sidebar-avatar'), currentMe.display_name, currentMe.email);
+  renderAvatar(document.getElementById('mobile-dropdown-avatar'), currentMe.display_name, currentMe.email);
 
   renderSettings();
 }
@@ -796,6 +989,7 @@ function renderSettings() {
         currentMe.display_name = data.display_name;
         currentMe.bio = data.bio;
         renderAvatar(document.getElementById('sidebar-avatar'), currentMe.display_name, currentMe.email);
+        renderAvatar(document.getElementById('mobile-dropdown-avatar'), currentMe.display_name, currentMe.email);
         msgEl.textContent = 'Saved.';
         msgEl.className = 'form-msg success';
       }
@@ -839,6 +1033,32 @@ document.querySelectorAll('.sidebar-link').forEach(function(link) {
 document.getElementById('logout-btn').addEventListener('click', async () => {
   await fetch('/logout', { method: 'POST' });
   window.location.href = '/static/login.html';
+});
+
+document.getElementById('mobile-logout-btn').addEventListener('click', async () => {
+  await fetch('/logout', { method: 'POST' });
+  window.location.href = '/static/login.html';
+});
+
+document.getElementById('mobile-menu-toggle').addEventListener('click', function(e) {
+  e.stopPropagation();
+  var dropdown = document.getElementById('mobile-dropdown');
+  var isOpen = dropdown.classList.toggle('open');
+  this.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+});
+document.addEventListener('click', function(e) {
+  var dropdown = document.getElementById('mobile-dropdown');
+  var toggle = document.getElementById('mobile-menu-toggle');
+  if (dropdown.classList.contains('open') && !dropdown.contains(e.target) && e.target !== toggle) {
+    dropdown.classList.remove('open');
+    toggle.setAttribute('aria-expanded', 'false');
+  }
+});
+window.addEventListener('resize', function() {
+  if (window.innerWidth > 720) {
+    document.getElementById('mobile-dropdown').classList.remove('open');
+    document.getElementById('mobile-menu-toggle').setAttribute('aria-expanded', 'false');
+  }
 });
 document.addEventListener('click', async (e) => {
   if (e.target && e.target.id === 'delete-account-btn') {
