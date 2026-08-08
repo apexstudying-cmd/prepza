@@ -1321,5 +1321,105 @@ def admin_refund_payment(payment_id):
     })
 
 
+# ---------- Admin: user management ----------
+
+@app.route("/admin/users")
+@require_admin
+def admin_list_users():
+    """
+    Lists users for the admin dashboard, optionally filtered by an
+    email substring. Newest signups first; users with no created_at
+    (pre-migration accounts) sort last rather than first.
+    """
+    search = (request.args.get("search") or "").strip().lower()
+
+    query = User.query
+    if search:
+        query = query.filter(User.email.ilike(f"%{search}%"))
+
+    users = query.all()
+    users.sort(key=lambda u: u.created_at or datetime.min, reverse=True)
+
+    return jsonify([
+        {
+            "id": u.id,
+            "email": u.email,
+            "year": u.year,
+            "semester": u.semester,
+            "display_name": u.display_name,
+            "email_verified": u.email_verified,
+            "is_admin": u.is_admin,
+            "is_suspended": u.is_suspended,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "signup_source": u.signup_source,
+        }
+        for u in users
+    ])
+
+
+@app.route("/admin/users/<int:user_id>", methods=["PATCH"])
+@require_csrf
+@require_admin
+def admin_update_user(user_id):
+    """
+    Lets an admin edit a student's year/semester, or toggle their
+    is_admin / is_suspended flags. Self-protection: the acting admin
+    cannot remove their own is_admin flag or suspend themselves here -
+    that would risk locking the only admin out with no recovery path
+    short of a direct DB edit.
+    """
+    acting_admin_id = session.get("user_id")
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    target_user = db.session.get(User, user_id)
+    if not target_user:
+        return jsonify({"error": "User not found"}), 404
+
+    if "year" in data:
+        year = data["year"]
+        if year is not None:
+            if not isinstance(year, int) or year < 1 or year > 4:
+                return jsonify({"error": "Year must be a number between 1 and 4"}), 400
+        target_user.year = year
+
+    if "semester" in data:
+        semester = data["semester"]
+        if semester is not None:
+            if not isinstance(semester, int) or semester not in (1, 2):
+                return jsonify({"error": "Semester must be 1 or 2"}), 400
+        target_user.semester = semester
+
+    if "is_admin" in data:
+        is_admin = data["is_admin"]
+        if not isinstance(is_admin, bool):
+            return jsonify({"error": "is_admin must be true or false"}), 400
+        if user_id == acting_admin_id and is_admin is False:
+            return jsonify({"error": "You can't remove your own admin access"}), 400
+        target_user.is_admin = is_admin
+
+    if "is_suspended" in data:
+        is_suspended = data["is_suspended"]
+        if not isinstance(is_suspended, bool):
+            return jsonify({"error": "is_suspended must be true or false"}), 400
+        if user_id == acting_admin_id and is_suspended is True:
+            return jsonify({"error": "You can't suspend your own account"}), 400
+        target_user.is_suspended = is_suspended
+
+    db.session.commit()
+
+    return jsonify({
+        "id": target_user.id,
+        "email": target_user.email,
+        "year": target_user.year,
+        "semester": target_user.semester,
+        "is_admin": target_user.is_admin,
+        "is_suspended": target_user.is_suspended,
+    })
+
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
