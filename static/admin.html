@@ -294,11 +294,8 @@
 <div id="gate">
   <div class="gate-card">
     <h1>Prepza <span style="color:var(--gold)">·</span> Admin</h1>
-    <p class="sub">Enter your admin secret to continue. It's kept only in this browser tab.</p>
-    <label for="secret-input">Admin secret</label>
-    <input type="password" id="secret-input" placeholder="••••••••••••••••" autocomplete="off">
-    <button class="btn-primary" onclick="attemptLogin()">Unlock panel</button>
-    <p id="gate-error">Incorrect secret, or the server didn't respond.</p>
+    <p class="sub" id="gate-message">Checking your session…</p>
+    <a class="btn-primary" id="gate-login-link" href="/login.html?next=/admin.html" style="display:none; text-decoration:none; text-align:center;">Log in</a>
   </div>
 </div>
 
@@ -399,7 +396,7 @@
 
 <script>
 const API_BASE = window.location.origin;
-let ADMIN_SECRET = sessionStorage.getItem("prepza_admin_secret") || "";
+let CSRF_TOKEN = "";
 
 function toast(msg, type) {
   const el = document.getElementById("toast");
@@ -409,11 +406,13 @@ function toast(msg, type) {
 }
 
 async function api(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const needsCsrf = method !== "GET" && method !== "HEAD";
   const res = await fetch(API_BASE + path, {
     ...options,
     headers: {
-      "X-Admin-Secret": ADMIN_SECRET,
       "Content-Type": "application/json",
+      ...(needsCsrf ? { "X-CSRF-Token": CSRF_TOKEN } : {}),
       ...(options.headers || {}),
     },
   });
@@ -424,31 +423,34 @@ async function api(path, options = {}) {
   return res.json();
 }
 
-async function attemptLogin() {
-  const input = document.getElementById("secret-input");
-  ADMIN_SECRET = input.value.trim();
-  const errorEl = document.getElementById("gate-error");
-  errorEl.style.display = "none";
-
-  if (!ADMIN_SECRET) return;
-
+async function checkAdminAccess() {
+  const messageEl = document.getElementById("gate-message");
+  const loginLink = document.getElementById("gate-login-link");
   try {
-    await api("/admin/units");
-    sessionStorage.setItem("prepza_admin_secret", ADMIN_SECRET);
+    const res = await fetch(API_BASE + "/me");
+    if (res.status === 401) {
+      messageEl.textContent = "You need to log in to access the admin panel.";
+      loginLink.style.display = "block";
+      return;
+    }
+    const me = await res.json();
+    if (!me.is_admin) {
+      messageEl.textContent = "This account doesn't have admin access.";
+      return;
+    }
+    CSRF_TOKEN = me.csrf_token;
     document.getElementById("gate").style.display = "none";
     document.getElementById("app").style.display = "block";
     initApp();
   } catch (e) {
-    errorEl.style.display = "block";
+    messageEl.textContent = "Couldn't reach the server. Try refreshing.";
   }
 }
 
 function logout() {
-  sessionStorage.removeItem("prepza_admin_secret");
-  ADMIN_SECRET = "";
-  document.getElementById("secret-input").value = "";
-  document.getElementById("app").style.display = "none";
-  document.getElementById("gate").style.display = "flex";
+  fetch(API_BASE + "/logout", { method: "POST" }).finally(() => {
+    window.location.href = "/login.html";
+  });
 }
 
 function initApp() {
@@ -677,21 +679,7 @@ function formatDate(iso) {
 }
 
 // ---------- Boot ----------
-if (ADMIN_SECRET) {
-  api("/admin/units")
-    .then(() => {
-      document.getElementById("gate").style.display = "none";
-      document.getElementById("app").style.display = "block";
-      initApp();
-    })
-    .catch(() => {
-      sessionStorage.removeItem("prepza_admin_secret");
-    });
-}
-
-document.getElementById("secret-input").addEventListener("keydown", e => {
-  if (e.key === "Enter") attemptLogin();
-});
+checkAdminAccess();
 </script>
 
 <script>
