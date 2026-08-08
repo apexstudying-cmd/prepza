@@ -202,6 +202,43 @@
     margin: 0 0 18px;
   }
 
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+  }
+
+  .stat-box {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .stat-box .stat-label {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .stat-box .stat-value {
+    font-family: 'Source Serif 4', serif;
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  .breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+  }
+
+  .breakdown-row:last-child {
+    border-bottom: none;
+  }
+
   .form-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -306,15 +343,34 @@
   </div>
 
   <div class="tabs">
-    <div class="tab active" data-panel="units">Units</div>
+    <div class="tab active" data-panel="analytics">Analytics</div>
+    <div class="tab" data-panel="units">Units</div>
     <div class="tab" data-panel="content">Content</div>
     <div class="tab" data-panel="payments">Payments</div>
   </div>
 
   <main>
 
+    <!-- ANALYTICS PANEL -->
+    <section class="panel active" id="panel-analytics">
+      <div class="card">
+        <h2>Overview</h2>
+        <div class="stats-grid" id="analytics-stats">
+          <div class="state-box"><div class="spinner"></div><p>Loading analytics...</p></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Content by type</h2>
+        <div id="analytics-content-type"></div>
+      </div>
+      <div class="card">
+        <h2>Payments by status</h2>
+        <div id="analytics-payment-status"></div>
+      </div>
+    </section>
+
     <!-- UNITS PANEL -->
-    <section class="panel active" id="panel-units">
+    <section class="panel" id="panel-units">
       <div class="card">
         <h2>Add a unit</h2>
         <p class="hint">Units are the course codes students see (e.g. SMA 104).</p>
@@ -454,6 +510,7 @@ function logout() {
 }
 
 function initApp() {
+  loadAnalytics();
   loadUnits();
   loadContent();
   loadPayments();
@@ -468,6 +525,52 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.getElementById("panel-" + tab.dataset.panel).classList.add("active");
   });
 });
+
+// ---------- Analytics ----------
+function formatKsh(amount) {
+  return "KSh " + Number(amount || 0).toLocaleString("en-KE");
+}
+
+async function loadAnalytics() {
+  try {
+    const data = await api("/admin/analytics");
+
+    document.getElementById("analytics-stats").innerHTML = `
+      <div class="stat-box">
+        <div class="stat-label">Total revenue</div>
+        <div class="stat-value">${formatKsh(data.total_revenue)}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Revenue (last 30 days)</div>
+        <div class="stat-value">${formatKsh(data.revenue_last_30d)}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Total users</div>
+        <div class="stat-value">${data.total_users}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Units</div>
+        <div class="stat-value">${data.total_units}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Content items</div>
+        <div class="stat-value">${data.total_content_items}</div>
+      </div>
+    `;
+
+    const typeRows = Object.entries(data.content_by_type || {})
+      .map(([type, count]) => `<div class="breakdown-row"><span>${escapeHtml(type)}</span><span>${count}</span></div>`)
+      .join("") || `<p class="hint">No content yet.</p>`;
+    document.getElementById("analytics-content-type").innerHTML = typeRows;
+
+    const statusRows = Object.entries(data.payments_by_status || {})
+      .map(([status, count]) => `<div class="breakdown-row"><span>${escapeHtml(status)}</span><span>${count}</span></div>`)
+      .join("") || `<p class="hint">No payments yet.</p>`;
+    document.getElementById("analytics-payment-status").innerHTML = statusRows;
+  } catch (e) {
+    document.getElementById("analytics-stats").innerHTML = `<p class="hint">Couldn't load analytics: ${escapeHtml(e.message)}</p>`;
+  }
+}
 
 // ---------- Units ----------
 async function loadUnits() {

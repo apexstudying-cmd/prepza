@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1240,6 +1241,52 @@ def admin_list_payments():
         })
 
     return jsonify({"payments": result})
+
+
+@app.route("/admin/analytics")
+@require_admin
+def admin_analytics():
+    total_revenue = db.session.query(
+        func.coalesce(func.sum(Payment.amount), 0)
+    ).filter(Payment.status == "success").scalar()
+
+    total_users = db.session.query(func.count(User.id)).scalar()
+
+    total_units = db.session.query(func.count(Unit.id)).scalar()
+    total_content = db.session.query(func.count(ContentItem.id)).scalar()
+
+    content_by_type = dict(
+        db.session.query(ContentItem.content_type, func.count(ContentItem.id))
+        .group_by(ContentItem.content_type)
+        .all()
+    )
+
+    payments_by_status = dict(
+        db.session.query(Payment.status, func.count(Payment.id))
+        .group_by(Payment.status)
+        .all()
+    )
+
+    revenue_30d = db.session.query(
+        func.coalesce(func.sum(Payment.amount), 0)
+    ).filter(
+        Payment.status == "success",
+        Payment.created_at >= datetime.utcnow() - timedelta(days=30),
+    ).scalar()
+
+    # Note: User has no created_at column yet, so signup-over-time growth
+    # can't be computed until that's added - deliberately left out rather
+    # than approximated from payment activity, which would be misleading.
+
+    return jsonify({
+        "total_revenue": total_revenue,
+        "revenue_last_30d": revenue_30d,
+        "total_users": total_users,
+        "total_units": total_units,
+        "total_content_items": total_content,
+        "content_by_type": content_by_type,
+        "payments_by_status": payments_by_status,
+    })
 
 
 @app.route("/admin/payments/<int:payment_id>/refund", methods=["POST"])
