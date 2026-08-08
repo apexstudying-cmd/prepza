@@ -99,6 +99,9 @@ class User(db.Model):
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
 
 
+    created_at = db.Column(db.DateTime, nullable=True)
+    signup_source = db.Column(db.String(100), nullable=True)
+    is_suspended = db.Column(db.Boolean, nullable=False, default=False)
 class Unit(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(20), nullable=False)
@@ -127,6 +130,12 @@ class Payment(db.Model):
     checkout_request_id = db.Column(db.String(100), unique=True, nullable=True)
     status = db.Column(db.String(20), default="pending")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class SystemSetting(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(50), unique=True, nullable=False)
+    value = db.Column(db.Text, nullable=False, default="")
 
 
 class ViewProgress(db.Model):
