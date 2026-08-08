@@ -452,6 +452,12 @@ def signup():
         if not isinstance(semester, int) or semester not in (1, 2):
             return jsonify({"error": "Semester must be 1 or 2"}), 400
 
+    raw_signup_source = data.get("signup_source")
+    signup_source = None
+    if raw_signup_source is not None and isinstance(raw_signup_source, str):
+        cleaned = raw_signup_source.strip().lower()[:50]
+        cleaned = "".join(ch for ch in cleaned if ch.isalnum() or ch in ("_", "-"))
+        signup_source = cleaned or None
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
         return jsonify({"error": "An account with this email already exists"}), 409
@@ -465,6 +471,7 @@ def signup():
         semester=semester,
         email_verified=False,
         verification_token=token,
+        signup_source=signup_source,
     )
     db.session.add(new_user)
     db.session.commit()
