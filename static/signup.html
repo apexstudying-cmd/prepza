@@ -234,6 +234,22 @@
 </head>
 <body>
 
+<script>
+// --- Ad/campaign source capture ---
+// If this page was reached via ?src=..., stash it so it survives
+// this tab's session even if the user reloads or the form takes a
+// moment to submit. If no ?src= is present, fall back to any value
+// already stashed earlier in this session (e.g. they landed on the
+// homepage first, then navigated here).
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var src = params.get('src');
+  if (src) {
+    sessionStorage.setItem('prepza_src', src.trim().slice(0, 50));
+  }
+})();
+</script>
+
 <div class="brand">Prepza</div>
 
 <div class="card">
@@ -343,11 +359,13 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   submitBtn.disabled = true;
   submitBtn.textContent = 'Creating account...';
 
+  const signupSource = sessionStorage.getItem('prepza_src') || null;
+
   try {
     const res = await fetch('/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, year, semester })
+      body: JSON.stringify({ email, password, year, semester, signup_source: signupSource })
     });
     const data = await res.json();
 

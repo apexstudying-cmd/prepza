@@ -590,6 +590,20 @@ document.documentElement.classList.add('auth-check');
 </head>
 <body style="display:none">
 
+<script>
+// --- Ad/campaign source capture ---
+// If this page was reached via ?src=..., stash it so it survives
+// navigation to signup.html (sessionStorage persists for this tab
+// until closed). signup.html reads this back at submit time.
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var src = params.get('src');
+  if (src) {
+    sessionStorage.setItem('prepza_src', src.trim().slice(0, 50));
+  }
+})();
+</script>
+
 <nav>
   <a class="logo-group" href="/">
     <img class="logo-mark-img" src="/static/images/logo.png" alt="Prepza logo">
