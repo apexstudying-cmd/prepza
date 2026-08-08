@@ -205,17 +205,17 @@
     top: 0;
     left: 0;
     right: 0;
-    height: 56px;
+    height: 101px;
     background: var(--navy);
     border-bottom: 3px solid var(--gold);
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px;
+    padding: 0 29px;
     z-index: 110;
   }
   .mobile-header-brand {
     color: #FFFFFF;
-    font-size: 18px;
+    font-size: 32px;
     font-weight: 600;
     letter-spacing: -0.01em;
     text-decoration: none;
@@ -225,7 +225,7 @@
     border: none;
     color: #FFFFFF;
     cursor: pointer;
-    padding: 6px;
+    padding: 11px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -233,7 +233,7 @@
   .mobile-dropdown {
     display: none;
     position: fixed;
-    top: 64px;
+    top: 109px;
     right: 12px;
     width: 240px;
     background: var(--navy);
@@ -346,28 +346,6 @@
   }
   body.sidebar-collapsed main {
     margin-left: 0;
-  }
-  @media (max-width: 720px) {
-    #sidebar {
-      display: none;
-    }
-    #menu-toggle {
-      display: none;
-    }
-    main {
-      margin-left: 0;
-      padding-top: 76px;
-      padding-bottom: 92px;
-    }
-    .tab-bar {
-      display: none;
-    }
-    .mobile-header {
-      display: flex;
-    }
-    .bottom-nav {
-      display: flex;
-    }
   }
 
   .welcome {
@@ -562,6 +540,29 @@
   [data-theme="dark"] .unit-code {
     background: rgba(255, 255, 255, 0.08);
   }
+
+  @media (max-width: 720px) {
+    #sidebar {
+      display: none;
+    }
+    #menu-toggle {
+      display: none;
+    }
+    main {
+      margin-left: 0;
+      padding-top: 124px;
+      padding-bottom: 92px;
+    }
+    .tab-bar {
+      display: none;
+    }
+    .mobile-header {
+      display: flex;
+    }
+    .bottom-nav {
+      display: flex;
+    }
+  }
 </style>
 </head>
 <body>
@@ -569,7 +570,7 @@
 <header class="mobile-header">
   <a class="mobile-header-brand" href="/static/dashboard.html">Prepza</a>
   <button class="mobile-header-hamburger" id="mobile-menu-toggle" aria-label="Open menu" aria-expanded="false">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
   </button>
 </header>
 
