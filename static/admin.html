@@ -297,6 +297,7 @@
   }
 
   .toolbar select { width: auto; min-width: 160px; }
+  .toolbar input[type="text"] { width: auto; min-width: 220px; }
 
   .empty-state {
     text-align: center;
@@ -324,6 +325,45 @@
   .toast.show { opacity: 1; transform: translateY(0); }
   .toast.error { background: var(--danger); }
   .toast.success { background: var(--success); }
+
+  /* ---------- Users tab additions ---------- */
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+    vertical-align: middle;
+    cursor: pointer;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--line);
+    border-radius: 20px;
+    transition: background 0.15s ease;
+  }
+  .toggle-slider::before {
+    content: "";
+    position: absolute;
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    top: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+  .toggle-switch input:checked + .toggle-slider { background: var(--success); }
+  .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+  .toggle-switch.danger input:checked + .toggle-slider { background: var(--danger); }
+
+  .mini-input {
+    width: 48px !important;
+    padding: 5px 6px !important;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -344,6 +384,7 @@
 
   <div class="tabs">
     <div class="tab active" data-panel="analytics">Analytics</div>
+    <div class="tab" data-panel="users">Users</div>
     <div class="tab" data-panel="units">Units</div>
     <div class="tab" data-panel="content">Content</div>
     <div class="tab" data-panel="payments">Payments</div>
@@ -366,6 +407,18 @@
       <div class="card">
         <h2>Payments by status</h2>
         <div id="analytics-payment-status"></div>
+      </div>
+    </section>
+
+    <!-- USERS PANEL -->
+    <section class="panel" id="panel-users">
+      <div class="card">
+        <h2>Students</h2>
+        <p class="hint">Search by email, edit year/semester inline, toggle admin or suspended access. You can't remove your own admin access or suspend yourself from here.</p>
+        <div class="toolbar">
+          <input type="text" id="user-search" placeholder="Search by email…" oninput="onUserSearchInput()">
+        </div>
+        <div id="users-table"></div>
       </div>
     </section>
 
@@ -495,6 +548,7 @@ async function checkAdminAccess() {
       return;
     }
     CSRF_TOKEN = me.csrf_token;
+    CURRENT_ADMIN_ID = me.id;
     document.getElementById("gate").style.display = "none";
     document.getElementById("app").style.display = "block";
     initApp();
@@ -511,6 +565,7 @@ function logout() {
 
 function initApp() {
   loadAnalytics();
+  loadUsers();
   loadUnits();
   loadContent();
   loadPayments();
@@ -569,6 +624,93 @@ async function loadAnalytics() {
     document.getElementById("analytics-payment-status").innerHTML = statusRows;
   } catch (e) {
     document.getElementById("analytics-stats").innerHTML = `<p class="hint">Couldn't load analytics: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+// ---------- Users ----------
+let CURRENT_ADMIN_ID = null;
+let userSearchTimer = null;
+
+function onUserSearchInput() {
+  clearTimeout(userSearchTimer);
+  userSearchTimer = setTimeout(loadUsers, 300);
+}
+
+async function loadUsers() {
+  const search = document.getElementById("user-search").value.trim();
+  const query = search ? `?search=${encodeURIComponent(search)}` : "";
+  try {
+    const users = await api("/admin/users" + query);
+    renderUsersTable(users);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+function renderUsersTable(users) {
+  const el = document.getElementById("users-table");
+  if (!users.length) {
+    el.innerHTML = `<div class="empty-state">No users match this search.</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Year</th>
+          <th>Sem</th>
+          <th>Verified</th>
+          <th>Signed up</th>
+          <th>Source</th>
+          <th>Admin</th>
+          <th>Suspended</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${users.map(u => `
+          <tr>
+            <td>${escapeHtml(u.email)}</td>
+            <td class="mono">
+              <input type="number" class="mini-input" min="1" max="4" value="${u.year ?? ""}"
+                onchange="updateUserField(${u.id}, 'year', this.value ? parseInt(this.value, 10) : null)">
+            </td>
+            <td class="mono">
+              <input type="number" class="mini-input" min="1" max="2" value="${u.semester ?? ""}"
+                onchange="updateUserField(${u.id}, 'semester', this.value ? parseInt(this.value, 10) : null)">
+            </td>
+            <td>${u.email_verified ? "Yes" : "No"}</td>
+            <td class="mono">${formatDate(u.created_at)}</td>
+            <td class="mono">${escapeHtml(u.signup_source || "—")}</td>
+            <td>
+              <label class="toggle-switch" title="${u.id === CURRENT_ADMIN_ID ? 'Cannot remove your own admin access' : ''}">
+                <input type="checkbox" ${u.is_admin ? "checked" : ""}
+                  ${u.id === CURRENT_ADMIN_ID && u.is_admin ? "disabled" : ""}
+                  onchange="updateUserField(${u.id}, 'is_admin', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </td>
+            <td>
+              <label class="toggle-switch danger" title="${u.id === CURRENT_ADMIN_ID ? 'Cannot suspend your own account' : ''}">
+                <input type="checkbox" ${u.is_suspended ? "checked" : ""}
+                  ${u.id === CURRENT_ADMIN_ID ? "disabled" : ""}
+                  onchange="updateUserField(${u.id}, 'is_suspended', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function updateUserField(userId, field, value) {
+  try {
+    await api(`/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify({ [field]: value }) });
+    toast("Updated.", "success");
+  } catch (e) {
+    toast(e.message, "error");
+    loadUsers(); // revert the UI to server truth if the update was rejected
   }
 }
 
