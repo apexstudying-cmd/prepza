@@ -365,7 +365,7 @@
     text-align: center;
   }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -510,9 +510,9 @@
             placeholder="Prepza is temporarily down for maintenance. Please check back shortly."></textarea>
           <h3 style="margin-top:20px; margin-bottom:10px;">Content pricing (KES)</h3>
           <div class="form-row" style="grid-template-columns: repeat(3, 1fr); margin-bottom:12px;">
-            <div><label>Notes</label><input type="number" id="setting-price-notes" min="0" placeholder="0"></div>
-            <div><label>Past papers</label><input type="number" id="setting-price-past-paper" min="0" placeholder="0"></div>
-            <div><label>Q&amp;A</label><input type="number" id="setting-price-qna" min="0" placeholder="0"></div>
+            <div><label for="setting-price-notes">Notes</label><input type="number" id="setting-price-notes" min="0" placeholder="0"></div>
+            <div><label for="setting-price-past-paper">Past papers</label><input type="number" id="setting-price-past-paper" min="0" placeholder="0"></div>
+            <div><label for="setting-price-qna">Q&amp;A</label><input type="number" id="setting-price-qna" min="0" placeholder="0"></div>
           </div>
           <button class="btn-primary" onclick="saveSettings()">Save settings</button>
         </div>
