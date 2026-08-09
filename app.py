@@ -1360,9 +1360,66 @@ def admin_analytics():
         Payment.created_at >= datetime.utcnow() - timedelta(days=30),
     ).scalar()
 
-    # Note: User has no created_at column yet, so signup-over-time growth
-    # can't be computed until that's added - deliberately left out rather
-    # than approximated from payment activity, which would be misleading.
+    trend_start = datetime.utcnow() - timedelta(days=30)
+
+    signups_raw = (
+        db.session.query(
+            func.date(User.created_at).label("day"),
+            func.count(User.id),
+        )
+        .filter(User.created_at >= trend_start)
+        .group_by(func.date(User.created_at))
+        .order_by(func.date(User.created_at))
+        .all()
+    )
+    signups_per_day = [
+        {"date": day.isoformat(), "count": count}
+        for day, count in signups_raw
+    ]
+
+    revenue_raw = (
+        db.session.query(
+            func.date(Payment.created_at).label("day"),
+            func.coalesce(func.sum(Payment.amount), 0),
+        )
+        .filter(
+            Payment.status == "success",
+            Payment.created_at >= trend_start,
+        )
+        .group_by(func.date(Payment.created_at))
+        .order_by(func.date(Payment.created_at))
+        .all()
+    )
+    revenue_per_day = [
+        {"date": day.isoformat(), "amount": amount}
+        for day, amount in revenue_raw
+    ]
+
+    top_content_raw = (
+        db.session.query(
+            ContentItem.id,
+            ContentItem.title,
+            ContentItem.content_type,
+            func.coalesce(func.sum(Payment.amount), 0).label("revenue"),
+            func.count(Payment.id).label("purchases"),
+        )
+        .join(Payment, Payment.content_item_id == ContentItem.id)
+        .filter(Payment.status == "success")
+        .group_by(ContentItem.id, ContentItem.title, ContentItem.content_type)
+        .order_by(func.coalesce(func.sum(Payment.amount), 0).desc())
+        .limit(10)
+        .all()
+    )
+    top_performing_content = [
+        {
+            "id": cid,
+            "title": title,
+            "content_type": content_type,
+            "revenue": revenue,
+            "purchases": purchases,
+        }
+        for cid, title, content_type, revenue, purchases in top_content_raw
+    ]
 
     return jsonify({
         "total_revenue": total_revenue,
@@ -1372,6 +1429,9 @@ def admin_analytics():
         "total_content_items": total_content,
         "content_by_type": content_by_type,
         "payments_by_status": payments_by_status,
+        "signups_per_day": signups_per_day,
+        "revenue_per_day": revenue_per_day,
+        "top_performing_content": top_performing_content,
     })
 
 
