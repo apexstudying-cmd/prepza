@@ -388,6 +388,7 @@
     <div class="tab" data-panel="units">Units</div>
     <div class="tab" data-panel="content">Content</div>
     <div class="tab" data-panel="payments">Payments</div>
+    <div class="tab" data-panel="settings">Settings</div>
   </div>
 
   <main>
@@ -482,6 +483,23 @@
     </section>
 
     <!-- PAYMENTS PANEL -->
+    <section class="panel" id="panel-settings">
+      <div class="card">
+        <h2>System Settings</h2>
+        <div id="settings-form">
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <input type="checkbox" id="setting-maintenance-mode">
+            Maintenance mode (blocks study content and account pages for students)
+          </label>
+          <label for="setting-maintenance-message" style="display:block; margin-bottom:6px;">
+            Maintenance message
+          </label>
+          <textarea id="setting-maintenance-message" rows="3" style="width:100%; margin-bottom:12px;"
+            placeholder="Prepza is temporarily down for maintenance. Please check back shortly."></textarea>
+          <button class="btn-primary" onclick="saveSettings()">Save settings</button>
+        </div>
+      </div>
+    </section>
     <section class="panel" id="panel-payments">
       <div class="card">
         <h2>Payments</h2>
@@ -572,6 +590,7 @@ function initApp() {
   loadUnits();
   loadContent();
   loadPayments();
+  loadSettings();
 }
 
 // ---------- Tabs ----------
@@ -899,6 +918,28 @@ function renderPaymentsTable(payments) {
         `).join("")}
       </tbody>
     </table>`;
+}
+async function loadSettings() {
+  try {
+    const data = await api("/admin/settings");
+    document.getElementById("setting-maintenance-mode").checked = data.maintenance_mode;
+    document.getElementById("setting-maintenance-message").value = data.maintenance_message || "";
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+async function saveSettings() {
+  const maintenance_mode = document.getElementById("setting-maintenance-mode").checked;
+  const maintenance_message = document.getElementById("setting-maintenance-message").value;
+  try {
+    await api("/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify({ maintenance_mode, maintenance_message }),
+    });
+    toast("Settings saved", "success");
+  } catch (e) {
+    toast(e.message, "error");
+  }
 }
 
 async function refundPayment(paymentId) {

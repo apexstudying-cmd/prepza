@@ -379,6 +379,68 @@ def render_watermarked_page(pdf_bytes, page_num, watermark_text, zoom=2.0):
     return png_bytes, page_count
 
 
+# ---------- Maintenance mode ----------
+# Blocks only content/user-data routes. Everything else (auth lifecycle,
+# admin, payments callback, health check, static assets) stays open even
+# during maintenance so admins can still work and M-Pesa callbacks still
+# land.
+MAINTENANCE_BLOCKED_PREFIXES = (
+    "/units",
+    "/library",
+    "/payment-history",
+    "/profile",
+    "/delete-account",
+    "/content/",
+)
+MAINTENANCE_NEVER_BLOCK_PREFIXES = (
+    "/admin",
+    "/mpesa/callback/",
+    "/me",
+    "/login",
+    "/logout",
+    "/health",
+    "/static/",
+    "/sw.js",
+)
+MAINTENANCE_CACHE_TTL = timedelta(seconds=30)
+_maintenance_cache = {"value": None, "checked_at": None}
+
+
+def _invalidate_maintenance_cache():
+    _maintenance_cache["value"] = None
+    _maintenance_cache["checked_at"] = None
+
+
+def is_maintenance_mode():
+    now = datetime.utcnow()
+    checked_at = _maintenance_cache["checked_at"]
+    if checked_at is not None and (now - checked_at) < MAINTENANCE_CACHE_TTL:
+        return _maintenance_cache["value"]
+    setting = SystemSetting.query.filter_by(key="maintenance_mode").first()
+    value = bool(setting and setting.value == "true")
+    _maintenance_cache["value"] = value
+    _maintenance_cache["checked_at"] = now
+    return value
+
+
+@app.before_request
+def enforce_maintenance_mode():
+    path = request.path
+    if any(path.startswith(p) for p in MAINTENANCE_NEVER_BLOCK_PREFIXES):
+        return None
+    if not any(path.startswith(p) for p in MAINTENANCE_BLOCKED_PREFIXES):
+        return None
+    if not is_maintenance_mode():
+        return None
+    setting = SystemSetting.query.filter_by(key="maintenance_message").first()
+    message = (
+        setting.value
+        if setting and setting.value
+        else "Prepza is temporarily down for maintenance. Please check back shortly."
+    )
+    return jsonify({"error": "maintenance", "message": message}), 503
+
+
 @app.route("/")
 def home():
     return send_from_directory(app.static_folder, "landing.html")
@@ -1434,6 +1496,57 @@ def admin_update_user(user_id):
         "is_suspended": target_user.is_suspended,
     })
 
+
+
+@app.route("/admin/settings", methods=["GET"])
+@require_admin
+def admin_get_settings():
+    settings = {s.key: s.value for s in SystemSetting.query.all()}
+    return jsonify({
+        "maintenance_mode": settings.get("maintenance_mode", "false") == "true",
+        "maintenance_message": settings.get("maintenance_message", ""),
+    })
+
+
+@app.route("/admin/settings", methods=["PATCH"])
+@require_csrf
+@require_admin
+def admin_update_settings():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    if "maintenance_mode" in data:
+        value = data["maintenance_mode"]
+        if not isinstance(value, bool):
+            return jsonify({"error": "maintenance_mode must be true or false"}), 400
+        setting = SystemSetting.query.filter_by(key="maintenance_mode").first()
+        if not setting:
+            setting = SystemSetting(key="maintenance_mode", value="false")
+            db.session.add(setting)
+        setting.value = "true" if value else "false"
+
+    if "maintenance_message" in data:
+        message = data["maintenance_message"]
+        if not isinstance(message, str):
+            return jsonify({"error": "maintenance_message must be a string"}), 400
+        if len(message) > 500:
+            return jsonify({"error": "maintenance_message must be 500 characters or fewer"}), 400
+        setting = SystemSetting.query.filter_by(key="maintenance_message").first()
+        if not setting:
+            setting = SystemSetting(key="maintenance_message", value="")
+            db.session.add(setting)
+        setting.value = message
+
+    db.session.commit()
+    _invalidate_maintenance_cache()
+
+    mode_setting = SystemSetting.query.filter_by(key="maintenance_mode").first()
+    message_setting = SystemSetting.query.filter_by(key="maintenance_message").first()
+    return jsonify({
+        "maintenance_mode": bool(mode_setting and mode_setting.value == "true"),
+        "maintenance_message": message_setting.value if message_setting else "",
+    })
 
 
 if __name__ == "__main__":
