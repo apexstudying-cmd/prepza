@@ -1,0 +1,13 @@
+# Pin line endings explicitly so a fresh clone or checkout can't silently
+# convert them based on local git config (core.autocrlf). Without this,
+# core.autocrlf=true will rewrite LF files to CRLF on checkout, which is
+# exactly what was about to happen to static/sw.js.
+#
+# app.py and static/admin.html are CRLF throughout (confirmed via direct
+# byte inspection - see project conventions). static/sw.js is LF throughout.
+# Patch scripts in this repo build their anchors against these exact
+# line endings, so keeping them stable matters.
+
+app.py text eol=crlf
+static/admin.html text eol=crlf
+static/sw.js text eol=lf
