@@ -207,14 +207,6 @@
   <a class="back-link" href="/">&larr; Back to Prepza</a>
 </main>
 
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/sw.js').catch(function(err) {
-      console.warn('Service worker registration failed:', err);
-    });
-  });
-}
-</script>
+<script src="/static/js/sw-register.js"></script>
 </body>
 </html>

@@ -756,14 +756,6 @@ window.addEventListener('resize', function() {
 loadPaymentHistory();
 </script>
 
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/sw.js').catch(function(err) {
-      console.warn('Service worker registration failed:', err);
-    });
-  });
-}
-</script>
+<script src="/static/js/sw-register.js"></script>
 </body>
 </html>

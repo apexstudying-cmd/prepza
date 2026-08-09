@@ -1,32 +1,28 @@
-// Prepza service worker - v3 (offline page navigation)
+// Prepza service worker - v4 (explicit update flow)
 //
 // v2 stopped intercepting navigation requests entirely after v1's blanket
 // interception (with no fallback) caused broken/blank pages on any brief
 // network hiccup - indistinguishable from being logged out.
 //
-// v3 reintroduces navigation handling, but deliberately never blocks on a
-// single fetch attempt with no fallback:
-//   1. Race the network fetch against a short timeout. Whichever settles
-//      first is used.
-//   2. If the network wins, use it, and also refresh the cached copy of
-//      that page in the background for next time (the network fetch keeps
-//      running even after the race settles, so a slow-but-eventually-
-//      successful response still updates the cache).
-//   3. If the timeout wins, or the network fetch fails outright, fall back
-//      to the cached copy of that page (ignoring any query string, since
-//      unit.html?id=X and viewer.html?id=X share one cached shell).
-//   4. If nothing is cached either, fall back to a small offline.html page
-//      instead of leaving the request unresolved.
-//   5. Only if even offline.html isn't cached does this re-throw, letting
-//      the browser show its own native offline error - matching v2's
-//      "never fail silently and never fail to resolve" principle.
+// v3 reintroduced navigation handling with a race + fallback chain (see
+// handleNavigate below) and precached the app shell pages so navigation
+// still resolves offline.
 //
-// Non-navigation requests (images, API calls, etc.) are untouched - simple
-// passthrough, same as v2. The separate "prepza-qna-offline-*" cache used
-// by viewer.html's Save Offline feature is never read or deleted here -
-// activate() only ever cleans up caches prefixed "prepza-shell-".
+// v4 changes how *updates* to this file itself are rolled out. Previously
+// install() called self.skipWaiting() unconditionally, so a new SW version
+// took over as soon as it finished installing - silently, mid-session, with
+// no user control. That's the same "surprise" failure mode as v1 in spirit:
+// content changing under someone without warning. v4 instead lets a new
+// worker install and sit in the "waiting" state. It only activates when the
+// page explicitly asks it to (via postMessage({type: 'SKIP_WAITING'})),
+// which sw-register.js sends after the user clicks an "Update" button in a
+// toast. This keeps updates user-triggered and predictable.
+//
+// Navigation handling (race/fallback/offline.html) and cache-cleanup scope
+// (only ever touching "prepza-shell-*", never "prepza-qna-offline-*") are
+// unchanged from v3.
 
-const SHELL_CACHE_NAME = 'prepza-shell-v3';
+const SHELL_CACHE_NAME = 'prepza-shell-v4';
 const NAV_TIMEOUT_MS = 3000;
 
 const PRECACHE_URLS = [
@@ -53,7 +49,9 @@ self.addEventListener('install', (event) => {
             .catch(() => {})
         )
       );
-    }).then(() => self.skipWaiting())
+    })
+    // Deliberately no self.skipWaiting() here - see v4 note above. This
+    // worker now waits until the page explicitly tells it to take over.
   );
 });
 
@@ -67,6 +65,15 @@ self.addEventListener('activate', (event) => {
       )
     ).then(() => self.clients.claim())
   );
+});
+
+// Lets sw-register.js hand control to a waiting worker on demand, once the
+// user clicks "Update" in the toast, instead of this worker deciding on its
+// own to activate.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 function timeout(ms) {
