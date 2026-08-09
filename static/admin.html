@@ -558,7 +558,10 @@ async function checkAdminAccess() {
 }
 
 function logout() {
-  fetch(API_BASE + "/logout", { method: "POST" }).finally(() => {
+  fetch(API_BASE + "/logout", { method: "POST" }).finally(async () => {
+    if ('caches' in window) {
+      await caches.delete('prepza-qna-offline-v1').catch(() => {});
+    }
     window.location.href = "/login.html";
   });
 }

@@ -857,11 +857,17 @@ document.querySelectorAll('.sidebar-link').forEach(function(link) {
 });
 document.getElementById('logout-btn').addEventListener('click', async () => {
   await fetch('/logout', { method: 'POST' });
+  if ('caches' in window) {
+    await caches.delete('prepza-qna-offline-v1').catch(() => {});
+  }
   window.location.href = '/static/login.html';
 });
 
 document.getElementById('mobile-logout-btn').addEventListener('click', async () => {
   await fetch('/logout', { method: 'POST' });
+  if ('caches' in window) {
+    await caches.delete('prepza-qna-offline-v1').catch(() => {});
+  }
   window.location.href = '/static/login.html';
 });
 
