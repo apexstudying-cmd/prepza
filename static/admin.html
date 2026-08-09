@@ -365,6 +365,7 @@
     text-align: center;
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -408,6 +409,18 @@
       <div class="card">
         <h2>Payments by status</h2>
         <div id="analytics-payment-status"></div>
+      </div>
+      <div class="card">
+        <h2>Signups (last 30 days)</h2>
+        <canvas id="chart-signups" height="80"></canvas>
+      </div>
+      <div class="card">
+        <h2>Revenue (last 30 days)</h2>
+        <canvas id="chart-revenue" height="80"></canvas>
+      </div>
+      <div class="card">
+        <h2>Top performing content</h2>
+        <div id="analytics-top-content"></div>
       </div>
     </section>
 
@@ -608,6 +621,80 @@ function formatKsh(amount) {
   return "KSh " + Number(amount || 0).toLocaleString("en-KE");
 }
 
+let signupsChart = null;
+let revenueChart = null;
+
+function fillDateRange(dataArr, days, valueKey) {
+  const map = {};
+  (dataArr || []).forEach(d => { map[d.date] = d[valueKey]; });
+  const labels = [];
+  const values = [];
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setUTCDate(d.getUTCDate() - i);
+    const iso = d.toISOString().slice(0, 10);
+    labels.push(iso);
+    values.push(map[iso] || 0);
+  }
+  return { labels, values };
+}
+
+function renderCharts(data) {
+  const signups = fillDateRange(data.signups_per_day, 30, "count");
+  const revenue = fillDateRange(data.revenue_per_day, 30, "amount");
+
+  if (signupsChart) signupsChart.destroy();
+  signupsChart = new Chart(document.getElementById("chart-signups"), {
+    type: "line",
+    data: {
+      labels: signups.labels,
+      datasets: [{
+        label: "Signups",
+        data: signups.values,
+        borderColor: "#C89B3C",
+        backgroundColor: "rgba(200, 155, 60, 0.15)",
+        tension: 0.3,
+        fill: true,
+        pointRadius: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 6 }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { precision: 0 } },
+      },
+    },
+  });
+
+  if (revenueChart) revenueChart.destroy();
+  revenueChart = new Chart(document.getElementById("chart-revenue"), {
+    type: "line",
+    data: {
+      labels: revenue.labels,
+      datasets: [{
+        label: "Revenue (KSh)",
+        data: revenue.values,
+        borderColor: "#2F7A4F",
+        backgroundColor: "rgba(47, 122, 79, 0.15)",
+        tension: 0.3,
+        fill: true,
+        pointRadius: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 6 }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { callback: v => "KSh " + v.toLocaleString("en-KE") } },
+      },
+    },
+  });
+}
+
 async function loadAnalytics() {
   try {
     const data = await api("/admin/analytics");
@@ -644,6 +731,13 @@ async function loadAnalytics() {
       .map(([status, count]) => `<div class="breakdown-row"><span>${escapeHtml(status)}</span><span>${count}</span></div>`)
       .join("") || `<p class="hint">No payments yet.</p>`;
     document.getElementById("analytics-payment-status").innerHTML = statusRows;
+
+    renderCharts(data);
+
+    const topContentRows = (data.top_performing_content || [])
+      .map(item => `<div class="breakdown-row"><span>${escapeHtml(item.title)} <span class="hint">(${escapeHtml(item.content_type)})</span></span><span>${formatKsh(item.revenue)} · ${item.purchases} purchase${item.purchases === 1 ? "" : "s"}</span></div>`)
+      .join("") || `<p class="hint">No sales yet.</p>`;
+    document.getElementById("analytics-top-content").innerHTML = topContentRows;
   } catch (e) {
     document.getElementById("analytics-stats").innerHTML = `<p class="hint">Couldn't load analytics: ${escapeHtml(e.message)}</p>`;
   }
