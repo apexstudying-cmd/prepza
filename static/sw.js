@@ -105,6 +105,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Everything else (images, etc.) still gets a simple passthrough.
-  event.respondWith(fetch(event.request));
+  // Everything else (images, etc.) still gets a simple passthrough,
+  // but falls back to a cached copy (if any) or a plain 503 instead
+  // of leaving an unhandled rejection when the network hiccups.
+  event.respondWith(
+    fetch(event.request).catch(async () => {
+      const cached = await caches.match(event.request, { ignoreSearch: true });
+      if (cached) return cached;
+      return new Response('', { status: 503, statusText: 'Network error' });
+    })
+  );
 });
