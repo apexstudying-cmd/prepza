@@ -2,7 +2,7 @@
   "name": "Prepza",
   "short_name": "Prepza",
   "description": "Study platform for KU BSc Actuarial Science students - past papers, notes, and Q&A guides.",
-  "start_url": "/",
+  "start_url": "/static/dashboard.html",
   "scope": "/",
   "display": "standalone",
   "background_color": "#16233E",
