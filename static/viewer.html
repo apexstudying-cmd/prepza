@@ -99,6 +99,12 @@
   }
   .page-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
 
+  .page-nav button.saved {
+    background: rgba(201, 162, 39, 0.25);
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+
   .page-indicator {
     color: #FFFFFF;
     font-size: 13px;
@@ -161,6 +167,7 @@
   <a class="brand" href="#" onclick="history.back(); return false;">&larr; Prepza</a>
   <span class="nav-title" id="doc-title"></span>
   <div class="page-nav">
+    <button id="save-offline-btn" disabled>Save offline</button>
     <button id="prev-btn">Prev</button>
     <span class="page-indicator" id="page-indicator">-</span>
     <button id="next-btn">Next</button>
@@ -180,6 +187,7 @@
 const params = new URLSearchParams(window.location.search);
 const contentId = params.get('id');
 const viewerEl = document.getElementById('viewer-content');
+const OFFLINE_CACHE = 'prepza-qna-offline-v1';
 
 let currentPage = 0;
 let pageCount = 0;
@@ -191,6 +199,66 @@ function showError(title, message) {
   document.getElementById('next-btn').disabled = true;
 }
 
+function pageUrl(pageNum) {
+  return `/content/${contentId}/view/page/${pageNum}`;
+}
+
+function infoUrl() {
+  return `/content/${contentId}/view/info`;
+}
+
+async function isFullyCached(count) {
+  if (!('caches' in window)) return false;
+  try {
+    const cache = await caches.open(OFFLINE_CACHE);
+    const infoMatch = await cache.match(infoUrl());
+    if (!infoMatch) return false;
+    for (let i = 0; i < count; i++) {
+      const pageMatch = await cache.match(pageUrl(i));
+      if (!pageMatch) return false;
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+async function saveOffline() {
+  if (!('caches' in window)) {
+    alert("Offline saving isn't supported in this browser.");
+    return;
+  }
+  const btn = document.getElementById('save-offline-btn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.classList.remove('saved');
+
+  try {
+    const cache = await caches.open(OFFLINE_CACHE);
+
+    const infoRes = await fetch(infoUrl());
+    if (infoRes.ok) {
+      await cache.put(infoUrl(), infoRes.clone());
+    }
+
+    for (let i = 0; i < pageCount; i++) {
+      btn.textContent = `Saving ${i + 1}/${pageCount}...`;
+      const res = await fetch(pageUrl(i), { cache: 'no-store' });
+      if (res.ok) {
+        await cache.put(pageUrl(i), res.clone());
+      }
+    }
+
+    btn.textContent = 'Saved offline';
+    btn.classList.add('saved');
+    btn.disabled = false;
+  } catch (err) {
+    btn.textContent = originalText;
+    btn.disabled = false;
+    alert("Couldn't save this for offline viewing. Check your connection and try again.");
+  }
+}
+
 async function init() {
   if (!contentId) {
     showError('No content specified', 'Go back and pick a Q&amp;A item to view.');
@@ -199,7 +267,7 @@ async function init() {
 
   let info;
   try {
-    const res = await fetch(`/content/${contentId}/view/info`);
+    const res = await fetch(infoUrl());
     const data = await res.json();
 
     if (res.status === 401) {
@@ -207,18 +275,40 @@ async function init() {
       return;
     }
     if (!res.ok) {
-      showError('Can\'t open this content', data.error || 'You may not have access to this item.');
+      showError("Can't open this content", data.error || 'You may not have access to this item.');
       return;
     }
     info = data;
   } catch (err) {
-    showError('Couldn\'t reach Prepza', 'Check your connection and refresh the page.');
-    return;
+    // Network failed outright - try the offline cache before giving up.
+    if ('caches' in window) {
+      try {
+        const cache = await caches.open(OFFLINE_CACHE);
+        const cachedRes = await cache.match(infoUrl());
+        if (cachedRes) {
+          info = await cachedRes.json();
+        }
+      } catch (cacheErr) { /* fall through to error below */ }
+    }
+    if (!info) {
+      showError("Couldn't reach Prepza", 'Check your connection and refresh the page.');
+      return;
+    }
   }
 
   pageCount = info.page_count;
   csrfToken = info.csrf_token;
   document.getElementById('doc-title').textContent = info.title;
+
+  const saveBtn = document.getElementById('save-offline-btn');
+  saveBtn.disabled = false;
+  saveBtn.addEventListener('click', saveOffline);
+  isFullyCached(pageCount).then((cached) => {
+    if (cached) {
+      saveBtn.textContent = 'Saved offline';
+      saveBtn.classList.add('saved');
+    }
+  });
 
   viewerEl.innerHTML = `
     <div id="page-canvas-wrap">
@@ -243,35 +333,50 @@ function saveProgress(pageNum) {
   }).catch(() => {});
 }
 
-async function loadPage(pageNum) {
+async function renderPageResponse(res) {
   const canvas = document.getElementById('page-canvas');
   const ctx = canvas.getContext('2d');
+  const blob = await res.blob();
+  const imgUrl = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(imgUrl);
+  };
+  img.src = imgUrl;
+}
 
+async function loadPage(pageNum) {
   document.getElementById('prev-btn').disabled = (pageNum <= 0);
   document.getElementById('next-btn').disabled = (pageNum >= pageCount - 1);
   document.getElementById('page-indicator').textContent = `Page ${pageNum + 1} of ${pageCount}`;
 
   try {
-    const res = await fetch(`/content/${contentId}/view/page/${pageNum}`, { cache: 'no-store' });
+    const res = await fetch(pageUrl(pageNum), { cache: 'no-store' });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      showError('Couldn\'t load this page', data.error || 'Try again in a moment.');
+      showError("Couldn't load this page", data.error || 'Try again in a moment.');
       return;
     }
-    const blob = await res.blob();
-    const imgUrl = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-      URL.revokeObjectURL(imgUrl);
-    };
-    img.src = imgUrl;
+    await renderPageResponse(res);
     currentPage = pageNum;
     saveProgress(pageNum);
   } catch (err) {
-    showError('Couldn\'t load this page', 'Check your connection and try again.');
+    // Network failed outright - try the offline cache before giving up.
+    if ('caches' in window) {
+      try {
+        const cache = await caches.open(OFFLINE_CACHE);
+        const cached = await cache.match(pageUrl(pageNum));
+        if (cached) {
+          await renderPageResponse(cached);
+          currentPage = pageNum;
+          return;
+        }
+      } catch (cacheErr) { /* fall through to error below */ }
+    }
+    showError("Couldn't load this page", "You're offline and this page hasn't been saved. Connect to the internet, or save this document for offline viewing first.");
   }
 }
 
