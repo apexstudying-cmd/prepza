@@ -248,8 +248,37 @@ def require_csrf(f):
     return decorated
 
 
+def get_content_prices():
+    """
+    Returns a dict of content_type -> price (KES), sourced from
+    SystemSetting rows (price_notes, price_past_paper, price_qna).
+    Missing or invalid settings default to 0 (free).
+    """
+    keys = ("price_notes", "price_past_paper", "price_qna")
+    settings = {
+        s.key: s.value
+        for s in SystemSetting.query.filter(SystemSetting.key.in_(keys)).all()
+    }
+
+    def parse(key):
+        try:
+            return int(settings.get(key, "0") or "0")
+        except (TypeError, ValueError):
+            return 0
+
+    return {
+        "notes": parse("price_notes"),
+        "past_paper": parse("price_past_paper"),
+        "qna": parse("price_qna"),
+    }
+
+
+def get_price_for_type(content_type):
+    return get_content_prices().get(content_type, 0)
+
+
 def has_access(user_id, content_item):
-    if content_item.price == 0:
+    if get_price_for_type(content_item.content_type) == 0:
         return True
 
     successful_payment = Payment.query.filter_by(
@@ -878,7 +907,7 @@ def unit_content(unit_id):
             "id": item.id,
             "title": item.title,
             "paper_year": item.paper_year,
-            "price": item.price,
+            "price": get_price_for_type(item.content_type),
             "unlocked": unlocked,
             "file_url": get_signed_url(item.file_url) if (unlocked and item.is_downloadable) else None,
         })
@@ -1067,7 +1096,8 @@ def pay_for_content(content_id):
     if not content_item:
         return jsonify({"error": "Content not found"}), 404
 
-    if content_item.price == 0:
+    price = get_price_for_type(content_item.content_type)
+    if price == 0:
         return jsonify({"error": "This content is free, no payment needed"}), 400
 
     if has_access(user_id, content_item):
@@ -1089,7 +1119,7 @@ def pay_for_content(content_id):
             "Password": password,
             "Timestamp": timestamp,
             "TransactionType": "CustomerPayBillOnline",
-            "Amount": content_item.price,
+            "Amount": price,
             "PartyA": phone_number,
             "PartyB": os.environ.get("MPESA_SHORTCODE"),
             "PhoneNumber": phone_number,
@@ -1106,7 +1136,7 @@ def pay_for_content(content_id):
                 user_id=user_id,
                 content_item_id=content_id,
                 phone_number=phone_number,
-                amount=content_item.price,
+                amount=price,
                 checkout_request_id=response_data["CheckoutRequestID"],
                 status="pending",
             )
@@ -1222,7 +1252,7 @@ def admin_list_content():
             "file_url": item.file_url,
             "paper_year": item.paper_year,
             "is_downloadable": item.is_downloadable,
-            "price": item.price,
+            "price": get_price_for_type(item.content_type),
         })
 
     return jsonify({"content": result})
@@ -1241,7 +1271,6 @@ def admin_add_content():
     title = data.get("title")
     file_url = data.get("file_url")
     paper_year = data.get("paper_year")
-    price = data.get("price", 0)
 
     if not unit_id or not content_type or not title:
         return jsonify({"error": "unit_id, content_type, and title are required"}), 400
@@ -1262,7 +1291,6 @@ def admin_add_content():
         file_url=file_url,
         paper_year=paper_year,
         is_downloadable=is_downloadable,
-        price=price,
     )
     db.session.add(item)
     db.session.commit()
@@ -1282,8 +1310,6 @@ def admin_update_content(content_id):
     if not data:
         return jsonify({"error": "Request body must be valid JSON"}), 400
 
-    if "price" in data:
-        item.price = data["price"]
     if "title" in data:
         item.title = data["title"]
     if "file_url" in data:
@@ -1296,7 +1322,7 @@ def admin_update_content(content_id):
     return jsonify({
         "message": "Content updated",
         "content_id": item.id,
-        "price": item.price,
+        "price": get_price_for_type(item.content_type),
         "title": item.title,
     })
 
@@ -1562,9 +1588,19 @@ def admin_update_user(user_id):
 @require_admin
 def admin_get_settings():
     settings = {s.key: s.value for s in SystemSetting.query.all()}
+
+    def price(key):
+        try:
+            return int(settings.get(key, "0") or "0")
+        except (TypeError, ValueError):
+            return 0
+
     return jsonify({
         "maintenance_mode": settings.get("maintenance_mode", "false") == "true",
         "maintenance_message": settings.get("maintenance_message", ""),
+        "price_notes": price("price_notes"),
+        "price_past_paper": price("price_past_paper"),
+        "price_qna": price("price_qna"),
     })
 
 
@@ -1597,6 +1633,17 @@ def admin_update_settings():
             setting = SystemSetting(key="maintenance_message", value="")
             db.session.add(setting)
         setting.value = message
+
+    for price_key in ("price_notes", "price_past_paper", "price_qna"):
+        if price_key in data:
+            value = data[price_key]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                return jsonify({"error": f"{price_key} must be a non-negative integer"}), 400
+            setting = SystemSetting.query.filter_by(key=price_key).first()
+            if not setting:
+                setting = SystemSetting(key=price_key, value="0")
+                db.session.add(setting)
+            setting.value = str(value)
 
     db.session.commit()
     _invalidate_maintenance_cache()
