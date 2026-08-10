@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 sentry_dsn = os.environ.get("SENTRY_DSN")
+anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
 if sentry_dsn:
     sentry_sdk.init(
         dsn=sentry_dsn,
@@ -148,6 +149,47 @@ class ViewProgress(db.Model):
         db.UniqueConstraint("user_id", "content_item_id", name="uq_view_progress_user_item"),
     )
 
+class ForumPost(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+class AiAnswer(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
+    question_text = db.Column(db.Text, nullable=False)
+    answer_text = db.Column(db.Text, nullable=False)
+    model_used = db.Column(db.String(50), nullable=True)
+    input_tokens = db.Column(db.Integer, default=0)
+    output_tokens = db.Column(db.Integer, default=0)
+    cache_read_tokens = db.Column(db.Integer, default=0)
+    cache_creation_tokens = db.Column(db.Integer, default=0)
+    cost_usd = db.Column(db.Numeric(10, 6), default=0)
+    reuse_count = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+class ForumReply(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey("forum_post.id", ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    is_ai = db.Column(db.Boolean, default=False)
+    ai_answer_id = db.Column(db.Integer, db.ForeignKey("ai_answer.id"), nullable=True)
+    triggered_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+class AiUsageLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    forum_reply_id = db.Column(db.Integer, db.ForeignKey("forum_reply.id"), nullable=True)
+    request_type = db.Column(db.String(20), nullable=False)
+    model = db.Column(db.String(50), nullable=True)
+    input_tokens = db.Column(db.Integer, default=0)
+    output_tokens = db.Column(db.Integer, default=0)
+    cache_read_tokens = db.Column(db.Integer, default=0)
+    cache_creation_tokens = db.Column(db.Integer, default=0)
+    cost_usd = db.Column(db.Numeric(10, 6), default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 def get_mpesa_access_token():
     consumer_key = os.environ.get("MPESA_CONSUMER_KEY")
