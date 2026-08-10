@@ -792,6 +792,22 @@ async function loadDashboard() {
   let units;
   try {
     const unitsRes = await fetch('/units');
+    if (unitsRes.status === 503) {
+      let maintMsg = 'Prepza is temporarily down for maintenance. Please check back shortly.';
+      try {
+        const body = await unitsRes.json();
+        if (body && body.message) maintMsg = body.message;
+      } catch (parseErr) {}
+      contentEl.innerHTML = `
+        <div class="state-box">
+          <h3>Under maintenance</h3>
+          <p>${escapeHtml(maintMsg)}</p>
+        </div>`;
+      return;
+    }
+    if (!unitsRes.ok) {
+      throw new Error('units request failed with status ' + unitsRes.status);
+    }
     units = await unitsRes.json();
   } catch (err) {
     contentEl.innerHTML = `
