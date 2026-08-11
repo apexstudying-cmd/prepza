@@ -103,12 +103,41 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, nullable=True)
     signup_source = db.Column(db.String(100), nullable=True)
     is_suspended = db.Column(db.Boolean, nullable=False, default=False)
+class University(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    short_code = db.Column(db.String(20), nullable=False, unique=True)
+    country = db.Column(db.String(80), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Program(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=False)
+    name = db.Column(db.String(150), nullable=False)
+    degree_level = db.Column(db.String(50), nullable=True)
+    discipline_category = db.Column(db.String(80), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class Unit(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(20), nullable=False)
     name = db.Column(db.String(200), nullable=False)
     year = db.Column(db.Integer, nullable=False)
     semester = db.Column(db.Integer, nullable=False)
+    university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=True)
+
+
+class UnitProgram(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
+    program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=False)
+    __table_args__ = (
+        db.UniqueConstraint("unit_id", "program_id", name="uq_unit_program"),
+    )
 
 
 class ContentItem(db.Model):
