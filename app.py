@@ -280,6 +280,7 @@ class AiUsageLog(db.Model):
     forum_reply_id = db.Column(db.Integer, db.ForeignKey("forum_reply.id"), nullable=True)
     request_type = db.Column(db.String(20), nullable=False)
     model = db.Column(db.String(50), nullable=True)
+    provider = db.Column(db.String(20), nullable=True)
     input_tokens = db.Column(db.Integer, default=0)
     output_tokens = db.Column(db.Integer, default=0)
     cache_read_tokens = db.Column(db.Integer, default=0)

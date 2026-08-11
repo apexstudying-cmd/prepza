@@ -1,0 +1,574 @@
+"""
+ai_service.py — Prepza's AI pipeline (Chunk 3).
+
+This module is the ONLY place in the codebase that should ever call an
+AI provider's SDK directly. Every feature (forum "Ask Prepza AI", and
+later the AI Tutor / Summaries / Quizzes / Flashcards / Podcasts / Mind
+maps) is expected to call the functions in this module rather than
+touching `anthropic` (or any future provider SDK) itself. That is what
+makes it possible to add/swap providers later without rewriting every
+feature that uses AI - see PREPZA AI COST OPTIMIZATION & MULTI-MODEL
+ROUTING doc.
+
+Deferred imports: functions below do `from app import db, ...` INSIDE
+the function body rather than at module level. app.py imports this
+module, so a top-level `from app import ...` here would be a circular
+import. Deferring it means Python only resolves it once app.py has
+already finished building the Flask app / db / models, which is always
+true by the time a request handler actually calls into ai_service.
+
+Nothing in this file talks to Flask `request`/`session` directly - it
+takes plain arguments and returns plain data/dicts, so it can be unit
+tested without a request context.
+"""
+
+import os
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Optional
+
+import anthropic
+
+
+# ============================================================
+# 1. PROVIDER-AGNOSTIC REQUEST / RESPONSE / USAGE SHAPES
+# ============================================================
+# Per the cost-optimization doc: features build an AIRequest and get
+# back an AIResponse. Nothing here is Anthropic-specific by name, even
+# though AnthropicProvider is currently the only implementation.
+
+@dataclass
+class AIRequest:
+    task: str                      # one of AI_TASKS keys, e.g. "FORUM_ANSWER"
+    system_prompt: str
+    user_message: str
+    max_tokens: int = 1024
+    cacheable_system: bool = False  # True => system prompt sent with cache_control
+
+
+@dataclass
+class AIUsage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
+    cost_usd: Decimal = Decimal("0")
+
+
+@dataclass
+class AIResponse:
+    text: str
+    model_used: str
+    provider: str
+    usage: AIUsage
+    latency_ms: int
+    escalated: bool = False        # True if the fallback model had to be used
+    escalation_reason: Optional[str] = None
+
+
+class AIProviderError(Exception):
+    """Raised when every model in a task's routing chain fails."""
+
+
+class AIBudgetExceededError(Exception):
+    """Raised when the global monthly spend cap has been hit."""
+
+
+class AIRateLimitExceededError(Exception):
+    """Raised when a user has hit their daily fresh-generation limit."""
+
+
+# ============================================================
+# 2. TASK-BASED MODEL ROUTING
+# ============================================================
+# Central config so nothing downstream hard-codes a model name.
+# Only Sonnet 5 / Haiku 4.5 exist today (single provider: Anthropic).
+# Adding a second provider later means adding entries here, not
+# touching call sites. Routing choices below follow the locked
+# decisions (Sonnet for real academic reasoning, Haiku for cheap/
+# mechanical generation) - tune with real usage data later per the
+# cost doc's "model evaluation harness" (not built yet, deliberately
+# out of scope for this pass).
+
+MODEL_SONNET_5 = "claude-sonnet-5"
+MODEL_HAIKU_4_5 = "claude-haiku-4-5-20251001"
+
+AI_TASKS = {
+    # Wired and in use this chunk:
+    "FORUM_ANSWER": {
+        "primary": MODEL_SONNET_5,
+        "fallback": None,
+        "max_tokens": 1024,
+        "notes": "Ask Prepza AI in the forum - real academic reasoning needed.",
+    },
+    "THREAD_SUMMARY": {
+        "primary": MODEL_HAIKU_4_5,
+        "fallback": MODEL_SONNET_5,
+        "max_tokens": 512,
+        "notes": "Summarizing an existing forum thread on request.",
+    },
+
+    # Reserved for the next pass of Chunk 3 (document text extraction
+    # must land first) - present now so routes/features can be added
+    # later without another routing-config change.
+    "TUTORING": {
+        "primary": MODEL_SONNET_5,
+        "fallback": None,
+        "max_tokens": 1024,
+        "notes": "AI Tutor chat, grounded in a student's document once extraction exists.",
+    },
+    "SUMMARIZATION": {
+        "primary": MODEL_HAIKU_4_5,
+        "fallback": MODEL_SONNET_5,
+        "max_tokens": 1024,
+        "notes": "Condensed notes from a document.",
+    },
+    "FLASHCARDS": {
+        "primary": MODEL_HAIKU_4_5,
+        "fallback": MODEL_SONNET_5,
+        "max_tokens": 2048,
+        "notes": "Mechanical extraction of Q/A pairs from source text.",
+    },
+    "QUIZZES": {
+        "primary": MODEL_SONNET_5,
+        "fallback": None,
+        "max_tokens": 2048,
+        "notes": "Needs correct distractors/answers, not just plausible-looking ones.",
+    },
+    "DOCUMENT_ANALYSIS": {
+        "primary": MODEL_SONNET_5,
+        "fallback": None,
+        "max_tokens": 2048,
+        "notes": "Classifying/understanding an uploaded document as a whole.",
+    },
+    "PODCAST_SCRIPT": {
+        "primary": MODEL_SONNET_5,
+        "fallback": None,
+        "max_tokens": 3072,
+        "notes": "Longer-form generation, benefits from a stronger model.",
+    },
+    "MIND_MAP": {
+        "primary": MODEL_HAIKU_4_5,
+        "fallback": MODEL_SONNET_5,
+        "max_tokens": 1536,
+        "notes": "Structural extraction (nodes/edges), not deep reasoning.",
+    },
+}
+
+
+# ============================================================
+# 3. PRICING (per MTok, USD) - keyed by effective date since Anthropic
+#    has an announced Sonnet 5 price change on 2026-08-31.
+#    Re-verify against platform.claude.com/docs if this drifts far
+#    from today's date. Cache multipliers apply to the INPUT price only.
+# ============================================================
+
+_PRICING_SCHEDULE = {
+    MODEL_SONNET_5: [
+        # (effective_from, input_per_mtok, output_per_mtok)
+        (datetime(2000, 1, 1), Decimal("2.00"), Decimal("10.00")),
+        (datetime(2026, 8, 31), Decimal("3.00"), Decimal("15.00")),
+    ],
+    MODEL_HAIKU_4_5: [
+        (datetime(2000, 1, 1), Decimal("1.00"), Decimal("5.00")),
+    ],
+}
+
+CACHE_READ_MULTIPLIER = Decimal("0.1")
+CACHE_WRITE_5MIN_MULTIPLIER = Decimal("1.25")
+CACHE_WRITE_1HOUR_MULTIPLIER = Decimal("2.0")
+
+
+def _pricing_for(model, at=None):
+    at = at or datetime.utcnow()
+    schedule = _PRICING_SCHEDULE.get(model)
+    if not schedule:
+        raise ValueError(f"No pricing configured for model '{model}'")
+    applicable = [row for row in schedule if row[0] <= at]
+    return applicable[-1] if applicable else schedule[0]
+
+
+def compute_cost_usd(model, input_tokens, output_tokens,
+                      cache_read_tokens=0, cache_creation_tokens=0,
+                      cache_ttl="5m", at=None):
+    """
+    Computes cost in USD from real token counts (never estimates).
+    `input_tokens` here should be the NON-cached portion only - callers
+    pass the API response's input_tokens field, which Anthropic already
+    reports net of cache reads/writes.
+    """
+    _, input_rate, output_rate = _pricing_for(model, at=at)
+
+    cost = Decimal(input_tokens) * input_rate / Decimal(1_000_000)
+    cost += Decimal(output_tokens) * output_rate / Decimal(1_000_000)
+
+    if cache_read_tokens:
+        cost += Decimal(cache_read_tokens) * input_rate * CACHE_READ_MULTIPLIER / Decimal(1_000_000)
+
+    if cache_creation_tokens:
+        write_multiplier = CACHE_WRITE_1HOUR_MULTIPLIER if cache_ttl == "1h" else CACHE_WRITE_5MIN_MULTIPLIER
+        cost += Decimal(cache_creation_tokens) * input_rate * write_multiplier / Decimal(1_000_000)
+
+    return cost.quantize(Decimal("0.000001"))
+
+
+# ============================================================
+# 4. PROVIDER (Anthropic) + ROUTER (primary -> fallback escalation)
+# ============================================================
+
+class AnthropicProvider:
+    """Thin wrapper around the Anthropic SDK. Not imported/used outside this file."""
+
+    def __init__(self, api_key):
+        if not api_key:
+            raise AIProviderError("ANTHROPIC_API_KEY is not configured")
+        self._client = anthropic.Anthropic(api_key=api_key)
+
+    def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False):
+        if cacheable_system:
+            system = [{
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }]
+        else:
+            system = system_prompt
+
+        response = self._client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user_message}],
+        )
+
+        text = "".join(block.text for block in response.content if block.type == "text")
+        usage = response.usage
+
+        return text, AIUsage(
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+            cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        )
+
+
+def _get_provider():
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    return AnthropicProvider(api_key), "anthropic"
+
+
+def route_and_generate(ai_request: AIRequest) -> AIResponse:
+    """
+    Resolves an AIRequest to a task's primary model, calls it, and
+    escalates to the task's fallback model on failure. This is a
+    failure-triggered escalation only (the provider errored/timed
+    out) - quality-gated escalation (validating the primary model's
+    answer and escalating on low confidence) is a documented future
+    upgrade, not built here; the AIResponse.escalated/escalation_reason
+    fields exist so that logic can slot in later without another
+    schema change.
+    """
+    task_config = AI_TASKS.get(ai_request.task)
+    if not task_config:
+        raise ValueError(f"Unknown AI task '{ai_request.task}'")
+
+    provider, provider_name = _get_provider()
+    max_tokens = ai_request.max_tokens or task_config["max_tokens"]
+
+    models_to_try = [task_config["primary"]]
+    if task_config.get("fallback"):
+        models_to_try.append(task_config["fallback"])
+
+    last_error = None
+    for attempt, model in enumerate(models_to_try):
+        start = time.monotonic()
+        try:
+            text, usage = provider.call(
+                model=model,
+                system_prompt=ai_request.system_prompt,
+                user_message=ai_request.user_message,
+                max_tokens=max_tokens,
+                cacheable_system=ai_request.cacheable_system,
+            )
+            latency_ms = int((time.monotonic() - start) * 1000)
+            usage.cost_usd = compute_cost_usd(
+                model, usage.input_tokens, usage.output_tokens,
+                usage.cache_read_tokens, usage.cache_creation_tokens,
+            )
+            return AIResponse(
+                text=text,
+                model_used=model,
+                provider=provider_name,
+                usage=usage,
+                latency_ms=latency_ms,
+                escalated=(attempt > 0),
+                escalation_reason="primary_model_failed" if attempt > 0 else None,
+            )
+        except Exception as e:  # noqa: BLE001 - genuinely want to catch+retry any provider failure
+            last_error = e
+            continue
+
+    raise AIProviderError(f"All models failed for task '{ai_request.task}': {last_error}")
+
+
+# ============================================================
+# 5. USAGE LOGGING
+# ============================================================
+
+def log_usage(user_id, request_type, model=None, provider=None,
+               usage: Optional[AIUsage] = None, forum_reply_id=None):
+    """
+    Logs one row to ai_usage_log. `request_type` is 'answer' | 'reuse' |
+    'summarize' (matches the existing column). For 'reuse' rows, model/
+    provider stay None and usage stays zeroed - no API call was made.
+    """
+    from app import db, AiUsageLog
+
+    usage = usage or AIUsage()
+    entry = AiUsageLog(
+        user_id=user_id,
+        forum_reply_id=forum_reply_id,
+        request_type=request_type,
+        model=model,
+        provider=provider,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        cache_creation_tokens=usage.cache_creation_tokens,
+        cost_usd=usage.cost_usd,
+    )
+    db.session.add(entry)
+    db.session.commit()
+    return entry
+
+
+# ============================================================
+# 6. RATE LIMITS (per-user daily fresh generations)
+# ============================================================
+
+DAILY_FRESH_GENERATION_LIMITS = {
+    "free": 5,
+    "plus": 15,
+    "premium": None,  # None = unlimited
+}
+
+
+def get_daily_fresh_generation_count(user_id):
+    """
+    Counts this user's FRESH (non-reuse) generations in the last 24h,
+    computed from ai_usage_log rather than a counter column on User -
+    avoids reset/drift bugs, per the locked decision.
+    """
+    from app import db, AiUsageLog
+
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+    return (
+        db.session.query(AiUsageLog)
+        .filter(
+            AiUsageLog.user_id == user_id,
+            AiUsageLog.request_type != "reuse",
+            AiUsageLog.created_at >= cutoff,
+        )
+        .count()
+    )
+
+
+def check_daily_limit(user_id, plan_tier="free"):
+    """
+    Returns (allowed: bool, used: int, limit: int | None).
+    `plan_tier` defaults to "free" for everyone today since User.plan
+    doesn't exist yet - callers can pass a real tier once it does,
+    without this function needing to change.
+    """
+    limit = DAILY_FRESH_GENERATION_LIMITS.get(plan_tier, DAILY_FRESH_GENERATION_LIMITS["free"])
+    if limit is None:
+        return True, 0, None
+
+    used = get_daily_fresh_generation_count(user_id)
+    return used < limit, used, limit
+
+
+# ============================================================
+# 7. GLOBAL SPEND CIRCUIT BREAKER (monthly)
+# ============================================================
+
+DEFAULT_MONTHLY_AI_BUDGET_USD = Decimal("20.00")
+_AI_BUDGET_SETTING_KEY = "ai_monthly_budget_usd"
+
+
+def get_monthly_ai_budget_usd():
+    """
+    Reads the configurable monthly cap from SystemSetting (same table/
+    pattern as price_notes etc.), defaulting to $20 if unset.
+    """
+    from app import db, SystemSetting
+
+    setting = SystemSetting.query.filter_by(key=_AI_BUDGET_SETTING_KEY).first()
+    if not setting or not setting.value:
+        return DEFAULT_MONTHLY_AI_BUDGET_USD
+    try:
+        return Decimal(setting.value)
+    except Exception:
+        return DEFAULT_MONTHLY_AI_BUDGET_USD
+
+
+def get_monthly_ai_spend_usd():
+    from app import db, AiUsageLog
+
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    total = (
+        db.session.query(db.func.coalesce(db.func.sum(AiUsageLog.cost_usd), 0))
+        .filter(AiUsageLog.created_at >= month_start)
+        .scalar()
+    )
+    return Decimal(total or 0)
+
+
+def is_spend_cap_reached():
+    """
+    True => fresh generation should pause app-wide. Cached/reused
+    answers (cost $0, request_type='reuse') must keep working - callers
+    should only call this before a FRESH generation, never before
+    serving a reuse-cache hit.
+    """
+    return get_monthly_ai_spend_usd() >= get_monthly_ai_budget_usd()
+
+
+# ============================================================
+# 8. REUSE CACHE (Postgres full-text + trigram, no embeddings)
+# ============================================================
+
+# Below this similarity score, a cached answer isn't considered a
+# reliable enough match to reuse - falls through to a fresh generation.
+REUSE_SIMILARITY_THRESHOLD = 0.35
+
+
+def find_reusable_answer(question_text, unit_id=None):
+    """
+    Searches ai_answer for a sufficiently similar existing question
+    using tsvector full-text ranking combined with pg_trgm similarity
+    (search_vector and the trigram index are already built into the
+    ai_answer table). Returns the best-matching AiAnswer row, or None.
+
+    Deliberately unit-scoped when unit_id is given: a good answer about
+    ACT 101 supply/demand shouldn't get served for a MAT 101 question
+    that happens to share vocabulary.
+    """
+    from app import db, AiAnswer
+    from sqlalchemy import text as sql_text
+
+    query = sql_text("""
+        SELECT id, similarity(question_text, :q) AS sim
+        FROM ai_answer
+        WHERE (:unit_id IS NULL OR unit_id = :unit_id)
+          AND (
+                search_vector @@ plainto_tsquery('english', :q)
+                OR question_text % :q
+              )
+        ORDER BY sim DESC
+        LIMIT 1
+    """)
+
+    row = db.session.execute(query, {"q": question_text, "unit_id": unit_id}).first()
+    if not row or row.sim is None or row.sim < REUSE_SIMILARITY_THRESHOLD:
+        return None
+
+    return db.session.get(AiAnswer, row.id)
+
+
+# ============================================================
+# 9. HIGH-LEVEL ORCHESTRATION - forum "Ask Prepza AI"
+# ============================================================
+# This is the one function the forum routes (next stage) should call.
+# Everything above is plumbing; this is the feature.
+
+def answer_forum_question(question_text, unit, triggering_user_id, plan_tier="free"):
+    """
+    Full pipeline for one "Ask Prepza AI" / @Prepza AI invocation:
+      1. Reuse-cache check (always tried first, zero cost, no limits apply)
+      2. Spend-cap check (only blocks FRESH generation)
+      3. Daily rate-limit check (only blocks FRESH generation)
+      4. Generate via the router, log usage, cache the new answer
+
+    `unit` is a Unit model instance (or None for a general question).
+    Returns a dict: {answer_text, ai_answer_id, reused, model_used}.
+    Raises AIBudgetExceededError / AIRateLimitExceededError when a
+    fresh generation is blocked - callers should catch these and
+    return a clear message to the student rather than a generic 500.
+    """
+    from app import db, AiAnswer
+
+    unit_id = unit.id if unit else None
+
+    cached = find_reusable_answer(question_text, unit_id=unit_id)
+    if cached:
+        cached.reuse_count = (cached.reuse_count or 0) + 1
+        db.session.commit()
+        log_usage(triggering_user_id, request_type="reuse")
+        return {
+            "answer_text": cached.answer_text,
+            "ai_answer_id": cached.id,
+            "reused": True,
+            "model_used": cached.model_used,
+        }
+
+    if is_spend_cap_reached():
+        raise AIBudgetExceededError(
+            "Prepza AI has reached its monthly budget - fresh answers are paused, "
+            "but existing answers are still available."
+        )
+
+    allowed, used, limit = check_daily_limit(triggering_user_id, plan_tier=plan_tier)
+    if not allowed:
+        raise AIRateLimitExceededError(
+            f"You've used {used}/{limit} AI questions today - try again tomorrow, "
+            "or search for an existing answer."
+        )
+
+    unit_context = f"{unit.code} - {unit.name}" if unit else "a general academic topic"
+    system_prompt = (
+        "You are Prepza AI, an academic assistant for university students on the Prepza "
+        "study platform. Answer clearly and correctly for a student studying "
+        f"{unit_context}. If you are not confident in an answer, say so rather than "
+        "guessing. Keep answers focused and study-friendly - use structure (steps, "
+        "short sections) for anything multi-part."
+    )
+
+    ai_response = route_and_generate(AIRequest(
+        task="FORUM_ANSWER",
+        system_prompt=system_prompt,
+        user_message=question_text,
+        cacheable_system=True,
+    ))
+
+    log_usage(
+        triggering_user_id,
+        request_type="answer",
+        model=ai_response.model_used,
+        provider=ai_response.provider,
+        usage=ai_response.usage,
+    )
+
+    new_answer = AiAnswer(
+        unit_id=unit_id,
+        question_text=question_text,
+        answer_text=ai_response.text,
+        model_used=ai_response.model_used,
+        input_tokens=ai_response.usage.input_tokens,
+        output_tokens=ai_response.usage.output_tokens,
+        cache_read_tokens=ai_response.usage.cache_read_tokens,
+        cache_creation_tokens=ai_response.usage.cache_creation_tokens,
+        cost_usd=ai_response.usage.cost_usd,
+        reuse_count=0,
+    )
+    db.session.add(new_answer)
+    db.session.commit()
+
+    return {
+        "answer_text": ai_response.text,
+        "ai_answer_id": new_answer.id,
+        "reused": False,
+        "model_used": ai_response.model_used,
+    }
