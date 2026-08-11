@@ -15,6 +15,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
+import ai_service
 
 load_dotenv()
 
@@ -1404,6 +1405,237 @@ def unit_content(unit_id):
         })
 
     return jsonify({"unit": unit.code, "content": grouped})
+
+
+# ---------- Forum + Prepza AI ----------
+
+AI_MENTION_RE = re.compile(r"@prepza\s*ai", re.IGNORECASE)
+FORUM_TITLE_MAX = 200
+FORUM_BODY_MAX = 5000
+FORUM_REPLY_MAX = 3000
+
+
+def _display_name(user):
+    """Forum identity is username-based, not full real-name reveal.
+    display_name is optional on signup, so fall back to a stable
+    per-account label rather than ever exposing email."""
+    return user.display_name or f"Student{user.id}"
+
+
+def _serialize_reply(reply):
+    author = None
+    if not reply.is_ai and reply.user_id:
+        author_user = db.session.get(User, reply.user_id)
+        author = _display_name(author_user) if author_user else "Deleted user"
+
+    return {
+        "id": reply.id,
+        "body": reply.body,
+        "is_ai": reply.is_ai,
+        "author": "Prepza AI" if reply.is_ai else author,
+        "ai_answer_id": reply.ai_answer_id,
+        "created_at": reply.created_at.isoformat() if reply.created_at else None,
+    }
+
+
+def _trigger_ai_reply(post, question_text, triggering_user_id):
+    """
+    Shared by both the @Prepza AI mention path and the dedicated button.
+    Returns (forum_reply_or_None, error_response_or_None). On any
+    ai_service error, the human reply/post that triggered this should
+    still have already been committed by the caller - AI failure must
+    never lose a student's own post/reply.
+    """
+    unit = db.session.get(Unit, post.unit_id) if post.unit_id else None
+
+    try:
+        result = ai_service.answer_forum_question(
+            question_text=question_text,
+            unit=unit,
+            triggering_user_id=triggering_user_id,
+        )
+    except ai_service.AIBudgetExceededError as e:
+        return None, (jsonify({"error": str(e)}), 503)
+    except ai_service.AIRateLimitExceededError as e:
+        return None, (jsonify({"error": str(e)}), 429)
+    except ai_service.AIProviderError:
+        return None, (jsonify({
+            "error": "Prepza AI is temporarily unavailable - please try again shortly."
+        }), 502)
+
+    ai_reply = ForumReply(
+        post_id=post.id,
+        user_id=None,
+        is_ai=True,
+        ai_answer_id=result["ai_answer_id"],
+        triggered_by_user_id=triggering_user_id,
+        body=result["answer_text"],
+    )
+    db.session.add(ai_reply)
+    db.session.commit()
+    return ai_reply, None
+
+
+@app.route("/units/<int:unit_id>/forum")
+def list_forum_posts(unit_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    unit = db.session.get(Unit, unit_id)
+    if not unit:
+        return jsonify({"error": "Unit not found"}), 404
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    per_page = 20
+
+    posts = (
+        ForumPost.query.filter_by(unit_id=unit_id)
+        .order_by(ForumPost.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    result = []
+    for post in posts:
+        author = db.session.get(User, post.user_id)
+        reply_count = ForumReply.query.filter_by(post_id=post.id).count()
+        result.append({
+            "id": post.id,
+            "title": post.title,
+            "body": post.body,
+            "author": _display_name(author) if author else "Deleted user",
+            "reply_count": reply_count,
+            "created_at": post.created_at.isoformat() if post.created_at else None,
+        })
+
+    return jsonify({"unit": unit.code, "page": page, "posts": result})
+
+
+@app.route("/forum/posts", methods=["POST"])
+@require_csrf
+def create_forum_post():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    unit_id = data.get("unit_id")
+    title = (data.get("title") or "").strip()
+    body = (data.get("body") or "").strip()
+
+    if not unit_id or not db.session.get(Unit, unit_id):
+        return jsonify({"error": "Valid unit_id is required"}), 400
+    if not title or len(title) > FORUM_TITLE_MAX:
+        return jsonify({"error": f"Title is required and must be {FORUM_TITLE_MAX} characters or fewer"}), 400
+    if not body or len(body) > FORUM_BODY_MAX:
+        return jsonify({"error": f"Body is required and must be {FORUM_BODY_MAX} characters or fewer"}), 400
+
+    post = ForumPost(unit_id=unit_id, user_id=user_id, title=title, body=body)
+    db.session.add(post)
+    db.session.commit()
+
+    return jsonify({
+        "id": post.id,
+        "title": post.title,
+        "body": post.body,
+        "unit_id": post.unit_id,
+        "created_at": post.created_at.isoformat() if post.created_at else None,
+    }), 201
+
+
+@app.route("/forum/posts/<int:post_id>")
+def get_forum_post(post_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    post = db.session.get(ForumPost, post_id)
+    if not post:
+        return jsonify({"error": "Post not found"}), 404
+
+    author = db.session.get(User, post.user_id)
+    replies = (
+        ForumReply.query.filter_by(post_id=post_id)
+        .order_by(ForumReply.created_at.asc())
+        .all()
+    )
+
+    return jsonify({
+        "id": post.id,
+        "title": post.title,
+        "body": post.body,
+        "author": _display_name(author) if author else "Deleted user",
+        "unit_id": post.unit_id,
+        "created_at": post.created_at.isoformat() if post.created_at else None,
+        "replies": [_serialize_reply(r) for r in replies],
+    })
+
+
+@app.route("/forum/posts/<int:post_id>/replies", methods=["POST"])
+@require_csrf
+def create_forum_reply(post_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    post = db.session.get(ForumPost, post_id)
+    if not post:
+        return jsonify({"error": "Post not found"}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    body = (data.get("body") or "").strip()
+    if not body or len(body) > FORUM_REPLY_MAX:
+        return jsonify({"error": f"Body is required and must be {FORUM_REPLY_MAX} characters or fewer"}), 400
+
+    reply = ForumReply(post_id=post_id, user_id=user_id, is_ai=False, body=body)
+    db.session.add(reply)
+    db.session.commit()
+
+    response = {"reply": _serialize_reply(reply)}
+
+    if AI_MENTION_RE.search(body):
+        ai_reply, error = _trigger_ai_reply(post, question_text=body, triggering_user_id=user_id)
+        if ai_reply:
+            response["ai_reply"] = _serialize_reply(ai_reply)
+        elif error:
+            body_json, status = error
+            response["ai_error"] = body_json.get_json()["error"]
+
+    return jsonify(response), 201
+
+
+@app.route("/forum/posts/<int:post_id>/ask-ai", methods=["POST"])
+@limiter.limit(
+    "20 per hour",
+    key_func=lambda: f"ask-ai:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def ask_prepza_ai(post_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    post = db.session.get(ForumPost, post_id)
+    if not post:
+        return jsonify({"error": "Post not found"}), 404
+
+    question_text = f"{post.title}\n\n{post.body}"
+    ai_reply, error = _trigger_ai_reply(post, question_text=question_text, triggering_user_id=user_id)
+    if error:
+        return error
+
+    return jsonify({"reply": _serialize_reply(ai_reply)}), 201
 
 
 @app.route("/library")
