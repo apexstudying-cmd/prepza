@@ -178,6 +178,73 @@ class ViewProgress(db.Model):
         db.UniqueConstraint("user_id", "content_item_id", name="uq_view_progress_user_item"),
     )
 
+
+class DocumentContent(db.Model):
+    """
+    Deduplicated file content, keyed by a SHA-256 hash computed client-side
+    before upload. Multiple students' Document rows can point at the same
+    DocumentContent row when they upload byte-identical files - this avoids
+    re-uploading, re-extracting, and re-generating AI materials for content
+    Prepza has already processed once.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    content_hash = db.Column(db.String(64), unique=True, nullable=False)
+    storage_path = db.Column(db.String(500), nullable=False)
+    file_type = db.Column(db.String(20), nullable=False)
+    file_size_bytes = db.Column(db.Integer, nullable=False)
+    page_count = db.Column(db.Integer, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    # pending -> processing -> ready | failed
+    error_message = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Document(db.Model):
+    """
+    A student's personal reference to a piece of DocumentContent. Several
+    students can each have their own Document row (own title, own status,
+    own delete/report state) pointing at the same underlying DocumentContent
+    once dedup kicks in.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=True)
+    title = db.Column(db.String(200), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="uploading")
+    # uploading -> processing -> ready | failed ; removed (soft delete) is
+    # tracked separately via is_removed so a failed/ready doc can still be
+    # cleanly hidden without losing its terminal status.
+    is_removed = db.Column(db.Boolean, nullable=False, default=False)
+    reported_at = db.Column(db.DateTime, nullable=True)
+    report_reason = db.Column(db.String(50), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class GeneratedMaterial(db.Model):
+    """
+    AI-generated study material tied to DocumentContent (not to any one
+    student's Document row), so it is produced once and reused by every
+    student who later matches the same content hash. Populated by the AI
+    pipeline in a later chunk - this table just reserves the shape now.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=False)
+    material_type = db.Column(db.String(20), nullable=False)
+    # summary | quiz | flashcards | podcast | mind_map
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    # pending -> generating -> ready | failed
+    payload = db.Column(db.Text, nullable=True)
+    error_message = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("document_content_id", "material_type", name="uq_material_content_type"),
+    )
+
+
 class ForumPost(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
@@ -361,7 +428,7 @@ def has_access(user_id, content_item):
     return successful_payment is not None
 
 
-def get_signed_url(bucket_path, expires_in=60):
+def get_signed_url(bucket_path, expires_in=60, bucket="content"):
     """
     Generates a temporary signed URL for a file stored in the private
     "content" bucket on Supabase Storage. Returns None if anything fails,
@@ -377,7 +444,7 @@ def get_signed_url(bucket_path, expires_in=60):
         print("WARNING: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set")
         return None
 
-    sign_url = f"{supabase_url}/storage/v1/object/sign/content/{bucket_path}"
+    sign_url = f"{supabase_url}/storage/v1/object/sign/{bucket}/{bucket_path}"
     headers = {
         "Authorization": f"Bearer {service_key}",
         "apikey": service_key,
@@ -396,7 +463,7 @@ def get_signed_url(bucket_path, expires_in=60):
         return None
 
 
-def fetch_private_file_bytes(bucket_path):
+def fetch_private_file_bytes(bucket_path, bucket="content"):
     """
     Downloads the raw file bytes for a path in the private "content" bucket,
     using the service role key. This happens server-side only - the raw
@@ -414,7 +481,7 @@ def fetch_private_file_bytes(bucket_path):
         print("WARNING: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set")
         return None
 
-    download_url = f"{supabase_url}/storage/v1/object/content/{bucket_path}"
+    download_url = f"{supabase_url}/storage/v1/object/{bucket}/{bucket_path}"
     headers = {
         "Authorization": f"Bearer {service_key}",
         "apikey": service_key,
@@ -491,6 +558,7 @@ MAINTENANCE_BLOCKED_PREFIXES = (
     "/profile",
     "/delete-account",
     "/content/",
+    "/documents",
 )
 MAINTENANCE_NEVER_BLOCK_PREFIXES = (
     "/admin",
@@ -940,6 +1008,357 @@ def payment_history():
         })
 
     return jsonify({"payments": result})
+
+
+# ---------- Document routes (student uploads) ----------
+
+ALLOWED_DOCUMENT_EXTENSIONS = {"pdf", "doc", "docx", "ppt", "pptx", "jpg", "jpeg", "png"}
+MAX_DOCUMENT_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB - revisit once real usage data exists
+CONTENT_HASH_REGEX = re.compile(r"^[a-f0-9]{64}$")
+
+
+def get_document_extension(filename):
+    """
+    Extracts and validates a file extension from a client-supplied filename.
+    Returns the lowercase extension (no dot) if allowed, otherwise None.
+    This is only ever used to pick a storage suffix - it is not trusted as
+    a statement of the file's real content type.
+    """
+    if not filename or "." not in filename:
+        return None
+    ext = filename.rsplit(".", 1)[-1].strip().lower()
+    if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        return None
+    return ext
+
+
+def create_signed_upload_url(bucket, path):
+    """
+    Requests a short-lived signed upload URL from Supabase Storage so the
+    client can PUT the file bytes directly to Supabase - the file itself
+    never passes through this Flask server. Returns None on failure.
+    """
+    supabase_url = os.environ.get("SUPABASE_URL", "").strip()
+    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
+    if not supabase_url or not service_key:
+        print("WARNING: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set")
+        return None
+
+    sign_url = f"{supabase_url}/storage/v1/object/upload/sign/{bucket}/{path}"
+    headers = {
+        "Authorization": f"Bearer {service_key}",
+        "apikey": service_key,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response = requests.post(sign_url, json={}, headers=headers)
+        response.raise_for_status()
+        signed_path = response.json().get("url")
+        if not signed_path:
+            return None
+        return f"{supabase_url}/storage/v1{signed_path}"
+    except Exception as e:
+        print(f"ERROR generating signed upload URL for {bucket}/{path}: {e}")
+        return None
+
+
+def storage_object_exists(bucket, path):
+    """
+    Confirms an object actually landed in Supabase Storage. Used to verify
+    a client's "upload finished" claim before trusting it server-side.
+    """
+    supabase_url = os.environ.get("SUPABASE_URL", "").strip()
+    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
+    if not supabase_url or not service_key:
+        print("WARNING: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set")
+        return False
+
+    info_url = f"{supabase_url}/storage/v1/object/info/{bucket}/{path}"
+    headers = {
+        "Authorization": f"Bearer {service_key}",
+        "apikey": service_key,
+    }
+
+    try:
+        response = requests.get(info_url, headers=headers)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"ERROR checking storage object {bucket}/{path}: {e}")
+        return False
+
+
+@app.route("/documents", methods=["POST"])
+@limiter.limit("20 per hour")
+@require_csrf
+def create_document():
+    """
+    Registers a new personal document. If a DocumentContent row already
+    exists for this exact content_hash (byte-identical file previously
+    uploaded by anyone), this student is attached to that existing content
+    immediately - no upload, no re-processing, no re-billing of AI cost.
+    Otherwise a new DocumentContent is created and a signed direct-upload
+    URL is returned so the client can PUT the file straight to Supabase
+    Storage without the bytes passing through this server.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    title = (data.get("title") or "").strip()
+    original_filename = (data.get("original_filename") or "").strip()
+    file_size_bytes = data.get("file_size_bytes")
+    content_hash = (data.get("content_hash") or "").strip().lower()
+
+    if not title or len(title) > 200:
+        return jsonify({"error": "Title is required and must be 200 characters or fewer"}), 400
+    if not original_filename or len(original_filename) > 255:
+        return jsonify({"error": "original_filename is required and must be 255 characters or fewer"}), 400
+    ext = get_document_extension(original_filename)
+    if not ext:
+        return jsonify({"error": "Unsupported file type"}), 400
+    if not isinstance(file_size_bytes, int) or isinstance(file_size_bytes, bool) or file_size_bytes <= 0:
+        return jsonify({"error": "file_size_bytes must be a positive integer"}), 400
+    if file_size_bytes > MAX_DOCUMENT_SIZE_BYTES:
+        return jsonify({"error": f"File exceeds the {MAX_DOCUMENT_SIZE_BYTES // (1024 * 1024)} MB limit"}), 400
+    if not CONTENT_HASH_REGEX.match(content_hash):
+        return jsonify({"error": "content_hash must be a 64-character hex SHA-256 hash"}), 400
+
+    existing_content = DocumentContent.query.filter_by(content_hash=content_hash).first()
+
+    if existing_content:
+        doc_status = "processing" if existing_content.status in ("pending", "processing") else existing_content.status
+        new_document = Document(
+            user_id=user_id,
+            document_content_id=existing_content.id,
+            title=title,
+            original_filename=original_filename,
+            status=doc_status,
+        )
+        db.session.add(new_document)
+        db.session.commit()
+        return jsonify({
+            "document_id": new_document.id,
+            "status": new_document.status,
+            "duplicate": True,
+        }), 201
+
+    storage_path = f"{content_hash}.{ext}"
+    new_content = DocumentContent(
+        content_hash=content_hash,
+        storage_path=storage_path,
+        file_type=ext,
+        file_size_bytes=file_size_bytes,
+        status="pending",
+    )
+    db.session.add(new_content)
+    db.session.flush()  # assign new_content.id before the Document row references it
+
+    new_document = Document(
+        user_id=user_id,
+        document_content_id=new_content.id,
+        title=title,
+        original_filename=original_filename,
+        status="uploading",
+    )
+    db.session.add(new_document)
+    db.session.commit()
+
+    upload_url = create_signed_upload_url("documents", storage_path)
+    if not upload_url:
+        return jsonify({"error": "Could not prepare upload - please try again shortly"}), 502
+
+    return jsonify({
+        "document_id": new_document.id,
+        "status": "uploading",
+        "duplicate": False,
+        "upload_url": upload_url,
+        "storage_path": storage_path,
+    }), 201
+
+
+@app.route("/documents/<int:document_id>/uploaded", methods=["POST"])
+@require_csrf
+def confirm_document_uploaded(document_id):
+    """
+    Called by the client once the direct-to-Supabase upload finishes.
+    Verifies the object actually landed in storage before trusting the
+    client's word for it, then advances both the Document and its shared
+    DocumentContent into "processing". Actual extraction/AI generation is
+    handled by a later pipeline chunk, not this endpoint.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id:
+        return jsonify({"error": "Document not found"}), 404
+
+    if document.status != "uploading":
+        return jsonify({"error": f"Document is not awaiting upload (status: {document.status})"}), 400
+
+    content = db.session.get(DocumentContent, document.document_content_id)
+    if not content:
+        return jsonify({"error": "Document content record missing"}), 500
+
+    if not storage_object_exists("documents", content.storage_path):
+        return jsonify({"error": "Upload not found in storage yet - please retry"}), 409
+
+    document.status = "processing"
+    if content.status == "pending":
+        content.status = "processing"
+    db.session.commit()
+
+    return jsonify({"status": "processing"})
+
+
+@app.route("/documents")
+def list_documents():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    documents = (
+        Document.query.filter_by(user_id=user_id, is_removed=False)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for d in documents:
+        content = db.session.get(DocumentContent, d.document_content_id) if d.document_content_id else None
+        result.append({
+            "id": d.id,
+            "title": d.title,
+            "status": d.status,
+            "file_type": content.file_type if content else None,
+            "page_count": content.page_count if content else None,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        })
+
+    return jsonify({"documents": result})
+
+
+@app.route("/documents/<int:document_id>")
+def get_document(document_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+
+    content = db.session.get(DocumentContent, document.document_content_id) if document.document_content_id else None
+
+    view_url = None
+    if content and content.status == "ready":
+        view_url = get_signed_url(content.storage_path, bucket="documents")
+
+    materials = []
+    if content:
+        materials = [
+            {"type": m.material_type, "status": m.status}
+            for m in GeneratedMaterial.query.filter_by(document_content_id=content.id).all()
+        ]
+
+    return jsonify({
+        "id": document.id,
+        "title": document.title,
+        "original_filename": document.original_filename,
+        "status": document.status,
+        "file_type": content.file_type if content else None,
+        "file_size_bytes": content.file_size_bytes if content else None,
+        "page_count": content.page_count if content else None,
+        "view_url": view_url,
+        "materials": materials,
+        "created_at": document.created_at.isoformat() if document.created_at else None,
+    })
+
+
+@app.route("/documents/<int:document_id>", methods=["PATCH"])
+@require_csrf
+def rename_document(document_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+
+    data = request.get_json(silent=True)
+    if not data or "title" not in data:
+        return jsonify({"error": "title is required"}), 400
+
+    title = (data.get("title") or "").strip()
+    if not title or len(title) > 200:
+        return jsonify({"error": "Title must be 1-200 characters"}), 400
+
+    document.title = title
+    db.session.commit()
+
+    return jsonify({"id": document.id, "title": document.title})
+
+
+@app.route("/documents/<int:document_id>", methods=["DELETE"])
+@require_csrf
+def delete_document(document_id):
+    """
+    Soft-deletes the student's personal Document row only. The underlying
+    DocumentContent (its storage object and any generated materials) is
+    left untouched, since other students' Document rows may point at the
+    same deduplicated content. Real cleanup - deleting DocumentContent once
+    zero Document rows reference it - belongs in a later chunk once that
+    reference-counting can be done safely.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id:
+        return jsonify({"error": "Document not found"}), 404
+
+    document.is_removed = True
+    db.session.commit()
+
+    return jsonify({"message": "Document removed"})
+
+
+@app.route("/documents/<int:document_id>/report", methods=["POST"])
+@require_csrf
+def report_document(document_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get("reason") or "").strip()
+    allowed_reasons = {
+        "inaccurate_content", "plagiarised_material",
+        "inappropriate_content", "copyright_violation", "other",
+    }
+    if reason not in allowed_reasons:
+        return jsonify({"error": "Invalid report reason"}), 400
+
+    document.reported_at = datetime.utcnow()
+    document.report_reason = reason
+    db.session.commit()
+
+    return jsonify({"message": "Report submitted"})
+
 
 
 # ---------- Content routes (student-facing) ----------
