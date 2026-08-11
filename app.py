@@ -99,6 +99,9 @@ class User(db.Model):
     reset_token = db.Column(db.String(64), nullable=True)
     reset_token_expiry = db.Column(db.DateTime, nullable=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
+    university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=True)
+    program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=True)
+    requested_program_name = db.Column(db.String(150), nullable=True)
 
 
     created_at = db.Column(db.DateTime, nullable=True)
@@ -662,6 +665,9 @@ def signup():
     password = data.get("password") or ""
     year = data.get("year")
     semester = data.get("semester")
+    university_id = data.get("university_id")
+    program_id = data.get("program_id")
+    requested_program_name = data.get("requested_program_name")
 
     if not email:
         return jsonify({"error": "Email is required"}), 400
@@ -684,6 +690,24 @@ def signup():
         if not isinstance(semester, int) or semester not in (1, 2):
             return jsonify({"error": "Semester must be 1 or 2"}), 400
 
+    if not university_id or not isinstance(university_id, int):
+        return jsonify({"error": "University is required"}), 400
+    university = University.query.filter_by(id=university_id, is_active=True).first()
+    if not university:
+        return jsonify({"error": "Selected university was not found"}), 400
+
+    if program_id is not None:
+        if not isinstance(program_id, int):
+            return jsonify({"error": "Invalid program"}), 400
+        program = Program.query.filter_by(id=program_id, university_id=university_id, is_active=True).first()
+        if not program:
+            return jsonify({"error": "Selected course does not belong to the selected university"}), 400
+
+    if requested_program_name is not None:
+        if not isinstance(requested_program_name, str):
+            return jsonify({"error": "Invalid course name"}), 400
+        requested_program_name = requested_program_name.strip()[:150] or None
+
     raw_signup_source = data.get("signup_source")
     signup_source = None
     if raw_signup_source is not None and isinstance(raw_signup_source, str):
@@ -704,6 +728,9 @@ def signup():
         email_verified=False,
         verification_token=token,
         signup_source=signup_source,
+        university_id=university_id,
+        program_id=program_id,
+        requested_program_name=requested_program_name,
     )
     db.session.add(new_user)
     db.session.commit()
