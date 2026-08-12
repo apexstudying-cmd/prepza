@@ -271,6 +271,83 @@ class AiJob(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class LibraryPublication(db.Model):
+    """
+    A student's document submitted for publication to the public Prepza
+    Library. One Document can have at most one active publication - if
+    rejected, the student is expected to resubmit as a new row (keeps a
+    clean history rather than mutating a rejected submission back to
+    pending).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.Integer, db.ForeignKey("document.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.String(1000), nullable=True)
+    material_type = db.Column(db.String(30), nullable=False)
+    # lecture_notes | past_paper | summary | other
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    # pending -> approved | rejected -> removed
+    rejection_reason = db.Column(db.String(500), nullable=True)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    view_count = db.Column(db.Integer, nullable=False, default=0)
+    save_count = db.Column(db.Integer, nullable=False, default=0)
+    xp_awarded = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SavedLibraryMaterial(db.Model):
+    """A student bookmarking a published library item (Library > Saved tab)."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    library_publication_id = db.Column(db.Integer, db.ForeignKey("library_publication.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "library_publication_id", name="uq_saved_material_user_pub"),
+    )
+
+
+class LibraryReport(db.Model):
+    """
+    Student report against a *published* library item (distinct from
+    Document.report_reason, which covers a student's own personal upload
+    before/without publication). Feeds the admin moderation queue.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    library_publication_id = db.Column(db.Integer, db.ForeignKey("library_publication.id"), nullable=False)
+    reporter_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    reason = db.Column(db.String(50), nullable=False)
+    details = db.Column(db.String(500), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    # pending -> dismissed | actioned
+    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    admin_notes = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class XpEvent(db.Model):
+    """
+    Minimal server-side XP ledger. Each row is one XP-earning event: the
+    unique constraint on (user_id, event_type, related_id) makes awarding
+    idempotent - re-running an approval action can never double-award XP
+    for the same publication.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    event_type = db.Column(db.String(40), nullable=False)
+    # library_publication_approved | ... (more event types added in later chunks)
+    xp_amount = db.Column(db.Integer, nullable=False)
+    related_id = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "event_type", "related_id", name="uq_xp_event_user_type_related"),
+    )
+
+
 class ForumPost(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
