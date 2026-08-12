@@ -1617,6 +1617,80 @@ def my_library_submissions():
     return jsonify({"submissions": result})
 
 
+@app.route("/library")
+def browse_library():
+    """
+    Browse/search approved Library publications. Login required (same
+    pattern as other content routes) but not tied to the viewer's own
+    year/semester - any student can browse any unit's published material,
+    matching the "any student, any university" product direction.
+
+    Query params (all optional):
+      q            - substring match against title
+      unit_id      - filter to one unit
+      university_id - filter to units belonging to one university
+      material_type - lecture_notes | past_paper | summary | other
+      page         - 1-indexed, 20 per page
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    query = LibraryPublication.query.filter_by(status="approved")
+
+    q = (request.args.get("q") or "").strip()
+    if q:
+        query = query.filter(LibraryPublication.title.ilike(f"%{q}%"))
+
+    unit_id = request.args.get("unit_id", type=int)
+    if unit_id:
+        query = query.filter(LibraryPublication.unit_id == unit_id)
+
+    university_id = request.args.get("university_id", type=int)
+    if university_id:
+        query = query.join(Unit, LibraryPublication.unit_id == Unit.id).filter(
+            Unit.university_id == university_id
+        )
+
+    material_type = request.args.get("material_type")
+    if material_type:
+        if material_type not in LIBRARY_MATERIAL_TYPES:
+            return jsonify({"error": "material_type must be one of: " + ", ".join(sorted(LIBRARY_MATERIAL_TYPES))}), 400
+        query = query.filter(LibraryPublication.material_type == material_type)
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    per_page = 20
+
+    publications = (
+        query.order_by(LibraryPublication.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    result = []
+    for pub in publications:
+        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+        author = db.session.get(User, pub.user_id)
+        result.append({
+            "id": pub.id,
+            "title": pub.title,
+            "description": pub.description,
+            "material_type": pub.material_type,
+            "unit_id": pub.unit_id,
+            "unit_code": unit.code if unit else None,
+            "author": _display_name(author) if author else "Deleted user",
+            "view_count": pub.view_count,
+            "save_count": pub.save_count,
+            "created_at": pub.created_at.isoformat() if pub.created_at else None,
+        })
+
+    return jsonify({"page": page, "publications": result})
+
+
 # ---------- Content routes (student-facing) ----------
 
 @app.route("/units")
