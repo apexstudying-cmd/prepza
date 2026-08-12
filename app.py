@@ -1493,6 +1493,91 @@ def report_document(document_id):
 
 
 
+# ---------- Library (publishing) ----------
+
+LIBRARY_MATERIAL_TYPES = {"lecture_notes", "past_paper", "summary", "other"}
+LIBRARY_TITLE_MAX = 200
+LIBRARY_DESCRIPTION_MAX = 1000
+LIBRARY_ACTIVE_STATUSES = ("pending", "approved")
+
+
+@app.route("/library/publish", methods=["POST"])
+@require_csrf
+def publish_document():
+    """
+    Submits a student's own Document to the public Library for admin
+    review. Only one active (pending or approved) publication is allowed
+    per document - if a prior submission was rejected, this creates a
+    fresh row rather than reviving the old one, keeping submission
+    history intact.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    document_id = data.get("document_id")
+    title = (data.get("title") or "").strip()
+    description = data.get("description")
+    material_type = (data.get("material_type") or "").strip()
+    unit_id = data.get("unit_id")
+
+    if not document_id:
+        return jsonify({"error": "document_id is required"}), 400
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+    if document.status != "ready":
+        return jsonify({"error": f"Document is not ready to publish (status: {document.status})"}), 400
+
+    if not title or len(title) > LIBRARY_TITLE_MAX:
+        return jsonify({"error": f"Title is required and must be {LIBRARY_TITLE_MAX} characters or fewer"}), 400
+
+    if description is not None:
+        if not isinstance(description, str):
+            return jsonify({"error": "description must be a string"}), 400
+        description = description.strip() or None
+        if description and len(description) > LIBRARY_DESCRIPTION_MAX:
+            return jsonify({"error": f"description must be {LIBRARY_DESCRIPTION_MAX} characters or fewer"}), 400
+
+    if material_type not in LIBRARY_MATERIAL_TYPES:
+        return jsonify({"error": "material_type must be one of: " + ", ".join(sorted(LIBRARY_MATERIAL_TYPES))}), 400
+
+    if unit_id is not None:
+        if not db.session.get(Unit, unit_id):
+            return jsonify({"error": "Unit not found"}), 404
+
+    existing_active = LibraryPublication.query.filter(
+        LibraryPublication.document_id == document_id,
+        LibraryPublication.status.in_(LIBRARY_ACTIVE_STATUSES),
+    ).first()
+    if existing_active:
+        return jsonify({
+            "error": f"This document already has an active library submission (status: {existing_active.status})"
+        }), 409
+
+    publication = LibraryPublication(
+        document_id=document_id,
+        user_id=user_id,
+        unit_id=unit_id,
+        title=title,
+        description=description,
+        material_type=material_type,
+        status="pending",
+    )
+    db.session.add(publication)
+    db.session.commit()
+
+    return jsonify({
+        "publication_id": publication.id,
+        "status": publication.status,
+    }), 201
+
+
 # ---------- Content routes (student-facing) ----------
 
 @app.route("/units")
