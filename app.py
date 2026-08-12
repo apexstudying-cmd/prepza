@@ -1367,10 +1367,15 @@ def list_documents():
     result = []
     for d in documents:
         content = db.session.get(DocumentContent, d.document_content_id) if d.document_content_id else None
+        # Once past "uploading", status tracks the shared DocumentContent
+        # live - document_pipeline.py updates content.status in the
+        # background, not this row, and several Document rows can share
+        # one DocumentContent.
+        effective_status = content.status if (content and d.status != "uploading") else d.status
         result.append({
             "id": d.id,
             "title": d.title,
-            "status": d.status,
+            "status": effective_status,
             "file_type": content.file_type if content else None,
             "page_count": content.page_count if content else None,
             "created_at": d.created_at.isoformat() if d.created_at else None,
@@ -1391,6 +1396,11 @@ def get_document(document_id):
 
     content = db.session.get(DocumentContent, document.document_content_id) if document.document_content_id else None
 
+    # Once past "uploading", status tracks the shared DocumentContent live -
+    # document_pipeline.py updates content.status in the background, not
+    # this row.
+    effective_status = content.status if (content and document.status != "uploading") else document.status
+
     view_url = None
     if content and content.status == "ready":
         view_url = get_signed_url(content.storage_path, bucket="documents")
@@ -1406,10 +1416,11 @@ def get_document(document_id):
         "id": document.id,
         "title": document.title,
         "original_filename": document.original_filename,
-        "status": document.status,
+        "status": effective_status,
         "file_type": content.file_type if content else None,
         "file_size_bytes": content.file_size_bytes if content else None,
         "page_count": content.page_count if content else None,
+        "error_message": content.error_message if (content and effective_status == "failed") else None,
         "view_url": view_url,
         "materials": materials,
         "created_at": document.created_at.isoformat() if document.created_at else None,
