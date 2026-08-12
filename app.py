@@ -1786,6 +1786,55 @@ def list_saved_library_items():
     return jsonify({"saved": result})
 
 
+LIBRARY_REPORT_REASONS = {
+    "inaccurate_content", "plagiarised_material",
+    "inappropriate_content", "copyright_violation", "other",
+}
+LIBRARY_REPORT_DETAILS_MAX = 500
+
+
+@app.route("/library/<int:publication_id>/report", methods=["POST"])
+@require_csrf
+def report_library_item(publication_id):
+    """
+    Files a moderation report against a published Library item. No
+    duplicate-report guard - a student can report the same item more
+    than once (e.g. for a different reason); admins dedupe/dismiss on
+    the review side rather than this endpoint silently dropping reports.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    publication = db.session.get(LibraryPublication, publication_id)
+    if not publication or publication.status != "approved":
+        return jsonify({"error": "Library item not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get("reason") or "").strip()
+    if reason not in LIBRARY_REPORT_REASONS:
+        return jsonify({"error": "Invalid report reason"}), 400
+
+    details = data.get("details")
+    if details is not None:
+        details = details.strip()
+        if len(details) > LIBRARY_REPORT_DETAILS_MAX:
+            return jsonify({"error": f"details must be {LIBRARY_REPORT_DETAILS_MAX} characters or fewer"}), 400
+        details = details or None
+
+    report = LibraryReport(
+        library_publication_id=publication_id,
+        reporter_user_id=user_id,
+        reason=reason,
+        details=details,
+        status="pending",
+    )
+    db.session.add(report)
+    db.session.commit()
+
+    return jsonify({"message": "Report submitted", "report_id": report.id}), 201
+
+
 # ---------- Content routes (student-facing) ----------
 
 @app.route("/units")
