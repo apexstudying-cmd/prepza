@@ -11,6 +11,7 @@ from functools import wraps
 from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1833,6 +1834,125 @@ def report_library_item(publication_id):
     db.session.commit()
 
     return jsonify({"message": "Report submitted", "report_id": report.id}), 201
+
+
+LIBRARY_XP_ON_APPROVAL = 50
+
+
+@app.route("/admin/library/queue")
+@require_admin
+def admin_library_queue():
+    """Lists pending Library publications for admin review, oldest first
+    (first submitted, first reviewed)."""
+    publications = (
+        LibraryPublication.query.filter_by(status="pending")
+        .order_by(LibraryPublication.created_at.asc())
+        .all()
+    )
+
+    result = []
+    for pub in publications:
+        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+        author = db.session.get(User, pub.user_id)
+        document = db.session.get(Document, pub.document_id)
+        result.append({
+            "id": pub.id,
+            "document_id": pub.document_id,
+            "title": pub.title,
+            "description": pub.description,
+            "material_type": pub.material_type,
+            "unit_id": pub.unit_id,
+            "unit_code": unit.code if unit else None,
+            "author_email": author.email if author else None,
+            "original_filename": document.original_filename if document else None,
+            "created_at": pub.created_at.isoformat() if pub.created_at else None,
+        })
+
+    return jsonify({"queue": result})
+
+
+@app.route("/admin/library/<int:publication_id>/approve", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_approve_library_item(publication_id):
+    """
+    Approves a pending publication and awards the submitter XP. XP award
+    is idempotent via the XpEvent unique constraint on
+    (user_id, event_type, related_id) - if this route is called twice for
+    the same publication (retry, double-click), the second XpEvent insert
+    is caught and skipped rather than double-awarding.
+    """
+    acting_admin_id = session.get("user_id")
+
+    publication = db.session.get(LibraryPublication, publication_id)
+    if not publication:
+        return jsonify({"error": "Publication not found"}), 404
+    if publication.status != "pending":
+        return jsonify({"error": f"Publication is not pending (status: {publication.status})"}), 400
+
+    publication.status = "approved"
+    publication.reviewed_by = acting_admin_id
+    publication.reviewed_at = datetime.utcnow()
+    publication.rejection_reason = None
+
+    xp_awarded_now = False
+    if not publication.xp_awarded:
+        xp_event = XpEvent(
+            user_id=publication.user_id,
+            event_type="library_publication_approved",
+            xp_amount=LIBRARY_XP_ON_APPROVAL,
+            related_id=publication.id,
+        )
+        db.session.add(xp_event)
+        try:
+            db.session.flush()
+            publication.xp_awarded = True
+            xp_awarded_now = True
+        except IntegrityError:
+            db.session.rollback()
+            # Another request already awarded XP for this publication -
+            # re-apply the approval fields (rolled back with the session)
+            # and just skip the XP award this time.
+            publication = db.session.get(LibraryPublication, publication_id)
+            publication.status = "approved"
+            publication.reviewed_by = acting_admin_id
+            publication.reviewed_at = datetime.utcnow()
+            publication.rejection_reason = None
+
+    db.session.commit()
+
+    return jsonify({
+        "id": publication.id,
+        "status": publication.status,
+        "xp_awarded_now": xp_awarded_now,
+    })
+
+
+@app.route("/admin/library/<int:publication_id>/reject", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_reject_library_item(publication_id):
+    """Rejects a pending publication with a required reason."""
+    acting_admin_id = session.get("user_id")
+
+    publication = db.session.get(LibraryPublication, publication_id)
+    if not publication:
+        return jsonify({"error": "Publication not found"}), 404
+    if publication.status != "pending":
+        return jsonify({"error": f"Publication is not pending (status: {publication.status})"}), 400
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get("reason") or "").strip()
+    if not reason or len(reason) > 500:
+        return jsonify({"error": "reason is required and must be 500 characters or fewer"}), 400
+
+    publication.status = "rejected"
+    publication.rejection_reason = reason
+    publication.reviewed_by = acting_admin_id
+    publication.reviewed_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({"id": publication.id, "status": publication.status})
 
 
 # ---------- Content routes (student-facing) ----------
