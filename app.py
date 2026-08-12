@@ -1691,6 +1691,101 @@ def browse_library():
     return jsonify({"page": page, "publications": result})
 
 
+@app.route("/library/<int:publication_id>/save", methods=["POST"])
+@require_csrf
+def save_library_item(publication_id):
+    """
+    Bookmarks an approved Library publication for the logged-in student.
+    Idempotent from the caller's perspective: saving an already-saved
+    item just returns success rather than erroring, since the frontend
+    doesn't need to track whether this is the first save.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    publication = db.session.get(LibraryPublication, publication_id)
+    if not publication or publication.status != "approved":
+        return jsonify({"error": "Library item not found"}), 404
+
+    existing = SavedLibraryMaterial.query.filter_by(
+        user_id=user_id, library_publication_id=publication_id
+    ).first()
+    if existing:
+        return jsonify({"message": "Already saved"}), 200
+
+    saved = SavedLibraryMaterial(user_id=user_id, library_publication_id=publication_id)
+    db.session.add(saved)
+    publication.save_count = (publication.save_count or 0) + 1
+    db.session.commit()
+
+    return jsonify({"message": "Saved", "save_count": publication.save_count}), 201
+
+
+@app.route("/library/<int:publication_id>/save", methods=["DELETE"])
+@require_csrf
+def unsave_library_item(publication_id):
+    """Removes the logged-in student's bookmark, if one exists."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    saved = SavedLibraryMaterial.query.filter_by(
+        user_id=user_id, library_publication_id=publication_id
+    ).first()
+    if not saved:
+        return jsonify({"message": "Not saved"}), 200
+
+    publication = db.session.get(LibraryPublication, publication_id)
+    db.session.delete(saved)
+    if publication and publication.save_count > 0:
+        publication.save_count -= 1
+    db.session.commit()
+
+    return jsonify({
+        "message": "Removed",
+        "save_count": publication.save_count if publication else None,
+    })
+
+
+@app.route("/library/saved")
+def list_saved_library_items():
+    """Lists the logged-in student's saved Library items (Saved tab)."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    saved_rows = (
+        SavedLibraryMaterial.query.filter_by(user_id=user_id)
+        .order_by(SavedLibraryMaterial.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for saved in saved_rows:
+        pub = db.session.get(LibraryPublication, saved.library_publication_id)
+        if not pub or pub.status != "approved":
+            # Publication was later rejected/removed - skip rather than
+            # error, so one bad row doesn't break the whole Saved tab.
+            continue
+        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+        author = db.session.get(User, pub.user_id)
+        result.append({
+            "id": pub.id,
+            "title": pub.title,
+            "description": pub.description,
+            "material_type": pub.material_type,
+            "unit_id": pub.unit_id,
+            "unit_code": unit.code if unit else None,
+            "author": _display_name(author) if author else "Deleted user",
+            "view_count": pub.view_count,
+            "save_count": pub.save_count,
+            "saved_at": saved.created_at.isoformat() if saved.created_at else None,
+        })
+
+    return jsonify({"saved": result})
+
+
 # ---------- Content routes (student-facing) ----------
 
 @app.route("/units")
