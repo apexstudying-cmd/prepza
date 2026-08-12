@@ -199,16 +199,33 @@ def _pricing_for(model, at=None):
     return applicable[-1] if applicable else schedule[0]
 
 
+# Message Batches API pricing (flat 50% off standard rates, per
+# Anthropic's docs). Not date-scheduled like _PRICING_SCHEDULE above,
+# since both models' batch rates have only ever been this one price -
+# re-verify against platform.claude.com/docs if that changes.
+_BATCH_PRICING = {
+    MODEL_SONNET_5: (Decimal("1.00"), Decimal("5.00")),
+    MODEL_HAIKU_4_5: (Decimal("0.50"), Decimal("2.50")),
+}
+
+
 def compute_cost_usd(model, input_tokens, output_tokens,
                       cache_read_tokens=0, cache_creation_tokens=0,
-                      cache_ttl="5m", at=None):
+                      cache_ttl="5m", at=None, batch=False):
     """
     Computes cost in USD from real token counts (never estimates).
     `input_tokens` here should be the NON-cached portion only - callers
     pass the API response's input_tokens field, which Anthropic already
-    reports net of cache reads/writes.
+    reports net of cache reads/writes. Pass batch=True for requests that
+    went through route_and_generate_batch (Message Batches API pricing).
     """
-    _, input_rate, output_rate = _pricing_for(model, at=at)
+    if batch:
+        pricing = _BATCH_PRICING.get(model)
+        if not pricing:
+            raise ValueError(f"No batch pricing configured for model '{model}'")
+        input_rate, output_rate = pricing
+    else:
+        _, input_rate, output_rate = _pricing_for(model, at=at)
 
     cost = Decimal(input_tokens) * input_rate / Decimal(1_000_000)
     cost += Decimal(output_tokens) * output_rate / Decimal(1_000_000)
@@ -334,6 +351,149 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
             continue
 
     raise AIProviderError(f"All models failed for task '{ai_request.task}': {last_error}")
+
+
+# ============================================================
+# 4b. MESSAGE BATCHES API (50% cheaper, async) - for background/non-
+#     real-time work only. Never call this from a request handler; it
+#     blocks the calling thread while polling, so it must only ever be
+#     called from a background thread (e.g. document_pipeline.py's
+#     extraction thread) so a slow batch never holds up a user request.
+# ============================================================
+
+# How often to poll an in-progress batch, and the longest this call
+# will wait before giving up and raising. Batches "often finish in
+# minutes" per Anthropic's docs even though the SLA is 24h, so this
+# cap is deliberately much shorter than the SLA - a batch still running
+# past this point is treated as unusually slow, not waited out further.
+# The batch itself keeps processing on Anthropic's side regardless;
+# callers that give up here can check back later via the batch_id.
+BATCH_POLL_INTERVAL_SECONDS = 15
+BATCH_MAX_WAIT_SECONDS = 20 * 60
+
+
+def _build_message_params(model, ai_request, max_tokens):
+    """
+    Builds the request-shape dict for one Messages API call, used by
+    the batch path below. (Mirrors AnthropicProvider.call's shape -
+    kept as a separate small function rather than refactoring .call()
+    itself, to avoid touching the already-working synchronous path.)
+    """
+    if ai_request.cacheable_system:
+        system = [{
+            "type": "text",
+            "text": ai_request.system_prompt,
+            "cache_control": {"type": "ephemeral"},
+        }]
+    else:
+        system = ai_request.system_prompt
+
+    if ai_request.image_b64:
+        user_content = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": ai_request.image_media_type,
+                    "data": ai_request.image_b64,
+                },
+            },
+            {"type": "text", "text": ai_request.user_message},
+        ]
+    else:
+        user_content = ai_request.user_message
+
+    return {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": user_content}],
+    }
+
+
+def route_and_generate_batch(task, items, on_batch_created=None):
+    """
+    Submits multiple AIRequests for the same task as a single Anthropic
+    Message Batch (50% cheaper than synchronous calls - see
+    _BATCH_PRICING). `items` is a list of (custom_id, AIRequest) tuples.
+
+    `on_batch_created`, if given, is called with the batch's id right
+    after submission (before polling starts) - callers can use this to
+    persist the id somewhere (e.g. AiJob.batch_id) so it's inspectable
+    even if this call is interrupted before finishing.
+
+    Returns (batch_id, results) where results is a dict of
+    {custom_id: AIResponse} for succeeded items and
+    {custom_id: AIProviderError} for anything errored/expired/canceled -
+    callers decide whether to retry those synchronously.
+
+    Unlike route_and_generate, there is no primary/fallback escalation
+    here - all items in a batch use the task's primary model. A failed
+    item should be retried (synchronously, or in a future batch), not
+    silently escalated.
+    """
+    task_config = AI_TASKS.get(task)
+    if not task_config:
+        raise ValueError(f"Unknown AI task '{task}'")
+
+    provider, provider_name = _get_provider()
+    model = task_config["primary"]
+    max_tokens = task_config["max_tokens"]
+
+    batch_requests = [
+        {"custom_id": custom_id, "params": _build_message_params(model, ai_request, max_tokens)}
+        for custom_id, ai_request in items
+    ]
+
+    batch = provider._client.messages.batches.create(requests=batch_requests)
+    batch_id = batch.id
+
+    if on_batch_created:
+        on_batch_created(batch_id)
+
+    elapsed = 0
+    while True:
+        batch = provider._client.messages.batches.retrieve(batch_id)
+        if batch.processing_status == "ended":
+            break
+        time.sleep(BATCH_POLL_INTERVAL_SECONDS)
+        elapsed += BATCH_POLL_INTERVAL_SECONDS
+        if elapsed >= BATCH_MAX_WAIT_SECONDS:
+            raise AIProviderError(
+                f"Batch {batch_id} for task '{task}' did not finish within "
+                f"{BATCH_MAX_WAIT_SECONDS}s (status: {batch.processing_status}). "
+                f"It will keep processing on Anthropic's side - check the "
+                f"Anthropic Console with this batch id if needed."
+            )
+
+    results = {}
+    for result in provider._client.messages.batches.results(batch_id):
+        custom_id = result.custom_id
+        if result.result.type == "succeeded":
+            message = result.result.message
+            text = "".join(block.text for block in message.content if block.type == "text")
+            usage = message.usage
+            ai_usage = AIUsage(
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+                cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+            )
+            ai_usage.cost_usd = compute_cost_usd(
+                model, ai_usage.input_tokens, ai_usage.output_tokens,
+                ai_usage.cache_read_tokens, ai_usage.cache_creation_tokens,
+                batch=True,
+            )
+            results[custom_id] = AIResponse(
+                text=text, model_used=model, provider=provider_name,
+                usage=ai_usage, latency_ms=0,
+            )
+        else:
+            results[custom_id] = AIProviderError(
+                f"Batch item '{custom_id}' ended as '{result.result.type}'"
+            )
+
+    return batch_id, results
 
 
 # ============================================================

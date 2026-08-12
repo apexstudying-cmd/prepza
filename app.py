@@ -270,6 +270,10 @@ class AiJob(db.Model):
     error_message = db.Column(db.String(500), nullable=True)
     retry_count = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    batch_id = db.Column(db.String(100), nullable=True)
+    # Anthropic Message Batch id, when this job's AI call(s) went through
+    # the Batch API instead of a synchronous call - lets an admin look up
+    # the batch directly in the Anthropic Console if a job seems stuck.
 
 
 class LibraryPublication(db.Model):
