@@ -1578,6 +1578,45 @@ def publish_document():
     }), 201
 
 
+@app.route("/library/my-submissions")
+def my_library_submissions():
+    """
+    Lists the logged-in student's own Library submissions, any status
+    (pending/approved/rejected/removed) - powers the "review" tab on
+    PublishLibraryScreen so a student can track where each one stands.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    publications = (
+        LibraryPublication.query.filter_by(user_id=user_id)
+        .order_by(LibraryPublication.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for pub in publications:
+        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+        result.append({
+            "id": pub.id,
+            "document_id": pub.document_id,
+            "title": pub.title,
+            "description": pub.description,
+            "material_type": pub.material_type,
+            "unit_id": pub.unit_id,
+            "unit_code": unit.code if unit else None,
+            "status": pub.status,
+            "rejection_reason": pub.rejection_reason,
+            "view_count": pub.view_count,
+            "save_count": pub.save_count,
+            "created_at": pub.created_at.isoformat() if pub.created_at else None,
+            "updated_at": pub.updated_at.isoformat() if pub.updated_at else None,
+        })
+
+    return jsonify({"submissions": result})
+
+
 # ---------- Content routes (student-facing) ----------
 
 @app.route("/units")
