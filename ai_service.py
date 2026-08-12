@@ -46,6 +46,8 @@ class AIRequest:
     user_message: str
     max_tokens: int = 1024
     cacheable_system: bool = False  # True => system prompt sent with cache_control
+    image_b64: Optional[str] = None       # base64-encoded image, for vision tasks (e.g. OCR)
+    image_media_type: Optional[str] = None  # e.g. "image/png"
 
 
 @dataclass
@@ -108,6 +110,13 @@ AI_TASKS = {
         "fallback": MODEL_SONNET_5,
         "max_tokens": 512,
         "notes": "Summarizing an existing forum thread on request.",
+    },
+
+    "OCR_TRANSCRIBE": {
+        "primary": MODEL_HAIKU_4_5,
+        "fallback": MODEL_SONNET_5,
+        "max_tokens": 2048,
+        "notes": "Vision transcription of a scanned/image-only document page.",
     },
 
     # Reserved for the next pass of Chunk 3 (document text extraction
@@ -226,7 +235,8 @@ class AnthropicProvider:
             raise AIProviderError("ANTHROPIC_API_KEY is not configured")
         self._client = anthropic.Anthropic(api_key=api_key)
 
-    def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False):
+    def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False,
+              image_b64=None, image_media_type=None):
         if cacheable_system:
             system = [{
                 "type": "text",
@@ -236,11 +246,22 @@ class AnthropicProvider:
         else:
             system = system_prompt
 
+        if image_b64:
+            user_content = [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": image_media_type, "data": image_b64},
+                },
+                {"type": "text", "text": user_message},
+            ]
+        else:
+            user_content = user_message
+
         response = self._client.messages.create(
             model=model,
             max_tokens=max_tokens,
             system=system,
-            messages=[{"role": "user", "content": user_message}],
+            messages=[{"role": "user", "content": user_content}],
         )
 
         text = "".join(block.text for block in response.content if block.type == "text")
@@ -291,6 +312,8 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
                 user_message=ai_request.user_message,
                 max_tokens=max_tokens,
                 cacheable_system=ai_request.cacheable_system,
+                image_b64=ai_request.image_b64,
+                image_media_type=ai_request.image_media_type,
             )
             latency_ms = int((time.monotonic() - start) * 1000)
             usage.cost_usd = compute_cost_usd(

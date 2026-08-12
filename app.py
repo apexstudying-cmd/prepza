@@ -16,6 +16,7 @@ from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import ai_service
+import document_pipeline
 
 load_dotenv()
 
@@ -200,6 +201,7 @@ class DocumentContent(db.Model):
     status = db.Column(db.String(20), nullable=False, default="pending")
     # pending -> processing -> ready | failed
     error_message = db.Column(db.String(500), nullable=True)
+    extracted_text = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -247,6 +249,26 @@ class GeneratedMaterial(db.Model):
     __table_args__ = (
         db.UniqueConstraint("document_content_id", "material_type", name="uq_material_content_type"),
     )
+
+
+class AiJob(db.Model):
+    """
+    Tracks one background AI/processing run (text extraction today;
+    summary/quiz/flashcard/podcast/mind_map generation later) so it can
+    be inspected, retried, and eventually picked up by a real queue
+    without changing this bookkeeping shape.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=False)
+    feature = db.Column(db.String(30), nullable=False)
+    # text_extraction | summary | quiz | flashcards | podcast | mind_map
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    # pending -> processing -> completed | failed
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    error_message = db.Column(db.String(500), nullable=True)
+    retry_count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class ForumPost(db.Model):
@@ -1241,9 +1263,13 @@ def confirm_document_uploaded(document_id):
         return jsonify({"error": "Upload not found in storage yet - please retry"}), 409
 
     document.status = "processing"
-    if content.status == "pending":
+    should_process = content.status == "pending"
+    if should_process:
         content.status = "processing"
     db.session.commit()
+
+    if should_process:
+        document_pipeline.start_processing(content.id, app)
 
     return jsonify({"status": "processing"})
 
@@ -1945,6 +1971,67 @@ def mpesa_callback(callback_token):
 
 
 # ---------- Admin routes (protected) ----------
+
+@app.route("/admin/ai-jobs")
+@require_admin
+def admin_list_ai_jobs():
+    """
+    Lists recent AiJob rows for admin visibility, optionally filtered
+    by status (?status=failed). Newest first.
+    """
+    status_filter = request.args.get("status")
+
+    query = AiJob.query
+    if status_filter:
+        query = query.filter_by(status=status_filter)
+
+    jobs = query.order_by(AiJob.created_at.desc()).limit(100).all()
+
+    return jsonify([
+        {
+            "id": j.id,
+            "document_content_id": j.document_content_id,
+            "feature": j.feature,
+            "status": j.status,
+            "started_at": j.started_at.isoformat() if j.started_at else None,
+            "completed_at": j.completed_at.isoformat() if j.completed_at else None,
+            "error_message": j.error_message,
+            "retry_count": j.retry_count,
+            "created_at": j.created_at.isoformat() if j.created_at else None,
+        }
+        for j in jobs
+    ])
+
+
+@app.route("/admin/ai-jobs/<int:job_id>/retry", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_retry_ai_job(job_id):
+    """
+    Re-runs a failed job synchronously (not backgrounded - admin is
+    waiting on the response) and increments retry_count regardless of
+    outcome, so repeated failures are visible in the job list.
+    """
+    job = db.session.get(AiJob, job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    if job.status not in ("failed", "completed"):
+        return jsonify({"error": f"Job is currently '{job.status}' - wait for it to finish before retrying"}), 400
+
+    job.retry_count = (job.retry_count or 0) + 1
+    db.session.commit()
+
+    try:
+        if job.feature == "text_extraction":
+            document_pipeline.process_document(job.document_content_id)
+        else:
+            return jsonify({"error": f"No retry handler for feature '{job.feature}' yet"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Retry failed: {e}"}), 502
+
+    return jsonify({"message": "Retry completed", "job_id": job.id})
+
 
 @app.route("/admin/units", methods=["POST"])
 @require_csrf
