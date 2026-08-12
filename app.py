@@ -1955,6 +1955,84 @@ def admin_reject_library_item(publication_id):
     return jsonify({"id": publication.id, "status": publication.status})
 
 
+LIBRARY_REPORT_RESOLUTIONS = {"dismissed", "actioned"}
+LIBRARY_REPORT_ADMIN_NOTES_MAX = 500
+
+
+@app.route("/admin/library/reports")
+@require_admin
+def admin_list_library_reports():
+    """
+    Lists Library reports for the moderation queue. Defaults to pending
+    only; pass status=all to see dismissed/actioned ones too.
+    """
+    status_filter = request.args.get("status", "pending")
+
+    query = LibraryReport.query
+    if status_filter != "all":
+        query = query.filter_by(status=status_filter)
+
+    reports = query.order_by(LibraryReport.created_at.asc()).all()
+
+    result = []
+    for report in reports:
+        publication = db.session.get(LibraryPublication, report.library_publication_id)
+        reporter = db.session.get(User, report.reporter_user_id)
+        result.append({
+            "id": report.id,
+            "library_publication_id": report.library_publication_id,
+            "publication_title": publication.title if publication else None,
+            "publication_status": publication.status if publication else None,
+            "reporter_email": reporter.email if reporter else None,
+            "reason": report.reason,
+            "details": report.details,
+            "status": report.status,
+            "admin_notes": report.admin_notes,
+            "created_at": report.created_at.isoformat() if report.created_at else None,
+        })
+
+    return jsonify({"reports": result})
+
+
+@app.route("/admin/library/reports/<int:report_id>/resolve", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_resolve_library_report(report_id):
+    """
+    Marks a report dismissed or actioned. Deliberately does NOT touch the
+    underlying LibraryPublication's status - taking a publication down is
+    a separate, explicit admin decision (existing reject/removal paths),
+    not an automatic side effect of closing a report.
+    """
+    acting_admin_id = session.get("user_id")
+
+    report = db.session.get(LibraryReport, report_id)
+    if not report:
+        return jsonify({"error": "Report not found"}), 404
+    if report.status != "pending":
+        return jsonify({"error": f"Report is not pending (status: {report.status})"}), 400
+
+    data = request.get_json(silent=True) or {}
+    resolution = (data.get("status") or "").strip()
+    if resolution not in LIBRARY_REPORT_RESOLUTIONS:
+        return jsonify({"error": "status must be one of: " + ", ".join(sorted(LIBRARY_REPORT_RESOLUTIONS))}), 400
+
+    admin_notes = data.get("admin_notes")
+    if admin_notes is not None:
+        admin_notes = admin_notes.strip()
+        if len(admin_notes) > LIBRARY_REPORT_ADMIN_NOTES_MAX:
+            return jsonify({"error": f"admin_notes must be {LIBRARY_REPORT_ADMIN_NOTES_MAX} characters or fewer"}), 400
+        admin_notes = admin_notes or None
+
+    report.status = resolution
+    report.admin_notes = admin_notes
+    report.reviewed_by = acting_admin_id
+    report.reviewed_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({"id": report.id, "status": report.status})
+
+
 # ---------- Content routes (student-facing) ----------
 
 @app.route("/units")
