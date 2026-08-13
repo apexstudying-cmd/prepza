@@ -1,0 +1,10 @@
+{
+  "description": "Connect with peers and enhance your learning experience through AI-powered study tools, personalized feeds, and collaborative features designed for university students.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

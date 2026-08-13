@@ -1,0 +1,5377 @@
+import { useState, useEffect, useRef } from 'react'
+import logoImg from './imports/logo.png'
+
+// ─── API helper ─────────────────────────────────────────────────────────────
+// Dev: Vite proxies these paths straight to the Flask backend (see
+// vite.config.ts), so relative paths work identically in dev and once this
+// app is eventually served by Flask itself in production - no base URL
+// switching needed.
+class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
+async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(path, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  })
+  let body: any = null
+  try { body = await res.json() } catch { /* no JSON body */ }
+  if (!res.ok) {
+    throw new ApiError((body && body.error) || `Request failed (${res.status})`, res.status)
+  }
+  return body as T
+}
+
+// ─── Icon helpers ─────────────────────────────────────────────────────────────
+const Ic = {
+  home:     (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
+  explore:  (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>,
+  plus:     (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>,
+  chat:     (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>,
+  person:   (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>,
+  back:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>,
+  close:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>,
+  search:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>,
+  send:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>,
+  mic:      (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>,
+  upload:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>,
+  heart:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>,
+  comment:  (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18z"/></svg>,
+  bookmark: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>,
+  share:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>,
+  dots:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>,
+  bell:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>,
+  check:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>,
+  flash:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>,
+  podcast:  (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h1v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v8h1c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z"/></svg>,
+  book:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 14H8v-2h8v2zm0-4H8v-2h8v2zm0-4H8V6h8v2z"/></svg>,
+  trophy:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></svg>,
+  play:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>,
+  pause:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>,
+  settings: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>,
+  eye:      (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>,
+  attach:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>,
+  edit:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>,
+  logout:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>,
+  image:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>,
+  link:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>,
+  skip:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>,
+  rewind:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M18 9.86v4.28L14.97 12 18 9.86zm-9 0v4.28L5.97 12 9 9.86zM20 6l-7 5 7 5V6zm-9 0l-7 5 7 5V6z"/></svg>,
+  chevR:    (s='w-4 h-4') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>,
+  toggle:   (on: boolean) => (
+    <div style={{ width: 44, height: 24, background: on ? '#C9A84C' : '#D1D5DB', borderRadius: 99, position: 'relative', transition: 'background 0.2s', cursor: 'pointer' }}>
+      <div style={{ width: 18, height: 18, background: '#fff', borderRadius: '50%', position: 'absolute', top: 3, left: on ? 23 : 3, transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
+    </div>
+  ),
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Screen =
+  | 'splash' | 'login' | 'forgot-password' | 'signup' | 'check-email'
+  | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'
+  | 'chat-detail' | 'upload' | 'processing' | 'doc-ready' | 'document-study'
+  | 'ai-tutor' | 'flashcards' | 'quiz' | 'podcast-player' | 'podcast-library' | 'summary'
+  | 'forum' | 'comments' | 'post-composer' | 'question-composer'
+  | 'opportunities' | 'opportunity-detail' | 'share-opp-form' | 'edu-upload-form'
+  | 'settings' | 'student-profile' | 'share-sheet'
+  | 'notifications' | 'library' | 'mind-map' | 'new-chat' | 'chat-options' | 'edit-profile'
+  | 'subscription' | 'payment' | 'payment-success' | 'payment-failure' | 'payment-history'
+  | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements'
+  | 'followers' | 'following' | 'group-detail' | 'group-create'
+
+// ─── Kenyan Data ──────────────────────────────────────────────────────────────
+const USER = { name: 'Arnold Gichuru', initials: 'AG', course: 'Actuarial Science', year: 'Year 1', uni: 'Kenyatta University' }
+
+const studyDocs = [
+  { id: 1, subject: 'ACT 101 – Actuarial Mathematics', chapter: 'Ch.3 – Interest Theory & Annuities', progress: 52, color: '#C9A84C', icon: '∑' },
+  { id: 2, subject: 'MAT 101 – Calculus I', chapter: 'Ch.5 – Integration Techniques', progress: 34, color: '#4C7BC9', icon: '∫' },
+  { id: 3, subject: 'STA 101 – Probability & Statistics', chapter: 'Ch.2 – Probability Distributions', progress: 78, color: '#4CC97B', icon: 'σ' },
+]
+
+const forumPosts = [
+  { id: 1, user: 'Wanjiru Kamau', avatar: 'WK', course: 'BSc Computer Science · Y2', time: '1h ago', content: "Just used Prepza AI to summarize my ACT 101 notes on Interest Theory. Generated 35 flashcards in 90 seconds. My CATS revision just got 10x easier 🔥", likes: 87, comments: 24, tag: 'Study Win', liked: false, saved: true },
+  { id: 2, user: 'Brian Omondi', avatar: 'BO', course: 'B.Com Finance · Y3', time: '3h ago', content: "The podcast feature is a game changer. Created a 10-minute study podcast from my STA 101 notes and listened during my matatu ride to KU. Arrived already revised 🎧", likes: 134, comments: 41, tag: 'Pro Tip', liked: true, saved: false },
+  { id: 3, user: 'Aisha Mohamed', avatar: 'AM', course: 'LLB Law · Y2', time: '5h ago', content: "Anyone have the Constitutional Law past papers from 2020-2023? Looking for them in the Prepza library. Will upload my own notes as trade 📚", likes: 43, comments: 18, tag: 'Request', liked: false, saved: false },
+  { id: 4, user: 'David Njoroge', avatar: 'DN', course: 'MBBS Medicine · Y3', time: '1d ago', content: "Kenyatta University students — the Physiology library on Prepza has 47 past papers now. Someone uploaded the full KU 2018-2023 set. Go grab them before your upcoming block exam!", likes: 221, comments: 67, tag: 'Announcement', liked: false, saved: false },
+]
+
+const opportunities = [
+  { id: 1, type: 'Internship', title: 'Technology Intern – Safaricom', org: 'Safaricom PLC', location: 'Nairobi, Kenya', deadline: 'Aug 30, 2025', reward: 'KES 35,000/mo', tag: 'Hot', color: '#4CC97B', desc: 'Join Safaricom\'s technology division for a 3-month internship covering software engineering, data analytics, and network operations. Open to 2nd and 3rd year students in Computer Science, Engineering, and related fields.', reqs: ['2nd or 3rd year student', 'Relevant STEM degree', 'Strong analytical skills', 'Kenyan citizen'] },
+  { id: 2, type: 'Scholarship', title: 'Equity Leaders Programme', org: 'Equity Bank Foundation', location: 'All Kenya', deadline: 'Sep 15, 2025', reward: 'Full Scholarship + KES 8,000/mo stipend', tag: 'Flagship', color: '#C9A84C', desc: 'The Equity Leaders Programme offers full scholarships to outstanding Kenyan university students, including tuition, accommodation, mentorship, and a monthly stipend.', reqs: ['Kenyan citizen', 'Mean grade of A- or above', 'Demonstrated financial need', 'Year 1 or 2 student'] },
+  { id: 3, type: 'Competition', title: 'Africa Prize for Engineering Innovation', org: 'Royal Academy of Engineering', location: 'Pan-Africa', deadline: 'Oct 1, 2025', reward: 'KES 600,000 prize', tag: 'Prestigious', color: '#4C7BC9', desc: 'The Africa Prize rewards early-stage engineering innovations that can make a real difference to people\'s lives across Sub-Saharan Africa. Open to African engineers with a working prototype.', reqs: ['African engineer', 'Working prototype required', 'Problem must affect Sub-Saharan Africa', 'Open to teams or individuals'] },
+  { id: 4, type: 'Job', title: 'Graduate Analyst Programme', org: 'KCB Group', location: 'Nairobi, Kenya', deadline: 'Sep 30, 2025', reward: 'KES 65,000/mo', tag: 'Entry Level', color: '#9B59B6', desc: 'KCB Group\'s Graduate Analyst Programme recruits fresh graduates across Finance, Technology, Risk Management, and Operations. Includes a structured 12-month rotation programme.', reqs: ['University degree (any field)', 'Min. Upper Second class honours', 'Graduated within last 2 years', 'Strong communication skills'] },
+  { id: 5, type: 'Event', title: 'Kenya Tech Summit 2025', org: 'ICT Authority Kenya', location: 'KICC, Nairobi', deadline: 'Aug 20, 2025', reward: 'Free (Student Pass)', tag: 'Upcoming', color: '#C94C4C', desc: 'Kenya\'s largest annual technology conference bringing together startups, corporates, government, and students. Features workshops, pitching competitions, and networking events.', reqs: ['Valid student ID', 'Free registration required', 'Open to all students'] },
+]
+
+const chatList = [
+  { id: 1, name: 'ACT 101 Study Group', avatar: '∑', last: 'Wanjiru: Anyone doing Chapter 3 tonight?', time: '9:41', unread: 5, isGroup: true },
+  { id: 2, name: 'Wanjiru Kamau', avatar: 'WK', last: 'Thanks for the flashcards! Really helped 🙏', time: '9:20', unread: 0, isGroup: false },
+  { id: 3, name: 'KU Actuarial Science Y1', avatar: '📐', last: 'CAT dates confirmed – check pinned message', time: 'Yesterday', unread: 12, isGroup: true },
+  { id: 4, name: 'Brian Omondi', avatar: 'BO', last: 'Did you see the new AI Podcast feature?', time: 'Yesterday', unread: 0, isGroup: false },
+  { id: 5, name: 'MAT 101 Class', avatar: '∫', last: 'Prepza AI: Here is the Integration summary...', time: 'Mon', unread: 3, isGroup: true },
+]
+
+const chatMessages = [
+  { sender: 'Wanjiru', text: 'Has anyone done Chapter 3 of ACT 101 yet? The annuities section is confusing 😭', time: '9:10', me: false },
+  { sender: 'Me', text: 'Yes! I uploaded the lecture notes to Prepza and asked the AI to explain it. Way clearer now.', time: '9:12', me: true },
+  { sender: 'Wanjiru', text: 'Send the link! Did you use the document study feature?', time: '9:13', me: false },
+  { sender: 'Me', text: 'Yeah, highlight any paragraph and tap "Explain" – it gives you examples with KES amounts too which makes it actually relatable 😄', time: '9:15', me: true },
+  { sender: 'Brian', text: 'I generated a quiz from the notes. Got 14/15 on first try 🔥', time: '9:22', me: false },
+  { sender: 'Wanjiru', text: 'Okay I NEED to try this. Uploading now 📤', time: '9:35', me: false },
+]
+
+const podcasts = [
+  { id: 1, title: 'Interest Theory Explained', subject: 'ACT 101', duration: '9 min', icon: '∑', color: '#C9A84C' },
+  { id: 2, title: 'Integration Techniques', subject: 'MAT 101', duration: '12 min', icon: '∫', color: '#4C7BC9' },
+  { id: 3, title: 'Normal Distributions', subject: 'STA 101', duration: '7 min', icon: 'σ', color: '#4CC97B' },
+  { id: 4, title: 'Probability Foundations', subject: 'STA 101', duration: '14 min', icon: 'P', color: '#9B59B6' },
+]
+
+const flashcardData = [
+  { q: 'What is the present value formula for an annuity-immediate?', a: 'PV = a(n,i) = (1 - vⁿ) / i\n\nWhere v = 1/(1+i) is the discount factor and i is the interest rate per period.' },
+  { q: 'Define the force of interest (δ).', a: 'δ = ln(1+i)\n\nIt is the continuously compounded interest rate equivalent to the effective annual rate i.' },
+  { q: 'What is the difference between an annuity-immediate and annuity-due?', a: 'Annuity-immediate: payments at END of each period\nAnnuity-due: payments at BEGINNING of each period\n\nä(n,i) = (1+i) × a(n,i)' },
+  { q: 'State the compound interest accumulation function.', a: 'A(t) = A(0)(1+i)ᵗ\n\nFor KES 10,000 at 8% for 3 years:\nA(3) = 10,000 × (1.08)³ = KES 12,597' },
+  { q: 'What is a perpetuity-immediate?', a: 'An annuity with payments continuing forever.\n\nPV = 1/i\n\nExample: KES 5,000/year at 10% = PV of KES 50,000' },
+]
+
+const quizData = [
+  { q: 'If KES 50,000 is invested at 12% p.a. compound interest, what is the accumulated value after 2 years?', opts: ['KES 56,000', 'KES 62,720', 'KES 60,000', 'KES 58,400'], ans: 1 },
+  { q: 'The present value of an annuity-immediate of KES 1 per annum for n years at effective interest rate i is:', opts: ['vⁿ/i', '(1-vⁿ)/i', '(1+i)ⁿ-1)/i', 'vⁿ × i'], ans: 1 },
+  { q: 'Which of the following correctly defines the discount factor v?', opts: ['v = 1+i', 'v = i/(1+i)', 'v = 1/(1+i)', 'v = ln(1+i)'], ans: 2 },
+  { q: 'A perpetuity pays KES 2,400 per month. At an annual effective interest rate of 6%, what is the present value?', opts: ['KES 480,000', 'KES 40,000', 'KES 474,000', 'KES 490,000'], ans: 0 },
+]
+
+// ─── Shared atoms ─────────────────────────────────────────────────────────────
+const N = { navy: '#0B1437', navy2: '#132046', navy3: '#1A2A5E', gold: '#C9A84C', goldL: '#E8C97E', bg: '#F8F9FC' }
+
+function Pill({ text, color = N.gold, bg }: { text: string; color?: string; bg?: string }) {
+  return <span style={{ background: bg ?? color + '20', color, border: `1px solid ${color}33`, borderRadius: 99, fontSize: 10, fontWeight: 700, padding: '2px 9px', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>{text}</span>
+}
+
+function Btn({ label, onClick, variant = 'primary', small }: { label: string; onClick?: () => void; variant?: 'primary'|'ghost'|'outline'; small?: boolean }) {
+  const styles: Record<string, React.CSSProperties> = {
+    primary: { background: `linear-gradient(135deg,${N.navy},${N.navy3})`, color: N.gold, border: 'none' },
+    ghost:   { background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, border: 'none' },
+    outline: { background: 'transparent', color: N.navy, border: `1.5px solid ${N.navy}22` },
+  }
+  return (
+    <button onClick={onClick} style={{ ...styles[variant], fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: small ? 12 : 14, borderRadius: 14, padding: small ? '8px 16px' : '13px 24px', cursor: 'pointer', letterSpacing: 0.2 }}>{label}</button>
+  )
+}
+
+function Avi({ name, size = 38, emoji }: { name: string; size?: number; emoji?: string }) {
+  return (
+    <div style={{ width: size, height: size, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: emoji ? size * 0.45 : size * 0.33, fontWeight: 800, color: N.gold, flexShrink: 0, fontFamily: 'Plus Jakarta Sans' }}>
+      {emoji ?? name}
+    </div>
+  )
+}
+
+function Bar({ pct, color = N.gold }: { pct: number; color?: string }) {
+  return <div style={{ background: '#E5E7EB', borderRadius: 99, height: 5 }}><div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 99, transition: 'width 0.6s ease' }} /></div>
+}
+
+function StatusBar({ dark = true }: { dark?: boolean }) {
+  const c = dark ? '#fff' : N.navy
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 22px 6px', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: c }}>
+      <span>9:41</span>
+      <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+        <svg width="16" height="11" viewBox="0 0 16 12" fill={c}><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="0.5" width="3" height="11.5" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1" opacity="0.3"/></svg>
+        <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke={c} strokeOpacity="0.35"/><rect x="2" y="2" width="16" height="8" rx="2" fill={c}/><path d="M23 4v4a2 2 0 000-4z" fill={c} fillOpacity="0.4"/></svg>
+      </div>
+    </div>
+  )
+}
+
+function TopBar({ title, onBack, setScreen, rightEl }: { title?: string; onBack?: () => void; setScreen?: (s: Screen) => void; rightEl?: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 18px 14px' }}>
+      {onBack && (
+        <button onClick={onBack} style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ color: '#fff' }}>{Ic.back()}</div>
+        </button>
+      )}
+      {title && <span style={{ flex: 1, fontWeight: 800, fontSize: 17, color: '#fff' }}>{title}</span>}
+      {rightEl}
+    </div>
+  )
+}
+
+function BottomNav({ active, setScreen }: { active: Screen; setScreen: (s: Screen) => void }) {
+  const isHome  = ['home','ai-tutor','forum','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','share-sheet','comments','post-composer','question-composer','share-opp-form','edu-upload-form','notifications','library','mind-map'].includes(active)
+  const isExp   = active === 'explore' || active === 'student-profile'
+  const isChat  = active === 'chats' || active === 'chat-detail' || active === 'new-chat' || active === 'chat-options'
+  const isProf  = active === 'profile' || active === 'settings' || active === 'edit-profile'
+  const tabs = [
+    { key: 'home' as Screen, icon: Ic.home, label: 'Home', hit: isHome },
+    { key: 'explore' as Screen, icon: Ic.explore, label: 'Explore', hit: isExp },
+    { key: 'create-modal' as Screen, icon: Ic.plus, label: '', hit: false },
+    { key: 'chats' as Screen, icon: Ic.chat, label: 'Chats', hit: isChat },
+    { key: 'profile' as Screen, icon: Ic.person, label: 'Profile', hit: isProf },
+  ]
+  return (
+    <div style={{ background: N.navy, borderTop: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', paddingBottom: 6, flexShrink: 0 }}>
+      {tabs.map(t => {
+        const isCta = t.key === 'create-modal'
+        return (
+          <button key={t.key} onClick={() => setScreen(t.key)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: isCta ? '0 0 4px' : '8px 0 4px', position: 'relative' }}>
+            {isCta ? (
+              <div style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: `0 4px 18px rgba(201,168,76,0.55)` }}>
+                <div style={{ color: N.navy }}>{Ic.plus()}</div>
+              </div>
+            ) : (
+              <>
+                {t.hit && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 18, height: 2, background: N.gold, borderRadius: 2 }} />}
+                <div style={{ color: t.hit ? N.gold : 'rgba(255,255,255,0.38)' }}>{t.icon()}</div>
+                <span style={{ fontSize: 10, fontWeight: t.hit ? 800 : 500, color: t.hit ? N.gold : 'rgba(255,255,255,0.38)', fontFamily: 'Plus Jakarta Sans' }}>{t.label}</span>
+              </>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── LOADING SYSTEM ───────────────────────────────────────────────────────────
+
+function useLoading(ms = 1200): boolean {
+  const [loading, setLoading] = useState(true)
+  useEffect(() => { const t = setTimeout(() => setLoading(false), ms); return () => clearTimeout(t) }, [])
+  return loading
+}
+
+function Sk({ w, h = 14, r = 8, dark, style: sx }: { w?: string | number; h?: number; r?: number; dark?: boolean; style?: React.CSSProperties }) {
+  const base: React.CSSProperties = { width: w ?? '100%', height: h, borderRadius: r, flexShrink: 0, ...sx }
+  return dark
+    ? <div style={{ ...base, background: 'linear-gradient(90deg,rgba(255,255,255,0.05) 25%,rgba(255,255,255,0.12) 50%,rgba(255,255,255,0.05) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.8s infinite' }} />
+    : <div className="shimmer" style={base} />
+}
+
+function SkCircle({ size = 40, dark }: { size?: number; dark?: boolean }) {
+  return <Sk w={size} h={size} r={size / 2} dark={dark} />
+}
+
+function AsyncBtn({ label, loadLabel, onClick, style, variant = 'primary', loadingMs = 1500 }: {
+  label: string; loadLabel?: string; onClick?: () => void; style?: React.CSSProperties
+  variant?: 'primary' | 'ghost' | 'danger'; loadingMs?: number
+}) {
+  const [busy, setBusy] = useState(false)
+  const bg = variant === 'primary' ? `linear-gradient(135deg,${N.gold},${N.goldL})` : variant === 'ghost' ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#C94C4C'
+  const fg = variant === 'primary' ? N.navy : variant === 'ghost' ? N.gold : '#fff'
+  const handle = () => { if (busy) return; setBusy(true); onClick?.(); setTimeout(() => setBusy(false), loadingMs) }
+  return (
+    <button onClick={handle} disabled={busy} style={{ background: bg, color: fg, border: 'none', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, borderRadius: 14, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.82 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'opacity 0.2s', ...style }}>
+      {busy
+        ? <><div style={{ width: 13, height: 13, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.65s linear infinite', flexShrink: 0 }} />{loadLabel ?? 'Working…'}</>
+        : label}
+    </button>
+  )
+}
+
+// ─── SKELETON ATOMS ───────────────────────────────────────────────────────────
+
+function SkPostCard() {
+  return (
+    <div style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+        <SkCircle size={38} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk w="50%" h={13} /><Sk w="70%" h={10} /></div>
+        <Sk w={50} h={18} r={99} />
+      </div>
+      <Sk h={12} style={{ marginBottom: 6 }} /><Sk h={12} w="80%" style={{ marginBottom: 6 }} /><Sk h={12} w="60%" style={{ marginBottom: 14 }} />
+      <div style={{ display: 'flex', gap: 16 }}>
+        <Sk w={50} h={14} r={6} /><Sk w={50} h={14} r={6} />
+        <div style={{ flex: 1 }} /><Sk w={18} h={18} r={4} /><Sk w={18} h={18} r={4} />
+      </div>
+    </div>
+  )
+}
+
+function SkDocCard() {
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+      <Sk w={42} h={42} r={12} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={13} w="80%" /><Sk h={10} w="55%" /><Sk h={9} w="40%" /></div>
+      <Sk w={36} h={18} r={99} />
+    </div>
+  )
+}
+
+function SkChatRow() {
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+      <SkCircle size={46} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><Sk w="45%" h={14} /><Sk w={40} h={11} /></div>
+        <Sk w="70%" h={11} />
+      </div>
+    </div>
+  )
+}
+
+function SkOppCard() {
+  return (
+    <div style={{ background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.08)', marginBottom: 14 }}>
+      <div style={{ height: 5, background: '#E5E7EB' }} />
+      <div style={{ padding: 16 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+          <Sk w={48} h={48} r={14} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}><Sk h={14} w="75%" /><Sk h={11} w="50%" /></div>
+          <Sk w={60} h={20} r={99} />
+        </div>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>{[80,100,90].map((w, i) => <Sk key={i} w={w} h={11} r={99} />)}</div>
+        <div style={{ display: 'flex', gap: 8 }}><Sk h={42} r={12} /><Sk w={44} h={42} r={12} /><Sk w={44} h={42} r={12} /></div>
+      </div>
+    </div>
+  )
+}
+
+function SkNotifRow() {
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+      <Sk w={42} h={42} r={12} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={13} w="55%" /><Sk h={11} /><Sk h={11} w="70%" /></div>
+      <Sk w={40} h={10} />
+    </div>
+  )
+}
+
+// ─── SCREEN SKELETONS ─────────────────────────────────────────────────────────
+
+function SkeletonHome() {
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Sk w={36} h={36} r={10} dark />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={60} h={10} dark /><Sk w={100} h={14} dark /></div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}><Sk w={38} h={38} r={12} dark /><Sk w={38} h={38} r={12} dark /></div>
+        </div>
+        <Sk h={52} r={14} dark />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '20px 18px 24px' }}>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><Sk w={140} h={14} /><Sk w={70} h={12} /></div>
+          <div style={{ background: '#fff', borderRadius: 18, padding: 18, marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 14, marginBottom: 14 }}>
+              <Sk w={48} h={48} r={14} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}><Sk h={14} /><Sk w="65%" h={11} /></div>
+            </div>
+            <Sk h={5} r={99} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}><Sk w={80} h={10} /><Sk w={80} h={28} r={10} /></div>
+          </div>
+          {[1,2].map(i => (
+            <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center' }}>
+              <Sk w={40} h={40} r={12} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={12} w="70%" /><Sk h={10} w="50%" /><Sk h={5} r={99} /></div>
+              <Sk w={30} h={12} />
+            </div>
+          ))}
+        </div>
+        <div>
+          <Sk w={120} h={14} style={{ marginBottom: 14 }} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+            {[1,2,3,4,5].map(i => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <Sk w={52} h={52} r={16} /><Sk w={40} h={9} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><Sk w={150} h={14} /><Sk w={60} h={12} /></div>
+          <div style={{ display: 'flex', gap: 12, overflowX: 'hidden' }}>
+            {[1,2,3].map(i => (
+              <div key={i} style={{ flexShrink: 0, width: 140, borderRadius: 16, overflow: 'hidden' }}>
+                <Sk w={140} h={90} r={0} />
+                <div style={{ background: '#fff', padding: '10px 10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <Sk h={12} /><Sk w="60%" h={10} /><Sk w={50} h={10} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><Sk w={100} h={14} /><Sk w={60} h={12} /></div>
+          {[1,2].map(i => <SkPostCard key={i} />)}
+        </div>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><Sk w={140} h={14} /><Sk w={60} h={12} /></div>
+          {[1,2].map(i => (
+            <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center' }}>
+              <Sk w={44} h={44} r={12} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={13} w="75%" /><Sk h={10} w="50%" /></div>
+              <Sk w={60} h={20} r={99} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SkeletonExplore() {
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <Sk w={80} h={20} dark style={{ marginBottom: 12 }} />
+        <Sk h={44} r={13} dark style={{ marginBottom: 12 }} />
+        <div style={{ display: 'flex', gap: 8 }}>{[40,70,90,70,80].map((w,i) => <Sk key={i} w={w} h={28} r={20} dark />)}</div>
+      </div>
+      <div style={{ padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div>
+          <Sk w={220} h={14} style={{ marginBottom: 12 }} />
+          <div style={{ display: 'flex', gap: 10, overflowX: 'hidden' }}>
+            {[1,2,3].map(i => (
+              <div key={i} style={{ flexShrink: 0, background: '#fff', borderRadius: 14, padding: 12, minWidth: 148, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <Sk w={30} h={24} /><Sk h={12} /><Sk w="60%" h={10} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div><Sk w={160} h={14} style={{ marginBottom: 12 }} />{[1,2,3].map(i => <SkDocCard key={i} />)}</div>
+        <div>
+          <Sk w={160} h={14} style={{ marginBottom: 12 }} />
+          <div style={{ display: 'flex', gap: 10, overflowX: 'hidden' }}>
+            {[1,2,3].map(i => (
+              <div key={i} style={{ flexShrink: 0, background: '#fff', borderRadius: 16, padding: '16px 14px', width: 148, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <SkCircle size={48} /><Sk h={12} /><Sk h={10} w="70%" /><Sk h={28} r={10} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SkeletonLibrary() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}><Sk w={34} h={34} r={10} dark /><Sk w={120} h={18} dark /></div>
+        <div style={{ display: 'flex', gap: 8 }}>{[40,60,80,70,55].map((w,i) => <Sk key={i} w={w} h={28} r={20} dark />)}</div>
+      </div>
+      <div style={{ flex: 1, padding: 16 }}>
+        {[1,2,3,4,5,6].map(i => (
+          <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <Sk w={44} h={44} r={12} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={13} w="75%" /><Sk h={10} w="50%" /></div>
+            <Sk w={50} h={18} r={99} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SkeletonDocument() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 14px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+          <Sk w={34} h={34} r={10} dark />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk h={14} dark /><Sk w="50%" h={10} dark /></div>
+          <Sk w={34} h={34} r={10} dark />
+        </div>
+        <Sk h={34} r={12} dark />
+      </div>
+      <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', gap: 8 }}>{[1,2,3,4].map(i => <Sk key={i} w={80} h={28} r={20} />)}</div>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Sk h={18} w="60%" /><Sk h={11} w="40%" /><div style={{ height: 4 }} />
+          {[100,85,100,75,100,90,100,65].map((w,i) => <Sk key={i} h={12} w={`${w}%`} />)}
+          <div style={{ height: 4 }} />
+          {[100,80,100,70].map((w,i) => <Sk key={i} h={12} w={`${w}%`} />)}
+          <Sk h={64} r={12} style={{ marginTop: 6 }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SkeletonAITutor() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+          <Sk w={34} h={34} r={10} dark /><Sk w={38} h={38} r={12} dark />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={140} h={14} dark /><Sk w={100} h={10} dark /></div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>{[1,2,3,4,5].map(i => <Sk key={i} w={70} h={28} r={20} dark />)}</div>
+        <div style={{ display: 'flex', gap: 8 }}>{[1,2,3,4,5].map(i => <Sk key={i} w={80} h={28} r={20} dark />)}</div>
+      </div>
+      <div style={{ flex: 1, padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Sk w={32} h={32} r={9} />
+          <div style={{ maxWidth: '78%', background: '#fff', borderRadius: '0 14px 14px 14px', padding: 14, flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Sk h={12} /><Sk h={12} w="90%" /><Sk h={12} w="75%" />
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ maxWidth: '65%', background: N.navy2, borderRadius: '14px 0 14px 14px', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Sk h={12} dark /><Sk h={12} w="80%" dark />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Sk w={32} h={32} r={9} />
+          <div style={{ background: '#fff', borderRadius: '0 14px 14px 14px', padding: '12px 16px', display: 'flex', gap: 6, alignItems: 'center' }}>
+            {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, background: '#D1D5DB', borderRadius: '50%', animation: `shimmer ${0.5 + i * 0.25}s ease-in-out infinite alternate` }} />)}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SkeletonQuiz() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+          <Sk w={34} h={34} r={10} dark />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={110} h={14} dark /><Sk w={160} h={10} dark /></div>
+          <Sk w={60} h={20} r={99} dark />
+        </div>
+        <Sk h={5} r={99} dark style={{ marginBottom: 4 }} />
+        <Sk w={60} h={10} dark style={{ marginLeft: 'auto' }} />
+      </div>
+      <div style={{ flex: 1, padding: 20 }}>
+        <div style={{ background: '#fff', borderRadius: 18, padding: 20, marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
+          <Sk w={80} h={10} style={{ marginBottom: 14 }} />
+          <Sk h={16} style={{ marginBottom: 8 }} /><Sk h={16} w="80%" />
+        </div>
+        {[1,2,3,4].map(i => (
+          <div key={i} style={{ background: '#fff', border: '2px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
+            <Sk w={26} h={26} r={13} /><Sk h={14} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SkeletonFlashcards() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+          <Sk w={34} h={34} r={10} dark />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={100} h={14} dark /><Sk w={200} h={10} dark /></div>
+          <Sk w={80} h={20} r={99} dark />
+        </div>
+        <Sk h={5} r={99} dark style={{ marginBottom: 4 }} />
+        <Sk w={50} h={10} dark style={{ marginLeft: 'auto' }} />
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', gap: 24 }}>
+        <div style={{ width: '100%', minHeight: 220, background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 8px 32px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Sk w={140} h={11} /><div style={{ height: 16 }} />
+          <Sk h={16} /><Sk h={16} w="80%" /><Sk h={16} w="60%" />
+        </div>
+        <Sk w={180} h={13} r={99} />
+      </div>
+    </div>
+  )
+}
+
+function SkeletonPodcast() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Sk w={34} h={34} r={10} dark /><Sk w={120} h={16} dark /></div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 28px', gap: 28 }}>
+        <Sk w={200} h={200} r={28} />
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+          <Sk w={200} h={22} /><Sk w={160} h={14} /><Sk w={80} h={18} r={99} />
+        </div>
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Sk h={4} r={99} />
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><Sk w={40} h={12} /><Sk w={40} h={12} /></div>
+        </div>
+        <div style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
+          <Sk w={24} h={24} r={4} /><Sk w={64} h={64} r={32} /><Sk w={24} h={24} r={4} />
+        </div>
+        <div style={{ width: '100%' }}>
+          <Sk w={120} h={14} style={{ marginBottom: 12 }} />
+          {[1,2,3].map(i => (
+            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', borderRadius: 14, padding: 12, marginBottom: 8 }}>
+              <Sk w={42} h={42} r={12} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={13} w="70%" /><Sk h={10} w="50%" /></div>
+              <Sk w={20} h={20} r={4} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SkeletonPodcastLibrary() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}><Sk w={34} h={34} r={10} dark /><Sk w={160} h={18} dark /></div>
+        <Sk w={200} h={11} dark />
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
+        <Sk w={120} h={13} style={{ marginBottom: 12 }} />
+        {[1,2,3,4,5].map(i => (
+          <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'center', background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8 }}>
+            <Sk w={52} h={52} r={14} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={13} w="65%" /><Sk h={10} w="45%" /></div>
+            <Sk w={24} h={24} r={4} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SkeletonForum() {
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <Sk w={34} h={34} r={10} dark /><Sk w={120} h={18} dark />
+          <Sk w={60} h={32} r={11} dark style={{ marginLeft: 'auto' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>{[1,2,3,4].map(i => <Sk key={i} w={80} h={28} r={20} dark />)}</div>
+      </div>
+      <div style={{ padding: '16px 16px' }}>{[1,2,3,4].map(i => <SkPostCard key={i} />)}</div>
+    </div>
+  )
+}
+
+function SkeletonOpportunities() {
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <Sk w={34} h={34} r={10} dark />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={150} h={18} dark /><Sk w={200} h={10} dark /></div>
+          <Sk w={60} h={30} r={10} dark />
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>{[40,80,100,50,60].map((w,i) => <Sk key={i} w={w} h={28} r={20} dark />)}</div>
+      </div>
+      <div style={{ padding: 16 }}>{[1,2,3].map(i => <SkOppCard key={i} />)}</div>
+    </div>
+  )
+}
+
+function SkeletonOppDetail() {
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <Sk w={34} h={34} r={10} dark /><Sk w="60%" h={16} dark /><Sk w={34} h={34} r={10} dark />
+        </div>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+          <Sk w={60} h={60} r={18} dark />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Sk w={180} h={16} dark /><Sk w={120} h={12} dark /><Sk w={60} h={18} r={99} dark />
+          </div>
+        </div>
+      </div>
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', gap: 10 }}>{[1,2,3].map(i => <Sk key={i} h={36} r={12} />)}</div>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 16 }}>
+          <Sk w={180} h={14} style={{ marginBottom: 12 }} />
+          {[100,90,100,85,100,70].map((w,i) => <Sk key={i} h={12} w={`${w}%`} style={{ marginBottom: 8 }} />)}
+        </div>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 16 }}>
+          <Sk w={120} h={14} style={{ marginBottom: 12 }} />
+          {[1,2,3,4].map(i => (
+            <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10 }}><Sk w={20} h={20} r={10} /><Sk h={13} /></div>
+          ))}
+        </div>
+        <Sk h={50} r={16} /><Sk h={46} r={16} />
+      </div>
+    </div>
+  )
+}
+
+function SkeletonChats() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      <div style={{ background: N.navy, padding: '0 18px 14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Sk w={60} h={20} dark /><Sk w={34} h={34} r={10} dark />
+        </div>
+        <Sk h={40} r={12} dark style={{ marginBottom: 12 }} />
+        <Sk h={36} r={12} dark />
+      </div>
+      <div style={{ background: N.navy2, margin: '12px 14px 0', borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'center' }}>
+        <Sk w={44} h={44} r={12} dark />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk w={120} h={14} dark /><Sk w={180} h={10} dark /></div>
+      </div>
+      <div style={{ flex: 1 }}>{[1,2,3,4,5].map(i => <SkChatRow key={i} />)}</div>
+    </div>
+  )
+}
+
+function SkeletonChatDetail() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 16px 14px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Sk w={34} h={34} r={10} dark />
+          <SkCircle size={38} dark />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={160} h={14} dark /><Sk w={100} h={10} dark /></div>
+          <Sk w={34} h={34} r={10} dark />
+        </div>
+      </div>
+      <div style={{ flex: 1, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {[
+          { me: false, lines: [160, 120] },
+          { me: true, lines: [180, 100] },
+          { me: false, lines: [200] },
+          { me: true, lines: [140, 90] },
+          { me: false, lines: [170, 130] },
+        ].map(({ me, lines }, i) => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: me ? 'flex-end' : 'flex-start', gap: 2 }}>
+            {!me && <Sk w={60} h={10} />}
+            <div style={{ maxWidth: '75%', background: me ? N.navy2 : '#fff', borderRadius: me ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {lines.map((w, j) => <Sk key={j} w={w} h={12} dark={me} />)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SkeletonProfile() {
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}><Sk w={34} h={34} r={10} dark /></div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <SkCircle size={76} dark />
+          <Sk w={160} h={20} dark /><Sk w={200} h={13} dark /><Sk w={130} h={11} dark />
+          <div style={{ display: 'flex', gap: 8 }}><Sk w={80} h={32} r={12} dark /><Sk w={80} h={32} r={12} dark /></div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, padding: '14px 14px 0' }}>
+        {[1,2,3,4].map(i => (
+          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '12px 8px', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+            <Sk w={40} h={16} /><Sk w={50} h={10} />
+          </div>
+        ))}
+      </div>
+      <div style={{ margin: '14px 14px 0', background: '#fff', borderRadius: 16, padding: 14 }}>
+        <Sk w={120} h={14} style={{ marginBottom: 14 }} />
+        <div style={{ display: 'flex', gap: 14 }}>
+          {[1,2,3,4,5].map(i => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+              <SkCircle size={46} /><Sk w={50} h={9} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ margin: '14px 14px 0', background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex' }}>{[1,2,3,4].map(i => <Sk key={i} h={42} r={0} style={{ borderRadius: 0 }} />)}</div>
+        <div style={{ padding: 14 }}>{[1,2,3].map(i => <SkDocCard key={i} />)}</div>
+      </div>
+      <div style={{ height: 24 }} />
+    </div>
+  )
+}
+
+function SkeletonNotifications() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Sk w={34} h={34} r={10} dark /><Sk w={130} h={18} dark /></div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }} className="scrollbar-hide">
+        {[1,2,3,4,5,6,7].map(i => <SkNotifRow key={i} />)}
+      </div>
+    </div>
+  )
+}
+
+function SkeletonMindMap() {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Sk w={34} h={34} r={10} dark />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={100} h={14} dark /><Sk w={160} h={10} dark /></div>
+        </div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ background: '#fff', borderRadius: 20, padding: 16, width: '100%', marginBottom: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+          <Sk h={260} r={12} />
+        </div>
+        {[1,2,3,4,5,6].map(i => (
+          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fff', borderRadius: 12, padding: '10px 14px', marginBottom: 8, width: '100%' }}>
+            <Sk w={10} h={10} r={5} /><Sk h={13} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SkeletonAdminDashboard() {
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><Sk w={80} h={12} dark /><Sk w={160} h={20} dark /></div>
+          <div style={{ display: 'flex', gap: 8 }}><Sk w={38} h={38} r={12} dark /><SkCircle size={38} dark /></div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
+          {[1,2,3,4].map(i => (
+            <div key={i} style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Sk w={80} h={11} dark /><Sk w={60} h={22} dark /><Sk w={90} h={10} dark />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}><Sk w={140} h={14} /><Sk w={60} h={24} r={8} /></div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 100 }}>
+            {[70,50,85,60,90,45,75].map((h,i) => <Sk key={i} h={h} r={6} />)}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+            {['M','T','W','T','F','S','S'].map((_,i) => <Sk key={i} w={20} h={10} />)}
+          </div>
+        </div>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><Sk w={100} h={14} /><Sk w={60} h={24} r={8} /></div>
+          {[1,2,3,4,5].map(i => (
+            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', paddingBottom: 12, marginBottom: 12, borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+              <SkCircle size={36} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk h={12} w="60%" /><Sk h={10} w="40%" /></div>
+              <Sk w={50} h={18} r={99} /><Sk w={60} h={12} />
+            </div>
+          ))}
+        </div>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <Sk w={120} h={14} style={{ marginBottom: 14 }} />
+          {[1,2,3,4].map(i => (
+            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
+              <Sk w={8} h={8} r={4} style={{ marginTop: 4, flexShrink: 0 }} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk h={12} /><Sk h={10} w="50%" /></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── SPLASH ───────────────────────────────────────────────────────────────────
+function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  useEffect(() => { const t = setTimeout(() => setScreen('login'), 2200); return () => clearTimeout(t) }, [])
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(160deg, ${N.navy} 0%, ${N.navy2} 60%, ${N.navy3} 100%)` }}>
+      <div style={{ position: 'absolute', top: '18%', width: 220, height: 220, background: 'rgba(201,168,76,0.06)', borderRadius: '50%', filter: 'blur(50px)' }} />
+      <img src={logoImg} alt="Prepza" style={{ width: 100, height: 100, borderRadius: 28, marginBottom: 20, boxShadow: '0 12px 48px rgba(201,168,76,0.3)' }} />
+      <div style={{ fontWeight: 800, fontSize: 30, color: '#fff', letterSpacing: '-1px' }}>PREPZA</div>
+      <div style={{ color: N.gold, fontSize: 13, fontWeight: 600, letterSpacing: 2, marginTop: 4, textTransform: 'uppercase' }}>Study Smarter. Together.</div>
+      <div style={{ marginTop: 60, display: 'flex', gap: 6 }}>
+        {[0,1,2].map(i => <div key={i} style={{ width: i === 0 ? 20 : 6, height: 6, background: i === 0 ? N.gold : 'rgba(255,255,255,0.2)', borderRadius: 99, transition: 'all 0.3s' }} />)}
+      </div>
+    </div>
+  )
+}
+
+// ─── LOGIN ────────────────────────────────────────────────────────────────────
+function LoginScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [email, setEmail] = useState('')
+  const [pass, setPass] = useState('')
+  const [showPass, setShowPass] = useState(false)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleLogin = async () => {
+    setError('')
+    if (!email || !pass) { setError('Please enter both your email and password.'); return }
+    setSubmitting(true)
+    try {
+      await api('/login', { method: 'POST', body: JSON.stringify({ email, password: pass }) })
+      setScreen('home')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: `linear-gradient(170deg, ${N.navy} 0%, ${N.navy2} 55%, ${N.bg} 100%)` }} className="scrollbar-hide">
+      <div style={{ padding: '20px 28px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 40 }}>
+        <img src={logoImg} alt="Prepza" style={{ width: 72, height: 72, borderRadius: 20, marginBottom: 16, boxShadow: '0 8px 32px rgba(201,168,76,0.25)' }} />
+        <div style={{ fontWeight: 800, fontSize: 26, color: '#fff', letterSpacing: '-0.5px' }}>Welcome back</div>
+        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 4, marginBottom: 36 }}>Sign in to continue studying</div>
+
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Email / Student ID</div>
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="arnold@students.ku.ac.ke" style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Password</div>
+            <div style={{ position: 'relative' }}>
+              <input type={showPass ? 'text' : 'password'} value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} placeholder="••••••••" style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 44px 13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', boxSizing: 'border-box' }} />
+              <button onClick={() => setShowPass(v => !v)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)' }}>{Ic.eye()}</button>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}><span onClick={() => setScreen('forgot-password')} style={{ color: N.gold, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Forgot password?</span></div>
+
+          {error && (
+            <div style={{ background: 'rgba(140,29,43,0.25)', border: '1px solid rgba(140,29,43,0.5)', borderRadius: 12, padding: '10px 14px', color: '#ffb4bd', fontSize: 13 }}>{error}</div>
+          )}
+
+          <button disabled={submitting} onClick={handleLogin} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: submitting ? 'default' : 'pointer', opacity: submitting ? 0.7 : 1, fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)', marginTop: 4 }}>{submitting ? 'Signing in...' : 'Sign In'}</button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>or continue with</span>
+            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+          </div>
+
+          <button style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>G</span> Continue with Google
+          </button>
+        </div>
+
+        <div style={{ marginTop: 28, color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center' }}>
+          Don't have an account? <span onClick={() => setScreen('signup')} style={{ color: N.gold, fontWeight: 700, cursor: 'pointer' }}>Sign Up</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── HOME ─────────────────────────────────────────────────────────────────────
+function HomeScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [notifCount] = useState(3)
+  const loading = useLoading(1200)
+  if (loading) return <SkeletonHome />
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      {/* Header */}
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src={logoImg} alt="Prepza" style={{ width: 36, height: 36, borderRadius: 10 }} />
+            <div>
+              <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: 500 }}>Good morning,</div>
+              <div style={{ color: '#fff', fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px' }}>Arnold 👋</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setScreen('ai-tutor')} style={{ width: 38, height: 38, background: 'rgba(201,168,76,0.14)', border: '1px solid rgba(201,168,76,0.28)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <div style={{ color: N.gold, fontSize: 18 }}>✦</div>
+            </button>
+            <button onClick={() => setScreen('notifications')} style={{ position: 'relative', width: 38, height: 38, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <div style={{ color: '#fff' }}>{Ic.bell()}</div>
+              {notifCount > 0 && <div style={{ position: 'absolute', top: 7, right: 7, width: 8, height: 8, background: N.gold, borderRadius: '50%', border: `1.5px solid ${N.navy}` }} />}
+            </button>
+          </div>
+        </div>
+        {/* Streak */}
+        <div style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.22)', borderRadius: 14, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 20 }}>🔥</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: N.gold, fontWeight: 800, fontSize: 13 }}>7-Day Streak — Keep it up!</div>
+            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>Study 30 mins today to extend it</div>
+          </div>
+          <Pill text="+25 XP" color={N.gold} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 24 }}>
+        {/* Continue Studying */}
+        <section style={{ padding: '20px 18px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Continue Studying</span>
+            <span onClick={() => setScreen('library')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>My Library →</span>
+          </div>
+          {/* Featured doc */}
+          <div onClick={() => setScreen('document-study')} style={{ background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 18, padding: 18, cursor: 'pointer', position: 'relative', overflow: 'hidden', marginBottom: 10 }}>
+            <div style={{ position: 'absolute', right: -20, top: -20, width: 120, height: 120, background: 'rgba(201,168,76,0.07)', borderRadius: '50%' }} />
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ width: 48, height: 48, background: 'rgba(201,168,76,0.15)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: N.gold, fontWeight: 800 }}>∑</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>ACT 101 – Actuarial Mathematics</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Ch.3 – Interest Theory & Annuities</div>
+              </div>
+            </div>
+            <Bar pct={52} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>52% complete</span>
+              <button onClick={e => { e.stopPropagation(); setScreen('document-study') }} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 11, border: 'none', borderRadius: 10, padding: '6px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Continue →</button>
+            </div>
+          </div>
+          {/* Other docs */}
+          {studyDocs.slice(1).map(d => (
+            <div key={d.id} onClick={() => setScreen('document-study')} style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
+              <div style={{ width: 40, height: 40, background: d.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: d.color, fontWeight: 800 }}>{d.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{d.subject}</div>
+                <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 6 }} className="line-clamp-1">{d.chapter}</div>
+                <Bar pct={d.progress} color={d.color} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: d.color, flexShrink: 0 }}>{d.progress}%</div>
+            </div>
+          ))}
+        </section>
+
+        {/* AI Study Tools */}
+        <section style={{ padding: '0 18px' }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: N.navy, marginBottom: 14 }}>AI Study Tools</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
+            {[
+              { icon: '📤', label: 'Upload', action: () => setScreen('upload') },
+              { icon: '✦', label: 'AI Tutor', action: () => setScreen('ai-tutor') },
+              { icon: '🃏', label: 'Flashcards', action: () => setScreen('flashcards') },
+              { icon: '📝', label: 'Practice', action: () => setScreen('quiz') },
+              { icon: '🎙️', label: 'Podcasts', action: () => setScreen('podcast-player') },
+            ].map((t, i) => (
+              <button key={i} onClick={t.action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                <div style={{ width: 52, height: 52, borderRadius: 16, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, border: '1px solid rgba(201,168,76,0.15)' }}>{t.icon}</div>
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#6B7280', fontFamily: 'Plus Jakarta Sans' }}>{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Podcasts */}
+        <section>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 18px', marginBottom: 12 }}>
+            <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Study Podcasts 🎙️</span>
+            <span onClick={() => setScreen('podcast-library')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
+          </div>
+          <div style={{ display: 'flex', gap: 12, padding: '0 18px', overflowX: 'auto' }} className="scrollbar-hide">
+            {podcasts.map(p => (
+              <div key={p.id} onClick={() => setScreen('podcast-player')} style={{ flexShrink: 0, width: 140, borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.09)', cursor: 'pointer' }}>
+                <div style={{ height: 90, background: `linear-gradient(135deg,${p.color},${p.color}99)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#fff', fontWeight: 800 }}>{p.icon}</div>
+                <div style={{ background: '#fff', padding: '10px 10px 12px' }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{p.title}</div>
+                  <div style={{ fontSize: 10, color: '#6B7280', marginBottom: 5 }}>{p.subject}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ color: p.color }}>{Ic.play('w-3 h-3')}</div>
+                    <span style={{ fontSize: 10, color: p.color, fontWeight: 700 }}>{p.duration}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Community */}
+        <section style={{ padding: '0 18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Community</span>
+            <span onClick={() => setScreen('forum')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
+          </div>
+          {forumPosts.slice(0, 2).map(p => <ForumCard key={p.id} post={p} setScreen={setScreen} />)}
+        </section>
+
+        {/* Opportunities */}
+        <section style={{ padding: '0 18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Opportunities 🚀</span>
+            <span onClick={() => setScreen('opportunities')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
+          </div>
+          {opportunities.slice(0, 2).map(o => (
+            <OppCard key={o.id} opp={o} setScreen={setScreen} />
+          ))}
+        </section>
+      </div>
+    </div>
+  )
+}
+
+// ─── SHARED CARDS ─────────────────────────────────────────────────────────────
+function ForumCard({ post, setScreen }: { post: typeof forumPosts[0]; setScreen: (s: Screen) => void }) {
+  const [liked, setLiked] = useState(post.liked)
+  const [saved, setSaved] = useState(post.saved)
+  return (
+    <div style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+        <Avi name={post.avatar} size={38} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{post.user}</div>
+          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{post.course} · {post.time}</div>
+        </div>
+        <Pill text={post.tag} />
+      </div>
+      <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, margin: '0 0 12px' }}>{post.content}</p>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+        <button onClick={() => setLiked(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: liked ? '#C94C4C' : '#9CA3AF', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+          {Ic.heart('w-4 h-4')} {post.likes + (liked ? 1 : 0)}
+        </button>
+        <button onClick={() => setScreen('comments')} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+          {Ic.comment('w-4 h-4')} {post.comments}
+        </button>
+        <div style={{ flex: 1 }} />
+        <button onClick={() => setSaved(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: saved ? N.gold : '#9CA3AF' }}>{Ic.bookmark('w-4 h-4')}</button>
+        <button onClick={() => setScreen('share-sheet')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}>{Ic.share('w-4 h-4')}</button>
+      </div>
+    </div>
+  )
+}
+
+function OppCard({ opp, setScreen }: { opp: typeof opportunities[0]; setScreen: (s: Screen) => void }) {
+  const [saved, setSaved] = useState(false)
+  return (
+    <div onClick={() => setScreen('opportunity-detail')} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
+      <div style={{ width: 44, height: 44, background: opp.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+        {opp.type === 'Internship' ? '💼' : opp.type === 'Scholarship' ? '🎓' : opp.type === 'Competition' ? '🏆' : opp.type === 'Job' ? '📋' : '🎪'}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{opp.title}</div>
+        <div style={{ fontSize: 11, color: '#6B7280' }}>{opp.org}</div>
+        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>📍 {opp.location} · ⏰ {opp.deadline}</div>
+      </div>
+      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <Pill text={opp.tag} color={opp.color} />
+        <div style={{ fontSize: 11, fontWeight: 800, color: opp.color, marginTop: 4 }}>{opp.reward}</div>
+      </div>
+    </div>
+  )
+}
+
+// ─── EXPLORE ──────────────────────────────────────────────────────────────────
+function ExploreScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('All')
+  const [following, setFollowing] = useState<string[]>([])
+  const loading = useLoading(1000)
+  const filters = ['All','Notes','Past Papers','AI Content','Opportunities','Forums','Students']
+  const students = [
+    { name: 'Wanjiru Kamau', course: 'Computer Science', year: 'Y2', xp: 3100, initials: 'WK' },
+    { name: 'Brian Omondi', course: 'B.Com Finance', year: 'Y3', xp: 2240, initials: 'BO' },
+    { name: 'Aisha Mohamed', course: 'LLB Law', year: 'Y2', xp: 1870, initials: 'AM' },
+  ]
+  const docs = [
+    { title: 'ACT 101 Lecture Notes – Week 1-6', by: 'Prof. Kamau', dept: 'Actuarial Science', pages: 38, downloads: 312, type: 'PDF' },
+    { title: 'KU Past Papers 2020-2023 (MAT 101)', by: 'Student Library', dept: 'Mathematics', pages: 72, downloads: 891, type: 'PDF' },
+    { title: 'STA 101 Probability Slides', by: 'Dr. Njuguna', dept: 'Statistics', pages: 44, downloads: 567, type: 'PPT' },
+    { title: 'Interest Theory – Study Guide', by: 'Arnold Gichuru', dept: 'Actuarial Science', pages: 12, downloads: 148, type: 'PDF' },
+  ]
+  const filtered = filter === 'All' ? docs : filter === 'Notes' ? docs.filter(d => d.by.includes('Prof') || d.by.includes('Dr')) : filter === 'Past Papers' ? docs.filter(d => d.title.includes('Past')) : docs
+  if (loading) return <SkeletonExplore />
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 12 }}>Explore</div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(255,255,255,0.09)', borderRadius: 13, padding: '10px 14px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)' }}>{Ic.search()}</div>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search notes, papers, students..." style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto', paddingBottom: 2 }} className="scrollbar-hide">
+          {filters.map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, background: filter === f ? N.gold : 'rgba(255,255,255,0.1)', color: filter === f ? N.navy : 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{f}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+        {/* Trending */}
+        {(filter === 'All' || filter === 'Notes' || filter === 'Past Papers') && (
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>🔥 Trending at Kenyatta University</div>
+            <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
+              {[
+                { label: 'ACT 101 Interest Theory', count: '1.2k views', icon: '∑' },
+                { label: 'MAT 101 Integration', count: '980 views', icon: '∫' },
+                { label: 'STA 101 Distributions', count: '876 views', icon: 'σ' },
+                { label: 'ECO 101 Microeconomics', count: '644 views', icon: '📊' },
+              ].map((t, i) => (
+                <div key={i} onClick={() => setScreen('document-study')} style={{ flexShrink: 0, background: '#fff', borderRadius: 14, padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', minWidth: 148, cursor: 'pointer' }}>
+                  <div style={{ fontWeight: 800, fontSize: 20, color: N.gold, marginBottom: 6, fontFamily: 'Plus Jakarta Sans' }}>{t.icon}</div>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 2 }}>{t.label}</div>
+                  <div style={{ fontSize: 11, color: '#9CA3AF' }}>{t.count}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Documents */}
+        {filter !== 'Students' && filter !== 'Forums' && filter !== 'Opportunities' && (
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>📄 {filter === 'Past Papers' ? 'Past Papers' : filter === 'Notes' ? 'Lecture Notes' : 'Recent Documents'}</div>
+            {filtered.map((d, i) => (
+              <div key={i} onClick={() => setScreen('document-study')} style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ width: 42, height: 42, background: d.type === 'PDF' ? 'rgba(201,68,68,0.1)' : 'rgba(76,123,201,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{d.type === 'PDF' ? '📕' : '📊'}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{d.title}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>{d.by} · {d.dept}</div>
+                  <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>{d.pages} pages · ↓ {d.downloads}</div>
+                </div>
+                <Pill text={d.type} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Students */}
+        {(filter === 'All' || filter === 'Students') && (
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>👥 Students to Follow</div>
+            <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
+              {students.map((s, i) => (
+                <div key={i} style={{ flexShrink: 0, background: '#fff', borderRadius: 16, padding: '16px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', width: 148, textAlign: 'center' }}>
+                  <div onClick={() => setScreen('student-profile')} style={{ cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><Avi name={s.initials} size={48} /></div>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }}>{s.name.split(' ')[0]} {s.name.split(' ')[1]}</div>
+                    <div style={{ fontSize: 10, color: '#6B7280', marginBottom: 2 }}>{s.course} · {s.year}</div>
+                    <div style={{ fontSize: 10, color: N.gold, fontWeight: 700 }}>⭐ {s.xp.toLocaleString()} XP</div>
+                  </div>
+                  <button onClick={() => setFollowing(f => f.includes(s.initials) ? f.filter(x => x !== s.initials) : [...f, s.initials])}
+                    style={{ marginTop: 10, background: following.includes(s.initials) ? 'rgba(201,168,76,0.15)' : N.navy, color: following.includes(s.initials) ? N.gold : N.gold, border: following.includes(s.initials) ? `1px solid ${N.gold}44` : 'none', borderRadius: 10, padding: '6px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+                    {following.includes(s.initials) ? 'Following ✓' : 'Follow'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── CREATE MODAL ─────────────────────────────────────────────────────────────
+function CreateModal({ setScreen }: { setScreen: (s: Screen) => void }) {
+  return (
+    <div style={{ flex: 1, background: N.bg, overflowY: 'auto' }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontWeight: 800, fontSize: 20, color: '#fff' }}>Create</div>
+          <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: '#fff' }}>{Ic.close()}</div>
+          </button>
+        </div>
+      </div>
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {[
+          { icon: '📤', label: 'Upload Document', sub: 'PDF, Word, PowerPoint, Images, Notes', action: () => setScreen('upload'), gold: true },
+          { icon: '📖', label: 'Publish to Prepza Library', sub: 'Share educational materials · Earn XP', action: () => setScreen('publish-library') },
+          { icon: '💬', label: 'Create Group Post', sub: 'Share in a group or course community', action: () => setScreen('post-composer') },
+          { icon: '❓', label: 'Ask a Question', sub: 'Get help from the community', action: () => setScreen('question-composer') },
+          { icon: '👥', label: 'Create Group', sub: 'Start a course or study group', action: () => setScreen('group-create') },
+          { icon: '🚀', label: 'Share Opportunity', sub: 'Jobs, internships, scholarships, events', action: () => setScreen('share-opp-form') },
+        ].map((item, i) => (
+          <button key={i} onClick={item.action} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: item.gold ? `2px solid ${N.gold}44` : '1px solid rgba(0,0,0,0.05)', borderRadius: 16, padding: 16, cursor: 'pointer', textAlign: 'left', boxShadow: item.gold ? `0 4px 20px rgba(201,168,76,0.12)` : '0 2px 8px rgba(0,0,0,0.04)', fontFamily: 'Plus Jakarta Sans' }}>
+            <div style={{ width: 50, height: 50, borderRadius: 15, background: item.gold ? `linear-gradient(135deg,${N.gold},${N.goldL})` : `linear-gradient(135deg,${N.navy2},${N.navy3})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{item.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 3 }}>{item.label}</div>
+              <div style={{ fontSize: 12, color: '#6B7280' }}>{item.sub}</div>
+            </div>
+            {item.gold && <Pill text="CORE" />}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── POST COMPOSER ────────────────────────────────────────────────────────────
+function PostComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [text, setText] = useState('')
+  const [category, setCategory] = useState('General')
+  const [showPicker, setShowPicker] = useState<string|null>(null)
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.close()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>New Post</span>
+          <button onClick={() => setScreen('forum')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 12, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Post</button>
+        </div>
+      </div>
+      <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <Avi name="AG" size={40} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{USER.name}</div>
+            <div style={{ fontSize: 11, color: '#6B7280' }}>{USER.course} · {USER.year}</div>
+          </div>
+        </div>
+        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Share a study tip, ask for help, or start a discussion..." rows={6} style={{ width: '100%', border: 'none', outline: 'none', fontSize: 14, color: '#374151', fontFamily: 'Plus Jakarta Sans', resize: 'none', background: 'transparent', lineHeight: 1.7, boxSizing: 'border-box' }} />
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 8 }}>Category</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {['General','Study Tip','Q&A','Resources','Win','Announcement'].map(c => (
+              <button key={c} onClick={() => setCategory(c)} style={{ padding: '6px 12px', borderRadius: 20, background: category === c ? N.gold : '#F3F4F6', color: category === c ? N.navy : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{c}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setShowPicker('image')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12, color: '#374151' }}>{Ic.image('w-4 h-4')} Image</button>
+          <button onClick={() => setShowPicker('document')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12, color: '#374151' }}>{Ic.attach('w-4 h-4')} Document</button>
+          <button onClick={() => setShowPicker('unit')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12, color: '#374151' }}>📚 Unit</button>
+        </div>
+      </div>
+      {showPicker && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }}>
+          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 36px', width: '100%' }}>
+            <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 16 }}>{showPicker === 'image' ? 'Add Image' : showPicker === 'document' ? 'Attach Document' : 'Select Unit'}</div>
+            {showPicker === 'unit' ? (
+              ['ACT 101','MAT 101','STA 101','ECO 101'].map((u,i) => (
+                <button key={i} onClick={() => setShowPicker(null)} style={{ display: 'block', width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 12, padding: '13px 16px', marginBottom: 8, textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>{u}</button>
+              ))
+            ) : (
+              [['📷','Camera'],['🖼️','Photo Library'],['📂','Files']].map(([icon,label],i) => (
+                <button key={i} onClick={() => setShowPicker(null)} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 12, padding: '13px 16px', marginBottom: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+                  <span style={{ fontSize: 22 }}>{icon}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{label}</span>
+                </button>
+              ))
+            )}
+            <button onClick={() => setShowPicker(null)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', marginTop: 4, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── QUESTION COMPOSER ────────────────────────────────────────────────────────
+function QuestionComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [q, setQ] = useState('')
+  const [unit, setUnit] = useState('ACT 101')
+  const [showPicker, setShowPicker] = useState<string|null>(null)
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.close()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Ask a Question</span>
+          <button onClick={() => setScreen('forum')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 12, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Post</button>
+        </div>
+      </div>
+      <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Your question</div>
+          <textarea value={q} onChange={e => setQ(e.target.value)} placeholder="e.g. Can someone explain the difference between annuity-immediate and annuity-due?" rows={5} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', outline: 'none', fontSize: 14, color: '#374151', fontFamily: 'Plus Jakarta Sans', resize: 'none', background: '#fff', lineHeight: 1.7, borderRadius: 14, padding: 14, boxSizing: 'border-box' }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 8 }}>Unit / Course</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {['ACT 101','MAT 101','STA 101','ECO 101','Other'].map(u => (
+              <button key={u} onClick={() => setUnit(u)} style={{ padding: '7px 14px', borderRadius: 20, background: unit === u ? N.navy : '#F3F4F6', color: unit === u ? N.gold : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setShowPicker('image')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12, color: '#374151' }}>{Ic.image('w-4 h-4')} Add Image</button>
+          <button onClick={() => setShowPicker('document')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12, color: '#374151' }}>{Ic.attach('w-4 h-4')} Attach Doc</button>
+        </div>
+        {showPicker && (
+          <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 14, padding: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 10 }}>{showPicker === 'image' ? 'Add Image from:' : 'Attach Document from:'}</div>
+            {(showPicker === 'image' ? [['📷','Camera'],['🖼️','Photo Library']] : [['📂','Files'],['☁️','Google Drive']]).map(([icon,label],i) => (
+              <button key={i} onClick={() => setShowPicker(null)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 10, padding: '10px 12px', marginBottom: 6, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+                <span style={{ fontSize: 18 }}>{icon}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{label}</span>
+              </button>
+            ))}
+            <button onClick={() => setShowPicker(null)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 10, padding: '9px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12, color: '#374151' }}>Cancel</button>
+          </div>
+        )}
+        <div style={{ background: 'rgba(201,168,76,0.08)', border: `1px solid ${N.gold}30`, borderRadius: 14, padding: 14 }}>
+          <div style={{ fontSize: 12, color: N.gold, fontWeight: 700, marginBottom: 4 }}>✦ Try Prepza AI first</div>
+          <div style={{ fontSize: 12, color: '#6B7280' }}>Your AI tutor might already know the answer. <span onClick={() => setScreen('ai-tutor')} style={{ color: N.gold, fontWeight: 700, cursor: 'pointer' }}>Ask AI instead →</span></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── SHARE OPP FORM ───────────────────────────────────────────────────────────
+function ShareOppForm({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [form, setForm] = useState({ title: '', org: '', type: 'Internship', deadline: '', location: '', reward: '', desc: '', link: '' })
+  const upd = (k: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
+  const inp = (placeholder: string, key: string, type?: string) => (
+    <input type={type ?? 'text'} placeholder={placeholder} value={(form as any)[key]} onChange={upd(key)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: '#374151', background: '#fff', boxSizing: 'border-box' }} />
+  )
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Share Opportunity</span>
+          <button onClick={() => setScreen('opportunities')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 12, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Post</button>
+        </div>
+      </div>
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {[['Title', 'title'], ['Organisation', 'org'], ['Location', 'location'], ['Reward / Stipend (e.g. KES 35,000/mo)', 'reward'], ['Application Link', 'link']].map(([p, k]) => (
+          <div key={k}><div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>{p}</div>{inp(p as string, k as string)}</div>
+        ))}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Category</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {['Internship','Scholarship','Competition','Job','Event'].map(c => (
+              <button key={c} onClick={() => setForm(f => ({ ...f, type: c }))} style={{ padding: '7px 14px', borderRadius: 20, background: form.type === c ? N.navy : '#F3F4F6', color: form.type === c ? N.gold : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{c}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Deadline</div>
+          {inp('e.g. Sep 30, 2025', 'deadline')}
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Description</div>
+          <textarea value={form.desc} onChange={upd('desc')} placeholder="Describe the opportunity, requirements, and how to apply..." rows={4} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', resize: 'none', outline: 'none', color: '#374151', background: '#fff', lineHeight: 1.7, boxSizing: 'border-box' }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── EDU UPLOAD FORM ──────────────────────────────────────────────────────────
+function EduUploadForm({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [type, setType] = useState('Notes')
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <TopBar title="Upload Educational Content" onBack={() => setScreen('create-modal')} />
+      </div>
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 8 }}>Content Type</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {['Notes','Summary','Guide','Past Paper','Cheat Sheet','Other'].map(t => (
+              <button key={t} onClick={() => setType(t)} style={{ padding: '7px 14px', borderRadius: 20, background: type === t ? N.navy : '#F3F4F6', color: type === t ? N.gold : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{t}</button>
+            ))}
+          </div>
+        </div>
+        {[['Title', 'e.g. ACT 101 Interest Theory – Complete Notes'], ['Unit / Course', 'e.g. ACT 101'], ['University', 'e.g. Kenyatta University']].map(([l, p]) => (
+          <div key={l}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>{l}</div>
+            <input placeholder={p} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: '#374151', boxSizing: 'border-box' }} />
+          </div>
+        ))}
+        <button onClick={() => setScreen('upload')} style={{ background: `linear-gradient(135deg,${N.navy},${N.navy3})`, color: N.gold, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Select & Upload File →</button>
+      </div>
+    </div>
+  )
+}
+
+// ─── UPLOAD ───────────────────────────────────────────────────────────────────
+function UploadScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <TopBar title="Upload Document" onBack={() => setScreen('home')} />
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: -8 }}>Prepza AI processes your document instantly</div>
+      </div>
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div onDragOver={e => { e.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={e => { e.preventDefault(); setDragging(false); setScreen('processing') }} onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${dragging ? N.gold : 'rgba(11,20,55,0.18)'}`, borderRadius: 20, padding: '40px 20px', textAlign: 'center', background: dragging ? 'rgba(201,168,76,0.04)' : '#fff', cursor: 'pointer', transition: 'all 0.2s' }}>
+          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.png" style={{ display: 'none' }} onChange={() => setScreen('processing')} />
+          <div style={{ fontSize: 48, marginBottom: 12 }}>📤</div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 6 }}>Drop your file here</div>
+          <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>or tap to browse from your device</div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {['PDF','Word','PowerPoint','JPG','PNG','EPUB'].map(t => <span key={t} style={{ background: '#F3F4F6', color: '#374151', fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 20 }}>{t}</span>)}
+          </div>
+        </div>
+
+        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Or import from</div>
+        {[
+          { icon: '📷', label: 'Camera / Scan', sub: 'Photograph handwritten notes', color: N.gold },
+          { icon: '☁️', label: 'Google Drive', sub: 'Import directly from Drive', color: '#4C7BC9' },
+          { icon: '📱', label: 'Phone Storage', sub: 'Browse local files', color: '#4CC97B' },
+        ].map((s, i) => (
+          <button key={i} onClick={() => setScreen('processing')} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, padding: '14px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+            <div style={{ width: 42, height: 42, background: s.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{s.icon}</div>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{s.label}</div>
+              <div style={{ fontSize: 11, color: '#6B7280' }}>{s.sub}</div>
+            </div>
+            <div style={{ color: '#9CA3AF' }}>{Ic.chevR()}</div>
+          </button>
+        ))}
+
+        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginTop: 4 }}>Recent Uploads</div>
+        {[
+          { name: 'ACT_101_Lecture_Notes_Week1-6.pdf', size: '4.1 MB', date: 'Today' },
+          { name: 'MAT_101_Calculus_PastPapers.pdf', size: '2.3 MB', date: 'Yesterday' },
+        ].map((f, i) => (
+          <div key={i} onClick={() => setScreen('document-study')} style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', borderRadius: 14, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer' }}>
+            <div style={{ width: 38, height: 38, background: 'rgba(201,68,68,0.1)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>📕</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 12, color: N.navy }} className="line-clamp-1">{f.name}</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF' }}>{f.size} · {f.date}</div>
+            </div>
+            <Pill text="✓ Ready" color="#4CC97B" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── PROCESSING ───────────────────────────────────────────────────────────────
+function ProcessingScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [step, setStep] = useState(0)
+  useEffect(() => {
+    let i = 0
+    const t = setInterval(() => { i++; setStep(i); if (i >= 4) clearInterval(t) }, 900)
+    return () => clearInterval(t)
+  }, [])
+  const steps = ['Uploading document…','Extracting content…','AI analysing structure…','Generating study materials…','Ready to study!']
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.navy, padding: 32 }}>
+      <div style={{ position: 'relative', width: 120, height: 120, marginBottom: 36 }}>
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '3px solid rgba(201,168,76,0.18)' }} />
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '3px solid transparent', borderTopColor: N.gold, animation: 'spin-slow 1.1s linear infinite' }} />
+        <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', background: 'rgba(201,168,76,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img src={logoImg} alt="Prepza" style={{ width: 52, height: 52, borderRadius: 14 }} />
+        </div>
+      </div>
+      <div style={{ color: '#fff', fontWeight: 800, fontSize: 20, marginBottom: 6, textAlign: 'center' }}>Prepza AI is working…</div>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, textAlign: 'center', marginBottom: 40 }}>ACT 101 Lecture Notes – Week 1-6.pdf</div>
+      <div style={{ width: '100%', maxWidth: 280, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {steps.map((s, i) => (
+          <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ width: 24, height: 24, borderRadius: '50%', background: i <= step ? N.gold : 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.3s' }}>
+              {i <= step ? <div style={{ color: N.navy }}>{Ic.check('w-3 h-3')}</div> : <div style={{ width: 6, height: 6, background: 'rgba(255,255,255,0.25)', borderRadius: '50%' }} />}
+            </div>
+            <span style={{ fontSize: 13, color: i <= step ? '#fff' : 'rgba(255,255,255,0.35)', fontWeight: i <= step ? 600 : 400, transition: 'color 0.3s' }}>{s}</span>
+          </div>
+        ))}
+      </div>
+      {step >= 4 && (
+        <button onClick={() => setScreen('doc-ready')} style={{ marginTop: 44, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 44px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 4px 20px rgba(201,168,76,0.4)' }}>
+          View Document →
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── DOC READY ────────────────────────────────────────────────────────────────
+function DocReadyScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [busyAction, setBusyAction] = useState<string | null>(null)
+  const trigger = (label: string, dest: Screen, isAI = false) => {
+    if (busyAction) return
+    if (isAI) { setBusyAction(label); setTimeout(() => { setBusyAction(null); setScreen(dest) }, 1500) }
+    else setScreen(dest)
+  }
+  const actions = [
+    { icon: '🤖', label: 'Study with AI', sub: 'Ask questions about this doc', dest: 'document-study' as Screen, ai: false },
+    { icon: '❓', label: 'Ask Questions', sub: 'AI answers from your notes', dest: 'ai-tutor' as Screen, ai: false },
+    { icon: '📝', label: 'Summarize', sub: '2-page condensed notes', dest: 'summary' as Screen, ai: true },
+    { icon: '🧠', label: 'Generate Quiz', sub: '15 MCQ questions', dest: 'quiz' as Screen, ai: true },
+    { icon: '🃏', label: 'Flashcards', sub: '35 cards auto-generated', dest: 'flashcards' as Screen, ai: true },
+    { icon: '🎙️', label: 'Create Podcast', sub: '9-min audio episode', dest: 'podcast-player' as Screen, ai: true },
+    { icon: '📚', label: 'Save to Library', sub: 'Access offline anytime', dest: 'library' as Screen, ai: false },
+  ]
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <TopBar title="Document Ready ✓" onBack={() => setScreen('home')} />
+        <div style={{ background: 'rgba(76,201,123,0.12)', border: '1px solid rgba(76,201,123,0.3)', borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 24 }}>✅</span>
+          <div>
+            <div style={{ color: '#4CC97B', fontWeight: 700, fontSize: 13 }}>Processing Complete!</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>Your document is ready to study</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ padding: 18 }}>
+        {/* Doc info */}
+        <div style={{ background: '#fff', borderRadius: 16, padding: 16, marginBottom: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', display: 'flex', gap: 14, alignItems: 'center' }}>
+          <div style={{ width: 52, height: 52, background: 'rgba(201,68,68,0.1)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>📕</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy }}>ACT 101 Lecture Notes – Week 1-6</div>
+            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>PDF · 38 pages · 4.1 MB</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <Pill text="35 Flashcards" color="#4C7BC9" />
+              <Pill text="15 Quiz Questions" color="#4CC97B" />
+              <Pill text="9 min Podcast" color="#C94C4C" />
+            </div>
+          </div>
+        </div>
+        <div style={{ fontWeight: 800, fontSize: 15, color: N.navy, marginBottom: 12 }}>What would you like to do?</div>
+        {actions.map((a, i) => {
+          const isBusy = busyAction === a.label
+          return (
+            <button key={i} onClick={() => trigger(a.label, a.dest, a.ai)} disabled={!!busyAction} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: `1px solid ${isBusy ? N.gold + '55' : 'rgba(0,0,0,0.05)'}`, borderRadius: 14, padding: '14px 16px', marginBottom: 8, cursor: busyAction ? 'wait' : 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.04)', opacity: busyAction && !isBusy ? 0.55 : 1, transition: 'opacity 0.2s, border-color 0.2s' }}>
+              <div style={{ width: 44, height: 44, background: isBusy ? `linear-gradient(135deg,${N.gold},${N.goldL})` : `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isBusy ? 0 : 20, flexShrink: 0, transition: 'background 0.2s' }}>
+                {isBusy
+                  ? <div style={{ width: 18, height: 18, border: `2.5px solid ${N.navy}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.65s linear infinite' }} />
+                  : a.icon}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: isBusy ? N.gold : N.navy }}>{isBusy ? 'Generating…' : a.label}</div>
+                <div style={{ fontSize: 11, color: '#6B7280' }}>{a.sub}</div>
+              </div>
+              {!isBusy && <div style={{ color: '#9CA3AF' }}>{Ic.chevR()}</div>}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── DOCUMENT STUDY ───────────────────────────────────────────────────────────
+function DocumentStudyScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [tab, setTab] = useState<'doc'|'ai'|'tools'>('doc')
+  const [askInput, setAskInput] = useState('')
+  const [showMenu, setShowMenu] = useState(false)
+  const [showDots, setShowDots] = useState(false)
+  const [showRename, setShowRename] = useState(false)
+  const [showDelete, setShowDelete] = useState(false)
+  const [showReport, setShowReport] = useState(false)
+  const [renameVal, setRenameVal] = useState('ACT 101 – Interest Theory')
+  const [savedToLib, setSavedToLib] = useState(false)
+  const loading = useLoading(700)
+  const [messages, setMessages] = useState([
+    { role: 'ai', text: "I've read your ACT 101 notes. I can explain concepts, quiz you, create flashcards, or summarise any section. What would you like to do?\n\n📎 Using: ACT 101 – Interest Theory" },
+  ])
+
+  if (loading) return <SkeletonDocument />
+  const sendMsg = () => {
+    if (!askInput.trim()) return
+    const q = askInput; setAskInput('')
+    setMessages(m => [...m, { role: 'user', text: q }])
+    setTimeout(() => setMessages(m => [...m, { role: 'ai', text: `Great question about "${q}"! In the context of your ACT 101 notes, here's a clear explanation…` }]), 900)
+  }
+
+  const doExplain = () => {
+    setShowMenu(false); setTab('ai')
+    setMessages(m => [...m, { role: 'user', text: 'Explain the compound interest accumulation function' }, { role: 'ai', text: 'The compound interest accumulation function is:\n\nA(t) = A(0)(1+i)ᵗ\n\nWhere:\n• A(0) = initial principal\n• i = effective annual interest rate\n• t = time in years\n\nKey insight: under compound interest, each period\'s interest is reinvested, so you earn "interest on interest."\n\nKenyan example: KES 10,000 at 8% for 3 years:\nA(3) = 10,000 × (1.08)³ = KES 12,597.12 ✓' }])
+  }
+  const doSimplify = () => {
+    setShowMenu(false); setTab('ai')
+    setMessages(m => [...m, { role: 'user', text: 'Simplify this section for me' }, { role: 'ai', text: '✨ Simplified version:\n\nCompound interest = money growing on top of money that already grew.\n\nThink of it like a snowball rolling downhill — it gets bigger every time it rolls.\n\nSimple rule: A(t) = Starting amount × (1 + rate)^years\n\nAt 8% interest:\n• Year 1: KES 10,000 → KES 10,800\n• Year 2: KES 10,800 → KES 11,664\n• Year 3: KES 11,664 → KES 12,597' }])
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }} className="line-clamp-1">ACT 101 – Interest Theory</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>38 pages · Processed</div>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setShowDots(v => !v)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
+            {showDots && (
+              <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, width: 160, overflow: 'hidden' }}>
+                <button onClick={() => { setShowDots(false); setShowRename(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>Rename</button>
+                <button onClick={() => { setShowDots(false); setSavedToLib(true); setTimeout(() => setSavedToLib(false), 2000) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>Download ↓</button>
+                <button onClick={() => { setShowDots(false); setScreen('share-sheet') }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>Share</button>
+                <button onClick={() => { setShowDots(false); setSavedToLib(true); setTimeout(() => setSavedToLib(false), 2000) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>Save to Library</button>
+                <button onClick={() => { setShowDots(false); setShowDelete(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: '#C94C4C', cursor: 'pointer' }}>Delete</button>
+                <button onClick={() => { setShowDots(false); setShowReport(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: '#C94C4C', cursor: 'pointer' }}>Report</button>
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 3, gap: 2 }}>
+          {(['doc','ai','tools'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '7px 0', borderRadius: 9, background: tab === t ? N.gold : 'transparent', color: tab === t ? N.navy : 'rgba(255,255,255,0.55)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', transition: 'all 0.2s' }}>
+              {t === 'doc' ? '📄 Document' : t === 'ai' ? '✦ AI Chat' : '🛠 Tools'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: 18 }} className="scrollbar-hide">
+        {tab === 'doc' && (
+          <div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }} className="scrollbar-hide">
+              <button onClick={doExplain} style={{ flexShrink: 0, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, border: `1px solid ${N.gold}33`, color: N.gold, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Explain</button>
+              <button onClick={doSimplify} style={{ flexShrink: 0, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, border: `1px solid ${N.gold}33`, color: N.gold, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Simplify</button>
+              <button onClick={() => setScreen('quiz')} style={{ flexShrink: 0, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, border: `1px solid ${N.gold}33`, color: N.gold, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Quiz Me</button>
+              <button onClick={() => setScreen('flashcards')} style={{ flexShrink: 0, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, border: `1px solid ${N.gold}33`, color: N.gold, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Flashcards</button>
+            </div>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 18, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 4 }}>Chapter 3: Interest Theory</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>Section 3.1 – Simple and Compound Interest</div>
+              <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, margin: '0 0 14px' }}>
+                Interest theory forms the mathematical foundation of actuarial science. The <strong>accumulation function</strong> A(t) describes how a principal amount grows over time under a given interest rate structure.
+              </p>
+              <div onClick={() => setShowMenu(v => !v)} style={{ background: showMenu ? 'rgba(201,168,76,0.2)' : 'transparent', borderRadius: 6, cursor: 'pointer', padding: '2px 0', transition: 'background 0.2s', marginBottom: 14 }}>
+                <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, margin: 0 }}>
+                  Under <strong>compound interest</strong>, the accumulation function is A(t) = A(0)(1+i)ᵗ, where i is the effective annual interest rate. For a principal of KES 10,000 at 8% p.a. for 3 years, A(3) = 10,000 × (1.08)³ = KES 12,597.12. The key property is that interest earned in one period itself earns interest in subsequent periods.
+                </p>
+              </div>
+              {showMenu && (
+                <div style={{ background: N.navy, borderRadius: 12, padding: '8px 6px', display: 'flex', gap: 6, marginBottom: 14 }}>
+                  <button onClick={doExplain} style={{ flex: 1, background: `rgba(201,168,76,0.15)`, border: `1px solid ${N.gold}30`, color: N.gold, fontSize: 10, fontWeight: 700, padding: '7px 2px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Explain</button>
+                  <button onClick={doSimplify} style={{ flex: 1, background: `rgba(201,168,76,0.15)`, border: `1px solid ${N.gold}30`, color: N.gold, fontSize: 10, fontWeight: 700, padding: '7px 2px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Simplify</button>
+                  <button onClick={() => { setShowMenu(false); setScreen('quiz') }} style={{ flex: 1, background: `rgba(201,168,76,0.15)`, border: `1px solid ${N.gold}30`, color: N.gold, fontSize: 10, fontWeight: 700, padding: '7px 2px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Quiz Me</button>
+                  <button onClick={() => { setShowMenu(false); setScreen('flashcards') }} style={{ flex: 1, background: `rgba(201,168,76,0.15)`, border: `1px solid ${N.gold}30`, color: N.gold, fontSize: 10, fontWeight: 700, padding: '7px 2px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cards</button>
+                  <button onClick={() => setShowMenu(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 10, fontWeight: 700, padding: '7px 8px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>✕</button>
+                </div>
+              )}
+              <div style={{ background: `rgba(201,168,76,0.08)`, borderRadius: 12, padding: '12px 14px', border: `1px solid ${N.gold}25` }}>
+                <div style={{ fontSize: 11, color: N.gold, fontWeight: 700, marginBottom: 4 }}>✦ Tip: Highlight any text</div>
+                <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.6 }}>Tap any paragraph to get AI explanations, simplifications, or generate quiz questions from that specific text.</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'ai' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {messages.map((m, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', gap: 10, alignItems: 'flex-start' }}>
+                {m.role === 'ai' && <div style={{ width: 30, height: 30, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>✦</div>}
+                <div style={{ maxWidth: '78%', background: m.role === 'user' ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: m.role === 'user' ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '11px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
+                  <div style={{ fontSize: 13, color: m.role === 'user' ? '#fff' : '#374151', lineHeight: 1.7 }}>{m.text}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === 'tools' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[
+              { icon: '🃏', title: 'Flashcards', sub: '35 cards generated', action: () => setScreen('flashcards'), color: N.gold },
+              { icon: '🧠', title: 'Practice Quiz', sub: '15 MCQ questions', action: () => setScreen('quiz'), color: '#4C7BC9' },
+              { icon: '📝', title: 'Summary', sub: '2-page condensed notes', action: () => setScreen('summary'), color: '#4CC97B' },
+              { icon: '🎙️', title: 'Study Podcast', sub: '9 min AI-generated episode', action: () => setScreen('podcast-player'), color: '#C94C4C' },
+              { icon: '🗺️', title: 'Mind Map', sub: 'Visual concept overview', action: () => setScreen('mind-map'), color: '#9B59B6' },
+              { icon: '📚', title: 'Save to Library', sub: 'Access offline anytime', action: () => setSavedToLib(true), color: '#6B7280' },
+            ].map((t, i) => (
+              <button key={i} onClick={t.action} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: '1px solid rgba(0,0,0,0.04)', borderRadius: 14, padding: '13px 15px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', fontFamily: 'Plus Jakarta Sans' }}>
+                <div style={{ width: 44, height: 44, background: t.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{t.icon}</div>
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{t.title}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>{t.sub}</div>
+                </div>
+                <div style={{ color: '#9CA3AF' }}>{Ic.chevR()}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: '10px 14px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+        {savedToLib && <div style={{ background: '#D1FAE5', color: '#065F46', fontSize: 12, fontWeight: 700, padding: '8px 14px', borderRadius: 10, marginBottom: 8, textAlign: 'center' }}>✓ Saved to Library</div>}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(11,20,55,0.08)' }}>
+          <input value={askInput} onChange={e => setAskInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMsg()} placeholder="Ask about this document…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
+          <button onClick={sendMsg} style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: N.navy }}>{Ic.send('w-4 h-4')}</div>
+          </button>
+        </div>
+      </div>
+
+      {/* Rename modal */}
+      {showRename && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 16 }}>Rename Document</div>
+            <input value={renameVal} onChange={e => setRenameVal(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button onClick={() => setShowRename(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+              <button onClick={() => setShowRename(false)} style={{ flex: 1, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: N.navy }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete modal */}
+      {showDelete && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 8 }}>Delete Document?</div>
+            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20 }}>This will permanently remove "ACT 101 – Interest Theory" from your library.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowDelete(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+              <button onClick={() => { setShowDelete(false); setScreen('home') }} style={{ flex: 1, background: '#C94C4C', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: '#fff' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Report modal */}
+      {showReport && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 14 }}>Report Document</div>
+            {['Inaccurate content','Plagiarised material','Inappropriate content','Copyright violation','Other'].map((r, i) => (
+              <button key={i} onClick={() => setShowReport(false)} style={{ display: 'block', width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 10, padding: '11px 14px', marginBottom: 8, textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>{r}</button>
+            ))}
+            <button onClick={() => setShowReport(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', marginTop: 4, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── AI TUTOR ─────────────────────────────────────────────────────────────────
+function AITutorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [messages, setMessages] = useState([
+    { role: 'ai', text: "Hello Arnold! 👋 I'm your Prepza AI Tutor. I can help you with ACT 101, MAT 101, STA 101 — or any topic you're studying.\n\nWhat would you like to work on today?" },
+    { role: 'user', text: 'Explain the concept of present value with a Kenyan example' },
+    { role: 'ai', text: "Great question! Present Value (PV) answers: \"How much is a future amount worth today?\"\n\nFormula: PV = FV / (1+i)ⁿ\n\nKenyan Example:\nYou're promised KES 100,000 in 2 years. Safaricom Money offers 10% p.a. What's it worth today?\n\nPV = 100,000 / (1.10)² = KES 82,645\n\nSo KES 82,645 today is equivalent to KES 100,000 in 2 years at 10%. This is exactly the kind of calculation an actuary at Jubilee Insurance would do daily! 💡" },
+  ])
+  const [input, setInput] = useState('')
+  const [context, setContext] = useState('ACT 101')
+  const [voiceMode, setVoiceMode] = useState(false)
+  const loadingAI = useLoading(600)
+  if (loadingAI) return <SkeletonAITutor />
+
+  const send = () => {
+    if (!input.trim()) return
+    const q = input; setInput('')
+    setMessages(m => [...m, { role: 'user', text: q }])
+    setTimeout(() => setMessages(m => [...m, { role: 'ai', text: `Good question! Here's a clear explanation related to your ${context} studies…` }]), 900)
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✦</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Prepza AI Tutor</div>
+            <div style={{ fontSize: 11, color: '#4CC97B', fontWeight: 600 }}>● Online · Ready to help</div>
+          </div>
+        </div>
+        {/* Context selector */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, overflowX: 'auto' }} className="scrollbar-hide">
+          {['ACT 101','MAT 101','STA 101','All Materials','General'].map(c => (
+            <button key={c} onClick={() => setContext(c)} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 20, background: context === c ? 'rgba(201,168,76,0.25)' : 'rgba(255,255,255,0.08)', border: `1px solid ${context === c ? N.gold+'55' : 'rgba(255,255,255,0.1)'}`, color: context === c ? N.gold : 'rgba(255,255,255,0.6)', fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{c}</button>
+          ))}
+        </div>
+        {/* Quick actions */}
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }} className="scrollbar-hide">
+          {['Explain','Quiz Me','Summarize','Flashcards','Podcast'].map(a => (
+            <button key={a} onClick={() => { setInput(a + ' '); }} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 20, background: `rgba(201,168,76,0.12)`, border: `1px solid ${N.gold}30`, color: N.gold, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{a}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }} className="scrollbar-hide">
+        {messages.map((m, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', gap: 10, alignItems: 'flex-start' }}>
+            {m.role === 'ai' && <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>✦</div>}
+            <div style={{ maxWidth: '80%', background: m.role === 'user' ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: m.role === 'user' ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
+              <div style={{ fontSize: 13, color: m.role === 'user' ? '#fff' : '#374151', lineHeight: 1.75, whiteSpace: 'pre-line' }}>{m.text}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {voiceMode && (
+        <div style={{ margin: '0 16px 8px', background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 56, height: 56, background: `rgba(201,168,76,0.2)`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${N.gold}`, animation: 'pulse-gold 1.5s infinite' }}>
+            <div style={{ color: N.gold }}>{Ic.mic()}</div>
+          </div>
+          <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>Listening…</div>
+          <button onClick={() => setVoiceMode(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, borderRadius: 10, padding: '7px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel</button>
+        </div>
+      )}
+
+      <div style={{ padding: '10px 14px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(11,20,55,0.08)' }}>
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Ask your AI tutor anything…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
+          <button onClick={() => setVoiceMode(v => !v)} style={{ width: 32, height: 32, background: voiceMode ? `rgba(201,168,76,0.2)` : '#F3F4F6', border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: voiceMode ? N.gold : '#6B7280' }}>{Ic.mic('w-4 h-4')}</div>
+          </button>
+          <button onClick={send} style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: N.navy }}>{Ic.send('w-4 h-4')}</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── FLASHCARDS ───────────────────────────────────────────────────────────────
+function FlashcardsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [idx, setIdx] = useState(0)
+  const [flipped, setFlipped] = useState(false)
+  const [known, setKnown] = useState<number[]>([])
+  const loading = useLoading(500)
+  if (loading) return <SkeletonFlashcards />
+  const card = flashcardData[idx]
+  const next = (k: boolean) => {
+    if (k) setKnown(n => [...n, idx])
+    setFlipped(false)
+    setTimeout(() => setIdx(i => (i + 1) % flashcardData.length), 150)
+  }
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Flashcards</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>ACT 101 – Interest Theory · 35 cards</div>
+          </div>
+          <Pill text={`${known.length}/${flashcardData.length} Known`} color="#4CC97B" />
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 99, height: 5, overflow: 'hidden' }}>
+          <div style={{ width: `${((idx + 1) / flashcardData.length) * 100}%`, height: '100%', background: N.gold, borderRadius: 99, transition: 'width 0.3s' }} />
+        </div>
+        <div style={{ textAlign: 'right', marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{idx + 1} / {flashcardData.length}</div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', gap: 24 }}>
+        <div onClick={() => setFlipped(v => !v)} style={{ width: '100%', minHeight: 220, background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 8px 32px rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: `2px solid ${flipped ? N.gold + '44' : 'transparent'}`, transition: 'border-color 0.2s' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: flipped ? N.gold : '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>{flipped ? 'Answer' : 'Question — tap to reveal'}</div>
+          <div style={{ fontSize: 14, color: N.navy, fontWeight: flipped ? 600 : 700, lineHeight: 1.7, whiteSpace: 'pre-line' }}>{flipped ? card.a : card.q}</div>
+        </div>
+        {flipped && (
+          <div style={{ display: 'flex', gap: 14, width: '100%' }}>
+            <button onClick={() => next(false)} style={{ flex: 1, background: '#FEE2E2', color: '#C94C4C', fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>✗ Still Learning</button>
+            <button onClick={() => next(true)} style={{ flex: 1, background: '#D1FAE5', color: '#065F46', fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>✓ Got It</button>
+          </div>
+        )}
+        {!flipped && (
+          <div style={{ color: '#9CA3AF', fontSize: 12, textAlign: 'center' }}>Tap the card to see the answer</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── QUIZ ─────────────────────────────────────────────────────────────────────
+function QuizScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [qi, setQi] = useState(0)
+  const [selected, setSelected] = useState<number|null>(null)
+  const [score, setScore] = useState(0)
+  const [done, setDone] = useState(false)
+  const loading = useLoading(500)
+  if (loading) return <SkeletonQuiz />
+  const q = quizData[qi]
+  const choose = (i: number) => {
+    if (selected !== null) return
+    setSelected(i)
+    if (i === q.ans) setScore(s => s + 1)
+    setTimeout(() => {
+      if (qi + 1 >= quizData.length) setDone(true)
+      else { setQi(qi + 1); setSelected(null) }
+    }, 1100)
+  }
+  if (done) return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: 32 }}>
+      <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
+      <div style={{ fontWeight: 800, fontSize: 24, color: N.navy, marginBottom: 6 }}>Quiz Complete!</div>
+      <div style={{ fontSize: 15, color: '#6B7280', marginBottom: 24 }}>You scored {score}/{quizData.length}</div>
+      <div style={{ width: 100, height: 100, borderRadius: '50%', background: score >= 3 ? '#D1FAE5' : '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 32 }}>
+        <div style={{ fontWeight: 800, fontSize: 26, color: score >= 3 ? '#065F46' : '#C94C4C' }}>{Math.round((score/quizData.length)*100)}%</div>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={() => { setQi(0); setScore(0); setDone(false); setSelected(null) }} style={{ background: N.navy, color: N.gold, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 14, padding: '12px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Try Again</button>
+        <button onClick={() => setScreen('document-study')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 14, padding: '12px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Notes</button>
+      </div>
+    </div>
+  )
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Practice Quiz</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>ACT 101 – Interest Theory</div>
+          </div>
+          <Pill text={`${score} correct`} color="#4CC97B" />
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 99, height: 5, overflow: 'hidden' }}>
+          <div style={{ width: `${((qi) / quizData.length) * 100}%`, height: '100%', background: N.gold, borderRadius: 99, transition: 'width 0.3s' }} />
+        </div>
+        <div style={{ textAlign: 'right', marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Q{qi+1} of {quizData.length}</div>
+      </div>
+      <div style={{ flex: 1, padding: 20 }}>
+        <div style={{ background: '#fff', borderRadius: 18, padding: 20, marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: N.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Question {qi+1}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: N.navy, lineHeight: 1.7 }}>{q.q}</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {q.opts.map((opt, i) => {
+            const isSelected = selected === i
+            const isCorrect = i === q.ans
+            const bg = selected !== null
+              ? isCorrect ? '#D1FAE5' : isSelected ? '#FEE2E2' : '#fff'
+              : '#fff'
+            const color = selected !== null
+              ? isCorrect ? '#065F46' : isSelected ? '#C94C4C' : N.navy
+              : N.navy
+            return (
+              <button key={i} onClick={() => choose(i)} style={{ background: bg, border: `2px solid ${selected !== null && isCorrect ? '#4CC97B' : selected !== null && isSelected ? '#C94C4C' : 'rgba(0,0,0,0.06)'}`, borderRadius: 14, padding: '14px 16px', cursor: selected !== null ? 'default' : 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans', fontSize: 13, fontWeight: 600, color, transition: 'all 0.2s', display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: selected !== null && isCorrect ? '#4CC97B' : selected !== null && isSelected ? '#C94C4C' : 'rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: selected !== null && (isCorrect || isSelected) ? '#fff' : N.navy, flexShrink: 0 }}>{String.fromCharCode(65+i)}</div>
+                {opt}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── PODCAST PLAYER ───────────────────────────────────────────────────────────
+function PodcastPlayerScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [playing, setPlaying] = useState(false)
+  const [progress, setProgress] = useState(0.28)
+  const loading = useLoading(800)
+  if (loading) return <SkeletonPodcast />
+  const pod = podcasts[0]
+  const total = 9 * 60
+  const current = Math.floor(progress * total)
+  const fmt = (s: number) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <TopBar title="Study Podcast" onBack={() => setScreen('podcast-library')} />
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 28px', gap: 28 }}>
+        {/* Album art */}
+        <div style={{ width: 200, height: 200, borderRadius: 28, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 16px 48px rgba(201,168,76,0.35)`, fontSize: 80, fontWeight: 800, color: N.navy, fontFamily: 'Plus Jakarta Sans' }}>∑</div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontWeight: 800, fontSize: 20, color: N.navy, marginBottom: 4 }}>{pod.title}</div>
+          <div style={{ fontSize: 13, color: '#6B7280' }}>ACT 101 · Kenyatta University · {pod.duration}</div>
+          <Pill text="AI Generated" color={N.gold} />
+        </div>
+        {/* Progress */}
+        <div style={{ width: '100%' }}>
+          <input type="range" min={0} max={1} step={0.01} value={progress} onChange={e => setProgress(+e.target.value)} style={{ width: '100%', accentColor: N.gold, cursor: 'pointer' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>
+            <span>{fmt(current)}</span><span>{fmt(total)}</span>
+          </div>
+        </div>
+        {/* Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+          <button onClick={() => setProgress(p => Math.max(0, p - 0.15))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: N.navy }}>{Ic.rewind()}</button>
+          <button onClick={() => setPlaying(v => !v)} style={{ width: 64, height: 64, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 20px rgba(201,168,76,0.4)` }}>
+            <div style={{ color: N.navy }}>{playing ? Ic.pause() : Ic.play()}</div>
+          </button>
+          <button onClick={() => setProgress(p => Math.min(1, p + 0.15))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: N.navy }}>{Ic.skip()}</button>
+        </div>
+        {/* More episodes */}
+        <div style={{ width: '100%' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>More Episodes</div>
+          {podcasts.slice(1).map((p, i) => (
+            <div key={i} onClick={() => setScreen('podcast-player')} style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', borderRadius: 14, padding: 12, marginBottom: 8, boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+              <div style={{ width: 42, height: 42, background: `linear-gradient(135deg,${p.color},${p.color}99)`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: '#fff', fontWeight: 800 }}>{p.icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }}>{p.title}</div>
+                <div style={{ fontSize: 11, color: '#6B7280' }}>{p.subject} · {p.duration}</div>
+              </div>
+              <div style={{ color: N.gold }}>{Ic.play('w-4 h-4')}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── SUMMARY ──────────────────────────────────────────────────────────────────
+function SummaryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [saved, setSaved] = useState(false)
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>AI Summary</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>ACT 101 – Interest Theory</div>
+          </div>
+          <button onClick={() => setScreen('share-sheet')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, padding: '7px 12px', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginRight: 6 }}>Share</button>
+          <button onClick={() => setSaved(true)} style={{ background: saved ? `linear-gradient(135deg,${N.gold},${N.goldL})` : 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, padding: '7px 12px', color: saved ? N.navy : '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{saved ? '✓ Saved' : 'Save'}</button>
+        </div>
+        {saved && <div style={{ background: 'rgba(76,201,123,0.15)', border: '1px solid rgba(76,201,123,0.3)', borderRadius: 10, padding: '7px 12px', marginTop: 8, fontSize: 12, color: '#4CC97B', fontWeight: 600 }}>✓ Saved to your Library</div>}
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 18 }} className="scrollbar-hide">
+        <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+          <Pill text="AI Generated · 2 min read" />
+          <div style={{ fontWeight: 800, fontSize: 18, color: N.navy, margin: '14px 0 6px' }}>ACT 101: Interest Theory – Key Concepts</div>
+          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 20 }}>Generated from your 38-page lecture notes</div>
+          {[
+            { title: '1. Simple vs Compound Interest', body: 'Simple interest: A(t) = A(0)(1 + it). Interest earned does not itself earn interest.\n\nCompound interest: A(t) = A(0)(1+i)ᵗ. Interest is reinvested each period. Always use compound for exam questions unless stated.' },
+            { title: '2. Present & Future Value', body: 'Future Value: FV = PV(1+i)ⁿ\nPresent Value: PV = FV/(1+i)ⁿ = FV·vⁿ where v = 1/(1+i)\n\nKES 100,000 in 5 years at 10%: PV = 100,000/(1.1)⁵ = KES 62,092' },
+            { title: '3. Annuities', body: 'Annuity-immediate: payments at END of period. a(n,i) = (1-vⁿ)/i\n\nAnnuity-due: payments at START of period. ä(n,i) = (1+i)·a(n,i)\n\nPerpetuity: a(∞,i) = 1/i' },
+            { title: '4. Force of Interest', body: 'δ = ln(1+i) — continuously compounded rate.\n\nFor i = 10%: δ = ln(1.1) = 9.53%\n\nRelation: e^δ = 1+i' },
+          ].map((s, i) => (
+            <div key={i} style={{ marginBottom: 20 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 8 }}>{s.title}</div>
+              <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{s.body}</div>
+              {i < 3 && <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', marginTop: 20 }} />}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── FORUM ────────────────────────────────────────────────────────────────────
+function ForumScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [filter, setFilter] = useState('For You')
+  const loading = useLoading(1000)
+  const filters = ['For You','My Course','My Year','Trending']
+  const filtered = filter === 'My Course' ? forumPosts.filter(p => p.course.includes('Actuarial') || p.course.includes('Finance'))
+    : filter === 'My Year' ? forumPosts.filter((_, i) => i < 2)
+    : filter === 'Trending' ? [...forumPosts].sort((a, b) => b.likes - a.likes)
+    : forumPosts
+  if (loading) return <SkeletonForum />
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>Community</span>
+          <button onClick={() => setScreen('post-composer')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 11, padding: '8px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 12, color: N.navy }}>+ Post</button>
+        </div>
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }} className="scrollbar-hide">
+          {filters.map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, background: filter === f ? N.gold : 'rgba(255,255,255,0.1)', color: filter === f ? N.navy : 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{f}</button>
+          ))}
+        </div>
+      </div>
+      {/* My Groups */}
+      <div style={{ padding: '14px 16px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>My Groups</div>
+          <button onClick={() => setScreen('group-create')} style={{ fontSize: 12, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ New</button>
+        </div>
+        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', marginBottom: 16 }} className="scrollbar-hide">
+          {[
+            { name: 'ACT 101 · KU', members: 248, initials: 'A1' },
+            { name: 'STA 101 · KU', members: 183, initials: 'S1' },
+            { name: 'Year 1 Actuarial', members: 412, initials: 'YA' },
+          ].map((g, i) => (
+            <button key={i} onClick={() => setScreen('group-detail')} style={{ flexShrink: 0, background: '#fff', border: 'none', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans', minWidth: 130 }}>
+              <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.gold, marginBottom: 8 }}>{g.initials}</div>
+              <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 2 }}>{g.name}</div>
+              <div style={{ fontSize: 10, color: '#9CA3AF' }}>{g.members} members</div>
+            </button>
+          ))}
+          <button onClick={() => setScreen('explore')} style={{ flexShrink: 0, background: '#F3F4F6', border: '1.5px dashed #D1D5DB', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: 'none', fontFamily: 'Plus Jakarta Sans', minWidth: 130, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <div style={{ width: 38, height: 38, background: '#E5E7EB', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>+</div>
+            <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textAlign: 'center' }}>Find groups</div>
+          </button>
+        </div>
+        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Recent Posts</div>
+        {filtered.length === 0 ? (
+          <EmptyState icon="💬" title="No posts yet" sub="Join a group and start a discussion." action="Find Groups" onAction={() => setScreen('explore')} />
+        ) : filtered.map(p => <ForumCard key={p.id} post={p} setScreen={setScreen} />)}
+      </div>
+    </div>
+  )
+}
+
+// ─── COMMENTS ────────────────────────────────────────────────────────────────
+function CommentsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [input, setInput] = useState('')
+  const [comments, setComments] = useState([
+    { user: 'Brian Omondi', avatar: 'BO', text: 'Completely agree! The podcast feature saved me during my commute this morning.', time: '2h', likes: 12 },
+    { user: 'Aisha Mohamed', avatar: 'AM', text: 'How long did it take for Prepza to process your notes? Mine took about 1 min for 50 pages', time: '1h', likes: 4 },
+    { user: 'David Njoroge', avatar: 'DN', text: 'Try the flashcard mode too — generated 40 cards from my Physiology notes in seconds', time: '45m', likes: 8 },
+  ])
+  const sendComment = () => {
+    if (!input.trim()) return
+    setComments(c => [...c, { user: USER.name, avatar: USER.initials, text: input, time: 'Just now', likes: 0 }])
+    setInput('')
+  }
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('forum')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Comments ({comments.length})</span>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }} className="scrollbar-hide">
+        {comments.map((c, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+              <Avi name={c.avatar} size={34} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{c.user}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{c.time}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, marginBottom: 8 }}>{c.text}</div>
+            <button style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+              {Ic.heart('w-3 h-3')} {c.likes}
+            </button>
+          </div>
+        ))}
+      </div>
+      <div style={{ padding: '10px 14px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.07)' }}>
+          <Avi name={USER.initials} size={28} />
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendComment()} placeholder="Add a comment…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
+          <button onClick={sendComment} style={{ width: 30, height: 30, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: N.navy }}>{Ic.send('w-3 h-3')}</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── CHATS ────────────────────────────────────────────────────────────────────
+function ChatsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [tab, setTab] = useState<'Chats'|'Groups'|'Requests'>('Chats')
+  const [search, setSearch] = useState('')
+  const loading = useLoading(700)
+  if (loading) return <SkeletonChats />
+  const displayed = chatList.filter(c => {
+    const matchSearch = c.name.toLowerCase().includes(search.toLowerCase())
+    const matchTab = tab === 'Groups' ? c.isGroup : tab === 'Requests' ? false : !c.isGroup || c.isGroup
+    return matchSearch && matchTab
+  })
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      <div style={{ background: N.navy, padding: '0 18px 14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontWeight: 800, fontSize: 20, color: '#fff' }}>Chats</span>
+          <button onClick={() => setScreen('new-chat')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: '#fff' }}>{Ic.plus()}</div>
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(255,255,255,0.09)', borderRadius: 12, padding: '9px 12px', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 12 }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)' }}>{Ic.search('w-4 h-4')}</div>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search conversations…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 0, background: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 3 }}>
+          {(['Chats','Groups','Requests'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '7px 0', borderRadius: 9, background: tab === t ? N.gold : 'transparent', color: tab === t ? N.navy : 'rgba(255,255,255,0.55)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', transition: 'all 0.2s' }}>{t}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Pinned AI */}
+      <div onClick={() => setScreen('ai-tutor')} style={{ margin: '12px 14px 0', background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: `1px solid ${N.gold}25` }}>
+        <div style={{ width: 44, height: 44, background: `rgba(201,168,76,0.18)`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>✦</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>Prepza AI Tutor</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Your personal study assistant</div>
+        </div>
+        <Pill text="AI" color={N.gold} />
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto' }} className="scrollbar-hide">
+        {tab === 'Requests' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: 44, marginBottom: 12 }}>📬</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No requests</div>
+            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>New chat requests will appear here</div>
+          </div>
+        ) : displayed.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: 44, marginBottom: 12 }}>💬</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No conversations</div>
+            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Start a new chat to connect with classmates</div>
+          </div>
+        ) : displayed.map(chat => (
+          <div key={chat.id} onClick={() => setScreen('chat-detail')} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+            <div style={{ position: 'relative' }}>
+              <Avi name={chat.avatar} size={46} emoji={chat.avatar.length > 2 ? chat.avatar : undefined} />
+              {chat.isGroup && <div style={{ position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: N.navy, fontWeight: 800 }}>G</div>}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                <span style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{chat.name}</span>
+                <span style={{ fontSize: 11, color: '#9CA3AF' }}>{chat.time}</span>
+              </div>
+              <div style={{ fontSize: 12, color: '#6B7280' }} className="line-clamp-1">{chat.last}</div>
+            </div>
+            {chat.unread > 0 && <div style={{ width: 22, height: 22, background: N.gold, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── CHAT DETAIL ──────────────────────────────────────────────────────────────
+function ChatDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [input, setInput] = useState('')
+  const [msgs, setMsgs] = useState(chatMessages)
+  const [showAttach, setShowAttach] = useState(false)
+  const loading = useLoading(500)
+  if (loading) return <SkeletonChatDetail />
+  const send = () => {
+    if (!input.trim()) return
+    setMsgs(m => [...m, { sender: 'Me', text: input, time: '9:41', me: true }])
+    setInput('')
+  }
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 16px 14px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button onClick={() => setScreen('chats')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <Avi name="∑" size={38} emoji="∑" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>ACT 101 Study Group</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>18 members · 4 online</div>
+          </div>
+          <button onClick={() => setScreen('chat-options')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }} className="scrollbar-hide">
+        {msgs.map((m, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: m.me ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: m.me ? 'flex-end' : 'flex-start', gap: 2 }}>
+            {!m.me && <span style={{ fontSize: 11, color: N.gold, fontWeight: 700, marginLeft: 4 }}>{m.sender}</span>}
+            <div style={{ maxWidth: '76%', background: m.me ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: m.me ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '10px 13px', boxShadow: '0 2px 6px rgba(0,0,0,0.07)' }}>
+              <div style={{ fontSize: 13, color: m.me ? '#fff' : '#374151', lineHeight: 1.6 }}>{m.text}</div>
+              <div style={{ fontSize: 10, color: m.me ? 'rgba(255,255,255,0.4)' : '#9CA3AF', textAlign: 'right', marginTop: 3 }}>{m.time}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ padding: '10px 12px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)', position: 'relative' }}>
+        {showAttach && (
+          <div style={{ position: 'absolute', bottom: '100%', left: 12, right: 12, background: '#fff', borderRadius: 16, boxShadow: '0 -4px 24px rgba(0,0,0,0.12)', padding: 16, border: '1px solid rgba(0,0,0,0.06)' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Send Attachment</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+              {[['📄','Document'],['🖼️','Image'],['📷','Camera'],['🎵','Audio']].map(([icon,label],i) => (
+                <button key={i} onClick={() => setShowAttach(false)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <div style={{ width: 52, height: 52, background: '#F3F4F6', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{icon}</div>
+                  <span style={{ fontSize: 11, color: '#6B7280', fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{label}</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setShowAttach(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 0', marginTop: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={() => setShowAttach(v => !v)} style={{ width: 36, height: 36, background: '#F3F4F6', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: '#6B7280' }}>{Ic.attach()}</div>
+          </button>
+          <div style={{ flex: 1, display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.06)' }}>
+            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Message…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
+          </div>
+          <button onClick={send} style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: N.navy }}>{Ic.send('w-4 h-4')}</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── OPPORTUNITIES ────────────────────────────────────────────────────────────
+function OpportunitiesScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [filter, setFilter] = useState('All')
+  const loading = useLoading(1000)
+  const filters = ['All','Internships','Scholarships','Competitions','Jobs','Events']
+  const displayed = filter === 'All' ? opportunities : opportunities.filter(o => o.type + 's' === filter || o.type === filter.slice(0,-1) || (filter === 'Internships' && o.type === 'Internship') || (filter === 'Scholarships' && o.type === 'Scholarship') || (filter === 'Competitions' && o.type === 'Competition') || (filter === 'Jobs' && o.type === 'Job') || (filter === 'Events' && o.type === 'Event'))
+  if (loading) return <SkeletonOpportunities />
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Opportunities 🚀</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>Curated for Kenyan students</div>
+          </div>
+          <button onClick={() => setScreen('share-opp-form')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 10, padding: '7px 12px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12, color: N.navy }}>+ Share</button>
+        </div>
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }} className="scrollbar-hide">
+          {filters.map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, background: filter === f ? N.gold : 'rgba(255,255,255,0.1)', color: filter === f ? N.navy : 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{f}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ padding: 16 }}>
+        {displayed.map(o => (
+          <div key={o.id} onClick={() => setScreen('opportunity-detail')} style={{ background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.08)', marginBottom: 14, cursor: 'pointer' }}>
+            <div style={{ height: 5, background: `linear-gradient(90deg,${o.color},${o.color}66)` }} />
+            <div style={{ padding: 16 }}>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                <div style={{ width: 48, height: 48, background: o.color + '18', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+                  {o.type === 'Internship' ? '💼' : o.type === 'Scholarship' ? '🎓' : o.type === 'Competition' ? '🏆' : o.type === 'Job' ? '📋' : '🎪'}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: N.navy }}>{o.title}</div>
+                  <div style={{ fontSize: 12, color: '#6B7280' }}>{o.org}</div>
+                </div>
+                <Pill text={o.tag} color={o.color} />
+              </div>
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+                <span style={{ fontSize: 11, color: '#6B7280' }}>📍 {o.location}</span>
+                <span style={{ fontSize: 11, color: '#6B7280' }}>⏰ {o.deadline}</span>
+                <span style={{ fontSize: 11, color: o.color, fontWeight: 700 }}>💰 {o.reward}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={e => { e.stopPropagation(); setScreen('opportunity-detail') }} style={{ flex: 1, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, color: N.gold, fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 12, padding: '11px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View Details →</button>
+                <button onClick={e => e.stopPropagation()} style={{ width: 44, height: 44, background: '#F8F9FC', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#6B7280' }}>{Ic.bookmark('w-4 h-4')}</div></button>
+                <button onClick={e => { e.stopPropagation(); setScreen('share-sheet') }} style={{ width: 44, height: 44, background: '#F8F9FC', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#6B7280' }}>{Ic.share('w-4 h-4')}</div></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── OPPORTUNITY DETAIL ───────────────────────────────────────────────────────
+function OppDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [saved, setSaved] = useState(false)
+  const [showApply, setShowApply] = useState(false)
+  const loading = useLoading(800)
+  if (loading) return <SkeletonOppDetail />
+  const o = opportunities[0]
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <button onClick={() => setScreen('opportunities')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Opportunity Details</span>
+          <button onClick={() => setSaved(v => !v)} style={{ width: 34, height: 34, background: saved ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: saved ? N.gold : '#fff' }}>{Ic.bookmark()}</div>
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+          <div style={{ width: 60, height: 60, background: `${o.color}25`, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>💼</div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>{o.title}</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{o.org}</div>
+            <Pill text={o.tag} color={o.color} />
+          </div>
+        </div>
+      </div>
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {[['📍', o.location], ['⏰', `Deadline: ${o.deadline}`], ['💰', o.reward]].map(([icon, val]) => (
+            <div key={val} style={{ background: '#fff', borderRadius: 12, padding: '8px 12px', display: 'flex', gap: 6, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+              <span style={{ fontSize: 14 }}>{icon}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: N.navy }}>{val}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>About this Opportunity</div>
+          <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8 }}>{o.desc}</div>
+        </div>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>Requirements</div>
+          {o.reqs.map((r, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
+              <div style={{ width: 20, height: 20, background: `${N.gold}22`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}><div style={{ color: N.gold }}>{Ic.check('w-3 h-3')}</div></div>
+              <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.5 }}>{r}</span>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => setShowApply(true)} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '15px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 6px 20px rgba(201,168,76,0.35)` }}>Apply Now →</button>
+        <button onClick={() => setScreen('share-sheet')} style={{ background: '#fff', color: N.navy, fontWeight: 700, fontSize: 14, border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <div style={{ color: '#6B7280' }}>{Ic.share('w-4 h-4')}</div> Share Opportunity
+        </button>
+      </div>
+
+      {showApply && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', zIndex: 50 }}>
+          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '28px 24px 36px', width: '100%' }}>
+            <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
+            <div style={{ fontSize: 24, textAlign: 'center', marginBottom: 12 }}>🌐</div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 10 }}>You're leaving Prepza</div>
+            <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 1.65, marginBottom: 24 }}>
+              You will be taken to <strong>{o.org}'s</strong> website to complete your application. Prepza is not responsible for third-party application processes.
+            </div>
+            <button style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginBottom: 10 }}>Continue to Website →</button>
+            <button onClick={() => setShowApply(false)} style={{ width: '100%', background: '#F3F4F6', color: '#374151', fontWeight: 700, fontSize: 14, border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── SHARE SHEET ──────────────────────────────────────────────────────────────
+function ShareSheetScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#00000055', justifyContent: 'flex-end' }}>
+      <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '20px 20px 32px' }}>
+        <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
+        <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 6 }}>Share</div>
+        <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20 }}>Safaricom Technology Intern – 2025</div>
+        <div style={{ display: 'flex', gap: 16, marginBottom: 24, overflowX: 'auto' }} className="scrollbar-hide">
+          {[
+            { icon: '💬', label: 'Chats' },
+            { icon: '📲', label: 'WhatsApp' },
+            { icon: '📧', label: 'Email' },
+            { icon: '🔗', label: 'Copy Link' },
+            { icon: '📤', label: 'More' },
+          ].map((s, i) => (
+            <button key={i} onClick={() => setScreen('home')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+              <div style={{ width: 52, height: 52, background: '#F3F4F6', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{s.icon}</div>
+              <span style={{ fontSize: 11, color: '#6B7280', fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{s.label}</span>
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setScreen('home')} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: N.navy }}>Cancel</button>
+      </div>
+    </div>
+  )
+}
+
+// ─── STUDENT PROFILE ──────────────────────────────────────────────────────────
+function StudentProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [following, setFollowing] = useState(false)
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button onClick={() => setScreen('explore')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+          <div style={{ marginBottom: 14 }}><Avi name="WK" size={72} /></div>
+          <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>Wanjiru Kamau</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>BSc Computer Science · Year 2</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 14 }}>Kenyatta University</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => setFollowing(v => !v)} style={{ background: following ? 'rgba(201,168,76,0.2)' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: following ? N.gold : N.navy, fontWeight: 800, fontSize: 13, border: following ? `1px solid ${N.gold}44` : 'none', borderRadius: 12, padding: '10px 24px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{following ? 'Following ✓' : 'Follow'}</button>
+            <button onClick={() => setScreen('chat-detail')} style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 700, fontSize: 13, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '10px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Message</button>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, padding: '16px 16px 0' }}>
+        {[['3,100', 'XP'], ['47', 'Followers'], ['23', 'Documents']].map(([v, l]) => (
+          <div key={l} style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{v}</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF' }}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ padding: '16px 16px' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: N.navy, marginBottom: 10 }}>Recent Posts</div>
+        {forumPosts.slice(0, 2).map(p => <ForumCard key={p.id} post={{ ...p, user: 'Wanjiru Kamau' }} setScreen={setScreen} />)}
+      </div>
+    </div>
+  )
+}
+
+// ─── PROFILE ──────────────────────────────────────────────────────────────────
+function ProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [tab, setTab] = useState<'posts'|'saved'|'activity'|'materials'>('posts')
+  const [showMenu, setShowMenu] = useState(false)
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+  const loading = useLoading(900)
+  if (loading) return <SkeletonProfile />
+  const stats = [
+    { label: 'Streak', value: '7🔥', color: N.gold },
+    { label: 'XP', value: '1,240', color: '#4CC97B' },
+    { label: 'Docs', value: '8', color: '#4C7BC9' },
+    { label: 'Followers', value: '23', color: '#9B59B6' },
+  ]
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setShowMenu(v => !v)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
+            {showMenu && (
+              <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, width: 170, overflow: 'hidden' }}>
+                {[['Edit Profile', () => { setShowMenu(false); setScreen('edit-profile') }], ['Settings', () => { setShowMenu(false); setScreen('settings') }], ['Share Profile', () => { setShowMenu(false); setScreen('share-sheet') }]].map(([label, action]) => (
+                  <button key={label as string} onClick={action as () => void} style={{ display: 'block', width: '100%', padding: '13px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>{label as string}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+          <div style={{ position: 'relative', marginBottom: 14 }}>
+            <div style={{ width: 76, height: 76, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy, border: `3px solid rgba(201,168,76,0.4)` }}>AG</div>
+            <button onClick={() => setShowAvatarPicker(true)} style={{ position: 'absolute', bottom: 0, right: 0, width: 22, height: 22, background: N.gold, borderRadius: '50%', border: `2px solid ${N.navy}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <div style={{ color: N.navy }}>{Ic.edit('w-3 h-3')}</div>
+            </button>
+          </div>
+          <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>{USER.name}</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{USER.course} · {USER.year}</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2, marginBottom: 14 }}>{USER.uni}</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Pill text="🏅 Top Learner" />
+            <Pill text="📚 Creator" />
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, padding: '14px 14px 0' }}>
+        {[
+          { label: 'Streak', value: '12🔥', color: N.gold, dest: 'study-streak' as Screen },
+          { label: 'XP', value: '1,240', color: '#4CC97B', dest: 'xp-progress' as Screen },
+          { label: 'Docs', value: '8', color: '#4C7BC9', dest: 'library' as Screen },
+          { label: 'Followers', value: '143', color: '#9B59B6', dest: 'followers' as Screen },
+        ].map(s => (
+          <button key={s.label} onClick={() => setScreen(s.dest)} style={{ background: '#fff', borderRadius: 14, padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{s.label}</div>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ margin: '14px 14px 0', background: '#fff', borderRadius: 16, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, fontSize: 13, color: N.navy }}>Achievements</div>
+          <button onClick={() => setScreen('achievements')} style={{ fontSize: 11, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>See all</button>
+        </div>
+        <div style={{ display: 'flex', gap: 14, overflowX: 'auto' }} className="scrollbar-hide">
+          {achievementsList.filter(a => a.done).map(a => (
+            <button key={a.id} onClick={() => setScreen('achievements')} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer' }}>
+              <div style={{ width: 46, height: 46, background: `${N.gold}18`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, border: `2px solid ${N.gold}33` }}>{a.icon}</div>
+              <div style={{ fontSize: 9, color: '#6B7280', textAlign: 'center', maxWidth: 50, lineHeight: 1.3 }}>{a.name}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ margin: '14px 14px 0', background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+          {(['posts','saved','activity','materials'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '11px 0', background: 'none', border: 'none', fontWeight: tab === t ? 800 : 500, fontSize: 11, color: tab === t ? N.navy : '#9CA3AF', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', borderBottom: tab === t ? `2px solid ${N.gold}` : '2px solid transparent' }}>
+              {t === 'posts' ? 'Posts' : t === 'saved' ? 'Saved' : t === 'activity' ? 'Activity' : 'Materials'}
+            </button>
+          ))}
+        </div>
+        <div style={{ padding: 14 }}>
+          {tab === 'posts' && (
+            <div style={{ fontSize: 13, color: '#374151' }}>
+              {[{ text: 'Just started my ACT 101 journey on Prepza! First flashcard set generated 🎉', likes: 14, time: '1d ago' }].map((p, i) => (
+                <div key={i} style={{ paddingBottom: 12 }}>
+                  <div style={{ marginBottom: 6, lineHeight: 1.6 }}>{p.text}</div>
+                  <div style={{ display: 'flex', gap: 12, fontSize: 11, color: '#9CA3AF' }}>
+                    <span style={{ color: '#C94C4C' }}>❤️ {p.likes}</span><span>{p.time}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {tab === 'saved' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {['ACT 101 Lecture Notes – Week 1-6', 'Equity Leaders Programme', 'STA 101 Flashcards'].map((item, i) => (
+                <button key={i} onClick={() => setScreen(i === 0 ? 'document-study' : i === 1 ? 'opportunity-detail' : 'flashcards')} style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: '6px 0', borderBottom: i < 2 ? '1px solid rgba(0,0,0,0.05)' : 'none', fontFamily: 'Plus Jakarta Sans' }}>
+                  <div style={{ width: 32, height: 32, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{i === 0 ? '📄' : i === 1 ? '🚀' : '🃏'}</div>
+                  <div style={{ fontSize: 13, color: N.navy, fontWeight: 600 }}>{item}</div>
+                  <div style={{ marginLeft: 'auto', color: '#9CA3AF' }}>{Ic.chevR('w-4 h-4')}</div>
+                </button>
+              ))}
+            </div>
+          )}
+          {tab === 'activity' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                { icon: '⚗️', action: 'Studied ACT 101 – Interest Theory', time: '2h ago', screen: 'document-study' as Screen },
+                { icon: '🃏', action: 'Completed 15 flashcards', time: '4h ago', screen: 'flashcards' as Screen },
+                { icon: '🎙️', action: 'Listened to Interest Theory Podcast', time: 'Yesterday', screen: 'podcast-player' as Screen },
+                { icon: '📤', action: 'Uploaded ACT 101 Notes – Week 1-6', time: '2d ago', screen: 'upload' as Screen },
+              ].map((a, i) => (
+                <button key={i} onClick={() => setScreen(a.screen)} style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, fontFamily: 'Plus Jakarta Sans' }}>
+                  <span style={{ fontSize: 18 }}>{a.icon}</span>
+                  <div style={{ flex: 1, fontSize: 13, color: N.navy, fontWeight: 500 }}>{a.action}</div>
+                  <span style={{ fontSize: 11, color: '#9CA3AF', flexShrink: 0 }}>{a.time}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {tab === 'materials' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {['ACT 101 Notes – Week 1-6.pdf', 'MAT 101 Past Papers 2023.pdf', 'STA 101 Flashcard Set'].map((m, i) => (
+                <button key={i} onClick={() => setScreen(i < 2 ? 'document-study' : 'flashcards')} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#F8F9FC', border: 'none', borderRadius: 12, padding: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+                  <div style={{ width: 36, height: 36, background: '#fff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{i < 2 ? '📕' : '🃏'}</div>
+                  <div style={{ flex: 1, fontSize: 12, color: N.navy, fontWeight: 600, textAlign: 'left' }}>{m}</div>
+                  <div style={{ color: '#9CA3AF' }}>{Ic.chevR('w-4 h-4')}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={{ height: 24 }} />
+
+      {showAvatarPicker && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }}>
+          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 36px', width: '100%' }}>
+            <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 16 }}>Change Profile Photo</div>
+            {[['📷','Take Photo'],['🖼️','Choose from Library'],['🔗','Enter Avatar URL']].map(([icon,label],i) => (
+              <button key={i} onClick={() => setShowAvatarPicker(false)} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 12, padding: '13px 16px', marginBottom: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+                <span style={{ fontSize: 22 }}>{icon}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{label}</span>
+              </button>
+            ))}
+            <button onClick={() => setShowAvatarPicker(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', marginTop: 4, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── SETTINGS ─────────────────────────────────────────────────────────────────
+function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [notifs, setNotifs] = useState({ push: true, messages: true, opportunities: false, community: true, reminders: true })
+  const [priv, setPriv] = useState({ profilePublic: true, whoMessages: false, whoFollows: true })
+  const [showLogout, setShowLogout] = useState(false)
+  const [showModal, setShowModal] = useState<string|null>(null)
+  const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, padding: '12px 18px 6px' }}>{title}</div>
+      <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', margin: '0 16px' }}>{children}</div>
+    </div>
+  )
+  const Row = ({ label, sub, onPress, right, danger }: { label: string; sub?: string; onPress?: () => void; right?: React.ReactNode; danger?: boolean }) => (
+    <button onClick={onPress} style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 14, padding: '14px 16px', background: 'none', border: 'none', borderBottom: '1px solid rgba(0,0,0,0.05)', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', textAlign: 'left' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600, fontSize: 13, color: danger ? '#C94C4C' : N.navy }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 1 }}>{sub}</div>}
+      </div>
+      {right ?? <div style={{ color: '#9CA3AF' }}>{Ic.chevR()}</div>}
+    </button>
+  )
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>Settings</span>
+        </div>
+      </div>
+
+      <div style={{ paddingTop: 12, paddingBottom: 32 }}>
+        <Section title="Account">
+          <Row label="Edit Profile" sub="Name, photo, bio" onPress={() => setScreen('edit-profile')} />
+          <Row label="Email" sub="arnold@students.ku.ac.ke" onPress={() => setShowModal('email')} />
+          <Row label="Phone" sub="+254 *** *** **89" onPress={() => setShowModal('phone')} />
+          <Row label="University" sub="Kenyatta University" onPress={() => setShowModal('university')} />
+          <Row label="Course" sub="Actuarial Science · Year 1" onPress={() => setShowModal('course')} />
+        </Section>
+
+        <Section title="Preferences">
+          <Row label="Study Preferences" sub="Goals, daily target, subjects" onPress={() => setShowModal('study-prefs')} />
+          <Row label="AI Preferences" sub="Language, explanation style" onPress={() => setShowModal('ai-prefs')} />
+          <Row label="Language" sub="English" onPress={() => setShowModal('language')} />
+          <Row label="Appearance" sub="Light mode" onPress={() => setShowModal('appearance')} />
+        </Section>
+
+        <Section title="Notifications">
+          {([['push','Push Notifications'],['messages','Messages'],['opportunities','Opportunities'],['community','Community'],['reminders','Study Reminders']] as [keyof typeof notifs, string][]).map(([k, l]) => (
+            <Row key={k} label={l} right={<div onClick={e => { e.stopPropagation(); setNotifs(n => ({ ...n, [k]: !n[k] })) }}>{Ic.toggle(notifs[k])}</div>} />
+          ))}
+        </Section>
+
+        <Section title="Privacy">
+          <Row label="Profile Visibility" right={<div onClick={() => setPriv(p => ({ ...p, profilePublic: !p.profilePublic }))}>{Ic.toggle(priv.profilePublic)}</div>} sub={priv.profilePublic ? 'Public' : 'Private'} />
+          <Row label="Who can message me" right={<div onClick={() => setPriv(p => ({ ...p, whoMessages: !p.whoMessages }))}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
+          <Row label="Who can follow me" right={<div onClick={() => setPriv(p => ({ ...p, whoFollows: !p.whoFollows }))}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
+        </Section>
+
+        <Section title="Security">
+          <Row label="Change Password" onPress={() => setShowModal('change-password')} />
+          <Row label="Login Sessions" sub="1 active session" onPress={() => setShowModal('sessions')} />
+          <Row label="Two-Factor Authentication" sub="Not enabled" onPress={() => setShowModal('2fa')} />
+        </Section>
+
+        <Section title="Subscription">
+          <Row label="Subscription & Plan" sub="Free plan — Tap to upgrade" right={<Pill text="Upgrade" color={N.gold} />} onPress={() => setScreen('subscription')} />
+          <Row label="Payment History" onPress={() => setScreen('payment-history')} />
+        </Section>
+
+        <Section title="Support">
+          <Row label="Help Centre" onPress={() => setShowModal('help')} />
+          <Row label="Contact Support" onPress={() => setShowModal('contact')} />
+          <Row label="Report a Problem" onPress={() => setShowModal('report-problem')} />
+        </Section>
+
+        <Section title="About">
+          <Row label="About Prepza" sub="v1.0.0 · Kenyatta University Launch" onPress={() => setShowModal('about')} />
+          <Row label="Terms of Service" onPress={() => setShowModal('terms')} />
+          <Row label="Privacy Policy" onPress={() => setShowModal('privacy-policy')} />
+        </Section>
+
+        <div style={{ margin: '8px 16px 0', background: '#fff', borderRadius: 16, overflow: 'hidden' }}>
+          <Row label="Log Out" danger onPress={() => setShowLogout(true)} right={<div style={{ color: '#C94C4C' }}>{Ic.logout()}</div>} />
+        </div>
+      </div>
+
+      {/* Generic settings modal */}
+      {showModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }}>
+          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%' }}>
+            <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
+            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>
+              {showModal === 'email' ? 'Change Email' : showModal === 'phone' ? 'Change Phone' : showModal === 'university' ? 'Select University' : showModal === 'course' ? 'Select Course' : showModal === 'study-prefs' ? 'Study Preferences' : showModal === 'ai-prefs' ? 'AI Preferences' : showModal === 'language' ? 'Language' : showModal === 'appearance' ? 'Appearance' : showModal === 'change-password' ? 'Change Password' : showModal === 'sessions' ? 'Login Sessions' : showModal === '2fa' ? 'Two-Factor Authentication' : showModal === 'plan' ? 'Current Plan' : showModal === 'upgrade' ? 'Upgrade to Premium' : showModal === 'billing' ? 'Billing' : showModal === 'help' ? 'Help Centre' : showModal === 'contact' ? 'Contact Support' : showModal === 'report-problem' ? 'Report a Problem' : showModal === 'about' ? 'About Prepza' : showModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
+            </div>
+            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 24 }}>
+              {showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? 'Prepza v1.0.0 — Kenyatta University Launch\n\nBuilt for Kenyan university students to study smarter with AI.' : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
+            </div>
+            <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
+          </div>
+        </div>
+      )}
+
+      {/* Logout confirmation */}
+      {showLogout && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 99 }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
+            <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>👋</div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 8 }}>Log out of Prepza?</div>
+            <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 24 }}>You'll need to sign in again to access your study materials.</div>
+            <button onClick={() => setScreen('login')} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
+            <button onClick={() => setShowLogout(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#374151' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── FORGOT PASSWORD ──────────────────────────────────────────────────────────
+function ForgotPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)` }} className="scrollbar-hide">
+      <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <button onClick={() => setScreen('login')} style={{ alignSelf: 'flex-start', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, padding: '8px 12px', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 32, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12 }}>{Ic.back('w-4 h-4')} Back</button>
+        <img src={logoImg} alt="Prepza" style={{ width: 64, height: 64, borderRadius: 18, marginBottom: 20 }} />
+        {!sent ? (
+          <>
+            <div style={{ fontWeight: 800, fontSize: 24, color: '#fff', letterSpacing: '-0.5px', textAlign: 'center' }}>Reset Password</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 6, marginBottom: 32, textAlign: 'center' }}>Enter your email and we'll send you a reset link</div>
+            <div style={{ width: '100%' }}>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Email Address</div>
+              <input value={email} onChange={e => setEmail(e.target.value)} placeholder="arnold@students.ku.ac.ke" style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', boxSizing: 'border-box', marginBottom: 20 }} />
+              <button onClick={() => setSent(true)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Send Reset Link</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>📧</div>
+            <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', textAlign: 'center', marginBottom: 10 }}>Check your email</div>
+            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, textAlign: 'center', lineHeight: 1.7, marginBottom: 32 }}>We've sent a password reset link to<br /><strong style={{ color: N.gold }}>{email || 'your email'}</strong></div>
+            <button onClick={() => setScreen('login')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Login</button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── SIGNUP ───────────────────────────────────────────────────────────────────
+type UniversityOption = { id: number; name: string; short_code: string; country: string | null }
+type ProgramOption = { id: number; name: string; degree_level: string | null; discipline_category: string | null }
+
+function SignupScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const steps = ['Name', 'Email', 'Password', 'University', 'Course', 'Year', 'Semester']
+  const [step, setStep] = useState(0)
+  const [data, setData] = useState({
+    display_name: '', email: '', password: '',
+    university_id: null as number | null, university_name: '',
+    program_id: null as number | null, program_name: '',
+    year: null as number | null, semester: null as number | null,
+  })
+
+  const [universities, setUniversities] = useState<UniversityOption[]>([])
+  const [loadingUniversities, setLoadingUniversities] = useState(true)
+  const [uniSearch, setUniSearch] = useState('')
+
+  const [programs, setPrograms] = useState<ProgramOption[]>([])
+  const [loadingPrograms, setLoadingPrograms] = useState(false)
+  const [courseSearch, setCourseSearch] = useState('')
+
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    api<UniversityOption[]>('/universities')
+      .then(setUniversities)
+      .catch(() => setError('Could not load the university list. Check your connection and try again.'))
+      .finally(() => setLoadingUniversities(false))
+  }, [])
+
+  useEffect(() => {
+    if (data.university_id == null) { setPrograms([]); return }
+    setLoadingPrograms(true)
+    api<ProgramOption[]>(`/universities/${data.university_id}/programs`)
+      .then(setPrograms)
+      .catch(() => setError('Could not load courses for that university.'))
+      .finally(() => setLoadingPrograms(false))
+  }, [data.university_id])
+
+  const goBack = () => { setError(''); setStep(s => Math.max(0, s - 1)) }
+  const advance = () => { setError(''); setStep(s => s + 1) }
+
+  const handleSubmit = async () => {
+    setSubmitting(true)
+    setError('')
+    try {
+      await api('/signup', {
+        method: 'POST',
+        body: JSON.stringify({
+          display_name: data.display_name,
+          email: data.email,
+          password: data.password,
+          university_id: data.university_id,
+          program_id: data.program_id,
+          year: data.year,
+          semester: data.semester,
+        }),
+      })
+      setScreen('check-email')
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : 'Something went wrong. Please try again.'
+      setError(msg)
+      const lower = msg.toLowerCase()
+      if (lower.includes('display name')) setStep(0)
+      else if (lower.includes('email')) setStep(1)
+      else if (lower.includes('password')) setStep(2)
+      else if (lower.includes('university')) setStep(3)
+      else if (lower.includes('course') || lower.includes('program')) setStep(4)
+      else if (lower.includes('year')) setStep(5)
+      else if (lower.includes('semester')) setStep(6)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const filteredUniversities = universities.filter(u => u.name.toLowerCase().includes(uniSearch.toLowerCase()))
+  const filteredPrograms = programs.filter(p => p.name.toLowerCase().includes(courseSearch.toLowerCase()))
+
+  const titles = ["What's your name?", 'Your email address', 'Create a password', 'Your university', 'Your course', 'What year are you?', 'Which semester?']
+  const subtitles: Record<number, string> = { 6: "Almost done - we'll personalise your experience" }
+
+  const inputStyle = { width: '100%', boxSizing: 'border-box' as const, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 12 }
+  const optionStyle = (selected: boolean) => ({ background: selected ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.08)', border: `1px solid ${selected ? N.gold + '55' : 'rgba(255,255,255,0.1)'}`, borderRadius: 14, padding: '14px 18px', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' as const, fontFamily: 'Plus Jakarta Sans' })
+  const primaryBtn = { background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginTop: 'auto' }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)` }}>
+      <div style={{ padding: '20px 24px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+          {step > 0 && <button onClick={goBack} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, padding: '8px 10px', color: '#fff', cursor: 'pointer' }}>{Ic.back('w-4 h-4')}</button>}
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.12)', borderRadius: 99, height: 4 }}>
+            <div style={{ width: `${((step + 1) / steps.length) * 100}%`, height: '100%', background: N.gold, borderRadius: 99, transition: 'width 0.3s' }} />
+          </div>
+          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 600 }}>{step + 1}/{steps.length}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+          <img src={logoImg} alt="Prepza" style={{ width: 56, height: 56, borderRadius: 16 }} />
+        </div>
+      </div>
+      <div style={{ flex: 1, padding: '0 24px 32px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ fontWeight: 800, fontSize: 26, color: '#fff', marginBottom: 6 }}>{titles[step]}</div>
+        <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginBottom: 20 }}>{subtitles[step] ?? 'Help us personalise your Prepza experience'}</div>
+
+        {error && (
+          <div style={{ background: 'rgba(140,29,43,0.25)', border: '1px solid rgba(140,29,43,0.5)', borderRadius: 12, padding: '10px 14px', color: '#ffb4bd', fontSize: 13, marginBottom: 16 }}>{error}</div>
+        )}
+
+        {step === 0 && (
+          <input value={data.display_name} onChange={e => setData(d => ({ ...d, display_name: e.target.value }))} placeholder="e.g. Arnold Gichuru" maxLength={50} style={inputStyle} />
+        )}
+        {step === 1 && (
+          <input type="text" value={data.email} onChange={e => setData(d => ({ ...d, email: e.target.value }))} placeholder="arnold@students.ku.ac.ke" style={inputStyle} />
+        )}
+        {step === 2 && (
+          <input type="password" value={data.password} onChange={e => setData(d => ({ ...d, password: e.target.value }))} placeholder="••••••••" style={inputStyle} />
+        )}
+
+        {step === 3 && (
+          <>
+            <input value={uniSearch} onChange={e => setUniSearch(e.target.value)} placeholder="Type to search your university..." style={inputStyle} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-hide">
+              {loadingUniversities ? (
+                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading universities...</div>
+              ) : filteredUniversities.length === 0 ? (
+                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>University not found. Prepza doesn't have your university yet - try a different search, or check back soon.</div>
+              ) : filteredUniversities.map(u => (
+                <button key={u.id} onClick={() => { setData(d => ({ ...d, university_id: u.id, university_name: u.name, program_id: null, program_name: '' })); setCourseSearch(''); advance() }}
+                  style={optionStyle(data.university_id === u.id)}>{u.name}</button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 4 && (
+          <>
+            <input value={courseSearch} onChange={e => setCourseSearch(e.target.value)} placeholder="Type to search your course..." style={inputStyle} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-hide">
+              {loadingPrograms ? (
+                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading courses...</div>
+              ) : programs.length === 0 ? (
+                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>No courses listed yet for {data.university_name}. Check back soon - we're adding more universities regularly.</div>
+              ) : filteredPrograms.length === 0 ? (
+                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Course not found for {data.university_name}. Try a different search.</div>
+              ) : filteredPrograms.map(p => (
+                <button key={p.id} onClick={() => { setData(d => ({ ...d, program_id: p.id, program_name: p.name })); advance() }}
+                  style={optionStyle(data.program_id === p.id)}>{p.name}</button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 5 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[1, 2, 3, 4].map(y => (
+              <button key={y} onClick={() => { setData(d => ({ ...d, year: y })); advance() }} style={optionStyle(data.year === y)}>Year {y}</button>
+            ))}
+          </div>
+        )}
+
+        {step === 6 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[1, 2].map(s => (
+              <button key={s} disabled={submitting} onClick={() => { setData(d => ({ ...d, semester: s })); handleSubmit() }} style={optionStyle(data.semester === s)}>Semester {s}</button>
+            ))}
+            {submitting && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8 }}>Creating your account...</div>}
+          </div>
+        )}
+
+        {step <= 2 && (
+          <button
+            onClick={() => {
+              if (step === 0 && !data.display_name.trim()) { setError('Please enter your name.'); return }
+              if (step === 1 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) { setError('Please enter a valid email address.'); return }
+              if (step === 2 && data.password.length < 8) { setError('Password must be at least 8 characters long.'); return }
+              advance()
+            }}
+            style={primaryBtn}>Continue →</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── CHECK EMAIL ────────────────────────────────────────────────────────────
+function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 32px', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)`, textAlign: 'center' }}>
+      <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(201,168,76,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+        <span style={{ fontSize: 32 }}>✉️</span>
+      </div>
+      <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', marginBottom: 10 }}>Check your email</div>
+      <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 1.6, marginBottom: 32 }}>
+        We've sent a verification link to your inbox. Click it to activate your account, then come back and sign in.
+      </div>
+      <button onClick={() => setScreen('login')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 32px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+        Back to Sign In
+      </button>
+    </div>
+  )
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+function NotificationsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const loading = useLoading(700)
+  const notifs = [
+    { icon: '📚', title: 'Study Reminder', body: "You haven't studied ACT 101 in 2 days. Resume now?", time: '5m ago', action: 'document-study' as Screen },
+    { icon: '💬', title: 'New Message', body: 'Wanjiru Kamau: "Thanks for the flashcards! Really helped 🙏"', time: '20m ago', action: 'chat-detail' as Screen },
+    { icon: '❤️', title: 'Forum Activity', body: 'Brian Omondi liked your post about the Podcast feature.', time: '1h ago', action: 'forum' as Screen },
+    { icon: '🚀', title: 'New Opportunity', body: 'New: KCB Graduate Analyst Programme – Deadline Sep 30', time: '2h ago', action: 'opportunity-detail' as Screen },
+    { icon: '✦', title: 'Prepza AI', body: 'Your ACT 101 podcast is ready! Tap to listen.', time: '3h ago', action: 'podcast-player' as Screen },
+    { icon: '📣', title: 'Prepza Announcement', body: 'New feature: Mind Maps now available in Document Study!', time: '1d ago', action: 'document-study' as Screen },
+    { icon: '🏆', title: 'Achievement Unlocked', body: 'You earned the "Quiz Master" badge – 10 quizzes completed!', time: '2d ago', action: 'profile' as Screen },
+  ]
+  if (loading) return <SkeletonNotifications />
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>Notifications</span>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }} className="scrollbar-hide">
+        {notifs.map((n, i) => (
+          <button key={i} onClick={() => setScreen(n.action)} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: '#fff', border: 'none', borderRadius: 14, padding: '13px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans' }}>
+            <div style={{ width: 42, height: 42, background: `${N.gold}18`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{n.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 2 }}>{n.title}</div>
+              <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.55 }} className="line-clamp-2">{n.body}</div>
+            </div>
+            <span style={{ fontSize: 10, color: '#9CA3AF', flexShrink: 0, marginTop: 2 }}>{n.time}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── LIBRARY ──────────────────────────────────────────────────────────────────
+function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [activeTab, setActiveTab] = useState('All')
+  const loading = useLoading(900)
+  const tabs = ['All','Documents','Notes','Flashcards','Podcasts','Saved','Published']
+  const items = [
+    { icon: '📕', title: 'ACT 101 Lecture Notes – Week 1-6', sub: 'PDF · 38 pages · Today', action: 'document-study' as Screen, tag: 'Recent' },
+    { icon: '🃏', title: 'ACT 101 Flashcards – Interest Theory', sub: '35 cards · Yesterday', action: 'flashcards' as Screen, tag: 'Flashcards' },
+    { icon: '📝', title: 'MAT 101 – Calculus Past Papers', sub: 'PDF · 72 pages · 2 days ago', action: 'document-study' as Screen, tag: 'Past Paper' },
+    { icon: '🎙️', title: 'Interest Theory Explained', sub: 'Podcast · 9 min · ACT 101', action: 'podcast-player' as Screen, tag: 'Podcast' },
+    { icon: '📋', title: 'AI Summary – ACT 101 Interest Theory', sub: '4 sections · Generated today', action: 'summary' as Screen, tag: 'Summary' },
+    { icon: '🚀', title: 'Equity Leaders Programme', sub: 'Saved opportunity · Deadline Sep 15', action: 'opportunity-detail' as Screen, tag: 'Saved' },
+    { icon: '📕', title: 'STA 101 Probability Notes', sub: 'PDF · 44 pages · Last week', action: 'document-study' as Screen, tag: 'Documents' },
+  ]
+  const tagFilter: Record<string,string[]> = { All: [], Documents: ['Recent','Documents','Past Paper'], Notes: ['Recent','Summary'], Flashcards: ['Flashcards'], Podcasts: ['Podcast'], Saved: ['Saved'], Published: ['Published'] }
+  const displayed = activeTab === 'All' ? items : items.filter(it => tagFilter[activeTab]?.includes(it.tag))
+
+  const publishedItems = [
+    { title: 'ACT 101 Lecture Notes – Week 1-6', unit: 'ACT 101', type: 'Lecture Notes', views: 284, saves: 47, status: 'Approved', date: 'Aug 9, 2025', xp: '+50 XP' },
+    { title: 'STA 101 Probability Notes', unit: 'STA 101', type: 'Summary Notes', views: 12, saves: 3, status: 'Under Review', date: 'Aug 11, 2025', xp: '' },
+  ]
+  if (loading) return <SkeletonLibrary />
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>My Library</span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }} className="scrollbar-hide">
+          {tabs.map(t => (
+            <button key={t} onClick={() => setActiveTab(t)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, background: activeTab === t ? N.gold : 'rgba(255,255,255,0.1)', color: activeTab === t ? N.navy : 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{t}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
+        {activeTab === 'Published' ? (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: '#9CA3AF' }}>Materials you've submitted to the Prepza Library</div>
+              <button onClick={() => setScreen('publish-library')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 11, border: 'none', borderRadius: 10, padding: '6px 12px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Publish</button>
+            </div>
+            {publishedItems.length === 0 ? (
+              <EmptyState icon="📖" title="Nothing published yet" sub="Share your notes and materials with students across Kenya. Earn XP for approved contributions." action="Publish Material" onAction={() => setScreen('publish-library')} />
+            ) : publishedItems.map((p, i) => (
+              <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1.5px solid ${p.status === 'Approved' ? 'rgba(76,201,123,0.2)' : 'rgba(0,0,0,0.06)'}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 3 }} className="line-clamp-1">{p.title}</div>
+                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.type} · {p.unit}</div>
+                  </div>
+                  <Pill text={p.status} color={p.status === 'Approved' ? '#4CC97B' : N.gold} />
+                </div>
+                {p.status === 'Approved' && (
+                  <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#9CA3AF', marginTop: 8, paddingTop: 8, borderTop: '1px solid #F3F4F6' }}>
+                    <span>{p.views} views</span>
+                    <span>{p.saves} saves</span>
+                    <span style={{ color: '#16A34A', fontWeight: 600 }}>{p.xp}</span>
+                    <span style={{ marginLeft: 'auto' }}>{p.date}</span>
+                  </div>
+                )}
+                {p.status === 'Under Review' && (
+                  <div style={{ fontSize: 11, color: '#D97706', marginTop: 6, fontWeight: 600 }}>Submitted {p.date} · Review takes 24-48h</div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : displayed.length === 0 ? (
+          <EmptyState icon="📚" title={`No ${activeTab.toLowerCase()} yet`} sub="Your library will fill up as you study and create." action={activeTab === 'Saved' ? 'Explore Content' : 'Upload Document'} onAction={() => setScreen(activeTab === 'Saved' ? 'explore' : 'upload')} />
+        ) : displayed.map((item, i) => (
+          <button key={i} onClick={() => setScreen(item.action)} style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', background: '#fff', border: 'none', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans' }}>
+            <div style={{ width: 44, height: 44, background: '#F3F4F6', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{item.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{item.title}</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF' }}>{item.sub}</div>
+            </div>
+            <Pill text={item.tag} />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── PODCAST LIBRARY ──────────────────────────────────────────────────────────
+function PodcastLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const loading = useLoading(900)
+  if (loading) return <SkeletonPodcastLibrary />
+  const allPodcasts = [
+    ...podcasts,
+    { id: 5, title: 'Probability Foundations', subject: 'STA 101', duration: '14 min', icon: 'P', color: '#9B59B6' },
+    { id: 6, title: 'Microeconomics Basics', subject: 'ECO 101', duration: '11 min', icon: '📊', color: '#C94C4C' },
+  ]
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>Study Podcasts 🎙️</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>AI-generated from your notes</div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
+        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Your Episodes</div>
+        {allPodcasts.map((p) => (
+          <div key={p.id} onClick={() => setScreen('podcast-player')} style={{ display: 'flex', gap: 14, alignItems: 'center', background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+            <div style={{ width: 52, height: 52, background: `linear-gradient(135deg,${p.color},${p.color}99)`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#fff', fontWeight: 800, flexShrink: 0 }}>{p.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{p.title}</div>
+              <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{p.subject} · {p.duration}</div>
+            </div>
+            <div style={{ color: N.gold }}>{Ic.play()}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── MIND MAP ─────────────────────────────────────────────────────────────────
+function MindMapScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const loading = useLoading(900)
+  if (loading) return <SkeletonMindMap />
+  const nodes = [
+    { id: 'center', label: 'Interest Theory', x: 150, y: 150, r: 44, color: N.gold, textColor: N.navy, fontSize: 11 },
+    { id: 'compound', label: 'Compound\nInterest', x: 60, y: 60, r: 36, color: N.navy2, textColor: N.gold, fontSize: 10 },
+    { id: 'simple', label: 'Simple\nInterest', x: 240, y: 60, r: 36, color: N.navy2, textColor: N.gold, fontSize: 10 },
+    { id: 'annuity', label: 'Annuities', x: 60, y: 240, r: 36, color: N.navy3, textColor: '#fff', fontSize: 10 },
+    { id: 'pv', label: 'Present\nValue', x: 240, y: 240, r: 36, color: N.navy3, textColor: '#fff', fontSize: 10 },
+    { id: 'force', label: 'Force of\nInterest', x: 280, y: 150, r: 30, color: '#4C7BC9', textColor: '#fff', fontSize: 9 },
+    { id: 'perpetuity', label: 'Perpetuity', x: 20, y: 150, r: 30, color: '#4CC97B', textColor: N.navy, fontSize: 9 },
+  ]
+  const lines = [['center','compound'],['center','simple'],['center','annuity'],['center','pv'],['center','force'],['center','perpetuity']]
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Mind Map</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>ACT 101 – Interest Theory</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ background: '#fff', borderRadius: 20, padding: 16, boxShadow: '0 4px 20px rgba(0,0,0,0.08)', width: '100%', marginBottom: 16 }}>
+          <svg viewBox="-10 -10 320 320" style={{ width: '100%', height: 300 }}>
+            {lines.map(([from, to]) => {
+              const f = nodes.find(n => n.id === from)!
+              const t = nodes.find(n => n.id === to)!
+              return <line key={from+to} x1={f.x} y1={f.y} x2={t.x} y2={t.y} stroke="rgba(11,20,55,0.15)" strokeWidth="2" />
+            })}
+            {nodes.map(node => (
+              <g key={node.id} style={{ cursor: 'pointer' }}>
+                <circle cx={node.x} cy={node.y} r={node.r} fill={node.color} />
+                {node.label.split('\n').map((line, i, arr) => (
+                  <text key={i} x={node.x} y={node.y + (i - (arr.length - 1) / 2) * (node.fontSize + 2)} textAnchor="middle" dominantBaseline="middle" fontSize={node.fontSize} fontWeight="700" fill={node.textColor} fontFamily="Plus Jakarta Sans">{line}</text>
+                ))}
+              </g>
+            ))}
+          </svg>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+          {nodes.slice(1).map(node => (
+            <div key={node.id} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fff', borderRadius: 12, padding: '10px 14px', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: node.color, flexShrink: 0 }} />
+              <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{node.label.replace('\n',' ')}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── NEW CHAT ─────────────────────────────────────────────────────────────────
+function NewChatScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [mode, setMode] = useState<'select'|'new-chat'|'new-group'>('select')
+  const [search, setSearch] = useState('')
+  const contacts = [
+    { name: 'Wanjiru Kamau', initials: 'WK', course: 'Computer Science · Y2' },
+    { name: 'Brian Omondi', initials: 'BO', course: 'B.Com Finance · Y3' },
+    { name: 'Aisha Mohamed', initials: 'AM', course: 'LLB Law · Y2' },
+    { name: 'David Njoroge', initials: 'DN', course: 'MBBS Medicine · Y3' },
+  ]
+  const filtered = contacts.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
+  if (mode === 'select') return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('chats')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>New Conversation</span>
+        </div>
+      </div>
+      <div style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <button onClick={() => setMode('new-chat')} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: 'none', borderRadius: 16, padding: 16, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans' }}>
+          <div style={{ width: 48, height: 48, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>💬</div>
+          <div style={{ textAlign: 'left' }}><div style={{ fontWeight: 800, fontSize: 14, color: N.navy }}>New Chat</div><div style={{ fontSize: 12, color: '#6B7280' }}>Message a classmate directly</div></div>
+        </button>
+        <button onClick={() => setMode('new-group')} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: 'none', borderRadius: 16, padding: 16, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans' }}>
+          <div style={{ width: 48, height: 48, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>👥</div>
+          <div style={{ textAlign: 'left' }}><div style={{ fontWeight: 800, fontSize: 14, color: N.navy }}>New Group</div><div style={{ fontSize: 12, color: '#6B7280' }}>Create a study group chat</div></div>
+        </button>
+      </div>
+    </div>
+  )
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <button onClick={() => setMode('select')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>{mode === 'new-chat' ? 'Select Contact' : 'New Group'}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(255,255,255,0.09)', borderRadius: 12, padding: '9px 12px' }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)' }}>{Ic.search('w-4 h-4')}</div>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search students…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }} />
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto' }} className="scrollbar-hide">
+        {filtered.map((c, i) => (
+          <div key={i} onClick={() => setScreen('chat-detail')} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '13px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+            <Avi name={c.initials} size={44} />
+            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{c.name}</div><div style={{ fontSize: 12, color: '#6B7280' }}>{c.course}</div></div>
+            {mode === 'new-chat' && <div style={{ color: N.gold }}>{Ic.chevR()}</div>}
+          </div>
+        ))}
+        {mode === 'new-group' && <div style={{ padding: '20px 16px' }}><button onClick={() => setScreen('chat-detail')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Create Group →</button></div>}
+      </div>
+    </div>
+  )
+}
+
+// ─── CHAT OPTIONS ─────────────────────────────────────────────────────────────
+function ChatOptionsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [notif, setNotif] = useState(true)
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <button onClick={() => setScreen('chat-detail')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Group Info</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Avi name="∑" size={64} emoji="∑" />
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff', marginTop: 12 }}>ACT 101 Study Group</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>18 members · Created by Arnold Gichuru</div>
+        </div>
+      </div>
+      <div style={{ padding: 16 }}>
+        {[{ label: 'Shared Media', icon: '🖼️', sub: '12 files shared' }, { label: 'Search Messages', icon: '🔍', sub: 'Search in this chat' }].map((item, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+            <span style={{ fontSize: 20 }}>{item.icon}</span>
+            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{item.label}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{item.sub}</div></div>
+            {Ic.chevR()}
+          </div>
+        ))}
+        <div style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+          <span style={{ fontSize: 20 }}>🔔</span>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Notifications</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{notif ? 'On' : 'Muted'}</div></div>
+          <div onClick={() => setNotif(v => !v)}>{Ic.toggle(notif)}</div>
+        </div>
+        <div style={{ background: '#fff', borderRadius: 14, marginTop: 12, overflow: 'hidden' }}>
+          <button onClick={() => setScreen('chats')} style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+            <span style={{ fontSize: 20 }}>🚪</span>
+            <span style={{ fontWeight: 700, fontSize: 13, color: '#C94C4C' }}>Leave Group</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── EDIT PROFILE ─────────────────────────────────────────────────────────────
+function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [form, setForm] = useState({ name: USER.name, bio: 'Actuarial Science student at KU. Passionate about mathematics and finance.', uni: USER.uni, course: USER.course, year: USER.year })
+  const [saved, setSaved] = useState(false)
+  const upd = (k: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
+  const handleSave = () => { setSaved(true); setTimeout(() => setScreen('profile'), 1000) }
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Edit Profile</span>
+          <button onClick={handleSave} style={{ background: saved ? '#4CC97B' : `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: saved ? '#fff' : N.navy }}>{saved ? '✓ Saved' : 'Save'}</button>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 20px 12px' }}>
+        <div style={{ position: 'relative', marginBottom: 20 }}>
+          <div style={{ width: 80, height: 80, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy }}>AG</div>
+          <div style={{ position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: N.navy }}>{Ic.edit('w-3 h-3')}</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 12, color: '#9CA3AF', cursor: 'pointer' }}>Change photo</div>
+      </div>
+      <div style={{ padding: '0 20px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {[['Full Name','name',form.name],['University','uni',form.uni],['Course','course',form.course],['Year','year',form.year]].map(([label,key,val]) => (
+          <div key={key}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>{label}</div>
+            <input value={val} onChange={upd(key)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+          </div>
+        ))}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Bio</div>
+          <textarea value={form.bio} onChange={upd('bio')} rows={3} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+        </div>
+        <button onClick={handleSave} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Save Changes</button>
+      </div>
+    </div>
+  )
+}
+
+// ─── PUBLISH TO LIBRARY ───────────────────────────────────────────────────────
+
+const myDocs = [
+  { id: 'd1', title: 'ACT 101 Lecture Notes – Week 1-6', size: '2.4 MB', type: 'PDF' },
+  { id: 'd2', title: 'STA 101 Probability & Statistics', size: '1.8 MB', type: 'PDF' },
+  { id: 'd3', title: 'MAT 101 Calculus Revision', size: '3.1 MB', type: 'PDF' },
+]
+
+const materialTypes = ['Lecture Notes', 'Past Paper', 'Summary Notes', 'Textbook Chapter', 'Assignment', 'Tutorial Sheet', 'Other']
+
+function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [step, setStep] = useState(1)
+  const [selectedDoc, setSelectedDoc] = useState<string | null>(null)
+  const [title, setTitle] = useState('')
+  const [uni, setUni] = useState('Kenyatta University')
+  const [course, setCourse] = useState('Actuarial Science')
+  const [unit, setUnit] = useState('ACT 101 – Introduction to Financial Mathematics')
+  const [year, setYear] = useState('Year 1')
+  const [matType, setMatType] = useState('Lecture Notes')
+  const [desc, setDesc] = useState('')
+  const [rightsChecked, setRightsChecked] = useState(false)
+  const [approved, setApproved] = useState(false)
+
+  const canProceed1 = selectedDoc && title.trim()
+  const canProceed2 = unit.trim()
+  const canProceed3 = rightsChecked
+
+  const submit = () => {
+    setStep(4)
+    setTimeout(() => setStep(5), 2000)
+    setTimeout(() => setApproved(true), 8000)
+  }
+
+  const stepLabel = ['Select Document', 'Add Details', 'Confirm Rights', '', ''][step - 1]
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      {/* Header */}
+      <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: step <= 3 ? 14 : 0 }}>
+          <button onClick={() => step > 1 && step <= 3 ? setStep(s => s - 1) : setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 17, color: '#fff' }}>Publish to Prepza Library</div>
+            {step <= 3 && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Step {step} of 3 — {stepLabel}</div>}
+          </div>
+        </div>
+        {step <= 3 && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[1, 2, 3].map(s => (
+              <div key={s} style={{ flex: 1, height: 3, borderRadius: 99, background: s <= step ? N.gold : 'rgba(255,255,255,0.15)', transition: 'background 0.3s' }} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Step 1: Select doc + title */}
+      {step === 1 && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
+          <div style={{ background: `${N.gold}10`, border: `1px solid ${N.gold}30`, borderRadius: 14, padding: '12px 16px', marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: N.gold, marginBottom: 4 }}>Free to publish · Earn XP on approval</div>
+            <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.6 }}>Share educational materials with students across Kenya. Approved contributions earn XP and build your contributor reputation.</div>
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Select a document</div>
+          {myDocs.map(d => (
+            <div key={d.id} onClick={() => { setSelectedDoc(d.id); setTitle(d.title) }}
+              style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, border: `2px solid ${selectedDoc === d.id ? N.gold : 'rgba(0,0,0,0.06)'}`, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center', boxShadow: selectedDoc === d.id ? `0 4px 16px ${N.gold}20` : '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s' }}>
+              <div style={{ width: 40, height: 44, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="20" height="24" viewBox="0 0 20 24" fill="none"><path d="M4 0h8l8 8v16H4V0z" fill="#E5E7EB"/><path d="M12 0l8 8h-8V0z" fill="#D1D5DB"/><rect x="6" y="12" width="8" height="1.5" rx="0.75" fill="#9CA3AF"/><rect x="6" y="15" width="6" height="1.5" rx="0.75" fill="#9CA3AF"/><rect x="6" y="18" width="7" height="1.5" rx="0.75" fill="#9CA3AF"/></svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: N.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{d.type} · {d.size}</div>
+              </div>
+              {selectedDoc === d.id && <div style={{ color: N.gold, flexShrink: 0 }}>{Ic.check('w-5 h-5')}</div>}
+            </div>
+          ))}
+          <div style={{ marginTop: 8, marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Publication title</div>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. ACT 101 Lecture Notes – Semester 1" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+            <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>This will be the public title visible to other students.</div>
+          </div>
+          <button onClick={() => canProceed1 && setStep(2)} style={{ width: '100%', background: canProceed1 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed1 ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed1 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>
+            Continue
+          </button>
+        </div>
+      )}
+
+      {/* Step 2: Details */}
+      {step === 2 && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
+          {[
+            { label: 'University', value: uni, set: setUni, opts: ['Kenyatta University', 'University of Nairobi', 'Strathmore University', 'JKUAT', 'Mount Kenya University', 'Daystar University', 'Other'] },
+            { label: 'Course', value: course, set: setCourse, opts: ['Actuarial Science', 'Computer Science', 'Business Administration', 'Law', 'Medicine', 'Engineering', 'Education', 'Other'] },
+            { label: 'Year of Study', value: year, set: setYear, opts: ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5', 'Postgraduate'] },
+            { label: 'Material Type', value: matType, set: setMatType, opts: materialTypes },
+          ].map(field => (
+            <div key={field.label} style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>{field.label}</div>
+              <select value={field.value} onChange={e => field.set(e.target.value)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none' }}>
+                {field.opts.map(o => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+          ))}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Unit / Module</div>
+            <input value={unit} onChange={e => setUnit(e.target.value)} placeholder="e.g. ACT 101 – Introduction to Financial Mathematics" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Description <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="What does this material cover? Who is it useful for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+          </div>
+          <button onClick={() => canProceed2 && setStep(3)} style={{ width: '100%', background: canProceed2 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed2 ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed2 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>
+            Continue
+          </button>
+        </div>
+      )}
+
+      {/* Step 3: Rights confirmation */}
+      {step === 3 && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
+          <div style={{ background: '#fff', borderRadius: 16, padding: '18px 18px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 12 }}>Publishing: {title}</div>
+            {[['University', uni], ['Course', course], ['Unit', unit], ['Year', year], ['Type', matType]].map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F3F4F6' }}>
+                <span style={{ fontSize: 12, color: '#9CA3AF' }}>{k}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: N.navy, maxWidth: 180, textAlign: 'right' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: '#FEF9F0', border: '1px solid rgba(201,168,76,0.25)', borderRadius: 14, padding: '16px 16px', marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E', marginBottom: 8 }}>Content responsibility</div>
+            <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.75 }}>
+              You are responsible for ensuring you have the right or permission to share this material. Prepza does not claim ownership of student-uploaded content. Unauthorised sharing of copyrighted materials may result in removal of the content and restrictions on your account.
+            </div>
+          </div>
+          <div onClick={() => setRightsChecked(r => !r)} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', background: '#fff', borderRadius: 14, border: `2px solid ${rightsChecked ? N.gold : 'rgba(0,0,0,0.08)'}`, cursor: 'pointer', marginBottom: 16, transition: 'border-color 0.2s' }}>
+            <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${rightsChecked ? N.gold : '#D1D5DB'}`, background: rightsChecked ? N.gold : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
+              {rightsChecked && <div style={{ color: N.navy }}>{Ic.check('w-3 h-3')}</div>}
+            </div>
+            <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>I confirm that I have the right or permission to share this material, and I agree to Prepza's <span style={{ color: N.gold, fontWeight: 700 }}>Terms of Service</span>, <span style={{ color: N.gold, fontWeight: 700 }}>Content Policy</span>, and <span style={{ color: N.gold, fontWeight: 700 }}>Copyright Policy</span>.</div>
+          </div>
+          <button onClick={() => canProceed3 && submit()} style={{ width: '100%', background: canProceed3 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed3 ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed3 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', boxShadow: canProceed3 ? `0 6px 24px ${N.gold}40` : 'none' }}>
+            Submit for Review
+          </button>
+          <button onClick={() => setScreen('home')} style={{ width: '100%', background: 'transparent', color: '#9CA3AF', fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel — don't publish</button>
+        </div>
+      )}
+
+      {/* Step 4: Submitting */}
+      {step === 4 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '0 32px', textAlign: 'center' }}>
+          <div style={{ width: 72, height: 72, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 28, height: 28, border: '3px solid rgba(11,20,55,0.4)', borderTopColor: N.navy, borderRadius: '50%', animation: 'spin-slow 0.7s linear infinite' }} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 18, color: N.navy, marginBottom: 6 }}>Submitting…</div>
+            <div style={{ fontSize: 13, color: '#9CA3AF' }}>Uploading to Prepza Library</div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 5: Under review */}
+      {step === 5 && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px' }} className="scrollbar-hide">
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{ width: 72, height: 72, background: 'rgba(76,201,123,0.1)', borderRadius: '50%', border: '3px solid #4CC97B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 28 }}>📥</div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: N.navy, marginBottom: 8 }}>Submitted for Review</div>
+            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65 }}>Your material has been received. Our team reviews every submission to maintain quality standards.</div>
+          </div>
+
+          {/* Timeline */}
+          <div style={{ background: '#fff', borderRadius: 16, padding: '18px 18px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 16 }}>Review timeline</div>
+            {[
+              { label: 'Submitted', sub: 'Your material has been received', done: true, active: false },
+              { label: 'Under Review', sub: approved ? 'Review complete' : 'Being reviewed — usually 24-48h', done: approved, active: !approved },
+              { label: approved ? 'Approved' : 'Decision', sub: approved ? 'Your material is now live in the library' : 'You will be notified of the outcome', done: approved, active: false },
+            ].map((item, i) => (
+              <div key={i} style={{ display: 'flex', gap: 14, marginBottom: i < 2 ? 16 : 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: item.done ? '#4CC97B' : item.active ? N.gold : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.5s' }}>
+                    {item.done ? <div style={{ color: '#fff' }}>{Ic.check('w-4 h-4')}</div> : item.active ? <div style={{ width: 8, height: 8, borderRadius: '50%', background: N.navy }} /> : <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#D1D5DB' }} />}
+                  </div>
+                  {i < 2 && <div style={{ width: 2, height: 24, background: item.done ? '#4CC97B' : '#E5E7EB', borderRadius: 1, transition: 'background 0.5s' }} />}
+                </div>
+                <div style={{ paddingTop: 3 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: item.active ? N.gold : item.done ? N.navy : '#9CA3AF' }}>{item.label}</div>
+                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{item.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {approved && (
+            <div style={{ background: 'rgba(76,201,123,0.08)', border: '1.5px solid #4CC97B40', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#16A34A', marginBottom: 4 }}>🎉 Approved! +50 XP earned</div>
+              <div style={{ fontSize: 12, color: '#6B7280' }}>Your material is now live in the Prepza Library. Other students can find, save and study with it.</div>
+            </div>
+          )}
+
+          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: N.navy, marginBottom: 4 }}>What happens if rejected?</div>
+            <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.65 }}>You'll receive a notification with the reason. You can revise and resubmit, or contact support if you believe it's a mistake.</div>
+          </div>
+
+          <button onClick={() => setScreen('library')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 6px 24px ${N.gold}40` }}>
+            Go to My Library
+          </button>
+          <button onClick={() => setScreen('home')} style={{ width: '100%', background: 'transparent', color: '#9CA3AF', fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Home</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── XP PROGRESS ──────────────────────────────────────────────────────────────
+function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const xpTotal = 1240
+  const xpNext = 1500
+  const level = 4
+  const pct = (xpTotal / xpNext) * 100
+
+  const xpHistory = [
+    { icon: '📄', label: 'Studied ACT 101 Notes', xp: +15, date: 'Today' },
+    { icon: '🧠', label: 'Completed flashcard set', xp: +10, date: 'Today' },
+    { icon: '❓', label: 'Completed quiz (80%)', xp: +20, date: 'Yesterday' },
+    { icon: '🔥', label: '10-day study streak', xp: +50, date: 'Yesterday' },
+    { icon: '📚', label: 'Material approved in Library', xp: +50, date: '3 days ago' },
+    { icon: '💬', label: 'Helpful community reply', xp: +5, date: '4 days ago' },
+    { icon: '📄', label: 'Studied STA 101 Notes', xp: +15, date: '5 days ago' },
+  ]
+
+  const howToEarn = [
+    { label: 'Study a document', xp: '+15 XP' },
+    { label: 'Complete a quiz (any score)', xp: '+20 XP' },
+    { label: 'Complete flashcard set', xp: '+10 XP' },
+    { label: 'Maintain 7-day streak', xp: '+50 XP' },
+    { label: 'Library material approved', xp: '+50 XP' },
+    { label: 'Helpful community reply', xp: '+5 XP' },
+    { label: 'Complete learning milestones', xp: 'Varies' },
+  ]
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>XP & Progress</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
+            <svg width="80" height="80" viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
+              <circle cx="40" cy="40" r="34" fill="none" stroke={N.gold} strokeWidth="8" strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 34 * pct / 100} ${2 * Math.PI * 34}`} strokeDashoffset={2 * Math.PI * 34 * 0.25} />
+            </svg>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ fontWeight: 800, fontSize: 18, color: '#fff', lineHeight: 1 }}>{level}</div>
+              <div style={{ fontSize: 9, color: N.gold, fontWeight: 700, letterSpacing: 0.5 }}>LEVEL</div>
+            </div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>Scholar</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 10 }}>{xpTotal.toLocaleString()} / {xpNext.toLocaleString()} XP to Level {level + 1}</div>
+            <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 99, height: 6, overflow: 'hidden' }}>
+              <div style={{ background: `linear-gradient(90deg,${N.gold},${N.goldL})`, height: 6, width: `${pct}%`, borderRadius: 99, transition: 'width 1s ease' }} />
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>{xpNext - xpTotal} XP to next level</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }} className="scrollbar-hide">
+        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Recent XP activity</div>
+        {xpHistory.map((h, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '12px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+            <div style={{ width: 38, height: 38, background: `${N.gold}15`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{h.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{h.label}</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{h.date}</div>
+            </div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#16A34A' }}>+{h.xp}</div>
+          </div>
+        ))}
+        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, margin: '20px 0 12px' }}>How to earn XP</div>
+        <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+          {howToEarn.map((h, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: i < howToEarn.length - 1 ? '1px solid #F3F4F6' : 'none' }}>
+              <span style={{ fontSize: 13, color: '#374151' }}>{h.label}</span>
+              <Pill text={h.xp} color={N.gold} />
+            </div>
+          ))}
+        </div>
+        <div style={{ height: 20 }} />
+      </div>
+    </div>
+  )
+}
+
+// ─── STUDY STREAK ─────────────────────────────────────────────────────────────
+function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const current = 12
+  const longest = 21
+
+  // Build last 42 days of study activity (mock)
+  const today = new Date()
+  const days = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(today)
+    d.setDate(today.getDate() - (41 - i))
+    const studied = i > 10 ? (Math.random() > 0.3) : i >= 30 // recent 12 are studied
+    return { date: d, studied: i >= 30 || (i >= 15 && Math.random() > 0.4) }
+  })
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Study Streak</div>
+        </div>
+        <div style={{ display: 'flex', gap: 14 }}>
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ fontSize: 38, fontWeight: 800, color: N.gold, lineHeight: 1 }}>{current}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>day streak 🔥</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Current</div>
+          </div>
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ fontSize: 38, fontWeight: 800, color: 'rgba(255,255,255,0.9)', lineHeight: 1 }}>{longest}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>days</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Personal best</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
+        <div style={{ background: '#fff', borderRadius: 16, padding: '16px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 14 }}>Last 42 days</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
+            {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 4 }}>{d}</div>)}
+            {days.map((d, i) => (
+              <div key={i} style={{ aspectRatio: '1', borderRadius: 6, background: d.studied ? N.gold : '#F3F4F6', opacity: d.studied ? (i >= 30 ? 1 : 0.55) : 1, transition: 'background 0.2s' }} title={d.date.toLocaleDateString()} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 14, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><div style={{ width: 12, height: 12, borderRadius: 3, background: N.gold }} /><span style={{ fontSize: 11, color: '#9CA3AF' }}>Studied</span></div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><div style={{ width: 12, height: 12, borderRadius: 3, background: '#F3F4F6', border: '1px solid #E5E7EB' }} /><span style={{ fontSize: 11, color: '#9CA3AF' }}>No activity</span></div>
+          </div>
+        </div>
+        <div style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Streak milestones</div>
+          {[{ days: 7, label: '7-Day Scholar', xp: '+50 XP', done: true }, { days: 14, label: '14-Day Achiever', xp: '+100 XP', done: false }, { days: 21, label: '21-Day Legend', xp: '+150 XP', done: false }, { days: 30, label: '30-Day Master', xp: '+200 XP', done: false }].map((m, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < 3 ? 12 : 0 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: m.done ? `${N.gold}20` : '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {m.done ? <span style={{ fontSize: 16 }}>🏆</span> : <span style={{ fontSize: 16, opacity: 0.4 }}>🔒</span>}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: m.done ? N.navy : '#9CA3AF' }}>{m.days}-Day Streak</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{m.label}</div>
+              </div>
+              <Pill text={m.xp} color={m.done ? N.gold : '#9CA3AF'} />
+            </div>
+          ))}
+        </div>
+        <button onClick={() => setScreen('share-sheet')} style={{ width: '100%', background: 'transparent', border: `1.5px solid ${N.gold}`, color: N.gold, fontWeight: 700, fontSize: 14, borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+          Share 12-Day Streak
+        </button>
+        <div style={{ height: 20 }} />
+      </div>
+    </div>
+  )
+}
+
+// ─── ACHIEVEMENTS ─────────────────────────────────────────────────────────────
+const achievementsList = [
+  { id: 'a1', icon: '📄', name: 'First Document', desc: 'Upload your first document', req: '1 document uploaded', done: true, date: 'Aug 1, 2025', progress: 1, total: 1 },
+  { id: 'a2', icon: '❓', name: 'Quiz Starter', desc: 'Complete your first quiz', req: '1 quiz completed', done: true, date: 'Aug 3, 2025', progress: 1, total: 1 },
+  { id: 'a3', icon: '🔥', name: '7-Day Scholar', desc: 'Maintain a 7-day study streak', req: '7 consecutive study days', done: true, date: 'Aug 8, 2025', progress: 7, total: 7 },
+  { id: 'a4', icon: '📚', name: 'Library Contributor', desc: 'Get a material approved in the library', req: '1 approved submission', done: true, date: 'Aug 9, 2025', progress: 1, total: 1 },
+  { id: 'a5', icon: '🧠', name: 'Quiz Master', desc: 'Complete 25 quizzes', req: '25 quizzes', done: false, progress: 8, total: 25 },
+  { id: 'a6', icon: '🃏', name: 'Flashcard Champ', desc: 'Complete 50 flashcard sessions', req: '50 sessions', done: false, progress: 12, total: 50 },
+  { id: 'a7', icon: '💬', name: 'Community Helper', desc: 'Receive 10 helpful votes on replies', req: '10 helpful votes', done: false, progress: 3, total: 10 },
+  { id: 'a8', icon: '🔥', name: '30-Day Master', desc: 'Maintain a 30-day study streak', req: '30 consecutive days', done: false, progress: 12, total: 30 },
+]
+
+function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [sharing, setSharing] = useState<string | null>(null)
+  const unlocked = achievementsList.filter(a => a.done)
+  const locked = achievementsList.filter(a => !a.done)
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      {sharing && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div style={{ width: 390, background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 32px' }}>
+            <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
+            {(() => { const a = achievementsList.find(x => x.id === sharing)!; return (
+              <div>
+                <div style={{ background: N.navy, borderRadius: 16, padding: '20px', marginBottom: 16, textAlign: 'center' }}>
+                  <div style={{ fontSize: 40, marginBottom: 10 }}>{a.icon}</div>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: '#fff', marginBottom: 4 }}>Achievement Unlocked</div>
+                  <div style={{ fontWeight: 700, fontSize: 20, color: N.gold, marginBottom: 8 }}>{a.name}</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{a.desc}</div>
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Join me on Prepza · prepza.app</div>
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setScreen('share-sheet')} style={{ flex: 1, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Share</button>
+                  <button onClick={() => setSharing(null)} style={{ flex: 1, background: '#F3F4F6', color: '#374151', fontWeight: 700, fontSize: 14, border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Close</button>
+                </div>
+              </div>
+            ) })()}
+          </div>
+        </div>
+      )}
+      <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Achievements</div>
+          <div style={{ marginLeft: 'auto' }}><Pill text={`${unlocked.length} of ${achievementsList.length}`} color={N.gold} /></div>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }} className="scrollbar-hide">
+        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Unlocked ({unlocked.length})</div>
+        {unlocked.map(a => (
+          <div key={a.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, border: `1.5px solid ${N.gold}30`, boxShadow: `0 4px 16px ${N.gold}10`, display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ width: 48, height: 48, background: `${N.gold}15`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{a.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{a.name}</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{a.desc}</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>Achieved {a.date}</div>
+            </div>
+            <button onClick={() => setSharing(a.id)} style={{ background: '#F3F4F6', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans', flexShrink: 0 }}>Share</button>
+          </div>
+        ))}
+        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, margin: '20px 0 12px' }}>In progress ({locked.length})</div>
+        {locked.map(a => (
+          <div key={a.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, opacity: 0.7, boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ width: 48, height: 48, background: '#F3F4F6', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, filter: 'grayscale(1)', opacity: 0.5 }}>{a.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#6B7280' }}>{a.name}</div>
+              <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{a.desc}</div>
+              <div style={{ background: '#F3F4F6', borderRadius: 99, height: 5, marginTop: 8, overflow: 'hidden' }}>
+                <div style={{ background: '#D1D5DB', height: 5, width: `${(a.progress / a.total) * 100}%`, borderRadius: 99 }} />
+              </div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{a.progress} / {a.total} {a.req.split(' ').slice(-1)[0]}</div>
+            </div>
+          </div>
+        ))}
+        <div style={{ height: 20 }} />
+      </div>
+    </div>
+  )
+}
+
+// ─── FOLLOWERS / FOLLOWING ────────────────────────────────────────────────────
+const followPeople = [
+  { name: 'Wanjiru Kamau', username: '@wanjiru.ku', uni: 'UoN', course: 'Computer Science', following: false },
+  { name: 'Brian Omondi', username: '@brian.str', uni: 'Strathmore', course: 'B.Com Finance', following: true },
+  { name: 'Aisha Mohamed', username: '@aisha.mku', uni: 'MKU', course: 'LLB Law', following: false },
+  { name: 'David Njoroge', username: '@david.ku', uni: 'Kenyatta University', course: 'MBBS Medicine', following: true },
+  { name: 'Faith Njeri', username: '@faith.daystar', uni: 'Daystar University', course: 'BA Psychology', following: false },
+  { name: 'James Kariuki', username: '@james.uon', uni: 'UoN', course: 'BSc Economics', following: false },
+]
+
+function FollowListScreen({ mode, setScreen }: { mode: 'followers' | 'following'; setScreen: (s: Screen) => void }) {
+  const [search, setSearch] = useState('')
+  const [states, setStates] = useState<Record<string, 'idle' | 'loading' | 'done'>>(
+    Object.fromEntries(followPeople.map(p => [p.username, 'idle']))
+  )
+  const [following, setFollowing] = useState<Record<string, boolean>>(
+    Object.fromEntries(followPeople.map(p => [p.username, p.following]))
+  )
+
+  const people = mode === 'followers' ? followPeople : followPeople.filter(p => p.following)
+  const filtered = people.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.username.includes(search.toLowerCase()))
+
+  const toggle = (username: string) => {
+    if (states[username] === 'loading') return
+    setStates(s => ({ ...s, [username]: 'loading' }))
+    setTimeout(() => {
+      setFollowing(f => ({ ...f, [username]: !f[username] }))
+      setStates(s => ({ ...s, [username]: 'idle' }))
+    }, 800)
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>{mode === 'followers' ? 'Followers' : 'Following'}</div>
+          <div style={{ marginLeft: 'auto' }}><Pill text={filtered.length.toString()} color={N.gold} /></div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '10px 14px' }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5"/><path d="M10 10l2.5 2.5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans' }} />
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px' }} className="scrollbar-hide">
+        {filtered.length === 0 ? (
+          <EmptyState icon="👥" title={mode === 'followers' ? 'No followers yet' : 'Not following anyone'} sub={mode === 'followers' ? "When students follow you, they'll appear here." : 'Discover students and follow them from their profiles.'} action="Explore Students" onAction={() => setScreen('explore')} />
+        ) : filtered.map((p, i) => {
+          const isFollowing = following[p.username]
+          const isLoading = states[p.username] === 'loading'
+          return (
+            <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+              <div onClick={() => setScreen('student-profile')} style={{ width: 44, height: 44, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: N.navy, flexShrink: 0, cursor: 'pointer' }}>
+                {p.name.split(' ').map(n => n[0]).join('')}
+              </div>
+              <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setScreen('student-profile')}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{p.name}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 1 }}>{p.course} · {p.uni}</div>
+              </div>
+              <button onClick={() => toggle(p.username)} disabled={isLoading} style={{ background: isFollowing ? '#F3F4F6' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: isFollowing ? '#374151' : N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', flexShrink: 0, opacity: isLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s' }}>
+                {isLoading ? <div style={{ width: 10, height: 10, border: '1.5px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.6s linear infinite' }} /> : null}
+                {isFollowing ? 'Following' : 'Follow'}
+              </button>
+            </div>
+          )
+        })}
+        <div style={{ height: 16 }} />
+      </div>
+    </div>
+  )
+}
+
+// ─── GROUP DETAIL ─────────────────────────────────────────────────────────────
+const sampleGroupPosts = [
+  { user: 'Wanjiru Kamau', time: '2h ago', text: "Has anyone found good resources for the Probability chapter in STA 101? I'm stuck on Bayes theorem applications.", likes: 12, comments: 5, userInitials: 'WK' },
+  { user: 'Brian Omondi', time: '4h ago', text: "Just uploaded my MAT 101 revision notes from last semester. Check the Files tab — might be useful for the upcoming test.", likes: 28, comments: 9, userInitials: 'BO' },
+  { user: 'David Njoroge', time: '1d ago', text: "Reminder: CAT 2 is on Thursday. Let's use this group to share any last-minute notes and questions.", likes: 45, comments: 18, userInitials: 'DN' },
+]
+
+function GroupDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [tab, setTab] = useState<'Posts' | 'Questions' | 'Files' | 'Members'>('Posts')
+  const [joined, setJoined] = useState(false)
+  const [joining, setJoining] = useState(false)
+  const [liked, setLiked] = useState<Record<number, boolean>>({})
+
+  const doJoin = () => {
+    if (joining) return
+    setJoining(true)
+    setTimeout(() => { setJoined(j => !j); setJoining(false) }, 900)
+  }
+
+  const groupFiles = [
+    { name: 'MAT 101 Revision Notes.pdf', by: 'Brian Omondi', size: '2.1 MB', date: '4h ago' },
+    { name: 'STA 101 Past Paper 2023.pdf', by: 'Wanjiru Kamau', size: '1.4 MB', date: '1d ago' },
+    { name: 'ACT 101 Formula Sheet.pdf', by: 'Arnold Gichuru', size: '0.8 MB', date: '2d ago' },
+  ]
+  const members = [
+    { name: 'Arnold Gichuru', role: 'Admin', initials: 'AG' },
+    { name: 'Wanjiru Kamau', role: 'Member', initials: 'WK' },
+    { name: 'Brian Omondi', role: 'Member', initials: 'BO' },
+    { name: 'David Njoroge', role: 'Member', initials: 'DN' },
+    { name: 'Aisha Mohamed', role: 'Member', initials: 'AM' },
+    { name: 'James Kariuki', role: 'Member', initials: 'JK' },
+  ]
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      {/* Header */}
+      <div style={{ background: N.navy, padding: '0 18px 0', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <button onClick={() => setScreen('forum')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>ACT 101 — Year 1 · KU</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>248 members · Actuarial Science</div>
+          </div>
+          <button onClick={doJoin} disabled={joining} style={{ background: joined ? 'rgba(255,255,255,0.1)' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: joined ? 'rgba(255,255,255,0.8)' : N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: joining ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.3s' }}>
+            {joining ? <div style={{ width: 10, height: 10, border: '1.5px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.6s linear infinite' }} /> : null}
+            {joined ? 'Joined' : 'Join'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 0 }}>
+          {(['Posts', 'Questions', 'Files', 'Members'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, background: 'none', border: 'none', borderBottom: `2px solid ${tab === t ? N.gold : 'transparent'}`, color: tab === t ? N.gold : 'rgba(255,255,255,0.5)', fontWeight: tab === t ? 700 : 500, fontSize: 13, padding: '10px 0 10px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', transition: 'all 0.2s' }}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto' }} className="scrollbar-hide">
+        {tab === 'Posts' && (
+          <div style={{ padding: '14px 18px' }}>
+            {joined && (
+              <button onClick={() => setScreen('post-composer')} style={{ width: '100%', background: '#fff', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: 14, padding: '12px 16px', marginBottom: 14, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 14, color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, color: N.navy }}>AG</div>
+                Write something…
+              </button>
+            )}
+            {sampleGroupPosts.map((p, i) => (
+              <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                  <div style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{p.userInitials}</div>
+                  <div><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{p.user}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.time}</div></div>
+                </div>
+                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, marginBottom: 12 }}>{p.text}</div>
+                <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #F3F4F6', paddingTop: 10 }}>
+                  <button onClick={() => setLiked(l => ({ ...l, [i]: !l[i] }))} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: liked[i] ? N.gold : '#9CA3AF', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill={liked[i] ? N.gold : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 12.5S1.5 9 1.5 5a2.5 2.5 0 015-0 2.5 2.5 0 015 0c0 4-5.5 7.5-5.5 7.5z"/></svg>
+                    {p.likes + (liked[i] ? 1 : 0)}
+                  </button>
+                  <button onClick={() => setScreen('comments')} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: '#9CA3AF', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 2h10a1 1 0 011 1v6a1 1 0 01-1 1H5l-3 3V3a1 1 0 011-1z"/></svg>
+                    {p.comments}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab === 'Questions' && (
+          <div style={{ padding: '14px 18px' }}>
+            {joined && (
+              <button onClick={() => setScreen('question-composer')} style={{ width: '100%', background: '#fff', border: '1.5px dashed rgba(0,0,0,0.12)', borderRadius: 14, padding: '14px 16px', marginBottom: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 14, color: '#9CA3AF', textAlign: 'left', boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
+                Ask the group a question…
+              </button>
+            )}
+            {[
+              { user: 'Faith Njeri', q: 'Can someone explain the difference between simple and compound interest in ACT 101?', replies: 4, votes: 11, initials: 'FN' },
+              { user: 'James Kariuki', q: 'What past papers are available for STA 101? The library seems incomplete.', replies: 7, votes: 23, initials: 'JK' },
+            ].map((q, i) => (
+              <div key={i} onClick={() => setScreen('comments')} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                  <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: '#6B7280', flexShrink: 0 }}>{q.initials}</div>
+                  <div><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{q.user}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>asked a question</div></div>
+                </div>
+                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, marginBottom: 10 }}>{q.q}</div>
+                <div style={{ display: 'flex', gap: 14, fontSize: 12, color: '#9CA3AF' }}>
+                  <span>{q.votes} votes</span><span>{q.replies} replies</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab === 'Files' && (
+          <div style={{ padding: '14px 18px' }}>
+            {groupFiles.map((f, i) => (
+              <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)', cursor: 'pointer' }} onClick={() => setScreen('doc-ready')}>
+                <div style={{ width: 40, height: 44, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="18" height="22" viewBox="0 0 20 24" fill="none"><path d="M4 0h8l8 8v16H4V0z" fill="#E5E7EB"/><path d="M12 0l8 8h-8V0z" fill="#D1D5DB"/></svg>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: N.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                  <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{f.by} · {f.size} · {f.date}</div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v9M4 8l4 4 4-4M2 14h12" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab === 'Members' && (
+          <div style={{ padding: '14px 18px' }}>
+            <div style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 600, marginBottom: 12 }}>248 MEMBERS</div>
+            {members.map((m, i) => (
+              <div key={i} onClick={() => setScreen('student-profile')} style={{ background: '#fff', borderRadius: 14, padding: '12px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{m.initials}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{m.name}</div>
+                </div>
+                {m.role === 'Admin' && <Pill text="Admin" color={N.gold} />}
+              </div>
+            ))}
+            <div style={{ height: 16 }} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── GROUP CREATE ─────────────────────────────────────────────────────────────
+function GroupCreateScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [step, setStep] = useState(1)
+  const [name, setName] = useState('')
+  const [desc, setDesc] = useState('')
+  const [privacy, setPrivacy] = useState<'Public' | 'Private' | 'Course-only'>('Public')
+  const [uni, setUni] = useState('Kenyatta University')
+  const [course, setCourse] = useState('Actuarial Science')
+  const [unit, setUnit] = useState('ACT 101')
+  const [year, setYear] = useState('Year 1')
+  const [memberSearch, setMemberSearch] = useState('')
+  const [selected, setSelected] = useState<string[]>([])
+  const [creating, setCreating] = useState(false)
+  const [done, setDone] = useState(false)
+
+  const candidates = followPeople.filter(p => !memberSearch || p.name.toLowerCase().includes(memberSearch.toLowerCase()))
+
+  const create = () => {
+    setCreating(true)
+    setTimeout(() => { setCreating(false); setDone(true) }, 1800)
+    setTimeout(() => setScreen('group-detail'), 3200)
+  }
+
+  if (done) return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, gap: 20, padding: '0 28px', textAlign: 'center', animation: 'fadeSlideUp 0.4s ease' }}>
+      <div style={{ width: 72, height: 72, background: 'rgba(76,201,123,0.1)', borderRadius: '50%', border: '3px solid #4CC97B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>✓</div>
+      <div>
+        <div style={{ fontWeight: 800, fontSize: 20, color: N.navy, marginBottom: 8 }}>{name} created!</div>
+        <div style={{ fontSize: 13, color: '#6B7280' }}>Taking you to the group…</div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: step < 3 ? 14 : 0 }}>
+          <button onClick={() => step > 1 ? setStep(s => s - 1) : setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Create Group</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Step {step} of 3</div>
+          </div>
+        </div>
+        {step < 3 && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[1,2,3].map(s => <div key={s} style={{ flex: 1, height: 3, borderRadius: 99, background: s <= step ? N.gold : 'rgba(255,255,255,0.15)', transition: 'background 0.3s' }} />)}
+          </div>
+        )}
+      </div>
+
+      {step === 1 && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Group name</div>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. ACT 101 — Year 1 · KU" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Description <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="What is this group for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Privacy</div>
+            {(['Public', 'Private', 'Course-only'] as const).map(p => (
+              <div key={p} onClick={() => setPrivacy(p)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 14px', background: '#fff', borderRadius: 12, border: `1.5px solid ${privacy === p ? N.gold : 'rgba(0,0,0,0.08)'}`, marginBottom: 8, cursor: 'pointer', transition: 'border-color 0.2s' }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${privacy === p ? N.gold : '#D1D5DB'}`, background: privacy === p ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {privacy === p && <div style={{ width: 6, height: 6, borderRadius: '50%', background: N.navy }} />}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{p}</div>
+                  <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p === 'Public' ? 'Anyone can find and join' : p === 'Private' ? 'Invite-only, hidden from search' : 'Only students on this course'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => name.trim() && setStep(2)} style={{ width: '100%', background: name.trim() ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: name.trim() ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: name.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>Continue</button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
+          {[
+            { label: 'University', value: uni, set: setUni, opts: ['Kenyatta University', 'University of Nairobi', 'Strathmore University', 'JKUAT', 'Other'] },
+            { label: 'Course', value: course, set: setCourse, opts: ['Actuarial Science', 'Computer Science', 'Business Administration', 'Law', 'Medicine', 'Other'] },
+            { label: 'Unit / Module', value: unit, set: setUnit, opts: ['ACT 101', 'MAT 101', 'STA 101', 'Other'] },
+            { label: 'Year of Study', value: year, set: setYear, opts: ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5', 'Mixed'] },
+          ].map(f => (
+            <div key={f.label} style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>{f.label}</div>
+              <select value={f.value} onChange={e => f.set(e.target.value)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none', boxSizing: 'border-box' }}>
+                {f.opts.map(o => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+          ))}
+          <button onClick={() => setStep(3)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginTop: 8 }}>Continue</button>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '14px 18px 0' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Add members <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional — you can add later)</span></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '10px 14px', marginBottom: 12 }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="5" stroke="#9CA3AF" strokeWidth="1.5"/><path d="M10 10l2.5 2.5" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Search students…" style={{ flex: 1, border: 'none', outline: 'none', fontSize: 14, fontFamily: 'Plus Jakarta Sans', color: N.navy }} />
+            </div>
+            {selected.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {selected.map(s => (
+                  <div key={s} style={{ background: `${N.gold}20`, borderRadius: 99, padding: '4px 10px 4px 8px', display: 'flex', gap: 5, alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: N.navy }}>{s.split(' ')[0]}</span>
+                    <button onClick={() => setSelected(arr => arr.filter(x => x !== s))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px' }} className="scrollbar-hide">
+            {candidates.map((p, i) => {
+              const sel = selected.includes(p.name)
+              return (
+                <div key={i} onClick={() => setSelected(arr => sel ? arr.filter(x => x !== p.name) : [...arr, p.name])} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #F3F4F6', cursor: 'pointer' }}>
+                  <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{p.name}</div>
+                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.course}</div>
+                  </div>
+                  <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${sel ? N.gold : '#D1D5DB'}`, background: sel ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
+                    {sel && <div style={{ color: N.navy }}>{Ic.check('w-3 h-3')}</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ padding: '14px 18px 20px', flexShrink: 0 }}>
+            <button onClick={create} disabled={creating} style={{ width: '100%', background: creating ? '#E5E7EB' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: creating ? '#9CA3AF' : N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: creating ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: creating ? 'none' : `0 6px 24px ${N.gold}40` }}>
+              {creating && <div style={{ width: 16, height: 16, border: '2px solid #9CA3AF', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.65s linear infinite' }} />}
+              {creating ? 'Creating group…' : `Create Group${selected.length > 0 ? ` with ${selected.length} member${selected.length > 1 ? 's' : ''}` : ''}`}
+            </button>
+            <button onClick={() => !creating && setScreen('home')} style={{ width: '100%', background: 'transparent', color: '#9CA3AF', fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── EMPTY & ERROR STATES ─────────────────────────────────────────────────────
+
+function EmptyState({ icon, title, sub, action, onAction }: { icon: string; title: string; sub: string; action?: string; onAction?: () => void }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 32px', textAlign: 'center', gap: 14 }}>
+      <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 4 }}>{icon}</div>
+      <div style={{ fontWeight: 800, fontSize: 18, color: N.navy }}>{title}</div>
+      <div style={{ fontSize: 13, color: '#9CA3AF', lineHeight: 1.65, maxWidth: 260 }}>{sub}</div>
+      {action && onAction && (
+        <button onClick={onAction} style={{ marginTop: 8, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 14, padding: '12px 24px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 4px 16px rgba(201,168,76,0.35)` }}>{action}</button>
+      )}
+    </div>
+  )
+}
+
+function ErrorState({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 32px', textAlign: 'center', gap: 14 }}>
+      <div style={{ fontSize: 52 }}>⚠️</div>
+      <div style={{ fontWeight: 800, fontSize: 18, color: N.navy }}>Something went wrong</div>
+      <div style={{ fontSize: 13, color: '#9CA3AF', lineHeight: 1.65 }}>We couldn't load this content. Check your connection and try again.</div>
+      {onRetry && <button onClick={onRetry} style={{ marginTop: 8, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 14, padding: '12px 24px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Try Again</button>}
+    </div>
+  )
+}
+
+// ─── SUBSCRIPTION ─────────────────────────────────────────────────────────────
+function SubscriptionScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [selected, setSelected] = useState<'semester'|'annual'>('semester')
+  const plans = [
+    { id: 'free', name: 'Free', price: 'KES 0', period: '', active: true, color: '#6B7280', features: ['5 AI sessions/month','3 document uploads','Basic flashcards','Forum browsing'] },
+    { id: 'semester', name: 'Semester', price: 'KES 599', period: '/semester', badge: 'Popular', badgeColor: N.gold, color: N.gold, highlight: true, features: ['Unlimited AI sessions','Unlimited uploads','All learning tools','Priority processing','Offline access','Full forum access'] },
+    { id: 'annual', name: 'Annual', price: 'KES 999', period: '/year', badge: 'Best Value', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Everything in Semester','2 months free','Early feature access','Group study tools','Priority support'] },
+  ]
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('settings')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Prepza Premium</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Unlock all AI study tools</div></div>
+        </div>
+        <div style={{ marginTop: 16, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 20 }}>🎓</span>
+          <div style={{ flex: 1 }}><div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>Current Plan: Free</div><div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>Upgrade to unlock everything</div></div>
+          <Pill text="Active" color="#4CC97B" />
+        </div>
+      </div>
+      <div style={{ padding: '20px 18px' }}>
+        {plans.map(p => (
+          <div key={p.id} onClick={() => p.id !== 'free' && setSelected(p.id as any)}
+            style={{ background: '#fff', borderRadius: 18, padding: 18, marginBottom: 12, border: `2px solid ${selected === p.id ? p.color : 'rgba(0,0,0,0.06)'}`, cursor: p.id !== 'free' ? 'pointer' : 'default', position: 'relative', boxShadow: selected === p.id ? `0 4px 20px ${p.color}25` : '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
+            {(p as any).badge && <div style={{ position: 'absolute', top: -11, right: 16, background: (p as any).badgeColor, color: p.id === 'semester' ? N.navy : '#fff', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>{(p as any).badge}</div>}
+            {p.active && <div style={{ position: 'absolute', top: -11, left: 16, background: '#E5E7EB', color: '#6B7280', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>Current</div>}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: N.navy }}>{p.name}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginTop: 2 }}>
+                  <span style={{ fontWeight: 800, fontSize: 22, color: p.color }}>{p.price}</span>
+                  <span style={{ fontSize: 11, color: '#9CA3AF' }}>{p.period}</span>
+                </div>
+              </div>
+              {p.id !== 'free' && (
+                <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${selected === p.id ? p.color : '#D1D5DB'}`, background: selected === p.id ? p.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {selected === p.id && <div style={{ color: p.id === 'semester' ? N.navy : '#fff' }}>{Ic.check('w-3 h-3')}</div>}
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {p.features.map((f, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ width: 16, height: 16, borderRadius: '50%', background: `${p.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><div style={{ color: p.color }}>{Ic.check('w-2.5 h-2.5')}</div></div>
+                  <span style={{ fontSize: 12, color: '#4B5563' }}>{f}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        <button onClick={() => setScreen('payment')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 6px 24px rgba(201,168,76,0.4)`, marginTop: 4 }}>
+          Upgrade — {selected === 'semester' ? 'KES 599' : 'KES 999'}
+        </button>
+        <button onClick={() => setScreen('payment-history')} style={{ width: '100%', background: 'transparent', color: '#9CA3AF', fontSize: 12, fontWeight: 600, border: 'none', padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View payment history</button>
+        <div style={{ textAlign: 'center', fontSize: 11, color: '#D1D5DB', lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & Stripe. Cancel anytime.</div>
+      </div>
+    </div>
+  )
+}
+
+// ─── PAYMENT ──────────────────────────────────────────────────────────────────
+function PaymentScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [phone, setPhone] = useState('0712 345 678')
+  const [method, setMethod] = useState<'mpesa'|'card'>('mpesa')
+  const [step, setStep] = useState<'form'|'stk'>('form')
+
+  const pay = () => {
+    setStep('stk')
+    setTimeout(() => { Math.random() > 0.2 ? setScreen('payment-success') : setScreen('payment-failure') }, 3200)
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 20px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <button onClick={() => setScreen('subscription')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Checkout</div>
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '14px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>Prepza Semester Plan</span>
+            <span style={{ color: N.gold, fontWeight: 800 }}>KES 599</span>
+          </div>
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 8 }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>Total</span>
+            <span style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>KES 599</span>
+          </div>
+        </div>
+      </div>
+      {step === 'stk' ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '0 32px', textAlign: 'center' }}>
+          <div style={{ width: 72, height: 72, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, animation: 'pulse-gold 2s infinite' }}>📱</div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>Check your phone</div>
+            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65 }}>An M-Pesa payment request was sent to <strong>{phone}</strong>. Enter your M-Pesa PIN to complete.</div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: N.gold, opacity: 0.4 + i * 0.3, animation: `shimmer ${0.7 + i * 0.3}s ease-in-out infinite alternate` }} />)}
+          </div>
+          <button onClick={() => setStep('form')} style={{ color: '#9CA3AF', background: 'none', border: 'none', fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel request</button>
+        </div>
+      ) : (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Payment Method</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[{ key: 'mpesa', label: 'M-Pesa', icon: '📱' }, { key: 'card', label: 'Card', icon: '💳' }].map(m => (
+                <button key={m.key} onClick={() => setMethod(m.key as any)} style={{ flex: 1, padding: '12px 8px', background: '#fff', border: `2px solid ${method === m.key ? N.gold : 'rgba(0,0,0,0.08)'}`, borderRadius: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: method === m.key ? N.navy : '#6B7280', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.2s' }}>
+                  <span>{m.icon}</span>{m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {method === 'mpesa' ? (
+            <div style={{ background: '#fff', borderRadius: 16, padding: 18, marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <div style={{ width: 40, height: 40, background: '#4CC97B20', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>📱</div>
+                <div><div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>Lipa na M-Pesa</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>Safaricom M-Pesa</div></div>
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>M-Pesa Phone Number</div>
+                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XX XXX XXX" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 15, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box', letterSpacing: 0.5 }} />
+              </div>
+              <div style={{ background: 'rgba(76,201,123,0.08)', border: '1px solid rgba(76,201,123,0.2)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#4CC97B', fontWeight: 600 }}>
+                💡 You will receive an M-Pesa STK push to authorise this payment
+              </div>
+            </div>
+          ) : (
+            <div style={{ background: '#fff', borderRadius: 16, padding: 18, marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+              {[['Card Number','1234 5678 9012 3456'],['Cardholder Name','Arnold Gichuru']].map(([label, placeholder]) => (
+                <div key={label} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>{label}</div>
+                  <input placeholder={placeholder} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 10 }}>
+                {[['Expiry','MM/YY'],['CVC','•••']].map(([label, ph]) => (
+                  <div key={label} style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>{label}</div>
+                    <input placeholder={ph} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <button onClick={pay} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)' }}>
+            {method === 'mpesa' ? '📱 Send M-Pesa Request' : '💳 Pay KES 599'}
+          </button>
+          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: '#D1D5DB' }}>🔒 Secured by Stripe & Safaricom</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  useEffect(() => { const t = setTimeout(() => setScreen('home'), 5000); return () => clearTimeout(t) }, [])
+  const ref = `PZA-${Math.floor(100000 + Math.random() * 900000)}`
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: '0 28px', textAlign: 'center', gap: 20 }}>
+      <div style={{ width: 80, height: 80, background: 'rgba(76,201,123,0.12)', borderRadius: '50%', border: '3px solid #4CC97B', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeSlideUp 0.5s ease both' }}>
+        <div style={{ color: '#4CC97B' }}>{Ic.check('w-10 h-10')}</div>
+      </div>
+      <div>
+        <div style={{ fontWeight: 800, fontSize: 22, color: N.navy, marginBottom: 8 }}>Payment Successful! 🎉</div>
+        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7 }}>Welcome to Prepza Premium. Your Semester plan is now active — enjoy unlimited AI sessions and all learning tools.</div>
+      </div>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '16px 20px', width: '100%', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {[['Plan','Semester'],['Amount','KES 599'],['Valid Until','Jan 15, 2026'],['Reference',ref]].map(([k,v]) => (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: '#9CA3AF' }}>{k}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: N.navy, fontFamily: k === 'Reference' ? 'monospace' : 'Plus Jakarta Sans' }}>{v}</span>
+          </div>
+        ))}
+      </div>
+      <button onClick={() => setScreen('home')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)' }}>
+        Start Studying Premium
+      </button>
+      <div style={{ fontSize: 11, color: '#D1D5DB' }}>Redirecting to home in a moment…</div>
+    </div>
+  )
+}
+
+function PaymentFailureScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: '0 28px', textAlign: 'center', gap: 20 }}>
+      <div style={{ width: 80, height: 80, background: 'rgba(201,76,76,0.1)', borderRadius: '50%', border: '3px solid #C94C4C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: '#C94C4C' }}>{Ic.close('w-9 h-9')}</div>
+      </div>
+      <div>
+        <div style={{ fontWeight: 800, fontSize: 22, color: N.navy, marginBottom: 8 }}>Payment Failed</div>
+        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7 }}>Your M-Pesa request was cancelled or timed out. Please try again or switch to card payment.</div>
+      </div>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '14px 18px', width: '100%', border: '1px solid rgba(201,76,76,0.2)', textAlign: 'left' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#C94C4C', marginBottom: 8 }}>Common reasons:</div>
+        {['Insufficient M-Pesa balance','Incorrect PIN entered','Payment request timed out','Phone off or unavailable'].map((r, i) => (
+          <div key={i} style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>• {r}</div>
+        ))}
+      </div>
+      <button onClick={() => setScreen('payment')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Try Again</button>
+      <button onClick={() => setScreen('subscription')} style={{ width: '100%', background: 'transparent', color: '#6B7280', fontWeight: 600, fontSize: 13, border: '1.5px solid rgba(0,0,0,0.1)', borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Plans</button>
+    </div>
+  )
+}
+
+function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const txns = [
+    { ref: 'PZA-849201', plan: 'Semester Plan', amount: 'KES 599', date: 'Aug 10, 2025', method: 'M-Pesa', ok: true },
+    { ref: 'PZA-763410', plan: 'Semester Plan', amount: 'KES 599', date: 'Jan 15, 2025', method: 'M-Pesa', ok: true },
+    { ref: 'PZA-551024', plan: 'Semester Plan', amount: 'KES 599', date: 'Jul 20, 2024', method: 'Card', ok: true },
+    { ref: 'PZA-401009', plan: 'Semester Plan', amount: 'KES 599', date: 'Jan 08, 2024', method: 'M-Pesa', ok: true },
+    { ref: 'PZA-390003', plan: 'Semester Plan', amount: 'KES 599', date: 'Dec 30, 2023', method: 'M-Pesa', ok: false },
+  ]
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => setScreen('subscription')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Payment History</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }} className="scrollbar-hide">
+        {txns.map((t, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ width: 44, height: 44, background: t.ok ? 'rgba(76,201,123,0.1)' : 'rgba(201,76,76,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{t.ok ? '✅' : '❌'}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{t.plan}</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{t.date} · {t.method}</div>
+              <div style={{ fontSize: 10, color: '#D1D5DB', fontFamily: 'monospace', marginTop: 2 }}>{t.ref}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: t.ok ? N.navy : '#C94C4C', marginBottom: 4 }}>{t.amount}</div>
+              <Pill text={t.ok ? 'Success' : 'Failed'} color={t.ok ? '#4CC97B' : '#C94C4C'} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── ADMIN PLATFORM ───────────────────────────────────────────────────────────
+
+const adminNav = [
+  { key: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { key: 'users', label: 'Users', icon: '👥' },
+  { key: 'content', label: 'Content', icon: '📄' },
+  { key: 'universities', label: 'Universities', icon: '🏛️' },
+  { key: 'community', label: 'Community', icon: '💬' },
+  { key: 'opportunities', label: 'Opportunities', icon: '🚀' },
+  { key: 'ai-usage', label: 'AI & Usage', icon: '🤖' },
+  { key: 'payments', label: 'Payments', icon: '💳' },
+  { key: 'communications', label: 'Communications', icon: '📢' },
+  { key: 'analytics', label: 'Analytics', icon: '📈' },
+  { key: 'moderation', label: 'Moderation', icon: '🛡️' },
+  { key: 'system', label: 'System', icon: '⚙️' },
+]
+
+const aUsers = [
+  { id: 'U001', name: 'Arnold Gichuru', email: 'arnold@ku.ac.ke', uni: 'Kenyatta University', course: 'Actuarial Science', year: 'Y1', sub: 'Semester', status: 'Active', joined: 'Aug 1, 2025', docs: 8, aiReqs: 142 },
+  { id: 'U002', name: 'Wanjiru Kamau', email: 'wanjiru@uon.ac.ke', uni: 'UoN', course: 'Computer Science', year: 'Y2', sub: 'Annual', status: 'Active', joined: 'Jul 15, 2025', docs: 24, aiReqs: 389 },
+  { id: 'U003', name: 'Brian Omondi', email: 'brian@strathmore.edu', uni: 'Strathmore', course: 'B.Com Finance', year: 'Y3', sub: 'Semester', status: 'Active', joined: 'Jul 10, 2025', docs: 15, aiReqs: 211 },
+  { id: 'U004', name: 'Aisha Mohamed', email: 'aisha@mku.ac.ke', uni: 'MKU', course: 'LLB Law', year: 'Y2', sub: 'Free', status: 'Active', joined: 'Jun 28, 2025', docs: 3, aiReqs: 12 },
+  { id: 'U005', name: 'David Njoroge', email: 'david@ku.ac.ke', uni: 'Kenyatta University', course: 'MBBS Medicine', year: 'Y3', sub: 'Annual', status: 'Active', joined: 'Jun 20, 2025', docs: 31, aiReqs: 456 },
+  { id: 'U006', name: 'Grace Muthoni', email: 'grace@jkuat.ac.ke', uni: 'JKUAT', course: 'BSc Comp Sci', year: 'Y1', sub: 'Free', status: 'Suspended', joined: 'Jun 5, 2025', docs: 0, aiReqs: 0 },
+  { id: 'U007', name: 'James Kariuki', email: 'james@uon.ac.ke', uni: 'UoN', course: 'BSc Economics', year: 'Y2', sub: 'Semester', status: 'Active', joined: 'May 30, 2025', docs: 11, aiReqs: 178 },
+  { id: 'U008', name: 'Faith Njeri', email: 'faith@daystar.ac.ke', uni: 'Daystar University', course: 'BA Psychology', year: 'Y3', sub: 'Free', status: 'Active', joined: 'May 20, 2025', docs: 4, aiReqs: 28 },
+]
+
+function AdminBadge({ text, color }: { text: string; color: string }) {
+  const bg = color === 'green' ? '#DCFCE7' : color === 'amber' ? '#FEF3C7' : color === 'red' ? '#FEE2E2' : color === 'blue' ? '#DBEAFE' : '#F3F4F6'
+  const fg = color === 'green' ? '#16A34A' : color === 'amber' ? '#D97706' : color === 'red' ? '#DC2626' : color === 'blue' ? '#2563EB' : '#6B7280'
+  return <span style={{ background: bg, color: fg, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans', whiteSpace: 'nowrap' }}>{text}</span>
+}
+
+function AdminBarChart({ data, labels, height = 80, color = N.gold }: { data: number[]; labels?: string[]; height?: number; color?: string }) {
+  const max = Math.max(...data) || 1
+  const w = data.length * 28
+  return (
+    <svg width="100%" height={height + (labels ? 18 : 0)} viewBox={`0 0 ${w} ${height + (labels ? 18 : 0)}`} preserveAspectRatio="none">
+      {data.map((v, i) => {
+        const bh = Math.max(2, (v / max) * (height - 4))
+        return (
+          <g key={i}>
+            <rect x={i * 28 + 2} y={height - bh} width={24} height={bh} rx={4} fill={color} opacity={0.75 + (i === data.length - 1 ? 0.25 : 0)} />
+            {labels && <text x={i * 28 + 14} y={height + 14} textAnchor="middle" fontSize="9" fill="#9CA3AF" fontFamily="Plus Jakarta Sans">{labels[i]}</text>}
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function AdminLineChart({ data, color = N.gold, height = 60 }: { data: number[]; color?: string; height?: number }) {
+  const max = Math.max(...data) || 1
+  const min = Math.min(...data)
+  const range = max - min || 1
+  const W = 300
+  const pts = data.map((v, i) => [
+    (i / (data.length - 1)) * W,
+    height - 8 - ((v - min) / range) * (height - 16)
+  ])
+  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
+  const areaPath = `${linePath} L${W},${height} L0,${height} Z`
+  const gid = `ag${color.replace('#','')}`
+  return (
+    <svg width="100%" height={height} viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.18} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gid})`} />
+      <path d={linePath} stroke={color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {pts.map((p, i) => i === pts.length - 1 && <circle key={i} cx={p[0]} cy={p[1]} r={4} fill={color} stroke="#fff" strokeWidth={1.5} />)}
+    </svg>
+  )
+}
+
+function AdminKPI({ label, value, sub, trend, color = N.navy, chartData }: { label: string; value: string; sub?: string; trend?: string; color?: string; chartData?: number[] }) {
+  const isUp = trend?.startsWith('+')
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF', letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontWeight: 800, fontSize: 24, color, letterSpacing: '-0.5px', lineHeight: 1 }}>{value}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: 11, color: '#9CA3AF' }}>{sub}</div>
+        {trend && <span style={{ fontSize: 11, fontWeight: 700, color: isUp ? '#16A34A' : '#DC2626' }}>{trend}</span>}
+      </div>
+      {chartData && <div style={{ marginTop: 4 }}><AdminLineChart data={chartData} color={color === N.navy ? N.gold : color} height={40} /></div>}
+    </div>
+  )
+}
+
+function AdminTable({ cols, rows, actions }: { cols: string[]; rows: (string | React.ReactNode)[][]; actions?: (i: number) => React.ReactNode }) {
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>
+        <thead>
+          <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+            {cols.map(c => <th key={c} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#6B7280', fontSize: 11, whiteSpace: 'nowrap' }}>{c}</th>)}
+            {actions && <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#6B7280', fontSize: 11 }}>Actions</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} style={{ borderBottom: '1px solid #F3F4F6', transition: 'background 0.1s' }}>
+              {row.map((cell, j) => <td key={j} style={{ padding: '12px 14px', color: j === 0 ? N.navy : '#4B5563', fontWeight: j === 0 ? 600 : 400, verticalAlign: 'middle', whiteSpace: 'nowrap' }}>{cell}</td>)}
+              {actions && <td style={{ padding: '12px 14px', textAlign: 'right' }}>{actions(i)}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function AdminCard({ title, children, action, actionLabel }: { title: string; children: React.ReactNode; action?: () => void; actionLabel?: string }) {
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{title}</div>
+        {action && <button onClick={action} style={{ fontSize: 12, fontWeight: 600, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{actionLabel ?? 'View all'}</button>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function AdminSection({ section, setSection }: { section: string; setSection: (s: string) => void }) {
+  const [search, setSearch] = useState('')
+  const [userFilter, setUserFilter] = useState('All')
+  const [selectedUser, setSelectedUser] = useState<typeof aUsers[0] | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ type: string; target: string } | null>(null)
+  const [contentTab, setContentTab] = useState('Documents')
+  const [commTab, setCommTab] = useState('Announcements')
+  const [announcementDraft, setAnnouncementDraft] = useState('')
+  const [announcements] = useState([
+    { title: 'Maintenance Window', body: 'Scheduled downtime: Aug 15, 2AM-4AM EAT', sent: 'Aug 12, 2025', reach: '2,847' },
+    { title: 'New Feature: Mind Maps', body: 'We just launched AI-powered mind maps from your documents!', sent: 'Aug 8, 2025', reach: '2,721' },
+    { title: 'Semester Plan Discount', body: 'August Special: 20% off Semester plans for new users.', sent: 'Aug 1, 2025', reach: '2,643' },
+  ])
+
+  const filteredUsers = aUsers.filter(u => {
+    const q = search.toLowerCase()
+    const matchQ = !q || u.name.toLowerCase().includes(q) || u.email.includes(q) || u.uni.toLowerCase().includes(q)
+    const matchF = userFilter === 'All' || (userFilter === 'Active' && u.status === 'Active') || (userFilter === 'Suspended' && u.status === 'Suspended') || (userFilter === 'Premium' && u.sub !== 'Free') || (userFilter === 'Free' && u.sub === 'Free')
+    return matchQ && matchF
+  })
+
+  const revenueData = [89000, 102000, 118000, 95000, 134000, 127000, 142250]
+  const revLabels = ['Feb','Mar','Apr','May','Jun','Jul','Aug']
+  const studentsData = [1840, 1980, 2124, 2267, 2488, 2643, 2847]
+  const aiData = [2840, 3100, 2650, 3890, 4234, 3102, 3214]
+  const aiLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const uploadsData = [45, 62, 38, 74, 55, 68, 59, 83, 71, 49, 94, 78, 65, 72]
+
+  const ActivityDot = ({ color }: { color: string }) => <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, marginTop: 3 }} />
+
+  if (section === 'dashboard') return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* KPI grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
+        <AdminKPI label="Total Students" value="2,847" sub="All time" trend="+124 this week" color={N.navy} chartData={studentsData} />
+        <AdminKPI label="Active Today" value="891" sub="31% of total" trend="+8% vs yesterday" color="#4C7BC9" chartData={aiData} />
+        <AdminKPI label="Revenue (MTD)" value="KES 142K" sub="Aug 2025" trend="+12% vs Jul" color="#16A34A" chartData={revenueData} />
+        <AdminKPI label="Active Subscriptions" value="893" sub="Free: 1,954" trend="+34 this week" color={N.gold} chartData={studentsData.map(v => v * 0.31)} />
+        <AdminKPI label="AI Requests Today" value="3,214" sub="Avg 1.13 per user" trend="+18% vs yesterday" color="#7C3AED" chartData={aiData} />
+        <AdminKPI label="Est. AI Cost (MTD)" value="KES 12.4K" sub="~KES 4.35/user" trend="-3% vs Jul" color="#DC2626" chartData={aiData.map(v => v * 3.9)} />
+        <AdminKPI label="Docs Uploaded" value="14,302" sub="Today: 72" trend="+287 this week" color={N.navy} chartData={uploadsData} />
+        <AdminKPI label="Storage Used" value="342 GB" sub="of 1 TB (34%)" color="#6B7280" chartData={[210,240,265,290,315,328,342]} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 14 }}>
+        {/* Revenue chart */}
+        <AdminCard title="Revenue — Last 7 Months">
+          <div style={{ padding: '16px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 11, color: '#9CA3AF' }}>KES</span>
+              <AdminBadge text="+12% MoM" color="green" />
+            </div>
+            <AdminBarChart data={revenueData} labels={revLabels} height={100} color={N.gold} />
+          </div>
+        </AdminCard>
+        {/* AI usage */}
+        <AdminCard title="AI Requests — This Week">
+          <div style={{ padding: '16px 18px' }}>
+            <AdminBarChart data={aiData} labels={aiLabels} height={100} color="#7C3AED" />
+          </div>
+        </AdminCard>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        {/* Student growth */}
+        <AdminCard title="Student Growth — Last 7 Months">
+          <div style={{ padding: '16px 18px' }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: N.navy, marginBottom: 4 }}>2,847 <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>total</span></div>
+            <AdminLineChart data={studentsData} color={N.navy} height={60} />
+          </div>
+        </AdminCard>
+
+        {/* Recent activity */}
+        <AdminCard title="Recent Activity">
+          <div style={{ padding: '0 18px' }}>
+            {[
+              { dot: '#4CC97B', text: 'Faith Njeri registered · Daystar University', time: '2 min ago' },
+              { dot: N.gold, text: 'Arnold Gichuru upgraded to Semester Plan', time: '5 min ago' },
+              { dot: '#7C3AED', text: 'AI processed ACT 101 (3 flashcard sets, 1 podcast)', time: '9 min ago' },
+              { dot: '#4C7BC9', text: 'Brian Omondi uploaded MAT 101 Past Papers.pdf', time: '14 min ago' },
+              { dot: '#DC2626', text: 'Report: Aisha Mohamed reported post #1047', time: '22 min ago' },
+              { dot: N.gold, text: 'James Kariuki renewed Annual Plan — KES 999', time: '31 min ago' },
+              { dot: '#6B7280', text: 'System: Nightly AI job completed (847 docs processed)', time: '2h ago' },
+            ].map((a, i) => (
+              <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderBottom: i < 6 ? '1px solid #F3F4F6' : 'none' }}>
+                <ActivityDot color={a.dot} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.4 }}>{a.text}</div>
+                  <div style={{ fontSize: 11, color: '#D1D5DB', marginTop: 2 }}>{a.time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </AdminCard>
+      </div>
+
+      {/* Alerts */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+        {[
+          { icon: '🛡️', label: 'Pending Reports', value: '7', color: '#FEF3C7', fg: '#D97706', action: () => setSection('moderation') },
+          { icon: '📄', label: 'Content Awaiting Review', value: '23', color: '#DBEAFE', fg: '#2563EB', action: () => setSection('content') },
+          { icon: '💳', label: 'Failed Payments', value: '14', color: '#FEE2E2', fg: '#DC2626', action: () => setSection('payments') },
+        ].map(a => (
+          <button key={a.label} onClick={a.action} style={{ background: a.color, border: 'none', borderRadius: 14, padding: '14px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left' }}>
+            <span style={{ fontSize: 22 }}>{a.icon}</span>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: a.fg }}>{a.value}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: a.fg, opacity: 0.8 }}>{a.label}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
+  if (section === 'users') return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* User detail panel */}
+      {selectedUser && (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+              <div style={{ width: 52, height: 52, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, color: N.navy }}>{selectedUser.name.split(' ').map(n => n[0]).join('')}</div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 17, color: N.navy }}>{selectedUser.name}</div>
+                <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{selectedUser.email}</div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <AdminBadge text={selectedUser.status} color={selectedUser.status === 'Active' ? 'green' : 'red'} />
+                  <AdminBadge text={selectedUser.sub} color={selectedUser.sub === 'Free' ? 'gray' : 'amber'} />
+                </div>
+              </div>
+            </div>
+            <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 20 }}>×</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
+            {[['University', selectedUser.uni], ['Course', selectedUser.course], ['Year', selectedUser.year], ['Joined', selectedUser.joined], ['Documents', selectedUser.docs.toString()], ['AI Requests', selectedUser.aiReqs.toString()], ['User ID', selectedUser.id], ['Subscription', selectedUser.sub]].map(([k, v]) => (
+              <div key={k} style={{ background: '#F9FAFB', borderRadius: 10, padding: '10px 12px' }}>
+                <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 3 }}>{k}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { label: 'Suspend', color: '#FEF3C7', fg: '#D97706' },
+              { label: 'Reset Password', color: '#DBEAFE', fg: '#2563EB' },
+              { label: 'Change Role', color: '#F3F4F6', fg: '#374151' },
+              { label: 'View Activity', color: '#F0FDF4', fg: '#16A34A' },
+            ].map(a => (
+              <button key={a.label} onClick={() => setConfirmAction({ type: a.label, target: selectedUser.name })} style={{ background: a.color, color: a.fg, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12 }}>{a.label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Confirm modal */}
+      {confirmAction && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmAction(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>Confirm: {confirmAction.type}</div>
+            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, lineHeight: 1.6 }}>Are you sure you want to <strong>{confirmAction.type.toLowerCase()}</strong> for <strong>{confirmAction.target}</strong>? This action will be logged.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmAction(null)} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button onClick={() => setConfirmAction(null)} style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AdminCard title={`Users — ${filteredUsers.length} of ${aUsers.length}`}>
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 10, padding: '8px 12px', minWidth: 200 }}>
+            <span style={{ color: '#9CA3AF', fontSize: 14 }}>🔍</span>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, university…" style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy }} />
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['All','Active','Suspended','Premium','Free'].map(f => (
+              <button key={f} onClick={() => setUserFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: userFilter === f ? N.navy : '#F3F4F6', color: userFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{f}</button>
+            ))}
+          </div>
+        </div>
+        <AdminTable
+          cols={['User', 'University', 'Plan', 'Docs', 'AI Reqs', 'Status', 'Joined']}
+          rows={filteredUsers.map(u => [
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, color: N.navy, flexShrink: 0 }}>{u.name.split(' ').map(n => n[0]).join('')}</div>
+              <div><div style={{ fontWeight: 600, color: N.navy }}>{u.name}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{u.email}</div></div>
+            </div>,
+            u.uni, u.sub, u.docs.toString(), u.aiReqs.toString(),
+            <AdminBadge text={u.status} color={u.status === 'Active' ? 'green' : 'red'} />,
+            u.joined
+          ])}
+          actions={i => (
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+              <button onClick={() => setSelectedUser(filteredUsers[i])} style={{ background: '#F3F4F6', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans' }}>View</button>
+              <button onClick={() => setConfirmAction({ type: 'Suspend', target: filteredUsers[i].name })} style={{ background: '#FEF3C7', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#D97706', fontFamily: 'Plus Jakarta Sans' }}>Suspend</button>
+            </div>
+          )}
+        />
+        <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #F3F4F6' }}>
+          <span style={{ fontSize: 12, color: '#9CA3AF' }}>Showing {filteredUsers.length} results</span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[1,2,3,'…',47].map((p, i) => <button key={i} style={{ width: 30, height: 30, borderRadius: 6, background: p === 1 ? N.navy : '#F3F4F6', color: p === 1 ? '#fff' : '#374151', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{p}</button>)}
+          </div>
+        </div>
+      </AdminCard>
+    </div>
+  )
+
+  if (section === 'content') {
+    const contentRows: Record<string,(string|React.ReactNode)[][]> = {
+      Documents: [
+        ['ACT 101 Lecture Notes – Week 1-6', 'Arnold Gichuru', 'Kenyatta University', 'PDF · 38p', 'Aug 10', <AdminBadge text="Approved" color="green" />],
+        ['KU Past Papers 2020-2023 (MAT 101)', 'Student Library', 'Kenyatta University', 'PDF · 72p', 'Aug 9', <AdminBadge text="Approved" color="green" />],
+        ['STA 101 Probability Slides', 'Dr. Njuguna', 'University of Nairobi', 'PPT · 44p', 'Aug 8', <AdminBadge text="Pending" color="amber" />],
+        ['Constitutional Law Notes 2025', 'Aisha Mohamed', 'Mount Kenya University', 'PDF · 55p', 'Aug 7', <AdminBadge text="Pending" color="amber" />],
+        ['MBBS Pharmacology Revision', 'David Njoroge', 'Kenyatta University', 'PDF · 91p', 'Aug 6', <AdminBadge text="Flagged" color="red" />],
+      ],
+      Podcasts: [
+        ['Introduction to Interest Theory', 'Arnold Gichuru', 'AI-Generated', '9 min', 'Aug 10', <AdminBadge text="Published" color="green" />],
+        ['Present Value Explained Simply', 'Brian Omondi', 'AI-Generated', '12 min', 'Aug 9', <AdminBadge text="Published" color="green" />],
+        ['Probability Foundations', 'Wanjiru Kamau', 'AI-Generated', '14 min', 'Aug 8', <AdminBadge text="Review" color="amber" />],
+      ],
+      Flashcards: [
+        ['ACT 101 – Interest Theory (35 cards)', 'Arnold Gichuru', 'AI-Generated', '35 cards', 'Aug 10', <AdminBadge text="Active" color="green" />],
+        ['STA 101 Probability (28 cards)', 'Faith Njeri', 'AI-Generated', '28 cards', 'Aug 9', <AdminBadge text="Active" color="green" />],
+      ],
+      Quizzes: [
+        ['ACT 101 – Interest Theory Quiz', 'Arnold Gichuru', 'AI-Generated', '15 Qs', 'Aug 10', <AdminBadge text="Active" color="green" />],
+        ['MAT 101 Integration Quiz', 'James Kariuki', 'AI-Generated', '10 Qs', 'Aug 8', <AdminBadge text="Active" color="green" />],
+      ],
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <AdminCard title="Content Management">
+          <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6 }}>
+            {Object.keys(contentRows).map(t => <button key={t} onClick={() => setContentTab(t)} style={{ padding: '7px 16px', borderRadius: 8, background: contentTab === t ? N.navy : '#F3F4F6', color: contentTab === t ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{t}</button>)}
+          </div>
+          <AdminTable
+            cols={['Title', 'Author', 'Institution', 'Size', 'Date', 'Status']}
+            rows={contentRows[contentTab]}
+            actions={() => (
+              <div style={{ display: 'flex', gap: 5 }}>
+                <button style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Approve</button>
+                <button style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
+              </div>
+            )}
+          />
+        </AdminCard>
+      </div>
+    )
+  }
+
+  if (section === 'ai-usage') return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+        <AdminKPI label="AI Requests Today" value="3,214" sub="Successful: 3,188" trend="+18% vs yesterday" color="#7C3AED" chartData={aiData} />
+        <AdminKPI label="Failed Requests" value="26" sub="0.8% error rate" trend="-2% vs yesterday" color="#DC2626" chartData={[40,28,35,22,30,18,26]} />
+        <AdminKPI label="Tokens Used (MTD)" value="84.2M" sub="~KES 12,400 cost" trend="+9% vs Jul" color={N.gold} chartData={aiData.map(v => v * 870)} />
+        <AdminKPI label="Avg Response Time" value="1.4s" sub="P95: 3.2s" trend="-0.2s vs last week" color="#16A34A" chartData={[1.8, 1.9, 1.6, 1.7, 1.5, 1.4, 1.4]} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <AdminCard title="AI Requests by Feature">
+          <div style={{ padding: '16px 18px' }}>
+            {[
+              { label: 'Document Processing', pct: 38, color: N.navy, count: '1,221' },
+              { label: 'Flashcard Generation', pct: 24, color: N.gold, count: '772' },
+              { label: 'Quiz Generation', pct: 18, color: '#7C3AED', count: '579' },
+              { label: 'Podcast Creation', pct: 12, color: '#4C7BC9', count: '386' },
+              { label: 'AI Tutor Chat', pct: 8, color: '#4CC97B', count: '256' },
+            ].map(r => (
+              <div key={r.label} style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: '#374151', fontWeight: 500 }}>{r.label}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{r.count}</span>
+                </div>
+                <div style={{ background: '#F3F4F6', borderRadius: 99, height: 6 }}>
+                  <div style={{ background: r.color, borderRadius: 99, height: 6, width: `${r.pct}%`, transition: 'width 0.5s' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </AdminCard>
+        <AdminCard title="AI Requests — Last 7 Days">
+          <div style={{ padding: '16px 18px' }}>
+            <AdminBarChart data={aiData} labels={aiLabels} height={120} color="#7C3AED" />
+          </div>
+        </AdminCard>
+      </div>
+      <AdminCard title="Recent AI Jobs">
+        <AdminTable
+          cols={['Job ID', 'Type', 'User', 'Document', 'Status', 'Duration', 'Time']}
+          rows={[
+            ['AI-9847', 'Quiz Generation', 'Arnold Gichuru', 'ACT 101 Notes', <AdminBadge text="Success" color="green" />, '1.2s', '2 min ago'],
+            ['AI-9846', 'Flashcard Gen.', 'Wanjiru Kamau', 'CS 201 Algorithms', <AdminBadge text="Success" color="green" />, '0.9s', '5 min ago'],
+            ['AI-9845', 'Podcast Creation', 'Brian Omondi', 'MAT 101 Notes', <AdminBadge text="Processing" color="blue" />, '—', '8 min ago'],
+            ['AI-9844', 'Doc Processing', 'David Njoroge', 'Pharmacology.pdf', <AdminBadge text="Success" color="green" />, '3.4s', '12 min ago'],
+            ['AI-9843', 'AI Tutor Chat', 'Faith Njeri', 'Context: STA 101', <AdminBadge text="Success" color="green" />, '0.6s', '15 min ago'],
+            ['AI-9842', 'Quiz Generation', 'James Kariuki', 'ECO 101 Notes', <AdminBadge text="Failed" color="red" />, '—', '18 min ago'],
+          ]}
+        />
+      </AdminCard>
+    </div>
+  )
+
+  if (section === 'payments') return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+        <AdminKPI label="Revenue (MTD)" value="KES 142K" sub="Aug 2025" trend="+12% vs Jul" color="#16A34A" chartData={revenueData} />
+        <AdminKPI label="Active Subscriptions" value="893" sub="Semester: 721 · Annual: 172" trend="+34 this week" color={N.gold} chartData={studentsData.map(v => v * 0.31)} />
+        <AdminKPI label="Failed Payments" value="14" sub="Aug 2025" trend="+3 this week" color="#DC2626" chartData={[8,12,7,15,11,9,14]} />
+        <AdminKPI label="Avg. Plan Value" value="KES 159" sub="Weighted average" trend="+KES 8 vs Jul" color={N.navy} chartData={[140,142,148,151,155,156,159]} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 14 }}>
+        <AdminCard title="Revenue — Last 7 Months">
+          <div style={{ padding: '16px 18px' }}>
+            <AdminBarChart data={revenueData} labels={revLabels} height={100} color={N.gold} />
+          </div>
+        </AdminCard>
+        <AdminCard title="Subscription Breakdown">
+          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[
+              { label: 'Semester Plan', count: 721, pct: 81, color: N.gold, price: 'KES 599' },
+              { label: 'Annual Plan', count: 172, pct: 19, color: '#4C7BC9', price: 'KES 999' },
+            ].map(r => (
+              <div key={r.label}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: N.navy }}>{r.label}</span>
+                  <span style={{ fontSize: 12, color: '#6B7280' }}>{r.count} · {r.price}</span>
+                </div>
+                <div style={{ background: '#F3F4F6', borderRadius: 99, height: 8 }}>
+                  <div style={{ background: r.color, borderRadius: 99, height: 8, width: `${r.pct}%` }} />
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 8, padding: '12px 14px', background: '#F9FAFB', borderRadius: 10 }}>
+              <div style={{ fontSize: 11, color: '#9CA3AF' }}>Free plan</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: N.navy }}>1,954</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF' }}>Conversion opportunity</div>
+            </div>
+          </div>
+        </AdminCard>
+      </div>
+      <AdminCard title="Recent Transactions">
+        <AdminTable
+          cols={['Reference', 'Student', 'Plan', 'Amount', 'Method', 'Status', 'Date']}
+          rows={[
+            ['PZA-849201', 'Arnold Gichuru', 'Semester', 'KES 599', 'M-Pesa', <AdminBadge text="Success" color="green" />, 'Aug 10, 2025'],
+            ['PZA-849198', 'James Kariuki', 'Annual', 'KES 999', 'Card', <AdminBadge text="Success" color="green" />, 'Aug 10, 2025'],
+            ['PZA-849190', 'Faith Njeri', 'Semester', 'KES 599', 'M-Pesa', <AdminBadge text="Failed" color="red" />, 'Aug 10, 2025'],
+            ['PZA-849187', 'Wanjiru Kamau', 'Annual', 'KES 999', 'M-Pesa', <AdminBadge text="Success" color="green" />, 'Aug 9, 2025'],
+            ['PZA-849173', 'Brian Omondi', 'Semester', 'KES 599', 'Card', <AdminBadge text="Success" color="green" />, 'Aug 9, 2025'],
+            ['PZA-849160', 'David Njoroge', 'Annual', 'KES 999', 'M-Pesa', <AdminBadge text="Refunded" color="amber" />, 'Aug 8, 2025'],
+          ]}
+          actions={() => <button style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>View</button>}
+        />
+        <div style={{ padding: '12px 18px', borderTop: '1px solid #F3F4F6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: '#9CA3AF' }}>Page 1 of 312</span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {['←', '1', '2', '3', '→'].map((p, i) => <button key={i} style={{ width: 30, height: 30, borderRadius: 6, background: p === '1' ? N.navy : '#F3F4F6', color: p === '1' ? '#fff' : '#374151', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{p}</button>)}
+          </div>
+        </div>
+      </AdminCard>
+    </div>
+  )
+
+  if (section === 'moderation') return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+        <AdminKPI label="Open Reports" value="7" sub="Avg resolution: 4h" trend="+2 since yesterday" color="#DC2626" />
+        <AdminKPI label="Resolved Today" value="3" sub="Dismiss: 2 · Remove: 1" color="#16A34A" />
+        <AdminKPI label="Total Posts" value="1,247" sub="Forums + Comments" color={N.navy} />
+        <AdminKPI label="Suspended Users" value="1" sub="Pending review: 0" color="#D97706" />
+      </div>
+      <AdminCard title="Report Queue — 7 Open">
+        <AdminTable
+          cols={['#', 'Type', 'Content', 'Reported By', 'Reason', 'Priority', 'Received']}
+          rows={[
+            ['R-107', 'Post', '"Does anyone have exam leaks for…"', 'Wanjiru Kamau', 'Academic Dishonesty', <AdminBadge text="High" color="red" />, '2h ago'],
+            ['R-106', 'Document', 'ACT 101 Notes (copyrighted claim)', 'Anonymous', 'Copyright', <AdminBadge text="High" color="red" />, '4h ago'],
+            ['R-105', 'User', 'User selling answers in DMs', 'Brian Omondi', 'Spam / Scam', <AdminBadge text="Medium" color="amber" />, '6h ago'],
+            ['R-104', 'Comment', 'Offensive reply in forum', 'David Njoroge', 'Offensive Content', <AdminBadge text="Medium" color="amber" />, '8h ago'],
+            ['R-103', 'Post', 'Misleading study tips post', 'Faith Njeri', 'Misinformation', <AdminBadge text="Low" color="gray" />, '1d ago'],
+            ['R-102', 'Document', 'Duplicate upload of same notes', 'James Kariuki', 'Duplicate', <AdminBadge text="Low" color="gray" />, '1d ago'],
+            ['R-101', 'User', 'Suspected spam account', 'System (Auto)', 'Bot Activity', <AdminBadge text="Low" color="gray" />, '2d ago'],
+          ]}
+          actions={() => (
+            <div style={{ display: 'flex', gap: 5 }}>
+              <button style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Dismiss</button>
+              <button style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
+              <button style={{ background: '#FEF3C7', color: '#D97706', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Warn</button>
+            </div>
+          )}
+        />
+      </AdminCard>
+    </div>
+  )
+
+  if (section === 'analytics') return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <AdminCard title="Student Growth — 7 Months">
+          <div style={{ padding: '16px 18px' }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: N.navy, marginBottom: 4 }}>+54% <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>growth this semester</span></div>
+            <AdminLineChart data={studentsData} color={N.navy} height={80} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+              {revLabels.map(l => <span key={l} style={{ fontSize: 10, color: '#D1D5DB' }}>{l}</span>)}
+            </div>
+          </div>
+        </AdminCard>
+        <AdminCard title="Revenue Growth — 7 Months">
+          <div style={{ padding: '16px 18px' }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: '#16A34A', marginBottom: 4 }}>KES 807K <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>total 7-month</span></div>
+            <AdminLineChart data={revenueData} color="#16A34A" height={80} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+              {revLabels.map(l => <span key={l} style={{ fontSize: 10, color: '#D1D5DB' }}>{l}</span>)}
+            </div>
+          </div>
+        </AdminCard>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <AdminCard title="Document Uploads — 14 Days">
+          <div style={{ padding: '16px 18px' }}><AdminBarChart data={uploadsData} height={80} color="#4C7BC9" /></div>
+        </AdminCard>
+        <AdminCard title="AI Requests — 7 Days">
+          <div style={{ padding: '16px 18px' }}><AdminBarChart data={aiData} labels={aiLabels} height={80} color="#7C3AED" /></div>
+        </AdminCard>
+      </div>
+      <AdminCard title="Top Universities by Engagement">
+        <AdminTable
+          cols={['University', 'Students', 'Documents', 'AI Requests', 'Premium Users', 'Engagement']}
+          rows={[
+            ['Kenyatta University', '843', '4,102', '28,441', '287', <AdminBadge text="Very High" color="green" />],
+            ['University of Nairobi', '621', '2,890', '19,882', '194', <AdminBadge text="High" color="green" />],
+            ['Strathmore University', '412', '1,744', '13,102', '178', <AdminBadge text="High" color="green" />],
+            ['JKUAT', '389', '1,502', '11,441', '134', <AdminBadge text="Medium" color="amber" />],
+            ['Mount Kenya University', '334', '1,203', '9,812', '87', <AdminBadge text="Medium" color="amber" />],
+            ['Daystar University', '248', '891', '7,102', '63', <AdminBadge text="Medium" color="amber" />],
+          ]}
+        />
+      </AdminCard>
+    </div>
+  )
+
+  if (section === 'system') return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+        {[
+          { label: 'API Gateway', status: 'Operational', uptime: '99.98%', color: 'green', ping: '12ms' },
+          { label: 'AI Service (Claude)', status: 'Operational', uptime: '99.91%', color: 'green', ping: '1.4s avg' },
+          { label: 'M-Pesa API', status: 'Operational', uptime: '99.85%', color: 'green', ping: '340ms' },
+          { label: 'Email (SendGrid)', status: 'Degraded', uptime: '97.20%', color: 'amber', ping: '—' },
+          { label: 'File Storage (S3)', status: 'Operational', uptime: '100%', color: 'green', ping: '28ms' },
+          { label: 'Database (Postgres)', status: 'Operational', uptime: '99.99%', color: 'green', ping: '4ms' },
+          { label: 'Auth Service', status: 'Operational', uptime: '99.97%', color: 'green', ping: '18ms' },
+          { label: 'Push Notifications', status: 'Operational', uptime: '99.76%', color: 'green', ping: '89ms' },
+        ].map(s => (
+          <div key={s.label} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: N.navy }}>{s.label}</span>
+              <AdminBadge text={s.status} color={s.color} />
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div><div style={{ fontSize: 10, color: '#9CA3AF' }}>Uptime</div><div style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>{s.uptime}</div></div>
+              <div><div style={{ fontSize: 10, color: '#9CA3AF' }}>Response</div><div style={{ fontSize: 14, fontWeight: 700, color: N.navy }}>{s.ping}</div></div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <AdminCard title="System Resources">
+        <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {[
+            { label: 'Storage', used: 342, total: 1024, unit: 'GB', color: N.gold },
+            { label: 'Database', used: 18, total: 100, unit: 'GB', color: '#7C3AED' },
+            { label: 'API Credits (MTD)', used: 84, total: 200, unit: 'M tokens', color: '#4C7BC9' },
+            { label: 'CPU (average)', used: 34, total: 100, unit: '%', color: '#4CC97B' },
+          ].map(r => (
+            <div key={r.label}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{r.label}</span>
+                <span style={{ fontSize: 12, color: '#9CA3AF' }}>{r.used} / {r.total} {r.unit}</span>
+              </div>
+              <div style={{ background: '#F3F4F6', borderRadius: 99, height: 8 }}>
+                <div style={{ background: r.color, borderRadius: 99, height: 8, width: `${(r.used / r.total) * 100}%`, transition: 'width 0.5s' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </AdminCard>
+      <AdminCard title="Admin Accounts">
+        <AdminTable
+          cols={['Name', 'Email', 'Role', 'Last Login', 'Status']}
+          rows={[
+            ['Prepza Admin', 'admin@prepza.co', 'Super Admin', 'Aug 10, 2025 09:14', <AdminBadge text="Active" color="green" />],
+            ['Content Lead', 'content@prepza.co', 'Content Manager', 'Aug 9, 2025 14:22', <AdminBadge text="Active" color="green" />],
+            ['Support Lead', 'support@prepza.co', 'Support', 'Aug 8, 2025 11:05', <AdminBadge text="Active" color="green" />],
+          ]}
+          actions={() => <button style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Edit</button>}
+        />
+      </AdminCard>
+    </div>
+  )
+
+  // Light sections for community, universities, opportunities, communications
+  const lightSections: Record<string, { icon: string; title: string; desc: string; features: string[] }> = {
+    universities: { icon: '🏛️', title: 'University Management', desc: 'Manage universities, faculties, departments, courses, and units.', features: ['Kenyatta University — 843 students','University of Nairobi — 621 students','Strathmore University — 412 students','JKUAT — 389 students','Mount Kenya University — 334 students'] },
+    community: { icon: '💬', title: 'Community Moderation', desc: 'Manage forum posts, comments, reports, and community health.', features: ['1,247 total posts','127 comments today','7 pending reports','0 active suspensions'] },
+    opportunities: { icon: '🚀', title: 'Opportunities Management', desc: 'Create, approve, feature, and archive opportunities for students.', features: ['48 active opportunities','12 pending approval','3 featured','5 expiring this week'] },
+    communications: { icon: '📢', title: 'Communications', desc: 'Send announcements, push notifications, and in-app messages.', features: ['3 announcements sent this month','2,847 total reach','Email open rate: 41%','Push delivery: 89%'] },
+  }
+  if (lightSections[section]) {
+    const s = lightSections[section]
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ background: '#fff', borderRadius: 16, padding: '24px 28px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: 40, marginBottom: 14 }}>{s.icon}</div>
+          <div style={{ fontWeight: 800, fontSize: 22, color: N.navy, marginBottom: 8 }}>{s.title}</div>
+          <div style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7, marginBottom: 20 }}>{s.desc}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {s.features.map((f, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#F9FAFB', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: N.gold, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: N.navy, fontWeight: 500 }}>{f}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 20, padding: '14px 16px', background: `${N.gold}10`, border: `1px solid ${N.gold}30`, borderRadius: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: N.gold }}>Full implementation in progress</div>
+            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>This section is live and will be expanded with full CRUD interfaces in the next sprint.</div>
+          </div>
+        </div>
+        {section === 'communications' && (
+          <AdminCard title="Send Announcement">
+            <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <input placeholder="Announcement title…" style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy }} />
+              <textarea value={announcementDraft} onChange={e => setAnnouncementDraft(e.target.value)} placeholder="Write your message to all students…" rows={4} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6 }} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                {['All Students', 'Premium Only', 'Free Plan'].map(t => <button key={t} style={{ padding: '7px 14px', background: '#F3F4F6', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans' }}>{t}</button>)}
+                <button style={{ marginLeft: 'auto', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, border: 'none', borderRadius: 10, padding: '8px 20px', cursor: 'pointer', fontWeight: 800, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Send Now</button>
+              </div>
+            </div>
+            <div style={{ borderTop: '1px solid #F3F4F6' }}>
+              {announcements.map((a, i) => (
+                <div key={i} style={{ padding: '14px 20px', borderBottom: i < announcements.length - 1 ? '1px solid #F3F4F6' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{a.title}</div>
+                    <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{a.body}</div>
+                    <div style={{ fontSize: 11, color: '#D1D5DB', marginTop: 4 }}>Sent {a.sent} · Reached {a.reach} students</div>
+                  </div>
+                  <AdminBadge text="Sent" color="green" />
+                </div>
+              ))}
+            </div>
+          </AdminCard>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: '#9CA3AF', fontSize: 14 }}>Select a section from the sidebar</div>
+  )
+}
+
+function AdminPlatform({ onExit }: { onExit: () => void }) {
+  const [section, setSection] = useState('dashboard')
+  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System' }
+
+  return (
+    <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#F4F6FA', fontFamily: 'Plus Jakarta Sans', overflow: 'hidden' }}>
+      {/* Sidebar */}
+      <div style={{ width: 220, background: N.navy, display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto' }} className="scrollbar-hide">
+        <div style={{ padding: '20px 16px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src={logoImg} alt="Prepza" style={{ width: 32, height: 32, borderRadius: 9 }} />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: '#fff', letterSpacing: '-0.3px' }}>PREPZA</div>
+              <div style={{ fontSize: 10, color: N.gold, fontWeight: 600 }}>Admin Platform</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '0 14px 10px' }} />
+        <div style={{ flex: 1, padding: '0 8px' }}>
+          {adminNav.map(n => {
+            const active = section === n.key
+            const hasBadge: Record<string, string> = { moderation: '7', content: '23', payments: '14' }
+            return (
+              <button key={n.key} onClick={() => setSection(n.key)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, background: active ? 'rgba(201,168,76,0.15)' : 'transparent', border: `1px solid ${active ? 'rgba(201,168,76,0.25)' : 'transparent'}`, cursor: 'pointer', marginBottom: 2, transition: 'all 0.15s' }}>
+                <span style={{ fontSize: 15 }}>{n.icon}</span>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? N.gold : 'rgba(255,255,255,0.65)', textAlign: 'left' }}>{n.label}</span>
+                {hasBadge[n.key] && <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99 }}>{hasBadge[n.key]}</span>}
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ padding: '10px 8px 20px' }}>
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '0 6px 10px' }} />
+          <div style={{ padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>PA</div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>Prepza Admin</div><div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Super Admin</div></div>
+          </div>
+          <button onClick={onExit} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', marginTop: 6 }}>
+            <span style={{ fontSize: 14 }}>📱</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>Student App</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        {/* Top bar */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', padding: '0 24px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 18, color: N.navy }}>{sectionLabels[section]}</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF' }}>Prepza Admin · {new Date().toLocaleDateString('en-KE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 99, padding: '4px 12px' }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#16A34A' }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#16A34A' }}>All Systems Operational</span>
+            </div>
+            <button style={{ width: 36, height: 36, background: '#F3F4F6', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 16 }}>🔔</button>
+            <div style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy }}>PA</div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 24 }} className="scrollbar-hide">
+          <AdminSection section={section} setSection={setSection} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── APP SHELL ────────────────────────────────────────────────────────────────
+export default function App() {
+  const [screen, setScreen] = useState<Screen>('splash')
+  const [adminMode, setAdminMode] = useState(false)
+
+  if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
+
+  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','processing','payment','payment-success','payment-failure']
+  const darkHomeIndicator: Screen[] = ['processing','splash','login']
+
+  const renderScreen = () => {
+    switch (screen) {
+      case 'splash':            return <SplashScreen setScreen={setScreen} />
+      case 'login':             return <LoginScreen setScreen={setScreen} />
+      case 'forgot-password':   return <ForgotPasswordScreen setScreen={setScreen} />
+      case 'signup':            return <SignupScreen setScreen={setScreen} />
+      case 'check-email':       return <CheckEmailScreen setScreen={setScreen} />
+      case 'home':              return <HomeScreen setScreen={setScreen} />
+      case 'explore':           return <ExploreScreen setScreen={setScreen} />
+      case 'create-modal':      return <CreateModal setScreen={setScreen} />
+      case 'post-composer':     return <PostComposer setScreen={setScreen} />
+      case 'question-composer': return <QuestionComposer setScreen={setScreen} />
+      case 'share-opp-form':    return <ShareOppForm setScreen={setScreen} />
+      case 'edu-upload-form':   return <EduUploadForm setScreen={setScreen} />
+      case 'upload':            return <UploadScreen setScreen={setScreen} />
+      case 'processing':        return <ProcessingScreen setScreen={setScreen} />
+      case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} />
+      case 'document-study':    return <DocumentStudyScreen setScreen={setScreen} />
+      case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} />
+      case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} />
+      case 'quiz':              return <QuizScreen setScreen={setScreen} />
+      case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} />
+      case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} />
+      case 'summary':           return <SummaryScreen setScreen={setScreen} />
+      case 'forum':             return <ForumScreen setScreen={setScreen} />
+      case 'comments':          return <CommentsScreen setScreen={setScreen} />
+      case 'chats':             return <ChatsScreen setScreen={setScreen} />
+      case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} />
+      case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} />
+      case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} />
+      case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
+      case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} />
+      case 'profile':           return <ProfileScreen setScreen={setScreen} />
+      case 'settings':          return <SettingsScreen setScreen={setScreen} />
+      case 'notifications':     return <NotificationsScreen setScreen={setScreen} />
+      case 'library':           return <LibraryScreen setScreen={setScreen} />
+      case 'mind-map':          return <MindMapScreen setScreen={setScreen} />
+      case 'new-chat':          return <NewChatScreen setScreen={setScreen} />
+      case 'chat-options':      return <ChatOptionsScreen setScreen={setScreen} />
+      case 'edit-profile':      return <EditProfileScreen setScreen={setScreen} />
+      case 'subscription':      return <SubscriptionScreen setScreen={setScreen} />
+      case 'payment':           return <PaymentScreen setScreen={setScreen} />
+      case 'payment-success':   return <PaymentSuccessScreen setScreen={setScreen} />
+      case 'payment-failure':   return <PaymentFailureScreen setScreen={setScreen} />
+      case 'payment-history':   return <PaymentHistoryScreen setScreen={setScreen} />
+      case 'publish-library':   return <PublishLibraryScreen setScreen={setScreen} />
+      case 'xp-progress':       return <XPProgressScreen setScreen={setScreen} />
+      case 'study-streak':      return <StudyStreakScreen setScreen={setScreen} />
+      case 'achievements':      return <AchievementsScreen setScreen={setScreen} />
+      case 'followers':         return <FollowListScreen mode="followers" setScreen={setScreen} />
+      case 'following':         return <FollowListScreen mode="following" setScreen={setScreen} />
+      case 'group-detail':      return <GroupDetailScreen setScreen={setScreen} />
+      case 'group-create':      return <GroupCreateScreen setScreen={setScreen} />
+      default:                  return <HomeScreen setScreen={setScreen} />
+    }
+  }
+
+  const isDark = ['splash','login','processing'].includes(screen)
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '24px 16px', background: 'linear-gradient(135deg,#060d26 0%,#0B1437 45%,#0f1e4a 100%)' }}>
+      <div style={{ position: 'fixed', top: '15%', left: '28%', width: 380, height: 380, background: 'rgba(201,168,76,0.05)', borderRadius: '50%', filter: 'blur(80px)', pointerEvents: 'none' }} />
+      <div style={{ width: 390, background: isDark ? N.navy : N.bg, borderRadius: 54, overflow: 'hidden', boxShadow: '0 40px 120px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', height: 844, position: 'relative' }}>
+        {/* Dynamic island */}
+        <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', width: 120, height: 34, background: '#000', borderRadius: 20, zIndex: 100 }} />
+        {/* Status bar */}
+        <div style={{ background: isDark ? N.navy : N.navy, flexShrink: 0, paddingTop: 6 }}>
+          <StatusBar dark />
+        </div>
+        {/* Content */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {renderScreen()}
+        </div>
+        {/* Bottom nav */}
+        {!noNav.includes(screen) && <BottomNav active={screen} setScreen={setScreen} />}
+        {/* Home indicator */}
+        <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 8, paddingTop: 4, background: darkHomeIndicator.includes(screen) ? N.navy : '#fff', flexShrink: 0 }}>
+          <div style={{ width: 134, height: 5, background: darkHomeIndicator.includes(screen) ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)', borderRadius: 99 }} />
+        </div>
+      </div>
+      <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+        <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, fontFamily: 'Plus Jakarta Sans', letterSpacing: '0.5px', userSelect: 'none' }}>
+          PREPZA · Kenyatta University Launch · Mobile Prototype
+        </div>
+        <button onClick={() => setAdminMode(true)} style={{ color: 'rgba(255,255,255,0.18)', fontSize: 10, fontFamily: 'Plus Jakarta Sans', background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 99, padding: '3px 12px', cursor: 'pointer', letterSpacing: '0.5px' }}>
+          ⚙ Admin Platform
+        </button>
+      </div>
+    </div>
+  )
+}
