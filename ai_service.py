@@ -23,6 +23,7 @@ tested without a request context.
 """
 
 import os
+import json
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -131,7 +132,7 @@ AI_TASKS = {
     "SUMMARIZATION": {
         "primary": MODEL_HAIKU_4_5,
         "fallback": MODEL_SONNET_5,
-        "max_tokens": 1024,
+        "max_tokens": 1536,
         "notes": "Condensed notes from a document.",
     },
     "FLASHCARDS": {
@@ -786,6 +787,255 @@ def answer_forum_question(question_text, unit, triggering_user_id, plan_tier="fr
     return {
         "answer_text": ai_response.text,
         "ai_answer_id": new_answer.id,
+        "reused": False,
+        "model_used": ai_response.model_used,
+    }
+
+
+
+# ============================================================
+# 10. CONTINUATION-RETRY CALL (summarization only)
+# ============================================================
+# route_and_generate()/AnthropicProvider.call() intentionally discard
+# stop_reason - fine for forum answers, which rarely truncate. Summaries
+# are longer and JSON-structured, so a max_tokens cutoff mid-JSON is a
+# real failure mode. This function is a separate, low-level path used
+# ONLY by generate_document_summary() below - it does not touch
+# route_and_generate() or any other feature's call path.
+#
+# Continuation approach: on truncation, resend the same system prompt
+# and user message, but append the partial output as a prefilled
+# assistant turn (no new user turn) so the model continues writing from
+# exactly where it stopped. Capped at one continuation (2 attempts
+# total) per the locked decision - still-truncated after that is
+# treated as a failure, not retried further.
+
+CONTINUATION_MAX_ATTEMPTS = 2
+
+
+def _call_with_continuation(task, system_prompt, user_message, max_tokens=None):
+    """
+    Like route_and_generate(), but detects max_tokens truncation and
+    retries with a prefilled continuation instead of returning a
+    truncated response. Uses the task's primary model only - no
+    primary/fallback escalation here (truncation isn't a provider
+    failure, so escalating models wouldn't help). Returns an AIResponse
+    whose usage/cost reflects the SUM of all attempts made.
+    """
+    task_config = AI_TASKS.get(task)
+    if not task_config:
+        raise ValueError(f"Unknown AI task '{task}'")
+
+    provider, provider_name = _get_provider()
+    model = task_config["primary"]
+    resolved_max_tokens = max_tokens or task_config["max_tokens"]
+
+    accumulated_text = ""
+    total_usage = AIUsage()
+    start = time.monotonic()
+
+    for attempt in range(CONTINUATION_MAX_ATTEMPTS):
+        if accumulated_text:
+            messages = [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": accumulated_text},
+            ]
+        else:
+            messages = [{"role": "user", "content": user_message}]
+
+        response = provider._client.messages.create(
+            model=model,
+            max_tokens=resolved_max_tokens,
+            system=system_prompt,
+            messages=messages,
+        )
+
+        chunk_text = "".join(block.text for block in response.content if block.type == "text")
+        accumulated_text += chunk_text
+
+        usage = response.usage
+        total_usage.input_tokens += usage.input_tokens
+        total_usage.output_tokens += usage.output_tokens
+        total_usage.cache_read_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
+        total_usage.cache_creation_tokens += getattr(usage, "cache_creation_input_tokens", 0) or 0
+
+        if response.stop_reason != "max_tokens":
+            break
+
+    latency_ms = int((time.monotonic() - start) * 1000)
+    total_usage.cost_usd = compute_cost_usd(
+        model, total_usage.input_tokens, total_usage.output_tokens,
+        total_usage.cache_read_tokens, total_usage.cache_creation_tokens,
+    )
+
+    return AIResponse(
+        text=accumulated_text,
+        model_used=model,
+        provider=provider_name,
+        usage=total_usage,
+        latency_ms=latency_ms,
+    )
+
+
+# ============================================================
+# 11. HIGH-LEVEL ORCHESTRATION - document Summaries
+# ============================================================
+# Mirrors answer_forum_question()'s shape (cache check -> spend cap ->
+# rate limit -> generate -> log -> persist), but the cache here is a
+# simple exact-key lookup on GeneratedMaterial(document_content_id,
+# material_type='summary') rather than fuzzy text matching - a
+# document's summary is either already generated for that exact
+# content hash, or it isn't.
+
+SUMMARY_JSON_SYSTEM_PROMPT = (
+    "You are Prepza AI, generating a condensed study summary from a student's "
+    "uploaded document for the Prepza study platform. Read the provided document "
+    "text and produce a summary as STRICT JSON ONLY - no markdown code fences, no "
+    "preamble, no text before or after the JSON object. The JSON must have this "
+    "exact shape:\n"
+    '{"title": "string", "subtitle": "string (e.g. \'Generated from your N-page '
+    'notes\')", "sections": [{"title": "string", "body": "string"}]}\n\n'
+    "Guidelines: choose the number of sections based on how the material "
+    "naturally divides (usually 3-6). Each section body should be dense, "
+    "exam-focused, plain text - use \\n\\n for paragraph breaks within a body. "
+    "Write mathematical notation in plain unicode (e.g. A(t) = A(0)(1+i)^t, "
+    "using ^ for exponents is acceptable, or unicode superscripts if natural) - "
+    "never LaTeX. Do not invent content not present in the source text."
+)
+
+
+def _parse_summary_json(raw_text):
+    """
+    Parses the model's summary JSON, tolerating stray markdown code
+    fences some models add despite instructions not to. Raises
+    ValueError on anything that doesn't match the expected shape -
+    caller treats this as a failed generation, not a crash.
+    """
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+
+    data = json.loads(cleaned)
+
+    if not isinstance(data, dict):
+        raise ValueError("Summary JSON root must be an object")
+    if "title" not in data or "sections" not in data:
+        raise ValueError("Summary JSON missing required \'title\' or \'sections\' key")
+    if not isinstance(data["sections"], list) or not data["sections"]:
+        raise ValueError("Summary JSON \'sections\' must be a non-empty list")
+    for section in data["sections"]:
+        if not isinstance(section, dict) or "title" not in section or "body" not in section:
+            raise ValueError("Each summary section must have \'title\' and \'body\'")
+
+    return data
+
+
+def generate_document_summary(document_content_id, triggering_user_id, plan_tier="free"):
+    """
+    Full pipeline for generating (or reusing) a document's AI summary:
+      1. Cache check - an existing ready GeneratedMaterial(material_type=
+         'summary') for this document_content_id is reused for free, no
+         limits apply.
+      2. Requires DocumentContent.extracted_text to be populated -
+         callers should not invoke this before text extraction has
+         completed.
+      3. Spend-cap check (only blocks FRESH generation)
+      4. Daily rate-limit check (only blocks FRESH generation)
+      5. Generate via _call_with_continuation, parse JSON, log usage,
+         persist to GeneratedMaterial.
+
+    Returns a dict: {payload: dict, material_id, reused, model_used}.
+    Raises AIBudgetExceededError / AIRateLimitExceededError /
+    AIProviderError - callers should catch these the same way the
+    forum routes do.
+
+    Known simplification (v1): no locking against a second concurrent
+    trigger for the same document while one generation is already in
+    flight - matches the "not handled yet" posture already taken
+    elsewhere in this codebase (e.g. concurrent forum posts).
+    """
+    from app import db, DocumentContent, GeneratedMaterial
+
+    content = db.session.get(DocumentContent, document_content_id)
+    if not content:
+        raise ValueError(f"DocumentContent {document_content_id} not found")
+
+    existing = GeneratedMaterial.query.filter_by(
+        document_content_id=document_content_id, material_type="summary"
+    ).first()
+
+    if existing and existing.status == "ready" and existing.payload:
+        log_usage(triggering_user_id, request_type="reuse")
+        return {
+            "payload": json.loads(existing.payload),
+            "material_id": existing.id,
+            "reused": True,
+            "model_used": None,
+        }
+
+    if not content.extracted_text:
+        raise AIProviderError(
+            "This document's text hasn't finished processing yet - try again shortly."
+        )
+
+    if is_spend_cap_reached():
+        raise AIBudgetExceededError(
+            "Prepza AI has reached its monthly budget - fresh summaries are paused, "
+            "but existing summaries are still available."
+        )
+
+    allowed, used, limit = check_daily_limit(triggering_user_id, plan_tier=plan_tier)
+    if not allowed:
+        raise AIRateLimitExceededError(
+            f"You've used {used}/{limit} AI questions today - try again tomorrow."
+        )
+
+    material = existing or GeneratedMaterial(
+        document_content_id=document_content_id, material_type="summary"
+    )
+    material.status = "generating"
+    material.error_message = None
+    if not existing:
+        db.session.add(material)
+    db.session.commit()
+
+    user_message = (
+        f"Document text ({content.page_count or '?'} pages):\n\n{content.extracted_text}"
+    )
+
+    try:
+        ai_response = _call_with_continuation(
+            task="SUMMARIZATION",
+            system_prompt=SUMMARY_JSON_SYSTEM_PROMPT,
+            user_message=user_message,
+        )
+        parsed = _parse_summary_json(ai_response.text)
+    except Exception as e:
+        material.status = "failed"
+        material.error_message = str(e)[:500]
+        db.session.commit()
+        if isinstance(e, (AIBudgetExceededError, AIRateLimitExceededError, AIProviderError)):
+            raise
+        raise AIProviderError(f"Summary generation failed: {e}")
+
+    log_usage(
+        triggering_user_id,
+        request_type="summarize",
+        model=ai_response.model_used,
+        provider=ai_response.provider,
+        usage=ai_response.usage,
+    )
+
+    material.payload = json.dumps(parsed)
+    material.status = "ready"
+    db.session.commit()
+
+    return {
+        "payload": parsed,
+        "material_id": material.id,
         "reused": False,
         "model_used": ai_response.model_used,
     }
