@@ -758,6 +758,44 @@ def health():
 
 # ---------- Auth routes ----------
 
+@app.route("/universities")
+def list_universities():
+    """
+    Public, unauthenticated - the signup wizard needs this before a
+    session exists. Only returns active universities so a
+    deactivated one can't be selected by new signups.
+    """
+    universities = University.query.filter_by(is_active=True).order_by(University.name).all()
+    return jsonify([
+        {"id": u.id, "name": u.name, "short_code": u.short_code, "country": u.country}
+        for u in universities
+    ])
+
+
+@app.route("/universities/<int:university_id>/programs")
+def list_programs(university_id):
+    """
+    Public, unauthenticated - same reasoning as /universities above.
+    404s on an unknown or inactive university instead of silently
+    returning an empty list, so the frontend can tell 'no programs
+    yet' apart from 'that university id doesn't exist'.
+    """
+    university = University.query.filter_by(id=university_id, is_active=True).first()
+    if not university:
+        return jsonify({"error": "University not found"}), 404
+
+    programs = Program.query.filter_by(university_id=university_id, is_active=True).order_by(Program.name).all()
+    return jsonify([
+        {
+            "id": p.id,
+            "name": p.name,
+            "degree_level": p.degree_level,
+            "discipline_category": p.discipline_category,
+        }
+        for p in programs
+    ])
+
+
 @app.route("/signup", methods=["POST"])
 @limiter.limit("5 per hour")
 def signup():
@@ -772,6 +810,15 @@ def signup():
     university_id = data.get("university_id")
     program_id = data.get("program_id")
     requested_program_name = data.get("requested_program_name")
+    display_name = data.get("display_name")
+
+    if display_name is not None:
+        if not isinstance(display_name, str):
+            return jsonify({"error": "Invalid display name"}), 400
+        display_name = display_name.strip()
+        if len(display_name) > 50:
+            return jsonify({"error": "Display name must be 50 characters or fewer"}), 400
+        display_name = display_name or None
 
     if not email:
         return jsonify({"error": "Email is required"}), 400
@@ -829,6 +876,7 @@ def signup():
         password_hash=generate_password_hash(password),
         year=year,
         semester=semester,
+        display_name=display_name,
         email_verified=False,
         verification_token=token,
         signup_source=signup_source,
@@ -3064,12 +3112,33 @@ def admin_get_settings():
         except (TypeError, ValueError):
             return 0
 
+    def daily_limit(key, default):
+        raw = settings.get(key)
+        if raw is None or raw == "":
+            return default
+        if raw.strip().lower() == "unlimited":
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return default
+
+    def money(key, default_str):
+        try:
+            return float(settings.get(key, default_str) or default_str)
+        except (TypeError, ValueError):
+            return float(default_str)
+
     return jsonify({
         "maintenance_mode": settings.get("maintenance_mode", "false") == "true",
         "maintenance_message": settings.get("maintenance_message", ""),
         "price_notes": price("price_notes"),
         "price_past_paper": price("price_past_paper"),
         "price_qna": price("price_qna"),
+        "ai_daily_limit_free": daily_limit("ai_daily_limit_free", 5),
+        "ai_daily_limit_plus": daily_limit("ai_daily_limit_plus", 15),
+        "ai_daily_limit_premium": daily_limit("ai_daily_limit_premium", None),
+        "ai_monthly_budget_usd": money("ai_monthly_budget_usd", "20.00"),
     })
 
 
@@ -3112,6 +3181,33 @@ def admin_update_settings():
             if not setting:
                 setting = SystemSetting(key=price_key, value="0")
                 db.session.add(setting)
+            setting.value = str(value)
+
+    for tier_key in ("ai_daily_limit_free", "ai_daily_limit_plus", "ai_daily_limit_premium"):
+        if tier_key in data:
+            value = data[tier_key]
+            if value is None:
+                stored = "unlimited"
+            elif not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                return jsonify({"error": f"{tier_key} must be a non-negative integer, or null for unlimited"}), 400
+            else:
+                stored = str(value)
+            setting = SystemSetting.query.filter_by(key=tier_key).first()
+            if not setting:
+                setting = SystemSetting(key=tier_key, value=stored)
+                db.session.add(setting)
+            else:
+                setting.value = stored
+
+    if "ai_monthly_budget_usd" in data:
+        value = data["ai_monthly_budget_usd"]
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+            return jsonify({"error": "ai_monthly_budget_usd must be a positive number"}), 400
+        setting = SystemSetting.query.filter_by(key="ai_monthly_budget_usd").first()
+        if not setting:
+            setting = SystemSetting(key="ai_monthly_budget_usd", value=str(value))
+            db.session.add(setting)
+        else:
             setting.value = str(value)
 
     db.session.commit()

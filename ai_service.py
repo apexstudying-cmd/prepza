@@ -537,6 +537,40 @@ DAILY_FRESH_GENERATION_LIMITS = {
     "premium": None,  # None = unlimited
 }
 
+_DAILY_LIMIT_SETTING_KEYS = {
+    "free": "ai_daily_limit_free",
+    "plus": "ai_daily_limit_plus",
+    "premium": "ai_daily_limit_premium",
+}
+
+
+def get_daily_limit_for_tier(plan_tier):
+    """
+    Reads the daily fresh-generation cap for a plan tier from
+    SystemSetting (admin-editable via /admin/settings), falling back
+    to the hardcoded DAILY_FRESH_GENERATION_LIMITS default if unset or
+    unparseable. A stored value of "unlimited" (case-insensitive) means
+    no cap, matching the existing None-means-unlimited convention.
+    """
+    from app import SystemSetting
+
+    default = DAILY_FRESH_GENERATION_LIMITS.get(plan_tier, DAILY_FRESH_GENERATION_LIMITS["free"])
+    setting_key = _DAILY_LIMIT_SETTING_KEYS.get(plan_tier)
+    if not setting_key:
+        return default
+
+    setting = SystemSetting.query.filter_by(key=setting_key).first()
+    if not setting or setting.value is None or setting.value == "":
+        return default
+
+    if setting.value.strip().lower() == "unlimited":
+        return None
+
+    try:
+        return int(setting.value)
+    except ValueError:
+        return default
+
 
 def get_daily_fresh_generation_count(user_id):
     """
@@ -565,7 +599,7 @@ def check_daily_limit(user_id, plan_tier="free"):
     doesn't exist yet - callers can pass a real tier once it does,
     without this function needing to change.
     """
-    limit = DAILY_FRESH_GENERATION_LIMITS.get(plan_tier, DAILY_FRESH_GENERATION_LIMITS["free"])
+    limit = get_daily_limit_for_tier(plan_tier)
     if limit is None:
         return True, 0, None
 
