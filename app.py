@@ -2371,7 +2371,7 @@ def ask_prepza_ai(post_id):
     return jsonify({"reply": _serialize_reply(ai_reply)}), 201
 
 
-@app.route("/library")
+@app.route("/library/my-purchases")
 def my_library():
     user_id = session.get("user_id")
     if not user_id:
