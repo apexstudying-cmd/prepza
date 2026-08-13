@@ -125,9 +125,11 @@ def process_document(document_content_id):
         content.error_message = str(e)[:500]
         _complete_job(job, success=False, error_message=str(e))
         db.session.commit()
+        _sync_document_statuses(document_content_id, "failed")
         raise
 
     db.session.commit()
+    _sync_document_statuses(document_content_id, "ready")
 
 
 def _fetch_file_bytes(storage_path):
@@ -290,4 +292,23 @@ def _complete_job(job, success, error_message=None):
     job.completed_at = datetime.utcnow()
     if error_message:
         job.error_message = error_message[:500]
+    db.session.commit()
+
+
+def _sync_document_statuses(document_content_id, status):
+    """
+    Mirrors the final DocumentContent status onto every Document row
+    that points at it. DocumentContent can be shared across several
+    students' personal Document rows (dedup), but only this function's
+    caller knows when processing has actually finished - without this,
+    Document.status freezes at "processing" forever, silently blocking
+    anything that gates on it (e.g. publish_document requiring
+    status == "ready" before a document can be submitted to the
+    library).
+    """
+    from app import db, Document
+
+    Document.query.filter_by(document_content_id=document_content_id).update(
+        {"status": status}, synchronize_session=False
+    )
     db.session.commit()
