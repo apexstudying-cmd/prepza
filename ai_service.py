@@ -1362,3 +1362,194 @@ def generate_document_flashcards(document_content_id, triggering_user_id, plan_t
         "reused": False,
         "model_used": ai_response.model_used,
     }
+
+
+
+# ============================================================
+# 14. HIGH-LEVEL ORCHESTRATION - document Podcast Scripts (Phase 1)
+# ============================================================
+# Phase 1 = script text only. Audio synthesis is a deliberately
+# separate follow-up (TTS provider not yet chosen at time of writing -
+# see the Podcast scope discussion). The GeneratedMaterial payload
+# already carries audio_status/audio_storage_path/duration_seconds so
+# that follow-up can update this SAME row once a provider is wired up,
+# rather than needing a new material_type or schema change.
+#
+# Speaker roles are a fixed 3-way enum, not free-text names, so
+# whichever TTS provider ends up used just needs a {role: voice_id}
+# lookup - script generation itself has zero knowledge of voices,
+# providers, or audio at all.
+
+PODCAST_SCRIPT_JSON_SYSTEM_PROMPT = (
+    "You are Prepza AI, generating a study podcast SCRIPT (text only, no audio) "
+    "from a student's uploaded document for the Prepza study platform. The "
+    "podcast is a natural spoken conversation between three fixed roles - a "
+    "teacher explaining the material, an advanced student asking exam-level "
+    "follow-up questions and pushing for deeper nuance, and a foundational "
+    "student who hasn\'t fully grasped the topic yet and asks basic clarifying "
+    "questions (\"wait, can you explain that again?\", \"what does that term "
+    "mean?\"). Read the provided document text and produce the script as "
+    "STRICT JSON ONLY - no markdown code fences, no preamble, no text before "
+    "or after the JSON object. The JSON must have this exact shape:\n"
+    '{"title": "string", "subtitle": "string", "turns": '
+    '[{"speaker": "teacher|student_advanced|student_foundational", "text": "string"}]}\n\n'
+    "Guidelines: \"speaker\" must be EXACTLY one of the three role strings "
+    "shown above, nothing else. Write natural spoken dialogue, not a lecture "
+    "read aloud - short turns, real back-and-forth, the foundational student "
+    "should ask about basics early and the advanced student should push into "
+    "harder territory later. Target roughly 1000-1400 words of total spoken "
+    "text across all turns combined (about 6-9 minutes at a natural spoken "
+    "pace). Read numbers and formulas the way a person would say them aloud "
+    "(e.g. \"ten thousand shillings at eight percent\" not \"KES 10,000 at "
+    "8%\", and spell out formulas in words where a listener couldn\'t parse "
+    "symbols by ear) since this text will be converted to speech, not read as "
+    "text. Do not invent facts not supported by the source text."
+)
+
+PODCAST_VALID_SPEAKERS = {"teacher", "student_advanced", "student_foundational"}
+
+
+def _parse_podcast_script_json(raw_text):
+    """
+    Parses the model's podcast script JSON, tolerating stray markdown
+    code fences. Raises ValueError on anything that doesn't match the
+    expected shape - caller treats this as a failed generation, not a
+    crash.
+    """
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+
+    data = json.loads(cleaned)
+
+    if not isinstance(data, dict):
+        raise ValueError("Podcast script JSON root must be an object")
+    if "title" not in data or "turns" not in data:
+        raise ValueError("Podcast script JSON missing required \'title\' or \'turns\' key")
+    if not isinstance(data["turns"], list) or not data["turns"]:
+        raise ValueError("Podcast script JSON \'turns\' must be a non-empty list")
+    for turn in data["turns"]:
+        if not isinstance(turn, dict) or "speaker" not in turn or "text" not in turn:
+            raise ValueError("Each podcast turn must have \'speaker\' and \'text\'")
+        if turn["speaker"] not in PODCAST_VALID_SPEAKERS:
+            raise ValueError(
+                f"Podcast turn \'speaker\' must be one of {sorted(PODCAST_VALID_SPEAKERS)}, "
+                f"got {turn['speaker']!r}"
+            )
+        if not isinstance(turn["text"], str) or not turn["text"].strip():
+            raise ValueError("Each podcast turn\'s \'text\' must be a non-empty string")
+
+    return data
+
+
+def generate_document_podcast_script(document_content_id, triggering_user_id, plan_tier="free"):
+    """
+    Full pipeline for generating (or reusing) a document's AI podcast
+    SCRIPT (Phase 1 - text only, no audio). Same caching/limits/error
+    semantics as generate_document_summary()/quiz()/flashcards() - see
+    those functions' docstrings.
+
+    The persisted payload is an envelope, not just the raw script:
+      {"script": {...}, "audio_status": "pending",
+       "audio_storage_path": None, "duration_seconds": None}
+    A later audio-synthesis pass (separate function, once a TTS
+    provider is chosen) updates audio_status/audio_storage_path/
+    duration_seconds on this SAME GeneratedMaterial row rather than
+    creating a new one - script and audio share one row's lifecycle.
+
+    Returns a dict: {payload: dict, material_id, reused, model_used}.
+    Raises AIBudgetExceededError / AIRateLimitExceededError /
+    AIProviderError - callers should catch these the same way the
+    other document-material routes do.
+    """
+    from app import db, DocumentContent, GeneratedMaterial
+
+    content = db.session.get(DocumentContent, document_content_id)
+    if not content:
+        raise ValueError(f"DocumentContent {document_content_id} not found")
+
+    existing = GeneratedMaterial.query.filter_by(
+        document_content_id=document_content_id, material_type="podcast"
+    ).first()
+
+    if existing and existing.status == "ready" and existing.payload:
+        log_usage(triggering_user_id, request_type="reuse")
+        return {
+            "payload": json.loads(existing.payload),
+            "material_id": existing.id,
+            "reused": True,
+            "model_used": None,
+        }
+
+    if not content.extracted_text:
+        raise AIProviderError(
+            "This document's text hasn't finished processing yet - try again shortly."
+        )
+
+    if is_spend_cap_reached():
+        raise AIBudgetExceededError(
+            "Prepza AI has reached its monthly budget - fresh podcast scripts are paused, "
+            "but existing ones are still available."
+        )
+
+    allowed, used, limit = check_daily_limit(triggering_user_id, plan_tier=plan_tier)
+    if not allowed:
+        raise AIRateLimitExceededError(
+            f"You've used {used}/{limit} AI questions today - try again tomorrow."
+        )
+
+    material = existing or GeneratedMaterial(
+        document_content_id=document_content_id, material_type="podcast"
+    )
+    material.status = "generating"
+    material.error_message = None
+    if not existing:
+        db.session.add(material)
+    db.session.commit()
+
+    user_message = (
+        f"Document text ({content.page_count or '?'} pages):\n\n{content.extracted_text}"
+    )
+
+    try:
+        ai_response = _call_with_continuation(
+            task="PODCAST_SCRIPT",
+            system_prompt=PODCAST_SCRIPT_JSON_SYSTEM_PROMPT,
+            user_message=user_message,
+        )
+        parsed_script = _parse_podcast_script_json(ai_response.text)
+    except Exception as e:
+        material.status = "failed"
+        material.error_message = str(e)[:500]
+        db.session.commit()
+        if isinstance(e, (AIBudgetExceededError, AIRateLimitExceededError, AIProviderError)):
+            raise
+        raise AIProviderError(f"Podcast script generation failed: {e}")
+
+    log_usage(
+        triggering_user_id,
+        request_type="podcast_script",
+        model=ai_response.model_used,
+        provider=ai_response.provider,
+        usage=ai_response.usage,
+    )
+
+    envelope = {
+        "script": parsed_script,
+        "audio_status": "pending",
+        "audio_storage_path": None,
+        "duration_seconds": None,
+    }
+    material.payload = json.dumps(envelope)
+    material.status = "ready"
+    db.session.commit()
+
+    return {
+        "payload": envelope,
+        "material_id": material.id,
+        "reused": False,
+        "model_used": ai_response.model_used,
+    }
