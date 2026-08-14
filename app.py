@@ -401,6 +401,57 @@ class AiUsageLog(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class Conversation(db.Model):
+    """
+    A 1:1 or group chat thread (Chunk 6). Message delivery is
+    polling-based for MVP - clients re-fetch /chats/<id>/messages on an
+    interval rather than holding a persistent connection, since the
+    current Render/gunicorn setup runs sync workers with no websocket
+    infra. Direct-message conversations always have exactly 2
+    ConversationParticipant rows and name=None; group conversations set
+    is_group=True and require a name.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    is_group = db.Column(db.Boolean, nullable=False, default=False)
+    name = db.Column(db.String(100), nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # updated_at is bumped on every new message so /chats can sort by
+    # most recent activity without a join + max(created_at) per row.
+
+
+class ConversationParticipant(db.Model):
+    """
+    One user's membership in a Conversation. last_read_at drives the
+    unread badge on /chats: unread_count = messages in this
+    conversation created after last_read_at, excluding the viewer's own
+    messages. left_at soft-marks a group departure; 1:1 conversations
+    are never left.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id", ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default="member")
+    # member | admin (group only - reserved for later moderation controls)
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_read_at = db.Column(db.DateTime, nullable=True)
+    left_at = db.Column(db.DateTime, nullable=True)
+    __table_args__ = (
+        db.UniqueConstraint("conversation_id", "user_id", name="uq_participant_conversation_user"),
+    )
+
+
+class Message(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id", ondelete="CASCADE"), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    body = db.Column(db.String(3000), nullable=False)
+    is_deleted = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    edited_at = db.Column(db.DateTime, nullable=True)
+
+
 class Group(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
@@ -3457,6 +3508,321 @@ def mpesa_callback(callback_token):
         print("Callback processing error:", str(e))
 
     return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+
+# ---------- Chat routes (Chunk 6) ----------
+
+CHAT_MESSAGE_MAX = 3000
+CHAT_GROUP_NAME_MAX = 100
+CHAT_MESSAGE_PAGE_SIZE = 50
+
+
+def _active_participant(conversation_id, user_id):
+    """Returns the caller's ConversationParticipant row if they are a
+    current (non-left) member of the conversation, else None."""
+    return ConversationParticipant.query.filter_by(
+        conversation_id=conversation_id, user_id=user_id, left_at=None,
+    ).first()
+
+
+def _conversation_display_name(conversation, viewer_id):
+    """Group conversations use their own name. 1:1 conversations are
+    named after the other participant, so the viewer never has to name
+    their own DMs."""
+    if conversation.is_group:
+        return conversation.name or "Study Group"
+
+    other = (
+        ConversationParticipant.query
+        .filter(
+            ConversationParticipant.conversation_id == conversation.id,
+            ConversationParticipant.user_id != viewer_id,
+        )
+        .first()
+    )
+    if not other:
+        return "Conversation"
+    other_user = db.session.get(User, other.user_id)
+    return _display_name(other_user) if other_user else "Deleted user"
+
+
+def _serialize_message(message):
+    return {
+        "id": message.id,
+        "conversation_id": message.conversation_id,
+        "sender_id": message.sender_id,
+        "body": message.body if not message.is_deleted else None,
+        "is_deleted": message.is_deleted,
+        "created_at": message.created_at.isoformat() if message.created_at else None,
+        "edited_at": message.edited_at.isoformat() if message.edited_at else None,
+    }
+
+
+@app.route("/chats")
+def list_chats():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    participations = (
+        ConversationParticipant.query
+        .filter_by(user_id=user_id, left_at=None)
+        .all()
+    )
+
+    result = []
+    for p in participations:
+        conversation = db.session.get(Conversation, p.conversation_id)
+        if not conversation:
+            continue
+
+        last_message = (
+            Message.query
+            .filter_by(conversation_id=conversation.id, is_deleted=False)
+            .order_by(Message.created_at.desc())
+            .first()
+        )
+
+        unread_query = Message.query.filter(
+            Message.conversation_id == conversation.id,
+            Message.sender_id != user_id,
+        )
+        if p.last_read_at:
+            unread_query = unread_query.filter(Message.created_at > p.last_read_at)
+        unread_count = unread_query.count()
+
+        result.append({
+            "id": conversation.id,
+            "is_group": conversation.is_group,
+            "name": _conversation_display_name(conversation, user_id),
+            "last_message": last_message.body if last_message else None,
+            "last_message_at": last_message.created_at.isoformat() if last_message else None,
+            "unread_count": unread_count,
+        })
+
+    result.sort(key=lambda c: c["last_message_at"] or "", reverse=True)
+    return jsonify({"chats": result})
+
+
+@app.route("/chats", methods=["POST"])
+@limiter.limit("30 per hour")
+@require_csrf
+def create_chat():
+    """
+    Starts a conversation. For a non-group chat between exactly 2
+    users, reuses an existing conversation between the same pair
+    instead of creating a duplicate every time someone taps "message"
+    on the same classmate.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    is_group = bool(data.get("is_group"))
+    participant_ids = data.get("participant_ids")
+    name = (data.get("name") or "").strip()
+
+    if not isinstance(participant_ids, list) or not participant_ids:
+        return jsonify({"error": "participant_ids must be a non-empty list"}), 400
+    try:
+        participant_ids = {int(pid) for pid in participant_ids}
+    except (TypeError, ValueError):
+        return jsonify({"error": "participant_ids must be integers"}), 400
+    participant_ids.discard(user_id)
+    if not participant_ids:
+        return jsonify({"error": "Cannot start a conversation with only yourself"}), 400
+
+    valid_users = User.query.filter(User.id.in_(participant_ids)).count()
+    if valid_users != len(participant_ids):
+        return jsonify({"error": "One or more participants were not found"}), 404
+
+    if is_group:
+        if not name or len(name) > CHAT_GROUP_NAME_MAX:
+            return jsonify({"error": f"Group name is required and must be {CHAT_GROUP_NAME_MAX} characters or fewer"}), 400
+    else:
+        if len(participant_ids) != 1:
+            return jsonify({"error": "Direct chats must have exactly one other participant"}), 400
+        other_id = next(iter(participant_ids))
+
+        existing = (
+            db.session.query(Conversation.id)
+            .join(ConversationParticipant, ConversationParticipant.conversation_id == Conversation.id)
+            .filter(Conversation.is_group.is_(False))
+            .filter(ConversationParticipant.user_id.in_([user_id, other_id]))
+            .group_by(Conversation.id)
+            .having(func.count(ConversationParticipant.user_id.distinct()) == 2)
+            .first()
+        )
+        if existing:
+            return jsonify({"id": existing.id, "reused": True}), 200
+
+    conversation = Conversation(
+        is_group=is_group,
+        name=name if is_group else None,
+        created_by=user_id,
+    )
+    db.session.add(conversation)
+    db.session.flush()
+
+    all_member_ids = participant_ids | {user_id}
+    for member_id in all_member_ids:
+        db.session.add(ConversationParticipant(
+            conversation_id=conversation.id,
+            user_id=member_id,
+            role="admin" if (is_group and member_id == user_id) else "member",
+        ))
+
+    db.session.commit()
+    return jsonify({"id": conversation.id, "reused": False}), 201
+
+
+@app.route("/chats/<int:conversation_id>/messages")
+def list_messages(conversation_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Conversation not found"}), 404
+
+    before_id = request.args.get("before_id", type=int)
+    query = Message.query.filter_by(conversation_id=conversation_id)
+    if before_id:
+        query = query.filter(Message.id < before_id)
+
+    messages = (
+        query.order_by(Message.created_at.desc())
+        .limit(CHAT_MESSAGE_PAGE_SIZE)
+        .all()
+    )
+    messages.reverse()  # oldest-first for the client's scroll-down feed
+
+    return jsonify({"messages": [_serialize_message(m) for m in messages]})
+
+
+@app.route("/chats/<int:conversation_id>/messages", methods=["POST"])
+@limiter.limit("120 per hour")
+@require_csrf
+def send_message(conversation_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Conversation not found"}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    body = (data.get("body") or "").strip()
+    if not body or len(body) > CHAT_MESSAGE_MAX:
+        return jsonify({"error": f"Message must be 1-{CHAT_MESSAGE_MAX} characters"}), 400
+
+    message = Message(conversation_id=conversation_id, sender_id=user_id, body=body)
+    db.session.add(message)
+
+    conversation = db.session.get(Conversation, conversation_id)
+    if conversation:
+        conversation.updated_at = datetime.utcnow()
+
+    db.session.commit()
+    return jsonify(_serialize_message(message)), 201
+
+
+@app.route("/chats/<int:conversation_id>/read", methods=["POST"])
+@require_csrf
+def mark_chat_read(conversation_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    participant = _active_participant(conversation_id, user_id)
+    if not participant:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    participant.last_read_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"message": "Marked as read"})
+
+
+@app.route("/chats/<int:conversation_id>", methods=["PATCH"])
+@require_csrf
+def rename_chat(conversation_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Conversation not found"}), 404
+
+    conversation = db.session.get(Conversation, conversation_id)
+    if not conversation or not conversation.is_group:
+        return jsonify({"error": "Only group conversations can be renamed"}), 400
+
+    data = request.get_json(silent=True)
+    if not data or "name" not in data:
+        return jsonify({"error": "name is required"}), 400
+
+    name = (data.get("name") or "").strip()
+    if not name or len(name) > CHAT_GROUP_NAME_MAX:
+        return jsonify({"error": f"Group name must be 1-{CHAT_GROUP_NAME_MAX} characters"}), 400
+
+    conversation.name = name
+    db.session.commit()
+    return jsonify({"id": conversation.id, "name": conversation.name})
+
+
+@app.route("/chats/<int:conversation_id>/leave", methods=["POST"])
+@require_csrf
+def leave_chat(conversation_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    conversation = db.session.get(Conversation, conversation_id)
+    if not conversation or not conversation.is_group:
+        return jsonify({"error": "Only group conversations can be left"}), 400
+
+    participant = _active_participant(conversation_id, user_id)
+    if not participant:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    participant.left_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"message": "Left group"})
+
+
+@app.route("/users/search")
+def search_users():
+    """Backs the "New Chat"/"New Group" contact picker. Deliberately
+    narrow: only display_name matches, capped results, no email
+    exposure - this is a people-picker, not a directory lookup."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"users": []})
+
+    matches = (
+        User.query
+        .filter(User.id != user_id)
+        .filter(User.is_suspended.is_(False))
+        .filter(User.display_name.ilike(f"%{q}%"))
+        .limit(20)
+        .all()
+    )
+
+    return jsonify({"users": [
+        {"id": u.id, "display_name": _display_name(u), "year": u.year, "semester": u.semester}
+        for u in matches
+    ]})
 
 
 # ---------- Admin routes (protected) ----------
