@@ -3391,6 +3391,108 @@ def follow_summary(target_user_id):
     })
 
 
+# ---------- Notifications ----------
+
+def _serialize_notification(notification):
+    return {
+        "id": notification.id,
+        "type": notification.type,
+        "title": notification.title,
+        "body": notification.body,
+        "related_type": notification.related_type,
+        "related_id": notification.related_id,
+        "is_read": notification.is_read,
+        "created_at": notification.created_at.isoformat() if notification.created_at else None,
+    }
+
+
+@app.route("/notifications")
+def list_notifications():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    per_page = 20
+
+    notifications = (
+        Notification.query.filter_by(user_id=user_id)
+        .order_by(Notification.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    return jsonify({
+        "page": page,
+        "notifications": [_serialize_notification(n) for n in notifications],
+    })
+
+
+@app.route("/notifications/unread-count")
+def notifications_unread_count():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
+    return jsonify({"unread_count": count})
+
+
+@app.route("/notifications/<int:notification_id>/read", methods=["POST"])
+@require_csrf
+def mark_notification_read(notification_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    notification = db.session.get(Notification, notification_id)
+    if not notification or notification.user_id != user_id:
+        return jsonify({"error": "Notification not found"}), 404
+
+    if not notification.is_read:
+        notification.is_read = True
+        db.session.commit()
+
+    return jsonify(_serialize_notification(notification))
+
+
+@app.route("/notifications/read-all", methods=["POST"])
+@require_csrf
+def mark_all_notifications_read():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    updated_count = (
+        Notification.query.filter_by(user_id=user_id, is_read=False)
+        .update({"is_read": True})
+    )
+    db.session.commit()
+
+    return jsonify({"message": "Marked all as read", "updated_count": updated_count})
+
+
+@app.route("/notifications/<int:notification_id>", methods=["DELETE"])
+@require_csrf
+def delete_notification(notification_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    notification = db.session.get(Notification, notification_id)
+    if not notification or notification.user_id != user_id:
+        return jsonify({"error": "Notification not found"}), 404
+
+    db.session.delete(notification)
+    db.session.commit()
+
+    return jsonify({"message": "Notification deleted"})
+
+
 # ---------- Content routes (student-facing) ----------
 
 @app.route("/units")
