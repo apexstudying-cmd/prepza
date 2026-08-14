@@ -62,10 +62,14 @@ def password_strength_error(password):
     """
     if password.lower() in COMMON_WEAK_PASSWORDS:
         return "That password is too common - please choose something more unique."
-    if not re.search(r"[A-Za-z]", password):
-        return "Password must include at least one letter."
+    if not re.search(r"[a-z]", password):
+        return "Password must include at least one lowercase letter."
+    if not re.search(r"[A-Z]", password):
+        return "Password must include at least one uppercase letter."
     if not re.search(r"\d", password):
         return "Password must include at least one number."
+    if not re.search(r"[^A-Za-z0-9]", password):
+        return "Password must include at least one symbol (e.g. ! @ # $ %)."
     return None
 
 
