@@ -1200,3 +1200,165 @@ def generate_document_quiz(document_content_id, triggering_user_id, plan_tier="f
         "model_used": ai_response.model_used,
     }
 
+
+
+
+# ============================================================
+# 13. HIGH-LEVEL ORCHESTRATION - document Flashcards
+# ============================================================
+# Same shape as generate_document_quiz() (cache check -> spend cap ->
+# rate limit -> generate -> log -> persist), keyed on
+# GeneratedMaterial(material_type='flashcards'). Uses the FLASHCARDS
+# task (Haiku primary, Sonnet fallback - "mechanical extraction of Q/A
+# pairs from source text" per AI_TASKS' own note) and the same
+# continuation-retry path as summaries/quizzes.
+#
+# Payload shape wraps the card list in {title, subtitle, cards} for
+# consistency with Summary/Quiz, even though the current flashcard
+# mock screen doesn't render a title today - keeps the three
+# generation features' payload shapes uniform rather than one-off.
+
+FLASHCARDS_JSON_SYSTEM_PROMPT = (
+    "You are Prepza AI, generating a set of study flashcards from a student's "
+    "uploaded document for the Prepza study platform. Read the provided "
+    "document text and produce flashcards as STRICT JSON ONLY - no markdown "
+    "code fences, no preamble, no text before or after the JSON object. The "
+    "JSON must have this exact shape:\n"
+    '{"title": "string", "subtitle": "string", "cards": '
+    '[{"q": "string", "a": "string"}]}\n\n'
+    "Guidelines: produce 15-30 cards covering key definitions, formulas, and "
+    "concepts from the material - one clear idea per card, not compound "
+    "questions. \"q\" should be a short prompt (a definition, formula name, "
+    "or question). \"a\" should be concise but complete - use \\n\\n to "
+    "separate the core answer from a worked example or extra context where "
+    "helpful, the way a physical flashcard's back would be laid out. Write "
+    "mathematical notation in plain unicode (e.g. A(t) = A(0)(1+i)^t), never "
+    "LaTeX. Do not invent facts not supported by the source text."
+)
+
+
+def _parse_flashcards_json(raw_text):
+    """
+    Parses the model's flashcards JSON, tolerating stray markdown code
+    fences. Raises ValueError on anything that doesn't match the
+    expected shape - caller treats this as a failed generation, not a
+    crash.
+    """
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+
+    data = json.loads(cleaned)
+
+    if not isinstance(data, dict):
+        raise ValueError("Flashcards JSON root must be an object")
+    if "title" not in data or "cards" not in data:
+        raise ValueError("Flashcards JSON missing required \'title\' or \'cards\' key")
+    if not isinstance(data["cards"], list) or not data["cards"]:
+        raise ValueError("Flashcards JSON \'cards\' must be a non-empty list")
+    for card in data["cards"]:
+        if not isinstance(card, dict) or "q" not in card or "a" not in card:
+            raise ValueError("Each flashcard must have \'q\' and \'a\'")
+        if not isinstance(card["q"], str) or not isinstance(card["a"], str):
+            raise ValueError("Each flashcard\'s \'q\' and \'a\' must be strings")
+
+    return data
+
+
+def generate_document_flashcards(document_content_id, triggering_user_id, plan_tier="free"):
+    """
+    Full pipeline for generating (or reusing) a document's AI
+    flashcard set. Identical shape to generate_document_quiz() - see
+    that function's docstring for the caching/limits/error semantics,
+    which are the same here.
+
+    Returns a dict: {payload: dict, material_id, reused, model_used}.
+    Raises AIBudgetExceededError / AIRateLimitExceededError /
+    AIProviderError - callers should catch these the same way the
+    other document-material routes do.
+    """
+    from app import db, DocumentContent, GeneratedMaterial
+
+    content = db.session.get(DocumentContent, document_content_id)
+    if not content:
+        raise ValueError(f"DocumentContent {document_content_id} not found")
+
+    existing = GeneratedMaterial.query.filter_by(
+        document_content_id=document_content_id, material_type="flashcards"
+    ).first()
+
+    if existing and existing.status == "ready" and existing.payload:
+        log_usage(triggering_user_id, request_type="reuse")
+        return {
+            "payload": json.loads(existing.payload),
+            "material_id": existing.id,
+            "reused": True,
+            "model_used": None,
+        }
+
+    if not content.extracted_text:
+        raise AIProviderError(
+            "This document's text hasn't finished processing yet - try again shortly."
+        )
+
+    if is_spend_cap_reached():
+        raise AIBudgetExceededError(
+            "Prepza AI has reached its monthly budget - fresh flashcards are paused, "
+            "but existing flashcard sets are still available."
+        )
+
+    allowed, used, limit = check_daily_limit(triggering_user_id, plan_tier=plan_tier)
+    if not allowed:
+        raise AIRateLimitExceededError(
+            f"You've used {used}/{limit} AI questions today - try again tomorrow."
+        )
+
+    material = existing or GeneratedMaterial(
+        document_content_id=document_content_id, material_type="flashcards"
+    )
+    material.status = "generating"
+    material.error_message = None
+    if not existing:
+        db.session.add(material)
+    db.session.commit()
+
+    user_message = (
+        f"Document text ({content.page_count or '?'} pages):\n\n{content.extracted_text}"
+    )
+
+    try:
+        ai_response = _call_with_continuation(
+            task="FLASHCARDS",
+            system_prompt=FLASHCARDS_JSON_SYSTEM_PROMPT,
+            user_message=user_message,
+        )
+        parsed = _parse_flashcards_json(ai_response.text)
+    except Exception as e:
+        material.status = "failed"
+        material.error_message = str(e)[:500]
+        db.session.commit()
+        if isinstance(e, (AIBudgetExceededError, AIRateLimitExceededError, AIProviderError)):
+            raise
+        raise AIProviderError(f"Flashcards generation failed: {e}")
+
+    log_usage(
+        triggering_user_id,
+        request_type="flashcards",
+        model=ai_response.model_used,
+        provider=ai_response.provider,
+        usage=ai_response.usage,
+    )
+
+    material.payload = json.dumps(parsed)
+    material.status = "ready"
+    db.session.commit()
+
+    return {
+        "payload": parsed,
+        "material_id": material.id,
+        "reused": False,
+        "model_used": ai_response.model_used,
+    }
