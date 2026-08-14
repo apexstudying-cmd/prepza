@@ -504,9 +504,12 @@ def route_and_generate_batch(task, items, on_batch_created=None):
 def log_usage(user_id, request_type, model=None, provider=None,
                usage: Optional[AIUsage] = None, forum_reply_id=None):
     """
-    Logs one row to ai_usage_log. `request_type` is 'answer' | 'reuse' |
-    'summarize' (matches the existing column). For 'reuse' rows, model/
-    provider stay None and usage stays zeroed - no API call was made.
+    Logs one row to ai_usage_log. `request_type` describes what kind of
+    request this was - 'answer' | 'reuse' | 'summarize' | 'quiz' (more
+    values are added as generation features grow; the column has no
+    DB-level constraint, this list is documentation only). For 'reuse'
+    rows, model/provider stay None and usage stays zeroed - no API call
+    was made.
     """
     from app import db, AiUsageLog
 
@@ -1039,3 +1042,161 @@ def generate_document_summary(document_content_id, triggering_user_id, plan_tier
         "reused": False,
         "model_used": ai_response.model_used,
     }
+
+
+# ============================================================
+# 12. HIGH-LEVEL ORCHESTRATION - document Quizzes
+# ============================================================
+# Same shape as generate_document_summary() (cache check -> spend cap ->
+# rate limit -> generate -> log -> persist), keyed on
+# GeneratedMaterial(material_type='quiz'). Uses the QUIZZES task
+# (Sonnet 5, no fallback - "needs correct distractors/answers, not just
+# plausible-looking ones" per AI_TASKS' own note) and the same
+# continuation-retry path as summaries, since a quiz truncated mid-JSON
+# is just as broken as a truncated summary.
+
+QUIZ_JSON_SYSTEM_PROMPT = (
+    "You are Prepza AI, generating a multiple-choice practice quiz from a "
+    "student\'s uploaded document for the Prepza study platform. Read the "
+    "provided document text and produce a quiz as STRICT JSON ONLY - no "
+    "markdown code fences, no preamble, no text before or after the JSON "
+    "object. The JSON must have this exact shape:\n"
+    '{"title": "string", "subtitle": "string", "questions": '
+    '[{"q": "string", "opts": ["string","string","string","string"], "ans": 0}]}\n\n'
+    "Guidelines: produce 10-15 questions covering the material\'s key concepts, "
+    "not trivial recall. Each question must have EXACTLY 4 options in \"opts\". "
+    "\"ans\" is the 0-indexed position of the correct option within \"opts\" "
+    "(0, 1, 2, or 3). Distractors (wrong options) must be plausible - based on "
+    "common mistakes or related-but-incorrect values/concepts, not obviously "
+    "wrong. Do not invent facts not supported by the source text. Write "
+    "mathematical notation in plain unicode, never LaTeX."
+)
+
+
+def _parse_quiz_json(raw_text):
+    """
+    Parses the model's quiz JSON, tolerating stray markdown code fences.
+    Raises ValueError on anything that doesn't match the expected shape -
+    caller treats this as a failed generation, not a crash.
+    """
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+
+    data = json.loads(cleaned)
+
+    if not isinstance(data, dict):
+        raise ValueError("Quiz JSON root must be an object")
+    if "title" not in data or "questions" not in data:
+        raise ValueError("Quiz JSON missing required \'title\' or \'questions\' key")
+    if not isinstance(data["questions"], list) or not data["questions"]:
+        raise ValueError("Quiz JSON \'questions\' must be a non-empty list")
+    for question in data["questions"]:
+        if not isinstance(question, dict) or "q" not in question or "opts" not in question or "ans" not in question:
+            raise ValueError("Each quiz question must have \'q\', \'opts\', and \'ans\'")
+        if not isinstance(question["opts"], list) or len(question["opts"]) != 4:
+            raise ValueError("Each quiz question\'s \'opts\' must be a list of exactly 4 options")
+        if not isinstance(question["ans"], int) or isinstance(question["ans"], bool) or not (0 <= question["ans"] <= 3):
+            raise ValueError("Each quiz question\'s \'ans\' must be an integer 0-3")
+
+    return data
+
+
+def generate_document_quiz(document_content_id, triggering_user_id, plan_tier="free"):
+    """
+    Full pipeline for generating (or reusing) a document's AI practice
+    quiz. Identical shape to generate_document_summary() - see that
+    function's docstring for the caching/limits/error semantics, which
+    are the same here.
+
+    Returns a dict: {payload: dict, material_id, reused, model_used}.
+    Raises AIBudgetExceededError / AIRateLimitExceededError /
+    AIProviderError - callers should catch these the same way the
+    forum routes / summarize route do.
+    """
+    from app import db, DocumentContent, GeneratedMaterial
+
+    content = db.session.get(DocumentContent, document_content_id)
+    if not content:
+        raise ValueError(f"DocumentContent {document_content_id} not found")
+
+    existing = GeneratedMaterial.query.filter_by(
+        document_content_id=document_content_id, material_type="quiz"
+    ).first()
+
+    if existing and existing.status == "ready" and existing.payload:
+        log_usage(triggering_user_id, request_type="reuse")
+        return {
+            "payload": json.loads(existing.payload),
+            "material_id": existing.id,
+            "reused": True,
+            "model_used": None,
+        }
+
+    if not content.extracted_text:
+        raise AIProviderError(
+            "This document's text hasn't finished processing yet - try again shortly."
+        )
+
+    if is_spend_cap_reached():
+        raise AIBudgetExceededError(
+            "Prepza AI has reached its monthly budget - fresh quizzes are paused, "
+            "but existing quizzes are still available."
+        )
+
+    allowed, used, limit = check_daily_limit(triggering_user_id, plan_tier=plan_tier)
+    if not allowed:
+        raise AIRateLimitExceededError(
+            f"You've used {used}/{limit} AI questions today - try again tomorrow."
+        )
+
+    material = existing or GeneratedMaterial(
+        document_content_id=document_content_id, material_type="quiz"
+    )
+    material.status = "generating"
+    material.error_message = None
+    if not existing:
+        db.session.add(material)
+    db.session.commit()
+
+    user_message = (
+        f"Document text ({content.page_count or '?'} pages):\n\n{content.extracted_text}"
+    )
+
+    try:
+        ai_response = _call_with_continuation(
+            task="QUIZZES",
+            system_prompt=QUIZ_JSON_SYSTEM_PROMPT,
+            user_message=user_message,
+        )
+        parsed = _parse_quiz_json(ai_response.text)
+    except Exception as e:
+        material.status = "failed"
+        material.error_message = str(e)[:500]
+        db.session.commit()
+        if isinstance(e, (AIBudgetExceededError, AIRateLimitExceededError, AIProviderError)):
+            raise
+        raise AIProviderError(f"Quiz generation failed: {e}")
+
+    log_usage(
+        triggering_user_id,
+        request_type="quiz",
+        model=ai_response.model_used,
+        provider=ai_response.provider,
+        usage=ai_response.usage,
+    )
+
+    material.payload = json.dumps(parsed)
+    material.status = "ready"
+    db.session.commit()
+
+    return {
+        "payload": parsed,
+        "material_id": material.id,
+        "reused": False,
+        "model_used": ai_response.model_used,
+    }
+

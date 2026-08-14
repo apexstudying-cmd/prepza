@@ -396,6 +396,119 @@ class AiUsageLog(db.Model):
     cost_usd = db.Column(db.Numeric(10, 6), default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
+class Group(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.String(1000), nullable=True)
+    privacy = db.Column(db.String(20), nullable=False, default="public")
+    # public | private | course_only
+    university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=True)
+    program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=True)
+    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
+    year = db.Column(db.Integer, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    member_count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class GroupMember(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("group.id", ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default="member")
+    # admin | member
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("group_id", "user_id", name="uq_group_member_group_user"),
+    )
+
+
+class GroupPost(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("group.id", ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    post_type = db.Column(db.String(20), nullable=False, default="post")
+    # post | question - Posts tab vs Questions tab in GroupDetailScreen
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class GroupPostComment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    group_post_id = db.Column(db.Integer, db.ForeignKey("group_post.id", ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Used for both Posts-tab comments and Questions-tab replies - the
+    # frontend's shared CommentsScreen doesn't distinguish them either.
+
+
+class GroupPostLike(db.Model):
+    """Heart/like on a Posts-tab GroupPost."""
+    id = db.Column(db.Integer, primary_key=True)
+    group_post_id = db.Column(db.Integer, db.ForeignKey("group_post.id", ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("group_post_id", "user_id", name="uq_group_post_like_post_user"),
+    )
+
+
+class GroupQuestionVote(db.Model):
+    """Upvote on a Questions-tab GroupPost. Kept separate from
+    GroupPostLike since a post can only be one type (post XOR question)
+    but the two interactions have different semantics and copy."""
+    id = db.Column(db.Integer, primary_key=True)
+    group_post_id = db.Column(db.Integer, db.ForeignKey("group_post.id", ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("group_post_id", "user_id", name="uq_group_question_vote_post_user"),
+    )
+
+
+class GroupFile(db.Model):
+    """Shares an existing personal Document into a group's Files tab -
+    does not duplicate storage, just links to the student's own
+    Document row (must already be status=ready)."""
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey("group.id", ondelete="CASCADE"), nullable=False)
+    document_id = db.Column(db.Integer, db.ForeignKey("document.id"), nullable=False)
+    shared_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("group_id", "document_id", name="uq_group_file_group_document"),
+    )
+
+
+class Follow(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    follower_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    followed_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("follower_id", "followed_id", name="uq_follow_follower_followed"),
+    )
+
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    type = db.Column(db.String(40), nullable=False)
+    # e.g. group_post, group_comment, group_join_request, new_follower,
+    # forum_ai_reply, study_reminder, opportunity, achievement, announcement
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.String(500), nullable=True)
+    related_type = db.Column(db.String(40), nullable=True)
+    # e.g. "group", "group_post", "user", "forum_post" - paired with
+    # related_id so the frontend notification tap-target can be resolved
+    # without a different table shape per notification type.
+    related_id = db.Column(db.Integer, nullable=True)
+    is_read = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 def get_mpesa_access_token():
     consumer_key = os.environ.get("MPESA_CONSUMER_KEY")
     consumer_secret = os.environ.get("MPESA_CONSUMER_SECRET")
@@ -1603,6 +1716,54 @@ def summarize_document(document_id):
     }), 200
 
 
+@app.route("/documents/<int:document_id>/quiz", methods=["POST"])
+@limiter.limit(
+    "20 per hour",
+    key_func=lambda: f"quiz:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def quiz_document(document_id):
+    """
+    Generates (or returns the cached) AI practice quiz for a student's
+    document. Same shape as summarize_document() above - ai_service
+    enforces the spend cap / rate limit / cache-reuse logic, this route
+    just translates its exceptions to HTTP responses.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no content to quiz"}), 400
+
+    content = db.session.get(DocumentContent, document.document_content_id)
+    if not content or content.status != "ready":
+        return jsonify({"error": "Document is still processing - try again shortly"}), 400
+
+    try:
+        result = ai_service.generate_document_quiz(
+            document_content_id=content.id,
+            triggering_user_id=user_id,
+        )
+    except ai_service.AIBudgetExceededError as e:
+        return jsonify({"error": str(e)}), 503
+    except ai_service.AIRateLimitExceededError as e:
+        return jsonify({"error": str(e)}), 429
+    except ai_service.AIProviderError as e:
+        return jsonify({"error": str(e)}), 502
+
+    return jsonify({
+        "material_id": result["material_id"],
+        "reused": result["reused"],
+        "quiz": result["payload"],
+    }), 200
+
+
+
 
 
 # ---------- Library (publishing) ----------
@@ -2142,6 +2303,553 @@ def admin_resolve_library_report(report_id):
     db.session.commit()
 
     return jsonify({"id": report.id, "status": report.status})
+
+
+# ---------- Groups ----------
+
+GROUP_NAME_MAX = 150
+GROUP_DESCRIPTION_MAX = 1000
+GROUP_PRIVACY_VALUES = {"public", "private", "course_only"}
+
+
+def _serialize_group(group, membership=None):
+    unit = db.session.get(Unit, group.unit_id) if group.unit_id else None
+    return {
+        "id": group.id,
+        "name": group.name,
+        "description": group.description,
+        "privacy": group.privacy,
+        "university_id": group.university_id,
+        "program_id": group.program_id,
+        "unit_id": group.unit_id,
+        "unit_code": unit.code if unit else None,
+        "year": group.year,
+        "member_count": group.member_count,
+        "created_by": group.created_by,
+        "created_at": group.created_at.isoformat() if group.created_at else None,
+        "is_member": membership is not None,
+        "role": membership.role if membership else None,
+    }
+
+
+@app.route("/groups", methods=["POST"])
+@require_csrf
+def create_group():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    name = (data.get("name") or "").strip()
+    if not name or len(name) > GROUP_NAME_MAX:
+        return jsonify({"error": f"name is required and must be {GROUP_NAME_MAX} characters or fewer"}), 400
+
+    description = data.get("description")
+    if description is not None:
+        if not isinstance(description, str):
+            return jsonify({"error": "description must be a string"}), 400
+        description = description.strip() or None
+        if description and len(description) > GROUP_DESCRIPTION_MAX:
+            return jsonify({"error": f"description must be {GROUP_DESCRIPTION_MAX} characters or fewer"}), 400
+
+    privacy = (data.get("privacy") or "public").strip().lower()
+    if privacy not in GROUP_PRIVACY_VALUES:
+        return jsonify({"error": "privacy must be one of: " + ", ".join(sorted(GROUP_PRIVACY_VALUES))}), 400
+
+    university_id = data.get("university_id")
+    if university_id is not None:
+        if not isinstance(university_id, int) or not db.session.get(University, university_id):
+            return jsonify({"error": "Invalid university_id"}), 400
+
+    program_id = data.get("program_id")
+    if program_id is not None:
+        if not isinstance(program_id, int) or not db.session.get(Program, program_id):
+            return jsonify({"error": "Invalid program_id"}), 400
+
+    unit_id = data.get("unit_id")
+    if unit_id is not None:
+        if not isinstance(unit_id, int) or not db.session.get(Unit, unit_id):
+            return jsonify({"error": "Invalid unit_id"}), 400
+
+    year = data.get("year")
+    if year is not None:
+        if not isinstance(year, int) or year < 1 or year > 4:
+            return jsonify({"error": "year must be a number between 1 and 4"}), 400
+
+    group = Group(
+        name=name,
+        description=description,
+        privacy=privacy,
+        university_id=university_id,
+        program_id=program_id,
+        unit_id=unit_id,
+        year=year,
+        created_by=user_id,
+        member_count=1,
+    )
+    db.session.add(group)
+    db.session.flush()  # assign group.id before the membership row references it
+
+    membership = GroupMember(group_id=group.id, user_id=user_id, role="admin")
+    db.session.add(membership)
+    db.session.commit()
+
+    return jsonify(_serialize_group(group, membership)), 201
+
+
+@app.route("/groups")
+def browse_groups():
+    """
+    Browse/discover groups. Private groups are excluded entirely - no
+    invite/request flow exists yet, so surfacing them would just be a
+    dead end. Course-only groups ARE listed (not yet restricted to
+    matching students - that's a later refinement, not a security
+    boundary, since course_only groups still require an explicit join).
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    query = Group.query.filter(Group.privacy != "private")
+
+    q = (request.args.get("q") or "").strip()
+    if q:
+        query = query.filter(Group.name.ilike(f"%{q}%"))
+
+    unit_id = request.args.get("unit_id", type=int)
+    if unit_id:
+        query = query.filter(Group.unit_id == unit_id)
+
+    university_id = request.args.get("university_id", type=int)
+    if university_id:
+        query = query.filter(Group.university_id == university_id)
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    per_page = 20
+
+    groups = (
+        query.order_by(Group.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    group_ids = [g.id for g in groups]
+    memberships = {
+        m.group_id: m
+        for m in GroupMember.query.filter(
+            GroupMember.user_id == user_id, GroupMember.group_id.in_(group_ids)
+        ).all()
+    } if group_ids else {}
+
+    return jsonify({
+        "page": page,
+        "groups": [_serialize_group(g, memberships.get(g.id)) for g in groups],
+    })
+
+
+@app.route("/groups/mine")
+def my_groups():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    memberships = (
+        GroupMember.query.filter_by(user_id=user_id)
+        .order_by(GroupMember.joined_at.desc())
+        .all()
+    )
+
+    result = []
+    for m in memberships:
+        group = db.session.get(Group, m.group_id)
+        if not group:
+            continue
+        result.append(_serialize_group(group, m))
+
+    return jsonify({"groups": result})
+
+
+@app.route("/groups/<int:group_id>")
+def get_group(group_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+
+    membership = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()
+
+    if group.privacy == "private" and not membership:
+        # Hide existence of private groups from non-members rather than
+        # a 403 that would confirm the group exists.
+        return jsonify({"error": "Group not found"}), 404
+
+    return jsonify(_serialize_group(group, membership))
+
+
+@app.route("/groups/<int:group_id>/join", methods=["POST"])
+@require_csrf
+def join_group(group_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+
+    existing = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()
+    if existing:
+        return jsonify({"message": "Already a member", "role": existing.role}), 200
+
+    if group.privacy == "private":
+        # No invite/request flow yet.
+        return jsonify({"error": "This group is invite-only"}), 403
+
+    membership = GroupMember(group_id=group_id, user_id=user_id, role="member")
+    db.session.add(membership)
+    group.member_count = (group.member_count or 0) + 1
+    db.session.commit()
+
+    return jsonify({
+        "message": "Joined",
+        "role": membership.role,
+        "member_count": group.member_count,
+    }), 201
+
+
+@app.route("/groups/<int:group_id>/leave", methods=["POST"])
+@require_csrf
+def leave_group(group_id):
+    """
+    A sole admin can't leave while other members remain - there's no
+    promote-another-admin endpoint yet, so this would strand the group.
+    If they're the last member overall, leaving is allowed (the group
+    is simply left empty for now - cleanup/deletion is a later item).
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+
+    membership = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()
+    if not membership:
+        return jsonify({"message": "Not a member"}), 200
+
+    if membership.role == "admin":
+        other_admins = GroupMember.query.filter(
+            GroupMember.group_id == group_id,
+            GroupMember.role == "admin",
+            GroupMember.user_id != user_id,
+        ).count()
+        other_members = GroupMember.query.filter(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id != user_id,
+        ).count()
+        if other_admins == 0 and other_members > 0:
+            return jsonify({
+                "error": "You're the only admin - promote another member to admin before leaving"
+            }), 400
+
+    db.session.delete(membership)
+    group.member_count = max(0, (group.member_count or 1) - 1)
+    db.session.commit()
+
+    return jsonify({"message": "Left group", "member_count": group.member_count})
+
+
+def _get_group_visible(group_id, user_id):
+    """
+    Returns (group, membership) if the group exists and is visible to
+    user_id - public/course_only groups are visible to anyone, private
+    groups only to members. Returns (None, None) otherwise, so callers
+    can 404 without distinguishing "doesn't exist" from "private and
+    you're not in it".
+    """
+    group = db.session.get(Group, group_id)
+    if not group:
+        return None, None
+    membership = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()
+    if group.privacy == "private" and not membership:
+        return None, None
+    return group, membership
+
+
+GROUP_POST_TYPES = {"post", "question"}
+GROUP_POST_BODY_MAX = 3000
+GROUP_POST_COMMENT_MAX = 2000
+
+
+def _serialize_group_post(post, user_id):
+    author = db.session.get(User, post.user_id)
+    like_count = None
+    vote_count = None
+    viewer_liked = False
+    viewer_voted = False
+    if post.post_type == "post":
+        like_count = GroupPostLike.query.filter_by(group_post_id=post.id).count()
+        viewer_liked = GroupPostLike.query.filter_by(group_post_id=post.id, user_id=user_id).first() is not None
+    else:
+        vote_count = GroupQuestionVote.query.filter_by(group_post_id=post.id).count()
+        viewer_voted = GroupQuestionVote.query.filter_by(group_post_id=post.id, user_id=user_id).first() is not None
+    comment_count = GroupPostComment.query.filter_by(group_post_id=post.id).count()
+    return {
+        "id": post.id,
+        "group_id": post.group_id,
+        "post_type": post.post_type,
+        "body": post.body,
+        "author": _display_name(author) if author else "Deleted user",
+        "author_id": post.user_id,
+        "like_count": like_count,
+        "viewer_liked": viewer_liked,
+        "vote_count": vote_count,
+        "viewer_voted": viewer_voted,
+        "comment_count": comment_count,
+        "created_at": post.created_at.isoformat() if post.created_at else None,
+    }
+
+
+def _serialize_group_post_comment(comment):
+    author = db.session.get(User, comment.user_id)
+    return {
+        "id": comment.id,
+        "group_post_id": comment.group_post_id,
+        "body": comment.body,
+        "author": _display_name(author) if author else "Deleted user",
+        "author_id": comment.user_id,
+        "created_at": comment.created_at.isoformat() if comment.created_at else None,
+    }
+
+
+@app.route("/groups/<int:group_id>/posts", methods=["POST"])
+@require_csrf
+def create_group_post(group_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    group, membership = _get_group_visible(group_id, user_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+    if not membership:
+        return jsonify({"error": "You must join this group first"}), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    post_type = (data.get("post_type") or "post").strip().lower()
+    if post_type not in GROUP_POST_TYPES:
+        return jsonify({"error": "post_type must be 'post' or 'question'"}), 400
+
+    body = (data.get("body") or "").strip()
+    if not body or len(body) > GROUP_POST_BODY_MAX:
+        return jsonify({"error": f"body is required and must be {GROUP_POST_BODY_MAX} characters or fewer"}), 400
+
+    post = GroupPost(group_id=group_id, user_id=user_id, post_type=post_type, body=body)
+    db.session.add(post)
+    db.session.commit()
+
+    return jsonify(_serialize_group_post(post, user_id)), 201
+
+
+@app.route("/groups/<int:group_id>/posts")
+def list_group_posts(group_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    group, membership = _get_group_visible(group_id, user_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+
+    post_type = (request.args.get("type") or "post").strip().lower()
+    if post_type not in GROUP_POST_TYPES:
+        return jsonify({"error": "type must be 'post' or 'question'"}), 400
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    per_page = 20
+
+    posts = (
+        GroupPost.query.filter_by(group_id=group_id, post_type=post_type)
+        .order_by(GroupPost.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    return jsonify({
+        "page": page,
+        "posts": [_serialize_group_post(p, user_id) for p in posts],
+    })
+
+
+@app.route("/groups/<int:group_id>/posts/<int:post_id>")
+def get_group_post(group_id, post_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    group, membership = _get_group_visible(group_id, user_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+
+    post = db.session.get(GroupPost, post_id)
+    if not post or post.group_id != group_id:
+        return jsonify({"error": "Post not found"}), 404
+
+    comments = (
+        GroupPostComment.query.filter_by(group_post_id=post_id)
+        .order_by(GroupPostComment.created_at.asc())
+        .all()
+    )
+
+    result = _serialize_group_post(post, user_id)
+    result["comments"] = [_serialize_group_post_comment(c) for c in comments]
+    return jsonify(result)
+
+
+@app.route("/groups/<int:group_id>/posts/<int:post_id>/comments", methods=["POST"])
+@require_csrf
+def create_group_post_comment(group_id, post_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    group, membership = _get_group_visible(group_id, user_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+    if not membership:
+        return jsonify({"error": "You must join this group first"}), 403
+
+    post = db.session.get(GroupPost, post_id)
+    if not post or post.group_id != group_id:
+        return jsonify({"error": "Post not found"}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    body = (data.get("body") or "").strip()
+    if not body or len(body) > GROUP_POST_COMMENT_MAX:
+        return jsonify({"error": f"body is required and must be {GROUP_POST_COMMENT_MAX} characters or fewer"}), 400
+
+    comment = GroupPostComment(group_post_id=post_id, user_id=user_id, body=body)
+    db.session.add(comment)
+    db.session.commit()
+
+    return jsonify(_serialize_group_post_comment(comment)), 201
+
+
+@app.route("/groups/<int:group_id>/posts/<int:post_id>/like", methods=["POST"])
+@require_csrf
+def like_group_post(group_id, post_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    group, membership = _get_group_visible(group_id, user_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+    if not membership:
+        return jsonify({"error": "You must join this group first"}), 403
+
+    post = db.session.get(GroupPost, post_id)
+    if not post or post.group_id != group_id:
+        return jsonify({"error": "Post not found"}), 404
+    if post.post_type != "post":
+        return jsonify({"error": "Only Posts-tab posts can be liked - use vote for questions"}), 400
+
+    existing = GroupPostLike.query.filter_by(group_post_id=post_id, user_id=user_id).first()
+    if not existing:
+        db.session.add(GroupPostLike(group_post_id=post_id, user_id=user_id))
+        db.session.commit()
+
+    return jsonify({
+        "message": "Already liked" if existing else "Liked",
+        "like_count": GroupPostLike.query.filter_by(group_post_id=post_id).count(),
+    }), (200 if existing else 201)
+
+
+@app.route("/groups/<int:group_id>/posts/<int:post_id>/like", methods=["DELETE"])
+@require_csrf
+def unlike_group_post(group_id, post_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    existing = GroupPostLike.query.filter_by(group_post_id=post_id, user_id=user_id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+
+    return jsonify({
+        "message": "Unliked" if existing else "Not liked",
+        "like_count": GroupPostLike.query.filter_by(group_post_id=post_id).count(),
+    })
+
+
+@app.route("/groups/<int:group_id>/posts/<int:post_id>/vote", methods=["POST"])
+@require_csrf
+def vote_group_post(group_id, post_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    group, membership = _get_group_visible(group_id, user_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+    if not membership:
+        return jsonify({"error": "You must join this group first"}), 403
+
+    post = db.session.get(GroupPost, post_id)
+    if not post or post.group_id != group_id:
+        return jsonify({"error": "Post not found"}), 404
+    if post.post_type != "question":
+        return jsonify({"error": "Only Questions-tab posts can be voted on - use like for posts"}), 400
+
+    existing = GroupQuestionVote.query.filter_by(group_post_id=post_id, user_id=user_id).first()
+    if not existing:
+        db.session.add(GroupQuestionVote(group_post_id=post_id, user_id=user_id))
+        db.session.commit()
+
+    return jsonify({
+        "message": "Already voted" if existing else "Voted",
+        "vote_count": GroupQuestionVote.query.filter_by(group_post_id=post_id).count(),
+    }), (200 if existing else 201)
+
+
+@app.route("/groups/<int:group_id>/posts/<int:post_id>/vote", methods=["DELETE"])
+@require_csrf
+def unvote_group_post(group_id, post_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    existing = GroupQuestionVote.query.filter_by(group_post_id=post_id, user_id=user_id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+
+    return jsonify({
+        "message": "Unvoted" if existing else "Not voted",
+        "vote_count": GroupQuestionVote.query.filter_by(group_post_id=post_id).count(),
+    })
 
 
 # ---------- Content routes (student-facing) ----------
