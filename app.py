@@ -2906,6 +2906,19 @@ def create_group_post_comment(group_id, post_id):
 
     comment = GroupPostComment(group_post_id=post_id, user_id=user_id, body=body)
     db.session.add(comment)
+
+    if post.user_id != user_id:
+        commenter = db.session.get(User, user_id)
+        group = db.session.get(Group, group_id)
+        db.session.add(Notification(
+            user_id=post.user_id,
+            type="group_comment",
+            title="New comment" if post.post_type == "post" else "New reply",
+            body=f"{_display_name(commenter)} commented on your {post.post_type} in {group.name if group else 'a group'}",
+            related_type="group_post",
+            related_id=post.id,
+        ))
+
     db.session.commit()
 
     return jsonify(_serialize_group_post_comment(comment)), 201
@@ -2933,6 +2946,16 @@ def like_group_post(group_id, post_id):
     existing = GroupPostLike.query.filter_by(group_post_id=post_id, user_id=user_id).first()
     if not existing:
         db.session.add(GroupPostLike(group_post_id=post_id, user_id=user_id))
+        if post.user_id != user_id:
+            liker = db.session.get(User, user_id)
+            db.session.add(Notification(
+                user_id=post.user_id,
+                type="group_like",
+                title="New like",
+                body=f"{_display_name(liker)} liked your post",
+                related_type="group_post",
+                related_id=post.id,
+            ))
         db.session.commit()
 
     return jsonify({
@@ -2981,6 +3004,16 @@ def vote_group_post(group_id, post_id):
     existing = GroupQuestionVote.query.filter_by(group_post_id=post_id, user_id=user_id).first()
     if not existing:
         db.session.add(GroupQuestionVote(group_post_id=post_id, user_id=user_id))
+        if post.user_id != user_id:
+            voter = db.session.get(User, user_id)
+            db.session.add(Notification(
+                user_id=post.user_id,
+                type="group_vote",
+                title="New vote",
+                body=f"{_display_name(voter)} voted on your question",
+                related_type="group_post",
+                related_id=post.id,
+            ))
         db.session.commit()
 
     return jsonify({
@@ -3074,7 +3107,20 @@ def update_group_member_role(group_id, target_user_id):
         if other_admins == 0:
             return jsonify({"error": "Can't demote the only admin - promote someone else first"}), 400
 
+    was_admin = target.role == "admin"
     target.role = role
+
+    if role == "admin" and not was_admin:
+        group = db.session.get(Group, group_id)
+        db.session.add(Notification(
+            user_id=target_user_id,
+            type="group_promoted",
+            title="You're now an admin",
+            body=f"You were made an admin of {group.name if group else 'a group'}",
+            related_type="group",
+            related_id=group_id,
+        ))
+
     db.session.commit()
 
     return jsonify(_serialize_group_member(target))
