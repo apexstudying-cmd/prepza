@@ -362,6 +362,86 @@ class XpEvent(db.Model):
     )
 
 
+class StudyStreak(db.Model):
+    """
+    One row per user - the running streak counter. Recomputed
+    incrementally whenever a new StudyActivityLog day is recorded
+    (see record_study_activity()), not by scanning history on every
+    request.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), unique=True, nullable=False)
+    current_streak = db.Column(db.Integer, nullable=False, default=0)
+    longest_streak = db.Column(db.Integer, nullable=False, default=0)
+    last_study_date = db.Column(db.Date, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class StudyActivityLog(db.Model):
+    """
+    One row per user per calendar day that had at least one qualifying
+    study action (document studied, quiz completed, flashcards
+    completed, podcast generated). Drives both the streak calendar and
+    the "once per document per day" XP cap on record_document_studied()
+    - the unique constraint is what makes that cap idempotent, not the
+    XpEvent table (which has no date dimension).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=True)
+    activity_date = db.Column(db.Date, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint(
+            "user_id", "document_content_id", "activity_date",
+            name="uq_study_activity_user_doc_date",
+        ),
+    )
+
+
+class QuizAttempt(db.Model):
+    """
+    A single quiz completion. Deliberately not deduplicated - a student
+    retaking the same quiz is a legitimate new attempt, both for XP and
+    for the "Quiz Master" achievement's attempt count. Abuse is bounded
+    by the rate limit on the completion endpoint, same pattern as
+    generation.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    generated_material_id = db.Column(db.Integer, db.ForeignKey("generated_material.id"), nullable=False)
+    document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=False)
+    score_percent = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class FlashcardSession(db.Model):
+    """A single completed flashcard review session. Same reasoning as
+    QuizAttempt - every session is a legitimate new event."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    generated_material_id = db.Column(db.Integer, db.ForeignKey("generated_material.id"), nullable=False)
+    document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=False)
+    cards_reviewed = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class UserAchievement(db.Model):
+    """
+    Unlocked achievements. The achievement catalog itself
+    (ACHIEVEMENT_DEFINITIONS) is a hardcoded constant, not a DB table -
+    same MVP tradeoff as the fixed XP_* amounts below. Unique constraint
+    makes unlock_achievement() idempotent.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    achievement_code = db.Column(db.String(40), nullable=False)
+    unlocked_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "achievement_code", name="uq_user_achievement_user_code"),
+    )
+
+
 class ForumPost(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
@@ -502,6 +582,9 @@ class GroupPostComment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # Used for both Posts-tab comments and Questions-tab replies - the
     # frontend's shared CommentsScreen doesn't distinguish them either.
+    marked_helpful = db.Column(db.Boolean, nullable=False, default=False)
+    # Set once by the original post's author via /helpful below - awards
+    # XP_COMMUNITY_HELPFUL_REPLY to the comment's author (Chunk 7).
 
 
 class GroupPostLike(db.Model):
@@ -1919,6 +2002,9 @@ def summarize_document(document_id):
     except ai_service.AIProviderError as e:
         return jsonify({"error": str(e)}), 502
 
+    record_document_studied(user_id, content.id)
+    db.session.commit()
+
     return jsonify({
         "material_id": result["material_id"],
         "reused": result["reused"],
@@ -1966,11 +2052,74 @@ def quiz_document(document_id):
     except ai_service.AIProviderError as e:
         return jsonify({"error": str(e)}), 502
 
+    record_document_studied(user_id, content.id)
+    db.session.commit()
+
     return jsonify({
         "material_id": result["material_id"],
         "reused": result["reused"],
         "quiz": result["payload"],
     }), 200
+
+
+@app.route("/documents/<int:document_id>/quiz/<int:material_id>/complete", methods=["POST"])
+@limiter.limit(
+    "30 per hour",
+    key_func=lambda: f"quiz-complete:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def complete_quiz(document_id, material_id):
+    """
+    Records that a student finished a generated quiz (with whatever
+    score, per the frontend's "+20 XP for any score" copy) and awards
+    XP for it. Separate from quiz generation above - generating a quiz
+    material and actually completing it are different events, and only
+    completion should count toward XP / the Quiz Master achievement.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no content"}), 400
+
+    material = db.session.get(GeneratedMaterial, material_id)
+    if (
+        not material
+        or material.document_content_id != document.document_content_id
+        or material.material_type != "quiz"
+        or material.status != "ready"
+    ):
+        return jsonify({"error": "Quiz material not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    score_percent = data.get("score_percent")
+    if score_percent is not None:
+        if not isinstance(score_percent, int) or isinstance(score_percent, bool) or not (0 <= score_percent <= 100):
+            return jsonify({"error": "score_percent must be an integer between 0 and 100"}), 400
+
+    attempt = QuizAttempt(
+        user_id=user_id,
+        generated_material_id=material.id,
+        document_content_id=material.document_content_id,
+        score_percent=score_percent,
+    )
+    db.session.add(attempt)
+    db.session.flush()  # assign attempt.id, used as the XpEvent related_id below
+
+    award_xp(user_id, "quiz_completed", XP_QUIZ_COMPLETED, related_id=attempt.id)
+    record_study_activity(user_id, document_content_id=material.document_content_id)
+    newly_unlocked = check_and_unlock_achievements(user_id)
+    db.session.commit()
+
+    return jsonify({
+        "attempt_id": attempt.id,
+        "xp_awarded": XP_QUIZ_COMPLETED,
+        "newly_unlocked_achievements": newly_unlocked,
+    }), 201
 
 
 @app.route("/documents/<int:document_id>/flashcards", methods=["POST"])
@@ -2014,11 +2163,69 @@ def flashcards_document(document_id):
     except ai_service.AIProviderError as e:
         return jsonify({"error": str(e)}), 502
 
+    record_document_studied(user_id, content.id)
+    db.session.commit()
+
     return jsonify({
         "material_id": result["material_id"],
         "reused": result["reused"],
         "flashcards": result["payload"],
     }), 200
+
+
+@app.route("/documents/<int:document_id>/flashcards/<int:material_id>/complete", methods=["POST"])
+@limiter.limit(
+    "30 per hour",
+    key_func=lambda: f"flashcards-complete:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def complete_flashcards(document_id, material_id):
+    """Records a completed flashcard review session. Same shape as
+    complete_quiz() above."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no content"}), 400
+
+    material = db.session.get(GeneratedMaterial, material_id)
+    if (
+        not material
+        or material.document_content_id != document.document_content_id
+        or material.material_type != "flashcards"
+        or material.status != "ready"
+    ):
+        return jsonify({"error": "Flashcard material not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    cards_reviewed = data.get("cards_reviewed")
+    if cards_reviewed is not None:
+        if not isinstance(cards_reviewed, int) or isinstance(cards_reviewed, bool) or cards_reviewed < 0:
+            return jsonify({"error": "cards_reviewed must be a non-negative integer"}), 400
+
+    session_row = FlashcardSession(
+        user_id=user_id,
+        generated_material_id=material.id,
+        document_content_id=material.document_content_id,
+        cards_reviewed=cards_reviewed,
+    )
+    db.session.add(session_row)
+    db.session.flush()
+
+    award_xp(user_id, "flashcards_completed", XP_FLASHCARDS_COMPLETED, related_id=session_row.id)
+    record_study_activity(user_id, document_content_id=material.document_content_id)
+    newly_unlocked = check_and_unlock_achievements(user_id)
+    db.session.commit()
+
+    return jsonify({
+        "session_id": session_row.id,
+        "xp_awarded": XP_FLASHCARDS_COMPLETED,
+        "newly_unlocked_achievements": newly_unlocked,
+    }), 201
 
 
 @app.route("/documents/<int:document_id>/podcast-script", methods=["POST"])
@@ -2063,6 +2270,9 @@ def podcast_script_document(document_id):
         return jsonify({"error": str(e)}), 429
     except ai_service.AIProviderError as e:
         return jsonify({"error": str(e)}), 502
+
+    record_document_studied(user_id, content.id)
+    db.session.commit()
 
     return jsonify({
         "material_id": result["material_id"],
@@ -2590,12 +2800,14 @@ def admin_approve_library_item(publication_id):
             publication.reviewed_at = datetime.utcnow()
             publication.rejection_reason = None
 
+    newly_unlocked = check_and_unlock_achievements(publication.user_id)
     db.session.commit()
 
     return jsonify({
         "id": publication.id,
         "status": publication.status,
         "xp_awarded_now": xp_awarded_now,
+        "newly_unlocked_achievements": newly_unlocked,
     })
 
 
@@ -2702,6 +2914,434 @@ def admin_resolve_library_report(report_id):
     db.session.commit()
 
     return jsonify({"id": report.id, "status": report.status})
+
+
+# ---------- XP / Achievements / Streaks (Chunk 7) ----------
+#
+# Fixed-value MVP: XP amounts and the achievement catalog are hardcoded
+# constants below rather than admin-editable SystemSetting rows (unlike
+# content prices) - that's a Phase 17 (Platform Controls) concern, not
+# this chunk's. All awarding funnels through award_xp()/unlock_achievement(),
+# which are idempotent the same way admin_approve_library_item already is:
+# insert into a uniquely-constrained table, and treat IntegrityError as
+# "already awarded" rather than an error.
+
+XP_DOCUMENT_STUDIED = 15
+XP_QUIZ_COMPLETED = 20
+XP_FLASHCARDS_COMPLETED = 10
+XP_COMMUNITY_HELPFUL_REPLY = 5
+XP_LIBRARY_PUBLICATION_APPROVED = LIBRARY_XP_ON_APPROVAL  # defined earlier, kept as one source of truth
+XP_STREAK_MILESTONES = {7: 50, 14: 100, 21: 150, 30: 200}
+
+# Cumulative XP required to REACH a level: cumulative(L) = 75 * L * (L-1).
+# Chosen so the curve lands on whole numbers and gives a natural ramp
+# (Level 4 starts at 900 XP, Level 5 at 1500 XP, etc).
+LEVEL_TITLES = {
+    1: "Fresher", 2: "Learner", 3: "Achiever", 4: "Scholar", 5: "Sage",
+    6: "Master", 7: "Luminary", 8: "Legend",
+}
+LEVEL_TITLE_FALLBACK = "Legend"
+
+
+def _level_cumulative_xp(level):
+    return 75 * level * (level - 1)
+
+
+def get_level_info(xp_total):
+    """
+    Returns (level, title, xp_into_level, xp_needed_for_level_gap,
+    next_level_xp_total) for a given lifetime XP total. The gap and
+    "into level" figures are what the frontend's progress ring needs
+    (xpTotal / xpNext in XPProgressScreen).
+    """
+    level = 1
+    while _level_cumulative_xp(level + 1) <= xp_total:
+        level += 1
+    level_start = _level_cumulative_xp(level)
+    next_level_xp = _level_cumulative_xp(level + 1)
+    title = LEVEL_TITLES.get(level, LEVEL_TITLE_FALLBACK)
+    return {
+        "level": level,
+        "title": title,
+        "xp_total": xp_total,
+        "xp_into_level": xp_total - level_start,
+        "xp_for_level_gap": next_level_xp - level_start,
+        "next_level_xp": next_level_xp,
+    }
+
+
+ACHIEVEMENT_DEFINITIONS = [
+    {
+        "code": "first_document", "icon": "📄", "name": "First Document",
+        "desc": "Upload your first document",
+        "check": lambda uid: min(1, Document.query.filter_by(user_id=uid, is_removed=False).count()),
+        "total": 1,
+    },
+    {
+        "code": "quiz_starter", "icon": "❓", "name": "Quiz Starter",
+        "desc": "Complete your first quiz",
+        "check": lambda uid: min(1, QuizAttempt.query.filter_by(user_id=uid).count()),
+        "total": 1,
+    },
+    {
+        "code": "streak_7", "icon": "🔥", "name": "7-Day Scholar",
+        "desc": "Maintain a 7-day study streak",
+        "check": lambda uid: min(7, _get_or_create_streak(uid).longest_streak),
+        "total": 7,
+    },
+    {
+        "code": "library_contributor", "icon": "📚", "name": "Library Contributor",
+        "desc": "Get a material approved in the library",
+        "check": lambda uid: min(1, LibraryPublication.query.filter_by(user_id=uid, status="approved").count()),
+        "total": 1,
+    },
+    {
+        "code": "quiz_master", "icon": "🧠", "name": "Quiz Master",
+        "desc": "Complete 25 quizzes",
+        "check": lambda uid: min(25, QuizAttempt.query.filter_by(user_id=uid).count()),
+        "total": 25,
+    },
+    {
+        "code": "flashcard_champ", "icon": "🃏", "name": "Flashcard Champ",
+        "desc": "Complete 50 flashcard sessions",
+        "check": lambda uid: min(50, FlashcardSession.query.filter_by(user_id=uid).count()),
+        "total": 50,
+    },
+    {
+        "code": "community_helper", "icon": "💬", "name": "Community Helper",
+        "desc": "Receive 10 helpful votes on replies",
+        "check": lambda uid: min(10, XpEvent.query.filter_by(user_id=uid, event_type="community_helpful_reply").count()),
+        "total": 10,
+    },
+    {
+        "code": "streak_30", "icon": "🔥", "name": "30-Day Master",
+        "desc": "Maintain a 30-day study streak",
+        "check": lambda uid: min(30, _get_or_create_streak(uid).longest_streak),
+        "total": 30,
+    },
+]
+
+
+def award_xp(user_id, event_type, xp_amount, related_id):
+    """
+    Idempotently awards XP. Returns True if this call actually granted
+    XP, False if an XpEvent with this (user, event_type, related_id)
+    already existed. Caller is responsible for choosing a related_id
+    that's unique per legitimate award (e.g. a freshly-inserted row's
+    own id for uncapped per-attempt events, or a shared sentinel for
+    "once ever" events like streak milestones).
+    """
+    event = XpEvent(user_id=user_id, event_type=event_type, xp_amount=xp_amount, related_id=related_id)
+    db.session.add(event)
+    try:
+        db.session.flush()
+        return True
+    except IntegrityError:
+        db.session.rollback()
+        return False
+
+
+def _get_or_create_streak(user_id):
+    streak = StudyStreak.query.filter_by(user_id=user_id).first()
+    if not streak:
+        streak = StudyStreak(user_id=user_id, current_streak=0, longest_streak=0, last_study_date=None)
+        db.session.add(streak)
+        db.session.flush()
+    return streak
+
+
+def record_study_activity(user_id, document_content_id=None):
+    """
+    Marks today as a study day for this user (and optionally this
+    document), updates the running streak, and awards any newly-crossed
+    streak milestone. Safe to call multiple times per day - the
+    StudyActivityLog unique constraint no-ops repeats for the same
+    (user, document, day), and the streak/milestone logic only advances
+    on the FIRST qualifying activity of a new calendar day.
+    Returns True if this was the first study activity logged today.
+    """
+    today = datetime.utcnow().date()
+
+    log_row = StudyActivityLog(user_id=user_id, document_content_id=document_content_id, activity_date=today)
+    db.session.add(log_row)
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        return False  # already logged this exact (user, document, day)
+
+    # Was ANY activity already logged today (possibly for a different
+    # document, or with document_content_id=None)? If so, the streak
+    # itself was already advanced today - only the per-document XP cap
+    # above needed the fresh row.
+    already_active_today = StudyActivityLog.query.filter(
+        StudyActivityLog.user_id == user_id,
+        StudyActivityLog.activity_date == today,
+        StudyActivityLog.id != log_row.id,
+    ).first() is not None
+    if already_active_today:
+        return True
+
+    streak = _get_or_create_streak(user_id)
+    yesterday = today - timedelta(days=1)
+    if streak.last_study_date == yesterday:
+        streak.current_streak += 1
+    elif streak.last_study_date == today:
+        pass
+    else:
+        streak.current_streak = 1
+    streak.longest_streak = max(streak.longest_streak, streak.current_streak)
+    streak.last_study_date = today
+
+    milestone_xp = XP_STREAK_MILESTONES.get(streak.current_streak)
+    if milestone_xp:
+        award_xp(user_id, "streak_milestone", milestone_xp, related_id=streak.current_streak)
+
+    return True
+
+
+def record_document_studied(user_id, document_content_id):
+    """
+    Called from the AI-action routes (summarize/quiz/flashcards/podcast)
+    on success. Awards document_studied XP at most once per document per
+    calendar day, and always updates the study streak regardless of
+    whether XP was capped.
+    """
+    first_today = record_study_activity(user_id, document_content_id=document_content_id)
+    if first_today:
+        event_related_id = _document_study_event_id(user_id, document_content_id)
+        award_xp(user_id, "document_studied", XP_DOCUMENT_STUDIED, related_id=event_related_id)
+    check_and_unlock_achievements(user_id)
+
+
+def _document_study_event_id(user_id, document_content_id):
+    """
+    XpEvent's uniqueness is (user, event_type, related_id) with no date
+    column, so "once per document per day" can't be expressed with
+    document_content_id alone (that would mean once per document EVER).
+    We instead key off today's StudyActivityLog row for this exact
+    (user, document, day), which is itself uniquely constrained -
+    giving each new day its own related_id "for free".
+    """
+    today = datetime.utcnow().date()
+    row = StudyActivityLog.query.filter_by(
+        user_id=user_id, document_content_id=document_content_id, activity_date=today,
+    ).first()
+    return row.id if row else None
+
+
+def check_and_unlock_achievements(user_id):
+    """
+    Evaluates every achievement definition and unlocks any newly-earned
+    ones. Cheap enough to call after every XP-earning action for MVP
+    scale (each check is a single indexed COUNT query); revisit with
+    caching/denormalized counters if this shows up in slow-query logs.
+    Returns the list of achievement_codes newly unlocked this call.
+    """
+    already_unlocked = {
+        row.achievement_code
+        for row in UserAchievement.query.filter_by(user_id=user_id).all()
+    }
+    newly_unlocked = []
+    for achievement in ACHIEVEMENT_DEFINITIONS:
+        code = achievement["code"]
+        if code in already_unlocked:
+            continue
+        progress = achievement["check"](user_id)
+        if progress >= achievement["total"]:
+            row = UserAchievement(user_id=user_id, achievement_code=code)
+            db.session.add(row)
+            try:
+                db.session.flush()
+                newly_unlocked.append(code)
+            except IntegrityError:
+                db.session.rollback()
+    return newly_unlocked
+
+
+XP_HISTORY_LABELS = {
+    "document_studied": ("📄", "Studied a document"),
+    "quiz_completed": ("❓", "Completed a quiz"),
+    "flashcards_completed": ("🧠", "Completed flashcard set"),
+    "streak_milestone": ("🔥", "Study streak milestone"),
+    "library_publication_approved": ("📚", "Material approved in Library"),
+    "community_helpful_reply": ("💬", "Helpful community reply"),
+}
+
+HOW_TO_EARN_XP = [
+    {"label": "Study a document", "xp": f"+{XP_DOCUMENT_STUDIED} XP"},
+    {"label": "Complete a quiz (any score)", "xp": f"+{XP_QUIZ_COMPLETED} XP"},
+    {"label": "Complete flashcard set", "xp": f"+{XP_FLASHCARDS_COMPLETED} XP"},
+    {"label": "Maintain 7-day streak", "xp": f"+{XP_STREAK_MILESTONES[7]} XP"},
+    {"label": "Library material approved", "xp": f"+{XP_LIBRARY_PUBLICATION_APPROVED} XP"},
+    {"label": "Helpful community reply", "xp": f"+{XP_COMMUNITY_HELPFUL_REPLY} XP"},
+]
+
+
+@app.route("/gamification/summary")
+def gamification_summary():
+    """
+    Lightweight combined payload for surfaces that show XP/streak as
+    small stat pills rather than the full detail screens - the Home
+    streak banner and the Profile stat row (Streak / XP / Docs /
+    Followers) in the current frontend.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    xp_total = db.session.query(func.coalesce(func.sum(XpEvent.xp_amount), 0)).filter(
+        XpEvent.user_id == user_id
+    ).scalar()
+    level_info = get_level_info(xp_total)
+    streak = _get_or_create_streak(user_id)
+    db.session.commit()  # persist a lazily-created StudyStreak row, if any
+
+    documents_count = Document.query.filter_by(user_id=user_id, is_removed=False).count()
+    followers_count = Follow.query.filter_by(followed_id=user_id).count()
+
+    return jsonify({
+        "xp_total": xp_total,
+        "level": level_info["level"],
+        "level_title": level_info["title"],
+        "current_streak": streak.current_streak,
+        "longest_streak": streak.longest_streak,
+        "documents_count": documents_count,
+        "followers_count": followers_count,
+    })
+
+
+@app.route("/xp/progress")
+def xp_progress():
+    """Powers XPProgressScreen: the level ring, and a paginated feed of
+    recent XP-earning events."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    xp_total = db.session.query(func.coalesce(func.sum(XpEvent.xp_amount), 0)).filter(
+        XpEvent.user_id == user_id
+    ).scalar()
+    level_info = get_level_info(xp_total)
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    per_page = 20
+
+    events = (
+        XpEvent.query.filter_by(user_id=user_id)
+        .order_by(XpEvent.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    history = []
+    for e in events:
+        icon, label = XP_HISTORY_LABELS.get(e.event_type, ("⭐", e.event_type.replace("_", " ").title()))
+        history.append({
+            "icon": icon,
+            "label": label,
+            "xp": e.xp_amount,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        })
+
+    return jsonify({
+        "level": level_info["level"],
+        "level_title": level_info["title"],
+        "xp_total": xp_total,
+        "xp_into_level": level_info["xp_into_level"],
+        "xp_for_level_gap": level_info["xp_for_level_gap"],
+        "next_level_xp": level_info["next_level_xp"],
+        "page": page,
+        "history": history,
+        "how_to_earn": HOW_TO_EARN_XP,
+    })
+
+
+STREAK_MILESTONE_LABELS = {7: "7-Day Scholar", 14: "14-Day Achiever", 21: "21-Day Legend", 30: "30-Day Master"}
+
+
+@app.route("/streak")
+def streak_detail():
+    """Powers StudyStreakScreen: current/longest streak, a 42-day
+    activity calendar, and milestone progress."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    streak = _get_or_create_streak(user_id)
+    db.session.commit()
+
+    today = datetime.utcnow().date()
+    window_start = today - timedelta(days=41)
+    active_dates = {
+        row.activity_date
+        for row in StudyActivityLog.query.filter(
+            StudyActivityLog.user_id == user_id,
+            StudyActivityLog.activity_date >= window_start,
+        ).all()
+    }
+
+    calendar = []
+    for i in range(42):
+        day = window_start + timedelta(days=i)
+        calendar.append({"date": day.isoformat(), "studied": day in active_dates})
+
+    milestones = [
+        {
+            "days": days,
+            "label": STREAK_MILESTONE_LABELS[days],
+            "xp": f"+{xp} XP",
+            "done": streak.longest_streak >= days,
+        }
+        for days, xp in sorted(XP_STREAK_MILESTONES.items())
+    ]
+
+    return jsonify({
+        "current_streak": streak.current_streak,
+        "longest_streak": streak.longest_streak,
+        "calendar": calendar,
+        "milestones": milestones,
+    })
+
+
+@app.route("/achievements")
+def list_achievements():
+    """Powers AchievementsScreen: full catalog split into
+    unlocked/in-progress, with progress counters for locked ones."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    unlocked_rows = {
+        row.achievement_code: row.unlocked_at
+        for row in UserAchievement.query.filter_by(user_id=user_id).all()
+    }
+
+    result = []
+    for a in ACHIEVEMENT_DEFINITIONS:
+        code = a["code"]
+        is_done = code in unlocked_rows
+        progress = a["total"] if is_done else a["check"](user_id)
+        result.append({
+            "code": code,
+            "icon": a["icon"],
+            "name": a["name"],
+            "desc": a["desc"],
+            "done": is_done,
+            "unlocked_at": unlocked_rows[code].isoformat() if is_done else None,
+            "progress": progress,
+            "total": a["total"],
+        })
+
+    return jsonify({
+        "unlocked_count": len(unlocked_rows),
+        "total_count": len(ACHIEVEMENT_DEFINITIONS),
+        "achievements": result,
+    })
 
 
 # ---------- Groups ----------
@@ -3049,6 +3689,7 @@ def _serialize_group_post_comment(comment):
         "body": comment.body,
         "author": _display_name(author) if author else "Deleted user",
         "author_id": comment.user_id,
+        "marked_helpful": comment.marked_helpful,
         "created_at": comment.created_at.isoformat() if comment.created_at else None,
     }
 
@@ -3187,6 +3828,54 @@ def create_group_post_comment(group_id, post_id):
     db.session.commit()
 
     return jsonify(_serialize_group_post_comment(comment)), 201
+
+
+@app.route("/groups/<int:group_id>/posts/<int:post_id>/comments/<int:comment_id>/helpful", methods=["POST"])
+@require_csrf
+def mark_comment_helpful(group_id, post_id, comment_id):
+    """
+    Lets the ORIGINAL POST author mark a reply as helpful, once, awarding
+    the replier community_helpful_reply XP (Chunk 7). Restricted to the
+    post author (not any group member) so this can't be used to farm XP
+    for friends, and restricted to Questions-tab posts since "helpful"
+    only makes sense as an answer-quality signal there.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    group, membership = _get_group_visible(group_id, user_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+
+    post = db.session.get(GroupPost, post_id)
+    if not post or post.group_id != group_id:
+        return jsonify({"error": "Post not found"}), 404
+    if post.post_type != "question":
+        return jsonify({"error": "Only replies on Questions-tab posts can be marked helpful"}), 400
+    if post.user_id != user_id:
+        return jsonify({"error": "Only the person who asked the question can mark a reply helpful"}), 403
+
+    comment = db.session.get(GroupPostComment, comment_id)
+    if not comment or comment.group_post_id != post_id:
+        return jsonify({"error": "Comment not found"}), 404
+    if comment.user_id == user_id:
+        return jsonify({"error": "You can't mark your own reply helpful"}), 400
+    if comment.marked_helpful:
+        return jsonify({"message": "Already marked helpful"}), 200
+
+    comment.marked_helpful = True
+    xp_awarded = award_xp(
+        comment.user_id, "community_helpful_reply", XP_COMMUNITY_HELPFUL_REPLY, related_id=comment.id,
+    )
+    newly_unlocked = check_and_unlock_achievements(comment.user_id) if xp_awarded else []
+    db.session.commit()
+
+    return jsonify({
+        "message": "Marked helpful",
+        "xp_awarded": XP_COMMUNITY_HELPFUL_REPLY if xp_awarded else 0,
+        "newly_unlocked_achievements": newly_unlocked,
+    })
 
 
 @app.route("/groups/<int:group_id>/posts/<int:post_id>/like", methods=["POST"])
