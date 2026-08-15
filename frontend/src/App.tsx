@@ -2896,6 +2896,10 @@ function SignupScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // True once the user has been bounced back to fix a field after a failed
+  // submit - lets Continue skip straight back to resubmitting instead of
+  // forcing them to re-click through every already-answered step again.
+  const [recovering, setRecovering] = useState(false)
 
   useEffect(() => {
     api<UniversityOption[]>('/universities')
@@ -2916,26 +2920,59 @@ function SignupScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const goBack = () => { setError(''); setStep(s => Math.max(0, s - 1)) }
   const advance = () => { setError(''); setStep(s => s + 1) }
 
-  const handleSubmit = async () => {
+  // Mirrors app.py's password_strength_error() exactly, so weak passwords
+  // get caught here instead of only failing after the full wizard is done.
+  const COMMON_WEAK_PASSWORDS = new Set([
+    'password', 'password1', 'password12', 'password123',
+    '12345678', '123456789', '1234567890', 'qwerty123', 'qwertyuiop',
+    'letmein123', 'iloveyou1', 'iloveyou123', 'admin1234', 'welcome123',
+    'abc123456', '11111111', '00000000', 'changeme1', 'monkey123',
+    'football1', 'sunshine1', 'princess1', 'dragon123',
+  ])
+  const passwordError = (pw: string): string | null => {
+    if (pw.length < 8) return 'Password must be at least 8 characters long.'
+    if (COMMON_WEAK_PASSWORDS.has(pw.toLowerCase())) return 'That password is too common - please choose something more unique.'
+    if (!/[A-Za-z]/.test(pw)) return 'Password must include at least one letter.'
+    if (!/\d/.test(pw)) return 'Password must include at least one number.'
+    return null
+  }
+
+  // After steps 0-2 (Name/Email/Password), decide whether to continue
+  // forward normally or - if this is a correction after a failed submit
+  // and everything else is already filled in - jump straight back to
+  // resubmitting instead of re-walking University/Course/Year/Semester.
+  const continueFromEarlyStep = () => {
+    if (recovering && data.university_id != null && data.program_id != null && data.year != null && data.semester != null) {
+      setRecovering(false)
+      setError('')
+      handleSubmit()
+    } else {
+      advance()
+    }
+  }
+
+  const handleSubmit = async (overrides: Partial<typeof data> = {}) => {
+    const payload = { ...data, ...overrides }
     setSubmitting(true)
     setError('')
     try {
       await api('/signup', {
         method: 'POST',
         body: JSON.stringify({
-          display_name: data.display_name,
-          email: data.email,
-          password: data.password,
-          university_id: data.university_id,
-          program_id: data.program_id,
-          year: data.year,
-          semester: data.semester,
+          display_name: payload.display_name,
+          email: payload.email,
+          password: payload.password,
+          university_id: payload.university_id,
+          program_id: payload.program_id,
+          year: payload.year,
+          semester: payload.semester,
         }),
       })
       setScreen('check-email')
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : 'Something went wrong. Please try again.'
       setError(msg)
+      setRecovering(true)
       const lower = msg.toLowerCase()
       if (lower.includes('display name')) setStep(0)
       else if (lower.includes('email')) setStep(1)
@@ -3036,7 +3073,7 @@ function SignupScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         {step === 6 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[1, 2].map(s => (
-              <button key={s} disabled={submitting} onClick={() => { setData(d => ({ ...d, semester: s })); handleSubmit() }} style={optionStyle(data.semester === s)}>Semester {s}</button>
+              <button key={s} disabled={submitting} onClick={() => { setData(d => ({ ...d, semester: s })); handleSubmit({ semester: s }) }} style={optionStyle(data.semester === s)}>Semester {s}</button>
             ))}
             {submitting && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8 }}>Creating your account...</div>}
           </div>
@@ -3047,8 +3084,11 @@ function SignupScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             onClick={() => {
               if (step === 0 && !data.display_name.trim()) { setError('Please enter your name.'); return }
               if (step === 1 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) { setError('Please enter a valid email address.'); return }
-              if (step === 2 && data.password.length < 8) { setError('Password must be at least 8 characters long.'); return }
-              advance()
+              if (step === 2) {
+                const pwErr = passwordError(data.password)
+                if (pwErr) { setError(pwErr); return }
+              }
+              continueFromEarlyStep()
             }}
             style={primaryBtn}>Continue →</button>
         )}
