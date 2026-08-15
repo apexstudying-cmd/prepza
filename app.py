@@ -18,11 +18,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import ai_service
 import document_pipeline
+from urllib.parse import urlencode
 
 load_dotenv()
 
 sentry_dsn = os.environ.get("SENTRY_DSN")
 anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 if sentry_dsn:
     sentry_sdk.init(
         dsn=sentry_dsn,
@@ -1223,6 +1226,125 @@ def login():
     return jsonify({"message": "Logged in successfully", "user_id": user.id})
 
 
+@app.route("/auth/google")
+@limiter.limit("20 per minute")
+def google_auth_start():
+    """
+    Redirects the browser to Google's consent screen. A random state
+    token is stashed in the session and checked on callback to guard
+    against CSRF - this is a full browser navigation, not a fetch()
+    call, so the usual @require_csrf header check doesn't apply here.
+    """
+    if not GOOGLE_CLIENT_ID:
+        return jsonify({"error": "Google Sign-In is not configured"}), 503
+
+    state = secrets.token_urlsafe(24)
+    session["google_oauth_state"] = state
+    redirect_uri = request.host_url.rstrip("/") + "/auth/google/callback"
+
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "online",
+        "prompt": "select_account",
+    }
+    return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
+
+
+@app.route("/auth/google/callback")
+def google_auth_callback():
+    """
+    Google redirects the user's browser back here with ?code=...&state=...
+    (or ?error=... if they cancelled). Exchanges the code for tokens,
+    fetches the Google profile, and logs the user in - creating a new
+    account if this is their first time signing in with this email.
+
+    New Google accounts get a random, never-shared password hash (so the
+    NOT NULL password_hash column is satisfied) and no university_id /
+    program_id yet - the frontend is expected to route them into a
+    profile-completion step when GET /me shows university_id: null.
+    """
+    if request.args.get("error"):
+        return redirect("/?auth_error=google_denied")
+
+    state = request.args.get("state")
+    expected_state = session.pop("google_oauth_state", None)
+    if not state or not expected_state or state != expected_state:
+        return redirect("/?auth_error=invalid_state")
+
+    code = request.args.get("code")
+    if not code:
+        return redirect("/?auth_error=missing_code")
+
+    redirect_uri = request.host_url.rstrip("/") + "/auth/google/callback"
+    try:
+        token_resp = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": redirect_uri,
+            },
+            timeout=10,
+        )
+        token_resp.raise_for_status()
+        access_token = token_resp.json().get("access_token")
+        if not access_token:
+            return redirect("/?auth_error=token_exchange_failed")
+
+        userinfo_resp = requests.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        userinfo_resp.raise_for_status()
+        info = userinfo_resp.json()
+    except requests.RequestException:
+        return redirect("/?auth_error=google_unreachable")
+
+    email = (info.get("email") or "").strip().lower()
+    email_verified = info.get("email_verified", False)
+    name = (info.get("name") or "").strip()
+
+    if not email or not email_verified:
+        return redirect("/?auth_error=unverified_google_email")
+
+    user = User.query.filter_by(email=email).first()
+    is_new = False
+    if not user:
+        is_new = True
+        user = User(
+            email=email,
+            password_hash=generate_password_hash(secrets.token_urlsafe(32)),
+            display_name=name[:50] or None,
+            email_verified=True,
+            created_at=datetime.utcnow(),
+            signup_source="google_oauth",
+        )
+        db.session.add(user)
+        db.session.commit()
+    else:
+        if user.is_suspended:
+            return redirect("/?auth_error=account_suspended")
+        if not user.email_verified:
+            # A successful Google login on this exact email is strong enough
+            # proof of ownership to satisfy our own verification requirement.
+            user.email_verified = True
+            db.session.commit()
+
+    session.permanent = True
+    session["user_id"] = user.id
+
+    if is_new or user.university_id is None:
+        return redirect("/?complete_profile=1")
+    return redirect("/")
+
+
 @app.route("/logout", methods=["POST"])
 def logout():
     session.pop("user_id", None)
@@ -1253,6 +1375,8 @@ def me():
         "bio": user.bio,
         "email_verified": user.email_verified,
         "is_admin": user.is_admin,
+        "university_id": user.university_id,
+        "program_id": user.program_id,
         "csrf_token": session["csrf_token"],
     })
 @app.route("/delete-account", methods=["DELETE"])
@@ -1314,6 +1438,29 @@ def update_profile():
         if len(bio) > 160:
             return jsonify({"error": "Bio must be 160 characters or fewer"}), 400
 
+    # Optional - lets a Google Sign-In account (which has no university/
+    # program yet) complete its profile after the fact. Same validation
+    # /signup uses: university_id must be real and active, program_id (if
+    # given) must belong to that exact university.
+    university_id = data.get("university_id", None)
+    program_id = data.get("program_id", None)
+    university = None
+    if university_id is not None:
+        if not isinstance(university_id, int):
+            return jsonify({"error": "Invalid university"}), 400
+        university = University.query.filter_by(id=university_id, is_active=True).first()
+        if not university:
+            return jsonify({"error": "Selected university was not found"}), 400
+    if program_id is not None:
+        if not isinstance(program_id, int):
+            return jsonify({"error": "Invalid program"}), 400
+        lookup_university_id = university_id if university_id is not None else (
+            db.session.get(User, user_id).university_id
+        )
+        program = Program.query.filter_by(id=program_id, university_id=lookup_university_id, is_active=True).first()
+        if not program:
+            return jsonify({"error": "Selected course does not belong to the selected university"}), 400
+
     user = db.session.get(User, user_id)
     user.year = year
     user.semester = semester
@@ -1321,6 +1468,10 @@ def update_profile():
         user.display_name = display_name or None
     if bio is not None:
         user.bio = bio or None
+    if university_id is not None:
+        user.university_id = university_id
+    if program_id is not None:
+        user.program_id = program_id
     db.session.commit()
 
     return jsonify({
@@ -1329,6 +1480,8 @@ def update_profile():
         "semester": user.semester,
         "display_name": user.display_name,
         "bio": user.bio,
+        "university_id": user.university_id,
+        "program_id": user.program_id,
     })
 
 
@@ -2531,8 +2684,18 @@ def create_group():
 
     year = data.get("year")
     if year is not None:
-        if not isinstance(year, int) or year < 1 or year > 4:
-            return jsonify({"error": "year must be a number between 1 and 4"}), 400
+        if not isinstance(year, int) or isinstance(year, bool) or year < 1 or year > 5:
+            return jsonify({"error": "year must be a number between 1 and 5, or omitted for 'Mixed'"}), 400
+
+    member_user_ids = data.get("member_user_ids")
+    if member_user_ids is not None:
+        if not isinstance(member_user_ids, list) or len(member_user_ids) > 50:
+            return jsonify({"error": "member_user_ids must be a list of at most 50 user ids"}), 400
+        if not all(isinstance(uid, int) and not isinstance(uid, bool) for uid in member_user_ids):
+            return jsonify({"error": "member_user_ids must all be integers"}), 400
+        member_user_ids = sorted({uid for uid in member_user_ids if uid != user_id})
+    else:
+        member_user_ids = []
 
     group = Group(
         name=name,
@@ -2550,6 +2713,17 @@ def create_group():
 
     membership = GroupMember(group_id=group.id, user_id=user_id, role="admin")
     db.session.add(membership)
+
+    added_members = 0
+    for member_id in member_user_ids:
+        # Silently skip unknown ids rather than failing the whole create -
+        # a stale/typo'd id in the initial member list shouldn't block
+        # group creation.
+        if db.session.get(User, member_id):
+            db.session.add(GroupMember(group_id=group.id, user_id=member_id, role="member"))
+            added_members += 1
+    group.member_count = 1 + added_members
+
     db.session.commit()
 
     return jsonify(_serialize_group(group, membership)), 201
