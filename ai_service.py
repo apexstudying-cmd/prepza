@@ -1364,49 +1364,68 @@ def generate_document_flashcards(document_content_id, triggering_user_id, plan_t
     }
 
 
-
 # ============================================================
 # 14. HIGH-LEVEL ORCHESTRATION - document Podcast Scripts (Phase 1)
 # ============================================================
 # Phase 1 = script text only. Audio synthesis is a deliberately
-# separate follow-up (TTS provider not yet chosen at time of writing -
-# see the Podcast scope discussion). The GeneratedMaterial payload
-# already carries audio_status/audio_storage_path/duration_seconds so
-# that follow-up can update this SAME row once a provider is wired up,
-# rather than needing a new material_type or schema change.
+# separate follow-up (TTS provider not yet chosen - see the Podcast
+# scope discussion; Render free tier rules out in-process self-hosted
+# TTS). The GeneratedMaterial payload already carries audio_status/
+# audio_storage_path/duration_seconds so that follow-up can update
+# this SAME row once a provider is wired up.
 #
-# Speaker roles are a fixed 3-way enum, not free-text names, so
-# whichever TTS provider ends up used just needs a {role: voice_id}
-# lookup - script generation itself has zero knowledge of voices,
-# providers, or audio at all.
+# Characters (fixed cast, not per-document):
+#   lec     - the teacher/lecturer
+#   morio   - the sharp, advanced student
+#   kichwa  - the foundational student, still catching on, asks Lec
+#             the basic clarifying questions
+# Speaker IDs in the JSON are clean lowercase for stable voice-ID
+# lookup later. Within spoken dialogue TEXT, name mentions use a
+# stress-spelled form ("Morrrrio", "Kichwaaaa") baked in at generation
+# time - the standard workaround for TTS engines without SSML/emphasis
+# support, so this works regardless of which engine Phase 2 picks.
 
 PODCAST_SCRIPT_JSON_SYSTEM_PROMPT = (
     "You are Prepza AI, generating a study podcast SCRIPT (text only, no audio) "
     "from a student's uploaded document for the Prepza study platform. The "
-    "podcast is a natural spoken conversation between three fixed roles - a "
-    "teacher explaining the material, an advanced student asking exam-level "
-    "follow-up questions and pushing for deeper nuance, and a foundational "
-    "student who hasn\'t fully grasped the topic yet and asks basic clarifying "
-    "questions (\"wait, can you explain that again?\", \"what does that term "
-    "mean?\"). Read the provided document text and produce the script as "
-    "STRICT JSON ONLY - no markdown code fences, no preamble, no text before "
-    "or after the JSON object. The JSON must have this exact shape:\n"
+    "podcast is a natural spoken conversation between three fixed, recurring "
+    "characters - the same three every episode:\n"
+    "- Lec: the lecturer. Explains concepts clearly, corrects misconceptions, "
+    "keeps the conversation moving.\n"
+    "- Morio: a sharp, advanced student. Asks exam-level follow-up questions, "
+    "pushes for deeper nuance and derivations.\n"
+    "- Kichwa: a foundational student still catching on. Asks Lec basic, "
+    "genuine clarifying questions (\"wait, can you explain that again?\", "
+    "\"what does that term actually mean?\"). Kichwa is endearing and "
+    "likeable, never mocked or the butt of a joke - his confusion drives real "
+    "teaching moments, it isn\'t comic relief at his expense.\n\n"
+    "IMPORTANT - this is a script for TEXT-TO-SPEECH, not a page to be read. "
+    "Whenever one character says another\'s name OUT LOUD inside a line of "
+    "dialogue, spell it with the stress baked into the spelling exactly like "
+    "this: write \"Morrrrio\" (not \"Morio\") and \"Kichwaaaa\" (not "
+    "\"Kichwa\") every time the name is spoken within a \"text\" field - "
+    "this is deliberate and must be followed exactly, it is how the stress is "
+    "encoded for the speech engine. The \"speaker\" field itself (who is "
+    "talking) must stay the plain lowercase id (\"lec\"/\"morio\"/"
+    "\"kichwa\") - only the SPOKEN mentions of a name inside dialogue text "
+    "get the stress spelling, never the speaker field.\n\n"
+    "Read the provided document text and produce the script as STRICT JSON "
+    "ONLY - no markdown code fences, no preamble, no text before or after the "
+    "JSON object. The JSON must have this exact shape:\n"
     '{"title": "string", "subtitle": "string", "turns": '
-    '[{"speaker": "teacher|student_advanced|student_foundational", "text": "string"}]}\n\n'
-    "Guidelines: \"speaker\" must be EXACTLY one of the three role strings "
-    "shown above, nothing else. Write natural spoken dialogue, not a lecture "
-    "read aloud - short turns, real back-and-forth, the foundational student "
-    "should ask about basics early and the advanced student should push into "
-    "harder territory later. Target roughly 1000-1400 words of total spoken "
-    "text across all turns combined (about 6-9 minutes at a natural spoken "
-    "pace). Read numbers and formulas the way a person would say them aloud "
-    "(e.g. \"ten thousand shillings at eight percent\" not \"KES 10,000 at "
-    "8%\", and spell out formulas in words where a listener couldn\'t parse "
-    "symbols by ear) since this text will be converted to speech, not read as "
-    "text. Do not invent facts not supported by the source text."
+    '[{"speaker": "lec|morio|kichwa", "text": "string"}]}\n\n'
+    "Guidelines: \"speaker\" must be EXACTLY one of lec, morio, or kichwa - "
+    "nothing else. Write natural spoken dialogue, not a lecture read aloud - "
+    "short turns, real back-and-forth. Target roughly 1000-1400 words of total "
+    "spoken text across all turns combined (about 6-9 minutes at a natural "
+    "spoken pace). Read numbers and formulas the way a person would say them "
+    "aloud (e.g. \"ten thousand shillings at eight percent\" not \"KES "
+    "10,000 at 8%\", spell out formulas in words where a listener couldn\'t "
+    "parse symbols by ear) since this text becomes speech, not text on a "
+    "page. Do not invent facts not supported by the source text."
 )
 
-PODCAST_VALID_SPEAKERS = {"teacher", "student_advanced", "student_foundational"}
+PODCAST_VALID_SPEAKERS = {"lec", "morio", "kichwa"}
 
 
 def _parse_podcast_script_json(raw_text):
