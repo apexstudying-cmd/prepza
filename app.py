@@ -3,6 +3,7 @@ import re
 import base64
 import secrets
 import hmac
+import json
 import requests
 import sentry_sdk
 import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
@@ -18,6 +19,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import ai_service
 import document_pipeline
+import podcast_audio
 from urllib.parse import urlencode
 
 load_dotenv()
@@ -269,7 +271,7 @@ class AiJob(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=False)
     feature = db.Column(db.String(30), nullable=False)
-    # text_extraction | summary | quiz | flashcards | podcast | mind_map
+    # text_extraction | summary | quiz | flashcards | podcast | podcast_audio | mind_map
     status = db.Column(db.String(20), nullable=False, default="pending")
     # pending -> processing -> completed | failed
     started_at = db.Column(db.DateTime, nullable=True)
@@ -2067,6 +2069,95 @@ def podcast_script_document(document_id):
         "reused": result["reused"],
         "podcast": result["payload"],
     }), 200
+
+
+@app.route("/documents/<int:document_id>/podcast-audio", methods=["POST"])
+@limiter.limit(
+    "10 per hour",
+    key_func=lambda: f"podcast-audio:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def trigger_podcast_audio(document_id):
+    """
+    Kicks off background audio synthesis for an already-generated
+    podcast script (see podcast_script_document above - a script must
+    exist first). Fire-and-forget: returns immediately with
+    audio_status='processing'; the frontend polls
+    GET /documents/<id>/podcast-audio for completion, same pattern as
+    document upload processing.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no content to generate a podcast from"}), 400
+
+    material = GeneratedMaterial.query.filter_by(
+        document_content_id=document.document_content_id, material_type="podcast"
+    ).first()
+    if not material or material.status != "ready" or not material.payload:
+        return jsonify({"error": "Generate the podcast script first"}), 400
+
+    envelope = json.loads(material.payload)
+    audio_status = envelope.get("audio_status")
+
+    if audio_status == "ready":
+        return jsonify({"audio_status": "ready", "material_id": material.id}), 200
+    if audio_status == "processing":
+        return jsonify({"audio_status": "processing", "material_id": material.id}), 202
+
+    podcast_audio.start_podcast_audio_processing(material.id, app)
+
+    envelope["audio_status"] = "processing"
+    material.payload = json.dumps(envelope)
+    db.session.commit()
+
+    return jsonify({"audio_status": "processing", "material_id": material.id}), 202
+
+
+@app.route("/documents/<int:document_id>/podcast-audio")
+def get_podcast_audio(document_id):
+    """
+    Polling endpoint for podcast audio synthesis status. Returns a
+    short-lived signed URL once audio_status is 'ready', same
+    get_signed_url() helper used for content items elsewhere in this
+    file.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no podcast"}), 404
+
+    material = GeneratedMaterial.query.filter_by(
+        document_content_id=document.document_content_id, material_type="podcast"
+    ).first()
+    if not material or not material.payload:
+        return jsonify({"error": "No podcast generated for this document yet"}), 404
+
+    envelope = json.loads(material.payload)
+    audio_status = envelope.get("audio_status", "pending")
+
+    audio_url = None
+    if audio_status == "ready" and envelope.get("audio_storage_path"):
+        audio_url = get_signed_url(envelope["audio_storage_path"], bucket="podcast-audio")
+
+    return jsonify({
+        "audio_status": audio_status,
+        "audio_url": audio_url,
+        "duration_seconds": envelope.get("duration_seconds"),
+    })
+
 
 
 
