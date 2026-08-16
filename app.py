@@ -664,6 +664,131 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+
+
+# ---------- Opportunities + Organisation portal ----------
+
+ORGANISATION_VERIFICATION_STATUSES = ("pending", "verified", "rejected")
+
+
+class Organisation(db.Model):
+    """
+    An employer/institution/sponsor account that can submit and manage
+    its own Opportunities. Verification is admin-gated - an unverified
+    organisation can still be created and staffed (OrganisationMember),
+    but its opportunities cannot be published until the org itself is
+    verified (enforced in the routes patch, not here).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.String(1000), nullable=True)
+    website = db.Column(db.String(500), nullable=True)
+    logo_url = db.Column(db.String(500), nullable=True)
+    contact_email = db.Column(db.String(120), nullable=False)
+    contact_phone = db.Column(db.String(20), nullable=True)
+    verification_status = db.Column(db.String(20), nullable=False, default="pending")
+    # pending -> verified | rejected
+    verification_notes = db.Column(db.String(500), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    # Admin kill-switch - deactivating an org hides all its opportunities
+    # without deleting anything, same soft-disable pattern as
+    # University.is_active / Program.is_active elsewhere in this file.
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class OrganisationMember(db.Model):
+    """
+    A User's membership/role within an Organisation - same shape as
+    GroupMember. 'owner' is the org's primary account holder (set on
+    creation, cannot be removed without transferring ownership first,
+    mirrored after the sole-admin protections on GroupMember); 'manager'
+    can submit/edit opportunities but not manage other staff or billing.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id", ondelete="CASCADE"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default="manager")
+    # owner | manager
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("organisation_id", "user_id", name="uq_org_member_org_user"),
+    )
+
+
+OPPORTUNITY_TYPES = ("job", "internship", "scholarship", "competition", "volunteering", "event", "other")
+OPPORTUNITY_STATUSES = (
+    "draft", "pending_review", "approved", "rejected",
+    "published", "expired", "archived", "removed",
+)
+
+
+class Opportunity(db.Model):
+    """
+    Full lifecycle: draft -> pending_review -> approved/rejected ->
+    published -> expired -> archived/removed. Expiry is computed
+    server-side off expiry_date (see is_opportunity_expired() /
+    the expiry sweep in the routes patch) - never trust a frontend
+    clock for this, per the MVP spec.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id", ondelete="CASCADE"), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    # the OrganisationMember (by user_id) who submitted this - kept even
+    # if that member later leaves the org, same pattern as
+    # LibraryPublication.user_id.
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    opportunity_type = db.Column(db.String(20), nullable=False)
+    location = db.Column(db.String(200), nullable=True)
+    is_remote = db.Column(db.Boolean, nullable=False, default=False)
+    application_url = db.Column(db.String(500), nullable=True)
+    application_instructions = db.Column(db.Text, nullable=True)
+    application_deadline = db.Column(db.DateTime, nullable=False)
+    expiry_date = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="draft")
+    rejection_reason = db.Column(db.String(500), nullable=True)
+    submitted_at = db.Column(db.DateTime, nullable=True)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    published_at = db.Column(db.DateTime, nullable=True)
+    view_count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+OPPORTUNITY_PROMOTION_TYPES = ("standard", "featured", "sponsored")
+OPPORTUNITY_PROMOTION_APPROVAL_STATUSES = ("pending", "approved", "rejected")
+OPPORTUNITY_PROMOTION_PAYMENT_STATUSES = ("unpaid", "pending", "paid", "refunded")
+
+
+class OpportunityPromotion(db.Model):
+    """
+    One promotion campaign for an Opportunity. Deliberately separate
+    from Opportunity itself (rather than fields on it) since an org can
+    run more than one promotion over an opportunity's lifetime, each
+    with its own window/price/approval. price is a snapshot captured at
+    creation time from admin-configurable SystemSetting pricing (same
+    pattern as get_content_prices()) - NOT hard-coded here. Actual
+    payment collection/webhook wiring belongs to the Payments chunk;
+    payment_status exists now so that schema is ready for it.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    opportunity_id = db.Column(db.Integer, db.ForeignKey("opportunity.id", ondelete="CASCADE"), nullable=False)
+    organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id"), nullable=False)
+    # denormalized for admin filtering, per the MVP spec's stored-fields list
+    promotion_type = db.Column(db.String(20), nullable=False)
+    start_date = db.Column(db.DateTime, nullable=False)
+    end_date = db.Column(db.DateTime, nullable=False)
+    price = db.Column(db.Integer, nullable=False, default=0)
+    payment_status = db.Column(db.String(20), nullable=False, default="unpaid")
+    approval_status = db.Column(db.String(20), nullable=False, default="pending")
+    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 # ---------- Pesapal (Chunk 8) ----------
 # API 3.0. PESAPAL_ENV switches base URL the same way Daraja used to
 # switch on shortcode. Docs: developer.pesapal.com/how-to-integrate
