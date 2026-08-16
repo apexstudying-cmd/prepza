@@ -23,3 +23,5 @@ sentry-sdk==2.64.0
 PyMuPDF==1.28.0
 Flask-Limiter==4.1.1
 anthropic==0.91.0
+pydub
+imageio-ffmpeg

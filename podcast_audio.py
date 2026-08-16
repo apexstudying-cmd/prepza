@@ -41,6 +41,8 @@ from datetime import datetime
 
 import requests
 from pydub import AudioSegment
+import imageio_ffmpeg
+AudioSegment.converter = imageio_ffmpeg.get_ffmpeg_exe()
 
 KOKORO_TTS_BASE_URL = os.environ.get("KOKORO_TTS_BASE_URL", "").rstrip("/")
 KOKORO_SHARED_SECRET = os.environ.get("KOKORO_SHARED_SECRET")
