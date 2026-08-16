@@ -170,11 +170,23 @@ class Payment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     content_item_id = db.Column(db.Integer, db.ForeignKey("content_item.id"), nullable=True)
-    phone_number = db.Column(db.String(20), nullable=False)
+    phone_number = db.Column(db.String(20), nullable=True)
     amount = db.Column(db.Integer, nullable=False)
+    # Unused since the Daraja -> Pesapal swap (Chunk 8). Left in place
+    # rather than dropped, per the no-destructive-migrations convention.
     checkout_request_id = db.Column(db.String(100), unique=True, nullable=True)
     status = db.Column(db.String(20), default="pending")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # ---- Pesapal (Chunk 8) ----
+    provider = db.Column(db.String(20), nullable=False, default="pesapal")
+    merchant_reference = db.Column(db.String(50), unique=True, nullable=True)
+    order_tracking_id = db.Column(db.String(100), unique=True, nullable=True)
+
+    # 'content' (one-off document/item purchase) or 'subscription' (plan purchase)
+    payment_type = db.Column(db.String(20), nullable=False, default="content")
+    plan = db.Column(db.String(20), nullable=True)  # 'semester' | 'annual' - subscription only
+    subscription_expires_at = db.Column(db.DateTime, nullable=True)  # subscription only
 
 
 class SystemSetting(db.Model):
@@ -652,22 +664,179 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-def get_mpesa_access_token():
-    consumer_key = os.environ.get("MPESA_CONSUMER_KEY")
-    consumer_secret = os.environ.get("MPESA_CONSUMER_SECRET")
-    url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
-    response = requests.get(url, auth=(consumer_key, consumer_secret))
+# ---------- Pesapal (Chunk 8) ----------
+# API 3.0. PESAPAL_ENV switches base URL the same way Daraja used to
+# switch on shortcode. Docs: developer.pesapal.com/how-to-integrate
+PESAPAL_SANDBOX_BASE = "https://cybqa.pesapal.com/pesapalv3"
+PESAPAL_PRODUCTION_BASE = "https://pay.pesapal.com/v3"
+SUBSCRIPTION_PLAN_DURATIONS_DAYS = {"semester": 120, "annual": 365}
+
+_pesapal_token_cache = {"token": None, "expires_at": None}
+
+
+def pesapal_base_url():
+    env = os.environ.get("PESAPAL_ENV", "sandbox").strip().lower()
+    return PESAPAL_PRODUCTION_BASE if env == "production" else PESAPAL_SANDBOX_BASE
+
+
+def get_pesapal_token():
+    """Cached bearer token - Pesapal tokens last 5 minutes."""
+    cached = _pesapal_token_cache["token"]
+    expires_at = _pesapal_token_cache["expires_at"]
+    if cached and expires_at and datetime.utcnow() < expires_at - timedelta(seconds=30):
+        return cached
+
+    response = requests.post(
+        f"{pesapal_base_url()}/api/Auth/RequestToken",
+        json={
+            "consumer_key": os.environ.get("PESAPAL_CONSUMER_KEY"),
+            "consumer_secret": os.environ.get("PESAPAL_CONSUMER_SECRET"),
+        },
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        timeout=15,
+    )
     response.raise_for_status()
-    return response.json()["access_token"]
+    data = response.json()
+    token = data.get("token")
+    if not token:
+        raise RuntimeError(f"Pesapal auth failed: {data.get('message') or data}")
+
+    _pesapal_token_cache["token"] = token
+    _pesapal_token_cache["expires_at"] = datetime.utcnow() + timedelta(minutes=5)
+    return token
 
 
-def generate_stk_password():
-    shortcode = os.environ.get("MPESA_SHORTCODE")
-    passkey = os.environ.get("MPESA_PASSKEY")
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    raw = shortcode + passkey + timestamp
-    password = base64.b64encode(raw.encode()).decode()
-    return password, timestamp
+def pesapal_request(method, path, **kwargs):
+    token = get_pesapal_token()
+    headers = kwargs.pop("headers", {})
+    headers.setdefault("Accept", "application/json")
+    headers.setdefault("Content-Type", "application/json")
+    headers["Authorization"] = f"Bearer {token}"
+    response = requests.request(
+        method, f"{pesapal_base_url()}{path}", headers=headers, timeout=20, **kwargs
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def create_pesapal_order(merchant_reference, amount, description, user):
+    """Submits an order to Pesapal. Returns (order_tracking_id, redirect_url)."""
+    notification_id = os.environ.get("PESAPAL_IPN_ID")
+    if not notification_id:
+        raise RuntimeError("PESAPAL_IPN_ID is not configured")
+
+    payload = {
+        "id": merchant_reference,
+        "currency": "KES",
+        "amount": amount,
+        "description": description[:100],
+        "callback_url": f"{BASE_URL}/payment/pesapal/callback",
+        "notification_id": notification_id,
+        "billing_address": {
+            "email_address": user.email,
+            "country_code": "KE",
+        },
+    }
+    data = pesapal_request("POST", "/api/Transactions/SubmitOrderRequest", json=payload)
+    order_tracking_id = data.get("order_tracking_id")
+    redirect_url = data.get("redirect_url")
+    if not order_tracking_id or not redirect_url:
+        raise RuntimeError(f"Pesapal order creation failed: {data}")
+    return order_tracking_id, redirect_url
+
+
+def get_plan_prices():
+    keys = ("price_plan_semester", "price_plan_annual")
+    settings = {
+        s.key: s.value
+        for s in SystemSetting.query.filter(SystemSetting.key.in_(keys)).all()
+    }
+
+    def parse(key, default):
+        try:
+            return int(settings.get(key) or default)
+        except (TypeError, ValueError):
+            return default
+
+    return {
+        "semester": parse("price_plan_semester", 599),
+        "annual": parse("price_plan_annual", 999),
+    }
+
+
+def get_user_subscription_status(user_id):
+    """
+    A user's plan is derived from their most recent successful subscription
+    Payment row rather than a separate table - mirrors how content access
+    already works off the Payment table.
+    """
+    latest = (
+        Payment.query.filter(
+            Payment.user_id == user_id,
+            Payment.payment_type == "subscription",
+            Payment.status == "success",
+            Payment.subscription_expires_at.isnot(None),
+        )
+        .order_by(Payment.subscription_expires_at.desc())
+        .first()
+    )
+    if not latest:
+        return {"plan": "free", "is_active": False, "expires_at": None}
+
+    is_active = latest.subscription_expires_at > datetime.utcnow()
+    return {
+        "plan": latest.plan if is_active else "free",
+        "is_active": is_active,
+        "expires_at": latest.subscription_expires_at.isoformat(),
+    }
+
+
+def compute_new_subscription_expiry(user_id, plan):
+    """Stacks on top of an unexpired plan rather than resetting it."""
+    duration_days = SUBSCRIPTION_PLAN_DURATIONS_DAYS.get(plan)
+    if not duration_days:
+        return datetime.utcnow()
+    current = get_user_subscription_status(user_id)
+    base = datetime.utcnow()
+    if current["is_active"] and current["expires_at"]:
+        current_expiry = datetime.fromisoformat(current["expires_at"])
+        if current_expiry > base:
+            base = current_expiry
+    return base + timedelta(days=duration_days)
+
+
+def sync_pesapal_payment_status(order_tracking_id):
+    """
+    Fetches the authoritative status from Pesapal and updates the matching
+    Payment row. Idempotent - a payment already resolved is left alone.
+    """
+    payment = Payment.query.filter_by(order_tracking_id=order_tracking_id).first()
+    if not payment or payment.status != "pending":
+        return payment
+
+    data = pesapal_request(
+        "GET", f"/api/Transactions/GetTransactionStatus?orderTrackingId={order_tracking_id}"
+    )
+    status_code = data.get("status_code")  # 0 INVALID, 1 COMPLETED, 2 FAILED, 3 REVERSED
+
+    if status_code == 1:
+        paid_amount = data.get("amount")
+        if paid_amount is not None and round(float(paid_amount)) != payment.amount:
+            print(f"Pesapal amount mismatch on payment {payment.id}: "
+                  f"expected {payment.amount}, got {paid_amount}")
+            payment.status = "failed"
+        else:
+            payment.status = "success"
+            if payment.payment_type == "subscription" and payment.plan:
+                payment.subscription_expires_at = compute_new_subscription_expiry(
+                    payment.user_id, payment.plan
+                )
+    elif status_code in (2, 3, 0):
+        payment.status = "failed"
+    # else: still processing on Pesapal's side, leave as pending
+
+    db.session.commit()
+    return payment
 
 
 def send_verification_email(to_email, token):
@@ -1584,13 +1753,16 @@ def payment_history():
 
     result = []
     for p in payments:
-        content_item = db.session.get(ContentItem, p.content_item_id)
+        content_item = db.session.get(ContentItem, p.content_item_id) if p.content_item_id else None
         result.append({
             "id": p.id,
+            "payment_type": p.payment_type,
             "content_title": content_item.title if content_item else None,
+            "plan": p.plan,
             "amount": p.amount,
             "status": p.status,
-            "checkout_request_id": p.checkout_request_id,
+            "provider": p.provider,
+            "merchant_reference": p.merchant_reference,
             "created_at": p.created_at.isoformat() if p.created_at else None,
         })
 
@@ -4956,95 +5128,173 @@ def pay_for_content(content_id):
     if has_access(user_id, content_item):
         return jsonify({"message": "You already have access to this content"}), 200
 
+    user = db.session.get(User, user_id)
     data = request.get_json(silent=True) or {}
-    phone_number = data.get("phone_number")
-    if not phone_number:
-        return jsonify({"error": "phone_number is required"}), 400
+    phone_number = data.get("phone_number")  # optional - Pesapal collects payment details itself
+    merchant_reference = f"PZA-content-{content_id}-{secrets.token_hex(6)}"
 
     try:
-        access_token = get_mpesa_access_token()
-        password, timestamp = generate_stk_password()
-
-        url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
-        headers = {"Authorization": f"Bearer {access_token}"}
-        payload = {
-            "BusinessShortCode": os.environ.get("MPESA_SHORTCODE"),
-            "Password": password,
-            "Timestamp": timestamp,
-            "TransactionType": "CustomerPayBillOnline",
-            "Amount": price,
-            "PartyA": phone_number,
-            "PartyB": os.environ.get("MPESA_SHORTCODE"),
-            "PhoneNumber": phone_number,
-            "CallBackURL": f"{os.environ.get('MPESA_CALLBACK_URL', '').strip()}/{os.environ.get('MPESA_CALLBACK_SECRET', '').strip()}",
-            "AccountReference": "Prepza",
-            "TransactionDesc": f"Prepza - {content_item.title}",
-        }
-
-        response = requests.post(url, json=payload, headers=headers)
-        response_data = response.json()
-
-        if "CheckoutRequestID" in response_data:
-            payment = Payment(
-                user_id=user_id,
-                content_item_id=content_id,
-                phone_number=phone_number,
-                amount=price,
-                checkout_request_id=response_data["CheckoutRequestID"],
-                status="pending",
-            )
-            db.session.add(payment)
-            db.session.commit()
-
-        return jsonify(response_data)
-
+        order_tracking_id, redirect_url = create_pesapal_order(
+            merchant_reference, price, f"Prepza - {content_item.title}", user
+        )
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 502
+
+    payment = Payment(
+        user_id=user_id,
+        content_item_id=content_id,
+        phone_number=phone_number,
+        amount=price,
+        provider="pesapal",
+        merchant_reference=merchant_reference,
+        order_tracking_id=order_tracking_id,
+        payment_type="content",
+        status="pending",
+    )
+    db.session.add(payment)
+    db.session.commit()
+
+    return jsonify({
+        "redirect_url": redirect_url,
+        "order_tracking_id": order_tracking_id,
+        "merchant_reference": merchant_reference,
+    })
 
 
-@app.route("/mpesa/callback/<callback_token>", methods=["POST"])
-def mpesa_callback(callback_token):
-    expected_token = os.environ.get("MPESA_CALLBACK_SECRET", "").strip()
-    if not expected_token or not hmac.compare_digest(callback_token, expected_token):
-        # Don't reveal *why* it failed - just look like a normal 404 to anyone probing the URL
-        return jsonify({"error": "Not found"}), 404
+@app.route("/payment/pesapal/callback")
+def pesapal_callback():
+    """
+    Browser redirect target after the user finishes on Pesapal's hosted
+    payment page. Pesapal's docs say this must NOT return JSON - show the
+    customer a result page instead. Real frontend wiring is a later chunk;
+    this is a minimal built-in placeholder so the flow is testable end to
+    end against the sandbox right now.
+    """
+    order_tracking_id = request.args.get("OrderTrackingId")
+    status = "error"
+    if order_tracking_id:
+        try:
+            payment = sync_pesapal_payment_status(order_tracking_id)
+            status = payment.status if payment else "error"
+        except Exception as e:
+            print("Pesapal callback sync error:", str(e))
 
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"ResultCode": 1, "ResultDesc": "Invalid payload"}), 400
+    html = f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Prepza Payment</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:60px 20px;">
+<h2>Payment {status}</h2>
+<p>You can close this window and return to the Prepza app.</p>
+</body></html>"""
+    return Response(html, mimetype="text/html")
+
+
+@app.route("/payment/pesapal/ipn", methods=["GET", "POST"])
+def pesapal_ipn():
+    """
+    Server-to-server notification. Accepts both GET and POST since which
+    one Pesapal actually uses depends on what was chosen at IPN
+    registration time (see register_pesapal_ipn.py).
+    """
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        order_tracking_id = data.get("OrderTrackingId")
+        order_merchant_reference = data.get("OrderMerchantReference")
+        order_notification_type = data.get("OrderNotificationType", "IPNCHANGE")
+    else:
+        order_tracking_id = request.args.get("OrderTrackingId")
+        order_merchant_reference = request.args.get("OrderMerchantReference")
+        order_notification_type = request.args.get("OrderNotificationType", "IPNCHANGE")
+
+    if not order_tracking_id:
+        return jsonify({"error": "Missing OrderTrackingId"}), 400
 
     try:
-        stk_callback = data["Body"]["stkCallback"]
-        checkout_request_id = stk_callback["CheckoutRequestID"]
-        result_code = stk_callback["ResultCode"]
-
-        payment = Payment.query.filter_by(
-            checkout_request_id=checkout_request_id
-        ).first()
-
-        if payment and payment.status == "pending":
-            if result_code == 0:
-                callback_amount = next(
-                    (item.get("Value") for item in
-                     stk_callback.get("CallbackMetadata", {}).get("Item", [])
-                     if item.get("Name") == "Amount"),
-                    None,
-                )
-                if callback_amount is not None and int(callback_amount) != payment.amount:
-                    # Amount mismatch - do NOT grant access, flag for manual review
-                    print(f"MPESA amount mismatch on payment {payment.id}: "
-                          f"expected {payment.amount}, callback said {callback_amount}")
-                    payment.status = "failed"
-                else:
-                    payment.status = "success"
-            else:
-                payment.status = "failed"
-            db.session.commit()
-
+        sync_pesapal_payment_status(order_tracking_id)
+        ack_status = 200
     except Exception as e:
-        print("Callback processing error:", str(e))
+        print("Pesapal IPN sync error:", str(e))
+        ack_status = 500
 
-    return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+    return jsonify({
+        "orderNotificationType": order_notification_type,
+        "orderTrackingId": order_tracking_id,
+        "orderMerchantReference": order_merchant_reference,
+        "status": ack_status,
+    })
+
+
+# ---------- Subscriptions (Chunk 8) ----------
+
+@app.route("/subscription/plans")
+def subscription_plans():
+    prices = get_plan_prices()
+    return jsonify({
+        "plans": [
+            {"id": "free", "name": "Free", "price": 0, "period": None},
+            {"id": "semester", "name": "Semester", "price": prices["semester"], "period": "semester"},
+            {"id": "annual", "name": "Annual", "price": prices["annual"], "period": "year"},
+        ]
+    })
+
+
+@app.route("/subscription/status")
+def subscription_status():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    return jsonify(get_user_subscription_status(user_id))
+
+
+@app.route("/subscription/upgrade", methods=["POST"])
+@limiter.limit(
+    "1 per 20 seconds",
+    key_func=lambda: f"sub_upgrade:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def subscription_upgrade():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    plan = data.get("plan")
+    if plan not in ("semester", "annual"):
+        return jsonify({"error": "plan must be 'semester' or 'annual'"}), 400
+
+    price = get_plan_prices()[plan]
+    if price <= 0:
+        return jsonify({"error": "This plan is not currently available"}), 400
+
+    user = db.session.get(User, user_id)
+    merchant_reference = f"PZA-sub-{plan}-{secrets.token_hex(6)}"
+
+    try:
+        order_tracking_id, redirect_url = create_pesapal_order(
+            merchant_reference, price, f"Prepza {plan.title()} Plan", user
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+    payment = Payment(
+        user_id=user_id,
+        content_item_id=None,
+        phone_number=data.get("phone_number"),
+        amount=price,
+        provider="pesapal",
+        merchant_reference=merchant_reference,
+        order_tracking_id=order_tracking_id,
+        payment_type="subscription",
+        plan=plan,
+        status="pending",
+    )
+    db.session.add(payment)
+    db.session.commit()
+
+    return jsonify({
+        "redirect_url": redirect_url,
+        "order_tracking_id": order_tracking_id,
+        "merchant_reference": merchant_reference,
+    })
 
 
 # ---------- Chat routes (Chunk 6) ----------
@@ -5569,15 +5819,18 @@ def admin_list_payments():
 
     result = []
     for p in payments:
-        content_item = db.session.get(ContentItem, p.content_item_id)
+        content_item = db.session.get(ContentItem, p.content_item_id) if p.content_item_id else None
         result.append({
             "id": p.id,
             "user_id": p.user_id,
+            "payment_type": p.payment_type,
             "content_title": content_item.title if content_item else None,
+            "plan": p.plan,
             "phone_number": p.phone_number,
             "amount": p.amount,
             "status": p.status,
-            "checkout_request_id": p.checkout_request_id,
+            "provider": p.provider,
+            "merchant_reference": p.merchant_reference,
             "created_at": p.created_at.isoformat() if p.created_at else None,
         })
 
@@ -5847,6 +6100,8 @@ def admin_get_settings():
         "price_notes": price("price_notes"),
         "price_past_paper": price("price_past_paper"),
         "price_qna": price("price_qna"),
+        "price_plan_semester": price("price_plan_semester") or 599,
+        "price_plan_annual": price("price_plan_annual") or 999,
         "ai_daily_limit_free": daily_limit("ai_daily_limit_free", 5),
         "ai_daily_limit_plus": daily_limit("ai_daily_limit_plus", 15),
         "ai_daily_limit_premium": daily_limit("ai_daily_limit_premium", None),
@@ -5884,7 +6139,7 @@ def admin_update_settings():
             db.session.add(setting)
         setting.value = message
 
-    for price_key in ("price_notes", "price_past_paper", "price_qna"):
+    for price_key in ("price_notes", "price_past_paper", "price_qna", "price_plan_semester", "price_plan_annual"):
         if price_key in data:
             value = data[price_key]
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
