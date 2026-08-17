@@ -35,7 +35,7 @@ if sentry_dsn:
         send_default_pii=False,  # Skip sending user IPs/headers by default
     )
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
 limiter = Limiter(get_remote_address, app=app, default_limits=[])
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -91,7 +91,7 @@ def set_security_headers(response):
     # Unrelated to the "no-store" header on the watermarked PDF viewer route
     # below - that one intentionally stays uncached since it's private,
     # paid content.
-    if request.path.startswith(("/static/images/", "/static/css/", "/static/js/")):
+    if request.path.startswith("/assets/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
 
     return response
@@ -789,6 +789,93 @@ class OpportunityPromotion(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class Ambassador(db.Model):
+    """
+    A user's enrollment in the referral/ambassador program (Chunk 9).
+    One row per user - applying again after rejection just resets this
+    same row back to 'pending' rather than creating duplicates, since
+    referral_code needs to stay stable once anything has been shared
+    publicly under it.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), unique=True, nullable=False)
+    referral_code = db.Column(db.String(20), unique=True, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    # pending -> active | rejected ; active -> suspended -> active (admin can reinstate)
+    applied_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Referral(db.Model):
+    """
+    One referred signup and its progress through the funnel:
+    signed_up -> verified -> activated, with paying/commission tracked
+    via first_payment_id rather than a status value (a referral can be
+    "activated" for months before ever converting - those aren't
+    mutually exclusive states). commission_rate_applied and
+    commission_amount are snapshotted at conversion time so a later
+    change to the tier thresholds/percentages in SystemSetting never
+    rewrites history for referrals that already converted.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassador.id"), nullable=False)
+    referred_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), unique=True, nullable=False)
+    referral_code_used = db.Column(db.String(20), nullable=False)
+    channel = db.Column(db.String(30), nullable=True)
+    # optional ?via= tag captured at signup (e.g. "whatsapp", "instagram")
+
+    status = db.Column(db.String(20), nullable=False, default="signed_up")
+    # signed_up -> verified -> activated
+    verified_at = db.Column(db.DateTime, nullable=True)
+    activated_at = db.Column(db.DateTime, nullable=True)
+
+    first_payment_id = db.Column(db.Integer, db.ForeignKey("payment.id"), unique=True, nullable=True)
+    first_payment_at = db.Column(db.DateTime, nullable=True)
+    commission_rate_applied = db.Column(db.Integer, nullable=True)  # whole percent, e.g. 15
+    commission_amount = db.Column(db.Integer, nullable=True)  # KES, snapshotted
+    unlock_at = db.Column(db.DateTime, nullable=True)
+    # first_payment_at + the hold period in effect at conversion time -
+    # commission becomes requestable once now() >= unlock_at.
+
+    payout_id = db.Column(db.Integer, db.ForeignKey("ambassador_payout.id"), nullable=True)
+    # set once bundled into a payout request; NULL means still available.
+
+    voided_at = db.Column(db.DateTime, nullable=True)
+    void_reason = db.Column(db.String(200), nullable=True)
+    # set if the qualifying payment is later refunded - only allowed
+    # while payout_id is still NULL (see admin_refund_payment).
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AmbassadorPayout(db.Model):
+    """
+    One payout request, bundling every currently-unlocked Referral
+    commission for an ambassador at request time. amount is a snapshot
+    of the sum at request time - Referral rows keep their own
+    commission_amount as the source of truth, this is just the total
+    actually requested/approved/paid.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    ambassador_id = db.Column(db.Integer, db.ForeignKey("ambassador.id"), nullable=False)
+    amount = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    # pending -> approved -> paid ; pending -> rejected (bundled referrals released)
+    payout_destination = db.Column(db.String(20), nullable=False)
+    # phone number for Kasapay mobile money disbursement
+    kasapay_reference = db.Column(db.String(100), nullable=True)
+    requested_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.String(500), nullable=True)
+    paid_at = db.Column(db.DateTime, nullable=True)
+
+
 # ---------- Pesapal (Chunk 8) ----------
 # API 3.0. PESAPAL_ENV switches base URL the same way Daraja used to
 # switch on shortcode. Docs: developer.pesapal.com/how-to-integrate
@@ -887,6 +974,78 @@ def get_plan_prices():
         "semester": parse("price_plan_semester", 599),
         "annual": parse("price_plan_annual", 999),
     }
+
+
+# ---------- Ambassador / Referral program (Chunk 9) ----------
+
+AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT = 21
+
+
+def get_ambassador_settings():
+    """
+    Returns the admin-configurable ambassador program settings, sourced
+    from SystemSetting rows - same pattern as get_content_prices() /
+    get_plan_prices(). Tier percentages are whole-number percents
+    (e.g. 15 means 15%), applied to a referral's first successful
+    payment amount only - not to any payment after that.
+    """
+    keys = (
+        "ambassador_program_enabled",
+        "ambassador_tier1_pct", "ambassador_tier2_pct", "ambassador_tier3_pct",
+        "ambassador_tier2_threshold", "ambassador_tier3_threshold",
+        "ambassador_payout_hold_days", "ambassador_min_payout_kes",
+    )
+    settings = {
+        s.key: s.value
+        for s in SystemSetting.query.filter(SystemSetting.key.in_(keys)).all()
+    }
+
+    def parse_int(key, default):
+        try:
+            return int(settings.get(key) or default)
+        except (TypeError, ValueError):
+            return default
+
+    return {
+        "enabled": settings.get("ambassador_program_enabled", "true") == "true",
+        "tier1_pct": parse_int("ambassador_tier1_pct", 10),
+        "tier2_pct": parse_int("ambassador_tier2_pct", 15),
+        "tier3_pct": parse_int("ambassador_tier3_pct", 20),
+        "tier2_threshold": parse_int("ambassador_tier2_threshold", 5),
+        "tier3_threshold": parse_int("ambassador_tier3_threshold", 20),
+        "payout_hold_days": parse_int("ambassador_payout_hold_days", AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT),
+        "min_payout_kes": parse_int("ambassador_min_payout_kes", 500),
+    }
+
+
+def compute_ambassador_tier(prior_converted_count, settings=None):
+    """
+    Returns (tier_number, commission_pct) for an ambassador's NEXT
+    conversion, based on how many of their referrals have already
+    converted (voided ones don't count - see the query in the
+    conversion hook, added in the next patch). Tier climbs
+    automatically; no manual admin bump needed unless overriding via
+    the SystemSetting thresholds above.
+    """
+    settings = settings or get_ambassador_settings()
+    if prior_converted_count >= settings["tier3_threshold"]:
+        return 3, settings["tier3_pct"]
+    if prior_converted_count >= settings["tier2_threshold"]:
+        return 2, settings["tier2_pct"]
+    return 1, settings["tier1_pct"]
+
+
+def generate_referral_code(display_name=None):
+    """
+    Generates a short, shareable referral code. Prefixed from the
+    user's display name where possible (e.g. "JOHN4F2A") purely for
+    memorability - uniqueness comes from the random suffix, not the
+    prefix, so a caller hitting a collision just re-rolls rather than
+    needing a different scheme.
+    """
+    prefix = "".join(ch for ch in (display_name or "").upper() if ch.isalnum())[:6] or "PREPZA"
+    suffix = secrets.token_hex(3).upper()
+    return f"{prefix}{suffix}"
 
 
 def get_user_subscription_status(user_id):
@@ -992,7 +1151,7 @@ def send_verification_email(to_email, token):
 
 def send_reset_email(to_email, token):
     api_key = os.environ.get("BREVO_API_KEY")
-    reset_link = f"{BASE_URL}/static/reset-password.html?token={token}"
+    reset_link = f"{BASE_URL}/reset-password?token={token}"
 
     url = "https://api.brevo.com/v3/smtp/email"
     headers = {
@@ -1270,7 +1429,7 @@ def enforce_maintenance_mode():
 
 @app.route("/")
 def home():
-    return send_from_directory(app.static_folder, "landing.html")
+    return send_from_directory(app.static_folder, "index.html")
 
 
 @app.route("/sw.js")
@@ -1457,9 +1616,20 @@ def verify_email():
     this GET request. Email link scanners fetch this URL but don't run
     JavaScript, so they can no longer silently consume the token - the
     actual verification happens via the JS-triggered POST below, from
-    static/verify-confirm.html.
+    the React app's VerifyConfirmScreen, reached at this same URL.
     """
-    return send_from_directory(app.static_folder, "verify-confirm.html")
+    return send_from_directory(app.static_folder, "index.html")
+
+
+@app.route("/reset-password")
+def reset_password_page():
+    """
+    Serves the React app shell so the emailed reset link
+    (?token=... in the query string) has somewhere to land.
+    ResetPasswordScreen reads the token client-side and POSTs it to
+    POST /reset-password below, which does the actual reset.
+    """
+    return send_from_directory(app.static_folder, "index.html")
 
 
 @app.route("/verify-email/confirm", methods=["POST"])
@@ -1484,7 +1654,7 @@ def verify_email_confirm():
 
     return jsonify({
         "message": "Email verified successfully",
-        "redirect": "/static/dashboard.html?verified=1",
+        "redirect": "/",
     })
 @app.route("/resend-verification", methods=["POST"])
 @limiter.limit("5 per hour")
