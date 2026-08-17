@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import logoImg from './imports/logo.png'
+import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -73,7 +74,7 @@ const Ic = {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Screen =
-  | 'splash' | 'login' | 'forgot-password' | 'signup' | 'check-email' | 'complete-profile'
+  | 'splash' | 'login' | 'forgot-password' | 'signup' | 'check-email' | 'complete-profile' | 'reset-password' | 'verify-confirm'
   | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'
   | 'chat-detail' | 'upload' | 'processing' | 'doc-ready' | 'document-study'
   | 'ai-tutor' | 'flashcards' | 'quiz' | 'podcast-player' | 'podcast-library' | 'summary'
@@ -2817,7 +2818,11 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
               {showModal === 'email' ? 'Change Email' : showModal === 'phone' ? 'Change Phone' : showModal === 'university' ? 'Select University' : showModal === 'course' ? 'Select Course' : showModal === 'study-prefs' ? 'Study Preferences' : showModal === 'ai-prefs' ? 'AI Preferences' : showModal === 'language' ? 'Language' : showModal === 'appearance' ? 'Appearance' : showModal === 'change-password' ? 'Change Password' : showModal === 'sessions' ? 'Login Sessions' : showModal === '2fa' ? 'Two-Factor Authentication' : showModal === 'plan' ? 'Current Plan' : showModal === 'upgrade' ? 'Upgrade to Premium' : showModal === 'billing' ? 'Billing' : showModal === 'help' ? 'Help Centre' : showModal === 'contact' ? 'Contact Support' : showModal === 'report-problem' ? 'Report a Problem' : showModal === 'about' ? 'About Prepza' : showModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
             </div>
             <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 24 }}>
-              {showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? 'Prepza v1.0.0 — Kenyatta University Launch\n\nBuilt for Kenyan university students to study smarter with AI.' : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
+              {showModal === 'terms' || showModal === 'privacy-policy' ? (
+                <div style={{ maxHeight: '50vh', overflowY: 'auto', whiteSpace: 'pre-wrap' }} className="scrollbar-hide">
+                  {showModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
+                </div>
+              ) : showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? 'Prepza v1.0.0 — Kenyatta University Launch\n\nBuilt for Kenyan university students to study smarter with AI.' : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
             </div>
             <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
           </div>
@@ -2844,6 +2849,26 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 function ForgotPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSend = async () => {
+    setError('')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Please enter a valid email address.'); return }
+    setSubmitting(true)
+    try {
+      // Backend always returns the same generic message whether or not the
+      // account exists (privacy pattern - see app.py forgot_password()), so
+      // there's nothing further to branch on here.
+      await api('/forgot-password', { method: 'POST', body: JSON.stringify({ email }) })
+      setSent(true)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)` }} className="scrollbar-hide">
       <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -2853,10 +2878,13 @@ function ForgotPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void })
           <>
             <div style={{ fontWeight: 800, fontSize: 24, color: '#fff', letterSpacing: '-0.5px', textAlign: 'center' }}>Reset Password</div>
             <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 6, marginBottom: 32, textAlign: 'center' }}>Enter your email and we'll send you a reset link</div>
+            {error && (
+              <div style={{ width: '100%', background: 'rgba(140,29,43,0.25)', border: '1px solid rgba(140,29,43,0.5)', borderRadius: 12, padding: '10px 14px', color: '#ffb4bd', fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }}>{error}</div>
+            )}
             <div style={{ width: '100%' }}>
               <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Email Address</div>
               <input value={email} onChange={e => setEmail(e.target.value)} placeholder="arnold@students.ku.ac.ke" style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', boxSizing: 'border-box', marginBottom: 20 }} />
-              <button onClick={() => setSent(true)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Send Reset Link</button>
+              <button disabled={submitting} onClick={handleSend} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: submitting ? 'default' : 'pointer', opacity: submitting ? 0.6 : 1, fontFamily: 'Plus Jakarta Sans' }}>{submitting ? 'Sending…' : 'Send Reset Link'}</button>
             </div>
           </>
         ) : (
@@ -2868,6 +2896,144 @@ function ForgotPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void })
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── RESET PASSWORD (reached via the emailed /reset-password?token= link) ────
+function ResetPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const token = new URLSearchParams(window.location.search).get('token') || ''
+  const [password, setPassword] = useState('')
+  const [done, setDone] = useState(false)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const COMMON_WEAK_PASSWORDS = new Set([
+    'password', 'password1', 'password12', 'password123',
+    '12345678', '123456789', '1234567890', 'qwerty123', 'qwertyuiop',
+    'letmein123', 'iloveyou1', 'iloveyou123', 'admin1234', 'welcome123',
+    'abc123456', '11111111', '00000000', 'changeme1', 'monkey123',
+    'football1', 'sunshine1', 'princess1', 'dragon123',
+  ])
+  // Mirrors app.py's password_strength_error() branch-for-branch, same as
+  // the signup checklist, so this never disagrees with what POST
+  // /reset-password will actually accept.
+  const passwordChecks = (pw: string) => [
+    { label: 'At least 8 characters', met: pw.length >= 8 },
+    { label: 'One lowercase letter', met: /[a-z]/.test(pw) },
+    { label: 'One uppercase letter', met: /[A-Z]/.test(pw) },
+    { label: 'One number', met: /\d/.test(pw) },
+    { label: 'One symbol (e.g. ! @ # $ %)', met: /[^A-Za-z0-9]/.test(pw) },
+    { label: 'Not a commonly used password', met: pw.length > 0 && !COMMON_WEAK_PASSWORDS.has(pw.toLowerCase()) },
+  ]
+  const stepValid = passwordChecks(password).every(c => c.met)
+
+  const handleSubmit = async () => {
+    setError('')
+    if (!token) { setError('This reset link is missing its token - please use the link from your email directly.'); return }
+    if (!stepValid) { setError('Please meet all password requirements below.'); return }
+    setSubmitting(true)
+    try {
+      await api('/reset-password', { method: 'POST', body: JSON.stringify({ token, new_password: password }) })
+      setDone(true)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)` }} className="scrollbar-hide">
+      <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <img src={logoImg} alt="Prepza" style={{ width: 64, height: 64, borderRadius: 18, marginTop: 20, marginBottom: 20 }} />
+        {!done ? (
+          <>
+            <div style={{ fontWeight: 800, fontSize: 24, color: '#fff', letterSpacing: '-0.5px', textAlign: 'center' }}>Set a new password</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 6, marginBottom: 24, textAlign: 'center' }}>Choose a strong password for your account</div>
+            {!token && (
+              <div style={{ width: '100%', background: 'rgba(140,29,43,0.25)', border: '1px solid rgba(140,29,43,0.5)', borderRadius: 12, padding: '10px 14px', color: '#ffb4bd', fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }}>
+                This link is missing its reset token. Please open the link from your email directly, or request a new one.
+              </div>
+            )}
+            {error && (
+              <div style={{ width: '100%', background: 'rgba(140,29,43,0.25)', border: '1px solid rgba(140,29,43,0.5)', borderRadius: 12, padding: '10px 14px', color: '#ffb4bd', fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }}>{error}</div>
+            )}
+            <div style={{ width: '100%' }}>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>New Password</div>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', boxSizing: 'border-box', marginBottom: 12 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+                {passwordChecks(password).map(c => (
+                  <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.met ? '#4CC97B' : 'rgba(255,255,255,0.4)', fontFamily: 'Plus Jakarta Sans' }}>
+                    <span>{c.met ? '✓' : '○'}</span>{c.label}
+                  </div>
+                ))}
+              </div>
+              <button disabled={submitting || !stepValid} onClick={handleSubmit} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: (submitting || !stepValid) ? 'default' : 'pointer', opacity: (submitting || !stepValid) ? 0.45 : 1, fontFamily: 'Plus Jakarta Sans' }}>{submitting ? 'Saving…' : 'Reset Password'}</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
+            <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', textAlign: 'center', marginBottom: 10 }}>Password reset</div>
+            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, textAlign: 'center', lineHeight: 1.7, marginBottom: 32 }}>You can now log in with your new password.</div>
+            <button onClick={() => setScreen('login')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Login</button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── VERIFY EMAIL (reached via the emailed /verify-email?token= link) ────────
+function VerifyConfirmScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [status, setStatus] = useState<'confirming' | 'success' | 'error'>('confirming')
+  const [error, setError] = useState('')
+
+  // GET /verify-email itself just serves this SPA shell (scanner-safe - a
+  // link-preview bot fetching the URL doesn't run JS and so can't silently
+  // consume the token). The actual confirmation happens here, via this
+  // JS-triggered POST, matching the old static/verify-confirm.html design.
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('token') || ''
+    if (!token) {
+      setStatus('error')
+      setError('This verification link is missing its token.')
+      return
+    }
+    api('/verify-email/confirm', { method: 'POST', body: JSON.stringify({ token }) })
+      .then(() => setStatus('success'))
+      .catch((e) => {
+        setStatus('error')
+        setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
+      })
+  }, [])
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 32px', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)`, textAlign: 'center' }}>
+      {status === 'confirming' && (
+        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Confirming your email…</div>
+      )}
+      {status === 'success' && (
+        <>
+          <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(76,201,123,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+            <span style={{ fontSize: 32 }}>✅</span>
+          </div>
+          <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', marginBottom: 10 }}>Email verified</div>
+          <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 1.6, marginBottom: 32 }}>Your account is confirmed and you're already signed in.</div>
+          <button onClick={() => setScreen('home')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 32px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Continue to Prepza</button>
+        </>
+      )}
+      {status === 'error' && (
+        <>
+          <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(140,29,43,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+            <span style={{ fontSize: 32 }}>⚠️</span>
+          </div>
+          <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', marginBottom: 10 }}>Verification failed</div>
+          <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 1.6, marginBottom: 32 }}>{error}</div>
+          <button onClick={() => setScreen('login')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 32px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Sign In</button>
+        </>
+      )}
     </div>
   )
 }
@@ -5520,7 +5686,22 @@ export default function App() {
   // This does NOT do general "am I still logged in" session restore on
   // every page load - only this specific OAuth round-trip.
   useEffect(() => {
+    const path = window.location.pathname
     const params = new URLSearchParams(window.location.search)
+
+    // Direct hits from emailed links - Flask serves this same SPA shell for
+    // both paths, so routing happens client-side off the pathname. The
+    // token itself stays in the query string; ResetPasswordScreen and
+    // VerifyConfirmScreen each read it themselves.
+    if (path === '/reset-password') {
+      setScreen('reset-password')
+      return
+    }
+    if (path === '/verify-email') {
+      setScreen('verify-confirm')
+      return
+    }
+
     const wantsCompleteProfile = params.get('complete_profile') === '1'
     const authError = params.get('auth_error')
     if (wantsCompleteProfile) {
@@ -5539,7 +5720,7 @@ export default function App() {
 
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
 
-  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','processing','payment','payment-success','payment-failure']
+  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','payment','payment-success','payment-failure']
   const darkHomeIndicator: Screen[] = ['processing','splash','login']
 
   const renderScreen = () => {
@@ -5550,6 +5731,8 @@ export default function App() {
       case 'signup':            return <SignupScreen setScreen={setScreen} />
       case 'check-email':       return <CheckEmailScreen setScreen={setScreen} />
       case 'complete-profile':  return <CompleteProfileScreen setScreen={setScreen} />
+      case 'reset-password':    return <ResetPasswordScreen setScreen={setScreen} />
+      case 'verify-confirm':    return <VerifyConfirmScreen setScreen={setScreen} />
       case 'home':              return <HomeScreen setScreen={setScreen} />
       case 'explore':           return <ExploreScreen setScreen={setScreen} />
       case 'create-modal':      return <CreateModal setScreen={setScreen} />
