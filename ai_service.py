@@ -1416,7 +1416,12 @@ PODCAST_SCRIPT_JSON_SYSTEM_PROMPT = (
     '[{"speaker": "lec|morio|kichwa", "text": "string"}]}\n\n'
     "Guidelines: \"speaker\" must be EXACTLY one of lec, morio, or kichwa - "
     "nothing else. Write natural spoken dialogue, not a lecture read aloud - "
-    "short turns, real back-and-forth. Target roughly 1000-1400 words of total "
+    "short turns, real back-and-forth. "
+    "Keep the tone a little funny and lighthearted - natural banter and "
+    "playful ribbing between Lec and Morio are welcome, but per the "
+    "character notes above, Kichwa is never the target of a joke - his "
+    "confusion stays genuine, not comic. "
+    "Target roughly 1000-1400 words of total "
     "spoken text across all turns combined (about 6-9 minutes at a natural "
     "spoken pace). Read numbers and formulas the way a person would say them "
     "aloud (e.g. \"ten thousand shillings at eight percent\" not \"KES "

@@ -51,9 +51,9 @@ KOKORO_SHARED_SECRET = os.environ.get("KOKORO_SHARED_SECRET")
 # gallery (af_*/am_*/bf_*/bm_* naming: a=American, b=British, f=female,
 # m=male). Nothing else in this file depends on which IDs go here.
 PODCAST_VOICE_MAP = {
-    "lec": "am_eric",
-    "morio": "am_michael",
-    "kichwa": "af_bella",
+    "lec": "bm_george",
+    "morio": "am_adam",
+    "kichwa": "af_sarah",
 }
 
 TURN_GAP_MS = 400  # silence stitched between speaker turns
@@ -126,7 +126,7 @@ def process_podcast_audio(material_id):
                 raise RuntimeError(f"No voice configured for speaker '{speaker}'")
 
             clip_bytes = _synthesize_turn(turn["text"], voice_id)
-            clip = AudioSegment.from_file(io.BytesIO(clip_bytes), format="mp3")
+            clip = AudioSegment.from_file(io.BytesIO(clip_bytes), format="wav")
             combined += clip
             if i < len(turns) - 1:
                 combined += gap
@@ -158,22 +158,24 @@ def process_podcast_audio(material_id):
 
 def _synthesize_turn(text, voice_id):
     """
-    Calls the Kokoro server's OpenAI-compatible speech endpoint for one
-    turn of dialogue. Returns raw MP3 bytes. Raises on any non-200
-    response or network failure.
+    Calls our own prepza-tts server's /synthesize endpoint for one turn
+    of dialogue. NOT OpenAI-compatible - this is a custom minimal
+    ONNX-based Kokoro server (separate "prepza-tts" repo/Render
+    service), not the abandoned kokoro-fastapi Docker image, so the
+    endpoint path and request body are both different from what an
+    OpenAI-compatible TTS API would expect. Returns raw WAV bytes.
+    Raises on any non-200 response or network failure.
     """
     headers = {"Content-Type": "application/json"}
     if KOKORO_SHARED_SECRET:
         headers["Authorization"] = f"Bearer {KOKORO_SHARED_SECRET}"
 
     response = requests.post(
-        f"{KOKORO_TTS_BASE_URL}/v1/audio/speech",
+        f"{KOKORO_TTS_BASE_URL}/synthesize",
         headers=headers,
         json={
-            "model": "kokoro",
-            "input": text,
+            "text": text,
             "voice": voice_id,
-            "response_format": "mp3",
         },
         timeout=60,
     )
