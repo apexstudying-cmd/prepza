@@ -16,3 +16,4 @@ add_sidebar_dashboard.py
 patch_settings_sidebar.py
 add_*.py
 remove_*.py
+!frontend/src/imports/logo.png
