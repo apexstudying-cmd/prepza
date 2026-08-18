@@ -816,7 +816,7 @@ def answer_forum_question(question_text, unit, triggering_user_id, plan_tier="fr
 CONTINUATION_MAX_ATTEMPTS = 2
 
 
-def _call_with_continuation(task, system_prompt, user_message, max_tokens=None):
+def _call_with_continuation(task, system_prompt, user_message, max_tokens=None, cacheable_system=True):
     """
     Like route_and_generate(), but detects max_tokens truncation and
     retries with a prefilled continuation instead of returning a
@@ -837,6 +837,14 @@ def _call_with_continuation(task, system_prompt, user_message, max_tokens=None):
     total_usage = AIUsage()
     start = time.monotonic()
 
+    if cacheable_system:
+        system = [{
+            "type": "text",
+            "text": system_prompt,
+            "cache_control": {"type": "ephemeral"},
+        }]
+    else:
+        system = system_prompt
     for attempt in range(CONTINUATION_MAX_ATTEMPTS):
         if accumulated_text:
             messages = [
@@ -849,7 +857,7 @@ def _call_with_continuation(task, system_prompt, user_message, max_tokens=None):
         response = provider._client.messages.create(
             model=model,
             max_tokens=resolved_max_tokens,
-            system=system_prompt,
+            system=system,
             messages=messages,
         )
 
