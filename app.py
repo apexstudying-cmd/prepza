@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -118,6 +118,11 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, nullable=True)
     signup_source = db.Column(db.String(100), nullable=True)
     is_suspended = db.Column(db.Boolean, nullable=False, default=False)
+    last_active_at = db.Column(db.DateTime, nullable=True)
+    # Updated (throttled, see track_last_active()) on any authenticated
+    # request - login, browsing, chatting, anything - not just specific
+    # study actions. That's a different, broader signal than
+    # StudyActivityLog, which only covers document/quiz/flashcard study.
 class University(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(150), nullable=False)
@@ -461,6 +466,9 @@ class ForumPost(db.Model):
     title = db.Column(db.String(200), nullable=False)
     body = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_removed = db.Column(db.Boolean, nullable=False, default=False)
+    # Moderation removal - same "hide body, keep row" pattern as
+    # Message.is_deleted, so thread/reply structure isn't broken.
 class AiAnswer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
@@ -483,6 +491,7 @@ class ForumReply(db.Model):
     triggered_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     body = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_removed = db.Column(db.Boolean, nullable=False, default=False)
 class AiUsageLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
@@ -584,6 +593,7 @@ class GroupPost(db.Model):
     # post | question - Posts tab vs Questions tab in GroupDetailScreen
     body = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_removed = db.Column(db.Boolean, nullable=False, default=False)
 
 
 class GroupPostComment(db.Model):
@@ -592,6 +602,7 @@ class GroupPostComment(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     body = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_removed = db.Column(db.Boolean, nullable=False, default=False)
     # Used for both Posts-tab comments and Questions-tab replies - the
     # frontend's shared CommentsScreen doesn't distinguish them either.
     marked_helpful = db.Column(db.Boolean, nullable=False, default=False)
@@ -664,6 +675,91 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class Announcement(db.Model):
+    """
+    A record of one admin broadcast (Communications tab). Sending an
+    announcement fans out a Notification(type="announcement") row to
+    every eligible user at send time - reach is snapshotted here rather
+    than recomputed later, since the user population (and who was
+    suspended at send time) will keep changing after the fact.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.String(500), nullable=False)
+    sent_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    reach = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ---------- Moderation (Chunk 10) ----------
+
+CONTENT_REPORT_TARGET_TYPES = (
+    "forum_post", "forum_reply", "group_post", "group_post_comment", "user",
+)
+CONTENT_REPORT_REASONS = {
+    # reason -> auto-assigned priority. Deliberately a fixed mapping
+    # rather than an admin-editable one for MVP, same tradeoff as the
+    # hardcoded XP_* amounts elsewhere in this file.
+    "academic_dishonesty": "high",
+    "harassment": "high",
+    "offensive_content": "medium",
+    "misinformation": "medium",
+    "spam_scam": "medium",
+    "duplicate": "low",
+    "bot_activity": "low",
+    "other": "low",
+}
+CONTENT_REPORT_STATUSES = ("pending", "dismissed", "actioned")
+CONTENT_REPORT_ACTIONS = ("dismissed", "removed", "warned")
+
+
+class ContentReport(db.Model):
+    """
+    A student report against a piece of community content (forum
+    posts/replies, group posts/comments) or against a user directly.
+    Deliberately separate from LibraryReport, which already covers
+    document/library-item reports with its own queue - this table
+    fills the gap for everything else, which previously had no
+    reporting mechanism at all.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    target_type = db.Column(db.String(30), nullable=False)
+    target_id = db.Column(db.Integer, nullable=False)
+    reporter_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    # nullable to leave room for future automated/system-flagged reports
+    reason = db.Column(db.String(40), nullable=False)
+    details = db.Column(db.String(500), nullable=True)
+    priority = db.Column(db.String(10), nullable=False)
+    # high | medium | low - derived from `reason` at creation time
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    # pending -> dismissed | actioned
+    action_taken = db.Column(db.String(20), nullable=True)
+    # set alongside status='actioned': 'removed' | 'warned'
+    admin_notes = db.Column(db.String(500), nullable=True)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class UserWarning(db.Model):
+    """
+    A formal warning issued to a student, always paired with a
+    Notification(type='moderation_warning') so the student actually
+    sees it - not just an internal admin note. `message` states what
+    they did wrong, `consequence` states what happens as a result /
+    next time, both admin-authored per warning rather than templated,
+    since the punishment should match the specific violation.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    issued_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    content_report_id = db.Column(db.Integer, db.ForeignKey("content_report.id"), nullable=True)
+    reason = db.Column(db.String(40), nullable=False)
+    # same vocabulary as ContentReport.reason, so warnings and reports
+    # can be filtered/grouped consistently
+    message = db.Column(db.String(500), nullable=False)
+    consequence = db.Column(db.String(500), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 # ---------- Opportunities + Organisation portal ----------
@@ -1048,6 +1144,86 @@ def generate_referral_code(display_name=None):
     return f"{prefix}{suffix}"
 
 
+def _sync_referral_progress(user):
+    """
+    Advances a referred user's Referral row through
+    signed_up -> verified -> activated as their account state crosses
+    each threshold. "Activated" requires BOTH a verified email AND a
+    completed profile (university/year/semester all set) - whichever
+    of the two happens second is what triggers the jump to activated,
+    so this only ever moves the status forward, never backward, and
+    it's safe to call redundantly (e.g. on every /profile PATCH).
+    No-ops if this user was never referred.
+    """
+    referral = Referral.query.filter_by(referred_user_id=user.id).first()
+    if not referral or referral.status == "activated":
+        return
+
+    now = datetime.utcnow()
+
+    if user.email_verified and referral.status == "signed_up":
+        referral.status = "verified"
+        referral.verified_at = now
+
+    profile_complete = bool(user.university_id and user.year and user.semester)
+    if user.email_verified and profile_complete and referral.status in ("signed_up", "verified"):
+        referral.status = "activated"
+        referral.activated_at = now
+        if not referral.verified_at:
+            referral.verified_at = now
+
+
+def _maybe_award_referral_commission(payment):
+    """
+    Called from sync_pesapal_payment_status() right after a Payment's
+    status is set to 'success' in memory, before that change is
+    committed. Awards a ONE-TIME referral commission on a user's FIRST
+    successful payment ever (content or subscription) - never on
+    repeat payments. No-ops entirely if the user wasn't referred,
+    already has an earlier successful payment on record, their
+    referral was voided, or the program is disabled.
+
+    A payment succeeding here also counts as "activated" even if the
+    referred student somehow paid before finishing their profile -
+    paying is a stronger engagement signal than the profile-completion
+    check alone.
+    """
+    if not payment.user_id:
+        return
+
+    referral = Referral.query.filter_by(referred_user_id=payment.user_id).first()
+    if not referral or referral.first_payment_id is not None or referral.voided_at is not None:
+        return
+
+    prior_success_count = Payment.query.filter(
+        Payment.user_id == payment.user_id,
+        Payment.status == "success",
+        Payment.id != payment.id,
+    ).count()
+    if prior_success_count > 0:
+        return  # not their first successful payment - no commission
+
+    settings = get_ambassador_settings()
+    if not settings["enabled"]:
+        return
+
+    prior_converted_count = Referral.query.filter(
+        Referral.ambassador_id == referral.ambassador_id,
+        Referral.first_payment_id.isnot(None),
+        Referral.voided_at.is_(None),
+    ).count()
+    _tier, commission_pct = compute_ambassador_tier(prior_converted_count, settings)
+
+    referral.first_payment_id = payment.id
+    referral.first_payment_at = datetime.utcnow()
+    referral.commission_rate_applied = commission_pct
+    referral.commission_amount = round(payment.amount * commission_pct / 100)
+    referral.unlock_at = referral.first_payment_at + timedelta(days=settings["payout_hold_days"])
+    if referral.status != "activated":
+        referral.status = "activated"
+        referral.activated_at = referral.activated_at or referral.first_payment_at
+
+
 def get_user_subscription_status(user_id):
     """
     A user's plan is derived from their most recent successful subscription
@@ -1115,6 +1291,7 @@ def sync_pesapal_payment_status(order_tracking_id):
                 payment.subscription_expires_at = compute_new_subscription_expiry(
                     payment.user_id, payment.plan
                 )
+            _maybe_award_referral_commission(payment)
     elif status_code in (2, 3, 0):
         payment.status = "failed"
     # else: still processing on Pesapal's side, leave as pending
@@ -1427,6 +1604,42 @@ def enforce_maintenance_mode():
     return jsonify({"error": "maintenance", "message": message}), 503
 
 
+# ---------- Activity tracking (for admin "Active Today") ----------
+# Broad, cheap DAU signal: touches on ANY authenticated request (login,
+# browsing, chatting, studying - not just specific study actions like
+# StudyActivityLog). Throttled via the session so this costs at most one
+# UPDATE per user per ACTIVITY_SYNC_INTERVAL, not one per request.
+
+ACTIVITY_TRACKING_SKIP_PREFIXES = ("/static/", "/sw.js", "/health")
+ACTIVITY_SYNC_INTERVAL = timedelta(minutes=5)
+
+
+@app.before_request
+def track_last_active():
+    if request.path.startswith(ACTIVITY_TRACKING_SKIP_PREFIXES):
+        return None
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+
+    now = datetime.utcnow()
+    last_sync_raw = session.get("_last_active_sync")
+    if last_sync_raw:
+        try:
+            last_sync = datetime.fromisoformat(last_sync_raw)
+        except ValueError:
+            last_sync = None
+        if last_sync and (now - last_sync) < ACTIVITY_SYNC_INTERVAL:
+            return None
+
+    # Bulk UPDATE (no SELECT) so this stays a single cheap query - we
+    # don't need the User object, just to touch the timestamp.
+    User.query.filter_by(id=user_id).update({"last_active_at": now})
+    db.session.commit()
+    session["_last_active_sync"] = now.isoformat()
+    return None
+
+
 @app.route("/")
 def home():
     return send_from_directory(app.static_folder, "index.html")
@@ -1596,6 +1809,35 @@ def signup():
     db.session.add(new_user)
     db.session.commit()
 
+    raw_ref_code = data.get("ref")
+    if raw_ref_code and isinstance(raw_ref_code, str):
+        try:
+            ref_code_clean = raw_ref_code.strip().upper()[:20]
+            ambassador = Ambassador.query.filter_by(
+                referral_code=ref_code_clean, status="active"
+            ).first()
+            if ambassador:
+                raw_channel = data.get("via")
+                channel = None
+                if raw_channel and isinstance(raw_channel, str):
+                    channel = "".join(
+                        ch for ch in raw_channel.strip().lower()[:30]
+                        if ch.isalnum() or ch in ("_", "-")
+                    ) or None
+                db.session.add(Referral(
+                    ambassador_id=ambassador.id,
+                    referred_user_id=new_user.id,
+                    referral_code_used=ref_code_clean,
+                    channel=channel,
+                ))
+                db.session.commit()
+        except Exception as e:
+            # Never let referral-tracking issues affect the already-created
+            # account - same defensive stance as the verification email
+            # try/except right below.
+            db.session.rollback()
+            print(f"WARNING: referral capture failed for new user {new_user.id}: {e}")
+
     try:
         send_verification_email(email, token)
         email_status = "Verification email sent"
@@ -1645,6 +1887,7 @@ def verify_email_confirm():
 
     user.email_verified = True
     user.verification_token = None
+    _sync_referral_progress(user)
     db.session.commit()
 
     # Auto-login: set the session the same way /login does, so the user
@@ -2021,6 +2264,7 @@ def update_profile():
         user.university_id = university_id
     if program_id is not None:
         user.program_id = program_id
+    _sync_referral_progress(user)
     db.session.commit()
 
     return jsonify({
@@ -4136,7 +4380,8 @@ def _serialize_group_post(post, user_id):
         "id": post.id,
         "group_id": post.group_id,
         "post_type": post.post_type,
-        "body": post.body,
+        "body": post.body if not post.is_removed else None,
+        "is_removed": post.is_removed,
         "author": _display_name(author) if author else "Deleted user",
         "author_id": post.user_id,
         "like_count": like_count,
@@ -4153,7 +4398,8 @@ def _serialize_group_post_comment(comment):
     return {
         "id": comment.id,
         "group_post_id": comment.group_post_id,
-        "body": comment.body,
+        "body": comment.body if not comment.is_removed else None,
+        "is_removed": comment.is_removed,
         "author": _display_name(author) if author else "Deleted user",
         "author_id": comment.user_id,
         "marked_helpful": comment.marked_helpful,
@@ -4214,7 +4460,7 @@ def list_group_posts(group_id):
     per_page = 20
 
     posts = (
-        GroupPost.query.filter_by(group_id=group_id, post_type=post_type)
+        GroupPost.query.filter_by(group_id=group_id, post_type=post_type, is_removed=False)
         .order_by(GroupPost.created_at.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
@@ -4708,6 +4954,81 @@ def remove_group_file(group_id, file_id):
     return jsonify({"message": "File removed"})
 
 
+# ---------- Content reports (Chunk 10 moderation) ----------
+
+CONTENT_REPORT_DETAILS_MAX = 500
+
+
+def _content_report_target_exists(target_type, target_id):
+    """Returns the target row if it exists (and isn't already removed
+    for the content types that support removal), else None."""
+    if target_type == "forum_post":
+        return ForumPost.query.filter_by(id=target_id, is_removed=False).first()
+    if target_type == "forum_reply":
+        return ForumReply.query.filter_by(id=target_id, is_removed=False).first()
+    if target_type == "group_post":
+        return GroupPost.query.filter_by(id=target_id, is_removed=False).first()
+    if target_type == "group_post_comment":
+        return GroupPostComment.query.filter_by(id=target_id, is_removed=False).first()
+    if target_type == "user":
+        return User.query.filter_by(id=target_id, is_suspended=False).first()
+    return None
+
+
+@app.route("/content-reports", methods=["POST"])
+@require_csrf
+def create_content_report():
+    """
+    Files a report against a forum post/reply, group post/comment, or
+    a user directly. No duplicate-report guard, same reasoning as
+    report_library_item() - admins dedupe on the review side.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    target_type = (data.get("target_type") or "").strip().lower()
+    target_id = data.get("target_id")
+    reason = (data.get("reason") or "").strip().lower()
+    details = data.get("details")
+
+    if target_type not in CONTENT_REPORT_TARGET_TYPES:
+        return jsonify({"error": "target_type must be one of: " + ", ".join(CONTENT_REPORT_TARGET_TYPES)}), 400
+    if not isinstance(target_id, int) or isinstance(target_id, bool):
+        return jsonify({"error": "target_id is required"}), 400
+    if reason not in CONTENT_REPORT_REASONS:
+        return jsonify({"error": "reason must be one of: " + ", ".join(CONTENT_REPORT_REASONS)}), 400
+    if target_type == "user" and target_id == user_id:
+        return jsonify({"error": "You can't report yourself"}), 400
+
+    if details is not None:
+        details = details.strip()
+        if len(details) > CONTENT_REPORT_DETAILS_MAX:
+            return jsonify({"error": f"details must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
+        details = details or None
+
+    if not _content_report_target_exists(target_type, target_id):
+        return jsonify({"error": "Reported content was not found"}), 404
+
+    report = ContentReport(
+        target_type=target_type,
+        target_id=target_id,
+        reporter_user_id=user_id,
+        reason=reason,
+        details=details,
+        priority=CONTENT_REPORT_REASONS[reason],
+        status="pending",
+    )
+    db.session.add(report)
+    db.session.commit()
+
+    return jsonify({"id": report.id, "status": report.status, "priority": report.priority}), 201
+
+
 # ---------- Follows ----------
 
 def _serialize_follow_user(user, viewer_user_id):
@@ -5027,7 +5348,8 @@ def _serialize_reply(reply):
 
     return {
         "id": reply.id,
-        "body": reply.body,
+        "body": reply.body if not reply.is_removed else None,
+        "is_removed": reply.is_removed,
         "is_ai": reply.is_ai,
         "author": "Prepza AI" if reply.is_ai else author,
         "ai_answer_id": reply.ai_answer_id,
@@ -5090,7 +5412,7 @@ def list_forum_posts(unit_id):
     per_page = 20
 
     posts = (
-        ForumPost.query.filter_by(unit_id=unit_id)
+        ForumPost.query.filter_by(unit_id=unit_id, is_removed=False)
         .order_by(ForumPost.created_at.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
@@ -5909,6 +6231,489 @@ def search_users():
 
 # ---------- Admin routes (protected) ----------
 
+ANNOUNCEMENT_TITLE_MAX = 200
+ANNOUNCEMENT_BODY_MAX = 500
+
+
+@app.route("/admin/announcements", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_send_announcement():
+    """
+    Broadcasts an announcement to every non-suspended user as a
+    Notification(type="announcement"), and logs the send in
+    Announcement for the Communications history table. Reach is
+    computed and stored at send time.
+    """
+    acting_admin_id = session.get("user_id")
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    title = (data.get("title") or "").strip()
+    body = (data.get("body") or "").strip()
+
+    if not title or len(title) > ANNOUNCEMENT_TITLE_MAX:
+        return jsonify({"error": f"title is required and must be {ANNOUNCEMENT_TITLE_MAX} characters or fewer"}), 400
+    if not body or len(body) > ANNOUNCEMENT_BODY_MAX:
+        return jsonify({"error": f"body is required and must be {ANNOUNCEMENT_BODY_MAX} characters or fewer"}), 400
+
+    recipient_ids = [
+        row.id for row in User.query.filter(User.is_suspended.is_(False)).with_entities(User.id).all()
+    ]
+
+    announcement = Announcement(title=title, body=body, sent_by=acting_admin_id, reach=len(recipient_ids))
+    db.session.add(announcement)
+    db.session.flush()  # assign announcement.id before Notification.related_id references it
+
+    for recipient_id in recipient_ids:
+        db.session.add(Notification(
+            user_id=recipient_id,
+            type="announcement",
+            title=title,
+            body=body,
+            related_type="announcement",
+            related_id=announcement.id,
+        ))
+
+    db.session.commit()
+
+    return jsonify({
+        "id": announcement.id,
+        "title": announcement.title,
+        "body": announcement.body,
+        "reach": announcement.reach,
+        "created_at": announcement.created_at.isoformat(),
+    }), 201
+
+
+@app.route("/admin/announcements")
+@require_admin
+def admin_list_announcements():
+    """History for the Communications tab, newest first."""
+    announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(50).all()
+    return jsonify([
+        {
+            "id": a.id,
+            "title": a.title,
+            "body": a.body,
+            "reach": a.reach,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a in announcements
+    ])
+
+
+# ---------- Admin: moderation (Chunk 10) ----------
+
+def _content_report_preview(report):
+    """
+    Best-effort preview of the reported content for the admin queue -
+    a short text snippet plus who authored it. Returns None fields if
+    the target was hard-deleted out from under the report (shouldn't
+    normally happen since content is soft-removed, but don't 500 if it
+    does).
+    """
+    author_id = None
+    snippet = None
+
+    if report.target_type == "forum_post":
+        row = db.session.get(ForumPost, report.target_id)
+        if row:
+            author_id = row.user_id
+            snippet = row.body
+    elif report.target_type == "forum_reply":
+        row = db.session.get(ForumReply, report.target_id)
+        if row:
+            author_id = row.user_id
+            snippet = row.body
+    elif report.target_type == "group_post":
+        row = db.session.get(GroupPost, report.target_id)
+        if row:
+            author_id = row.user_id
+            snippet = row.body
+    elif report.target_type == "group_post_comment":
+        row = db.session.get(GroupPostComment, report.target_id)
+        if row:
+            author_id = row.user_id
+            snippet = row.body
+    elif report.target_type == "user":
+        author_id = report.target_id
+
+    author = db.session.get(User, author_id) if author_id else None
+    return {
+        "author_id": author_id,
+        "author_email": author.email if author else None,
+        "snippet": (snippet[:200] if snippet else None),
+    }
+
+
+def _serialize_content_report(report):
+    reporter = db.session.get(User, report.reporter_user_id) if report.reporter_user_id else None
+    entry = {
+        "id": report.id,
+        "target_type": report.target_type,
+        "target_id": report.target_id,
+        "reporter_email": reporter.email if reporter else "System",
+        "reason": report.reason,
+        "details": report.details,
+        "priority": report.priority,
+        "status": report.status,
+        "action_taken": report.action_taken,
+        "admin_notes": report.admin_notes,
+        "created_at": report.created_at.isoformat() if report.created_at else None,
+    }
+    entry.update(_content_report_preview(report))
+    return entry
+
+
+@app.route("/admin/content-reports")
+@require_admin
+def admin_list_content_reports():
+    """
+    Moderation queue. Defaults to pending only, ordered highest
+    priority first (then oldest first within a priority tier) so the
+    most urgent reports surface at the top; pass status=all to see
+    dismissed/actioned ones too.
+
+    Sorted in Python rather than via a SQL CASE expression - same
+    pattern as admin_list_users() below, which avoids depending on
+    SQLAlchemy version-specific case() syntax (the tuple-positional
+    form needs 1.4+; older installs need the list/`whens=` form).
+    Report volume is small enough that this costs nothing.
+    """
+    status_filter = request.args.get("status", "pending")
+    if status_filter != "all" and status_filter not in CONTENT_REPORT_STATUSES:
+        return jsonify({"error": "status must be 'all' or one of: " + ", ".join(CONTENT_REPORT_STATUSES)}), 400
+
+    query = ContentReport.query
+    if status_filter != "all":
+        query = query.filter_by(status=status_filter)
+
+    reports = query.order_by(ContentReport.created_at.asc()).all()
+    priority_rank = {"high": 0, "medium": 1, "low": 2}
+    reports.sort(key=lambda r: priority_rank.get(r.priority, 3))
+
+    return jsonify({"reports": [_serialize_content_report(r) for r in reports]})
+
+
+@app.route("/admin/content-reports/summary")
+@require_admin
+def admin_content_reports_summary():
+    """KPI row for the Moderation tab header."""
+    open_reports = ContentReport.query.filter_by(status="pending").count()
+    today = datetime.utcnow().date()
+    resolved_today = ContentReport.query.filter(
+        ContentReport.status != "pending",
+        func.date(ContentReport.reviewed_at) == today,
+    ).count()
+    suspended_users = User.query.filter_by(is_suspended=True).count()
+    warnings_issued = UserWarning.query.count()
+
+    return jsonify({
+        "open_reports": open_reports,
+        "resolved_today": resolved_today,
+        "suspended_users": suspended_users,
+        "warnings_issued": warnings_issued,
+    })
+
+
+def _load_pending_report(report_id):
+    report = db.session.get(ContentReport, report_id)
+    if not report:
+        return None, (jsonify({"error": "Report not found"}), 404)
+    if report.status != "pending":
+        return None, (jsonify({"error": f"Report is not pending (status: {report.status})"}), 400)
+    return report, None
+
+
+@app.route("/admin/content-reports/<int:report_id>/dismiss", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_dismiss_content_report(report_id):
+    acting_admin_id = session.get("user_id")
+    report, error = _load_pending_report(report_id)
+    if error:
+        return error
+
+    data = request.get_json(silent=True) or {}
+    admin_notes = data.get("admin_notes")
+    if admin_notes is not None:
+        admin_notes = admin_notes.strip()
+        if len(admin_notes) > CONTENT_REPORT_DETAILS_MAX:
+            return jsonify({"error": f"admin_notes must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
+        admin_notes = admin_notes or None
+
+    report.status = "dismissed"
+    report.action_taken = "dismissed"
+    report.admin_notes = admin_notes
+    report.reviewed_by = acting_admin_id
+    report.reviewed_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify(_serialize_content_report(report))
+
+
+@app.route("/admin/content-reports/<int:report_id>/remove", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_remove_reported_content(report_id):
+    """
+    Hides the reported content (soft-remove, same is_removed pattern
+    used everywhere else) and marks the report actioned. Not valid for
+    target_type='user' - there's no "content" to remove for a user
+    report; use /warn or the existing /admin/users suspend toggle
+    instead.
+    """
+    acting_admin_id = session.get("user_id")
+    report, error = _load_pending_report(report_id)
+    if error:
+        return error
+
+    if report.target_type == "user":
+        return jsonify({
+            "error": "Can't 'remove' a user report - use /admin/content-reports/<id>/warn, "
+                     "or suspend the user via PATCH /admin/users/<id>"
+        }), 400
+
+    model_by_type = {
+        "forum_post": ForumPost,
+        "forum_reply": ForumReply,
+        "group_post": GroupPost,
+        "group_post_comment": GroupPostComment,
+    }
+    model = model_by_type[report.target_type]
+    target = db.session.get(model, report.target_id)
+    if not target:
+        return jsonify({"error": "Reported content no longer exists"}), 404
+
+    target.is_removed = True
+
+    data = request.get_json(silent=True) or {}
+    admin_notes = data.get("admin_notes")
+    if admin_notes is not None:
+        admin_notes = admin_notes.strip()
+        if len(admin_notes) > CONTENT_REPORT_DETAILS_MAX:
+            return jsonify({"error": f"admin_notes must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
+        admin_notes = admin_notes or None
+
+    report.status = "actioned"
+    report.action_taken = "removed"
+    report.admin_notes = admin_notes
+    report.reviewed_by = acting_admin_id
+    report.reviewed_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify(_serialize_content_report(report))
+
+
+@app.route("/admin/content-reports/<int:report_id>/warn", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_warn_from_content_report(report_id):
+    """
+    Issues a UserWarning to the content's author (or the reported user
+    directly, for target_type='user'), tied back to this report. The
+    warning ALWAYS reaches the student as a Notification - message
+    states what they did wrong, consequence states what happens as a
+    result. Both are admin-authored per warning, not templated, since
+    the punishment should fit the specific violation. Optionally also
+    removes the content in the same call (remove_content=true).
+    """
+    acting_admin_id = session.get("user_id")
+    report, error = _load_pending_report(report_id)
+    if error:
+        return error
+
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    consequence = (data.get("consequence") or "").strip()
+    remove_content = bool(data.get("remove_content"))
+
+    if not message or len(message) > CONTENT_REPORT_DETAILS_MAX:
+        return jsonify({"error": f"message is required and must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
+    if not consequence or len(consequence) > CONTENT_REPORT_DETAILS_MAX:
+        return jsonify({"error": f"consequence is required and must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
+
+    if report.target_type == "user":
+        warned_user_id = report.target_id
+    else:
+        preview = _content_report_preview(report)
+        warned_user_id = preview["author_id"]
+        if not warned_user_id:
+            return jsonify({"error": "Could not determine the content's author to warn"}), 404
+
+        if remove_content:
+            model_by_type = {
+                "forum_post": ForumPost,
+                "forum_reply": ForumReply,
+                "group_post": GroupPost,
+                "group_post_comment": GroupPostComment,
+            }
+            target = db.session.get(model_by_type[report.target_type], report.target_id)
+            if target:
+                target.is_removed = True
+
+    warning = UserWarning(
+        user_id=warned_user_id,
+        issued_by=acting_admin_id,
+        content_report_id=report.id,
+        reason=report.reason,
+        message=message,
+        consequence=consequence,
+    )
+    db.session.add(warning)
+    db.session.flush()  # assign warning.id before Notification.related_id references it
+
+    db.session.add(Notification(
+        user_id=warned_user_id,
+        type="moderation_warning",
+        title="You've received a warning",
+        body=f"{message} {consequence}",
+        related_type="user_warning",
+        related_id=warning.id,
+    ))
+
+    report.status = "actioned"
+    report.action_taken = "warned"
+    report.reviewed_by = acting_admin_id
+    report.reviewed_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({
+        "report": _serialize_content_report(report),
+        "warning_id": warning.id,
+        "content_removed": remove_content and report.target_type != "user",
+    })
+
+
+@app.route("/warnings")
+def list_my_warnings():
+    """Lets a student see their own warning history - what they did
+    wrong and the consequence, in their own words from the admin."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    warnings = (
+        UserWarning.query.filter_by(user_id=user_id)
+        .order_by(UserWarning.created_at.desc())
+        .all()
+    )
+    return jsonify({"warnings": [
+        {
+            "id": w.id,
+            "reason": w.reason,
+            "message": w.message,
+            "consequence": w.consequence,
+            "created_at": w.created_at.isoformat() if w.created_at else None,
+        }
+        for w in warnings
+    ]})
+
+
+@app.route("/admin/ai-usage")
+@require_admin
+def admin_ai_usage():
+    """
+    Rollup of AI usage/cost for the admin AI & Usage dashboard, sourced
+    from AiUsageLog (populated by ai_service.py on every AI call - both
+    document actions and forum Q&A share this table via request_type).
+
+    NOTE on gaps this endpoint deliberately does NOT paper over:
+      - AiUsageLog has no success/failure column, so a request-level
+        error rate can't be computed from it. failed_jobs/completed_jobs
+        below come from AiJob instead, which only covers the document
+        pipeline (text_extraction/summary/quiz/flashcards/podcast) -
+        forum Q&A failures aren't persisted anywhere today (ai_service
+        raises an exception, the route translates it to an HTTP error,
+        nothing is logged). Treat failed_jobs as a partial signal, not
+        a true platform-wide error rate.
+      - Average response time isn't tracked anywhere in the schema, so
+        it's omitted entirely rather than estimated.
+    """
+    try:
+        days = int(request.args.get("days", 30))
+    except ValueError:
+        days = 30
+    days = max(1, min(days, 365))
+    window_start = datetime.utcnow() - timedelta(days=days)
+
+    base = AiUsageLog.query.filter(AiUsageLog.created_at >= window_start)
+
+    total_requests = base.count()
+    totals_row = db.session.query(
+        func.coalesce(func.sum(AiUsageLog.cost_usd), 0),
+        func.coalesce(func.sum(AiUsageLog.input_tokens), 0),
+        func.coalesce(func.sum(AiUsageLog.output_tokens), 0),
+        func.coalesce(func.sum(AiUsageLog.cache_read_tokens), 0),
+        func.coalesce(func.sum(AiUsageLog.cache_creation_tokens), 0),
+    ).filter(AiUsageLog.created_at >= window_start).first()
+    total_cost_usd, total_input_tokens, total_output_tokens, total_cache_read, total_cache_creation = totals_row
+
+    by_feature_raw = (
+        db.session.query(
+            AiUsageLog.request_type,
+            func.count(AiUsageLog.id),
+            func.coalesce(func.sum(AiUsageLog.cost_usd), 0),
+        )
+        .filter(AiUsageLog.created_at >= window_start)
+        .group_by(AiUsageLog.request_type)
+        .order_by(func.count(AiUsageLog.id).desc())
+        .all()
+    )
+    by_feature = [
+        {"request_type": request_type, "requests": count, "cost_usd": float(cost)}
+        for request_type, count, cost in by_feature_raw
+    ]
+
+    daily_raw = (
+        db.session.query(
+            func.date(AiUsageLog.created_at).label("day"),
+            func.count(AiUsageLog.id),
+            func.coalesce(func.sum(AiUsageLog.cost_usd), 0),
+        )
+        .filter(AiUsageLog.created_at >= window_start)
+        .group_by(func.date(AiUsageLog.created_at))
+        .order_by(func.date(AiUsageLog.created_at))
+        .all()
+    )
+    daily_trend = [
+        {"date": day.isoformat(), "requests": count, "cost_usd": float(cost)}
+        for day, count, cost in daily_raw
+    ]
+
+    today = datetime.utcnow().date()
+    requests_today = AiUsageLog.query.filter(func.date(AiUsageLog.created_at) == today).count()
+
+    failed_jobs = AiJob.query.filter(
+        AiJob.status == "failed", AiJob.created_at >= window_start,
+    ).count()
+    completed_jobs = AiJob.query.filter(
+        AiJob.status == "completed", AiJob.created_at >= window_start,
+    ).count()
+
+    return jsonify({
+        "period_days": days,
+        "total_requests": total_requests,
+        "requests_today": requests_today,
+        "total_cost_usd": float(total_cost_usd),
+        "total_tokens": int(total_input_tokens) + int(total_output_tokens),
+        "input_tokens": int(total_input_tokens),
+        "output_tokens": int(total_output_tokens),
+        "cache_read_tokens": int(total_cache_read),
+        "cache_creation_tokens": int(total_cache_creation),
+        "by_feature": by_feature,
+        "daily_trend": daily_trend,
+        "document_pipeline_jobs": {
+            "completed": completed_jobs,
+            "failed": failed_jobs,
+            "note": "Covers text_extraction/summary/quiz/flashcards/podcast jobs only - forum Q&A failures aren't logged.",
+        },
+    })
+
+
 @app.route("/admin/ai-jobs")
 @require_admin
 def admin_list_ai_jobs():
@@ -6141,6 +6946,21 @@ def admin_analytics():
 
     total_users = db.session.query(func.count(User.id)).scalar()
 
+    # "Active today" = any authenticated request today (login, browsing,
+    # chatting, studying - see track_last_active()), not just specific
+    # study actions.
+    today = datetime.utcnow().date()
+    active_today = db.session.query(
+        func.count(User.id)
+    ).filter(func.date(User.last_active_at) == today).scalar()
+
+    # Storage is summed off DocumentContent, not Document - DocumentContent
+    # is the deduplicated, one-row-per-unique-file table, so a document
+    # shared by many students' Document rows is only counted once.
+    storage_used_bytes = db.session.query(
+        func.coalesce(func.sum(DocumentContent.file_size_bytes), 0)
+    ).scalar()
+
     total_units = db.session.query(func.count(Unit.id)).scalar()
     total_content = db.session.query(func.count(ContentItem.id)).scalar()
 
@@ -6228,6 +7048,8 @@ def admin_analytics():
         "total_revenue": total_revenue,
         "revenue_last_30d": revenue_30d,
         "total_users": total_users,
+        "active_today": active_today,
+        "storage_used_bytes": int(storage_used_bytes),
         "total_units": total_units,
         "total_content_items": total_content,
         "content_by_type": content_by_type,
@@ -6252,10 +7074,19 @@ def admin_refund_payment(payment_id):
         }), 400
 
     payment.status = "refunded"
+
+    referral = Referral.query.filter_by(first_payment_id=payment.id).first()
+    referral_commission_voided = False
+    if referral and referral.payout_id is None and referral.voided_at is None:
+        referral.voided_at = datetime.utcnow()
+        referral.void_reason = "Underlying payment refunded"
+        referral_commission_voided = True
+
     db.session.commit()
 
     return jsonify({
         "message": "Payment marked as refunded. Access to this content has been revoked.",
+        "referral_commission_voided": referral_commission_voided,
         "payment_id": payment.id,
         "note": "This only updates records in Prepza. You must still send the actual M-Pesa refund manually.",
     })
@@ -6263,25 +7094,99 @@ def admin_refund_payment(payment_id):
 
 # ---------- Admin: user management ----------
 
+ADMIN_USER_STATUS_VALUES = ("active", "suspended")
+ADMIN_USER_SUB_VALUES = ("free", "premium")
+
+
 @app.route("/admin/users")
 @require_admin
 def admin_list_users():
     """
     Lists users for the admin dashboard, optionally filtered by an
-    email substring. Newest signups first; users with no created_at
-    (pre-migration accounts) sort last rather than first.
+    email/display_name substring, suspension status, and subscription
+    tier. Newest signups first; users with no created_at (pre-migration
+    accounts) sort last rather than first.
+
+    Each row is enriched with document count, AI request count, and
+    current subscription plan - all computed via grouped aggregate
+    queries up front (one query per metric) rather than per-user
+    lookups, so this stays cheap regardless of user count.
     """
     search = (request.args.get("search") or "").strip().lower()
+    status_filter = (request.args.get("status") or "").strip().lower()
+    sub_filter = (request.args.get("sub") or "").strip().lower()
+
+    if status_filter and status_filter not in ADMIN_USER_STATUS_VALUES:
+        return jsonify({"error": "status must be one of: " + ", ".join(ADMIN_USER_STATUS_VALUES)}), 400
+    if sub_filter and sub_filter not in ADMIN_USER_SUB_VALUES:
+        return jsonify({"error": "sub must be one of: " + ", ".join(ADMIN_USER_SUB_VALUES)}), 400
 
     query = User.query
     if search:
-        query = query.filter(User.email.ilike(f"%{search}%"))
+        query = query.filter(
+            or_(
+                User.email.ilike(f"%{search}%"),
+                User.display_name.ilike(f"%{search}%"),
+            )
+        )
+    if status_filter == "active":
+        query = query.filter(User.is_suspended.is_(False))
+    elif status_filter == "suspended":
+        query = query.filter(User.is_suspended.is_(True))
 
     users = query.all()
     users.sort(key=lambda u: u.created_at or datetime.min, reverse=True)
+    user_ids = [u.id for u in users]
 
-    return jsonify([
-        {
+    doc_counts = dict(
+        db.session.query(Document.user_id, func.count(Document.id))
+        .filter(Document.user_id.in_(user_ids), Document.is_removed.is_(False))
+        .group_by(Document.user_id)
+        .all()
+    ) if user_ids else {}
+
+    ai_counts = dict(
+        db.session.query(AiUsageLog.user_id, func.count(AiUsageLog.id))
+        .filter(AiUsageLog.user_id.in_(user_ids))
+        .group_by(AiUsageLog.user_id)
+        .all()
+    ) if user_ids else {}
+
+    # Latest successful subscription payment per user, so plan can be
+    # derived the same way get_user_subscription_status() does for a
+    # single user - done here as one grouped query instead of N calls.
+    sub_rows = (
+        db.session.query(Payment.user_id, Payment.plan, Payment.subscription_expires_at)
+        .filter(
+            Payment.user_id.in_(user_ids),
+            Payment.payment_type == "subscription",
+            Payment.status == "success",
+            Payment.subscription_expires_at.isnot(None),
+        )
+        .all()
+    ) if user_ids else []
+    latest_sub = {}
+    for uid, plan, expires_at in sub_rows:
+        existing = latest_sub.get(uid)
+        if existing is None or expires_at > existing[1]:
+            latest_sub[uid] = (plan, expires_at)
+
+    now = datetime.utcnow()
+    result = []
+    for u in users:
+        sub_entry = latest_sub.get(u.id)
+        is_sub_active = bool(sub_entry and sub_entry[1] > now)
+        plan = sub_entry[0] if (sub_entry and is_sub_active) else "free"
+
+        if sub_filter == "premium" and plan == "free":
+            continue
+        if sub_filter == "free" and plan != "free":
+            continue
+
+        university = db.session.get(University, u.university_id) if u.university_id else None
+        program = db.session.get(Program, u.program_id) if u.program_id else None
+
+        result.append({
             "id": u.id,
             "email": u.email,
             "year": u.year,
@@ -6292,9 +7197,15 @@ def admin_list_users():
             "is_suspended": u.is_suspended,
             "created_at": u.created_at.isoformat() if u.created_at else None,
             "signup_source": u.signup_source,
-        }
-        for u in users
-    ])
+            "university_name": university.name if university else None,
+            "program_name": program.name if program else None,
+            "documents_count": doc_counts.get(u.id, 0),
+            "ai_requests_count": ai_counts.get(u.id, 0),
+            "subscription_plan": plan,
+            "subscription_active": is_sub_active,
+        })
+
+    return jsonify(result)
 
 
 @app.route("/admin/users/<int:user_id>", methods=["PATCH"])
@@ -6809,6 +7720,406 @@ def admin_update_organisation(organisation_id):
     db.session.commit()
 
     return jsonify(_serialize_organisation(org))
+
+
+# ---------- Opportunities (organisation-side CRUD) ----------
+
+from datetime import timezone
+
+OPPORTUNITY_TITLE_MAX = 200
+OPPORTUNITY_DESCRIPTION_MAX = 5000
+OPPORTUNITY_LOCATION_MAX = 200
+OPPORTUNITY_APPLICATION_URL_MAX = 500
+OPPORTUNITY_INSTRUCTIONS_MAX = 3000
+OPPORTUNITY_EDITABLE_STATUSES = ("draft", "rejected")
+
+
+def _get_org_membership(organisation_id, user_id):
+    return OrganisationMember.query.filter_by(
+        organisation_id=organisation_id, user_id=user_id
+    ).first()
+
+
+def _parse_iso_datetime(value):
+    """
+    Parses an ISO-8601 string into a naive UTC datetime (matching the
+    naive datetime.utcnow() convention used throughout this file).
+    Returns None if value is missing/invalid rather than raising -
+    callers turn that into a 400.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    v = value.strip()
+    if v.endswith("Z"):
+        v = v[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(v)
+    except ValueError:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _serialize_opportunity(opp):
+    return {
+        "id": opp.id,
+        "organisation_id": opp.organisation_id,
+        "created_by": opp.created_by,
+        "title": opp.title,
+        "description": opp.description,
+        "opportunity_type": opp.opportunity_type,
+        "location": opp.location,
+        "is_remote": opp.is_remote,
+        "application_url": opp.application_url,
+        "application_instructions": opp.application_instructions,
+        "application_deadline": opp.application_deadline.isoformat() if opp.application_deadline else None,
+        "expiry_date": opp.expiry_date.isoformat() if opp.expiry_date else None,
+        "status": opp.status,
+        "rejection_reason": opp.rejection_reason,
+        "submitted_at": opp.submitted_at.isoformat() if opp.submitted_at else None,
+        "reviewed_at": opp.reviewed_at.isoformat() if opp.reviewed_at else None,
+        "published_at": opp.published_at.isoformat() if opp.published_at else None,
+        "view_count": opp.view_count,
+        "created_at": opp.created_at.isoformat() if opp.created_at else None,
+        "updated_at": opp.updated_at.isoformat() if opp.updated_at else None,
+    }
+
+
+def _validate_opportunity_fields(data, partial=False):
+    """
+    Shared validation for create + update. Returns (fields, error_response).
+    Does NOT validate the deadline/expiry cross-field ordering - callers
+    do that themselves once they know the row's effective final values
+    (needed because PATCH may only change one of the two dates).
+    """
+    fields = {}
+
+    if not partial or "title" in data:
+        title = (data.get("title") or "").strip()
+        if not title or len(title) > OPPORTUNITY_TITLE_MAX:
+            return None, (jsonify({
+                "error": f"title is required and must be {OPPORTUNITY_TITLE_MAX} characters or fewer"
+            }), 400)
+        fields["title"] = title
+
+    if not partial or "description" in data:
+        description = (data.get("description") or "").strip()
+        if not description or len(description) > OPPORTUNITY_DESCRIPTION_MAX:
+            return None, (jsonify({
+                "error": f"description is required and must be {OPPORTUNITY_DESCRIPTION_MAX} characters or fewer"
+            }), 400)
+        fields["description"] = description
+
+    if not partial or "opportunity_type" in data:
+        opportunity_type = (data.get("opportunity_type") or "").strip().lower()
+        if opportunity_type not in OPPORTUNITY_TYPES:
+            return None, (jsonify({
+                "error": "opportunity_type must be one of: " + ", ".join(OPPORTUNITY_TYPES)
+            }), 400)
+        fields["opportunity_type"] = opportunity_type
+
+    if "location" in data:
+        location = data.get("location")
+        if location is not None:
+            if not isinstance(location, str):
+                return None, (jsonify({"error": "location must be a string"}), 400)
+            location = location.strip() or None
+            if location and len(location) > OPPORTUNITY_LOCATION_MAX:
+                return None, (jsonify({
+                    "error": f"location must be {OPPORTUNITY_LOCATION_MAX} characters or fewer"
+                }), 400)
+        fields["location"] = location
+
+    if "is_remote" in data:
+        is_remote = data.get("is_remote")
+        if not isinstance(is_remote, bool):
+            return None, (jsonify({"error": "is_remote must be true or false"}), 400)
+        fields["is_remote"] = is_remote
+
+    if "application_url" in data:
+        application_url = data.get("application_url")
+        if application_url is not None:
+            if not isinstance(application_url, str):
+                return None, (jsonify({"error": "application_url must be a string"}), 400)
+            application_url = application_url.strip() or None
+            if application_url and len(application_url) > OPPORTUNITY_APPLICATION_URL_MAX:
+                return None, (jsonify({
+                    "error": f"application_url must be {OPPORTUNITY_APPLICATION_URL_MAX} characters or fewer"
+                }), 400)
+        fields["application_url"] = application_url
+
+    if "application_instructions" in data:
+        instructions = data.get("application_instructions")
+        if instructions is not None:
+            if not isinstance(instructions, str):
+                return None, (jsonify({"error": "application_instructions must be a string"}), 400)
+            instructions = instructions.strip() or None
+            if instructions and len(instructions) > OPPORTUNITY_INSTRUCTIONS_MAX:
+                return None, (jsonify({
+                    "error": f"application_instructions must be {OPPORTUNITY_INSTRUCTIONS_MAX} characters or fewer"
+                }), 400)
+        fields["application_instructions"] = instructions
+
+    if not partial or "application_deadline" in data:
+        deadline = _parse_iso_datetime(data.get("application_deadline"))
+        if not deadline:
+            return None, (jsonify({
+                "error": "application_deadline is required and must be a valid ISO datetime"
+            }), 400)
+        fields["application_deadline"] = deadline
+
+    if not partial or "expiry_date" in data:
+        expiry = _parse_iso_datetime(data.get("expiry_date"))
+        if not expiry:
+            return None, (jsonify({
+                "error": "expiry_date is required and must be a valid ISO datetime"
+            }), 400)
+        fields["expiry_date"] = expiry
+
+    return fields, None
+
+
+@app.route("/organisations/<int:organisation_id>/opportunities", methods=["POST"])
+@require_csrf
+def create_opportunity(organisation_id):
+    """
+    Creates a new Opportunity in status='draft'. Allowed even if the
+    organisation isn't verified yet - verification is only required to
+    submit for review (see submit_opportunity below), not to draft one.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    org = db.session.get(Organisation, organisation_id)
+    if not org:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    fields, error = _validate_opportunity_fields(data, partial=False)
+    if error:
+        return error
+
+    if fields["expiry_date"] <= fields["application_deadline"]:
+        return jsonify({"error": "expiry_date must be after application_deadline"}), 400
+    if fields["application_deadline"] <= datetime.utcnow():
+        return jsonify({"error": "application_deadline must be in the future"}), 400
+
+    opp = Opportunity(
+        organisation_id=organisation_id, created_by=user_id, status="draft", **fields
+    )
+    db.session.add(opp)
+    db.session.commit()
+
+    return jsonify(_serialize_opportunity(opp)), 201
+
+
+@app.route("/organisations/<int:organisation_id>/opportunities")
+def list_org_opportunities(organisation_id):
+    """Lists this org's own opportunities, any status. ?status= filters
+    to one status (management view - not the public browse endpoint)."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    org = db.session.get(Organisation, organisation_id)
+    if not org:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    query = Opportunity.query.filter_by(organisation_id=organisation_id)
+
+    status_filter = request.args.get("status")
+    if status_filter:
+        if status_filter not in OPPORTUNITY_STATUSES:
+            return jsonify({
+                "error": "status must be one of: " + ", ".join(OPPORTUNITY_STATUSES)
+            }), 400
+        query = query.filter_by(status=status_filter)
+
+    opportunities = query.order_by(Opportunity.created_at.desc()).all()
+    return jsonify({"opportunities": [_serialize_opportunity(o) for o in opportunities]})
+
+
+@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>")
+def get_org_opportunity(organisation_id, opportunity_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    opp = db.session.get(Opportunity, opportunity_id)
+    if not opp or opp.organisation_id != organisation_id:
+        return jsonify({"error": "Opportunity not found"}), 404
+
+    return jsonify(_serialize_opportunity(opp))
+
+
+@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>", methods=["PATCH"])
+@require_csrf
+def update_opportunity(organisation_id, opportunity_id):
+    """
+    Edits an opportunity. Only allowed while status is 'draft' or
+    'rejected' - once it's in the review/published pipeline, the org
+    can't silently change it out from under an approval; they'd need to
+    withdraw and recreate, or (for rejected ones) fix it up here and
+    resubmit via /submit.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    opp = db.session.get(Opportunity, opportunity_id)
+    if not opp or opp.organisation_id != organisation_id:
+        return jsonify({"error": "Opportunity not found"}), 404
+
+    if opp.status not in OPPORTUNITY_EDITABLE_STATUSES:
+        return jsonify({
+            "error": f"Cannot edit an opportunity with status '{opp.status}' - "
+                     f"only draft or rejected opportunities can be edited"
+        }), 400
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    fields, error = _validate_opportunity_fields(data, partial=True)
+    if error:
+        return error
+
+    effective_deadline = fields.get("application_deadline", opp.application_deadline)
+    effective_expiry = fields.get("expiry_date", opp.expiry_date)
+    if effective_expiry <= effective_deadline:
+        return jsonify({"error": "expiry_date must be after application_deadline"}), 400
+
+    for key, value in fields.items():
+        setattr(opp, key, value)
+    db.session.commit()
+
+    return jsonify(_serialize_opportunity(opp))
+
+
+@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>/submit", methods=["POST"])
+@require_csrf
+def submit_opportunity(organisation_id, opportunity_id):
+    """
+    Moves draft/rejected -> pending_review. Requires the organisation to
+    be verified AND active (an unverified or deactivated org's postings
+    never enter the admin review queue), and requires the opportunity's
+    own dates to not already be in the past.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    org = db.session.get(Organisation, organisation_id)
+    if not org:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    if org.verification_status != "verified" or not org.is_active:
+        return jsonify({
+            "error": "Organisation must be verified and active before submitting opportunities for review"
+        }), 400
+
+    opp = db.session.get(Opportunity, opportunity_id)
+    if not opp or opp.organisation_id != organisation_id:
+        return jsonify({"error": "Opportunity not found"}), 404
+
+    if opp.status not in OPPORTUNITY_EDITABLE_STATUSES:
+        return jsonify({
+            "error": f"Cannot submit an opportunity with status '{opp.status}'"
+        }), 400
+
+    now = datetime.utcnow()
+    if opp.application_deadline <= now or opp.expiry_date <= now:
+        return jsonify({
+            "error": "Cannot submit - application_deadline or expiry_date has already passed. "
+                     "Update the dates first."
+        }), 400
+
+    opp.status = "pending_review"
+    opp.submitted_at = now
+    opp.rejection_reason = None
+    db.session.commit()
+
+    return jsonify(_serialize_opportunity(opp))
+
+
+@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>/archive", methods=["POST"])
+@require_csrf
+def archive_opportunity(organisation_id, opportunity_id):
+    """Org self-service archive - lets them retire a published or
+    already-expired posting without waiting on an admin."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    opp = db.session.get(Opportunity, opportunity_id)
+    if not opp or opp.organisation_id != organisation_id:
+        return jsonify({"error": "Opportunity not found"}), 404
+
+    if opp.status not in ("published", "expired"):
+        return jsonify({
+            "error": f"Cannot archive an opportunity with status '{opp.status}'"
+        }), 400
+
+    opp.status = "archived"
+    db.session.commit()
+
+    return jsonify(_serialize_opportunity(opp))
+
+
+@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>", methods=["DELETE"])
+@require_csrf
+def withdraw_opportunity(organisation_id, opportunity_id):
+    """Org withdraws its own opportunity at any point in its lifecycle
+    (except if already removed). Soft-delete via status='removed', same
+    pattern as Document.is_removed elsewhere in this file."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    opp = db.session.get(Opportunity, opportunity_id)
+    if not opp or opp.organisation_id != organisation_id:
+        return jsonify({"error": "Opportunity not found"}), 404
+
+    if opp.status == "removed":
+        return jsonify({"message": "Already removed"}), 200
+
+    opp.status = "removed"
+    db.session.commit()
+
+    return jsonify({"message": "Opportunity withdrawn"})
 
 
 if __name__ == "__main__":
