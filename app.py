@@ -6205,6 +6205,164 @@ def ambassador_request_payout():
     return jsonify({"id": payout.id, "amount": payout.amount, "status": payout.status}), 201
 
 
+# ---------- Kasapay B2C Payouts (Chunk 9) ----------
+# Local mobile-money disbursements for ambassador commissions. Auth
+# mirrors the Pesapal pattern (cached token, refreshed on expiry) but
+# Kasapay passes its token via an x-access-token header rather than
+# Authorization: Bearer, and payouts are asynchronous - initiate only
+# returns an acknowledgement, the real result lands later via callback
+# or a manual status poll. Docs: developer.kasapay.com/docs/payouts
+
+KASAPAY_SANDBOX_BASE = "https://sandbox.api.gateway.kasapay.com"
+KASAPAY_PRODUCTION_BASE = "https://api.gateway.kasapay.com"
+
+_kasapay_token_cache = {"token": None, "expires_at": None}
+
+
+def kasapay_base_url():
+    env = os.environ.get("KASAPAY_ENV", "sandbox").strip().lower()
+    return KASAPAY_PRODUCTION_BASE if env == "production" else KASAPAY_SANDBOX_BASE
+
+
+def get_kasapay_token():
+    """Cached access token - Kasapay tokens last up to 1 hour."""
+    cached = _kasapay_token_cache["token"]
+    expires_at = _kasapay_token_cache["expires_at"]
+    if cached and expires_at and datetime.utcnow() < expires_at - timedelta(seconds=30):
+        return cached
+
+    response = requests.post(
+        f"{kasapay_base_url()}/v1/auth",
+        json={
+            "consumer_key": os.environ.get("KASAPAY_CONSUMER_KEY"),
+            "consumer_secret": os.environ.get("KASAPAY_CONSUMER_SECRET"),
+        },
+        headers={"Content-Type": "application/json"},
+        timeout=15,
+    )
+    response.raise_for_status()
+    data = response.json()
+    token = data.get("access_token")
+    if not token:
+        raise RuntimeError(f"Kasapay auth failed: {data.get('message') or data}")
+
+    expires_in = data.get("expiresIn") or 3600
+    _kasapay_token_cache["token"] = token
+    _kasapay_token_cache["expires_at"] = datetime.utcnow() + timedelta(seconds=expires_in)
+    return token
+
+
+def kasapay_request(method, path, **kwargs):
+    token = get_kasapay_token()
+    headers = kwargs.pop("headers", {})
+    headers.setdefault("Content-Type", "application/json")
+    headers["x-access-token"] = token
+    response = requests.request(
+        method, f"{kasapay_base_url()}{path}", headers=headers, timeout=20, **kwargs
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def initiate_kasapay_payout(payout):
+    """
+    Submits a local mobile-money payout to Kasapay for one approved
+    AmbassadorPayout. Returns (payout_reference, ack_response) - the ack
+    only confirms Kasapay ACCEPTED the request for processing, not that
+    money has landed. The real outcome arrives later via the callback
+    route, or can be checked with sync_kasapay_payout_status().
+    """
+    service_code = os.environ.get("KASAPAY_SERVICE_CODE")
+    if not service_code:
+        raise RuntimeError("KASAPAY_SERVICE_CODE is not configured")
+
+    payout_reference = f"PZA-amb-{payout.id}-{secrets.token_hex(4)}"
+    recipient_name = f"{payout.recipient_first_name} {payout.recipient_last_name}"
+
+    payload = {
+        "payout_reference": payout_reference,
+        "service_code": service_code,
+        "recipient_first_name": payout.recipient_first_name,
+        "recipient_last_name": payout.recipient_last_name,
+        "destination_type": "MOBILE",
+        "destination_name": "MPESA_KEN",
+        "recipient_phone_number": payout.payout_destination,
+        "recipient_account_number": payout.payout_destination,
+        "recipient_account_name": recipient_name,
+        "source_currency": "KES",
+        "destination_currency": "KES",
+        "exchange_rate": "1",
+        "sender_amount": str(payout.amount),
+        "sender_country_code": "KEN",
+        "recipient_amount": str(payout.amount),
+        "payment_description": "Prepza ambassador commission payout",
+        "callback_url": f"{BASE_URL}/payment/kasapay/callback",
+    }
+    ack = kasapay_request("POST", "/v1/payouts/initiate", json=payload)
+    return payout_reference, ack
+
+
+def _apply_kasapay_payout_result(payout, result_payload):
+    """
+    Shared by the callback route and the manual status-poll route -
+    both receive the same {"data": {"payment_status": ..., ...}} shape
+    (Kasapay's callback payload and Status API response are identical).
+    No-ops if the payout is already resolved to 'paid', so a retried
+    webhook or a repeated manual poll can never double-apply a result.
+    """
+    if payout.status == "paid":
+        return payout
+
+    data = result_payload.get("data") or {}
+    payment_status = data.get("payment_status")
+
+    if payment_status == 700:
+        payout.status = "paid"
+        payout.paid_at = datetime.utcnow()
+    elif payment_status in (701, 702, 705):
+        # failed / reversed / refunded - release the bundled referrals
+        # so the ambassador's commissions become requestable again.
+        payout.status = "rejected"
+        payout.rejection_reason = data.get("result_description") or "Payout failed at Kasapay"
+        Referral.query.filter_by(payout_id=payout.id).update({"payout_id": None})
+    # else: 703 pending / 704 jammed / 706-708 in progress - leave the
+    # payout as 'approved' and check again later (retry or manual sync).
+
+    db.session.commit()
+    return payout
+
+
+def sync_kasapay_payout_status(payout):
+    """Polls Kasapay's Status API directly - their docs explicitly warn
+    not to rely on webhooks alone for the final result."""
+    if not payout.kasapay_reference or payout.status == "paid":
+        return payout
+    data = kasapay_request("GET", f"/v1/payouts/{payout.kasapay_reference}/status")
+    return _apply_kasapay_payout_result(payout, data)
+
+
+@app.route("/payment/kasapay/callback", methods=["POST"])
+def kasapay_payout_callback():
+    """
+    Server-to-server webhook Kasapay calls once a payout's final result
+    is ready. Always acknowledges with 200 - even for an unrecognised
+    reference - so Kasapay doesn't keep retrying; unmatched references
+    are logged instead of raising.
+    """
+    payload = request.get_json(silent=True) or {}
+    payout_reference = payload.get("payout_reference")
+    if not payout_reference:
+        return jsonify({"status": "ignored", "reason": "missing payout_reference"}), 200
+
+    payout = AmbassadorPayout.query.filter_by(kasapay_reference=payout_reference).first()
+    if not payout:
+        print(f"WARNING: Kasapay callback for unknown payout_reference {payout_reference}")
+        return jsonify({"status": "ignored", "reason": "unknown reference"}), 200
+
+    _apply_kasapay_payout_result(payout, payload)
+    return jsonify({"status": "ok"}), 200
+
+
 # ---------- Admin: ambassador management (Chunk 9) ----------
 
 @app.route("/admin/ambassadors")
@@ -6433,12 +6591,18 @@ def admin_list_ambassador_payouts():
 @require_admin
 def admin_approve_ambassador_payout(payout_id):
     """
-    Greenlights a payout request - this is the fraud checkpoint, NOT
-    the money-movement step. Flips the request to 'approved' so it's
-    ready to be sent; the actual Kasapay disbursement call is wired in
-    a follow-up patch and will be what moves this to 'paid'. Same
-    two-phase separation as admin_approve_library_item's review vs.
-    XP-award step.
+    Greenlights a payout request AND fires the actual Kasapay
+    disbursement in the same action - approving IS sending, which is
+    the fraud checkpoint you get instead of a separate "send" button.
+    If Kasapay's acknowledgement isn't a success code, nothing is
+    marked approved and the payout stays 'pending', so the admin can
+    fix whatever's wrong (float balance, recipient details) and retry
+    the same click.
+
+    A successful acknowledgement here only means Kasapay ACCEPTED the
+    request for processing - not that money has landed. The real
+    outcome arrives later via /payment/kasapay/callback, or can be
+    checked manually via /admin/payouts/<id>/sync-status.
     """
     acting_admin_id = session.get("user_id")
 
@@ -6448,12 +6612,26 @@ def admin_approve_ambassador_payout(payout_id):
     if payout.status != "pending":
         return jsonify({"error": f"Payout is not pending (status: {payout.status})"}), 400
 
+    try:
+        payout_reference, ack = initiate_kasapay_payout(payout)
+    except Exception as e:
+        return jsonify({"error": f"Kasapay payout request failed: {e}"}), 502
+
+    if ack.get("response_code") != 720:
+        return jsonify({
+            "error": ack.get("response_description") or "Kasapay rejected the payout request",
+            "kasapay_error_code": ack.get("error_code"),
+        }), 502
+
     payout.status = "approved"
+    payout.kasapay_reference = payout_reference
     payout.reviewed_by = acting_admin_id
     payout.reviewed_at = datetime.utcnow()
     db.session.commit()
 
-    return jsonify({"id": payout.id, "status": payout.status})
+    return jsonify({
+        "id": payout.id, "status": payout.status, "kasapay_reference": payout.kasapay_reference,
+    })
 
 
 @app.route("/admin/payouts/<int:payout_id>/reject", methods=["POST"])
@@ -6489,6 +6667,35 @@ def admin_reject_ambassador_payout(payout_id):
     db.session.commit()
 
     return jsonify({"id": payout.id, "status": payout.status})
+
+
+@app.route("/admin/payouts/<int:payout_id>/sync-status", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_sync_ambassador_payout_status(payout_id):
+    """
+    Manually re-checks a payout's status directly against Kasapay's
+    Status API - their own docs warn not to rely on webhooks alone for
+    the final result. Safe to call any time after a payout has a
+    kasapay_reference (i.e. after it's been approved/sent).
+    """
+    payout = db.session.get(AmbassadorPayout, payout_id)
+    if not payout:
+        return jsonify({"error": "Payout not found"}), 404
+    if not payout.kasapay_reference:
+        return jsonify({"error": "This payout has not been sent to Kasapay yet"}), 400
+
+    try:
+        sync_kasapay_payout_status(payout)
+    except Exception as e:
+        return jsonify({"error": f"Kasapay status check failed: {e}"}), 502
+
+    return jsonify({
+        "id": payout.id,
+        "status": payout.status,
+        "rejection_reason": payout.rejection_reason,
+        "paid_at": payout.paid_at.isoformat() if payout.paid_at else None,
+    })
 
 
 # ---------- Chat routes (Chunk 6) ----------
