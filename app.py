@@ -964,6 +964,12 @@ class AmbassadorPayout(db.Model):
     # pending -> approved -> paid ; pending -> rejected (bundled referrals released)
     payout_destination = db.Column(db.String(20), nullable=False)
     # phone number for Kasapay mobile money disbursement
+    recipient_first_name = db.Column(db.String(100), nullable=False)
+    recipient_last_name = db.Column(db.String(100), nullable=False)
+    # Kasapay's payout payload requires a real first/last name, not just
+    # a phone number - collected explicitly at request time rather than
+    # split from User.display_name, since that field is an optional
+    # nickname and unreliable for an actual money transfer.
     kasapay_reference = db.Column(db.String(100), nullable=True)
     requested_at = db.Column(db.DateTime, default=datetime.utcnow)
     reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
@@ -6147,6 +6153,13 @@ def ambassador_request_payout():
     if not AMBASSADOR_PAYOUT_DESTINATION_REGEX.match(payout_destination):
         return jsonify({"error": "payout_destination must be a valid phone number"}), 400
 
+    recipient_first_name = (data.get("recipient_first_name") or "").strip()
+    recipient_last_name = (data.get("recipient_last_name") or "").strip()
+    if not recipient_first_name or len(recipient_first_name) > 100:
+        return jsonify({"error": "recipient_first_name is required and must be 100 characters or fewer"}), 400
+    if not recipient_last_name or len(recipient_last_name) > 100:
+        return jsonify({"error": "recipient_last_name is required and must be 100 characters or fewer"}), 400
+
     # An existing pending/approved request already in flight - don't let
     # a student stack multiple requests before the last one is resolved.
     in_flight = AmbassadorPayout.query.filter(
@@ -6177,6 +6190,8 @@ def ambassador_request_payout():
         ambassador_id=ambassador.id,
         amount=total,
         payout_destination=payout_destination,
+        recipient_first_name=recipient_first_name,
+        recipient_last_name=recipient_last_name,
         status="pending",
     )
     db.session.add(payout)
