@@ -3085,6 +3085,57 @@ def get_podcast_audio(document_id):
         "duration_seconds": envelope.get("duration_seconds"),
     })
 
+@app.route("/documents/<int:document_id>/mindmap", methods=["POST"])
+@limiter.limit(
+    "20 per hour",
+    key_func=lambda: f"mindmap:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def mindmap_document(document_id):
+    """
+    Generates (or returns the cached) AI mind map for a student's
+    document. Same shape as flashcards_document()/quiz_document()/
+    summarize_document() above - ai_service enforces the spend cap /
+    rate limit / cache-reuse logic, this route just translates its
+    exceptions to HTTP responses.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no content to generate a mind map from"}), 400
+
+    content = db.session.get(DocumentContent, document.document_content_id)
+    if not content or content.status != "ready":
+        return jsonify({"error": "Document is still processing - try again shortly"}), 400
+
+    try:
+        result = ai_service.generate_document_mindmap(
+            document_content_id=content.id,
+            triggering_user_id=user_id,
+        )
+    except ai_service.AIBudgetExceededError as e:
+        return jsonify({"error": str(e)}), 503
+    except ai_service.AIRateLimitExceededError as e:
+        return jsonify({"error": str(e)}), 429
+    except ai_service.AIProviderError as e:
+        return jsonify({"error": str(e)}), 502
+
+    record_document_studied(user_id, content.id)
+    db.session.commit()
+
+    return jsonify({
+        "material_id": result["material_id"],
+        "reused": result["reused"],
+        "mindmap": result["payload"],
+    }), 200
+
+
 
 
 
