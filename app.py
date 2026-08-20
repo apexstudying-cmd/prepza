@@ -8146,7 +8146,10 @@ def admin_get_settings():
         "ai_daily_limit_free": daily_limit("ai_daily_limit_free", 5),
         "ai_daily_limit_plus": daily_limit("ai_daily_limit_plus", 15),
         "ai_daily_limit_premium": daily_limit("ai_daily_limit_premium", None),
-        "ai_monthly_budget_usd": money("ai_monthly_budget_usd", "20.00"),
+        "ai_daily_tutor_limit_free": daily_limit("ai_daily_tutor_limit_free", 5),
+        "ai_daily_tutor_limit_plus": daily_limit("ai_daily_tutor_limit_plus", 20),
+        "ai_daily_tutor_limit_premium": daily_limit("ai_daily_tutor_limit_premium", 50),
+        "ai_monthly_budget_usd": money("ai_monthly_budget_usd", "300.00"),
     })
 
 
@@ -8191,7 +8194,10 @@ def admin_update_settings():
                 db.session.add(setting)
             setting.value = str(value)
 
-    for tier_key in ("ai_daily_limit_free", "ai_daily_limit_plus", "ai_daily_limit_premium"):
+    for tier_key in (
+        "ai_daily_limit_free", "ai_daily_limit_plus", "ai_daily_limit_premium",
+        "ai_daily_tutor_limit_free", "ai_daily_tutor_limit_plus", "ai_daily_tutor_limit_premium",
+    ):
         if tier_key in data:
             value = data[tier_key]
             if value is None:

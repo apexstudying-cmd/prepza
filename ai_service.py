@@ -612,10 +612,97 @@ def check_daily_limit(user_id, plan_tier="free"):
 
 
 # ============================================================
+# 6b. RATE LIMITS (per-user daily TUTOR messages) - separate pool
+# ============================================================
+# Deliberately NOT shared with DAILY_FRESH_GENERATION_LIMITS above - a
+# single tutoring session is many back-and-forth messages, and sharing
+# the document-generation pool would let one conversation exhaust a
+# free student's entire day. Same SystemSetting-backed override
+# pattern as get_daily_limit_for_tier(), just keyed on
+# ai_daily_tutor_limit_* instead of ai_daily_limit_*.
+
+DAILY_FRESH_TUTOR_LIMITS = {
+    "free": 5,
+    "plus": 20,
+    "premium": 50,
+    # premium is a soft abuse-guard here, not a real cost ceiling - see
+    # the ai_monthly_budget_usd global circuit breaker below for that.
+}
+
+_DAILY_TUTOR_LIMIT_SETTING_KEYS = {
+    "free": "ai_daily_tutor_limit_free",
+    "plus": "ai_daily_tutor_limit_plus",
+    "premium": "ai_daily_tutor_limit_premium",
+}
+
+
+def get_daily_tutor_limit_for_tier(plan_tier):
+    """
+    Reads the daily tutor-message cap for a plan tier from
+    SystemSetting (admin-editable via /admin/settings), falling back
+    to DAILY_FRESH_TUTOR_LIMITS if unset or unparseable. Mirrors
+    get_daily_limit_for_tier() exactly, just against the tutor-specific
+    keys/defaults.
+    """
+    from app import SystemSetting
+
+    default = DAILY_FRESH_TUTOR_LIMITS.get(plan_tier, DAILY_FRESH_TUTOR_LIMITS["free"])
+    setting_key = _DAILY_TUTOR_LIMIT_SETTING_KEYS.get(plan_tier)
+    if not setting_key:
+        return default
+
+    setting = SystemSetting.query.filter_by(key=setting_key).first()
+    if not setting or setting.value is None or setting.value == "":
+        return default
+
+    if setting.value.strip().lower() == "unlimited":
+        return None
+
+    try:
+        return int(setting.value)
+    except ValueError:
+        return default
+
+
+def get_daily_fresh_tutor_count(user_id):
+    """
+    Counts this user's tutor messages in the last 24h. Filters on
+    request_type == "tutor_message" specifically (not != "reuse" like
+    get_daily_fresh_generation_count()) since tutor messages are their
+    own separate pool entirely, not a "fresh vs reused" distinction.
+    """
+    from app import db, AiUsageLog
+
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+    return (
+        db.session.query(AiUsageLog)
+        .filter(
+            AiUsageLog.user_id == user_id,
+            AiUsageLog.request_type == "tutor_message",
+            AiUsageLog.created_at >= cutoff,
+        )
+        .count()
+    )
+
+
+def check_daily_tutor_limit(user_id, plan_tier="free"):
+    """
+    Returns (allowed: bool, used: int, limit: int | None). Same shape
+    as check_daily_limit() above, against the tutor-specific pool.
+    """
+    limit = get_daily_tutor_limit_for_tier(plan_tier)
+    if limit is None:
+        return True, 0, None
+
+    used = get_daily_fresh_tutor_count(user_id)
+    return used < limit, used, limit
+
+
+# ============================================================
 # 7. GLOBAL SPEND CIRCUIT BREAKER (monthly)
 # ============================================================
 
-DEFAULT_MONTHLY_AI_BUDGET_USD = Decimal("20.00")
+DEFAULT_MONTHLY_AI_BUDGET_USD = Decimal("300.00")
 _AI_BUDGET_SETTING_KEY = "ai_monthly_budget_usd"
 
 
