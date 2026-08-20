@@ -26,10 +26,8 @@ html, body {
 }
 
 #root {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  height: 100dvh;
+  overflow: hidden;
   background: linear-gradient(135deg, #0B1437 0%, #1a2a6e 50%, #0B1437 100%);
 }
 

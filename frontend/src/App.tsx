@@ -16,10 +16,11 @@ class ApiError extends Error {
 }
 
 async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+  const { headers: extraHeaders, ...restOptions } = options
   const res = await fetch(path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options,
+    ...restOptions,
+    headers: { 'Content-Type': 'application/json', ...(extraHeaders || {}) },
   })
   let body: any = null
   try { body = await res.json() } catch { /* no JSON body */ }
