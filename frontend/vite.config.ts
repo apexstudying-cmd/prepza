@@ -5,6 +5,15 @@ import path from 'node:path'
 
 import siteConfiguration from './.figma/make/site.json'
 
+// Chunk 6 dev proxy target - see the comment on server.proxy below.
+function proxyTarget() {
+  return {
+    target: process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:5000',
+    changeOrigin: true,
+    secure: false,
+  }
+}
+
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
@@ -34,15 +43,52 @@ export default defineConfig(({ mode }) => {
       port: parseInt(process.env.PORT || '8443'),
       strictPort: true,
       watch: { ignored: ['**/.figma/**'] },
-      // Dev-only: proxy known Flask routes straight to the local backend so
-      // fetch('/signup') etc. work with relative paths, same-origin, no CORS
-      // config needed. Once this app is served BY Flask in production these
-      // paths are already correct as-is - nothing to change at deploy time.
+      // Dev-only proxy to the local Flask backend. Needed because Vite and
+      // Flask run on different ports/origins in dev, and the backend's
+      // session cookie is SameSite=Lax with no CORS configured - without
+      // this, fetch() calls in src/lib/api.ts would 404 against Vite
+      // itself instead of reaching Flask, and even if they didn't, the
+      // session cookie wouldn't be sent cross-origin. In production the
+      // built frontend is served from Flask's static/ folder (same
+      // origin), so this proxy only matters for `npm run dev`.
+      //
+      // Set VITE_API_PROXY_TARGET in your .env if Flask isn't running on
+      // the default http://127.0.0.1:5000 (e.g. python app.py's default).
       proxy: {
-        '^/(signup|login|logout|me|delete-account|profile|payment-history|verify-email|resend-verification|forgot-password|reset-password|universities|documents|library|admin|units|forum|health)($|/)': {
-          target: 'http://127.0.0.1:5000',
-          changeOrigin: true,
-        },
+        '/chats': proxyTarget(),
+        '/users': proxyTarget(),
+        '/documents': proxyTarget(),
+        '/units': proxyTarget(),
+        '/universities': proxyTarget(),
+        '/content': proxyTarget(),
+        '/content-reports': proxyTarget(),
+        '/forum': proxyTarget(),
+        '/library': proxyTarget(),
+        '/admin': proxyTarget(),
+        '/auth': proxyTarget(),
+        '/login': proxyTarget(),
+        '/logout': proxyTarget(),
+        '/signup': proxyTarget(),
+        '/me': proxyTarget(),
+        '/profile': proxyTarget(),
+        '/forgot-password': proxyTarget(),
+        '/reset-password': proxyTarget(),
+        '/resend-verification': proxyTarget(),
+        '/verify-email': proxyTarget(),
+        '/delete-account': proxyTarget(),
+        '/payment': proxyTarget(),
+        '/payment-history': proxyTarget(),
+        '/subscription': proxyTarget(),
+        '/achievements': proxyTarget(),
+        '/streak': proxyTarget(),
+        '/xp': proxyTarget(),
+        '/gamification': proxyTarget(),
+        '/groups': proxyTarget(),
+        '/organisations': proxyTarget(),
+        '/notifications': proxyTarget(),
+        '/ambassador': proxyTarget(),
+        '/warnings': proxyTarget(),
+        '/health': proxyTarget(),
       },
     },
     preview: {

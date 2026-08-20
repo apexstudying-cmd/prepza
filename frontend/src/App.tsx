@@ -878,7 +878,22 @@ function SkeletonAdminDashboard() {
 
 // ─── SPLASH ───────────────────────────────────────────────────────────────────
 function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  useEffect(() => { const t = setTimeout(() => setScreen('login'), 2200); return () => clearTimeout(t) }, [])
+  // Restores an existing backend session (cookie lasts 7 days) instead of
+  // always dropping the user back to the login screen on every app open.
+  // Keeps the branded 2.2s splash beat either way.
+  useEffect(() => {
+    let cancelled = false
+    const t = setTimeout(async () => {
+      try {
+        const me = await api<{ university_id: number | null }>('/me')
+        if (cancelled) return
+        setScreen(me.university_id ? 'home' : 'complete-profile')
+      } catch {
+        if (!cancelled) setScreen('login')
+      }
+    }, 2200)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [])
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(160deg, ${N.navy} 0%, ${N.navy2} 60%, ${N.navy3} 100%)` }}>
       <div style={{ position: 'absolute', top: '18%', width: 220, height: 220, background: 'rgba(201,168,76,0.06)', borderRadius: '50%', filter: 'blur(50px)' }} />
@@ -5679,6 +5694,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('splash')
   const [adminMode, setAdminMode] = useState(false)
   const [oauthError, setOauthError] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
 
   // Handles the round-trip back from /auth/google/callback, which appends
   // ?complete_profile=1 (new Google account, needs university/course/year/
@@ -5716,6 +5732,14 @@ export default function App() {
       url.searchParams.delete('auth_error')
       window.history.replaceState({}, '', url.toString())
     }
+
+    // Admin Platform is only ever shown to a confirmed admin session -
+    // fails silently (stays false) for logged-out visitors or regular
+    // students, on top of every /admin/* route already being server-side
+    // gated via @require_admin.
+    api<{ is_admin: boolean }>('/me')
+      .then(me => setIsAdmin(!!me.is_admin))
+      .catch(() => setIsAdmin(false))
   }, [])
 
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
@@ -5786,34 +5810,20 @@ export default function App() {
   const isDark = ['splash','login','processing'].includes(screen)
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '24px 16px', background: 'linear-gradient(135deg,#060d26 0%,#0B1437 45%,#0f1e4a 100%)' }}>
-      <div style={{ position: 'fixed', top: '15%', left: '28%', width: 380, height: 380, background: 'rgba(201,168,76,0.05)', borderRadius: '50%', filter: 'blur(80px)', pointerEvents: 'none' }} />
-      <div style={{ width: 390, background: isDark ? N.navy : N.bg, borderRadius: 54, overflow: 'hidden', boxShadow: '0 40px 120px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', height: 844, position: 'relative' }}>
-        {/* Dynamic island */}
-        <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', width: 120, height: 34, background: '#000', borderRadius: 20, zIndex: 100 }} />
-        {/* Status bar */}
-        <div style={{ background: isDark ? N.navy : N.navy, flexShrink: 0, paddingTop: 6 }}>
-          <StatusBar dark />
-        </div>
-        {/* Content */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          {renderScreen()}
-        </div>
-        {/* Bottom nav */}
-        {!noNav.includes(screen) && <BottomNav active={screen} setScreen={setScreen} />}
-        {/* Home indicator */}
-        <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 8, paddingTop: 4, background: darkHomeIndicator.includes(screen) ? N.navy : '#fff', flexShrink: 0 }}>
-          <div style={{ width: 134, height: 5, background: darkHomeIndicator.includes(screen) ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)', borderRadius: 99 }} />
-        </div>
+    <div style={{ width: '100%', height: '100dvh', background: isDark ? N.navy : N.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Content */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {renderScreen()}
       </div>
-      <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-        <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, fontFamily: 'Plus Jakarta Sans', letterSpacing: '0.5px', userSelect: 'none' }}>
-          PREPZA · Kenyatta University Launch · Mobile Prototype
-        </div>
-        <button onClick={() => setAdminMode(true)} style={{ color: 'rgba(255,255,255,0.18)', fontSize: 10, fontFamily: 'Plus Jakarta Sans', background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 99, padding: '3px 12px', cursor: 'pointer', letterSpacing: '0.5px' }}>
+      {/* Bottom nav */}
+      {!noNav.includes(screen) && <BottomNav active={screen} setScreen={setScreen} />}
+      {/* Real admins only - hidden for everyone else, on top of every
+          /admin/* route already being server-side gated via @require_admin. */}
+      {isAdmin && (
+        <button onClick={() => setAdminMode(true)} style={{ position: 'fixed', bottom: 10, right: 10, color: 'rgba(255,255,255,0.18)', fontSize: 10, fontFamily: 'Plus Jakarta Sans', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 99, padding: '3px 12px', cursor: 'pointer', letterSpacing: '0.5px', zIndex: 200 }}>
           ⚙ Admin Platform
         </button>
-      </div>
+      )}
     </div>
   )
 }

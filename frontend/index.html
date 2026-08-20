@@ -5,12 +5,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title><!-- figma:title --></title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#16233E" />
+    <link rel="icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
     <!-- figma:head-end -->
   </head>
   <body>
     <!-- figma:body-start -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script defer src="/sw-register.js"></script>
     <!-- figma:body-end -->
   </body>
 </html>
