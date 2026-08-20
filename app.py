@@ -314,6 +314,106 @@ class AiJob(db.Model):
     # the batch directly in the Anthropic Console if a job seems stuck.
 
 
+# ---------- Ada Phase 1 (tutor chat + learning foundation) ----------
+
+class TutorConversation(db.Model):
+    """
+    One persistent conversation per (student, document) pair - not a
+    global tutor thread, not session-only/ephemeral. Every other
+    feature in Prepza persists (quiz attempts, flashcard sessions, view
+    progress) and grounding each conversation in one specific document
+    is what makes tutoring useful vs. generic chat - locked decision,
+    see the tutor chat design handoff.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "document_content_id", name="uq_tutor_conv_user_doc"),
+    )
+
+
+class TutorMessage(db.Model):
+    """
+    Deliberately lean - no per-message token/cost tracking on this row
+    itself; usage stays centralized in AiUsageLog like every other AI
+    feature (request_type="tutor_message").
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("tutor_conversation.id", ondelete="CASCADE"), nullable=False)
+    role = db.Column(db.String(10), nullable=False)  # "user" | "assistant"
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class StudentLearningProfile(db.Model):
+    """
+    One row per user, capturing inferred learning preferences. Every
+    preference field starts NULL and is only filled in gradually from
+    observed behavior - nothing here is set at signup or assumed on
+    day one, per the Ada design doc's "do not assume immediately"
+    principle. No inference logic lands with this patch - just the
+    shape to write into once it does.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), unique=True, nullable=False)
+    preferred_explanation_style = db.Column(db.String(30), nullable=True)
+    # direct | socratic | analogy | worked_example
+    prefers_examples = db.Column(db.Boolean, nullable=True)
+    prefers_theory_vs_practice = db.Column(db.String(20), nullable=True)
+    # theory | practice | balanced
+    preferred_difficulty = db.Column(db.String(20), nullable=True)
+    # easier | standard | harder
+    typical_session_length_minutes = db.Column(db.Integer, nullable=True)
+    learning_pace = db.Column(db.String(20), nullable=True)
+    # slow | moderate | fast
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class LearningConcept(db.Model):
+    """
+    A simple, ungoverned concept catalog - rows are upserted on first
+    mention via generate_tutor_reply()'s trailing [[CONCEPT: ...]]
+    marker (see the concept-detection design decision), no admin
+    curation for MVP. unit_id is optional and best-effort: personal
+    Documents aren't unit-scoped in the current schema (only
+    ContentItem is), so this stays NULL whenever that link can't be
+    inferred confidently.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), unique=True, nullable=False)
+    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class LearningEvent(db.Model):
+    """
+    One row per tutor turn where a concept was detected - the raw
+    signal a later mastery-scoring pass (Ada Phase 2, not built here)
+    will aggregate over. Deliberately NOT computing a mastery number in
+    this patch, per the Ada doc's phasing. evidence_snippet is a short
+    excerpt, not the full message, to keep this table lean rather than
+    duplicating tutor_message.content. document_content_id is
+    denormalized from the parent conversation so mastery-by-document
+    queries won't need to join through tutor_message -> 
+    tutor_conversation every time.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    concept_id = db.Column(db.Integer, db.ForeignKey("learning_concept.id"), nullable=False)
+    tutor_message_id = db.Column(db.Integer, db.ForeignKey("tutor_message.id"), nullable=True)
+    # nullable - a future non-tutor-chat learning signal (e.g. a quiz
+    # misconception) could populate this table too without a schema
+    # change, per the Ada doc's generalized learning-event system.
+    document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=True)
+    evidence_snippet = db.Column(db.String(500), nullable=True)
+    misconception = db.Column(db.String(300), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class LibraryPublication(db.Model):
     """
     A student's document submitted for publication to the public Prepza
