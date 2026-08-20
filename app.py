@@ -1791,6 +1791,7 @@ def health():
     from sqlalchemy import text
     try:
         db.session.execute(text("SELECT 1"))
+        _sweep_expired_opportunities_safe()
         return jsonify({"status": "ok"}), 200
     except Exception:
         return jsonify({"status": "error"}), 503
@@ -9949,6 +9950,65 @@ def list_saved_opportunities():
         ))
 
     return jsonify({"saved": result})
+
+
+
+# ---------- Opportunity auto-expiry (Step 7) ----------
+
+def sweep_expired_opportunities():
+    """
+    Flips any Opportunity still marked 'published' whose expiry_date has
+    passed into 'expired'. Never trusts a frontend clock for this - per
+    the MVP spec, expiry is always computed server-side. Bulk UPDATE (no
+    per-row SELECT/commit loop) so this stays cheap even when called on
+    every health-check tick. Returns the number of rows updated.
+
+    Deliberately scoped to status='published' only - opportunities still
+    stuck in pending_review/approved past their own expiry_date never
+    went live, so 'expired' is the wrong terminal state for them; those
+    are left for an admin to handle manually via the existing
+    reject/remove routes rather than silently auto-expired here.
+    """
+    now = datetime.utcnow()
+    updated = Opportunity.query.filter(
+        Opportunity.status == "published",
+        Opportunity.expiry_date <= now,
+    ).update({"status": "expired"}, synchronize_session=False)
+    db.session.commit()
+    return updated
+
+
+def _sweep_expired_opportunities_safe():
+    """
+    Wraps sweep_expired_opportunities() for use inside /health - a sweep
+    failure must NEVER turn /health into a false-negative for the
+    GitHub Actions keep-alive ping, whose only job is preventing
+    Render's free tier from spinning down and Supabase's free tier from
+    auto-pausing. Swallows and logs, never raises or affects the
+    response.
+    """
+    try:
+        count = sweep_expired_opportunities()
+        if count:
+            print(f"INFO: swept {count} expired opportunity(ies) to status='expired'")
+    except Exception as e:
+        db.session.rollback()
+        print(f"WARNING: expired-opportunity sweep failed during health check: {e}")
+
+
+@app.route("/admin/opportunities/sweep-expired", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_sweep_expired_opportunities():
+    """
+    Manual trigger for the expiry sweep - lets an admin force it on
+    demand (e.g. right after changing an expiry_date, or for testing)
+    rather than waiting for the next /health ping, which piggybacks the
+    same sweep on roughly a 10-minute cadence via the existing GitHub
+    Actions keep-alive workflow.
+    """
+    count = sweep_expired_opportunities()
+    return jsonify({"swept_count": count})
 
 
 
