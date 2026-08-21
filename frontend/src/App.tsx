@@ -882,28 +882,57 @@ function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   // Restores an existing backend session (cookie lasts 7 days) instead of
   // always dropping the user back to the login screen on every app open.
   // Keeps the branded 2.2s splash beat either way.
+  //
+  // IMPORTANT: only a confirmed 401 from /me means "not logged in". Any
+  // other failure (network blip, the service worker's offline fallback,
+  // a timeout while the connection re-establishes - all common right
+  // after a PWA refresh on mobile) does NOT mean the session is gone;
+  // treating it as a logout was sending people back to the login screen
+  // while their cookie was still perfectly valid. So: retry once on a
+  // non-401 failure, and if it still fails, offer a manual retry instead
+  // of silently signing the user out.
+  const [state, setState] = useState<'checking' | 'retry'>('checking')
+
+  const checkSession = async (attempt = 0): Promise<void> => {
+    setState('checking')
+    try {
+      const me = await api<{ university_id: number | null }>('/me')
+      setScreen(me.university_id ? 'home' : 'complete-profile')
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setScreen('login')
+        return
+      }
+      if (attempt === 0) {
+        setTimeout(() => checkSession(1), 1200)
+      } else {
+        setState('retry')
+      }
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
-    const t = setTimeout(async () => {
-      try {
-        const me = await api<{ university_id: number | null }>('/me')
-        if (cancelled) return
-        setScreen(me.university_id ? 'home' : 'complete-profile')
-      } catch {
-        if (!cancelled) setScreen('login')
-      }
-    }, 2200)
+    const t = setTimeout(() => { if (!cancelled) checkSession(0) }, 2200)
     return () => { cancelled = true; clearTimeout(t) }
   }, [])
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(160deg, ${N.navy} 0%, ${N.navy2} 60%, ${N.navy3} 100%)` }}>
       <div style={{ position: 'absolute', top: '18%', width: 220, height: 220, background: 'rgba(201,168,76,0.06)', borderRadius: '50%', filter: 'blur(50px)' }} />
       <img src={logoImg} alt="Prepza" style={{ width: 100, height: 100, borderRadius: 28, marginBottom: 20, boxShadow: '0 12px 48px rgba(201,168,76,0.3)' }} />
       <div style={{ fontWeight: 800, fontSize: 30, color: '#fff', letterSpacing: '-1px' }}>PREPZA</div>
       <div style={{ color: N.gold, fontSize: 13, fontWeight: 600, letterSpacing: 2, marginTop: 4, textTransform: 'uppercase' }}>Study Smarter. Together.</div>
-      <div style={{ marginTop: 60, display: 'flex', gap: 6 }}>
-        {[0,1,2].map(i => <div key={i} style={{ width: i === 0 ? 20 : 6, height: 6, background: i === 0 ? N.gold : 'rgba(255,255,255,0.2)', borderRadius: 99, transition: 'all 0.3s' }} />)}
-      </div>
+      {state === 'checking' ? (
+        <div style={{ marginTop: 60, display: 'flex', gap: 6 }}>
+          {[0,1,2].map(i => <div key={i} style={{ width: i === 0 ? 20 : 6, height: 6, background: i === 0 ? N.gold : 'rgba(255,255,255,0.2)', borderRadius: 99, transition: 'all 0.3s' }} />)}
+        </div>
+      ) : (
+        <div style={{ marginTop: 48, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, textAlign: 'center', padding: '0 32px' }}>Couldn't reach Prepza. Check your connection.</div>
+          <button onClick={() => checkSession(0)} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 12, padding: '10px 22px', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Retry</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -2852,7 +2881,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>👋</div>
             <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 8 }}>Log out of Prepza?</div>
             <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 24 }}>You'll need to sign in again to access your study materials.</div>
-            <button onClick={() => setScreen('login')} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
+            <button onClick={() => { api('/logout', { method: 'POST' }).catch(() => {}).finally(() => setScreen('login')) }} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
             <button onClick={() => setShowLogout(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#374151' }}>Cancel</button>
           </div>
         </div>
@@ -3005,6 +3034,8 @@ function ResetPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
 function VerifyConfirmScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [status, setStatus] = useState<'confirming' | 'success' | 'error'>('confirming')
   const [error, setError] = useState('')
+  const [resendEmail, setResendEmail] = useState('')
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle')
 
   // GET /verify-email itself just serves this SPA shell (scanner-safe - a
   // link-preview bot fetching the URL doesn't run JS and so can't silently
@@ -3024,6 +3055,18 @@ function VerifyConfirmScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
         setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
       })
   }, [])
+
+  // Backend always returns the same generic message whether or not the
+  // account/verification state matches (same privacy pattern as
+  // /forgot-password) - nothing to branch on beyond request success.
+  const handleResend = async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(resendEmail)) return
+    setResendState('sending')
+    try {
+      await api('/resend-verification', { method: 'POST', body: JSON.stringify({ email: resendEmail }) })
+    } catch { /* generic response either way - nothing to surface */ }
+    setResendState('sent')
+  }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 32px', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)`, textAlign: 'center' }}>
@@ -3046,7 +3089,22 @@ function VerifyConfirmScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
             <span style={{ fontSize: 32 }}>⚠️</span>
           </div>
           <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', marginBottom: 10 }}>Verification failed</div>
-          <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 1.6, marginBottom: 32 }}>{error}</div>
+          <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>{error}</div>
+
+          {resendState === 'sent' ? (
+            <div style={{ color: '#4CC97B', fontSize: 13, marginBottom: 24 }}>If that email needs verifying, a new link is on its way.</div>
+          ) : (
+            <div style={{ width: '100%', maxWidth: 320, marginBottom: 24 }}>
+              <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, marginBottom: 10 }}>Get a new verification link:</div>
+              <input value={resendEmail} onChange={e => setResendEmail(e.target.value)} placeholder="your@email.com" style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10 }} />
+              <button
+                disabled={resendState === 'sending' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(resendEmail)}
+                onClick={handleResend}
+                style={{ width: '100%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 14, padding: '12px 0', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: resendState === 'sending' ? 0.6 : 1 }}
+              >{resendState === 'sending' ? 'Sending…' : 'Resend verification email'}</button>
+            </div>
+          )}
+
           <button onClick={() => setScreen('login')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 32px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Sign In</button>
         </>
       )}
