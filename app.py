@@ -3264,6 +3264,175 @@ def mindmap_document(document_id):
 
 
 
+# ---------- AI Tutor (Ada Phase 1) ----------
+
+TUTOR_MESSAGE_MAX = 3000
+
+
+def _serialize_tutor_message(message):
+    return {
+        "id": message.id,
+        "role": message.role,
+        "content": message.content,
+        "created_at": message.created_at.isoformat() if message.created_at else None,
+    }
+
+
+@app.route("/documents/<int:document_id>/tutor")
+def get_tutor_conversation(document_id):
+    """
+    Fetches (or reports empty) the persistent tutor conversation for
+    this student+document pair. Returns conversation_id: null and
+    messages: [] if no conversation has started yet - the first
+    POST to /documents/<id>/tutor/messages creates it. Doesn't gate on
+    document status - resuming/viewing history is harmless even if the
+    document is still processing, unlike actually sending a new message.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no content to tutor on"}), 400
+
+    conversation = TutorConversation.query.filter_by(
+        user_id=user_id, document_content_id=document.document_content_id
+    ).first()
+
+    if not conversation:
+        return jsonify({"conversation_id": None, "messages": []})
+
+    messages = (
+        TutorMessage.query.filter_by(conversation_id=conversation.id)
+        .order_by(TutorMessage.created_at.asc())
+        .all()
+    )
+
+    return jsonify({
+        "conversation_id": conversation.id,
+        "messages": [_serialize_tutor_message(m) for m in messages],
+    })
+
+
+@app.route("/documents/<int:document_id>/tutor/messages", methods=["POST"])
+@limiter.limit(
+    "60 per hour",
+    key_func=lambda: f"tutor-message:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def send_tutor_message(document_id):
+    """
+    Sends one message to Ada and returns her reply. Creates the
+    TutorConversation on first message if it doesn't exist yet (get-
+    or-create keyed on the same (user_id, document_content_id) pair
+    the model's own unique constraint enforces).
+
+    This route-level "60 per hour" throttle is deliberately SEPARATE
+    from ai_service.check_daily_tutor_limit()'s daily cap - this one
+    guards against rapid-fire spam within a short window, the daily
+    cap guards total cost/day. Both apply independently, same layering
+    other rate-limited AI routes in this file already use.
+
+    ai_service.generate_tutor_reply() enforces the spend cap / daily
+    rate limit / message persistence - this route just resolves the
+    conversation and translates exceptions to HTTP responses, same
+    shape as every other AI route in this file.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no content to tutor on"}), 400
+
+    content = db.session.get(DocumentContent, document.document_content_id)
+    if not content or content.status != "ready":
+        return jsonify({"error": "Document is still processing - try again shortly"}), 400
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    body = (data.get("body") or "").strip()
+    if not body or len(body) > TUTOR_MESSAGE_MAX:
+        return jsonify({"error": f"Message is required and must be {TUTOR_MESSAGE_MAX} characters or fewer"}), 400
+
+    conversation = TutorConversation.query.filter_by(
+        user_id=user_id, document_content_id=content.id
+    ).first()
+    if not conversation:
+        conversation = TutorConversation(user_id=user_id, document_content_id=content.id)
+        db.session.add(conversation)
+        db.session.commit()
+
+    try:
+        result = ai_service.generate_tutor_reply(
+            conversation_id=conversation.id,
+            user_message_text=body,
+            triggering_user_id=user_id,
+        )
+    except ai_service.AIBudgetExceededError as e:
+        return jsonify({"error": str(e)}), 503
+    except ai_service.AIRateLimitExceededError as e:
+        return jsonify({"error": str(e)}), 429
+    except ai_service.AIProviderError as e:
+        return jsonify({"error": str(e)}), 502
+
+    record_document_studied(user_id, content.id)
+    db.session.commit()
+
+    return jsonify({
+        "conversation_id": conversation.id,
+        "reply": {
+            "id": result["tutor_message_id"],
+            "role": "assistant",
+            "content": result["reply_text"],
+        },
+        "concept": result["concept"],
+    }), 201
+
+
+@app.route("/documents/<int:document_id>/tutor", methods=["DELETE"])
+@require_csrf
+def reset_tutor_conversation(document_id):
+    """
+    Hard-deletes the TutorConversation (cascades to TutorMessage via
+    the FK's ondelete="CASCADE") - "start fresh" is a real recurring
+    need for a study tool, unlike forum posts where soft-delete/audit
+    trail matters, so this is a real delete rather than an is_removed
+    flag.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    document = db.session.get(Document, document_id)
+    if not document or document.user_id != user_id or document.is_removed:
+        return jsonify({"error": "Document not found"}), 404
+
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no content"}), 400
+
+    conversation = TutorConversation.query.filter_by(
+        user_id=user_id, document_content_id=document.document_content_id
+    ).first()
+    if not conversation:
+        return jsonify({"message": "No conversation to reset"}), 200
+
+    db.session.delete(conversation)
+    db.session.commit()
+
+    return jsonify({"message": "Tutor conversation reset"})
+
+
 # ---------- Library (publishing) ----------
 
 LIBRARY_MATERIAL_TYPES = {"lecture_notes", "past_paper", "summary", "other"}
