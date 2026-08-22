@@ -24,6 +24,7 @@ tested without a request context.
 
 import os
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -1671,6 +1672,276 @@ def generate_document_podcast_script(document_content_id, triggering_user_id, pl
         "material_id": material.id,
         "reused": False,
         "model_used": ai_response.model_used,
+    }
+
+
+# ============================================================
+# HIGH-LEVEL ORCHESTRATION - Tutor Chat (Ada Phase 1)
+# ============================================================
+# One persistent TutorConversation per (student, document) - see the
+# tutor chat design handoff. This is Phase 1 only: direct tutoring +
+# best-effort concept-tagging for LearningEvent logging. No diagnostic
+# teaching, no mastery scoring, no past-paper retrieval yet - those are
+# later Ada phases, deliberately out of scope here.
+#
+# Unlike every other generate_document_*() function above, this talks
+# to provider._client.messages.create() directly instead of going
+# through AnthropicProvider.call() - .call() only supports a single
+# user message, not a growing multi-turn history. Mirrors how
+# _call_with_continuation() already bypasses .call() for its own
+# reasons; same "add a parallel low-level path, don't touch the
+# already-working .call() path" approach.
+#
+# Caching strategy: the document's extracted_text is identical on
+# every turn of a given conversation, so it lives in the SYSTEM prompt
+# (wrapped in cache_control, same ephemeral 5-minute pattern used
+# elsewhere) - the only part of a turn's input that's expensive AND
+# stable. The growing conversation history goes in the `messages` list
+# instead, uncached, capped at the last TUTOR_HISTORY_MESSAGE_LIMIT
+# messages so an unbounded conversation doesn't get expensive purely
+# from history length (the Anthropic API is stateless - full history
+# is resent every turn).
+#
+# Deliberately NOT using continuation-retry (_call_with_continuation)
+# here - a tutor reply truncated mid-sentence by a max_tokens cutoff is
+# a minor UX rough edge, not the JSON-corruption failure mode
+# continuation-retry exists to solve for summaries/quizzes/flashcards.
+# Revisit if this turns out to matter in practice.
+
+TUTOR_HISTORY_MESSAGE_LIMIT = 20
+
+# Matches a trailing "[[CONCEPT: <name>]]" marker line the tutor system
+# prompt instructs the model to always end its reply with. Tolerant of
+# a leading blank line and trailing whitespace; anchored to the END of
+# the (already-stripped) text so it only ever matches the final line,
+# never a concept mention elsewhere in the reply body.
+TUTOR_CONCEPT_MARKER_RE = re.compile(r"\n?\[\[CONCEPT:\s*(.+?)\s*\]\]\s*\Z", re.IGNORECASE)
+
+
+def _build_tutor_system_prompt(unit_context, document_text, page_count):
+    """
+    Builds the (cacheable) tutor system prompt: tone/behavior
+    instructions, the concept-marker protocol, and the full document
+    text. Kept as one string (not split into "instructions" + "doc")
+    since both go into the SAME cached system-prompt block regardless.
+    """
+    return (
+        "You are Ada, Prepza's AI tutor. You are working one-on-one with a "
+        f"student on {unit_context}, grounded in the document they uploaded "
+        f"({page_count or '?'} pages), reproduced in full below. Teach the "
+        "way a patient, intelligent, encouraging-but-direct personal tutor "
+        "would: check understanding before assuming it, explain clearly, "
+        "use examples where they genuinely help, and prioritize the "
+        "student actually learning the material over simply answering as "
+        "fast as possible. Ground every answer in the document text below "
+        "wherever it's relevant - if the student asks about something the "
+        "document doesn't cover, say so rather than inventing content. "
+        "Keep replies conversational and appropriately concise for a chat, "
+        "not an essay.\n\n"
+        "At the very end of EVERY reply, on its own final line, add a "
+        "machine-readable marker naming the single main academic concept "
+        "this turn was about, in this exact format:\n"
+        "[[CONCEPT: <2-5 word concept name, Title Case>]]\n"
+        "If the turn was small talk, logistics, or not about a specific "
+        "academic concept, write [[CONCEPT: none]] instead. Always include "
+        "exactly one such line, always last, always in this exact bracket "
+        "format - it is stripped out before the student ever sees your "
+        "reply, so it does not need to read naturally as part of the "
+        "conversation.\n\n"
+        f"DOCUMENT TEXT:\n{document_text}"
+    )
+
+
+def _fetch_tutor_history(conversation_id, limit=TUTOR_HISTORY_MESSAGE_LIMIT):
+    """
+    Returns up to the last `limit` TutorMessage rows for a conversation,
+    oldest first - ready to map directly into the API's `messages` list.
+    """
+    from app import TutorMessage
+
+    rows = (
+        TutorMessage.query.filter_by(conversation_id=conversation_id)
+        .order_by(TutorMessage.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    rows.reverse()
+    return rows
+
+
+def _parse_tutor_reply(raw_text):
+    """
+    Strips the trailing [[CONCEPT: ...]] marker (see
+    _build_tutor_system_prompt()) from a raw tutor reply. Returns
+    (visible_reply_text, concept_name_or_None).
+
+    Tolerant of a missing or malformed marker - concept detection is a
+    best-effort signal for LearningEvent logging, not something that
+    should ever block the reply itself from reaching the student. If
+    the marker is missing, the whole raw reply is shown as-is and no
+    concept is recorded for that turn.
+    """
+    stripped = raw_text.strip()
+    match = TUTOR_CONCEPT_MARKER_RE.search(stripped)
+    if not match:
+        return stripped, None
+
+    visible_text = stripped[:match.start()].strip()
+    if not visible_text:
+        # Marker somehow ate the whole reply - never show the student
+        # an empty message over a parsing edge case.
+        return stripped, None
+
+    concept_raw = match.group(1).strip()
+    if not concept_raw or concept_raw.lower() in ("none", "n/a"):
+        return visible_text, None
+
+    return visible_text, concept_raw[:200]
+
+
+def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id, plan_tier="free"):
+    """
+    Full pipeline for one tutor-chat turn:
+      1. Spend-cap check (blocks fresh generation platform-wide, same
+         circuit breaker every other AI feature shares)
+      2. Daily tutor-message rate-limit check - a SEPARATE pool from
+         the document-generation daily cap (see check_daily_tutor_limit())
+      3. Persist the student's message immediately, before the AI call
+         - it must survive even if generation below fails, same
+         "human content survives AI failure" posture as
+         _trigger_ai_reply() in the forum feature
+      4. Call Sonnet directly with a cacheable system prompt (the
+         document text) + the last TUTOR_HISTORY_MESSAGE_LIMIT messages
+      5. Strip the trailing concept marker, persist the assistant's
+         reply, log usage, and - if a real concept was named - upsert
+         LearningConcept + record a LearningEvent
+      6. Bump TutorConversation.updated_at
+
+    Returns {reply_text, concept, tutor_message_id, model_used}.
+    Raises AIBudgetExceededError / AIRateLimitExceededError /
+    AIProviderError - callers (the tutor routes) translate these to
+    HTTP responses the same way every other AI route already does.
+
+    Known simplification (Phase 1): no diagnostic pre-check, no
+    mastery scoring, no past-paper retrieval - this is direct tutoring
+    grounded in one document, plus raw learning-event logging for a
+    later phase to build on. Matches the "not handled yet" honesty
+    pattern used elsewhere in this codebase.
+    """
+    from app import (
+        db, TutorConversation, TutorMessage, DocumentContent,
+        LearningConcept, LearningEvent,
+    )
+
+    conversation = db.session.get(TutorConversation, conversation_id)
+    if not conversation:
+        raise ValueError(f"TutorConversation {conversation_id} not found")
+
+    content = db.session.get(DocumentContent, conversation.document_content_id)
+    if not content or not content.extracted_text:
+        raise AIProviderError(
+            "This document's text hasn't finished processing yet - try again shortly."
+        )
+
+    if is_spend_cap_reached():
+        raise AIBudgetExceededError(
+            "Prepza AI has reached its monthly budget - the tutor is paused for now, "
+            "but your existing conversation is still here."
+        )
+
+    allowed, used, limit = check_daily_tutor_limit(triggering_user_id, plan_tier=plan_tier)
+    if not allowed:
+        raise AIRateLimitExceededError(
+            f"You've sent {used}/{limit} tutor messages today - try again tomorrow."
+        )
+
+    # Persist the student's message now, before the AI call, so it
+    # survives even if generation below fails.
+    user_row = TutorMessage(conversation_id=conversation_id, role="user", content=user_message_text)
+    db.session.add(user_row)
+    db.session.commit()
+
+    history_rows = _fetch_tutor_history(conversation_id)
+    messages = [{"role": row.role, "content": row.content} for row in history_rows]
+
+    task_config = AI_TASKS["TUTORING"]
+    model = task_config["primary"]
+    max_tokens = task_config["max_tokens"]
+
+    system_prompt = _build_tutor_system_prompt(
+        unit_context="their coursework",
+        document_text=content.extracted_text,
+        page_count=content.page_count,
+    )
+    system = [{
+        "type": "text",
+        "text": system_prompt,
+        "cache_control": {"type": "ephemeral"},
+    }]
+
+    provider, provider_name = _get_provider()
+
+    start = time.monotonic()
+    try:
+        response = provider._client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=messages,
+        )
+    except Exception as e:  # noqa: BLE001 - genuinely want to catch any provider failure
+        raise AIProviderError(f"Tutor reply generation failed: {e}")
+    latency_ms = int((time.monotonic() - start) * 1000)  # noqa: F841 - kept for future observability wiring
+
+    raw_text = "".join(block.text for block in response.content if block.type == "text")
+    usage = response.usage
+    ai_usage = AIUsage(
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+        cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+    )
+    ai_usage.cost_usd = compute_cost_usd(
+        model, ai_usage.input_tokens, ai_usage.output_tokens,
+        ai_usage.cache_read_tokens, ai_usage.cache_creation_tokens,
+    )
+
+    reply_text, concept_name = _parse_tutor_reply(raw_text)
+
+    assistant_row = TutorMessage(conversation_id=conversation_id, role="assistant", content=reply_text)
+    db.session.add(assistant_row)
+    db.session.flush()  # assign assistant_row.id before the LearningEvent FK below references it
+
+    log_usage(
+        triggering_user_id,
+        request_type="tutor_message",
+        model=model,
+        provider=provider_name,
+        usage=ai_usage,
+    )
+
+    if concept_name:
+        concept = LearningConcept.query.filter_by(name=concept_name).first()
+        if not concept:
+            concept = LearningConcept(name=concept_name)
+            db.session.add(concept)
+            db.session.flush()  # assign concept.id before the LearningEvent FK below references it
+        db.session.add(LearningEvent(
+            user_id=triggering_user_id,
+            concept_id=concept.id,
+            tutor_message_id=assistant_row.id,
+            document_content_id=content.id,
+            evidence_snippet=user_message_text[:500],
+        ))
+
+    conversation.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return {
+        "reply_text": reply_text,
+        "concept": concept_name,
+        "tutor_message_id": assistant_row.id,
+        "model_used": model,
     }
 
 
