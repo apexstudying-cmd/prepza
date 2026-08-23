@@ -30,6 +30,62 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
   return body as T
 }
 
+// ─── Document upload helpers ───────────────────────────────────────────────
+const ALLOWED_UPLOAD_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png']
+const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024 // 50 MB - matches backend MAX_DOCUMENT_SIZE_BYTES
+
+function getFileExtension(filename: string): string | null {
+  const parts = filename.split('.')
+  if (parts.length < 2) return null
+  return parts[parts.length - 1].toLowerCase()
+}
+
+async function sha256Hex(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+type DocumentDetail = {
+  id: number; title: string; original_filename: string; status: string
+  file_type: string | null; file_size_bytes: number | null; page_count: number | null
+  error_message: string | null; view_url: string | null
+  materials: { type: string; status: string }[]; created_at: string | null
+}
+
+// Payload shape inside `summary`/`quiz`/`flashcards`/`mindmap` below is
+// whatever ai_service.py produces - not pinned down here, so every
+// consumer renders defensively (checks a few likely field names, falls
+// back to raw JSON) rather than assuming one exact shape.
+type CompletionResponse = { xp_awarded: number; newly_unlocked_achievements: string[] }
+
+function AchievementToast({ codes }: { codes: string[] }) {
+  if (codes.length === 0) return null
+  return (
+    <div style={{ background: 'rgba(201,168,76,0.15)', border: `1px solid ${N.gold}55`, borderRadius: 12, padding: '10px 14px', margin: '0 0 14px', fontSize: 12, fontWeight: 700, color: N.gold }}>
+      🏆 Achievement unlocked: {codes.join(', ')}
+    </div>
+  )
+}
+
+function GenerationError({ error }: { error: string }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center' }}>
+      <div style={{ fontSize: 40, marginBottom: 14 }}>⚠️</div>
+      <div style={{ color: '#6B7280', fontSize: 13, maxWidth: 280 }}>{error}</div>
+    </div>
+  )
+}
+
+function GenerationLoading({ label }: { label: string }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+      <div style={{ width: 40, height: 40, border: `3px solid rgba(201,168,76,0.2)`, borderTopColor: N.gold, borderRadius: '50%', animation: 'spin-slow 0.8s linear infinite', marginBottom: 16 }} />
+      <div style={{ color: '#6B7280', fontSize: 13 }}>{label}</div>
+    </div>
+  )
+}
+
 // ─── Icon helpers ─────────────────────────────────────────────────────────────
 const Ic = {
   home:     (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
@@ -1006,9 +1062,36 @@ function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) =>
 }
 
 // ─── HOME ─────────────────────────────────────────────────────────────────────
-function HomeScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+type HomeDocument = { id: number; title: string; status: string; file_type: string | null; page_count: number | null; created_at: string | null }
+type GamificationSummary = { xp_total: number; level: number; level_title: string; current_streak: number; longest_streak: number; documents_count: number; followers_count: number }
+
+function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
   const [notifCount] = useState(3)
   const loading = useLoading(1200)
+
+  const [displayName, setDisplayName] = useState<string | null>(null)
+  const [documents, setDocuments] = useState<HomeDocument[]>([])
+  const [docsLoading, setDocsLoading] = useState(true)
+  const [summary, setSummary] = useState<GamificationSummary | null>(null)
+
+  useEffect(() => {
+    api<{ display_name: string | null }>('/me')
+      .then(me => setDisplayName(me.display_name))
+      .catch(() => {})
+    api<{ documents: HomeDocument[] }>('/documents')
+      .then(res => setDocuments(res.documents))
+      .catch(() => {})
+      .finally(() => setDocsLoading(false))
+    api<GamificationSummary>('/gamification/summary')
+      .then(setSummary)
+      .catch(() => {})
+  }, [])
+
+  const greetingName = displayName || 'there'
+  const activeDocs = documents.filter(d => !docsLoading)
+  const featuredDoc = activeDocs[0]
+  const restDocs = activeDocs.slice(1)
+
   if (loading) return <SkeletonHome />
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
@@ -1019,7 +1102,7 @@ function HomeScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <img src={logoImg} alt="Prepza" style={{ width: 36, height: 36, borderRadius: 10 }} />
             <div>
               <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: 500 }}>Good morning,</div>
-              <div style={{ color: '#fff', fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px' }}>Arnold 👋</div>
+              <div style={{ color: '#fff', fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px' }}>{greetingName} 👋</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -1036,10 +1119,12 @@ function HomeScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.22)', borderRadius: 14, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 20 }}>🔥</span>
           <div style={{ flex: 1 }}>
-            <div style={{ color: N.gold, fontWeight: 800, fontSize: 13 }}>7-Day Streak — Keep it up!</div>
+            <div style={{ color: N.gold, fontWeight: 800, fontSize: 13 }}>
+              {summary ? `${summary.current_streak}-Day Streak${summary.current_streak > 0 ? ' — Keep it up!' : ''}` : 'Loading streak...'}
+            </div>
             <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>Study 30 mins today to extend it</div>
           </div>
-          <Pill text="+25 XP" color={N.gold} />
+          {summary && <Pill text={`${summary.xp_total.toLocaleString()} XP`} color={N.gold} />}
         </div>
       </div>
 
@@ -1050,34 +1135,40 @@ function HomeScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Continue Studying</span>
             <span onClick={() => setScreen('library')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>My Library →</span>
           </div>
-          {/* Featured doc */}
-          <div onClick={() => setScreen('document-study')} style={{ background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 18, padding: 18, cursor: 'pointer', position: 'relative', overflow: 'hidden', marginBottom: 10 }}>
-            <div style={{ position: 'absolute', right: -20, top: -20, width: 120, height: 120, background: 'rgba(201,168,76,0.07)', borderRadius: '50%' }} />
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
-              <div style={{ width: 48, height: 48, background: 'rgba(201,168,76,0.15)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: N.gold, fontWeight: 800 }}>∑</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>ACT 101 – Actuarial Mathematics</div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Ch.3 – Interest Theory & Annuities</div>
+          {docsLoading ? (
+            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '12px 0' }}>Loading your documents...</div>
+          ) : !featuredDoc ? (
+            <div onClick={() => setScreen('upload')} style={{ background: '#fff', borderRadius: 14, padding: '18px 16px', textAlign: 'center', cursor: 'pointer', border: '1px dashed rgba(0,0,0,0.15)' }}>
+              <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>No documents yet — upload one to get started 📤</div>
+            </div>
+          ) : (
+            <>
+              {/* Featured doc */}
+              <div onClick={() => { setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} style={{ background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 18, padding: 18, cursor: 'pointer', position: 'relative', overflow: 'hidden', marginBottom: 10 }}>
+                <div style={{ position: 'absolute', right: -20, top: -20, width: 120, height: 120, background: 'rgba(201,168,76,0.07)', borderRadius: '50%' }} />
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
+                  <div style={{ width: 48, height: 48, background: 'rgba(201,168,76,0.15)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: N.gold, fontWeight: 800 }}>📄</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }} className="line-clamp-1">{featuredDoc.title}</div>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2, textTransform: 'capitalize' }}>{featuredDoc.status}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={e => { e.stopPropagation(); setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 11, border: 'none', borderRadius: 10, padding: '6px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Continue →</button>
+                </div>
               </div>
-            </div>
-            <Bar pct={52} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>52% complete</span>
-              <button onClick={e => { e.stopPropagation(); setScreen('document-study') }} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 11, border: 'none', borderRadius: 10, padding: '6px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Continue →</button>
-            </div>
-          </div>
-          {/* Other docs */}
-          {studyDocs.slice(1).map(d => (
-            <div key={d.id} onClick={() => setScreen('document-study')} style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
-              <div style={{ width: 40, height: 40, background: d.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: d.color, fontWeight: 800 }}>{d.icon}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{d.subject}</div>
-                <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 6 }} className="line-clamp-1">{d.chapter}</div>
-                <Bar pct={d.progress} color={d.color} />
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: d.color, flexShrink: 0 }}>{d.progress}%</div>
-            </div>
-          ))}
+              {/* Other docs */}
+              {restDocs.map(d => (
+                <div key={d.id} onClick={() => { setActiveDocumentId(d.id); setScreen('document-study') }} style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
+                  <div style={{ width: 40, height: 40, background: N.gold + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: N.gold, fontWeight: 800 }}>📄</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{d.title}</div>
+                    <div style={{ fontSize: 11, color: '#6B7280', textTransform: 'capitalize' }}>{d.status}</div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </section>
 
         {/* AI Study Tools */}
@@ -1558,9 +1649,89 @@ function EduUploadForm({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── UPLOAD ───────────────────────────────────────────────────────────────────
-function UploadScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadStage, setUploadStage] = useState('')
+  const [error, setError] = useState('')
+
+  const startUpload = async (file: File) => {
+    setError('')
+
+    const ext = getFileExtension(file.name)
+    if (!ext || !ALLOWED_UPLOAD_EXTENSIONS.includes(ext)) {
+      setError(`Unsupported file type. Allowed: ${ALLOWED_UPLOAD_EXTENSIONS.join(', ').toUpperCase()}`)
+      return
+    }
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      setError(`File exceeds the ${MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)} MB limit`)
+      return
+    }
+
+    setUploading(true)
+    try {
+      setUploadStage('Hashing file...')
+      const contentHash = await sha256Hex(file)
+
+      setUploadStage('Registering upload...')
+      const me = await api<{ csrf_token: string }>('/me')
+      const title = file.name.includes('.') ? file.name.slice(0, file.name.lastIndexOf('.')) : file.name
+
+      const created = await api<{
+        document_id: number; status: string; duplicate: boolean
+        upload_url?: string; storage_path?: string
+      }>('/documents', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': me.csrf_token },
+        body: JSON.stringify({
+          title,
+          original_filename: file.name,
+          file_size_bytes: file.size,
+          content_hash: contentHash,
+        }),
+      })
+
+      if (!created.duplicate && created.upload_url) {
+        setUploadStage('Uploading file...')
+        const putRes = await fetch(created.upload_url, { method: 'PUT', body: file })
+        if (!putRes.ok) throw new Error('Upload to storage failed - please try again')
+
+        setUploadStage('Confirming upload...')
+        try {
+          await api(`/documents/${created.document_id}/uploaded`, {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': me.csrf_token },
+          })
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 409) {
+            await new Promise(r => setTimeout(r, 1500))
+            await api(`/documents/${created.document_id}/uploaded`, {
+              method: 'POST',
+              headers: { 'X-CSRF-Token': me.csrf_token },
+            })
+          } else {
+            throw e
+          }
+        }
+      }
+
+      setActiveDocumentId(created.document_id)
+      setScreen('processing')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Upload failed - please check your connection and try again.')
+    } finally {
+      setUploading(false)
+      setUploadStage('')
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) startUpload(file)
+    e.target.value = ''
+  }
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
@@ -1568,60 +1739,87 @@ function UploadScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: -8 }}>Prepza AI processes your document instantly</div>
       </div>
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div onDragOver={e => { e.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)} onDrop={e => { e.preventDefault(); setDragging(false); setScreen('processing') }} onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${dragging ? N.gold : 'rgba(11,20,55,0.18)'}`, borderRadius: 20, padding: '40px 20px', textAlign: 'center', background: dragging ? 'rgba(201,168,76,0.04)' : '#fff', cursor: 'pointer', transition: 'all 0.2s' }}>
-          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.png" style={{ display: 'none' }} onChange={() => setScreen('processing')} />
-          <div style={{ fontSize: 48, marginBottom: 12 }}>📤</div>
-          <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 6 }}>Drop your file here</div>
-          <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>or tap to browse from your device</div>
-          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {['PDF','Word','PowerPoint','JPG','PNG','EPUB'].map(t => <span key={t} style={{ background: '#F3F4F6', color: '#374151', fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 20 }}>{t}</span>)}
-          </div>
+        {error && (
+          <div style={{ background: 'rgba(201,68,68,0.08)', border: '1px solid rgba(201,68,68,0.25)', borderRadius: 12, padding: '12px 14px', color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>
+        )}
+        <div
+          onDragOver={e => { e.preventDefault(); if (!uploading) setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={e => { e.preventDefault(); setDragging(false); const file = e.dataTransfer.files?.[0]; if (file && !uploading) startUpload(file) }}
+          onClick={() => !uploading && fileRef.current?.click()}
+          style={{ border: `2px dashed ${dragging ? N.gold : 'rgba(11,20,55,0.18)'}`, borderRadius: 20, padding: '40px 20px', textAlign: 'center', background: dragging ? 'rgba(201,168,76,0.04)' : '#fff', cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.7 : 1, transition: 'all 0.2s' }}
+        >
+          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleFileChange} disabled={uploading} />
+          <div style={{ fontSize: 48, marginBottom: 12 }}>{uploading ? '⏳' : '📤'}</div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 6 }}>{uploading ? (uploadStage || 'Uploading...') : 'Drop your file here'}</div>
+          {!uploading && <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>or tap to browse from your device</div>}
+          {!uploading && (
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {['PDF','Word','PowerPoint','JPG','PNG'].map(t => <span key={t} style={{ background: '#F3F4F6', color: '#374151', fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 20 }}>{t}</span>)}
+            </div>
+          )}
         </div>
-
-        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Or import from</div>
-        {[
-          { icon: '📷', label: 'Camera / Scan', sub: 'Photograph handwritten notes', color: N.gold },
-          { icon: '☁️', label: 'Google Drive', sub: 'Import directly from Drive', color: '#4C7BC9' },
-          { icon: '📱', label: 'Phone Storage', sub: 'Browse local files', color: '#4CC97B' },
-        ].map((s, i) => (
-          <button key={i} onClick={() => setScreen('processing')} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, padding: '14px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-            <div style={{ width: 42, height: 42, background: s.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{s.icon}</div>
-            <div style={{ flex: 1, textAlign: 'left' }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{s.label}</div>
-              <div style={{ fontSize: 11, color: '#6B7280' }}>{s.sub}</div>
-            </div>
-            <div style={{ color: '#9CA3AF' }}>{Ic.chevR()}</div>
-          </button>
-        ))}
-
-        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginTop: 4 }}>Recent Uploads</div>
-        {[
-          { name: 'ACT_101_Lecture_Notes_Week1-6.pdf', size: '4.1 MB', date: 'Today' },
-          { name: 'MAT_101_Calculus_PastPapers.pdf', size: '2.3 MB', date: 'Yesterday' },
-        ].map((f, i) => (
-          <div key={i} onClick={() => setScreen('document-study')} style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', borderRadius: 14, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer' }}>
-            <div style={{ width: 38, height: 38, background: 'rgba(201,68,68,0.1)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>📕</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 12, color: N.navy }} className="line-clamp-1">{f.name}</div>
-              <div style={{ fontSize: 11, color: '#9CA3AF' }}>{f.size} · {f.date}</div>
-            </div>
-            <Pill text="✓ Ready" color="#4CC97B" />
-          </div>
-        ))}
       </div>
     </div>
   )
 }
 
 // ─── PROCESSING ───────────────────────────────────────────────────────────────
-function ProcessingScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const [step, setStep] = useState(0)
+function ProcessingScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const [doc, setDoc] = useState<DocumentDetail | null>(null)
+  const [pollError, setPollError] = useState('')
+
   useEffect(() => {
-    let i = 0
-    const t = setInterval(() => { i++; setStep(i); if (i >= 4) clearInterval(t) }, 900)
-    return () => clearInterval(t)
-  }, [])
-  const steps = ['Uploading document…','Extracting content…','AI analysing structure…','Generating study materials…','Ready to study!']
+    if (activeDocumentId == null) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
+
+    const poll = async () => {
+      try {
+        const result = await api<DocumentDetail>(`/documents/${activeDocumentId}`)
+        if (cancelled) return
+        setDoc(result)
+        if (result.status === 'ready' || result.status === 'failed') return
+        timer = setTimeout(poll, 2500)
+      } catch (e) {
+        if (cancelled) return
+        setPollError(e instanceof ApiError ? e.message : 'Lost connection while checking status - retrying...')
+        timer = setTimeout(poll, 2500)
+      }
+    }
+    poll()
+
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [activeDocumentId])
+
+  const status = doc?.status
+  const stageLabel = status === 'uploading' ? 'Uploading document…'
+    : status === 'processing' ? 'Extracting content & analysing…'
+    : status === 'ready' ? 'Ready to study!'
+    : status === 'failed' ? 'Something went wrong'
+    : 'Getting started…'
+
+  if (activeDocumentId == null) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.navy, padding: 32, textAlign: 'center' }}>
+        <div style={{ color: '#fff', fontWeight: 800, fontSize: 18, marginBottom: 10 }}>No upload in progress</div>
+        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 28 }}>Head back to upload a document to see its processing status here.</div>
+        <button onClick={() => setScreen('upload')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '12px 28px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Go to Upload</button>
+      </div>
+    )
+  }
+
+  if (status === 'failed') {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.navy, padding: 32, textAlign: 'center' }}>
+        <div style={{ fontSize: 44, marginBottom: 16 }}>⚠️</div>
+        <div style={{ color: '#fff', fontWeight: 800, fontSize: 18, marginBottom: 10 }}>Processing failed</div>
+        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 28, maxWidth: 280 }}>{doc?.error_message || 'This document could not be processed. Please try uploading again.'}</div>
+        <button onClick={() => setScreen('upload')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '12px 28px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Try Again</button>
+      </div>
+    )
+  }
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.navy, padding: 32 }}>
       <div style={{ position: 'relative', width: 120, height: 120, marginBottom: 36 }}>
@@ -1631,20 +1829,11 @@ function ProcessingScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <img src={logoImg} alt="Prepza" style={{ width: 52, height: 52, borderRadius: 14 }} />
         </div>
       </div>
-      <div style={{ color: '#fff', fontWeight: 800, fontSize: 20, marginBottom: 6, textAlign: 'center' }}>Prepza AI is working…</div>
-      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, textAlign: 'center', marginBottom: 40 }}>ACT 101 Lecture Notes – Week 1-6.pdf</div>
-      <div style={{ width: '100%', maxWidth: 280, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {steps.map((s, i) => (
-          <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <div style={{ width: 24, height: 24, borderRadius: '50%', background: i <= step ? N.gold : 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.3s' }}>
-              {i <= step ? <div style={{ color: N.navy }}>{Ic.check('w-3 h-3')}</div> : <div style={{ width: 6, height: 6, background: 'rgba(255,255,255,0.25)', borderRadius: '50%' }} />}
-            </div>
-            <span style={{ fontSize: 13, color: i <= step ? '#fff' : 'rgba(255,255,255,0.35)', fontWeight: i <= step ? 600 : 400, transition: 'color 0.3s' }}>{s}</span>
-          </div>
-        ))}
-      </div>
-      {step >= 4 && (
-        <button onClick={() => setScreen('doc-ready')} style={{ marginTop: 44, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 44px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 4px 20px rgba(201,168,76,0.4)' }}>
+      <div style={{ color: '#fff', fontWeight: 800, fontSize: 20, marginBottom: 6, textAlign: 'center' }}>{stageLabel}</div>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, textAlign: 'center', marginBottom: 20 }}>{doc?.title || 'Your document'}</div>
+      {pollError && <div style={{ color: '#E8A54C', fontSize: 12, marginBottom: 20, textAlign: 'center' }}>{pollError}</div>}
+      {status === 'ready' && (
+        <button onClick={() => setScreen('doc-ready')} style={{ marginTop: 12, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 44px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 4px 20px rgba(201,168,76,0.4)' }}>
           View Document →
         </button>
       )}
@@ -1653,22 +1842,32 @@ function ProcessingScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── DOC READY ────────────────────────────────────────────────────────────────
-function DocReadyScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const [busyAction, setBusyAction] = useState<string | null>(null)
-  const trigger = (label: string, dest: Screen, isAI = false) => {
-    if (busyAction) return
-    if (isAI) { setBusyAction(label); setTimeout(() => { setBusyAction(null); setScreen(dest) }, 1500) }
-    else setScreen(dest)
-  }
-  const actions = [
-    { icon: '🤖', label: 'Study with AI', sub: 'Ask questions about this doc', dest: 'document-study' as Screen, ai: false },
-    { icon: '❓', label: 'Ask Questions', sub: 'AI answers from your notes', dest: 'ai-tutor' as Screen, ai: false },
-    { icon: '📝', label: 'Summarize', sub: '2-page condensed notes', dest: 'summary' as Screen, ai: true },
-    { icon: '🧠', label: 'Generate Quiz', sub: '15 MCQ questions', dest: 'quiz' as Screen, ai: true },
-    { icon: '🃏', label: 'Flashcards', sub: '35 cards auto-generated', dest: 'flashcards' as Screen, ai: true },
-    { icon: '🎙️', label: 'Create Podcast', sub: '9-min audio episode', dest: 'podcast-player' as Screen, ai: true },
-    { icon: '📚', label: 'Save to Library', sub: 'Access offline anytime', dest: 'library' as Screen, ai: false },
+function DocReadyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const [doc, setDoc] = useState<DocumentDetail | null>(null)
+  const [loadError, setLoadError] = useState('')
+
+  useEffect(() => {
+    if (activeDocumentId == null) return
+    api<DocumentDetail>(`/documents/${activeDocumentId}`)
+      .then(setDoc)
+      .catch(e => setLoadError(e instanceof ApiError ? e.message : 'Could not load document details.'))
+  }, [activeDocumentId])
+
+  const actions: { icon: string; label: string; sub: string; dest: Screen }[] = [
+    { icon: '🤖', label: 'Study with AI', sub: 'Ask questions about this doc', dest: 'document-study' },
+    { icon: '❓', label: 'Ask Questions', sub: 'AI answers from your notes', dest: 'ai-tutor' },
+    { icon: '📝', label: 'Summarize', sub: 'Condensed AI notes', dest: 'summary' },
+    { icon: '🧠', label: 'Generate Quiz', sub: 'AI-generated practice quiz', dest: 'quiz' },
+    { icon: '🃏', label: 'Flashcards', sub: 'AI-generated flashcard set', dest: 'flashcards' },
+    { icon: '🎙️', label: 'Create Podcast', sub: 'AI-generated audio episode', dest: 'podcast-player' },
+    { icon: '📚', label: 'Save to Library', sub: 'Access offline anytime', dest: 'library' },
   ]
+
+  const fileTypeLabel = doc?.file_type ? doc.file_type.toUpperCase() : null
+  const pageLabel = doc?.page_count != null ? `${doc.page_count} pages` : null
+  const sizeLabel = doc?.file_size_bytes != null ? `${(doc.file_size_bytes / (1024 * 1024)).toFixed(1)} MB` : null
+  const metaParts = [fileTypeLabel, pageLabel, sizeLabel].filter(Boolean)
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
@@ -1682,44 +1881,33 @@ function DocReadyScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
       </div>
       <div style={{ padding: 18 }}>
+        {loadError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 14 }}>{loadError}</div>}
         {/* Doc info */}
         <div style={{ background: '#fff', borderRadius: 16, padding: 16, marginBottom: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', display: 'flex', gap: 14, alignItems: 'center' }}>
           <div style={{ width: 52, height: 52, background: 'rgba(201,68,68,0.1)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>📕</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy }}>ACT 101 Lecture Notes – Week 1-6</div>
-            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>PDF · 38 pages · 4.1 MB</div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-              <Pill text="35 Flashcards" color="#4C7BC9" />
-              <Pill text="15 Quiz Questions" color="#4CC97B" />
-              <Pill text="9 min Podcast" color="#C94C4C" />
-            </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy }} className="line-clamp-1">{doc?.title || 'Loading…'}</div>
+            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{metaParts.length > 0 ? metaParts.join(' · ') : '—'}</div>
           </div>
         </div>
         <div style={{ fontWeight: 800, fontSize: 15, color: N.navy, marginBottom: 12 }}>What would you like to do?</div>
-        {actions.map((a, i) => {
-          const isBusy = busyAction === a.label
-          return (
-            <button key={i} onClick={() => trigger(a.label, a.dest, a.ai)} disabled={!!busyAction} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: `1px solid ${isBusy ? N.gold + '55' : 'rgba(0,0,0,0.05)'}`, borderRadius: 14, padding: '14px 16px', marginBottom: 8, cursor: busyAction ? 'wait' : 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.04)', opacity: busyAction && !isBusy ? 0.55 : 1, transition: 'opacity 0.2s, border-color 0.2s' }}>
-              <div style={{ width: 44, height: 44, background: isBusy ? `linear-gradient(135deg,${N.gold},${N.goldL})` : `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isBusy ? 0 : 20, flexShrink: 0, transition: 'background 0.2s' }}>
-                {isBusy
-                  ? <div style={{ width: 18, height: 18, border: `2.5px solid ${N.navy}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.65s linear infinite' }} />
-                  : a.icon}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: isBusy ? N.gold : N.navy }}>{isBusy ? 'Generating…' : a.label}</div>
-                <div style={{ fontSize: 11, color: '#6B7280' }}>{a.sub}</div>
-              </div>
-              {!isBusy && <div style={{ color: '#9CA3AF' }}>{Ic.chevR()}</div>}
-            </button>
-          )
-        })}
+        {actions.map((a, i) => (
+          <button key={i} onClick={() => setScreen(a.dest)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 14, padding: '14px 16px', marginBottom: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+            <div style={{ width: 44, height: 44, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{a.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{a.label}</div>
+              <div style={{ fontSize: 11, color: '#6B7280' }}>{a.sub}</div>
+            </div>
+            <div style={{ color: '#9CA3AF' }}>{Ic.chevR()}</div>
+          </button>
+        ))}
       </div>
     </div>
   )
 }
 
 // ─── DOCUMENT STUDY ───────────────────────────────────────────────────────────
-function DocumentStudyScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   const [tab, setTab] = useState<'doc'|'ai'|'tools'>('doc')
   const [askInput, setAskInput] = useState('')
   const [showMenu, setShowMenu] = useState(false)
@@ -1727,14 +1915,34 @@ function DocumentStudyScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
   const [showRename, setShowRename] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [showReport, setShowReport] = useState(false)
-  const [renameVal, setRenameVal] = useState('ACT 101 – Interest Theory')
+  const [renameVal, setRenameVal] = useState('')
   const [savedToLib, setSavedToLib] = useState(false)
   const loading = useLoading(700)
   const [messages, setMessages] = useState([
-    { role: 'ai', text: "I've read your ACT 101 notes. I can explain concepts, quiz you, create flashcards, or summarise any section. What would you like to do?\n\n📎 Using: ACT 101 – Interest Theory" },
+    { role: 'ai', text: "I've read your document. I can explain concepts, quiz you, create flashcards, or summarise any section. What would you like to do?" },
   ])
 
+  const [doc, setDoc] = useState<DocumentDetail | null>(null)
+  const [docLoadError, setDocLoadError] = useState('')
+
+  useEffect(() => {
+    if (activeDocumentId == null) return
+    api<DocumentDetail>(`/documents/${activeDocumentId}`)
+      .then(d => { setDoc(d); setRenameVal(d.title) })
+      .catch(e => setDocLoadError(e instanceof ApiError ? e.message : 'Could not load this document.'))
+  }, [activeDocumentId])
+
   if (loading) return <SkeletonDocument />
+
+  if (activeDocumentId == null) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: 32, textAlign: 'center' }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 8 }}>No document selected</div>
+        <div style={{ color: '#6B7280', fontSize: 13, marginBottom: 24 }}>Open a document from Home to study it here.</div>
+        <button onClick={() => setScreen('home')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '12px 28px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Go Home</button>
+      </div>
+    )
+  }
   const sendMsg = () => {
     if (!askInput.trim()) return
     const q = askInput; setAskInput('')
@@ -1757,8 +1965,8 @@ function DocumentStudyScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }} className="line-clamp-1">ACT 101 – Interest Theory</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>38 pages · Processed</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }} className="line-clamp-1">{doc?.title || 'Loading…'}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{doc?.page_count != null ? `${doc.page_count} pages · ` : ''}{doc?.status ? doc.status.charAt(0).toUpperCase() + doc.status.slice(1) : ''}</div>
           </div>
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowDots(v => !v)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
@@ -1787,36 +1995,26 @@ function DocumentStudyScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
         {tab === 'doc' && (
           <div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }} className="scrollbar-hide">
-              <button onClick={doExplain} style={{ flexShrink: 0, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, border: `1px solid ${N.gold}33`, color: N.gold, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Explain</button>
-              <button onClick={doSimplify} style={{ flexShrink: 0, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, border: `1px solid ${N.gold}33`, color: N.gold, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Simplify</button>
+              <button onClick={() => setScreen('summary')} style={{ flexShrink: 0, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, border: `1px solid ${N.gold}33`, color: N.gold, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Summarize</button>
               <button onClick={() => setScreen('quiz')} style={{ flexShrink: 0, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, border: `1px solid ${N.gold}33`, color: N.gold, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Quiz Me</button>
               <button onClick={() => setScreen('flashcards')} style={{ flexShrink: 0, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, border: `1px solid ${N.gold}33`, color: N.gold, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Flashcards</button>
+              <button onClick={() => setScreen('mind-map')} style={{ flexShrink: 0, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, border: `1px solid ${N.gold}33`, color: N.gold, fontSize: 11, fontWeight: 700, padding: '7px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Mind Map</button>
             </div>
-            <div style={{ background: '#fff', borderRadius: 16, padding: 18, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 4 }}>Chapter 3: Interest Theory</div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 16 }}>Section 3.1 – Simple and Compound Interest</div>
-              <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, margin: '0 0 14px' }}>
-                Interest theory forms the mathematical foundation of actuarial science. The <strong>accumulation function</strong> A(t) describes how a principal amount grows over time under a given interest rate structure.
-              </p>
-              <div onClick={() => setShowMenu(v => !v)} style={{ background: showMenu ? 'rgba(201,168,76,0.2)' : 'transparent', borderRadius: 6, cursor: 'pointer', padding: '2px 0', transition: 'background 0.2s', marginBottom: 14 }}>
-                <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, margin: 0 }}>
-                  Under <strong>compound interest</strong>, the accumulation function is A(t) = A(0)(1+i)ᵗ, where i is the effective annual interest rate. For a principal of KES 10,000 at 8% p.a. for 3 years, A(3) = 10,000 × (1.08)³ = KES 12,597.12. The key property is that interest earned in one period itself earns interest in subsequent periods.
-                </p>
+            {docLoadError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{docLoadError}</div>}
+            {doc?.view_url ? (
+              <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.06)', height: '60vh' }}>
+                {doc.file_type && ['jpg', 'jpeg', 'png'].includes(doc.file_type) ? (
+                  <img src={doc.view_url} alt={doc.title} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
+                ) : (
+                  <iframe src={doc.view_url} title={doc.title} style={{ width: '100%', height: '100%', border: 'none' }} />
+                )}
               </div>
-              {showMenu && (
-                <div style={{ background: N.navy, borderRadius: 12, padding: '8px 6px', display: 'flex', gap: 6, marginBottom: 14 }}>
-                  <button onClick={doExplain} style={{ flex: 1, background: `rgba(201,168,76,0.15)`, border: `1px solid ${N.gold}30`, color: N.gold, fontSize: 10, fontWeight: 700, padding: '7px 2px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Explain</button>
-                  <button onClick={doSimplify} style={{ flex: 1, background: `rgba(201,168,76,0.15)`, border: `1px solid ${N.gold}30`, color: N.gold, fontSize: 10, fontWeight: 700, padding: '7px 2px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Simplify</button>
-                  <button onClick={() => { setShowMenu(false); setScreen('quiz') }} style={{ flex: 1, background: `rgba(201,168,76,0.15)`, border: `1px solid ${N.gold}30`, color: N.gold, fontSize: 10, fontWeight: 700, padding: '7px 2px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Quiz Me</button>
-                  <button onClick={() => { setShowMenu(false); setScreen('flashcards') }} style={{ flex: 1, background: `rgba(201,168,76,0.15)`, border: `1px solid ${N.gold}30`, color: N.gold, fontSize: 10, fontWeight: 700, padding: '7px 2px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cards</button>
-                  <button onClick={() => setShowMenu(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', fontSize: 10, fontWeight: 700, padding: '7px 8px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>✕</button>
-                </div>
-              )}
-              <div style={{ background: `rgba(201,168,76,0.08)`, borderRadius: 12, padding: '12px 14px', border: `1px solid ${N.gold}25` }}>
-                <div style={{ fontSize: 11, color: N.gold, fontWeight: 700, marginBottom: 4 }}>✦ Tip: Highlight any text</div>
-                <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.6 }}>Tap any paragraph to get AI explanations, simplifications, or generate quiz questions from that specific text.</div>
+            ) : (
+              <div style={{ background: '#fff', borderRadius: 16, padding: 18, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', textAlign: 'center' }}>
+                <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 6 }}>{doc?.title || 'Loading document…'}</div>
+                <div style={{ fontSize: 12, color: '#9CA3AF' }}>{doc ? 'Preview not available for this file type - use the tools above to study it.' : 'Fetching your document…'}</div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -1990,18 +2188,91 @@ function AITutorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── FLASHCARDS ───────────────────────────────────────────────────────────────
-function FlashcardsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   const [idx, setIdx] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [known, setKnown] = useState<number[]>([])
-  const loading = useLoading(500)
-  if (loading) return <SkeletonFlashcards />
-  const card = flashcardData[idx]
-  const next = (k: boolean) => {
-    if (k) setKnown(n => [...n, idx])
-    setFlipped(false)
-    setTimeout(() => setIdx(i => (i + 1) % flashcardData.length), 150)
+
+  const [cards, setCards] = useState<{ q: string; a: string }[]>([])
+  const [materialId, setMaterialId] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
+  const [finished, setFinished] = useState(false)
+  const [completion, setCompletion] = useState<CompletionResponse | null>(null)
+
+  // Normalizes ai_service.py's flashcards payload defensively - tries a
+  // few likely field names for the front/back of each card.
+  const normalizeCards = (raw: any): { q: string; a: string }[] => {
+    const list = Array.isArray(raw) ? raw : Array.isArray(raw?.cards) ? raw.cards : Array.isArray(raw?.flashcards) ? raw.flashcards : []
+    return list.map((item: any) => ({
+      q: item.q || item.question || item.front || 'Question',
+      a: item.a || item.answer || item.back || 'Answer',
+    }))
   }
+
+  useEffect(() => {
+    if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
+    api<{ csrf_token: string }>('/me')
+      .then(me => {
+        setCsrfToken(me.csrf_token)
+        return api<{ material_id: number; reused: boolean; flashcards: any }>(`/documents/${activeDocumentId}/flashcards`, {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': me.csrf_token },
+        })
+      })
+      .then(res => { setMaterialId(res.material_id); setCards(normalizeCards(res.flashcards)) })
+      .catch(e => {
+        if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
+        else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
+        else setError(e instanceof ApiError ? e.message : 'Could not generate flashcards. Please try again.')
+      })
+      .finally(() => setLoading(false))
+  }, [activeDocumentId])
+
+  const complete = async (reviewedCount: number) => {
+    setFinished(true)
+    if (activeDocumentId == null || materialId == null) return
+    try {
+      const res = await api<CompletionResponse>(`/documents/${activeDocumentId}/flashcards/${materialId}/complete`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ cards_reviewed: reviewedCount }),
+      })
+      setCompletion(res)
+    } catch {
+      // Non-fatal - the review session itself already completed.
+    }
+  }
+
+  const card = cards[idx]
+  const next = (k: boolean) => {
+    const newKnown = k ? [...known, idx] : known
+    if (k) setKnown(newKnown)
+    setFlipped(false)
+    setTimeout(() => {
+      if (idx + 1 >= cards.length) complete(idx + 1)
+      else setIdx(i => i + 1)
+    }, 150)
+  }
+
+  if (loading) return <GenerationLoading label="Generating your flashcards…" />
+  if (error) return <GenerationError error={error} />
+  if (cards.length === 0) return <GenerationError error="No flashcards were returned." />
+
+  if (finished) return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: 32 }}>
+      <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
+      <div style={{ fontWeight: 800, fontSize: 24, color: N.navy, marginBottom: 6 }}>Review Complete!</div>
+      <div style={{ fontSize: 15, color: '#6B7280', marginBottom: 16 }}>{known.length}/{cards.length} marked as known</div>
+      {completion && completion.xp_awarded > 0 && (
+        <div style={{ fontSize: 13, color: N.gold, fontWeight: 700, marginBottom: 8 }}>+{completion.xp_awarded} XP</div>
+      )}
+      {completion && <AchievementToast codes={completion.newly_unlocked_achievements} />}
+      <button onClick={() => setScreen('document-study')} style={{ marginTop: 16, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 14, padding: '12px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Notes</button>
+    </div>
+  )
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
@@ -2009,14 +2280,14 @@ function FlashcardsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Flashcards</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>ACT 101 – Interest Theory · 35 cards</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{cards.length} cards</div>
           </div>
-          <Pill text={`${known.length}/${flashcardData.length} Known`} color="#4CC97B" />
+          <Pill text={`${known.length}/${cards.length} Known`} color="#4CC97B" />
         </div>
         <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 99, height: 5, overflow: 'hidden' }}>
-          <div style={{ width: `${((idx + 1) / flashcardData.length) * 100}%`, height: '100%', background: N.gold, borderRadius: 99, transition: 'width 0.3s' }} />
+          <div style={{ width: `${((idx + 1) / cards.length) * 100}%`, height: '100%', background: N.gold, borderRadius: 99, transition: 'width 0.3s' }} />
         </div>
-        <div style={{ textAlign: 'right', marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{idx + 1} / {flashcardData.length}</div>
+        <div style={{ textAlign: 'right', marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{idx + 1} / {cards.length}</div>
       </div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', gap: 24 }}>
         <div onClick={() => setFlipped(v => !v)} style={{ width: '100%', minHeight: 220, background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 8px 32px rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: `2px solid ${flipped ? N.gold + '44' : 'transparent'}`, transition: 'border-color 0.2s' }}>
@@ -2038,33 +2309,97 @@ function FlashcardsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── QUIZ ─────────────────────────────────────────────────────────────────────
-function QuizScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   const [qi, setQi] = useState(0)
   const [selected, setSelected] = useState<number|null>(null)
   const [score, setScore] = useState(0)
   const [done, setDone] = useState(false)
-  const loading = useLoading(500)
-  if (loading) return <SkeletonQuiz />
-  const q = quizData[qi]
+
+  const [questions, setQuestions] = useState<{ q: string; opts: string[]; ans: number }[]>([])
+  const [materialId, setMaterialId] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
+  const [completion, setCompletion] = useState<CompletionResponse | null>(null)
+
+  // Normalizes ai_service.py's quiz payload defensively: tries a few
+  // likely field names for the question text, options list, and
+  // correct-answer index rather than assuming one exact shape.
+  const normalizeQuiz = (raw: any): { q: string; opts: string[]; ans: number }[] => {
+    const list = Array.isArray(raw) ? raw : Array.isArray(raw?.questions) ? raw.questions : []
+    return list.map((item: any) => ({
+      q: item.question || item.q || item.prompt || 'Question',
+      opts: item.options || item.opts || item.choices || [],
+      ans: typeof item.answer_index === 'number' ? item.answer_index
+        : typeof item.correct_index === 'number' ? item.correct_index
+        : typeof item.ans === 'number' ? item.ans : 0,
+    }))
+  }
+
+  useEffect(() => {
+    if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
+    api<{ csrf_token: string }>('/me')
+      .then(me => {
+        setCsrfToken(me.csrf_token)
+        return api<{ material_id: number; reused: boolean; quiz: any }>(`/documents/${activeDocumentId}/quiz`, {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': me.csrf_token },
+        })
+      })
+      .then(res => { setMaterialId(res.material_id); setQuestions(normalizeQuiz(res.quiz)) })
+      .catch(e => {
+        if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
+        else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
+        else setError(e instanceof ApiError ? e.message : 'Could not generate a quiz. Please try again.')
+      })
+      .finally(() => setLoading(false))
+  }, [activeDocumentId])
+
+  const finish = async (finalScore: number) => {
+    setDone(true)
+    if (activeDocumentId == null || materialId == null) return
+    try {
+      const scorePercent = Math.round((finalScore / questions.length) * 100)
+      const res = await api<CompletionResponse>(`/documents/${activeDocumentId}/quiz/${materialId}/complete`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ score_percent: scorePercent }),
+      })
+      setCompletion(res)
+    } catch {
+      // Non-fatal - the quiz itself already completed for the student.
+    }
+  }
+
+  const q = questions[qi]
   const choose = (i: number) => {
-    if (selected !== null) return
+    if (selected !== null || !q) return
     setSelected(i)
-    if (i === q.ans) setScore(s => s + 1)
+    const newScore = i === q.ans ? score + 1 : score
+    if (i === q.ans) setScore(newScore)
     setTimeout(() => {
-      if (qi + 1 >= quizData.length) setDone(true)
+      if (qi + 1 >= questions.length) finish(newScore)
       else { setQi(qi + 1); setSelected(null) }
     }, 1100)
   }
+
+  if (loading) return <GenerationLoading label="Generating your quiz…" />
+  if (error) return <GenerationError error={error} />
+  if (questions.length === 0) return <GenerationError error="No quiz questions were returned." />
+
   if (done) return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: 32 }}>
       <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
       <div style={{ fontWeight: 800, fontSize: 24, color: N.navy, marginBottom: 6 }}>Quiz Complete!</div>
-      <div style={{ fontSize: 15, color: '#6B7280', marginBottom: 24 }}>You scored {score}/{quizData.length}</div>
-      <div style={{ width: 100, height: 100, borderRadius: '50%', background: score >= 3 ? '#D1FAE5' : '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 32 }}>
-        <div style={{ fontWeight: 800, fontSize: 26, color: score >= 3 ? '#065F46' : '#C94C4C' }}>{Math.round((score/quizData.length)*100)}%</div>
+      <div style={{ fontSize: 15, color: '#6B7280', marginBottom: 16 }}>You scored {score}/{questions.length}</div>
+      {completion && completion.xp_awarded > 0 && (
+        <div style={{ fontSize: 13, color: N.gold, fontWeight: 700, marginBottom: 8 }}>+{completion.xp_awarded} XP</div>
+      )}
+      {completion && <AchievementToast codes={completion.newly_unlocked_achievements} />}
+      <div style={{ width: 100, height: 100, borderRadius: '50%', background: score / questions.length >= 0.6 ? '#D1FAE5' : '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 32 }}>
+        <div style={{ fontWeight: 800, fontSize: 26, color: score / questions.length >= 0.6 ? '#065F46' : '#C94C4C' }}>{Math.round((score/questions.length)*100)}%</div>
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={() => { setQi(0); setScore(0); setDone(false); setSelected(null) }} style={{ background: N.navy, color: N.gold, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 14, padding: '12px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Try Again</button>
         <button onClick={() => setScreen('document-study')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 14, padding: '12px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Notes</button>
       </div>
     </div>
@@ -2076,14 +2411,13 @@ function QuizScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Practice Quiz</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>ACT 101 – Interest Theory</div>
           </div>
           <Pill text={`${score} correct`} color="#4CC97B" />
         </div>
         <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 99, height: 5, overflow: 'hidden' }}>
-          <div style={{ width: `${((qi) / quizData.length) * 100}%`, height: '100%', background: N.gold, borderRadius: 99, transition: 'width 0.3s' }} />
+          <div style={{ width: `${((qi) / questions.length) * 100}%`, height: '100%', background: N.gold, borderRadius: 99, transition: 'width 0.3s' }} />
         </div>
-        <div style={{ textAlign: 'right', marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Q{qi+1} of {quizData.length}</div>
+        <div style={{ textAlign: 'right', marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Q{qi+1} of {questions.length}</div>
       </div>
       <div style={{ flex: 1, padding: 20 }}>
         <div style={{ background: '#fff', borderRadius: 18, padding: 20, marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
@@ -2114,65 +2448,188 @@ function QuizScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── PODCAST PLAYER ───────────────────────────────────────────────────────────
-function PodcastPlayerScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const audioRef = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
-  const [progress, setProgress] = useState(0.28)
-  const loading = useLoading(800)
-  if (loading) return <SkeletonPodcast />
-  const pod = podcasts[0]
-  const total = 9 * 60
-  const current = Math.floor(progress * total)
-  const fmt = (s: number) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
+  const [progress, setProgress] = useState(0)
+  const [duration, setDuration] = useState(0)
+
+  const [stage, setStage] = useState<'script' | 'audio' | 'ready'>('script')
+  const [title, setTitle] = useState('Study Podcast')
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
+
+  useEffect(() => {
+    if (activeDocumentId == null) { setError('No document selected.'); return }
+    let cancelled = false
+
+    const run = async () => {
+      try {
+        const me = await api<{ csrf_token: string }>('/me')
+        if (cancelled) return
+        setCsrfToken(me.csrf_token)
+
+        const scriptRes = await api<{ material_id: number; reused: boolean; podcast: any }>(`/documents/${activeDocumentId}/podcast-script`, {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': me.csrf_token },
+        })
+        if (cancelled) return
+        if (scriptRes.podcast?.title) setTitle(scriptRes.podcast.title)
+
+        setStage('audio')
+        const audioKickoff = await api<{ audio_status: string; material_id: number }>(`/documents/${activeDocumentId}/podcast-audio`, {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': me.csrf_token },
+        })
+        if (cancelled) return
+
+        if (audioKickoff.audio_status === 'ready') {
+          await pollAudio()
+          return
+        }
+
+        const poll = async () => {
+          if (cancelled) return
+          const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null }>(`/documents/${activeDocumentId}/podcast-audio`)
+          if (cancelled) return
+          if (status.audio_status === 'ready' && status.audio_url) {
+            setAudioUrl(status.audio_url)
+            setDuration(status.duration_seconds || 0)
+            setStage('ready')
+          } else {
+            setTimeout(poll, 3000)
+          }
+        }
+        await poll()
+      } catch (e) {
+        if (cancelled) return
+        if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
+        else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
+        else setError(e instanceof ApiError ? e.message : 'Could not generate this podcast. Please try again.')
+      }
+    }
+
+    const pollAudio = async () => {
+      const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null }>(`/documents/${activeDocumentId}/podcast-audio`)
+      if (status.audio_status === 'ready' && status.audio_url) {
+        setAudioUrl(status.audio_url)
+        setDuration(status.duration_seconds || 0)
+        setStage('ready')
+      }
+    }
+
+    run()
+    return () => { cancelled = true }
+  }, [activeDocumentId])
+
+  const togglePlay = () => {
+    const el = audioRef.current
+    if (!el) return
+    if (playing) { el.pause() } else { el.play() }
+    setPlaying(!playing)
+  }
+
+  const seek = (delta: number) => {
+    const el = audioRef.current
+    if (!el) return
+    el.currentTime = Math.max(0, Math.min(el.duration || duration, el.currentTime + delta))
+  }
+
+  const fmt = (s: number) => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
-        <TopBar title="Study Podcast" onBack={() => setScreen('podcast-library')} />
+        <TopBar title="Study Podcast" onBack={() => setScreen('document-study')} />
       </div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 28px', gap: 28 }}>
-        {/* Album art */}
-        <div style={{ width: 200, height: 200, borderRadius: 28, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 16px 48px rgba(201,168,76,0.35)`, fontSize: 80, fontWeight: 800, color: N.navy, fontFamily: 'Plus Jakarta Sans' }}>∑</div>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 800, fontSize: 20, color: N.navy, marginBottom: 4 }}>{pod.title}</div>
-          <div style={{ fontSize: 13, color: '#6B7280' }}>ACT 101 · Kenyatta University · {pod.duration}</div>
-          <Pill text="AI Generated" color={N.gold} />
-        </div>
-        {/* Progress */}
-        <div style={{ width: '100%' }}>
-          <input type="range" min={0} max={1} step={0.01} value={progress} onChange={e => setProgress(+e.target.value)} style={{ width: '100%', accentColor: N.gold, cursor: 'pointer' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>
-            <span>{fmt(current)}</span><span>{fmt(total)}</span>
+      {error ? <GenerationError error={error} /> : stage !== 'ready' ? (
+        <GenerationLoading label={stage === 'script' ? 'Writing your podcast script…' : 'Generating audio — this can take a minute…'} />
+      ) : (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 28px', gap: 28 }}>
+          {audioUrl && (
+            <audio
+              ref={audioRef}
+              src={audioUrl}
+              onTimeUpdate={e => setProgress(e.currentTarget.currentTime)}
+              onLoadedMetadata={e => setDuration(e.currentTarget.duration)}
+              onEnded={() => setPlaying(false)}
+            />
+          )}
+          {/* Album art */}
+          <div style={{ width: 200, height: 200, borderRadius: 28, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 16px 48px rgba(201,168,76,0.35)`, fontSize: 80, fontWeight: 800, color: N.navy, fontFamily: 'Plus Jakarta Sans' }}>🎙️</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 800, fontSize: 20, color: N.navy, marginBottom: 4 }}>{title}</div>
+            <Pill text="AI Generated" color={N.gold} />
+          </div>
+          {/* Progress */}
+          <div style={{ width: '100%' }}>
+            <input type="range" min={0} max={duration || 1} step={0.5} value={progress} onChange={e => { const v = +e.target.value; setProgress(v); if (audioRef.current) audioRef.current.currentTime = v }} style={{ width: '100%', accentColor: N.gold, cursor: 'pointer' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>
+              <span>{fmt(progress)}</span><span>{fmt(duration)}</span>
+            </div>
+          </div>
+          {/* Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+            <button onClick={() => seek(-15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: N.navy }}>{Ic.rewind()}</button>
+            <button onClick={togglePlay} style={{ width: 64, height: 64, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 20px rgba(201,168,76,0.4)` }}>
+              <div style={{ color: N.navy }}>{playing ? Ic.pause() : Ic.play()}</div>
+            </button>
+            <button onClick={() => seek(15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: N.navy }}>{Ic.skip()}</button>
           </div>
         </div>
-        {/* Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          <button onClick={() => setProgress(p => Math.max(0, p - 0.15))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: N.navy }}>{Ic.rewind()}</button>
-          <button onClick={() => setPlaying(v => !v)} style={{ width: 64, height: 64, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 20px rgba(201,168,76,0.4)` }}>
-            <div style={{ color: N.navy }}>{playing ? Ic.pause() : Ic.play()}</div>
-          </button>
-          <button onClick={() => setProgress(p => Math.min(1, p + 0.15))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: N.navy }}>{Ic.skip()}</button>
-        </div>
-        {/* More episodes */}
-        <div style={{ width: '100%' }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>More Episodes</div>
-          {podcasts.slice(1).map((p, i) => (
-            <div key={i} onClick={() => setScreen('podcast-player')} style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', borderRadius: 14, padding: 12, marginBottom: 8, boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
-              <div style={{ width: 42, height: 42, background: `linear-gradient(135deg,${p.color},${p.color}99)`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: '#fff', fontWeight: 800 }}>{p.icon}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }}>{p.title}</div>
-                <div style={{ fontSize: 11, color: '#6B7280' }}>{p.subject} · {p.duration}</div>
-              </div>
-              <div style={{ color: N.gold }}>{Ic.play('w-4 h-4')}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   )
 }
 
 // ─── SUMMARY ──────────────────────────────────────────────────────────────────
-function SummaryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   const [saved, setSaved] = useState(false)
+  const [summary, setSummary] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
+    api<{ csrf_token: string }>('/me')
+      .then(me => api<{ material_id: number; reused: boolean; summary: any }>(`/documents/${activeDocumentId}/summarize`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': me.csrf_token },
+      }))
+      .then(res => setSummary(res.summary))
+      .catch(e => {
+        if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
+        else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
+        else setError(e instanceof ApiError ? e.message : 'Could not generate a summary. Please try again.')
+      })
+      .finally(() => setLoading(false))
+  }, [activeDocumentId])
+
+  // Renders whatever ai_service.py returned, without assuming one fixed
+  // shape: a plain string, an array of {title, body}-like sections, or
+  // (as a last resort) raw JSON so nothing is silently hidden.
+  const renderSummaryBody = () => {
+    if (typeof summary === 'string') {
+      return <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{summary}</div>
+    }
+    if (Array.isArray(summary)) {
+      return summary.map((s: any, i: number) => (
+        <div key={i} style={{ marginBottom: 20 }}>
+          {(s.title || s.heading) && <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 8 }}>{s.title || s.heading}</div>}
+          <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{s.body || s.content || s.text || JSON.stringify(s)}</div>
+          {i < summary.length - 1 && <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', marginTop: 20 }} />}
+        </div>
+      ))
+    }
+    if (summary && typeof summary === 'object') {
+      const text = summary.text || summary.content || summary.body
+      if (text) return <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{text}</div>
+      return <pre style={{ fontSize: 11, color: '#374151', whiteSpace: 'pre-wrap', background: '#F8F9FC', borderRadius: 10, padding: 12 }}>{JSON.stringify(summary, null, 2)}</pre>
+    }
+    return null
+  }
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
@@ -2180,32 +2637,20 @@ function SummaryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>AI Summary</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>ACT 101 – Interest Theory</div>
           </div>
           <button onClick={() => setScreen('share-sheet')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, padding: '7px 12px', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginRight: 6 }}>Share</button>
           <button onClick={() => setSaved(true)} style={{ background: saved ? `linear-gradient(135deg,${N.gold},${N.goldL})` : 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, padding: '7px 12px', color: saved ? N.navy : '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{saved ? '✓ Saved' : 'Save'}</button>
         </div>
         {saved && <div style={{ background: 'rgba(76,201,123,0.15)', border: '1px solid rgba(76,201,123,0.3)', borderRadius: 10, padding: '7px 12px', marginTop: 8, fontSize: 12, color: '#4CC97B', fontWeight: 600 }}>✓ Saved to your Library</div>}
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: 18 }} className="scrollbar-hide">
-        <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
-          <Pill text="AI Generated · 2 min read" />
-          <div style={{ fontWeight: 800, fontSize: 18, color: N.navy, margin: '14px 0 6px' }}>ACT 101: Interest Theory – Key Concepts</div>
-          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 20 }}>Generated from your 38-page lecture notes</div>
-          {[
-            { title: '1. Simple vs Compound Interest', body: 'Simple interest: A(t) = A(0)(1 + it). Interest earned does not itself earn interest.\n\nCompound interest: A(t) = A(0)(1+i)ᵗ. Interest is reinvested each period. Always use compound for exam questions unless stated.' },
-            { title: '2. Present & Future Value', body: 'Future Value: FV = PV(1+i)ⁿ\nPresent Value: PV = FV/(1+i)ⁿ = FV·vⁿ where v = 1/(1+i)\n\nKES 100,000 in 5 years at 10%: PV = 100,000/(1.1)⁵ = KES 62,092' },
-            { title: '3. Annuities', body: 'Annuity-immediate: payments at END of period. a(n,i) = (1-vⁿ)/i\n\nAnnuity-due: payments at START of period. ä(n,i) = (1+i)·a(n,i)\n\nPerpetuity: a(∞,i) = 1/i' },
-            { title: '4. Force of Interest', body: 'δ = ln(1+i) — continuously compounded rate.\n\nFor i = 10%: δ = ln(1.1) = 9.53%\n\nRelation: e^δ = 1+i' },
-          ].map((s, i) => (
-            <div key={i} style={{ marginBottom: 20 }}>
-              <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 8 }}>{s.title}</div>
-              <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{s.body}</div>
-              {i < 3 && <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', marginTop: 20 }} />}
-            </div>
-          ))}
+      {loading ? <GenerationLoading label="Generating your summary…" /> : error ? <GenerationError error={error} /> : (
+        <div style={{ flex: 1, overflowY: 'auto', padding: 18 }} className="scrollbar-hide">
+          <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+            <Pill text="AI Generated" />
+            {renderSummaryBody()}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -2752,18 +3197,39 @@ function StudentProfileScreen({ setScreen }: { setScreen: (s: Screen) => void })
 }
 
 // ─── PROFILE ──────────────────────────────────────────────────────────────────
+type ProfileMe = { display_name: string | null; bio: string | null; university_id: number | null; program_id: number | null }
+
 function ProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [tab, setTab] = useState<'posts'|'saved'|'activity'|'materials'>('posts')
   const [showMenu, setShowMenu] = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   const loading = useLoading(900)
+
+  const [me, setMe] = useState<ProfileMe | null>(null)
+  const [uniName, setUniName] = useState<string | null>(null)
+  const [programName, setProgramName] = useState<string | null>(null)
+  const [summary, setSummary] = useState<GamificationSummary | null>(null)
+
+  useEffect(() => {
+    api<ProfileMe>('/me').then(setMe).catch(() => {})
+    api<GamificationSummary>('/gamification/summary').then(setSummary).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (me?.university_id == null) return
+    api<UniversityOption[]>('/universities')
+      .then(list => setUniName(list.find(u => u.id === me.university_id)?.name ?? null))
+      .catch(() => {})
+    if (me.program_id != null) {
+      api<ProgramOption[]>(`/universities/${me.university_id}/programs`)
+        .then(list => setProgramName(list.find(p => p.id === me.program_id)?.name ?? null))
+        .catch(() => {})
+    }
+  }, [me?.university_id, me?.program_id])
+
   if (loading) return <SkeletonProfile />
-  const stats = [
-    { label: 'Streak', value: '7🔥', color: N.gold },
-    { label: 'XP', value: '1,240', color: '#4CC97B' },
-    { label: 'Docs', value: '8', color: '#4C7BC9' },
-    { label: 'Followers', value: '23', color: '#9B59B6' },
-  ]
+  const displayName = me?.display_name || 'Student'
+  const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
@@ -2781,14 +3247,15 @@ function ProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ position: 'relative', marginBottom: 14 }}>
-            <div style={{ width: 76, height: 76, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy, border: `3px solid rgba(201,168,76,0.4)` }}>AG</div>
+            <div style={{ width: 76, height: 76, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy, border: `3px solid rgba(201,168,76,0.4)` }}>{initials}</div>
             <button onClick={() => setShowAvatarPicker(true)} style={{ position: 'absolute', bottom: 0, right: 0, width: 22, height: 22, background: N.gold, borderRadius: '50%', border: `2px solid ${N.navy}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <div style={{ color: N.navy }}>{Ic.edit('w-3 h-3')}</div>
             </button>
           </div>
-          <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>{USER.name}</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{USER.course} · {USER.year}</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2, marginBottom: 14 }}>{USER.uni}</div>
+          <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>{displayName}</div>
+          {programName && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{programName}</div>}
+          {uniName && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2, marginBottom: 14 }}>{uniName}</div>}
+          {!programName && !uniName && <div style={{ marginBottom: 14 }} />}
           <div style={{ display: 'flex', gap: 8 }}>
             <Pill text="🏅 Top Learner" />
             <Pill text="📚 Creator" />
@@ -2798,10 +3265,10 @@ function ProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, padding: '14px 14px 0' }}>
         {[
-          { label: 'Streak', value: '12🔥', color: N.gold, dest: 'study-streak' as Screen },
-          { label: 'XP', value: '1,240', color: '#4CC97B', dest: 'xp-progress' as Screen },
-          { label: 'Docs', value: '8', color: '#4C7BC9', dest: 'library' as Screen },
-          { label: 'Followers', value: '143', color: '#9B59B6', dest: 'followers' as Screen },
+          { label: 'Streak', value: summary ? `${summary.current_streak}🔥` : '—', color: N.gold, dest: 'study-streak' as Screen },
+          { label: 'XP', value: summary ? summary.xp_total.toLocaleString() : '—', color: '#4CC97B', dest: 'xp-progress' as Screen },
+          { label: 'Docs', value: summary ? String(summary.documents_count) : '—', color: '#4C7BC9', dest: 'library' as Screen },
+          { label: 'Followers', value: summary ? String(summary.followers_count) : '—', color: '#9B59B6', dest: 'followers' as Screen },
         ].map(s => (
           <button key={s.label} onClick={() => setScreen(s.dest)} style={{ background: '#fff', borderRadius: 14, padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: s.color }}>{s.value}</div>
@@ -2913,6 +3380,45 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [priv, setPriv] = useState({ profilePublic: true, whoMessages: false, whoFollows: true })
   const [showLogout, setShowLogout] = useState(false)
   const [showModal, setShowModal] = useState<string|null>(null)
+
+  const [csrfToken, setCsrfToken] = useState('')
+  const [email, setEmail] = useState('')
+  const [uniName, setUniName] = useState<string | null>(null)
+  const [programName, setProgramName] = useState<string | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
+  useEffect(() => {
+    api<{ email: string; csrf_token: string; university_id: number | null; program_id: number | null }>('/me')
+      .then(me => {
+        setCsrfToken(me.csrf_token)
+        setEmail(me.email)
+        if (me.university_id != null) {
+          api<UniversityOption[]>('/universities')
+            .then(list => setUniName(list.find(u => u.id === me.university_id)?.name ?? null))
+            .catch(() => {})
+        }
+        if (me.university_id != null && me.program_id != null) {
+          api<ProgramOption[]>(`/universities/${me.university_id}/programs`)
+            .then(list => setProgramName(list.find(p => p.id === me.program_id)?.name ?? null))
+            .catch(() => {})
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await api('/delete-account', { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
+      setScreen('login')
+    } catch (e) {
+      setDeleteError(e instanceof ApiError ? e.message : 'Could not delete your account. Please try again.')
+      setDeleting(false)
+    }
+  }
   const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
     <div style={{ marginBottom: 8 }}>
       <div style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, padding: '12px 18px 6px' }}>{title}</div>
@@ -2940,10 +3446,10 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       <div style={{ paddingTop: 12, paddingBottom: 32 }}>
         <Section title="Account">
           <Row label="Edit Profile" sub="Name, photo, bio" onPress={() => setScreen('edit-profile')} />
-          <Row label="Email" sub="arnold@students.ku.ac.ke" onPress={() => setShowModal('email')} />
+          <Row label="Email" sub={email || 'Loading...'} onPress={() => setShowModal('email')} />
           <Row label="Phone" sub="+254 *** *** **89" onPress={() => setShowModal('phone')} />
-          <Row label="University" sub="Kenyatta University" onPress={() => setShowModal('university')} />
-          <Row label="Course" sub="Actuarial Science · Year 1" onPress={() => setShowModal('course')} />
+          <Row label="University" sub={uniName || 'Not set'} onPress={() => setScreen('edit-profile')} />
+          <Row label="Course" sub={programName || 'Not set'} onPress={() => setScreen('edit-profile')} />
         </Section>
 
         <Section title="Preferences">
@@ -2991,6 +3497,9 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ margin: '8px 16px 0', background: '#fff', borderRadius: 16, overflow: 'hidden' }}>
           <Row label="Log Out" danger onPress={() => setShowLogout(true)} right={<div style={{ color: '#C94C4C' }}>{Ic.logout()}</div>} />
         </div>
+        <div style={{ margin: '10px 16px 0', background: '#fff', borderRadius: 16, overflow: 'hidden' }}>
+          <Row label="Delete Account" sub="Permanently delete your account and data" danger onPress={() => setShowDeleteConfirm(true)} />
+        </div>
       </div>
 
       {/* Generic settings modal */}
@@ -3022,6 +3531,20 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 24 }}>You'll need to sign in again to access your study materials.</div>
             <button onClick={() => { api('/logout', { method: 'POST' }).catch(() => {}).finally(() => setScreen('login')) }} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
             <button onClick={() => setShowLogout(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#374151' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete account confirmation */}
+      {showDeleteConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 99 }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
+            <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>⚠️</div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 8 }}>Delete your account?</div>
+            <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 16 }}>This permanently deletes your account and cannot be undone. Your uploaded documents and study history will be lost.</div>
+            {deleteError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, textAlign: 'center', marginBottom: 12 }}>{deleteError}</div>}
+            <button onClick={handleDeleteAccount} disabled={deleting} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: deleting ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10, opacity: deleting ? 0.7 : 1 }}>{deleting ? 'Deleting...' : 'Yes, Delete My Account'}</button>
+            <button onClick={() => { setShowDeleteConfirm(false); setDeleteError('') }} disabled={deleting} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#374151' }}>Cancel</button>
           </div>
         </div>
       )}
@@ -3850,19 +4373,60 @@ function PodcastLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
 }
 
 // ─── MIND MAP ─────────────────────────────────────────────────────────────────
-function MindMapScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const loading = useLoading(900)
-  if (loading) return <SkeletonMindMap />
-  const nodes = [
-    { id: 'center', label: 'Interest Theory', x: 150, y: 150, r: 44, color: N.gold, textColor: N.navy, fontSize: 11 },
-    { id: 'compound', label: 'Compound\nInterest', x: 60, y: 60, r: 36, color: N.navy2, textColor: N.gold, fontSize: 10 },
-    { id: 'simple', label: 'Simple\nInterest', x: 240, y: 60, r: 36, color: N.navy2, textColor: N.gold, fontSize: 10 },
-    { id: 'annuity', label: 'Annuities', x: 60, y: 240, r: 36, color: N.navy3, textColor: '#fff', fontSize: 10 },
-    { id: 'pv', label: 'Present\nValue', x: 240, y: 240, r: 36, color: N.navy3, textColor: '#fff', fontSize: 10 },
-    { id: 'force', label: 'Force of\nInterest', x: 280, y: 150, r: 30, color: '#4C7BC9', textColor: '#fff', fontSize: 9 },
-    { id: 'perpetuity', label: 'Perpetuity', x: 20, y: 150, r: 30, color: '#4CC97B', textColor: N.navy, fontSize: 9 },
-  ]
-  const lines = [['center','compound'],['center','simple'],['center','annuity'],['center','pv'],['center','force'],['center','perpetuity']]
+type MindMapNode = { id: string; label: string; x: number; y: number; r: number; color: string; textColor: string; fontSize: number }
+
+function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const [raw, setRaw] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
+    api<{ csrf_token: string }>('/me')
+      .then(me => api<{ material_id: number; reused: boolean; mindmap: any }>(`/documents/${activeDocumentId}/mindmap`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': me.csrf_token },
+      }))
+      .then(res => setRaw(res.mindmap))
+      .catch(e => {
+        if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
+        else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
+        else setError(e instanceof ApiError ? e.message : 'Could not generate a mind map. Please try again.')
+      })
+      .finally(() => setLoading(false))
+  }, [activeDocumentId])
+
+  // Builds a simple radial layout from whatever ai_service.py returned:
+  // tries {center, branches:[...]} or {nodes:[...], edges:[...]} shapes.
+  // Falls back to raw JSON if neither is recognizable.
+  const palette = [N.navy2, N.navy3, '#4C7BC9', '#4CC97B', '#9B59B6', '#C94C4C']
+  const buildLayout = (): { nodes: MindMapNode[]; lines: [string, string][] } | null => {
+    if (!raw) return null
+    const centerLabel: string = raw.center || raw.root || raw.title || 'Overview'
+    const branches: string[] = Array.isArray(raw.branches) ? raw.branches
+      : Array.isArray(raw.nodes) ? raw.nodes.map((n: any) => n.label || n.name || String(n))
+      : []
+    if (branches.length === 0) return null
+
+    const nodes: MindMapNode[] = [{ id: 'center', label: centerLabel, x: 150, y: 150, r: 44, color: N.gold, textColor: N.navy, fontSize: 11 }]
+    const lines: [string, string][] = []
+    const angleStep = (2 * Math.PI) / branches.length
+    const radius = 110
+    branches.forEach((label, i) => {
+      const id = `n${i}`
+      const angle = i * angleStep
+      nodes.push({
+        id, label: String(label),
+        x: 150 + radius * Math.cos(angle), y: 150 + radius * Math.sin(angle),
+        r: 34, color: palette[i % palette.length], textColor: '#fff', fontSize: 10,
+      })
+      lines.push(['center', id])
+    })
+    return { nodes, lines }
+  }
+
+  const layout = buildLayout()
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
@@ -3870,37 +4434,42 @@ function MindMapScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Mind Map</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>ACT 101 – Interest Theory</div>
           </div>
         </div>
       </div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <div style={{ background: '#fff', borderRadius: 20, padding: 16, boxShadow: '0 4px 20px rgba(0,0,0,0.08)', width: '100%', marginBottom: 16 }}>
-          <svg viewBox="-10 -10 320 320" style={{ width: '100%', height: 300 }}>
-            {lines.map(([from, to]) => {
-              const f = nodes.find(n => n.id === from)!
-              const t = nodes.find(n => n.id === to)!
-              return <line key={from+to} x1={f.x} y1={f.y} x2={t.x} y2={t.y} stroke="rgba(11,20,55,0.15)" strokeWidth="2" />
-            })}
-            {nodes.map(node => (
-              <g key={node.id} style={{ cursor: 'pointer' }}>
-                <circle cx={node.x} cy={node.y} r={node.r} fill={node.color} />
-                {node.label.split('\n').map((line, i, arr) => (
-                  <text key={i} x={node.x} y={node.y + (i - (arr.length - 1) / 2) * (node.fontSize + 2)} textAnchor="middle" dominantBaseline="middle" fontSize={node.fontSize} fontWeight="700" fill={node.textColor} fontFamily="Plus Jakarta Sans">{line}</text>
-                ))}
-              </g>
+      {loading ? <GenerationLoading label="Generating your mind map…" /> : error ? <GenerationError error={error} /> : !layout ? (
+        <div style={{ flex: 1, overflowY: 'auto', padding: 20 }} className="scrollbar-hide">
+          <pre style={{ fontSize: 11, color: '#374151', whiteSpace: 'pre-wrap', background: '#fff', borderRadius: 12, padding: 14, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>{JSON.stringify(raw, null, 2)}</pre>
+        </div>
+      ) : (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: 16, boxShadow: '0 4px 20px rgba(0,0,0,0.08)', width: '100%', marginBottom: 16 }}>
+            <svg viewBox="-10 -10 320 320" style={{ width: '100%', height: 300 }}>
+              {layout.lines.map(([from, to]) => {
+                const f = layout.nodes.find(n => n.id === from)!
+                const t = layout.nodes.find(n => n.id === to)!
+                return <line key={from+to} x1={f.x} y1={f.y} x2={t.x} y2={t.y} stroke="rgba(11,20,55,0.15)" strokeWidth="2" />
+              })}
+              {layout.nodes.map(node => (
+                <g key={node.id} style={{ cursor: 'pointer' }}>
+                  <circle cx={node.x} cy={node.y} r={node.r} fill={node.color} />
+                  {node.label.split('\n').map((line, i, arr) => (
+                    <text key={i} x={node.x} y={node.y + (i - (arr.length - 1) / 2) * (node.fontSize + 2)} textAnchor="middle" dominantBaseline="middle" fontSize={node.fontSize} fontWeight="700" fill={node.textColor} fontFamily="Plus Jakarta Sans">{line}</text>
+                  ))}
+                </g>
+              ))}
+            </svg>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+            {layout.nodes.slice(1).map(node => (
+              <div key={node.id} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fff', borderRadius: 12, padding: '10px 14px', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: node.color, flexShrink: 0 }} />
+                <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{node.label.replace('\n',' ')}</div>
+              </div>
             ))}
-          </svg>
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-          {nodes.slice(1).map(node => (
-            <div key={node.id} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fff', borderRadius: 12, padding: '10px 14px', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: node.color, flexShrink: 0 }} />
-              <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{node.label.replace('\n',' ')}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -4003,41 +4572,148 @@ function ChatOptionsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── EDIT PROFILE ─────────────────────────────────────────────────────────────
+type EditProfileMe = { display_name: string | null; bio: string | null; year: number | null; semester: number | null; university_id: number | null; program_id: number | null; csrf_token: string }
+
 function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const [form, setForm] = useState({ name: USER.name, bio: 'Actuarial Science student at KU. Passionate about mathematics and finance.', uni: USER.uni, course: USER.course, year: USER.year })
+  const [csrfToken, setCsrfToken] = useState('')
+  const [loadingMe, setLoadingMe] = useState(true)
+  const [loadError, setLoadError] = useState('')
+
+  const [form, setForm] = useState({
+    display_name: '', bio: '',
+    university_id: null as number | null, program_id: null as number | null,
+    year: null as number | null, semester: null as number | null,
+  })
+
+  const [universities, setUniversities] = useState<UniversityOption[]>([])
+  const [programs, setPrograms] = useState<ProgramOption[]>([])
+
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [saved, setSaved] = useState(false)
-  const upd = (k: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
-  const handleSave = () => { setSaved(true); setTimeout(() => setScreen('profile'), 1000) }
+
+  useEffect(() => {
+    api<EditProfileMe>('/me')
+      .then(me => {
+        setCsrfToken(me.csrf_token)
+        setForm({
+          display_name: me.display_name || '',
+          bio: me.bio || '',
+          university_id: me.university_id,
+          program_id: me.program_id,
+          year: me.year,
+          semester: me.semester,
+        })
+      })
+      .catch(() => setLoadError('Could not load your profile. Check your connection and try again.'))
+      .finally(() => setLoadingMe(false))
+  }, [])
+
+  useEffect(() => {
+    api<UniversityOption[]>('/universities').then(setUniversities).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (form.university_id == null) { setPrograms([]); return }
+    api<ProgramOption[]>(`/universities/${form.university_id}/programs`).then(setPrograms).catch(() => {})
+  }, [form.university_id])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaveError('')
+    try {
+      await api('/profile', {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({
+          display_name: form.display_name.trim() || null,
+          bio: form.bio.trim() || null,
+          university_id: form.university_id,
+          program_id: form.program_id,
+          year: form.year,
+          semester: form.semester,
+        }),
+      })
+      setSaved(true)
+      setTimeout(() => setScreen('profile'), 1000)
+    } catch (e) {
+      setSaveError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputStyle = { width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' as const }
+  const initials = (form.display_name || 'ST').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+
+  if (loadingMe) {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: N.bg }}>
+        <div style={{ color: '#9CA3AF', fontSize: 14 }}>Loading your profile...</div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Edit Profile</span>
-          <button onClick={handleSave} style={{ background: saved ? '#4CC97B' : `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: saved ? '#fff' : N.navy }}>{saved ? '✓ Saved' : 'Save'}</button>
+          <button onClick={handleSave} disabled={saving} style={{ background: saved ? '#4CC97B' : `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '8px 16px', cursor: saving ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: saved ? '#fff' : N.navy, opacity: saving ? 0.7 : 1 }}>{saved ? '✓ Saved' : saving ? 'Saving...' : 'Save'}</button>
         </div>
       </div>
+      {loadError && <div style={{ margin: '14px 20px 0', color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{loadError}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 20px 12px' }}>
         <div style={{ position: 'relative', marginBottom: 20 }}>
-          <div style={{ width: 80, height: 80, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy }}>AG</div>
+          <div style={{ width: 80, height: 80, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy }}>{initials}</div>
           <div style={{ position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ color: N.navy }}>{Ic.edit('w-3 h-3')}</div>
           </div>
         </div>
-        <div style={{ fontSize: 12, color: '#9CA3AF', cursor: 'pointer' }}>Change photo</div>
+        <div style={{ fontSize: 12, color: '#9CA3AF' }}>Change photo (coming soon)</div>
       </div>
       <div style={{ padding: '0 20px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {[['Full Name','name',form.name],['University','uni',form.uni],['Course','course',form.course],['Year','year',form.year]].map(([label,key,val]) => (
-          <div key={key}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>{label}</div>
-            <input value={val} onChange={upd(key)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
-          </div>
-        ))}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Full Name</div>
+          <input value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} maxLength={50} style={inputStyle} />
+        </div>
         <div>
           <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Bio</div>
-          <textarea value={form.bio} onChange={upd('bio')} rows={3} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+          <textarea value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} rows={3} maxLength={160} style={{ ...inputStyle, resize: 'none', lineHeight: 1.6 }} />
         </div>
-        <button onClick={handleSave} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Save Changes</button>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>University</div>
+          <select value={form.university_id ?? ''} onChange={e => setForm(f => ({ ...f, university_id: e.target.value ? Number(e.target.value) : null, program_id: null }))} style={inputStyle}>
+            <option value="">Select university</option>
+            {universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Course</div>
+          <select value={form.program_id ?? ''} onChange={e => setForm(f => ({ ...f, program_id: e.target.value ? Number(e.target.value) : null }))} disabled={!form.university_id} style={{ ...inputStyle, opacity: form.university_id ? 1 : 0.5 }}>
+            <option value="">Select course</option>
+            {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Year</div>
+            <select value={form.year ?? ''} onChange={e => setForm(f => ({ ...f, year: e.target.value ? Number(e.target.value) : null }))} style={inputStyle}>
+              <option value="">—</option>
+              {[1, 2, 3, 4].map(y => <option key={y} value={y}>Year {y}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Semester</div>
+            <select value={form.semester ?? ''} onChange={e => setForm(f => ({ ...f, semester: e.target.value ? Number(e.target.value) : null }))} style={inputStyle}>
+              <option value="">—</option>
+              {[1, 2].map(s => <option key={s} value={s}>Semester {s}</option>)}
+            </select>
+          </div>
+        </div>
+        {saveError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{saveError}</div>}
+        <button onClick={handleSave} disabled={saving} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '14px 0', cursor: saving ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving...' : 'Save Changes'}</button>
       </div>
     </div>
   )
@@ -5898,11 +6574,13 @@ export default function App() {
   const [adminMode, setAdminMode] = useState(false)
   const [oauthError, setOauthError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
-  // Which ForumPost is open in CommentsScreen. Screens communicate purely
-  // via the Screen string (no route params), so this - like other
-  // "currently open X" ids - has to be lifted here rather than living
-  // inside ForumScreen/CommentsScreen, which unmount on navigation.
+  // Which ForumPost is open in CommentsScreen, and which Document is open
+  // in SummaryScreen. Screens communicate purely via the Screen string (no
+  // route params), so these - like other "currently open X" ids - have to
+  // be lifted here rather than living inside the screens themselves, which
+  // unmount on navigation.
   const [activeForumPostId, setActiveForumPostId] = useState<number | null>(null)
+  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null)
 
   // Handles the round-trip back from /auth/google/callback, which appends
   // ?complete_profile=1 (new Google account, needs university/course/year/
@@ -5965,23 +6643,23 @@ export default function App() {
       case 'complete-profile':  return <CompleteProfileScreen setScreen={setScreen} />
       case 'reset-password':    return <ResetPasswordScreen setScreen={setScreen} />
       case 'verify-confirm':    return <VerifyConfirmScreen setScreen={setScreen} />
-      case 'home':              return <HomeScreen setScreen={setScreen} />
+      case 'home':              return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'explore':           return <ExploreScreen setScreen={setScreen} />
       case 'create-modal':      return <CreateModal setScreen={setScreen} />
       case 'post-composer':     return <PostComposer setScreen={setScreen} />
       case 'question-composer': return <QuestionComposer setScreen={setScreen} />
       case 'share-opp-form':    return <ShareOppForm setScreen={setScreen} />
       case 'edu-upload-form':   return <EduUploadForm setScreen={setScreen} />
-      case 'upload':            return <UploadScreen setScreen={setScreen} />
-      case 'processing':        return <ProcessingScreen setScreen={setScreen} />
-      case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} />
-      case 'document-study':    return <DocumentStudyScreen setScreen={setScreen} />
+      case 'upload':            return <UploadScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
+      case 'processing':        return <ProcessingScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
+      case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
+      case 'document-study':    return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} />
-      case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} />
-      case 'quiz':              return <QuizScreen setScreen={setScreen} />
-      case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} />
+      case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
+      case 'quiz':              return <QuizScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
+      case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} />
-      case 'summary':           return <SummaryScreen setScreen={setScreen} />
+      case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'forum':             return <ForumScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} />
       case 'comments':          return <CommentsScreen setScreen={setScreen} postId={activeForumPostId} />
       case 'chats':             return <ChatsScreen setScreen={setScreen} />
@@ -5994,7 +6672,7 @@ export default function App() {
       case 'settings':          return <SettingsScreen setScreen={setScreen} />
       case 'notifications':     return <NotificationsScreen setScreen={setScreen} />
       case 'library':           return <LibraryScreen setScreen={setScreen} />
-      case 'mind-map':          return <MindMapScreen setScreen={setScreen} />
+      case 'mind-map':          return <MindMapScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'new-chat':          return <NewChatScreen setScreen={setScreen} />
       case 'chat-options':      return <ChatOptionsScreen setScreen={setScreen} />
       case 'edit-profile':      return <EditProfileScreen setScreen={setScreen} />
@@ -6011,7 +6689,7 @@ export default function App() {
       case 'following':         return <FollowListScreen mode="following" setScreen={setScreen} />
       case 'group-detail':      return <GroupDetailScreen setScreen={setScreen} />
       case 'group-create':      return <GroupCreateScreen setScreen={setScreen} />
-      default:                  return <HomeScreen setScreen={setScreen} />
+      default:                  return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
     }
   }
 
