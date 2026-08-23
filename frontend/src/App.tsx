@@ -1176,6 +1176,30 @@ function ForumCard({ post, setScreen }: { post: typeof forumPosts[0]; setScreen:
   )
 }
 
+// Real, per-unit ForumPost card - separate from the mock ForumCard above
+// (still used by the Home screen's preview strip) since ForumPost has no
+// like feature and a different shape than the mock forumPosts data.
+function RealForumCard({ post, onOpen }: { post: ForumPostSummary; onOpen: () => void }) {
+  return (
+    <div onClick={onOpen} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+        <Avi name={post.author.slice(0, 2).toUpperCase()} size={38} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{post.author}</div>
+          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{post.created_at ? new Date(post.created_at).toLocaleString() : ''}</div>
+        </div>
+      </div>
+      <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 4 }}>{post.title}</div>
+      <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, margin: '0 0 12px' }} className="line-clamp-2">{post.body}</p>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+        {Ic.comment('w-4 h-4')} {post.reply_count} {post.reply_count === 1 ? 'reply' : 'replies'}
+        <span style={{ flex: 1 }} />
+        <span style={{ color: N.gold, fontWeight: 700 }}>Ask Prepza AI →</span>
+      </div>
+    </div>
+  )
+}
+
 function OppCard({ opp, setScreen }: { opp: typeof opportunities[0]; setScreen: (s: Screen) => void }) {
   const [saved, setSaved] = useState(false)
   return (
@@ -1335,19 +1359,46 @@ function CreateModal({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── POST COMPOSER ────────────────────────────────────────────────────────────
 function PostComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [title, setTitle] = useState('')
   const [text, setText] = useState('')
-  const [category, setCategory] = useState('General')
-  const [showPicker, setShowPicker] = useState<string|null>(null)
+  const [units, setUnits] = useState<UnitOption[]>([])
+  const [unitId, setUnitId] = useState<number | null>(null)
+  const [csrfToken, setCsrfToken] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<UnitOption[]>('/units').then(u => { setUnits(u); if (u.length) setUnitId(u[0].id) }).catch(() => setError('Could not load your units.'))
+    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+  }, [])
+
+  const submit = async () => {
+    if (!unitId || !title.trim() || !text.trim() || submitting) return
+    setSubmitting(true); setError('')
+    try {
+      await api('/forum/posts', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ unit_id: unitId, title: title.trim(), body: text.trim() }),
+      })
+      setScreen('forum')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not post. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.close()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>New Post</span>
-          <button onClick={() => setScreen('forum')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 12, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Post</button>
+          <button onClick={submit} disabled={submitting || !unitId || !title.trim() || !text.trim()} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 12, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: (submitting || !unitId || !title.trim() || !text.trim()) ? 0.5 : 1 }}>{submitting ? 'Posting…' : 'Post'}</button>
         </div>
       </div>
-      <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }} className="scrollbar-hide">
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           <Avi name="AG" size={40} />
           <div>
@@ -1355,89 +1406,78 @@ function PostComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ fontSize: 11, color: '#6B7280' }}>{USER.course} · {USER.year}</div>
           </div>
         </div>
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Share a study tip, ask for help, or start a discussion..." rows={6} style={{ width: '100%', border: 'none', outline: 'none', fontSize: 14, color: '#374151', fontFamily: 'Plus Jakarta Sans', resize: 'none', background: 'transparent', lineHeight: 1.7, boxSizing: 'border-box' }} />
+        {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>}
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 8 }}>Category</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 8 }}>Unit</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {['General','Study Tip','Q&A','Resources','Win','Announcement'].map(c => (
-              <button key={c} onClick={() => setCategory(c)} style={{ padding: '6px 12px', borderRadius: 20, background: category === c ? N.gold : '#F3F4F6', color: category === c ? N.navy : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{c}</button>
+            {units.map(u => (
+              <button key={u.id} onClick={() => setUnitId(u.id)} style={{ padding: '7px 14px', borderRadius: 20, background: unitId === u.id ? N.navy : '#F3F4F6', color: unitId === u.id ? N.gold : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u.code}</button>
             ))}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setShowPicker('image')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12, color: '#374151' }}>{Ic.image('w-4 h-4')} Image</button>
-          <button onClick={() => setShowPicker('document')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12, color: '#374151' }}>{Ic.attach('w-4 h-4')} Document</button>
-          <button onClick={() => setShowPicker('unit')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12, color: '#374151' }}>📚 Unit</button>
-        </div>
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={200} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', outline: 'none', fontSize: 14, fontWeight: 700, color: N.navy, fontFamily: 'Plus Jakarta Sans', background: '#fff', borderRadius: 12, padding: '12px 14px', boxSizing: 'border-box' }} />
+        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Share a study tip, ask for help, or start a discussion..." rows={6} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', outline: 'none', fontSize: 14, color: '#374151', fontFamily: 'Plus Jakarta Sans', resize: 'none', background: '#fff', lineHeight: 1.7, borderRadius: 12, padding: 14, boxSizing: 'border-box' }} />
       </div>
-      {showPicker && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }}>
-          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 36px', width: '100%' }}>
-            <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
-            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 16 }}>{showPicker === 'image' ? 'Add Image' : showPicker === 'document' ? 'Attach Document' : 'Select Unit'}</div>
-            {showPicker === 'unit' ? (
-              ['ACT 101','MAT 101','STA 101','ECO 101'].map((u,i) => (
-                <button key={i} onClick={() => setShowPicker(null)} style={{ display: 'block', width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 12, padding: '13px 16px', marginBottom: 8, textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>{u}</button>
-              ))
-            ) : (
-              [['📷','Camera'],['🖼️','Photo Library'],['📂','Files']].map(([icon,label],i) => (
-                <button key={i} onClick={() => setShowPicker(null)} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 12, padding: '13px 16px', marginBottom: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-                  <span style={{ fontSize: 22 }}>{icon}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{label}</span>
-                </button>
-              ))
-            )}
-            <button onClick={() => setShowPicker(null)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', marginTop: 4, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
 // ─── QUESTION COMPOSER ────────────────────────────────────────────────────────
 function QuestionComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [title, setTitle] = useState('')
   const [q, setQ] = useState('')
-  const [unit, setUnit] = useState('ACT 101')
-  const [showPicker, setShowPicker] = useState<string|null>(null)
+  const [units, setUnits] = useState<UnitOption[]>([])
+  const [unitId, setUnitId] = useState<number | null>(null)
+  const [csrfToken, setCsrfToken] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<UnitOption[]>('/units').then(u => { setUnits(u); if (u.length) setUnitId(u[0].id) }).catch(() => setError('Could not load your units.'))
+    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+  }, [])
+
+  const submit = async () => {
+    if (!unitId || !title.trim() || !q.trim() || submitting) return
+    setSubmitting(true); setError('')
+    try {
+      await api('/forum/posts', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ unit_id: unitId, title: title.trim(), body: q.trim() }),
+      })
+      setScreen('forum')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not post. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.close()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Ask a Question</span>
-          <button onClick={() => setScreen('forum')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 12, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Post</button>
+          <button onClick={submit} disabled={submitting || !unitId || !title.trim() || !q.trim()} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 12, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: (submitting || !unitId || !title.trim() || !q.trim()) ? 0.5 : 1 }}>{submitting ? 'Posting…' : 'Post'}</button>
         </div>
       </div>
-      <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }} className="scrollbar-hide">
+        {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 8 }}>Unit</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {units.map(u => (
+              <button key={u.id} onClick={() => setUnitId(u.id)} style={{ padding: '7px 14px', borderRadius: 20, background: unitId === u.id ? N.navy : '#F3F4F6', color: unitId === u.id ? N.gold : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u.code}</button>
+            ))}
+          </div>
+        </div>
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={200} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', outline: 'none', fontSize: 14, fontWeight: 700, color: N.navy, fontFamily: 'Plus Jakarta Sans', background: '#fff', borderRadius: 12, padding: '12px 14px', boxSizing: 'border-box' }} />
         <div>
           <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Your question</div>
           <textarea value={q} onChange={e => setQ(e.target.value)} placeholder="e.g. Can someone explain the difference between annuity-immediate and annuity-due?" rows={5} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', outline: 'none', fontSize: 14, color: '#374151', fontFamily: 'Plus Jakarta Sans', resize: 'none', background: '#fff', lineHeight: 1.7, borderRadius: 14, padding: 14, boxSizing: 'border-box' }} />
         </div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 8 }}>Unit / Course</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {['ACT 101','MAT 101','STA 101','ECO 101','Other'].map(u => (
-              <button key={u} onClick={() => setUnit(u)} style={{ padding: '7px 14px', borderRadius: 20, background: unit === u ? N.navy : '#F3F4F6', color: unit === u ? N.gold : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u}</button>
-            ))}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setShowPicker('image')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12, color: '#374151' }}>{Ic.image('w-4 h-4')} Add Image</button>
-          <button onClick={() => setShowPicker('document')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12, color: '#374151' }}>{Ic.attach('w-4 h-4')} Attach Doc</button>
-        </div>
-        {showPicker && (
-          <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 14, padding: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 10 }}>{showPicker === 'image' ? 'Add Image from:' : 'Attach Document from:'}</div>
-            {(showPicker === 'image' ? [['📷','Camera'],['🖼️','Photo Library']] : [['📂','Files'],['☁️','Google Drive']]).map(([icon,label],i) => (
-              <button key={i} onClick={() => setShowPicker(null)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 10, padding: '10px 12px', marginBottom: 6, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-                <span style={{ fontSize: 18 }}>{icon}</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{label}</span>
-              </button>
-            ))}
-            <button onClick={() => setShowPicker(null)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 10, padding: '9px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12, color: '#374151' }}>Cancel</button>
-          </div>
-        )}
         <div style={{ background: 'rgba(201,168,76,0.08)', border: `1px solid ${N.gold}30`, borderRadius: 14, padding: 14 }}>
           <div style={{ fontSize: 12, color: N.gold, fontWeight: 700, marginBottom: 4 }}>✦ Try Prepza AI first</div>
           <div style={{ fontSize: 12, color: '#6B7280' }}>Your AI tutor might already know the answer. <span onClick={() => setScreen('ai-tutor')} style={{ color: N.gold, fontWeight: 700, cursor: 'pointer' }}>Ask AI instead →</span></div>
@@ -2171,15 +2211,33 @@ function SummaryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── FORUM ────────────────────────────────────────────────────────────────────
-function ForumScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const [filter, setFilter] = useState('For You')
-  const loading = useLoading(1000)
-  const filters = ['For You','My Course','My Year','Trending']
-  const filtered = filter === 'My Course' ? forumPosts.filter(p => p.course.includes('Actuarial') || p.course.includes('Finance'))
-    : filter === 'My Year' ? forumPosts.filter((_, i) => i < 2)
-    : filter === 'Trending' ? [...forumPosts].sort((a, b) => b.likes - a.likes)
-    : forumPosts
-  if (loading) return <SkeletonForum />
+function ForumScreen({ setScreen, setActiveForumPostId }: { setScreen: (s: Screen) => void; setActiveForumPostId: (id: number) => void }) {
+  const [units, setUnits] = useState<UnitOption[]>([])
+  const [unitId, setUnitId] = useState<number | null>(null)
+  const [posts, setPosts] = useState<ForumPostSummary[]>([])
+  const [loadingUnits, setLoadingUnits] = useState(true)
+  const [loadingPosts, setLoadingPosts] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<UnitOption[]>('/units')
+      .then(u => { setUnits(u); if (u.length) setUnitId(u[0].id) })
+      .catch(() => setError('Could not load your units.'))
+      .finally(() => setLoadingUnits(false))
+  }, [])
+
+  useEffect(() => {
+    if (unitId == null) return
+    setLoadingPosts(true)
+    api<{ unit: string; page: number; posts: ForumPostSummary[] }>(`/units/${unitId}/forum`)
+      .then(res => setPosts(res.posts))
+      .catch(() => setError('Could not load posts for this unit.'))
+      .finally(() => setLoadingPosts(false))
+  }, [unitId])
+
+  const openPost = (id: number) => { setActiveForumPostId(id); setScreen('comments') }
+
+  if (loadingUnits) return <SkeletonForum />
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
@@ -2189,12 +2247,12 @@ function ForumScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <button onClick={() => setScreen('post-composer')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 11, padding: '8px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 12, color: N.navy }}>+ Post</button>
         </div>
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }} className="scrollbar-hide">
-          {filters.map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, background: filter === f ? N.gold : 'rgba(255,255,255,0.1)', color: filter === f ? N.navy : 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{f}</button>
+          {units.map(u => (
+            <button key={u.id} onClick={() => setUnitId(u.id)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, background: unitId === u.id ? N.gold : 'rgba(255,255,255,0.1)', color: unitId === u.id ? N.navy : 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u.code}</button>
           ))}
         </div>
       </div>
-      {/* My Groups */}
+      {/* My Groups - not yet wired to real data */}
       <div style={{ padding: '14px 16px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>My Groups</div>
@@ -2218,57 +2276,138 @@ function ForumScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           </button>
         </div>
         <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Recent Posts</div>
-        {filtered.length === 0 ? (
-          <EmptyState icon="💬" title="No posts yet" sub="Join a group and start a discussion." action="Find Groups" onAction={() => setScreen('explore')} />
-        ) : filtered.map(p => <ForumCard key={p.id} post={p} setScreen={setScreen} />)}
+        {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{error}</div>}
+        {loadingPosts ? (
+          <div style={{ fontSize: 12, color: '#9CA3AF', padding: '20px 0' }}>Loading posts…</div>
+        ) : posts.length === 0 ? (
+          <EmptyState icon="💬" title="No posts yet" sub="Be the first to post in this unit." action="New Post" onAction={() => setScreen('post-composer')} />
+        ) : posts.map(p => <RealForumCard key={p.id} post={p} onOpen={() => openPost(p.id)} />)}
       </div>
     </div>
   )
 }
 
 // ─── COMMENTS ────────────────────────────────────────────────────────────────
-function CommentsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void; postId: number | null }) {
+  const [post, setPost] = useState<ForumPostDetail | null>(null)
   const [input, setInput] = useState('')
-  const [comments, setComments] = useState([
-    { user: 'Brian Omondi', avatar: 'BO', text: 'Completely agree! The podcast feature saved me during my commute this morning.', time: '2h', likes: 12 },
-    { user: 'Aisha Mohamed', avatar: 'AM', text: 'How long did it take for Prepza to process your notes? Mine took about 1 min for 50 pages', time: '1h', likes: 4 },
-    { user: 'David Njoroge', avatar: 'DN', text: 'Try the flashcard mode too — generated 40 cards from my Physiology notes in seconds', time: '45m', likes: 8 },
-  ])
-  const sendComment = () => {
-    if (!input.trim()) return
-    setComments(c => [...c, { user: USER.name, avatar: USER.initials, text: input, time: 'Just now', likes: 0 }])
-    setInput('')
+  const [csrfToken, setCsrfToken] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [askingAi, setAskingAi] = useState(false)
+  const [error, setError] = useState('')
+
+  const loadPost = () => {
+    if (postId == null) return
+    setLoading(true)
+    api<ForumPostDetail>(`/forum/posts/${postId}`)
+      .then(setPost)
+      .catch(() => setError('Could not load this post.'))
+      .finally(() => setLoading(false))
   }
+
+  useEffect(() => { loadPost() }, [postId])
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  const sendComment = async () => {
+    if (!input.trim() || postId == null || sending) return
+    setSending(true); setError('')
+    try {
+      await api(`/forum/posts/${postId}/replies`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ body: input.trim() }),
+      })
+      setInput('')
+      loadPost()
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not post your reply.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const askAi = async () => {
+    if (postId == null || askingAi) return
+    setAskingAi(true); setError('')
+    try {
+      await api(`/forum/posts/${postId}/ask-ai`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      loadPost()
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Prepza AI could not answer right now.')
+    } finally {
+      setAskingAi(false)
+    }
+  }
+
+  if (postId == null) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => setScreen('forum')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Post</span>
+          </div>
+        </div>
+        <EmptyState icon="💬" title="No post selected" sub="Go back and pick a post from the forum." action="Back to Forum" onAction={() => setScreen('forum')} />
+      </div>
+    )
+  }
+
+  const replyCount = post ? post.replies.filter(r => !r.is_removed).length : 0
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setScreen('forum')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Comments ({comments.length})</span>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Replies ({replyCount})</span>
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }} className="scrollbar-hide">
-        {comments.map((c, i) => (
-          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-              <Avi name={c.avatar} size={34} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{c.user}</div>
-                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{c.time}</div>
+        {loading ? (
+          <div style={{ fontSize: 12, color: '#9CA3AF', padding: '20px 0' }}>Loading…</div>
+        ) : !post ? (
+          <div style={{ fontSize: 12, color: '#C94C4C' }}>{error || 'Post not found.'}</div>
+        ) : (
+          <>
+            <div style={{ background: '#fff', borderRadius: 14, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+                <Avi name={post.author.slice(0, 2).toUpperCase()} size={34} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{post.author}</div>
+                  <div style={{ fontSize: 11, color: '#9CA3AF' }}>{post.created_at ? new Date(post.created_at).toLocaleString() : ''}</div>
+                </div>
               </div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: N.navy, marginBottom: 6 }}>{post.title}</div>
+              <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65 }}>{post.body}</div>
             </div>
-            <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, marginBottom: 8 }}>{c.text}</div>
-            <button style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
-              {Ic.heart('w-3 h-3')} {c.likes}
+            <button onClick={askAi} disabled={askingAi} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(201,168,76,0.1)', border: `1px solid ${N.gold}40`, borderRadius: 12, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12, color: N.gold, opacity: askingAi ? 0.6 : 1 }}>
+              ✦ {askingAi ? 'Asking Prepza AI…' : 'Ask Prepza AI to answer'}
             </button>
-          </div>
-        ))}
+            {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>}
+            {post.replies.map(r => (
+              <div key={r.id} style={{ background: r.is_ai ? 'rgba(201,168,76,0.06)' : '#fff', borderRadius: 14, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: r.is_ai ? `1px solid ${N.gold}30` : 'none' }}>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+                  {r.is_ai
+                    ? <div style={{ width: 34, height: 34, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>✦</div>
+                    : <Avi name={(r.author || '??').slice(0, 2).toUpperCase()} size={34} />}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{r.is_ai ? 'Prepza AI' : (r.author || 'Deleted user')}</div>
+                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, whiteSpace: 'pre-line' }}>{r.is_removed ? '[removed]' : r.body}</div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
       <div style={{ padding: '10px 14px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.07)' }}>
           <Avi name={USER.initials} size={28} />
-          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendComment()} placeholder="Add a comment…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
-          <button onClick={sendComment} style={{ width: 30, height: 30, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendComment()} placeholder="Add a reply… (mention @Prepza AI to ask it directly)" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
+          <button onClick={sendComment} disabled={sending} style={{ width: 30, height: 30, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: sending ? 0.6 : 1 }}>
             <div style={{ color: N.navy }}>{Ic.send('w-3 h-3')}</div>
           </button>
         </div>
@@ -3113,6 +3252,11 @@ function VerifyConfirmScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
 }
 
 // ─── SIGNUP ───────────────────────────────────────────────────────────────────
+type UnitOption = { id: number; code: string; name: string }
+type ForumReplyData = { id: number; body: string | null; is_removed: boolean; is_ai: boolean; author: string | null; ai_answer_id: number | null; created_at: string | null }
+type ForumPostSummary = { id: number; title: string; body: string; author: string; reply_count: number; created_at: string | null }
+type ForumPostDetail = { id: number; title: string; body: string; author: string; unit_id: number; created_at: string | null; replies: ForumReplyData[] }
+
 type UniversityOption = { id: number; name: string; short_code: string; country: string | null }
 type ProgramOption = { id: number; name: string; degree_level: string | null; discipline_category: string | null }
 
@@ -5754,6 +5898,11 @@ export default function App() {
   const [adminMode, setAdminMode] = useState(false)
   const [oauthError, setOauthError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  // Which ForumPost is open in CommentsScreen. Screens communicate purely
+  // via the Screen string (no route params), so this - like other
+  // "currently open X" ids - has to be lifted here rather than living
+  // inside ForumScreen/CommentsScreen, which unmount on navigation.
+  const [activeForumPostId, setActiveForumPostId] = useState<number | null>(null)
 
   // Handles the round-trip back from /auth/google/callback, which appends
   // ?complete_profile=1 (new Google account, needs university/course/year/
@@ -5833,8 +5982,8 @@ export default function App() {
       case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} />
       case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} />
       case 'summary':           return <SummaryScreen setScreen={setScreen} />
-      case 'forum':             return <ForumScreen setScreen={setScreen} />
-      case 'comments':          return <CommentsScreen setScreen={setScreen} />
+      case 'forum':             return <ForumScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} />
+      case 'comments':          return <CommentsScreen setScreen={setScreen} postId={activeForumPostId} />
       case 'chats':             return <ChatsScreen setScreen={setScreen} />
       case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} />
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} />
