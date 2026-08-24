@@ -414,6 +414,176 @@ class LearningEvent(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+# ---------- Ada Phase 2 (concept mastery) ----------
+
+class StudentConceptMastery(db.Model):
+    """
+    One row per (user, concept), aggregating LearningEvent rows into a
+    running mastery estimate. Deliberately naive for this first pass -
+    every LearningEvent today is an "exposure" signal only (a concept
+    came up in a tutor turn), with no correctness signal yet, per the
+    Ada doc's "initial algorithm can be simple, architecture should
+    allow improvement later" guidance (see section 19, MASTERy MODEL).
+    Real correctness data (quiz/past-paper attempts) will feed into
+    update_concept_mastery() once Phase 4 exists, without a schema
+    change here - misconception_count and the scoring inputs below are
+    already shaped to take that signal when it lands.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    concept_id = db.Column(db.Integer, db.ForeignKey("learning_concept.id"), nullable=False)
+    mastery_score = db.Column(db.Integer, nullable=False, default=0)
+    # 0-100. Naive exposure-based estimate for now - see class docstring.
+    confidence = db.Column(db.String(20), nullable=False, default="low")
+    # low | moderate | high - reflects how much EVIDENCE backs the
+    # score, not the score itself. A student could have a high
+    # mastery_score off few exposures, which is exactly what "low"
+    # confidence here is meant to flag as not yet reliable.
+    exposure_count = db.Column(db.Integer, nullable=False, default=0)
+    misconception_count = db.Column(db.Integer, nullable=False, default=0)
+    last_practiced_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "concept_id", name="uq_concept_mastery_user_concept"),
+    )
+
+
+MASTERY_CONFIDENCE_THRESHOLDS = {"moderate": 3, "high": 7}
+# exposure_count needed to reach each confidence tier - below
+# "moderate"'s threshold, confidence stays "low" regardless of score.
+
+
+def _mastery_gain_for_exposure(exposure_count_before):
+    """
+    Diminishing-returns gain curve: an early exposure moves the needle
+    a lot (a student's first few encounters with a concept are the
+    most informative), later exposures move it less. Floor of 3 so
+    mastery never fully plateaus from continued engagement alone.
+    Deliberately simple - see StudentConceptMastery's docstring.
+    """
+    return max(3, 20 - 2 * exposure_count_before)
+
+
+def update_concept_mastery(user_id, concept_id, had_misconception=False):
+    """
+    Get-or-creates a StudentConceptMastery row and applies one
+    exposure update. Called from ai_service.generate_tutor_reply()
+    right after a LearningEvent is logged for this concept - one call
+    per detected concept per tutor turn.
+
+    On a normal exposure, mastery_score increases per
+    _mastery_gain_for_exposure() (diminishing returns, capped at 100).
+    On a flagged misconception, mastery_score decreases by a fixed
+    penalty instead (floored at 0) and misconception_count increments -
+    LearningEvent.misconception isn't populated by anything yet as of
+    this patch, so this branch is currently unreachable in practice,
+    but the scoring function is ready for whenever misconception
+    detection lands rather than needing another schema/logic change.
+
+    Does NOT commit - caller is expected to commit alongside whatever
+    else it's persisting in the same request (matches award_xp() /
+    record_study_activity()'s pattern elsewhere in this file, which
+    also leave the commit to their caller).
+    """
+    row = StudentConceptMastery.query.filter_by(user_id=user_id, concept_id=concept_id).first()
+    if not row:
+        row = StudentConceptMastery(user_id=user_id, concept_id=concept_id)
+        db.session.add(row)
+        db.session.flush()
+
+    if had_misconception:
+        row.misconception_count = (row.misconception_count or 0) + 1
+        row.mastery_score = max(0, row.mastery_score - 10)
+    else:
+        gain = _mastery_gain_for_exposure(row.exposure_count)
+        row.mastery_score = min(100, row.mastery_score + gain)
+
+    row.exposure_count = (row.exposure_count or 0) + 1
+    row.last_practiced_at = datetime.utcnow()
+
+    if row.exposure_count >= MASTERY_CONFIDENCE_THRESHOLDS["high"]:
+        row.confidence = "high"
+    elif row.exposure_count >= MASTERY_CONFIDENCE_THRESHOLDS["moderate"]:
+        row.confidence = "moderate"
+    else:
+        row.confidence = "low"
+
+    return row
+
+
+def get_student_mastery_snapshot(user_id, document_content_id, limit=10):
+    """
+    Returns this student's current mastery for concepts already touched
+    within THIS document's tutoring conversation - e.g.
+    [{"name": "Conditional Probability", "mastery_score": 54, "confidence":
+    "moderate"}, ...], most-recently-practiced first. Used to give Ada
+    per-turn calibration context (don't re-explain something already
+    mastered, don't assume a weak prerequisite is understood).
+
+    Deliberately scoped to THIS document, not the student's entire
+    history - TutorConversation itself is per (user, document), so this
+    matches that boundary. A longer-term, cross-document profile is a
+    later Ada phase (see LONG-TERM ACADEMIC MEMORY in the Ada design
+    doc), not built here.
+    """
+    concept_ids = [
+        row[0] for row in
+        db.session.query(LearningEvent.concept_id)
+        .filter(
+            LearningEvent.user_id == user_id,
+            LearningEvent.document_content_id == document_content_id,
+        )
+        .distinct()
+        .all()
+    ]
+    if not concept_ids:
+        return []
+
+    rows = (
+        StudentConceptMastery.query
+        .filter(
+            StudentConceptMastery.user_id == user_id,
+            StudentConceptMastery.concept_id.in_(concept_ids),
+        )
+        .order_by(StudentConceptMastery.last_practiced_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    snapshot = []
+    for row in rows:
+        concept = db.session.get(LearningConcept, row.concept_id)
+        if not concept:
+            continue
+        snapshot.append({
+            "name": concept.name,
+            "mastery_score": row.mastery_score,
+            "confidence": row.confidence,
+        })
+    return snapshot
+
+
+class ConceptPrerequisite(db.Model):
+    """
+    A directed edge: concept_id requires prerequisite_concept_id.
+    Deliberately ungoverned/no admin curation for MVP, same tradeoff as
+    LearningConcept itself - rows are upserted organically whenever the
+    tutor names a prerequisite via its trailing [[PREREQUISITE: ...]]
+    marker (see the marker-protocol extension in ai_service.py).
+    Global, not per-student, same scope as LearningConcept - "Bayes
+    Theorem requires Conditional Probability" is a fact about the
+    subject matter, not about any one student.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    concept_id = db.Column(db.Integer, db.ForeignKey("learning_concept.id"), nullable=False)
+    prerequisite_concept_id = db.Column(db.Integer, db.ForeignKey("learning_concept.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint("concept_id", "prerequisite_concept_id", name="uq_concept_prerequisite_pair"),
+    )
+
+
 class LibraryPublication(db.Model):
     """
     A student's document submitted for publication to the public Prepza

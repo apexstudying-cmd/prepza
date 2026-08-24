@@ -1717,6 +1717,13 @@ TUTOR_HISTORY_MESSAGE_LIMIT = 20
 # never a concept mention elsewhere in the reply body.
 TUTOR_CONCEPT_MARKER_RE = re.compile(r"\n?\[\[CONCEPT:\s*(.+?)\s*\]\]\s*\Z", re.IGNORECASE)
 
+# Matches a "[[PREREQUISITE: <name>]]" marker line, same tolerant
+# pattern as TUTOR_CONCEPT_MARKER_RE above. Applied as a SEPARATE pass
+# after the CONCEPT marker has already been stripped (see
+# _parse_tutor_reply()) - PREREQUISITE sits one line above CONCEPT, so
+# it only becomes the new end-of-string once CONCEPT is gone.
+TUTOR_PREREQUISITE_MARKER_RE = re.compile(r"\n?\[\[PREREQUISITE:\s*(.+?)\s*\]\]\s*\Z", re.IGNORECASE)
+
 
 def _build_tutor_system_prompt(unit_context, document_text, page_count):
     """
@@ -1738,6 +1745,20 @@ def _build_tutor_system_prompt(unit_context, document_text, page_count):
         "document doesn't cover, say so rather than inventing content. "
         "Keep replies conversational and appropriately concise for a chat, "
         "not an essay.\n\n"
+        "GUIDED PROBLEM-SOLVING: when the student asks you to solve, "
+        "complete, or work through a specific exercise or homework-style "
+        "problem, default to guided practice rather than handing over a "
+        "worked solution immediately - ask what they think the first step "
+        "is, evaluate their attempt, and give a hint if they're off track "
+        "rather than the full answer. Escalate to a stronger hint only if "
+        "a lighter one didn't help. Give the direct, complete solution "
+        "when the student explicitly asks for it, says they're stuck "
+        "after a genuine attempt, or still wants it spelled out after "
+        "you've already offered guidance - respect a clear, direct "
+        "request rather than withholding the answer out of stubbornness. "
+        "This guided-practice default does NOT apply to conceptual "
+        "questions (\"explain X\", \"what is Y\") - answer those "
+        "directly, no hint-first detour.\n\n"
         "At the very end of EVERY reply, on its own final line, add a "
         "machine-readable marker naming the single main academic concept "
         "this turn was about, in this exact format:\n"
@@ -1748,7 +1769,52 @@ def _build_tutor_system_prompt(unit_context, document_text, page_count):
         "format - it is stripped out before the student ever sees your "
         "reply, so it does not need to read naturally as part of the "
         "conversation.\n\n"
+        "Directly above that CONCEPT marker line (making it the "
+        "second-to-last line, not the last), add one more marker "
+        "naming ONE key prerequisite concept a student would need to "
+        "already understand before this turn's concept, in this exact "
+        "format:\n"
+        "[[PREREQUISITE: <2-5 word prerequisite concept name, Title Case>]]\n"
+        "If this turn wasn't really about a specific concept, or it "
+        "has no clear single prerequisite, write [[PREREQUISITE: none]] "
+        "instead. This marker is also stripped out before the student "
+        "sees your reply.\n\n"
         f"DOCUMENT TEXT:\n{document_text}"
+    )
+
+
+def _format_mastery_context(snapshot):
+    """
+    Turns a get_student_mastery_snapshot() result into a short
+    instruction block for the tutor prompt. Returns "" for an empty
+    snapshot (nothing tracked yet in this conversation) so callers can
+    skip adding an empty system block.
+
+    Explicitly instructs the model not to read the numbers back to the
+    student verbatim - this is internal calibration context, not
+    something Ada should narrate ("I see your mastery score is 54"
+    would be exactly the kind of robotic, fabricated-sounding framing
+    the Ada design doc's personality section warns against).
+    """
+    if not snapshot:
+        return ""
+
+    lines = [
+        f"- {item['name']}: mastery {item['mastery_score']}/100 ({item['confidence']} confidence)"
+        for item in snapshot
+    ]
+    return (
+        "STUDENT MASTERY CONTEXT (from this student's history in this "
+        "conversation - use it to calibrate depth and pacing, but NEVER "
+        "read these numbers back to the student or mention them "
+        "directly):\n" + "\n".join(lines) + "\n\n"
+        "Calibration guidance: for concepts with high mastery, don't "
+        "re-explain the basics - build on them or move faster. For "
+        "concepts with low mastery, use more scaffolding and check "
+        "understanding before advancing. 'Low' confidence means there "
+        "isn't much evidence yet either way - treat that mastery number "
+        "as tentative, not a reliable read on what the student actually "
+        "knows."
     )
 
 
@@ -1771,32 +1837,55 @@ def _fetch_tutor_history(conversation_id, limit=TUTOR_HISTORY_MESSAGE_LIMIT):
 
 def _parse_tutor_reply(raw_text):
     """
-    Strips the trailing [[CONCEPT: ...]] marker (see
-    _build_tutor_system_prompt()) from a raw tutor reply. Returns
-    (visible_reply_text, concept_name_or_None).
+    Strips the trailing [[PREREQUISITE: ...]] and [[CONCEPT: ...]]
+    markers (see _build_tutor_system_prompt()) from a raw tutor reply.
+    Returns (visible_reply_text, concept_name_or_None,
+    prerequisite_name_or_None).
 
-    Tolerant of a missing or malformed marker - concept detection is a
-    best-effort signal for LearningEvent logging, not something that
-    should ever block the reply itself from reaching the student. If
-    the marker is missing, the whole raw reply is shown as-is and no
-    concept is recorded for that turn.
+    Stripped in the order the prompt asks the model to write them:
+    CONCEPT is the true last line, so it's matched and removed FIRST;
+    PREREQUISITE is the line directly above it, matched against
+    whatever remains. This means CONCEPT parsing behaves identically to
+    before this marker existed - a missing/malformed PREREQUISITE line
+    can't affect it. Both are best-effort signals for
+    LearningEvent/ConceptPrerequisite logging, never something that
+    blocks the reply itself from reaching the student.
     """
     stripped = raw_text.strip()
-    match = TUTOR_CONCEPT_MARKER_RE.search(stripped)
-    if not match:
-        return stripped, None
 
-    visible_text = stripped[:match.start()].strip()
-    if not visible_text:
+    concept_match = TUTOR_CONCEPT_MARKER_RE.search(stripped)
+    if not concept_match:
+        return stripped, None, None
+
+    after_concept_strip = stripped[:concept_match.start()].strip()
+    if not after_concept_strip:
         # Marker somehow ate the whole reply - never show the student
         # an empty message over a parsing edge case.
-        return stripped, None
+        return stripped, None, None
 
-    concept_raw = match.group(1).strip()
-    if not concept_raw or concept_raw.lower() in ("none", "n/a"):
-        return visible_text, None
+    concept_raw = concept_match.group(1).strip()
+    concept_name = (
+        None if (not concept_raw or concept_raw.lower() in ("none", "n/a"))
+        else concept_raw[:200]
+    )
 
-    return visible_text, concept_raw[:200]
+    prerequisite_match = TUTOR_PREREQUISITE_MARKER_RE.search(after_concept_strip)
+    if not prerequisite_match:
+        return after_concept_strip, concept_name, None
+
+    visible_text = after_concept_strip[:prerequisite_match.start()].strip()
+    if not visible_text:
+        # Same defensive fallback as above - never lose the reply body
+        # over a prerequisite-marker parsing edge case.
+        return after_concept_strip, concept_name, None
+
+    prerequisite_raw = prerequisite_match.group(1).strip()
+    prerequisite_name = (
+        None if (not prerequisite_raw or prerequisite_raw.lower() in ("none", "n/a"))
+        else prerequisite_raw[:200]
+    )
+
+    return visible_text, concept_name, prerequisite_name
 
 
 def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id, plan_tier="free"):
@@ -1830,7 +1919,8 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
     """
     from app import (
         db, TutorConversation, TutorMessage, DocumentContent,
-        LearningConcept, LearningEvent,
+        LearningConcept, LearningEvent, update_concept_mastery,
+        get_student_mastery_snapshot, ConceptPrerequisite,
     )
 
     conversation = db.session.get(TutorConversation, conversation_id)
@@ -1873,11 +1963,23 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
         document_text=content.extracted_text,
         page_count=content.page_count,
     )
+
+    mastery_snapshot = get_student_mastery_snapshot(triggering_user_id, content.id)
+    mastery_context_text = _format_mastery_context(mastery_snapshot)
+
     system = [{
         "type": "text",
         "text": system_prompt,
         "cache_control": {"type": "ephemeral"},
     }]
+    if mastery_context_text:
+        # Deliberately a SEPARATE, uncached system block - mastery
+        # scores change nearly every turn, so folding this into the
+        # cached document-text block above would invalidate that
+        # cache almost every request and undo Phase 1's caching cost
+        # savings. This block is short, so leaving it uncached costs
+        # very little.
+        system.append({"type": "text", "text": mastery_context_text})
 
     provider, provider_name = _get_provider()
 
@@ -1906,7 +2008,7 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
         ai_usage.cache_read_tokens, ai_usage.cache_creation_tokens,
     )
 
-    reply_text, concept_name = _parse_tutor_reply(raw_text)
+    reply_text, concept_name, prerequisite_name = _parse_tutor_reply(raw_text)
 
     assistant_row = TutorMessage(conversation_id=conversation_id, role="assistant", content=reply_text)
     db.session.add(assistant_row)
@@ -1933,6 +2035,32 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             document_content_id=content.id,
             evidence_snippet=user_message_text[:500],
         ))
+        # Ada Phase 2: fold this exposure into the running mastery
+        # estimate for this (user, concept) pair. had_misconception is
+        # always False today - nothing populates LearningEvent.misconception
+        # yet, so every detected concept is treated as a plain exposure
+        # signal until misconception detection is wired up.
+        update_concept_mastery(triggering_user_id, concept.id, had_misconception=False)
+
+        # Ada Phase 2: organically build the prerequisite graph, same
+        # upsert pattern as LearningConcept itself. Guards against a
+        # self-loop (a concept can't be its own prerequisite) since the
+        # model occasionally repeats the concept name here despite the
+        # prompt asking for a DIFFERENT prerequisite concept.
+        if prerequisite_name and prerequisite_name != concept_name:
+            prerequisite_concept = LearningConcept.query.filter_by(name=prerequisite_name).first()
+            if not prerequisite_concept:
+                prerequisite_concept = LearningConcept(name=prerequisite_name)
+                db.session.add(prerequisite_concept)
+                db.session.flush()  # assign prerequisite_concept.id before the query below
+            existing_edge = ConceptPrerequisite.query.filter_by(
+                concept_id=concept.id, prerequisite_concept_id=prerequisite_concept.id,
+            ).first()
+            if not existing_edge:
+                db.session.add(ConceptPrerequisite(
+                    concept_id=concept.id,
+                    prerequisite_concept_id=prerequisite_concept.id,
+                ))
 
     conversation.updated_at = datetime.utcnow()
     db.session.commit()
