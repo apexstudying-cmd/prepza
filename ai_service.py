@@ -1818,6 +1818,28 @@ def _format_mastery_context(snapshot):
     )
 
 
+def _format_diagnostic_instruction(prerequisite_concept):
+    """
+    Builds a short, uncached system block instructing Ada to check the
+    student's grasp of a specific prerequisite before continuing to
+    teach, rather than assuming it. Kept as its own tiny system block
+    (uncached, same reasoning as _format_mastery_context()) so it
+    doesn't invalidate the cached document-text block on every turn.
+    """
+    return (
+        "DIAGNOSTIC CHECK-IN: before continuing to teach, this student's "
+        f"grasp of a likely prerequisite - \"{prerequisite_concept.name}\" - "
+        "isn't yet well-established. Before going deeper into the current "
+        "topic, ask ONE lightweight, natural question to check their "
+        "understanding of this prerequisite (not a quiz, just a quick "
+        "conversational check). If they show they understand it, continue "
+        "teaching normally. If they don't, address the prerequisite first "
+        "before returning to the original topic. Don't make this feel like "
+        "an interruption or a test - it should read as a natural part of "
+        "the conversation."
+    )
+
+
 def _fetch_tutor_history(conversation_id, limit=TUTOR_HISTORY_MESSAGE_LIMIT):
     """
     Returns up to the last `limit` TutorMessage rows for a conversation,
@@ -1921,6 +1943,7 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
         db, TutorConversation, TutorMessage, DocumentContent,
         LearningConcept, LearningEvent, update_concept_mastery,
         get_student_mastery_snapshot, ConceptPrerequisite,
+        should_diagnose, get_current_conversation_concept_id,
     )
 
     conversation = db.session.get(TutorConversation, conversation_id)
@@ -1980,6 +2003,26 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
         # savings. This block is short, so leaving it uncached costs
         # very little.
         system.append({"type": "text", "text": mastery_context_text})
+
+    # Ada Phase 2: diagnostic teaching. Looks at the concept most
+    # recently touched in THIS conversation (not this turn's concept -
+    # that's unknown until the model replies) and checks whether a
+    # prerequisite gap is likely, via should_diagnose(). Fires at most
+    # a short instruction block, no extra model call - reuses the same
+    # single-call architecture as everything else in this function.
+    current_concept_id = get_current_conversation_concept_id(triggering_user_id, content.id)
+    diagnostic_prerequisite = (
+        should_diagnose(triggering_user_id, current_concept_id)
+        if current_concept_id else None
+    )
+    if diagnostic_prerequisite:
+        # Same uncached-block reasoning as mastery_context_text above -
+        # this can change turn to turn, so it must not ride inside the
+        # cached document-text block.
+        system.append({
+            "type": "text",
+            "text": _format_diagnostic_instruction(diagnostic_prerequisite),
+        })
 
     provider, provider_name = _get_provider()
 

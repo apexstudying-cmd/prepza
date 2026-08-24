@@ -564,6 +564,72 @@ def get_student_mastery_snapshot(user_id, document_content_id, limit=10):
     return snapshot
 
 
+def get_current_conversation_concept_id(user_id, document_content_id):
+    """
+    Returns the concept_id of the most recently detected concept in
+    this student's tutoring conversation for this document, or None if
+    no concept has been detected yet. Used to decide whether a
+    diagnostic check-in is warranted before generating this turn's
+    reply - see should_diagnose() below. Deliberately scoped to this
+    document only, same boundary as get_student_mastery_snapshot().
+    """
+    latest_event = (
+        LearningEvent.query
+        .filter_by(user_id=user_id, document_content_id=document_content_id)
+        .order_by(LearningEvent.created_at.desc())
+        .first()
+    )
+    return latest_event.concept_id if latest_event else None
+
+
+def should_diagnose(user_id, concept_id):
+    """
+    Ada Phase 2: decides whether Ada should check the student's grasp
+    of a prerequisite before continuing to teach `concept_id`. Fires
+    only when there's a real gap signal, not on every turn - see the
+    Ada design doc's "diagnosis should be used when useful, not
+    mandatory" guidance (section 6).
+
+    Returns the prerequisite LearningConcept row to diagnose against,
+    or None if no diagnostic is warranted. Deliberately checks at most
+    one prerequisite per call - asking about several at once would
+    feel like an interrogation, not a natural check-in - so if a
+    concept has multiple prerequisites, this returns whichever one has
+    the lowest (or entirely missing) mastery for this student.
+    """
+    target_mastery = StudentConceptMastery.query.filter_by(
+        user_id=user_id, concept_id=concept_id
+    ).first()
+    # A student with solid, well-evidenced mastery of the target
+    # concept itself doesn't need a prerequisite check gating further
+    # teaching - diagnosis is for shoring up shaky ground, not
+    # interrupting a student who's already doing fine.
+    if target_mastery and target_mastery.confidence == "high":
+        return None
+
+    prereq_edges = ConceptPrerequisite.query.filter_by(concept_id=concept_id).all()
+    if not prereq_edges:
+        return None
+
+    weakest_concept = None
+    weakest_score = None
+    for edge in prereq_edges:
+        prereq_mastery = StudentConceptMastery.query.filter_by(
+            user_id=user_id, concept_id=edge.prerequisite_concept_id
+        ).first()
+        # No evidence at all reads as "unknown", scored below any real
+        # measured score - never assume an unpracticed prerequisite is
+        # fine just because nothing negative has been observed yet.
+        score = prereq_mastery.mastery_score if prereq_mastery else -1
+        if score >= 40:
+            continue
+        if weakest_score is None or score < weakest_score:
+            weakest_score = score
+            weakest_concept = db.session.get(LearningConcept, edge.prerequisite_concept_id)
+
+    return weakest_concept
+
+
 class ConceptPrerequisite(db.Model):
     """
     A directed edge: concept_id requires prerequisite_concept_id.
