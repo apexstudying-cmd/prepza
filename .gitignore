@@ -18,3 +18,14 @@ add_*.py
 remove_*.py
 !frontend/src/imports/logo.png
 !frontend/public/*.png
+*.patch
+/*_patch.py
+/migrate_*.py
+/chunk*.py
+/create_*.py
+/seed_*.py
+/test_chunk*.py
+/run_admin_schema_sql.py
+/resolve_forum_conflict.py
+/mark_document_ready.py
+/diagnose_chat_patch_anchors.py
