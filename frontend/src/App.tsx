@@ -2963,40 +2963,111 @@ function ChatsScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Sc
 }
 
 // ─── CHAT DETAIL ──────────────────────────────────────────────────────────────
-function ChatDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+type ChatMessageData = { id: number; conversation_id: number; sender_id: number; body: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null }
+
+function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
   const [input, setInput] = useState('')
-  const [msgs, setMsgs] = useState(chatMessages)
+  const [msgs, setMsgs] = useState<ChatMessageData[]>([])
   const [showAttach, setShowAttach] = useState(false)
-  const loading = useLoading(500)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
+  const [csrfToken, setCsrfToken] = useState('')
+  const [meId, setMeId] = useState<number | null>(null)
+  const [headerName, setHeaderName] = useState('Conversation')
+  const [headerIsGroup, setHeaderIsGroup] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    api<{ id: number; csrf_token: string }>('/me').then(me => { setCsrfToken(me.csrf_token); setMeId(me.id) }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (conversationId == null) { setLoading(false); return }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
+    api<{ chats: ChatSummary[] }>('/chats').then(data => {
+      if (cancelled) return
+      const summary = data.chats.find(c => c.id === conversationId)
+      if (summary) { setHeaderName(summary.name); setHeaderIsGroup(summary.is_group) }
+    }).catch(() => {})
+
+    const loadMessages = () => api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
+      .then(data => { if (!cancelled) setMsgs(data.messages) })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load messages') })
+
+    loadMessages().finally(() => { if (!cancelled) setLoading(false) })
+
+    api('/chats/' + conversationId + '/read', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrfToken },
+    }).catch(() => {})
+
+    const interval = setInterval(loadMessages, 4000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [conversationId, csrfToken])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [msgs])
+
   if (loading) return <SkeletonChatDetail />
-  const send = () => {
-    if (!input.trim()) return
-    setMsgs(m => [...m, { sender: 'Me', text: input, time: '9:41', me: true }])
-    setInput('')
+
+  const send = async () => {
+    if (!input.trim() || sending || conversationId == null) return
+    setSending(true)
+    setError(null)
+    try {
+      const message = await api<ChatMessageData>(`/chats/${conversationId}/messages`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ body: input.trim() }),
+      })
+      setMsgs(m => [...m, message])
+      setInput('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not send message')
+    } finally {
+      setSending(false)
+    }
   }
+
+  const initials = (headerName || '??').slice(0, 2).toUpperCase()
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 16px 14px' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button onClick={() => setScreen('chats')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <Avi name="∑" size={38} emoji="∑" />
+          <Avi name={initials} size={38} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>ACT 101 Study Group</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>18 members · 4 online</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>{headerName}</div>
+            {headerIsGroup && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>Group chat</div>}
           </div>
           <button onClick={() => setScreen('chat-options')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }} className="scrollbar-hide">
-        {msgs.map((m, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: m.me ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: m.me ? 'flex-end' : 'flex-start', gap: 2 }}>
-            {!m.me && <span style={{ fontSize: 11, color: N.gold, fontWeight: 700, marginLeft: 4 }}>{m.sender}</span>}
-            <div style={{ maxWidth: '76%', background: m.me ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: m.me ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '10px 13px', boxShadow: '0 2px 6px rgba(0,0,0,0.07)' }}>
-              <div style={{ fontSize: 13, color: m.me ? '#fff' : '#374151', lineHeight: 1.6 }}>{m.text}</div>
-              <div style={{ fontSize: 10, color: m.me ? 'rgba(255,255,255,0.4)' : '#9CA3AF', textAlign: 'right', marginTop: 3 }}>{m.time}</div>
+        {error && <div style={{ textAlign: 'center', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{error}</div>}
+        {conversationId == null ? (
+          <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginTop: 40 }}>No conversation selected</div>
+        ) : msgs.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginTop: 40 }}>No messages yet - say hi 👋</div>
+        ) : msgs.map(m => {
+          const isMe = m.sender_id === meId
+          const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+          return (
+            <div key={m.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 2 }}>
+              <div style={{ maxWidth: '76%', background: isMe ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: isMe ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '10px 13px', boxShadow: '0 2px 6px rgba(0,0,0,0.07)' }}>
+                <div style={{ fontSize: 13, color: m.is_deleted ? (isMe ? 'rgba(255,255,255,0.5)' : '#9CA3AF') : (isMe ? '#fff' : '#374151'), lineHeight: 1.6, fontStyle: m.is_deleted ? 'italic' : 'normal' }}>{m.is_deleted ? 'This message was deleted' : m.body}</div>
+                <div style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.4)' : '#9CA3AF', textAlign: 'right', marginTop: 3 }}>{time}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
+        <div ref={bottomRef} />
       </div>
       <div style={{ padding: '10px 12px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)', position: 'relative' }}>
         {showAttach && (
@@ -3018,9 +3089,9 @@ function ChatDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ color: '#6B7280' }}>{Ic.attach()}</div>
           </button>
           <div style={{ flex: 1, display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.06)' }}>
-            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Message…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
+            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Message…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} disabled={sending} />
           </div>
-          <button onClick={send} style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={send} disabled={sending} style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 10, cursor: sending ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: sending ? 0.6 : 1 }}>
             <div style={{ color: N.navy }}>{Ic.send('w-4 h-4')}</div>
           </button>
         </div>
@@ -7172,7 +7243,7 @@ export default function App() {
       case 'forum':             return <ForumScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} />
       case 'comments':          return <CommentsScreen setScreen={setScreen} postId={activeForumPostId} />
       case 'chats':             return <ChatsScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
-      case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} />
+      case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} />
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} />
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} />
       case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
