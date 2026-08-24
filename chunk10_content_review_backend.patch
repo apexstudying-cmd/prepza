@@ -1,0 +1,216 @@
+diff --git a/app.py b/app.py
+index 91cfd40..a2d042b 100644
+--- a/app.py
++++ b/app.py
+@@ -273,6 +273,18 @@ class GeneratedMaterial(db.Model):
+     error_message = db.Column(db.String(500), nullable=True)
+     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
++
++    # ---- Content review (Chunk 10) ----
++    # Flagging a material does NOT block a student from generating/
++    # studying it privately - it only keeps it out of the public Library
++    # (see _flagged_document_ids() / the publish/browse/saved gates
++    # below), same reactive kill-switch pattern as Group.is_active /
++    # University.is_active elsewhere in this file.
++    is_flagged = db.Column(db.Boolean, nullable=False, default=False)
++    flagged_reason = db.Column(db.String(500), nullable=True)
++    flagged_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
++    flagged_at = db.Column(db.DateTime, nullable=True)
++
+     __table_args__ = (
+         db.UniqueConstraint("document_content_id", "material_type", name="uq_material_content_type"),
+     )
+@@ -3151,6 +3163,43 @@ LIBRARY_DESCRIPTION_MAX = 1000
+ LIBRARY_ACTIVE_STATUSES = ("pending", "approved")
+ 
+ 
++def _document_content_has_flagged_material(document_content_id):
++    """Used at publish time - blocks submitting a document to the Library
++    if any of its AI-generated materials are currently flagged."""
++    if not document_content_id:
++        return False
++    return GeneratedMaterial.query.filter_by(
++        document_content_id=document_content_id, is_flagged=True
++    ).first() is not None
++
++
++def _flagged_document_ids():
++    """
++    Document ids whose underlying DocumentContent has at least one
++    flagged GeneratedMaterial - computed as plain Python lists rather
++    than a SQL subquery/join, same SQLAlchemy-version-safety reasoning
++    as the moderation queue's Python-side priority sort elsewhere in
++    this file. Used to keep already-published items out of Library
++    browse/saved views without touching LibraryPublication's own status
++    machine. Publication volume is small enough that this costs nothing.
++    """
++    flagged_content_ids = [
++        row[0] for row in
++        db.session.query(GeneratedMaterial.document_content_id)
++        .filter(GeneratedMaterial.is_flagged.is_(True))
++        .distinct()
++        .all()
++    ]
++    if not flagged_content_ids:
++        return []
++    return [
++        row[0] for row in
++        db.session.query(Document.id)
++        .filter(Document.document_content_id.in_(flagged_content_ids))
++        .all()
++    ]
++
++
+ @app.route("/library/publish", methods=["POST"])
+ @require_csrf
+ def publish_document():
+@@ -3201,6 +3250,12 @@ def publish_document():
+         if not db.session.get(Unit, unit_id):
+             return jsonify({"error": "Unit not found"}), 404
+ 
++    if _document_content_has_flagged_material(document.document_content_id):
++        return jsonify({
++            "error": "This document can't be published right now - one of its AI-generated "
++                     "materials has been flagged for review"
++        }), 400
++
+     existing_active = LibraryPublication.query.filter(
+         LibraryPublication.document_id == document_id,
+         LibraryPublication.status.in_(LIBRARY_ACTIVE_STATUSES),
+@@ -3287,6 +3342,9 @@ def browse_library():
+         return jsonify({"error": "Not logged in"}), 401
+ 
+     query = LibraryPublication.query.filter_by(status="approved")
++    flagged_document_ids = _flagged_document_ids()
++    if flagged_document_ids:
++        query = query.filter(~LibraryPublication.document_id.in_(flagged_document_ids))
+ 
+     q = (request.args.get("q") or "").strip()
+     if q:
+@@ -3410,6 +3468,7 @@ def list_saved_library_items():
+         .order_by(SavedLibraryMaterial.created_at.desc())
+         .all()
+     )
++    flagged_document_ids = _flagged_document_ids()
+ 
+     result = []
+     for saved in saved_rows:
+@@ -3418,6 +3477,10 @@ def list_saved_library_items():
+             # Publication was later rejected/removed - skip rather than
+             # error, so one bad row doesn't break the whole Saved tab.
+             continue
++        if pub.document_id in flagged_document_ids:
++            # Underlying material was flagged after this was saved - hide
++            # it the same way browse_library does, rather than error.
++            continue
+         unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+         author = db.session.get(User, pub.user_id)
+         result.append({
+@@ -3684,6 +3747,106 @@ def admin_resolve_library_report(report_id):
+     return jsonify({"id": report.id, "status": report.status})
+ 
+ 
++# ---------- Admin: content review (Chunk 10) ----------
++# Flags an individual GeneratedMaterial row (not the Document, and not
++# the LibraryPublication). A flagged material only affects the public
++# Library - see _document_content_has_flagged_material() (blocks new
++# publishes) and _flagged_document_ids() (hides already-published items)
++# above. A student can still privately generate/study flagged material;
++# this is a sharing gate, not an access gate.
++
++CONTENT_MATERIAL_FLAG_REASON_MAX = 500
++
++
++def _serialize_admin_content_material(material):
++    content = db.session.get(DocumentContent, material.document_content_id)
++    flagged_by_user = db.session.get(User, material.flagged_by) if material.flagged_by else None
++    return {
++        "id": material.id,
++        "document_content_id": material.document_content_id,
++        "material_type": material.material_type,
++        "status": material.status,
++        "file_type": content.file_type if content else None,
++        "is_flagged": material.is_flagged,
++        "flagged_reason": material.flagged_reason,
++        "flagged_by_email": flagged_by_user.email if flagged_by_user else None,
++        "flagged_at": material.flagged_at.isoformat() if material.flagged_at else None,
++        "created_at": material.created_at.isoformat() if material.created_at else None,
++    }
++
++
++@app.route("/admin/content-materials")
++@require_admin
++def admin_list_content_materials():
++    """
++    Lists GeneratedMaterial rows for admin review. Defaults to flagged
++    only; pass status=all to see everything. Newest first.
++    """
++    status_filter = request.args.get("status", "flagged")
++
++    query = GeneratedMaterial.query
++    if status_filter == "flagged":
++        query = query.filter_by(is_flagged=True)
++    elif status_filter != "all":
++        return jsonify({"error": "status must be 'flagged' or 'all'"}), 400
++
++    materials = query.order_by(GeneratedMaterial.created_at.desc()).limit(200).all()
++
++    return jsonify({"materials": [_serialize_admin_content_material(m) for m in materials]})
++
++
++@app.route("/admin/content-materials/<int:material_id>/flag", methods=["POST"])
++@require_csrf
++@require_admin
++def admin_flag_content_material(material_id):
++    """
++    Flags a GeneratedMaterial row, requiring a reason. Idempotent -
++    re-flagging an already-flagged row just updates the reason/admin
++    rather than erroring, so an admin can amend a flag without an
++    unflag/reflag round trip.
++    """
++    acting_admin_id = session.get("user_id")
++
++    material = db.session.get(GeneratedMaterial, material_id)
++    if not material:
++        return jsonify({"error": "Material not found"}), 404
++
++    data = request.get_json(silent=True) or {}
++    reason = (data.get("reason") or "").strip()
++    if not reason or len(reason) > CONTENT_MATERIAL_FLAG_REASON_MAX:
++        return jsonify({
++            "error": f"reason is required and must be {CONTENT_MATERIAL_FLAG_REASON_MAX} characters or fewer"
++        }), 400
++
++    material.is_flagged = True
++    material.flagged_reason = reason
++    material.flagged_by = acting_admin_id
++    material.flagged_at = datetime.utcnow()
++    db.session.commit()
++
++    return jsonify(_serialize_admin_content_material(material))
++
++
++@app.route("/admin/content-materials/<int:material_id>/unflag", methods=["POST"])
++@require_csrf
++@require_admin
++def admin_unflag_content_material(material_id):
++    material = db.session.get(GeneratedMaterial, material_id)
++    if not material:
++        return jsonify({"error": "Material not found"}), 404
++
++    if not material.is_flagged:
++        return jsonify({"message": "Not flagged"}), 200
++
++    material.is_flagged = False
++    material.flagged_reason = None
++    material.flagged_by = None
++    material.flagged_at = None
++    db.session.commit()
++
++    return jsonify(_serialize_admin_content_material(material))
++
++
+ # ---------- XP / Achievements / Streaks (Chunk 7) ----------
+ #
+ # Fixed-value MVP: XP amounts and the achievement catalog are hardcoded

@@ -1,0 +1,282 @@
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -1,5 +1,6 @@
+ import { useState, useEffect, useRef } from 'react'
+ import logoImg from './imports/logo.png'
++import * as api from './lib/api'
+ 
+ // ─── Icon helpers ─────────────────────────────────────────────────────────────
+ const Ic = {
+@@ -914,6 +915,8 @@
+ // ─── HOME ─────────────────────────────────────────────────────────────────────
+ function HomeScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+   const [notifCount] = useState(3)
++  const [streak, setStreak] = useState(0)
++  useEffect(() => { api.getGamificationSummary().then(s => setStreak(s.current_streak)).catch(() => {}) }, [])
+   const loading = useLoading(1200)
+   if (loading) return <SkeletonHome />
+   return (
+@@ -942,10 +945,10 @@
+         <div style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.22)', borderRadius: 14, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+           <span style={{ fontSize: 20 }}>🔥</span>
+           <div style={{ flex: 1 }}>
+-            <div style={{ color: N.gold, fontWeight: 800, fontSize: 13 }}>7-Day Streak — Keep it up!</div>
++            <div style={{ color: N.gold, fontWeight: 800, fontSize: 13 }}>{streak > 0 ? `${streak}-Day Streak — Keep it up!` : 'Start a study streak today'}</div>
+             <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>Study 30 mins today to extend it</div>
+           </div>
+-          <Pill text="+25 XP" color={N.gold} />
++          <Pill text="🔥 Streak" color={N.gold} />
+         </div>
+       </div>
+ 
+@@ -2523,13 +2526,19 @@
+   const [tab, setTab] = useState<'posts'|'saved'|'activity'|'materials'>('posts')
+   const [showMenu, setShowMenu] = useState(false)
+   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
++  const [gami, setGami] = useState<api.GamificationSummary | null>(null)
++  const [unlockedAchievements, setUnlockedAchievements] = useState<api.AchievementEntry[]>([])
++  useEffect(() => {
++    api.getGamificationSummary().then(setGami).catch(() => {})
++    api.getAchievements().then(r => setUnlockedAchievements(r.achievements.filter(a => a.done))).catch(() => {})
++  }, [])
+   const loading = useLoading(900)
+   if (loading) return <SkeletonProfile />
+   const stats = [
+-    { label: 'Streak', value: '7🔥', color: N.gold },
+-    { label: 'XP', value: '1,240', color: '#4CC97B' },
+-    { label: 'Docs', value: '8', color: '#4C7BC9' },
+-    { label: 'Followers', value: '23', color: '#9B59B6' },
++    { label: 'Streak', value: `${gami?.current_streak ?? 0}🔥`, color: N.gold, dest: 'study-streak' as Screen },
++    { label: 'XP', value: (gami?.xp_total ?? 0).toLocaleString(), color: '#4CC97B', dest: 'xp-progress' as Screen },
++    { label: 'Docs', value: String(gami?.documents_count ?? 0), color: '#4C7BC9', dest: 'library' as Screen },
++    { label: 'Followers', value: String(gami?.followers_count ?? 0), color: '#9B59B6', dest: 'followers' as Screen },
+   ]
+   return (
+     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+@@ -2564,12 +2573,7 @@
+       </div>
+ 
+       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, padding: '14px 14px 0' }}>
+-        {[
+-          { label: 'Streak', value: '12🔥', color: N.gold, dest: 'study-streak' as Screen },
+-          { label: 'XP', value: '1,240', color: '#4CC97B', dest: 'xp-progress' as Screen },
+-          { label: 'Docs', value: '8', color: '#4C7BC9', dest: 'library' as Screen },
+-          { label: 'Followers', value: '143', color: '#9B59B6', dest: 'followers' as Screen },
+-        ].map(s => (
++        {stats.map(s => (
+           <button key={s.label} onClick={() => setScreen(s.dest)} style={{ background: '#fff', borderRadius: 14, padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+             <div style={{ fontWeight: 800, fontSize: 15, color: s.color }}>{s.value}</div>
+             <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{s.label}</div>
+@@ -2583,8 +2587,8 @@
+           <button onClick={() => setScreen('achievements')} style={{ fontSize: 11, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>See all</button>
+         </div>
+         <div style={{ display: 'flex', gap: 14, overflowX: 'auto' }} className="scrollbar-hide">
+-          {achievementsList.filter(a => a.done).map(a => (
+-            <button key={a.id} onClick={() => setScreen('achievements')} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer' }}>
++          {unlockedAchievements.map(a => (
++            <button key={a.code} onClick={() => setScreen('achievements')} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer' }}>
+               <div style={{ width: 46, height: 46, background: `${N.gold}18`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, border: `2px solid ${N.gold}33` }}>{a.icon}</div>
+               <div style={{ fontSize: 9, color: '#6B7280', textAlign: 'center', maxWidth: 50, lineHeight: 1.3 }}>{a.name}</div>
+             </button>
+@@ -3444,31 +3448,38 @@
+ }
+ 
+ // ─── XP PROGRESS ──────────────────────────────────────────────────────────────
++function formatRelativeDate(iso: string | null): string {
++  if (!iso) return ''
++  const date = new Date(iso)
++  const today = new Date()
++  const diffDays = Math.floor((today.setHours(0, 0, 0, 0) - new Date(date).setHours(0, 0, 0, 0)) / 86400000)
++  if (diffDays <= 0) return 'Today'
++  if (diffDays === 1) return 'Yesterday'
++  if (diffDays < 7) return `${diffDays} days ago`
++  return date.toLocaleDateString()
++}
++
+ function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+-  const xpTotal = 1240
+-  const xpNext = 1500
+-  const level = 4
+-  const pct = (xpTotal / xpNext) * 100
+-
+-  const xpHistory = [
+-    { icon: '📄', label: 'Studied ACT 101 Notes', xp: +15, date: 'Today' },
+-    { icon: '🧠', label: 'Completed flashcard set', xp: +10, date: 'Today' },
+-    { icon: '❓', label: 'Completed quiz (80%)', xp: +20, date: 'Yesterday' },
+-    { icon: '🔥', label: '10-day study streak', xp: +50, date: 'Yesterday' },
+-    { icon: '📚', label: 'Material approved in Library', xp: +50, date: '3 days ago' },
+-    { icon: '💬', label: 'Helpful community reply', xp: +5, date: '4 days ago' },
+-    { icon: '📄', label: 'Studied STA 101 Notes', xp: +15, date: '5 days ago' },
+-  ]
++  const [data, setData] = useState<api.XpProgress | null>(null)
++  useEffect(() => { api.getXpProgress().then(setData).catch(() => {}) }, [])
+ 
+-  const howToEarn = [
+-    { label: 'Study a document', xp: '+15 XP' },
+-    { label: 'Complete a quiz (any score)', xp: '+20 XP' },
+-    { label: 'Complete flashcard set', xp: '+10 XP' },
+-    { label: 'Maintain 7-day streak', xp: '+50 XP' },
+-    { label: 'Library material approved', xp: '+50 XP' },
+-    { label: 'Helpful community reply', xp: '+5 XP' },
+-    { label: 'Complete learning milestones', xp: 'Varies' },
+-  ]
++  if (!data) {
++    return (
++      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
++        <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
++          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
++            <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
++            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>XP & Progress</div>
++          </div>
++        </div>
++        <div style={{ padding: 18, color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
++      </div>
++    )
++  }
++
++  const { level, level_title, xp_total: xpTotal, xp_into_level: xpInto, xp_for_level_gap: xpGap, next_level_xp: xpNext, history, how_to_earn: howToEarn } = data
++  const pct = xpGap > 0 ? (xpInto / xpGap) * 100 : 100
++  const xpHistory = history.map(h => ({ icon: h.icon, label: h.label, xp: h.xp, date: formatRelativeDate(h.created_at) }))
+ 
+   return (
+     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+@@ -3490,7 +3501,7 @@
+             </div>
+           </div>
+           <div style={{ flex: 1 }}>
+-            <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>Scholar</div>
++            <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>{level_title}</div>
+             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 10 }}>{xpTotal.toLocaleString()} / {xpNext.toLocaleString()} XP to Level {level + 1}</div>
+             <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 99, height: 6, overflow: 'hidden' }}>
+               <div style={{ background: `linear-gradient(90deg,${N.gold},${N.goldL})`, height: 6, width: `${pct}%`, borderRadius: 99, transition: 'width 1s ease' }} />
+@@ -3528,17 +3539,27 @@
+ 
+ // ─── STUDY STREAK ─────────────────────────────────────────────────────────────
+ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+-  const current = 12
+-  const longest = 21
++  const [data, setData] = useState<api.StreakDetail | null>(null)
++  useEffect(() => { api.getStreak().then(setData).catch(() => {}) }, [])
+ 
+-  // Build last 42 days of study activity (mock)
+-  const today = new Date()
+-  const days = Array.from({ length: 42 }, (_, i) => {
+-    const d = new Date(today)
+-    d.setDate(today.getDate() - (41 - i))
+-    const studied = i > 10 ? (Math.random() > 0.3) : i >= 30 // recent 12 are studied
+-    return { date: d, studied: i >= 30 || (i >= 15 && Math.random() > 0.4) }
+-  })
++  if (!data) {
++    return (
++      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
++        <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
++          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
++            <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
++            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Study Streak</div>
++          </div>
++        </div>
++        <div style={{ padding: 18, color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
++      </div>
++    )
++  }
++
++  const current = data.current_streak
++  const longest = data.longest_streak
++  const days = data.calendar.map(d => ({ date: new Date(d.date), studied: d.studied }))
++  const milestones = data.milestones
+ 
+   return (
+     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+@@ -3566,7 +3587,7 @@
+           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
+             {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 4 }}>{d}</div>)}
+             {days.map((d, i) => (
+-              <div key={i} style={{ aspectRatio: '1', borderRadius: 6, background: d.studied ? N.gold : '#F3F4F6', opacity: d.studied ? (i >= 30 ? 1 : 0.55) : 1, transition: 'background 0.2s' }} title={d.date.toLocaleDateString()} />
++              <div key={i} style={{ aspectRatio: '1', borderRadius: 6, background: d.studied ? N.gold : '#F3F4F6', transition: 'background 0.2s' }} title={d.date.toLocaleDateString()} />
+             ))}
+           </div>
+           <div style={{ display: 'flex', gap: 12, marginTop: 14, alignItems: 'center' }}>
+@@ -3576,8 +3597,8 @@
+         </div>
+         <div style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+           <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Streak milestones</div>
+-          {[{ days: 7, label: '7-Day Scholar', xp: '+50 XP', done: true }, { days: 14, label: '14-Day Achiever', xp: '+100 XP', done: false }, { days: 21, label: '21-Day Legend', xp: '+150 XP', done: false }, { days: 30, label: '30-Day Master', xp: '+200 XP', done: false }].map((m, i) => (
+-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < 3 ? 12 : 0 }}>
++          {milestones.map((m, i) => (
++            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < milestones.length - 1 ? 12 : 0 }}>
+               <div style={{ width: 36, height: 36, borderRadius: 10, background: m.done ? `${N.gold}20` : '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                 {m.done ? <span style={{ fontSize: 16 }}>🏆</span> : <span style={{ fontSize: 16, opacity: 0.4 }}>🔒</span>}
+               </div>
+@@ -3590,7 +3611,7 @@
+           ))}
+         </div>
+         <button onClick={() => setScreen('share-sheet')} style={{ width: '100%', background: 'transparent', border: `1.5px solid ${N.gold}`, color: N.gold, fontWeight: 700, fontSize: 14, borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+-          Share 12-Day Streak
++          Share {current}-Day Streak
+         </button>
+         <div style={{ height: 20 }} />
+       </div>
+@@ -3599,19 +3620,10 @@
+ }
+ 
+ // ─── ACHIEVEMENTS ─────────────────────────────────────────────────────────────
+-const achievementsList = [
+-  { id: 'a1', icon: '📄', name: 'First Document', desc: 'Upload your first document', req: '1 document uploaded', done: true, date: 'Aug 1, 2025', progress: 1, total: 1 },
+-  { id: 'a2', icon: '❓', name: 'Quiz Starter', desc: 'Complete your first quiz', req: '1 quiz completed', done: true, date: 'Aug 3, 2025', progress: 1, total: 1 },
+-  { id: 'a3', icon: '🔥', name: '7-Day Scholar', desc: 'Maintain a 7-day study streak', req: '7 consecutive study days', done: true, date: 'Aug 8, 2025', progress: 7, total: 7 },
+-  { id: 'a4', icon: '📚', name: 'Library Contributor', desc: 'Get a material approved in the library', req: '1 approved submission', done: true, date: 'Aug 9, 2025', progress: 1, total: 1 },
+-  { id: 'a5', icon: '🧠', name: 'Quiz Master', desc: 'Complete 25 quizzes', req: '25 quizzes', done: false, progress: 8, total: 25 },
+-  { id: 'a6', icon: '🃏', name: 'Flashcard Champ', desc: 'Complete 50 flashcard sessions', req: '50 sessions', done: false, progress: 12, total: 50 },
+-  { id: 'a7', icon: '💬', name: 'Community Helper', desc: 'Receive 10 helpful votes on replies', req: '10 helpful votes', done: false, progress: 3, total: 10 },
+-  { id: 'a8', icon: '🔥', name: '30-Day Master', desc: 'Maintain a 30-day study streak', req: '30 consecutive days', done: false, progress: 12, total: 30 },
+-]
+-
+ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+   const [sharing, setSharing] = useState<string | null>(null)
++  const [achievementsList, setAchievementsList] = useState<api.AchievementEntry[]>([])
++  useEffect(() => { api.getAchievements().then(r => setAchievementsList(r.achievements)).catch(() => {}) }, [])
+   const unlocked = achievementsList.filter(a => a.done)
+   const locked = achievementsList.filter(a => !a.done)
+ 
+@@ -3621,7 +3633,7 @@
+         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+           <div style={{ width: 390, background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 32px' }}>
+             <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
+-            {(() => { const a = achievementsList.find(x => x.id === sharing)!; return (
++            {(() => { const a = achievementsList.find(x => x.code === sharing)!; return (
+               <div>
+                 <div style={{ background: N.navy, borderRadius: 16, padding: '20px', marginBottom: 16, textAlign: 'center' }}>
+                   <div style={{ fontSize: 40, marginBottom: 10 }}>{a.icon}</div>
+@@ -3649,19 +3661,19 @@
+       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }} className="scrollbar-hide">
+         <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Unlocked ({unlocked.length})</div>
+         {unlocked.map(a => (
+-          <div key={a.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, border: `1.5px solid ${N.gold}30`, boxShadow: `0 4px 16px ${N.gold}10`, display: 'flex', gap: 12, alignItems: 'center' }}>
++          <div key={a.code} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, border: `1.5px solid ${N.gold}30`, boxShadow: `0 4px 16px ${N.gold}10`, display: 'flex', gap: 12, alignItems: 'center' }}>
+             <div style={{ width: 48, height: 48, background: `${N.gold}15`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{a.icon}</div>
+             <div style={{ flex: 1 }}>
+               <div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{a.name}</div>
+               <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{a.desc}</div>
+-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>Achieved {a.date}</div>
++              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>Achieved {a.unlocked_at ? new Date(a.unlocked_at).toLocaleDateString() : ''}</div>
+             </div>
+-            <button onClick={() => setSharing(a.id)} style={{ background: '#F3F4F6', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans', flexShrink: 0 }}>Share</button>
++            <button onClick={() => setSharing(a.code)} style={{ background: '#F3F4F6', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans', flexShrink: 0 }}>Share</button>
+           </div>
+         ))}
+         <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, margin: '20px 0 12px' }}>In progress ({locked.length})</div>
+         {locked.map(a => (
+-          <div key={a.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, opacity: 0.7, boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', gap: 12, alignItems: 'center' }}>
++          <div key={a.code} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, opacity: 0.7, boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', gap: 12, alignItems: 'center' }}>
+             <div style={{ width: 48, height: 48, background: '#F3F4F6', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, filter: 'grayscale(1)', opacity: 0.5 }}>{a.icon}</div>
+             <div style={{ flex: 1 }}>
+               <div style={{ fontWeight: 700, fontSize: 14, color: '#6B7280' }}>{a.name}</div>
+@@ -3669,7 +3681,7 @@
+               <div style={{ background: '#F3F4F6', borderRadius: 99, height: 5, marginTop: 8, overflow: 'hidden' }}>
+                 <div style={{ background: '#D1D5DB', height: 5, width: `${(a.progress / a.total) * 100}%`, borderRadius: 99 }} />
+               </div>
+-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{a.progress} / {a.total} {a.req.split(' ').slice(-1)[0]}</div>
++              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{a.progress} / {a.total}</div>
+             </div>
+           </div>
+         ))}

@@ -1,0 +1,503 @@
+diff --git a/App.tsx b/App.tsx
+index dbc0c3c..6a40708 100644
+--- a/App.tsx
++++ b/App.tsx
+@@ -3820,84 +3820,191 @@ function NotificationsScreen({ setScreen }: { setScreen: (s: Screen) => void })
+ }
+ 
+ // ─── LIBRARY ──────────────────────────────────────────────────────────────────
++type LibraryPublicationSummary = {
++  id: number; title: string; description: string | null; material_type: string
++  unit_id: number | null; unit_code: string | null; author: string
++  view_count: number; save_count: number; created_at: string | null
++}
++type SavedLibraryItem = LibraryPublicationSummary & { saved_at: string | null }
++type MySubmission = {
++  id: number; document_id: number; title: string; description: string | null; material_type: string
++  unit_id: number | null; unit_code: string | null; status: string; rejection_reason: string | null
++  view_count: number; save_count: number; created_at: string | null; updated_at: string | null
++}
++
+ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+-  const [activeTab, setActiveTab] = useState('All')
+-  const loading = useLoading(900)
+-  const tabs = ['All','Documents','Notes','Flashcards','Podcasts','Saved','Published']
+-  const items = [
+-    { icon: '📕', title: 'ACT 101 Lecture Notes – Week 1-6', sub: 'PDF · 38 pages · Today', action: 'document-study' as Screen, tag: 'Recent' },
+-    { icon: '🃏', title: 'ACT 101 Flashcards – Interest Theory', sub: '35 cards · Yesterday', action: 'flashcards' as Screen, tag: 'Flashcards' },
+-    { icon: '📝', title: 'MAT 101 – Calculus Past Papers', sub: 'PDF · 72 pages · 2 days ago', action: 'document-study' as Screen, tag: 'Past Paper' },
+-    { icon: '🎙️', title: 'Interest Theory Explained', sub: 'Podcast · 9 min · ACT 101', action: 'podcast-player' as Screen, tag: 'Podcast' },
+-    { icon: '📋', title: 'AI Summary – ACT 101 Interest Theory', sub: '4 sections · Generated today', action: 'summary' as Screen, tag: 'Summary' },
+-    { icon: '🚀', title: 'Equity Leaders Programme', sub: 'Saved opportunity · Deadline Sep 15', action: 'opportunity-detail' as Screen, tag: 'Saved' },
+-    { icon: '📕', title: 'STA 101 Probability Notes', sub: 'PDF · 44 pages · Last week', action: 'document-study' as Screen, tag: 'Documents' },
+-  ]
+-  const tagFilter: Record<string,string[]> = { All: [], Documents: ['Recent','Documents','Past Paper'], Notes: ['Recent','Summary'], Flashcards: ['Flashcards'], Podcasts: ['Podcast'], Saved: ['Saved'], Published: ['Published'] }
+-  const displayed = activeTab === 'All' ? items : items.filter(it => tagFilter[activeTab]?.includes(it.tag))
++  const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')
++  const [materialTypeFilter, setMaterialTypeFilter] = useState<string | null>(null)
++  const [csrfToken, setCsrfToken] = useState('')
++
++  const [browseItems, setBrowseItems] = useState<LibraryPublicationSummary[]>([])
++  const [browseLoading, setBrowseLoading] = useState(true)
++  const [browseError, setBrowseError] = useState('')
++
++  const [savedItems, setSavedItems] = useState<SavedLibraryItem[]>([])
++  const [savedLoading, setSavedLoading] = useState(true)
++  const [savedError, setSavedError] = useState('')
++  const [savedIds, setSavedIds] = useState<Set<number>>(new Set())
++
++  const [submissions, setSubmissions] = useState<MySubmission[]>([])
++  const [submissionsLoading, setSubmissionsLoading] = useState(true)
++  const [submissionsError, setSubmissionsError] = useState('')
++
++  useEffect(() => {
++    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
++  }, [])
++
++  const loadBrowse = () => {
++    setBrowseLoading(true)
++    setBrowseError('')
++    const params = new URLSearchParams({ page: '1' })
++    if (materialTypeFilter) params.set('material_type', materialTypeFilter)
++    api<{ page: number; publications: LibraryPublicationSummary[] }>(`/library?${params.toString()}`)
++      .then(res => setBrowseItems(res.publications))
++      .catch(e => setBrowseError(e instanceof ApiError ? e.message : 'Could not load the library - check your connection and try again.'))
++      .finally(() => setBrowseLoading(false))
++  }
++
++  const loadSaved = () => {
++    setSavedLoading(true)
++    setSavedError('')
++    api<{ saved: SavedLibraryItem[] }>('/library/saved')
++      .then(res => { setSavedItems(res.saved); setSavedIds(new Set(res.saved.map(s => s.id))) })
++      .catch(e => setSavedError(e instanceof ApiError ? e.message : 'Could not load your saved items.'))
++      .finally(() => setSavedLoading(false))
++  }
++
++  const loadSubmissions = () => {
++    setSubmissionsLoading(true)
++    setSubmissionsError('')
++    api<{ submissions: MySubmission[] }>('/library/my-submissions')
++      .then(res => setSubmissions(res.submissions))
++      .catch(e => setSubmissionsError(e instanceof ApiError ? e.message : 'Could not load your submissions.'))
++      .finally(() => setSubmissionsLoading(false))
++  }
++
++  useEffect(() => { loadBrowse() }, [materialTypeFilter])
++  useEffect(() => { loadSaved() }, [])
++  useEffect(() => { loadSubmissions() }, [])
++
++  const toggleSave = async (pub: LibraryPublicationSummary) => {
++    if (!csrfToken) return
++    const isSaved = savedIds.has(pub.id)
++    setSavedIds(prev => { const next = new Set(prev); isSaved ? next.delete(pub.id) : next.add(pub.id); return next })
++    setBrowseItems(items => items.map(it => it.id === pub.id ? { ...it, save_count: it.save_count + (isSaved ? -1 : 1) } : it))
++    try {
++      if (isSaved) {
++        await api(`/library/${pub.id}/save`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
++        setSavedItems(items => items.filter(it => it.id !== pub.id))
++      } else {
++        await api(`/library/${pub.id}/save`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
++        loadSaved()
++      }
++    } catch {
++      setSavedIds(prev => { const next = new Set(prev); isSaved ? next.add(pub.id) : next.delete(pub.id); return next })
++      setBrowseItems(items => items.map(it => it.id === pub.id ? { ...it, save_count: it.save_count + (isSaved ? 1 : -1) } : it))
++    }
++  }
++
++  const statusColor = (status: string) => status === 'approved' ? '#4CC97B' : status === 'rejected' ? '#C94C4C' : N.gold
+ 
+-  const publishedItems = [
+-    { title: 'ACT 101 Lecture Notes – Week 1-6', unit: 'ACT 101', type: 'Lecture Notes', views: 284, saves: 47, status: 'Approved', date: 'Aug 9, 2025', xp: '+50 XP' },
+-    { title: 'STA 101 Probability Notes', unit: 'STA 101', type: 'Summary Notes', views: 12, saves: 3, status: 'Under Review', date: 'Aug 11, 2025', xp: '' },
+-  ]
+-  if (loading) return <SkeletonLibrary />
+   return (
+     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+           <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+-          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>My Library</span>
++          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>Prepza Library</span>
++          <button onClick={() => setScreen('publish-library')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 11, border: 'none', borderRadius: 10, padding: '7px 12px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Publish</button>
+         </div>
+-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }} className="scrollbar-hide">
+-          {tabs.map(t => (
++        <div style={{ display: 'flex', gap: 8 }}>
++          {(['Browse', 'Saved', 'Published'] as const).map(t => (
+             <button key={t} onClick={() => setActiveTab(t)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, background: activeTab === t ? N.gold : 'rgba(255,255,255,0.1)', color: activeTab === t ? N.navy : 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{t}</button>
+           ))}
+         </div>
++        {activeTab === 'Browse' && (
++          <div style={{ display: 'flex', gap: 8, marginTop: 10, overflowX: 'auto' }} className="scrollbar-hide">
++            <button onClick={() => setMaterialTypeFilter(null)} style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, background: !materialTypeFilter ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)', color: '#fff', fontWeight: 600, fontSize: 10, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>All types</button>
++            {LIBRARY_MATERIAL_TYPES.map(t => (
++              <button key={t.value} onClick={() => setMaterialTypeFilter(t.value)} style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, background: materialTypeFilter === t.value ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)', color: '#fff', fontWeight: 600, fontSize: 10, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{t.label}</button>
++            ))}
++          </div>
++        )}
+       </div>
+       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
+-        {activeTab === 'Published' ? (
++        {activeTab === 'Browse' && (
++          browseLoading ? (
++            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '12px 0' }}>Loading the library…</div>
++          ) : browseError ? (
++            <ErrorState onRetry={loadBrowse} />
++          ) : browseItems.length === 0 ? (
++            <EmptyState icon="📚" title="Nothing published yet" sub="Be the first to share notes or past papers with other students." action="Publish Material" onAction={() => setScreen('publish-library')} />
++          ) : browseItems.map(pub => (
++            <div key={pub.id} style={{ background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
++              <div style={{ width: 44, height: 44, background: '#F3F4F6', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📕</div>
++              <div style={{ flex: 1, minWidth: 0 }}>
++                <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{pub.title}</div>
++                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{pub.author}{pub.unit_code ? ` · ${pub.unit_code}` : ''} · {pub.view_count} views · {pub.save_count} saves</div>
++              </div>
++              <button onClick={() => toggleSave(pub)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: savedIds.has(pub.id) ? N.gold : '#9CA3AF', flexShrink: 0 }}>{Ic.bookmark('w-5 h-5')}</button>
++            </div>
++          ))
++        )}
++        {activeTab === 'Saved' && (
++          savedLoading ? (
++            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '12px 0' }}>Loading your saved items…</div>
++          ) : savedError ? (
++            <ErrorState onRetry={loadSaved} />
++          ) : savedItems.length === 0 ? (
++            <EmptyState icon="📚" title="No saved items yet" sub="Bookmark items from the library to find them here." action="Browse Library" onAction={() => setActiveTab('Browse')} />
++          ) : savedItems.map(pub => (
++            <div key={pub.id} style={{ background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
++              <div style={{ width: 44, height: 44, background: '#F3F4F6', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📕</div>
++              <div style={{ flex: 1, minWidth: 0 }}>
++                <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{pub.title}</div>
++                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{pub.author}{pub.unit_code ? ` · ${pub.unit_code}` : ''}</div>
++              </div>
++              <button onClick={() => toggleSave(pub)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: N.gold, flexShrink: 0 }}>{Ic.bookmark('w-5 h-5')}</button>
++            </div>
++          ))
++        )}
++        {activeTab === 'Published' && (
+           <div>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+               <div style={{ fontSize: 12, color: '#9CA3AF' }}>Materials you've submitted to the Prepza Library</div>
+               <button onClick={() => setScreen('publish-library')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 11, border: 'none', borderRadius: 10, padding: '6px 12px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Publish</button>
+             </div>
+-            {publishedItems.length === 0 ? (
++            {submissionsLoading ? (
++              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '12px 0' }}>Loading your submissions…</div>
++            ) : submissionsError ? (
++              <ErrorState onRetry={loadSubmissions} />
++            ) : submissions.length === 0 ? (
+               <EmptyState icon="📖" title="Nothing published yet" sub="Share your notes and materials with students across Kenya. Earn XP for approved contributions." action="Publish Material" onAction={() => setScreen('publish-library')} />
+-            ) : publishedItems.map((p, i) => (
+-              <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1.5px solid ${p.status === 'Approved' ? 'rgba(76,201,123,0.2)' : 'rgba(0,0,0,0.06)'}` }}>
++            ) : submissions.map(p => (
++              <div key={p.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1.5px solid ${p.status === 'approved' ? 'rgba(76,201,123,0.2)' : 'rgba(0,0,0,0.06)'}` }}>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                   <div style={{ flex: 1, minWidth: 0 }}>
+                     <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 3 }} className="line-clamp-1">{p.title}</div>
+-                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.type} · {p.unit}</div>
++                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{materialTypeLabel(p.material_type)}{p.unit_code ? ` · ${p.unit_code}` : ''}</div>
+                   </div>
+-                  <Pill text={p.status} color={p.status === 'Approved' ? '#4CC97B' : N.gold} />
++                  <Pill text={p.status.charAt(0).toUpperCase() + p.status.slice(1)} color={statusColor(p.status)} />
+                 </div>
+-                {p.status === 'Approved' && (
++                {p.status === 'approved' && (
+                   <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#9CA3AF', marginTop: 8, paddingTop: 8, borderTop: '1px solid #F3F4F6' }}>
+-                    <span>{p.views} views</span>
+-                    <span>{p.saves} saves</span>
+-                    <span style={{ color: '#16A34A', fontWeight: 600 }}>{p.xp}</span>
+-                    <span style={{ marginLeft: 'auto' }}>{p.date}</span>
++                    <span>{p.view_count} views</span>
++                    <span>{p.save_count} saves</span>
++                    <span style={{ marginLeft: 'auto' }}>{p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}</span>
+                   </div>
+                 )}
+-                {p.status === 'Under Review' && (
+-                  <div style={{ fontSize: 11, color: '#D97706', marginTop: 6, fontWeight: 600 }}>Submitted {p.date} · Review takes 24-48h</div>
++                {p.status === 'pending' && (
++                  <div style={{ fontSize: 11, color: '#D97706', marginTop: 6, fontWeight: 600 }}>Submitted {p.created_at ? new Date(p.created_at).toLocaleDateString() : ''} · Review takes 24-48h</div>
++                )}
++                {p.status === 'rejected' && p.rejection_reason && (
++                  <div style={{ fontSize: 11, color: '#C94C4C', marginTop: 6, fontWeight: 600 }}>Rejected: {p.rejection_reason}</div>
+                 )}
+               </div>
+             ))}
+           </div>
+-        ) : displayed.length === 0 ? (
+-          <EmptyState icon="📚" title={`No ${activeTab.toLowerCase()} yet`} sub="Your library will fill up as you study and create." action={activeTab === 'Saved' ? 'Explore Content' : 'Upload Document'} onAction={() => setScreen(activeTab === 'Saved' ? 'explore' : 'upload')} />
+-        ) : displayed.map((item, i) => (
+-          <button key={i} onClick={() => setScreen(item.action)} style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', background: '#fff', border: 'none', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans' }}>
+-            <div style={{ width: 44, height: 44, background: '#F3F4F6', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{item.icon}</div>
+-            <div style={{ flex: 1, minWidth: 0 }}>
+-              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{item.title}</div>
+-              <div style={{ fontSize: 11, color: '#9CA3AF' }}>{item.sub}</div>
+-            </div>
+-            <Pill text={item.tag} />
+-          </button>
+-        ))}
++        )}
+       </div>
+     </div>
+   )
+@@ -4241,35 +4348,80 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+ 
+ // ─── PUBLISH TO LIBRARY ───────────────────────────────────────────────────────
+ 
+-const myDocs = [
+-  { id: 'd1', title: 'ACT 101 Lecture Notes – Week 1-6', size: '2.4 MB', type: 'PDF' },
+-  { id: 'd2', title: 'STA 101 Probability & Statistics', size: '1.8 MB', type: 'PDF' },
+-  { id: 'd3', title: 'MAT 101 Calculus Revision', size: '3.1 MB', type: 'PDF' },
+-]
++type PublishableDoc = { id: number; title: string; file_type: string | null; page_count: number | null }
++type PublishUnit = { id: number; code: string; name: string }
+ 
+-const materialTypes = ['Lecture Notes', 'Past Paper', 'Summary Notes', 'Textbook Chapter', 'Assignment', 'Tutorial Sheet', 'Other']
++const LIBRARY_MATERIAL_TYPES: { value: string; label: string }[] = [
++  { value: 'lecture_notes', label: 'Lecture Notes' },
++  { value: 'past_paper', label: 'Past Paper' },
++  { value: 'summary', label: 'Summary' },
++  { value: 'other', label: 'Other' },
++]
++const materialTypeLabel = (v: string) => LIBRARY_MATERIAL_TYPES.find(t => t.value === v)?.label ?? v
+ 
+ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+   const [step, setStep] = useState(1)
+-  const [selectedDoc, setSelectedDoc] = useState<string | null>(null)
++
++  const [csrfToken, setCsrfToken] = useState('')
++  const [docs, setDocs] = useState<PublishableDoc[]>([])
++  const [docsLoading, setDocsLoading] = useState(true)
++  const [docsError, setDocsError] = useState('')
++
++  const [units, setUnits] = useState<PublishUnit[]>([])
++  const [unitsLoading, setUnitsLoading] = useState(true)
++
++  const [selectedDocId, setSelectedDocId] = useState<number | null>(null)
+   const [title, setTitle] = useState('')
+-  const [uni, setUni] = useState('Kenyatta University')
+-  const [course, setCourse] = useState('Actuarial Science')
+-  const [unit, setUnit] = useState('ACT 101 – Introduction to Financial Mathematics')
+-  const [year, setYear] = useState('Year 1')
+-  const [matType, setMatType] = useState('Lecture Notes')
++  const [matType, setMatType] = useState(LIBRARY_MATERIAL_TYPES[0].value)
++  const [unitId, setUnitId] = useState<number | null>(null)
+   const [desc, setDesc] = useState('')
+   const [rightsChecked, setRightsChecked] = useState(false)
+-  const [approved, setApproved] = useState(false)
+ 
+-  const canProceed1 = selectedDoc && title.trim()
+-  const canProceed2 = unit.trim()
++  const [submitting, setSubmitting] = useState(false)
++  const [submitError, setSubmitError] = useState('')
++  const [submittedStatus, setSubmittedStatus] = useState<string | null>(null)
++
++  useEffect(() => {
++    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
++    api<{ documents: { id: number; title: string; status: string; file_type: string | null; page_count: number | null }[] }>('/documents')
++      .then(res => setDocs(res.documents.filter(d => d.status === 'ready')))
++      .catch(() => setDocsError('Could not load your documents - check your connection and try again.'))
++      .finally(() => setDocsLoading(false))
++    api<PublishUnit[]>('/units')
++      .then(setUnits)
++      .catch(() => {})
++      .finally(() => setUnitsLoading(false))
++  }, [])
++
++  const canProceed1 = selectedDocId != null && title.trim().length > 0
++  const canProceed2 = true
+   const canProceed3 = rightsChecked
+ 
+-  const submit = () => {
++  const submit = async () => {
++    if (selectedDocId == null) return
++    setSubmitting(true)
++    setSubmitError('')
+     setStep(4)
+-    setTimeout(() => setStep(5), 2000)
+-    setTimeout(() => setApproved(true), 8000)
++    try {
++      const result = await api<{ publication_id: number; status: string }>('/library/publish', {
++        method: 'POST',
++        headers: { 'X-CSRF-Token': csrfToken },
++        body: JSON.stringify({
++          document_id: selectedDocId,
++          title: title.trim(),
++          description: desc.trim() || undefined,
++          material_type: matType,
++          unit_id: unitId ?? undefined,
++        }),
++      })
++      setSubmittedStatus(result.status)
++      setStep(5)
++    } catch (e) {
++      setSubmitError(e instanceof ApiError ? e.message : 'Something went wrong submitting your material. Please try again.')
++      setStep(3)
++    } finally {
++      setSubmitting(false)
++    }
+   }
+ 
+   const stepLabel = ['Select Document', 'Add Details', 'Confirm Rights', '', ''][step - 1]
+@@ -4302,22 +4454,28 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
+             <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.6 }}>Share educational materials with students across Kenya. Approved contributions earn XP and build your contributor reputation.</div>
+           </div>
+           <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Select a document</div>
+-          {myDocs.map(d => (
+-            <div key={d.id} onClick={() => { setSelectedDoc(d.id); setTitle(d.title) }}
+-              style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, border: `2px solid ${selectedDoc === d.id ? N.gold : 'rgba(0,0,0,0.06)'}`, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center', boxShadow: selectedDoc === d.id ? `0 4px 16px ${N.gold}20` : '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s' }}>
++          {docsLoading ? (
++            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '12px 0' }}>Loading your documents…</div>
++          ) : docsError ? (
++            <div style={{ fontSize: 12, color: '#C94C4C', fontWeight: 600, padding: '12px 0' }}>{docsError}</div>
++          ) : docs.length === 0 ? (
++            <EmptyState icon="📄" title="No ready documents" sub="Upload and finish processing a document before publishing it to the library." action="Upload Document" onAction={() => setScreen('upload')} />
++          ) : docs.map(d => (
++            <div key={d.id} onClick={() => { setSelectedDocId(d.id); setTitle(d.title) }}
++              style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, border: `2px solid ${selectedDocId === d.id ? N.gold : 'rgba(0,0,0,0.06)'}`, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center', boxShadow: selectedDocId === d.id ? `0 4px 16px ${N.gold}20` : '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s' }}>
+               <div style={{ width: 40, height: 44, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                 <svg width="20" height="24" viewBox="0 0 20 24" fill="none"><path d="M4 0h8l8 8v16H4V0z" fill="#E5E7EB"/><path d="M12 0l8 8h-8V0z" fill="#D1D5DB"/><rect x="6" y="12" width="8" height="1.5" rx="0.75" fill="#9CA3AF"/><rect x="6" y="15" width="6" height="1.5" rx="0.75" fill="#9CA3AF"/><rect x="6" y="18" width="7" height="1.5" rx="0.75" fill="#9CA3AF"/></svg>
+               </div>
+               <div style={{ flex: 1, minWidth: 0 }}>
+                 <div style={{ fontWeight: 600, fontSize: 13, color: N.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+-                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{d.type} · {d.size}</div>
++                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{(d.file_type || '').toUpperCase()}{d.page_count != null ? ` · ${d.page_count} pages` : ''}</div>
+               </div>
+-              {selectedDoc === d.id && <div style={{ color: N.gold, flexShrink: 0 }}>{Ic.check('w-5 h-5')}</div>}
++              {selectedDocId === d.id && <div style={{ color: N.gold, flexShrink: 0 }}>{Ic.check('w-5 h-5')}</div>}
+             </div>
+           ))}
+           <div style={{ marginTop: 8, marginBottom: 20 }}>
+             <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Publication title</div>
+-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. ACT 101 Lecture Notes – Semester 1" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
++            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. ACT 101 Lecture Notes – Semester 1" maxLength={200} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+             <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>This will be the public title visible to other students.</div>
+           </div>
+           <button onClick={() => canProceed1 && setStep(2)} style={{ width: '100%', background: canProceed1 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed1 ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed1 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>
+@@ -4329,28 +4487,24 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
+       {/* Step 2: Details */}
+       {step === 2 && (
+         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
+-          {[
+-            { label: 'University', value: uni, set: setUni, opts: ['Kenyatta University', 'University of Nairobi', 'Strathmore University', 'JKUAT', 'Mount Kenya University', 'Daystar University', 'Other'] },
+-            { label: 'Course', value: course, set: setCourse, opts: ['Actuarial Science', 'Computer Science', 'Business Administration', 'Law', 'Medicine', 'Engineering', 'Education', 'Other'] },
+-            { label: 'Year of Study', value: year, set: setYear, opts: ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5', 'Postgraduate'] },
+-            { label: 'Material Type', value: matType, set: setMatType, opts: materialTypes },
+-          ].map(field => (
+-            <div key={field.label} style={{ marginBottom: 16 }}>
+-              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>{field.label}</div>
+-              <select value={field.value} onChange={e => field.set(e.target.value)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none' }}>
+-                {field.opts.map(o => <option key={o}>{o}</option>)}
+-              </select>
+-            </div>
+-          ))}
+-          <div style={{ marginBottom: 20 }}>
+-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Unit / Module</div>
+-            <input value={unit} onChange={e => setUnit(e.target.value)} placeholder="e.g. ACT 101 – Introduction to Financial Mathematics" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
++          <div style={{ marginBottom: 16 }}>
++            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Material Type</div>
++            <select value={matType} onChange={e => setMatType(e.target.value)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none' }}>
++              {LIBRARY_MATERIAL_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
++            </select>
++          </div>
++          <div style={{ marginBottom: 16 }}>
++            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Unit / Module <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
++            <select value={unitId ?? ''} onChange={e => setUnitId(e.target.value ? Number(e.target.value) : null)} disabled={unitsLoading} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none' }}>
++              <option value="">{unitsLoading ? 'Loading units…' : 'No specific unit'}</option>
++              {units.map(u => <option key={u.id} value={u.id}>{u.code} — {u.name}</option>)}
++            </select>
+           </div>
+           <div style={{ marginBottom: 24 }}>
+             <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Description <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
+-            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="What does this material cover? Who is it useful for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
++            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} maxLength={1000} placeholder="What does this material cover? Who is it useful for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+           </div>
+-          <button onClick={() => canProceed2 && setStep(3)} style={{ width: '100%', background: canProceed2 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed2 ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed2 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>
++          <button onClick={() => canProceed2 && setStep(3)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+             Continue
+           </button>
+         </div>
+@@ -4361,7 +4515,7 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
+         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
+           <div style={{ background: '#fff', borderRadius: 16, padding: '18px 18px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+             <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 12 }}>Publishing: {title}</div>
+-            {[['University', uni], ['Course', course], ['Unit', unit], ['Year', year], ['Type', matType]].map(([k, v]) => (
++            {[['Type', materialTypeLabel(matType)], ['Unit', units.find(u => u.id === unitId)?.code ?? 'Not specified']].map(([k, v]) => (
+               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F3F4F6' }}>
+                 <span style={{ fontSize: 12, color: '#9CA3AF' }}>{k}</span>
+                 <span style={{ fontSize: 12, fontWeight: 600, color: N.navy, maxWidth: 180, textAlign: 'right' }}>{v}</span>
+@@ -4374,13 +4528,16 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
+               You are responsible for ensuring you have the right or permission to share this material. Prepza does not claim ownership of student-uploaded content. Unauthorised sharing of copyrighted materials may result in removal of the content and restrictions on your account.
+             </div>
+           </div>
++          {submitError && (
++            <div style={{ background: 'rgba(201,68,68,0.08)', border: '1px solid rgba(201,68,68,0.25)', borderRadius: 12, padding: '12px 14px', color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 16 }}>{submitError}</div>
++          )}
+           <div onClick={() => setRightsChecked(r => !r)} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', background: '#fff', borderRadius: 14, border: `2px solid ${rightsChecked ? N.gold : 'rgba(0,0,0,0.08)'}`, cursor: 'pointer', marginBottom: 16, transition: 'border-color 0.2s' }}>
+             <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${rightsChecked ? N.gold : '#D1D5DB'}`, background: rightsChecked ? N.gold : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
+               {rightsChecked && <div style={{ color: N.navy }}>{Ic.check('w-3 h-3')}</div>}
+             </div>
+             <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>I confirm that I have the right or permission to share this material, and I agree to Prepza's <span style={{ color: N.gold, fontWeight: 700 }}>Terms of Service</span>, <span style={{ color: N.gold, fontWeight: 700 }}>Content Policy</span>, and <span style={{ color: N.gold, fontWeight: 700 }}>Copyright Policy</span>.</div>
+           </div>
+-          <button onClick={() => canProceed3 && submit()} style={{ width: '100%', background: canProceed3 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed3 ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed3 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', boxShadow: canProceed3 ? `0 6px 24px ${N.gold}40` : 'none' }}>
++          <button onClick={() => canProceed3 && !submitting && submit()} style={{ width: '100%', background: canProceed3 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed3 ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed3 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', boxShadow: canProceed3 ? `0 6px 24px ${N.gold}40` : 'none' }}>
+             Submit for Review
+           </button>
+           <button onClick={() => setScreen('home')} style={{ width: '100%', background: 'transparent', color: '#9CA3AF', fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel — don't publish</button>
+@@ -4400,45 +4557,15 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
+         </div>
+       )}
+ 
+-      {/* Step 5: Under review */}
++      {/* Step 5: Submitted for review */}
+       {step === 5 && (
+         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px' }} className="scrollbar-hide">
+           <div style={{ textAlign: 'center', marginBottom: 28 }}>
+             <div style={{ width: 72, height: 72, background: 'rgba(76,201,123,0.1)', borderRadius: '50%', border: '3px solid #4CC97B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 28 }}>📥</div>
+             <div style={{ fontWeight: 800, fontSize: 20, color: N.navy, marginBottom: 8 }}>Submitted for Review</div>
+-            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65 }}>Your material has been received. Our team reviews every submission to maintain quality standards.</div>
++            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65 }}>Your material has been received and is {submittedStatus || 'pending'}. Our team reviews every submission to maintain quality standards — this usually takes 24-48h. You'll be notified of the outcome.</div>
+           </div>
+ 
+-          {/* Timeline */}
+-          <div style={{ background: '#fff', borderRadius: 16, padding: '18px 18px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 16 }}>Review timeline</div>
+-            {[
+-              { label: 'Submitted', sub: 'Your material has been received', done: true, active: false },
+-              { label: 'Under Review', sub: approved ? 'Review complete' : 'Being reviewed — usually 24-48h', done: approved, active: !approved },
+-              { label: approved ? 'Approved' : 'Decision', sub: approved ? 'Your material is now live in the library' : 'You will be notified of the outcome', done: approved, active: false },
+-            ].map((item, i) => (
+-              <div key={i} style={{ display: 'flex', gap: 14, marginBottom: i < 2 ? 16 : 0 }}>
+-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: item.done ? '#4CC97B' : item.active ? N.gold : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.5s' }}>
+-                    {item.done ? <div style={{ color: '#fff' }}>{Ic.check('w-4 h-4')}</div> : item.active ? <div style={{ width: 8, height: 8, borderRadius: '50%', background: N.navy }} /> : <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#D1D5DB' }} />}
+-                  </div>
+-                  {i < 2 && <div style={{ width: 2, height: 24, background: item.done ? '#4CC97B' : '#E5E7EB', borderRadius: 1, transition: 'background 0.5s' }} />}
+-                </div>
+-                <div style={{ paddingTop: 3 }}>
+-                  <div style={{ fontWeight: 700, fontSize: 13, color: item.active ? N.gold : item.done ? N.navy : '#9CA3AF' }}>{item.label}</div>
+-                  <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{item.sub}</div>
+-                </div>
+-              </div>
+-            ))}
+-          </div>
+-
+-          {approved && (
+-            <div style={{ background: 'rgba(76,201,123,0.08)', border: '1.5px solid #4CC97B40', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
+-              <div style={{ fontWeight: 700, fontSize: 13, color: '#16A34A', marginBottom: 4 }}>🎉 Approved! +50 XP earned</div>
+-              <div style={{ fontSize: 12, color: '#6B7280' }}>Your material is now live in the Prepza Library. Other students can find, save and study with it.</div>
+-            </div>
+-          )}
+-
+           <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+             <div style={{ fontSize: 12, fontWeight: 700, color: N.navy, marginBottom: 4 }}>What happens if rejected?</div>
+             <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.65 }}>You'll receive a notification with the reason. You can revise and resubmit, or contact support if you believe it's a mistake.</div>
+@@ -4454,6 +4581,7 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
+   )
+ }
+ 
++
+ // ─── XP PROGRESS ──────────────────────────────────────────────────────────────
+ function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+   const xpTotal = 1240

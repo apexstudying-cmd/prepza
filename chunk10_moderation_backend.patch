@@ -1,0 +1,632 @@
+diff --git a/app.py b/app.py
+index 504ad98..0826bcf 100644
+--- a/app.py
++++ b/app.py
+@@ -118,6 +118,11 @@ class User(db.Model):
+     created_at = db.Column(db.DateTime, nullable=True)
+     signup_source = db.Column(db.String(100), nullable=True)
+     is_suspended = db.Column(db.Boolean, nullable=False, default=False)
++    last_active_at = db.Column(db.DateTime, nullable=True)
++    # Updated (throttled, see track_last_active()) on any authenticated
++    # request - login, browsing, chatting, anything - not just specific
++    # study actions. That's a different, broader signal than
++    # StudyActivityLog, which only covers document/quiz/flashcard study.
+ class University(db.Model):
+     id = db.Column(db.Integer, primary_key=True)
+     name = db.Column(db.String(150), nullable=False)
+@@ -461,6 +466,9 @@ class ForumPost(db.Model):
+     title = db.Column(db.String(200), nullable=False)
+     body = db.Column(db.Text, nullable=False)
+     created_at = db.Column(db.DateTime, default=datetime.utcnow)
++    is_removed = db.Column(db.Boolean, nullable=False, default=False)
++    # Moderation removal - same "hide body, keep row" pattern as
++    # Message.is_deleted, so thread/reply structure isn't broken.
+ class AiAnswer(db.Model):
+     id = db.Column(db.Integer, primary_key=True)
+     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
+@@ -483,6 +491,7 @@ class ForumReply(db.Model):
+     triggered_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+     body = db.Column(db.Text, nullable=False)
+     created_at = db.Column(db.DateTime, default=datetime.utcnow)
++    is_removed = db.Column(db.Boolean, nullable=False, default=False)
+ class AiUsageLog(db.Model):
+     id = db.Column(db.Integer, primary_key=True)
+     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+@@ -584,6 +593,7 @@ class GroupPost(db.Model):
+     # post | question - Posts tab vs Questions tab in GroupDetailScreen
+     body = db.Column(db.Text, nullable=False)
+     created_at = db.Column(db.DateTime, default=datetime.utcnow)
++    is_removed = db.Column(db.Boolean, nullable=False, default=False)
+ 
+ 
+ class GroupPostComment(db.Model):
+@@ -592,6 +602,7 @@ class GroupPostComment(db.Model):
+     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+     body = db.Column(db.Text, nullable=False)
+     created_at = db.Column(db.DateTime, default=datetime.utcnow)
++    is_removed = db.Column(db.Boolean, nullable=False, default=False)
+     # Used for both Posts-tab comments and Questions-tab replies - the
+     # frontend's shared CommentsScreen doesn't distinguish them either.
+     marked_helpful = db.Column(db.Boolean, nullable=False, default=False)
+@@ -680,6 +691,77 @@ class Announcement(db.Model):
+     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+ 
+ 
++# ---------- Moderation (Chunk 10) ----------
++
++CONTENT_REPORT_TARGET_TYPES = (
++    "forum_post", "forum_reply", "group_post", "group_post_comment", "user",
++)
++CONTENT_REPORT_REASONS = {
++    # reason -> auto-assigned priority. Deliberately a fixed mapping
++    # rather than an admin-editable one for MVP, same tradeoff as the
++    # hardcoded XP_* amounts elsewhere in this file.
++    "academic_dishonesty": "high",
++    "harassment": "high",
++    "offensive_content": "medium",
++    "misinformation": "medium",
++    "spam_scam": "medium",
++    "duplicate": "low",
++    "bot_activity": "low",
++    "other": "low",
++}
++CONTENT_REPORT_STATUSES = ("pending", "dismissed", "actioned")
++CONTENT_REPORT_ACTIONS = ("dismissed", "removed", "warned")
++
++
++class ContentReport(db.Model):
++    """
++    A student report against a piece of community content (forum
++    posts/replies, group posts/comments) or against a user directly.
++    Deliberately separate from LibraryReport, which already covers
++    document/library-item reports with its own queue - this table
++    fills the gap for everything else, which previously had no
++    reporting mechanism at all.
++    """
++    id = db.Column(db.Integer, primary_key=True)
++    target_type = db.Column(db.String(30), nullable=False)
++    target_id = db.Column(db.Integer, nullable=False)
++    reporter_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
++    # nullable to leave room for future automated/system-flagged reports
++    reason = db.Column(db.String(40), nullable=False)
++    details = db.Column(db.String(500), nullable=True)
++    priority = db.Column(db.String(10), nullable=False)
++    # high | medium | low - derived from `reason` at creation time
++    status = db.Column(db.String(20), nullable=False, default="pending")
++    # pending -> dismissed | actioned
++    action_taken = db.Column(db.String(20), nullable=True)
++    # set alongside status='actioned': 'removed' | 'warned'
++    admin_notes = db.Column(db.String(500), nullable=True)
++    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
++    reviewed_at = db.Column(db.DateTime, nullable=True)
++    created_at = db.Column(db.DateTime, default=datetime.utcnow)
++
++
++class UserWarning(db.Model):
++    """
++    A formal warning issued to a student, always paired with a
++    Notification(type='moderation_warning') so the student actually
++    sees it - not just an internal admin note. `message` states what
++    they did wrong, `consequence` states what happens as a result /
++    next time, both admin-authored per warning rather than templated,
++    since the punishment should match the specific violation.
++    """
++    id = db.Column(db.Integer, primary_key=True)
++    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
++    issued_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
++    content_report_id = db.Column(db.Integer, db.ForeignKey("content_report.id"), nullable=True)
++    reason = db.Column(db.String(40), nullable=False)
++    # same vocabulary as ContentReport.reason, so warnings and reports
++    # can be filtered/grouped consistently
++    message = db.Column(db.String(500), nullable=False)
++    consequence = db.Column(db.String(500), nullable=False)
++    created_at = db.Column(db.DateTime, default=datetime.utcnow)
++
++
+ # ---------- Opportunities + Organisation portal ----------
+ 
+ ORGANISATION_VERIFICATION_STATUSES = ("pending", "verified", "rejected")
+@@ -1441,6 +1523,42 @@ def enforce_maintenance_mode():
+     return jsonify({"error": "maintenance", "message": message}), 503
+ 
+ 
++# ---------- Activity tracking (for admin "Active Today") ----------
++# Broad, cheap DAU signal: touches on ANY authenticated request (login,
++# browsing, chatting, studying - not just specific study actions like
++# StudyActivityLog). Throttled via the session so this costs at most one
++# UPDATE per user per ACTIVITY_SYNC_INTERVAL, not one per request.
++
++ACTIVITY_TRACKING_SKIP_PREFIXES = ("/static/", "/sw.js", "/health")
++ACTIVITY_SYNC_INTERVAL = timedelta(minutes=5)
++
++
++@app.before_request
++def track_last_active():
++    if request.path.startswith(ACTIVITY_TRACKING_SKIP_PREFIXES):
++        return None
++    user_id = session.get("user_id")
++    if not user_id:
++        return None
++
++    now = datetime.utcnow()
++    last_sync_raw = session.get("_last_active_sync")
++    if last_sync_raw:
++        try:
++            last_sync = datetime.fromisoformat(last_sync_raw)
++        except ValueError:
++            last_sync = None
++        if last_sync and (now - last_sync) < ACTIVITY_SYNC_INTERVAL:
++            return None
++
++    # Bulk UPDATE (no SELECT) so this stays a single cheap query - we
++    # don't need the User object, just to touch the timestamp.
++    User.query.filter_by(id=user_id).update({"last_active_at": now})
++    db.session.commit()
++    session["_last_active_sync"] = now.isoformat()
++    return None
++
++
+ @app.route("/")
+ def home():
+     return send_from_directory(app.static_folder, "index.html")
+@@ -4150,7 +4268,8 @@ def _serialize_group_post(post, user_id):
+         "id": post.id,
+         "group_id": post.group_id,
+         "post_type": post.post_type,
+-        "body": post.body,
++        "body": post.body if not post.is_removed else None,
++        "is_removed": post.is_removed,
+         "author": _display_name(author) if author else "Deleted user",
+         "author_id": post.user_id,
+         "like_count": like_count,
+@@ -4167,7 +4286,8 @@ def _serialize_group_post_comment(comment):
+     return {
+         "id": comment.id,
+         "group_post_id": comment.group_post_id,
+-        "body": comment.body,
++        "body": comment.body if not comment.is_removed else None,
++        "is_removed": comment.is_removed,
+         "author": _display_name(author) if author else "Deleted user",
+         "author_id": comment.user_id,
+         "marked_helpful": comment.marked_helpful,
+@@ -4228,7 +4348,7 @@ def list_group_posts(group_id):
+     per_page = 20
+ 
+     posts = (
+-        GroupPost.query.filter_by(group_id=group_id, post_type=post_type)
++        GroupPost.query.filter_by(group_id=group_id, post_type=post_type, is_removed=False)
+         .order_by(GroupPost.created_at.desc())
+         .offset((page - 1) * per_page)
+         .limit(per_page)
+@@ -4722,6 +4842,81 @@ def remove_group_file(group_id, file_id):
+     return jsonify({"message": "File removed"})
+ 
+ 
++# ---------- Content reports (Chunk 10 moderation) ----------
++
++CONTENT_REPORT_DETAILS_MAX = 500
++
++
++def _content_report_target_exists(target_type, target_id):
++    """Returns the target row if it exists (and isn't already removed
++    for the content types that support removal), else None."""
++    if target_type == "forum_post":
++        return ForumPost.query.filter_by(id=target_id, is_removed=False).first()
++    if target_type == "forum_reply":
++        return ForumReply.query.filter_by(id=target_id, is_removed=False).first()
++    if target_type == "group_post":
++        return GroupPost.query.filter_by(id=target_id, is_removed=False).first()
++    if target_type == "group_post_comment":
++        return GroupPostComment.query.filter_by(id=target_id, is_removed=False).first()
++    if target_type == "user":
++        return User.query.filter_by(id=target_id, is_suspended=False).first()
++    return None
++
++
++@app.route("/content-reports", methods=["POST"])
++@require_csrf
++def create_content_report():
++    """
++    Files a report against a forum post/reply, group post/comment, or
++    a user directly. No duplicate-report guard, same reasoning as
++    report_library_item() - admins dedupe on the review side.
++    """
++    user_id = session.get("user_id")
++    if not user_id:
++        return jsonify({"error": "Not logged in"}), 401
++
++    data = request.get_json(silent=True)
++    if not data:
++        return jsonify({"error": "Request body must be valid JSON"}), 400
++
++    target_type = (data.get("target_type") or "").strip().lower()
++    target_id = data.get("target_id")
++    reason = (data.get("reason") or "").strip().lower()
++    details = data.get("details")
++
++    if target_type not in CONTENT_REPORT_TARGET_TYPES:
++        return jsonify({"error": "target_type must be one of: " + ", ".join(CONTENT_REPORT_TARGET_TYPES)}), 400
++    if not isinstance(target_id, int) or isinstance(target_id, bool):
++        return jsonify({"error": "target_id is required"}), 400
++    if reason not in CONTENT_REPORT_REASONS:
++        return jsonify({"error": "reason must be one of: " + ", ".join(CONTENT_REPORT_REASONS)}), 400
++    if target_type == "user" and target_id == user_id:
++        return jsonify({"error": "You can't report yourself"}), 400
++
++    if details is not None:
++        details = details.strip()
++        if len(details) > CONTENT_REPORT_DETAILS_MAX:
++            return jsonify({"error": f"details must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
++        details = details or None
++
++    if not _content_report_target_exists(target_type, target_id):
++        return jsonify({"error": "Reported content was not found"}), 404
++
++    report = ContentReport(
++        target_type=target_type,
++        target_id=target_id,
++        reporter_user_id=user_id,
++        reason=reason,
++        details=details,
++        priority=CONTENT_REPORT_REASONS[reason],
++        status="pending",
++    )
++    db.session.add(report)
++    db.session.commit()
++
++    return jsonify({"id": report.id, "status": report.status, "priority": report.priority}), 201
++
++
+ # ---------- Follows ----------
+ 
+ def _serialize_follow_user(user, viewer_user_id):
+@@ -5041,7 +5236,8 @@ def _serialize_reply(reply):
+ 
+     return {
+         "id": reply.id,
+-        "body": reply.body,
++        "body": reply.body if not reply.is_removed else None,
++        "is_removed": reply.is_removed,
+         "is_ai": reply.is_ai,
+         "author": "Prepza AI" if reply.is_ai else author,
+         "ai_answer_id": reply.ai_answer_id,
+@@ -5104,7 +5300,7 @@ def list_forum_posts(unit_id):
+     per_page = 20
+ 
+     posts = (
+-        ForumPost.query.filter_by(unit_id=unit_id)
++        ForumPost.query.filter_by(unit_id=unit_id, is_removed=False)
+         .order_by(ForumPost.created_at.desc())
+         .offset((page - 1) * per_page)
+         .limit(per_page)
+@@ -5997,6 +6193,311 @@ def admin_list_announcements():
+     ])
+ 
+ 
++# ---------- Admin: moderation (Chunk 10) ----------
++
++def _content_report_preview(report):
++    """
++    Best-effort preview of the reported content for the admin queue -
++    a short text snippet plus who authored it. Returns None fields if
++    the target was hard-deleted out from under the report (shouldn't
++    normally happen since content is soft-removed, but don't 500 if it
++    does).
++    """
++    author_id = None
++    snippet = None
++
++    if report.target_type == "forum_post":
++        row = db.session.get(ForumPost, report.target_id)
++        if row:
++            author_id = row.user_id
++            snippet = row.body
++    elif report.target_type == "forum_reply":
++        row = db.session.get(ForumReply, report.target_id)
++        if row:
++            author_id = row.user_id
++            snippet = row.body
++    elif report.target_type == "group_post":
++        row = db.session.get(GroupPost, report.target_id)
++        if row:
++            author_id = row.user_id
++            snippet = row.body
++    elif report.target_type == "group_post_comment":
++        row = db.session.get(GroupPostComment, report.target_id)
++        if row:
++            author_id = row.user_id
++            snippet = row.body
++    elif report.target_type == "user":
++        author_id = report.target_id
++
++    author = db.session.get(User, author_id) if author_id else None
++    return {
++        "author_id": author_id,
++        "author_email": author.email if author else None,
++        "snippet": (snippet[:200] if snippet else None),
++    }
++
++
++def _serialize_content_report(report):
++    reporter = db.session.get(User, report.reporter_user_id) if report.reporter_user_id else None
++    entry = {
++        "id": report.id,
++        "target_type": report.target_type,
++        "target_id": report.target_id,
++        "reporter_email": reporter.email if reporter else "System",
++        "reason": report.reason,
++        "details": report.details,
++        "priority": report.priority,
++        "status": report.status,
++        "action_taken": report.action_taken,
++        "admin_notes": report.admin_notes,
++        "created_at": report.created_at.isoformat() if report.created_at else None,
++    }
++    entry.update(_content_report_preview(report))
++    return entry
++
++
++@app.route("/admin/content-reports")
++@require_admin
++def admin_list_content_reports():
++    """
++    Moderation queue. Defaults to pending only, ordered highest
++    priority first (then oldest first within a priority tier) so the
++    most urgent reports surface at the top; pass status=all to see
++    dismissed/actioned ones too.
++    """
++    status_filter = request.args.get("status", "pending")
++    if status_filter != "all" and status_filter not in CONTENT_REPORT_STATUSES:
++        return jsonify({"error": "status must be 'all' or one of: " + ", ".join(CONTENT_REPORT_STATUSES)}), 400
++
++    query = ContentReport.query
++    if status_filter != "all":
++        query = query.filter_by(status=status_filter)
++
++    priority_order = db.case(
++        (ContentReport.priority == "high", 0),
++        (ContentReport.priority == "medium", 1),
++        else_=2,
++    )
++    reports = query.order_by(priority_order, ContentReport.created_at.asc()).all()
++
++    return jsonify({"reports": [_serialize_content_report(r) for r in reports]})
++
++
++@app.route("/admin/content-reports/summary")
++@require_admin
++def admin_content_reports_summary():
++    """KPI row for the Moderation tab header."""
++    open_reports = ContentReport.query.filter_by(status="pending").count()
++    today = datetime.utcnow().date()
++    resolved_today = ContentReport.query.filter(
++        ContentReport.status != "pending",
++        func.date(ContentReport.reviewed_at) == today,
++    ).count()
++    suspended_users = User.query.filter_by(is_suspended=True).count()
++    warnings_issued = UserWarning.query.count()
++
++    return jsonify({
++        "open_reports": open_reports,
++        "resolved_today": resolved_today,
++        "suspended_users": suspended_users,
++        "warnings_issued": warnings_issued,
++    })
++
++
++def _load_pending_report(report_id):
++    report = db.session.get(ContentReport, report_id)
++    if not report:
++        return None, (jsonify({"error": "Report not found"}), 404)
++    if report.status != "pending":
++        return None, (jsonify({"error": f"Report is not pending (status: {report.status})"}), 400)
++    return report, None
++
++
++@app.route("/admin/content-reports/<int:report_id>/dismiss", methods=["POST"])
++@require_csrf
++@require_admin
++def admin_dismiss_content_report(report_id):
++    acting_admin_id = session.get("user_id")
++    report, error = _load_pending_report(report_id)
++    if error:
++        return error
++
++    data = request.get_json(silent=True) or {}
++    admin_notes = data.get("admin_notes")
++    if admin_notes is not None:
++        admin_notes = admin_notes.strip()
++        if len(admin_notes) > CONTENT_REPORT_DETAILS_MAX:
++            return jsonify({"error": f"admin_notes must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
++        admin_notes = admin_notes or None
++
++    report.status = "dismissed"
++    report.action_taken = "dismissed"
++    report.admin_notes = admin_notes
++    report.reviewed_by = acting_admin_id
++    report.reviewed_at = datetime.utcnow()
++    db.session.commit()
++
++    return jsonify(_serialize_content_report(report))
++
++
++@app.route("/admin/content-reports/<int:report_id>/remove", methods=["POST"])
++@require_csrf
++@require_admin
++def admin_remove_reported_content(report_id):
++    """
++    Hides the reported content (soft-remove, same is_removed pattern
++    used everywhere else) and marks the report actioned. Not valid for
++    target_type='user' - there's no "content" to remove for a user
++    report; use /warn or the existing /admin/users suspend toggle
++    instead.
++    """
++    acting_admin_id = session.get("user_id")
++    report, error = _load_pending_report(report_id)
++    if error:
++        return error
++
++    if report.target_type == "user":
++        return jsonify({
++            "error": "Can't 'remove' a user report - use /admin/content-reports/<id>/warn, "
++                     "or suspend the user via PATCH /admin/users/<id>"
++        }), 400
++
++    model_by_type = {
++        "forum_post": ForumPost,
++        "forum_reply": ForumReply,
++        "group_post": GroupPost,
++        "group_post_comment": GroupPostComment,
++    }
++    model = model_by_type[report.target_type]
++    target = db.session.get(model, report.target_id)
++    if not target:
++        return jsonify({"error": "Reported content no longer exists"}), 404
++
++    target.is_removed = True
++
++    data = request.get_json(silent=True) or {}
++    admin_notes = data.get("admin_notes")
++    if admin_notes is not None:
++        admin_notes = admin_notes.strip()
++        if len(admin_notes) > CONTENT_REPORT_DETAILS_MAX:
++            return jsonify({"error": f"admin_notes must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
++        admin_notes = admin_notes or None
++
++    report.status = "actioned"
++    report.action_taken = "removed"
++    report.admin_notes = admin_notes
++    report.reviewed_by = acting_admin_id
++    report.reviewed_at = datetime.utcnow()
++    db.session.commit()
++
++    return jsonify(_serialize_content_report(report))
++
++
++@app.route("/admin/content-reports/<int:report_id>/warn", methods=["POST"])
++@require_csrf
++@require_admin
++def admin_warn_from_content_report(report_id):
++    """
++    Issues a UserWarning to the content's author (or the reported user
++    directly, for target_type='user'), tied back to this report. The
++    warning ALWAYS reaches the student as a Notification - message
++    states what they did wrong, consequence states what happens as a
++    result. Both are admin-authored per warning, not templated, since
++    the punishment should fit the specific violation. Optionally also
++    removes the content in the same call (remove_content=true).
++    """
++    acting_admin_id = session.get("user_id")
++    report, error = _load_pending_report(report_id)
++    if error:
++        return error
++
++    data = request.get_json(silent=True) or {}
++    message = (data.get("message") or "").strip()
++    consequence = (data.get("consequence") or "").strip()
++    remove_content = bool(data.get("remove_content"))
++
++    if not message or len(message) > CONTENT_REPORT_DETAILS_MAX:
++        return jsonify({"error": f"message is required and must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
++    if not consequence or len(consequence) > CONTENT_REPORT_DETAILS_MAX:
++        return jsonify({"error": f"consequence is required and must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
++
++    if report.target_type == "user":
++        warned_user_id = report.target_id
++    else:
++        preview = _content_report_preview(report)
++        warned_user_id = preview["author_id"]
++        if not warned_user_id:
++            return jsonify({"error": "Could not determine the content's author to warn"}), 404
++
++        if remove_content:
++            model_by_type = {
++                "forum_post": ForumPost,
++                "forum_reply": ForumReply,
++                "group_post": GroupPost,
++                "group_post_comment": GroupPostComment,
++            }
++            target = db.session.get(model_by_type[report.target_type], report.target_id)
++            if target:
++                target.is_removed = True
++
++    warning = UserWarning(
++        user_id=warned_user_id,
++        issued_by=acting_admin_id,
++        content_report_id=report.id,
++        reason=report.reason,
++        message=message,
++        consequence=consequence,
++    )
++    db.session.add(warning)
++    db.session.flush()  # assign warning.id before Notification.related_id references it
++
++    db.session.add(Notification(
++        user_id=warned_user_id,
++        type="moderation_warning",
++        title="You've received a warning",
++        body=f"{message} {consequence}",
++        related_type="user_warning",
++        related_id=warning.id,
++    ))
++
++    report.status = "actioned"
++    report.action_taken = "warned"
++    report.reviewed_by = acting_admin_id
++    report.reviewed_at = datetime.utcnow()
++    db.session.commit()
++
++    return jsonify({
++        "report": _serialize_content_report(report),
++        "warning_id": warning.id,
++        "content_removed": remove_content and report.target_type != "user",
++    })
++
++
++@app.route("/warnings")
++def list_my_warnings():
++    """Lets a student see their own warning history - what they did
++    wrong and the consequence, in their own words from the admin."""
++    user_id = session.get("user_id")
++    if not user_id:
++        return jsonify({"error": "Not logged in"}), 401
++
++    warnings = (
++        UserWarning.query.filter_by(user_id=user_id)
++        .order_by(UserWarning.created_at.desc())
++        .all()
++    )
++    return jsonify({"warnings": [
++        {
++            "id": w.id,
++            "reason": w.reason,
++            "message": w.message,
++            "consequence": w.consequence,
++            "created_at": w.created_at.isoformat() if w.created_at else None,
++        }
++        for w in warnings
++    ]})
++
++
+ @app.route("/admin/ai-usage")
+ @require_admin
+ def admin_ai_usage():
+@@ -6330,13 +6831,13 @@ def admin_analytics():
+ 
+     total_users = db.session.query(func.count(User.id)).scalar()
+ 
+-    # "Active today" = users with at least one qualifying study action
+-    # logged today (StudyActivityLog is the same table record_study_activity()
+-    # writes to for streaks) - the closest existing signal to a DAU count.
++    # "Active today" = any authenticated request today (login, browsing,
++    # chatting, studying - see track_last_active()), not just specific
++    # study actions.
+     today = datetime.utcnow().date()
+     active_today = db.session.query(
+-        func.count(func.distinct(StudyActivityLog.user_id))
+-    ).filter(StudyActivityLog.activity_date == today).scalar()
++        func.count(User.id)
++    ).filter(func.date(User.last_active_at) == today).scalar()
+ 
+     # Storage is summed off DocumentContent, not Document - DocumentContent
+     # is the deduplicated, one-row-per-unique-file table, so a document

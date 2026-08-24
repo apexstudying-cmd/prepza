@@ -1,0 +1,33 @@
+diff --git a/app.py b/app.py
+index 0826bcf..511861b 100644
+--- a/app.py
++++ b/app.py
+@@ -6264,6 +6264,12 @@ def admin_list_content_reports():
+     priority first (then oldest first within a priority tier) so the
+     most urgent reports surface at the top; pass status=all to see
+     dismissed/actioned ones too.
++
++    Sorted in Python rather than via a SQL CASE expression - same
++    pattern as admin_list_users() below, which avoids depending on
++    SQLAlchemy version-specific case() syntax (the tuple-positional
++    form needs 1.4+; older installs need the list/`whens=` form).
++    Report volume is small enough that this costs nothing.
+     """
+     status_filter = request.args.get("status", "pending")
+     if status_filter != "all" and status_filter not in CONTENT_REPORT_STATUSES:
+@@ -6273,12 +6279,9 @@ def admin_list_content_reports():
+     if status_filter != "all":
+         query = query.filter_by(status=status_filter)
+ 
+-    priority_order = db.case(
+-        (ContentReport.priority == "high", 0),
+-        (ContentReport.priority == "medium", 1),
+-        else_=2,
+-    )
+-    reports = query.order_by(priority_order, ContentReport.created_at.asc()).all()
++    reports = query.order_by(ContentReport.created_at.asc()).all()
++    priority_rank = {"high": 0, "medium": 1, "low": 2}
++    reports.sort(key=lambda r: priority_rank.get(r.priority, 3))
+ 
+     return jsonify({"reports": [_serialize_content_report(r) for r in reports]})
+ 

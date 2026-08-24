@@ -1,0 +1,176 @@
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -0,0 +1,173 @@
++// Thin fetch wrapper for the Prepza Flask backend.
++//
++// - Sends the session cookie on every request (credentials: 'include').
++// - Caches the CSRF token from GET /me and attaches it to every
++//   non-GET request, matching require_csrf() on the backend.
++// - In production this assumes the frontend is served BY Flask itself
++//   (same origin as app.py's static routes), so API_BASE defaults to
++//   ''. For local dev with `npm run dev` on a different port than
++//   Flask, set VITE_API_BASE_URL (e.g. http://127.0.0.1:5000) - you'll
++//   also need flask-cors enabled on the backend for that origin, and
++//   SESSION_COOKIE_SECURE relaxed for plain HTTP, since dev then runs
++//   as two different origins. Neither of those backend changes are
++//   included here - flag if you want them.
++
++const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
++
++let csrfToken: string | null = null
++let cachedUser: MeResponse | null = null
++
++export interface MeResponse {
++  id: number
++  email: string
++  year: number | null
++  semester: number | null
++  display_name: string | null
++  bio: string | null
++  email_verified: boolean
++  is_admin: boolean
++  csrf_token: string
++}
++
++export class ApiError extends Error {
++  status: number
++  constructor(message: string, status: number) {
++    super(message)
++    this.status = status
++  }
++}
++
++async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
++  const method = (options.method || 'GET').toString().toUpperCase()
++  const headers: Record<string, string> = {
++    'Content-Type': 'application/json',
++    ...(options.headers as Record<string, string> | undefined),
++  }
++  if (method !== 'GET' && csrfToken) {
++    headers['X-CSRF-Token'] = csrfToken
++  }
++
++  const res = await fetch(`${API_BASE}${path}`, {
++    ...options,
++    method,
++    headers,
++    credentials: 'include',
++  })
++
++  let body: unknown = null
++  try { body = await res.json() } catch { /* empty/non-JSON body, e.g. 204 */ }
++
++  if (!res.ok) {
++    const message = (body as { error?: string } | null)?.error || `Request failed (${res.status})`
++    throw new ApiError(message, res.status)
++  }
++  return body as T
++}
++
++/** Restores the session on app load by calling /me. Returns null (not
++ *  an error) if there's no valid session cookie - that's the normal
++ *  "logged out" case, not a failure. */
++export async function getMe(): Promise<MeResponse | null> {
++  try {
++    const me = await request<MeResponse>('/me')
++    csrfToken = me.csrf_token
++    cachedUser = me
++    return me
++  } catch (e) {
++    if (e instanceof ApiError && e.status === 401) return null
++    throw e
++  }
++}
++
++/** Synchronous access to whatever /me last returned - populated once
++ *  at app boot (see App()'s bootstrap effect), so this is safe to read
++ *  from any screen without re-fetching. */
++export function getCachedUser(): MeResponse | null {
++  return cachedUser
++}
++
++export async function login(email: string, password: string): Promise<void> {
++  await request('/login', { method: 'POST', body: JSON.stringify({ email, password }) })
++  await getMe() // populates csrfToken + cachedUser for the new session
++}
++
++export async function logout(): Promise<void> {
++  await request('/logout', { method: 'POST' })
++  csrfToken = null
++  cachedUser = null
++}
++
++// ---------- Gamification (Chunk 7) ----------
++
++export interface GamificationSummary {
++  xp_total: number
++  level: number
++  level_title: string
++  current_streak: number
++  longest_streak: number
++  documents_count: number
++  followers_count: number
++}
++export function getGamificationSummary() {
++  return request<GamificationSummary>('/gamification/summary')
++}
++
++export interface XpHistoryEntry {
++  icon: string
++  label: string
++  xp: number
++  created_at: string | null
++}
++export interface XpProgress {
++  level: number
++  level_title: string
++  xp_total: number
++  xp_into_level: number
++  xp_for_level_gap: number
++  next_level_xp: number
++  page: number
++  history: XpHistoryEntry[]
++  how_to_earn: { label: string; xp: string }[]
++}
++export function getXpProgress(page = 1) {
++  return request<XpProgress>(`/xp/progress?page=${page}`)
++}
++
++export interface StreakCalendarDay {
++  date: string
++  studied: boolean
++}
++export interface StreakMilestone {
++  days: number
++  label: string
++  xp: string
++  done: boolean
++}
++export interface StreakDetail {
++  current_streak: number
++  longest_streak: number
++  calendar: StreakCalendarDay[]
++  milestones: StreakMilestone[]
++}
++export function getStreak() {
++  return request<StreakDetail>('/streak')
++}
++
++export interface AchievementEntry {
++  code: string
++  icon: string
++  name: string
++  desc: string
++  done: boolean
++  unlocked_at: string | null
++  progress: number
++  total: number
++}
++export interface AchievementsResponse {
++  unlocked_count: number
++  total_count: number
++  achievements: AchievementEntry[]
++}
++export function getAchievements() {
++  return request<AchievementsResponse>('/achievements')
++}

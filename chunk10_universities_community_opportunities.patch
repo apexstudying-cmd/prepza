@@ -1,0 +1,565 @@
+diff --git a/app.py b/app.py
+index e7b7f94..ba9a620 100644
+--- a/app.py
++++ b/app.py
+@@ -571,6 +571,10 @@ class Group(db.Model):
+     created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+     member_count = db.Column(db.Integer, nullable=False, default=0)
+     created_at = db.Column(db.DateTime, default=datetime.utcnow)
++    is_active = db.Column(db.Boolean, nullable=False, default=True)
++    # Admin kill-switch, same soft-disable pattern as Organisation.is_active
++    # elsewhere in this file - deactivating hides a group from discovery
++    # and blocks new joins without deleting its posts/members/history.
+ 
+ 
+ class GroupMember(db.Model):
+@@ -1718,6 +1722,292 @@ def list_programs(university_id):
+     ])
+ 
+ 
++# ---------- Admin: universities & programs (Chunk 10) ----------
++
++UNIVERSITY_NAME_MAX = 150
++UNIVERSITY_SHORT_CODE_MAX = 20
++UNIVERSITY_COUNTRY_MAX = 80
++PROGRAM_NAME_MAX = 150
++PROGRAM_DEGREE_LEVEL_MAX = 50
++PROGRAM_DISCIPLINE_CATEGORY_MAX = 80
++
++
++def _serialize_university(university):
++    return {
++        "id": university.id,
++        "name": university.name,
++        "short_code": university.short_code,
++        "country": university.country,
++        "is_active": university.is_active,
++        "created_at": university.created_at.isoformat() if university.created_at else None,
++    }
++
++
++def _serialize_program(program):
++    return {
++        "id": program.id,
++        "university_id": program.university_id,
++        "name": program.name,
++        "degree_level": program.degree_level,
++        "discipline_category": program.discipline_category,
++        "is_active": program.is_active,
++        "created_at": program.created_at.isoformat() if program.created_at else None,
++    }
++
++
++@app.route("/admin/universities")
++@require_admin
++def admin_list_universities():
++    """Lists every university, active or not - unlike the public
++    /universities route, which only shows active ones."""
++    search = (request.args.get("search") or "").strip()
++    query = University.query
++    if search:
++        query = query.filter(University.name.ilike(f"%{search}%"))
++    universities = query.order_by(University.name).all()
++    return jsonify({"universities": [_serialize_university(u) for u in universities]})
++
++
++@app.route("/admin/universities", methods=["POST"])
++@require_csrf
++@require_admin
++def admin_create_university():
++    data = request.get_json(silent=True)
++    if not data:
++        return jsonify({"error": "Request body must be valid JSON"}), 400
++
++    name = (data.get("name") or "").strip()
++    short_code = (data.get("short_code") or "").strip().upper()
++    country = data.get("country")
++
++    if not name or len(name) > UNIVERSITY_NAME_MAX:
++        return jsonify({"error": f"name is required and must be {UNIVERSITY_NAME_MAX} characters or fewer"}), 400
++    if not short_code or len(short_code) > UNIVERSITY_SHORT_CODE_MAX:
++        return jsonify({"error": f"short_code is required and must be {UNIVERSITY_SHORT_CODE_MAX} characters or fewer"}), 400
++    if University.query.filter_by(short_code=short_code).first():
++        return jsonify({"error": "A university with that short_code already exists"}), 409
++
++    if country is not None:
++        country = country.strip() or None
++        if country and len(country) > UNIVERSITY_COUNTRY_MAX:
++            return jsonify({"error": f"country must be {UNIVERSITY_COUNTRY_MAX} characters or fewer"}), 400
++
++    university = University(name=name, short_code=short_code, country=country)
++    db.session.add(university)
++    db.session.commit()
++
++    return jsonify(_serialize_university(university)), 201
++
++
++@app.route("/admin/universities/<int:university_id>", methods=["PATCH"])
++@require_csrf
++@require_admin
++def admin_update_university(university_id):
++    """Edits a university's fields, or toggles is_active. Deactivating
++    hides it from the public /universities list and from new signups,
++    same soft-disable pattern as Organisation.is_active."""
++    university = db.session.get(University, university_id)
++    if not university:
++        return jsonify({"error": "University not found"}), 404
++
++    data = request.get_json(silent=True)
++    if not data:
++        return jsonify({"error": "Request body must be valid JSON"}), 400
++
++    if "name" in data:
++        name = (data["name"] or "").strip()
++        if not name or len(name) > UNIVERSITY_NAME_MAX:
++            return jsonify({"error": f"name must be 1-{UNIVERSITY_NAME_MAX} characters"}), 400
++        university.name = name
++
++    if "short_code" in data:
++        short_code = (data["short_code"] or "").strip().upper()
++        if not short_code or len(short_code) > UNIVERSITY_SHORT_CODE_MAX:
++            return jsonify({"error": f"short_code must be 1-{UNIVERSITY_SHORT_CODE_MAX} characters"}), 400
++        existing = University.query.filter_by(short_code=short_code).first()
++        if existing and existing.id != university.id:
++            return jsonify({"error": "A university with that short_code already exists"}), 409
++        university.short_code = short_code
++
++    if "country" in data:
++        country = data["country"]
++        if country is not None:
++            country = country.strip() or None
++            if country and len(country) > UNIVERSITY_COUNTRY_MAX:
++                return jsonify({"error": f"country must be {UNIVERSITY_COUNTRY_MAX} characters or fewer"}), 400
++        university.country = country
++
++    if "is_active" in data:
++        is_active = data["is_active"]
++        if not isinstance(is_active, bool):
++            return jsonify({"error": "is_active must be true or false"}), 400
++        university.is_active = is_active
++
++    db.session.commit()
++    return jsonify(_serialize_university(university))
++
++
++@app.route("/admin/programs")
++@require_admin
++def admin_list_programs():
++    """Lists programs, optionally filtered to one university. Admins
++    see inactive programs too, unlike the public per-university route."""
++    university_id = request.args.get("university_id", type=int)
++    query = Program.query
++    if university_id:
++        query = query.filter_by(university_id=university_id)
++    programs = query.order_by(Program.name).all()
++    return jsonify({"programs": [_serialize_program(p) for p in programs]})
++
++
++@app.route("/admin/programs", methods=["POST"])
++@require_csrf
++@require_admin
++def admin_create_program():
++    data = request.get_json(silent=True)
++    if not data:
++        return jsonify({"error": "Request body must be valid JSON"}), 400
++
++    university_id = data.get("university_id")
++    name = (data.get("name") or "").strip()
++    degree_level = data.get("degree_level")
++    discipline_category = data.get("discipline_category")
++
++    if not isinstance(university_id, int) or isinstance(university_id, bool):
++        return jsonify({"error": "university_id is required"}), 400
++    if not db.session.get(University, university_id):
++        return jsonify({"error": "University not found"}), 404
++    if not name or len(name) > PROGRAM_NAME_MAX:
++        return jsonify({"error": f"name is required and must be {PROGRAM_NAME_MAX} characters or fewer"}), 400
++
++    if degree_level is not None:
++        degree_level = degree_level.strip() or None
++        if degree_level and len(degree_level) > PROGRAM_DEGREE_LEVEL_MAX:
++            return jsonify({"error": f"degree_level must be {PROGRAM_DEGREE_LEVEL_MAX} characters or fewer"}), 400
++    if discipline_category is not None:
++        discipline_category = discipline_category.strip() or None
++        if discipline_category and len(discipline_category) > PROGRAM_DISCIPLINE_CATEGORY_MAX:
++            return jsonify({"error": f"discipline_category must be {PROGRAM_DISCIPLINE_CATEGORY_MAX} characters or fewer"}), 400
++
++    program = Program(
++        university_id=university_id, name=name,
++        degree_level=degree_level, discipline_category=discipline_category,
++    )
++    db.session.add(program)
++    db.session.commit()
++
++    return jsonify(_serialize_program(program)), 201
++
++
++@app.route("/admin/programs/<int:program_id>", methods=["PATCH"])
++@require_csrf
++@require_admin
++def admin_update_program(program_id):
++    program = db.session.get(Program, program_id)
++    if not program:
++        return jsonify({"error": "Program not found"}), 404
++
++    data = request.get_json(silent=True)
++    if not data:
++        return jsonify({"error": "Request body must be valid JSON"}), 400
++
++    if "name" in data:
++        name = (data["name"] or "").strip()
++        if not name or len(name) > PROGRAM_NAME_MAX:
++            return jsonify({"error": f"name must be 1-{PROGRAM_NAME_MAX} characters"}), 400
++        program.name = name
++
++    if "degree_level" in data:
++        degree_level = data["degree_level"]
++        if degree_level is not None:
++            degree_level = degree_level.strip() or None
++            if degree_level and len(degree_level) > PROGRAM_DEGREE_LEVEL_MAX:
++                return jsonify({"error": f"degree_level must be {PROGRAM_DEGREE_LEVEL_MAX} characters or fewer"}), 400
++        program.degree_level = degree_level
++
++    if "discipline_category" in data:
++        discipline_category = data["discipline_category"]
++        if discipline_category is not None:
++            discipline_category = discipline_category.strip() or None
++            if discipline_category and len(discipline_category) > PROGRAM_DISCIPLINE_CATEGORY_MAX:
++                return jsonify({"error": f"discipline_category must be {PROGRAM_DISCIPLINE_CATEGORY_MAX} characters or fewer"}), 400
++        program.discipline_category = discipline_category
++
++    if "is_active" in data:
++        is_active = data["is_active"]
++        if not isinstance(is_active, bool):
++            return jsonify({"error": "is_active must be true or false"}), 400
++        program.is_active = is_active
++
++    db.session.commit()
++    return jsonify(_serialize_program(program))
++
++
++# ---------- Admin: community / groups (Chunk 10) ----------
++
++@app.route("/admin/groups")
++@require_admin
++def admin_list_groups():
++    """
++    Lists groups for the Community admin tab, including inactive and
++    private ones (the public /groups browse route hides both). Optional
++    ?search= matches group name, ?status=active|inactive filters by
++    is_active.
++    """
++    search = (request.args.get("search") or "").strip()
++    status_filter = (request.args.get("status") or "").strip().lower()
++    if status_filter and status_filter not in ("active", "inactive"):
++        return jsonify({"error": "status must be 'active' or 'inactive'"}), 400
++
++    query = Group.query
++    if search:
++        query = query.filter(Group.name.ilike(f"%{search}%"))
++    if status_filter == "active":
++        query = query.filter(Group.is_active.is_(True))
++    elif status_filter == "inactive":
++        query = query.filter(Group.is_active.is_(False))
++
++    groups = query.order_by(Group.created_at.desc()).all()
++
++    result = []
++    for g in groups:
++        creator = db.session.get(User, g.created_by)
++        entry = _serialize_group(g)
++        entry["creator_email"] = creator.email if creator else None
++        entry["post_count"] = GroupPost.query.filter_by(group_id=g.id, is_removed=False).count()
++        result.append(entry)
++
++    return jsonify({"groups": result})
++
++
++@app.route("/admin/groups/<int:group_id>", methods=["PATCH"])
++@require_csrf
++@require_admin
++def admin_update_group(group_id):
++    """
++    Admin kill-switch: activate/deactivate a group. Deactivating hides
++    it from discovery and blocks new joins without deleting its posts,
++    members, or history - same soft-disable pattern as
++    admin_update_organisation.
++    """
++    group = db.session.get(Group, group_id)
++    if not group:
++        return jsonify({"error": "Group not found"}), 404
++
++    data = request.get_json(silent=True)
++    if not data:
++        return jsonify({"error": "Request body must be valid JSON"}), 400
++
++    if "is_active" in data:
++        is_active = data["is_active"]
++        if not isinstance(is_active, bool):
++            return jsonify({"error": "is_active must be true or false"}), 400
++        group.is_active = is_active
++
++    db.session.commit()
++    return jsonify(_serialize_group(group))
++
++
+ @app.route("/signup", methods=["POST"])
+ @limiter.limit("5 per hour")
+ def signup():
+@@ -4077,6 +4367,7 @@ def _serialize_group(group, membership=None):
+         "member_count": group.member_count,
+         "created_by": group.created_by,
+         "created_at": group.created_at.isoformat() if group.created_at else None,
++        "is_active": group.is_active,
+         "is_member": membership is not None,
+         "role": membership.role if membership else None,
+     }
+@@ -4184,7 +4475,7 @@ def browse_groups():
+     if not user_id:
+         return jsonify({"error": "Not logged in"}), 401
+ 
+-    query = Group.query.filter(Group.privacy != "private")
++    query = Group.query.filter(Group.privacy != "private", Group.is_active.is_(True))
+ 
+     q = (request.args.get("q") or "").strip()
+     if q:
+@@ -4286,6 +4577,9 @@ def join_group(group_id):
+         # No invite/request flow yet.
+         return jsonify({"error": "This group is invite-only"}), 403
+ 
++    if not group.is_active:
++        return jsonify({"error": "This group has been deactivated by an admin"}), 403
++
+     membership = GroupMember(group_id=group_id, user_id=user_id, role="member")
+     db.session.add(membership)
+     group.member_count = (group.member_count or 0) + 1
+@@ -8684,5 +8978,229 @@ def withdraw_opportunity(organisation_id, opportunity_id):
+     return jsonify({"message": "Opportunity withdrawn"})
+ 
+ 
++# ---------- Opportunities: public browse (student-facing) ----------
++
++def _serialize_opportunity_public(opp, org):
++    """
++    Slimmer than _serialize_opportunity() (which is for the org's own
++    management view) - omits internal review fields (rejection_reason,
++    reviewed_at/by, submitted_at) that students have no reason to see.
++    """
++    return {
++        "id": opp.id,
++        "organisation_id": opp.organisation_id,
++        "organisation_name": org.name if org else None,
++        "organisation_logo_url": org.logo_url if org else None,
++        "title": opp.title,
++        "description": opp.description,
++        "opportunity_type": opp.opportunity_type,
++        "location": opp.location,
++        "is_remote": opp.is_remote,
++        "application_url": opp.application_url,
++        "application_instructions": opp.application_instructions,
++        "application_deadline": opp.application_deadline.isoformat() if opp.application_deadline else None,
++        "expiry_date": opp.expiry_date.isoformat() if opp.expiry_date else None,
++        "published_at": opp.published_at.isoformat() if opp.published_at else None,
++        "view_count": opp.view_count,
++    }
++
++
++@app.route("/opportunities")
++def browse_opportunities():
++    """
++    Public browse of live opportunities - published, not yet expired,
++    and belonging to an org that's still verified and active (an org
++    losing verification/activation after publishing shouldn't leave
++    its old postings visible). Expiry is computed on read against
++    expiry_date rather than swept by a background job, same as
++    get_user_subscription_status() does for subscriptions elsewhere.
++    """
++    user_id = session.get("user_id")
++    if not user_id:
++        return jsonify({"error": "Not logged in"}), 401
++
++    now = datetime.utcnow()
++    query = (
++        Opportunity.query
++        .join(Organisation, Opportunity.organisation_id == Organisation.id)
++        .filter(
++            Opportunity.status == "published",
++            Opportunity.expiry_date > now,
++            Organisation.verification_status == "verified",
++            Organisation.is_active.is_(True),
++        )
++    )
++
++    opportunity_type = request.args.get("opportunity_type")
++    if opportunity_type:
++        if opportunity_type not in OPPORTUNITY_TYPES:
++            return jsonify({"error": "opportunity_type must be one of: " + ", ".join(OPPORTUNITY_TYPES)}), 400
++        query = query.filter(Opportunity.opportunity_type == opportunity_type)
++
++    if request.args.get("is_remote") is not None:
++        query = query.filter(Opportunity.is_remote.is_(request.args.get("is_remote").lower() == "true"))
++
++    q = (request.args.get("q") or "").strip()
++    if q:
++        query = query.filter(Opportunity.title.ilike(f"%{q}%"))
++
++    try:
++        page = max(1, int(request.args.get("page", 1)))
++    except ValueError:
++        page = 1
++    per_page = 20
++
++    opportunities = (
++        query.order_by(Opportunity.published_at.desc())
++        .offset((page - 1) * per_page)
++        .limit(per_page)
++        .all()
++    )
++
++    org_ids = [o.organisation_id for o in opportunities]
++    orgs = {
++        org.id: org for org in Organisation.query.filter(Organisation.id.in_(org_ids)).all()
++    } if org_ids else {}
++
++    return jsonify({
++        "page": page,
++        "opportunities": [
++            _serialize_opportunity_public(o, orgs.get(o.organisation_id)) for o in opportunities
++        ],
++    })
++
++
++@app.route("/opportunities/<int:opportunity_id>")
++def get_opportunity(opportunity_id):
++    """
++    Detail view for a single live opportunity - same visibility rules
++    as browse_opportunities(), plus a view_count bump on each fetch.
++    """
++    user_id = session.get("user_id")
++    if not user_id:
++        return jsonify({"error": "Not logged in"}), 401
++
++    opp = db.session.get(Opportunity, opportunity_id)
++    if not opp or opp.status != "published" or opp.expiry_date <= datetime.utcnow():
++        return jsonify({"error": "Opportunity not found"}), 404
++
++    org = db.session.get(Organisation, opp.organisation_id)
++    if not org or org.verification_status != "verified" or not org.is_active:
++        return jsonify({"error": "Opportunity not found"}), 404
++
++    opp.view_count = (opp.view_count or 0) + 1
++    db.session.commit()
++
++    return jsonify(_serialize_opportunity_public(opp, org))
++
++
++# ---------- Admin: opportunities review (Chunk 10) ----------
++
++@app.route("/admin/opportunities")
++@require_admin
++def admin_list_opportunities():
++    """
++    Review queue. Defaults to pending_review only, oldest submitted
++    first (matches admin_library_queue's ordering convention); pass
++    status=all to see every status.
++    """
++    status_filter = request.args.get("status", "pending_review")
++    if status_filter != "all" and status_filter not in OPPORTUNITY_STATUSES:
++        return jsonify({"error": "status must be 'all' or one of: " + ", ".join(OPPORTUNITY_STATUSES)}), 400
++
++    query = Opportunity.query
++    if status_filter != "all":
++        query = query.filter_by(status=status_filter)
++
++    opportunities = query.order_by(Opportunity.submitted_at.asc().nullslast()).all()
++
++    result = []
++    for opp in opportunities:
++        org = db.session.get(Organisation, opp.organisation_id)
++        entry = _serialize_opportunity(opp)
++        entry["organisation_name"] = org.name if org else None
++        entry["organisation_verified"] = org.verification_status == "verified" if org else False
++        result.append(entry)
++
++    return jsonify({"opportunities": result})
++
++
++@app.route("/admin/opportunities/<int:opportunity_id>/approve", methods=["POST"])
++@require_csrf
++@require_admin
++def admin_approve_opportunity(opportunity_id):
++    """
++    Moves pending_review -> approved. Deliberately does NOT publish
++    immediately - approval and publishing are separate steps (see
++    /publish below) so an admin can approve ahead of a scheduled go-live
++    without it appearing to students right away.
++    """
++    acting_admin_id = session.get("user_id")
++    opp = db.session.get(Opportunity, opportunity_id)
++    if not opp:
++        return jsonify({"error": "Opportunity not found"}), 404
++    if opp.status != "pending_review":
++        return jsonify({"error": f"Opportunity is not pending review (status: {opp.status})"}), 400
++
++    opp.status = "approved"
++    opp.rejection_reason = None
++    opp.reviewed_by = acting_admin_id
++    opp.reviewed_at = datetime.utcnow()
++    db.session.commit()
++
++    return jsonify(_serialize_opportunity(opp))
++
++
++@app.route("/admin/opportunities/<int:opportunity_id>/reject", methods=["POST"])
++@require_csrf
++@require_admin
++def admin_reject_opportunity(opportunity_id):
++    acting_admin_id = session.get("user_id")
++    opp = db.session.get(Opportunity, opportunity_id)
++    if not opp:
++        return jsonify({"error": "Opportunity not found"}), 404
++    if opp.status != "pending_review":
++        return jsonify({"error": f"Opportunity is not pending review (status: {opp.status})"}), 400
++
++    data = request.get_json(silent=True) or {}
++    reason = (data.get("reason") or "").strip()
++    if not reason or len(reason) > 500:
++        return jsonify({"error": "reason is required and must be 500 characters or fewer"}), 400
++
++    opp.status = "rejected"
++    opp.rejection_reason = reason
++    opp.reviewed_by = acting_admin_id
++    opp.reviewed_at = datetime.utcnow()
++    db.session.commit()
++
++    return jsonify(_serialize_opportunity(opp))
++
++
++@app.route("/admin/opportunities/<int:opportunity_id>/publish", methods=["POST"])
++@require_csrf
++@require_admin
++def admin_publish_opportunity(opportunity_id):
++    """Moves approved -> published, making it visible via
++    GET /opportunities. Refuses if the deadline/expiry already passed
++    since being approved - same guard submit_opportunity() applies."""
++    opp = db.session.get(Opportunity, opportunity_id)
++    if not opp:
++        return jsonify({"error": "Opportunity not found"}), 404
++    if opp.status != "approved":
++        return jsonify({"error": f"Opportunity must be approved before publishing (status: {opp.status})"}), 400
++
++    now = datetime.utcnow()
++    if opp.application_deadline <= now or opp.expiry_date <= now:
++        return jsonify({
++            "error": "Cannot publish - application_deadline or expiry_date has already passed"
++        }), 400
++
++    opp.status = "published"
++    opp.published_at = now
++    db.session.commit()
++
++    return jsonify(_serialize_opportunity(opp))
++
++
+ if __name__ == "__main__":
+     app.run(host="0.0.0.0", port=5000)
