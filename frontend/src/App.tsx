@@ -2862,16 +2862,33 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
 }
 
 // ─── CHATS ────────────────────────────────────────────────────────────────────
-function ChatsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; unread_count: number }
+
+function ChatsScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void }) {
   const [tab, setTab] = useState<'Chats'|'Groups'|'Requests'>('Chats')
   const [search, setSearch] = useState('')
-  const loading = useLoading(700)
+  const [chats, setChats] = useState<ChatSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    api<{ chats: ChatSummary[] }>('/chats')
+      .then(data => { if (!cancelled) setChats(data.chats) })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load chats') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
   if (loading) return <SkeletonChats />
-  const displayed = chatList.filter(c => {
+  const displayed = chats.filter(c => {
     const matchSearch = c.name.toLowerCase().includes(search.toLowerCase())
-    const matchTab = tab === 'Groups' ? c.isGroup : tab === 'Requests' ? false : !c.isGroup || c.isGroup
+    const matchTab = tab === 'Groups' ? c.is_group : tab === 'Requests' ? false : true
     return matchSearch && matchTab
   })
+  const openChat = (id: number) => { setActiveConversationId(id); setScreen('chat-detail') }
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
       <div style={{ background: N.navy, padding: '0 18px 14px' }}>
@@ -2903,7 +2920,13 @@ function ChatsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }} className="scrollbar-hide">
-        {tab === 'Requests' ? (
+        {error ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: 44, marginBottom: 12 }}>⚠️</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>Couldn't load chats</div>
+            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>{error}</div>
+          </div>
+        ) : tab === 'Requests' ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 44, marginBottom: 12 }}>📬</div>
             <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No requests</div>
@@ -2915,22 +2938,25 @@ function ChatsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No conversations</div>
             <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Start a new chat to connect with classmates</div>
           </div>
-        ) : displayed.map(chat => (
-          <div key={chat.id} onClick={() => setScreen('chat-detail')} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-            <div style={{ position: 'relative' }}>
-              <Avi name={chat.avatar} size={46} emoji={chat.avatar.length > 2 ? chat.avatar : undefined} />
-              {chat.isGroup && <div style={{ position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: N.navy, fontWeight: 800 }}>G</div>}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                <span style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{chat.name}</span>
-                <span style={{ fontSize: 11, color: '#9CA3AF' }}>{chat.time}</span>
+        ) : displayed.map(chat => {
+          const initials = (chat.name || '??').slice(0, 2).toUpperCase()
+          return (
+            <div key={chat.id} onClick={() => openChat(chat.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+              <div style={{ position: 'relative' }}>
+                <Avi name={initials} size={46} />
+                {chat.is_group && <div style={{ position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: N.navy, fontWeight: 800 }}>G</div>}
               </div>
-              <div style={{ fontSize: 12, color: '#6B7280' }} className="line-clamp-1">{chat.last}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{chat.name}</span>
+                  <span style={{ fontSize: 11, color: '#9CA3AF' }}>{chat.last_message_at ? new Date(chat.last_message_at).toLocaleString() : ''}</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#6B7280' }} className="line-clamp-1">{chat.last_message || 'No messages yet'}</div>
+              </div>
+              {chat.unread_count > 0 && <div style={{ width: 22, height: 22, background: N.gold, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread_count}</div>}
             </div>
-            {chat.unread > 0 && <div style={{ width: 22, height: 22, background: N.gold, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread}</div>}
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -4475,16 +4501,83 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 }
 
 // ─── NEW CHAT ─────────────────────────────────────────────────────────────────
-function NewChatScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+type UserSearchResult = { id: number; display_name: string; year: number | null; semester: number | null }
+
+function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void }) {
   const [mode, setMode] = useState<'select'|'new-chat'|'new-group'>('select')
   const [search, setSearch] = useState('')
-  const contacts = [
-    { name: 'Wanjiru Kamau', initials: 'WK', course: 'Computer Science · Y2' },
-    { name: 'Brian Omondi', initials: 'BO', course: 'B.Com Finance · Y3' },
-    { name: 'Aisha Mohamed', initials: 'AM', course: 'LLB Law · Y2' },
-    { name: 'David Njoroge', initials: 'DN', course: 'MBBS Medicine · Y3' },
-  ]
-  const filtered = contacts.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
+  const [results, setResults] = useState<UserSearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [csrfToken, setCsrfToken] = useState('')
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [groupName, setGroupName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (mode === 'select') return
+    const q = search.trim()
+    if (!q) { setResults([]); setSearchError(null); return }
+    let cancelled = false
+    setSearching(true)
+    const t = setTimeout(() => {
+      api<{ users: UserSearchResult[] }>(`/users/search?q=${encodeURIComponent(q)}`)
+        .then(data => { if (!cancelled) { setResults(data.users); setSearchError(null) } })
+        .catch(e => { if (!cancelled) setSearchError(e instanceof Error ? e.message : 'Search failed') })
+        .finally(() => { if (!cancelled) setSearching(false) })
+    }, 300)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [search, mode])
+
+  const startDirectChat = async (userId: number) => {
+    if (creating) return
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const res = await api<{ id: number; reused: boolean }>('/chats', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ is_group: false, participant_ids: [userId] }),
+      })
+      setActiveConversationId(res.id)
+      setScreen('chat-detail')
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Could not start chat')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const toggleSelected = (userId: number) => {
+    setSelectedIds(ids => ids.includes(userId) ? ids.filter(id => id !== userId) : [...ids, userId])
+  }
+
+  const createGroup = async () => {
+    if (creating) return
+    if (!groupName.trim()) { setCreateError('Group name is required'); return }
+    if (selectedIds.length === 0) { setCreateError('Select at least one member'); return }
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const res = await api<{ id: number; reused: boolean }>('/chats', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ is_group: true, name: groupName.trim(), participant_ids: selectedIds }),
+      })
+      setActiveConversationId(res.id)
+      setScreen('chat-detail')
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Could not create group')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   if (mode === 'select') return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
@@ -4516,16 +4609,46 @@ function NewChatScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <div style={{ color: 'rgba(255,255,255,0.4)' }}>{Ic.search('w-4 h-4')}</div>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search students…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }} />
         </div>
+        {mode === 'new-group' && (
+          <input value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="Group name…" style={{ marginTop: 10, width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.09)', border: 'none', borderRadius: 12, padding: '10px 12px', color: '#fff', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none' }} />
+        )}
       </div>
       <div style={{ flex: 1, overflowY: 'auto' }} className="scrollbar-hide">
-        {filtered.map((c, i) => (
-          <div key={i} onClick={() => setScreen('chat-detail')} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '13px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-            <Avi name={c.initials} size={44} />
-            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{c.name}</div><div style={{ fontSize: 12, color: '#6B7280' }}>{c.course}</div></div>
-            {mode === 'new-chat' && <div style={{ color: N.gold }}>{Ic.chevR()}</div>}
+        {createError && <div style={{ padding: '10px 16px', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{createError}</div>}
+        {searchError && <div style={{ padding: '10px 16px', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{searchError}</div>}
+        {!search.trim() ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: 44, marginBottom: 12 }}>🔍</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>Search for students</div>
+            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Start typing a name to find classmates</div>
           </div>
-        ))}
-        {mode === 'new-group' && <div style={{ padding: '20px 16px' }}><button onClick={() => setScreen('chat-detail')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Create Group →</button></div>}
+        ) : searching ? (
+          <div style={{ padding: '20px 16px', textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Searching…</div>
+        ) : results.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+            <div style={{ fontSize: 44, marginBottom: 12 }}>🙁</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No students found</div>
+          </div>
+        ) : results.map(c => {
+          const initials = (c.display_name || '??').slice(0, 2).toUpperCase()
+          const course = c.year != null && c.semester != null ? `Year ${c.year} · Semester ${c.semester}` : 'Prepza student'
+          const selected = selectedIds.includes(c.id)
+          return (
+            <div key={c.id} onClick={() => mode === 'new-chat' ? startDirectChat(c.id) : toggleSelected(c.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '13px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)', opacity: creating ? 0.6 : 1 }}>
+              <Avi name={initials} size={44} />
+              <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{c.display_name}</div><div style={{ fontSize: 12, color: '#6B7280' }}>{course}</div></div>
+              {mode === 'new-chat' && <div style={{ color: N.gold }}>{Ic.chevR()}</div>}
+              {mode === 'new-group' && (
+                <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${selected ? N.gold : '#D1D5DB'}`, background: selected ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: N.navy, fontWeight: 800, flexShrink: 0 }}>{selected ? '✓' : ''}</div>
+              )}
+            </div>
+          )
+        })}
+        {mode === 'new-group' && (
+          <div style={{ padding: '20px 16px' }}>
+            <button onClick={createGroup} disabled={creating} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '14px 0', cursor: creating ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: creating ? 0.7 : 1 }}>{creating ? 'Creating…' : `Create Group${selectedIds.length ? ` (${selectedIds.length})` : ''} →`}</button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -6580,6 +6703,7 @@ export default function App() {
   // be lifted here rather than living inside the screens themselves, which
   // unmount on navigation.
   const [activeForumPostId, setActiveForumPostId] = useState<number | null>(null)
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null)
 
   // Handles the round-trip back from /auth/google/callback, which appends
@@ -6662,7 +6786,7 @@ export default function App() {
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'forum':             return <ForumScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} />
       case 'comments':          return <CommentsScreen setScreen={setScreen} postId={activeForumPostId} />
-      case 'chats':             return <ChatsScreen setScreen={setScreen} />
+      case 'chats':             return <ChatsScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
       case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} />
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} />
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} />
@@ -6673,7 +6797,7 @@ export default function App() {
       case 'notifications':     return <NotificationsScreen setScreen={setScreen} />
       case 'library':           return <LibraryScreen setScreen={setScreen} />
       case 'mind-map':          return <MindMapScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'new-chat':          return <NewChatScreen setScreen={setScreen} />
+      case 'new-chat':          return <NewChatScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
       case 'chat-options':      return <ChatOptionsScreen setScreen={setScreen} />
       case 'edit-profile':      return <EditProfileScreen setScreen={setScreen} />
       case 'subscription':      return <SubscriptionScreen setScreen={setScreen} />
