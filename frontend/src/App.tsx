@@ -1066,7 +1066,7 @@ type HomeDocument = { id: number; title: string; status: string; file_type: stri
 type GamificationSummary = { xp_total: number; level: number; level_title: string; current_streak: number; longest_streak: number; documents_count: number; followers_count: number }
 
 function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
-  const [notifCount] = useState(3)
+  const [notifCount, setNotifCount] = useState(0)
   const loading = useLoading(1200)
 
   const [displayName, setDisplayName] = useState<string | null>(null)
@@ -1084,6 +1084,9 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
       .finally(() => setDocsLoading(false))
     api<GamificationSummary>('/gamification/summary')
       .then(setSummary)
+      .catch(() => {})
+    api<{ unread_count: number }>('/notifications/unread-count')
+      .then(r => setNotifCount(r.unread_count))
       .catch(() => {})
   }, [])
 
@@ -4314,17 +4317,53 @@ function CompleteProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }
 }
 
 // ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
-function NotificationsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const loading = useLoading(700)
-  const notifs = [
-    { icon: '📚', title: 'Study Reminder', body: "You haven't studied ACT 101 in 2 days. Resume now?", time: '5m ago', action: 'document-study' as Screen },
-    { icon: '💬', title: 'New Message', body: 'Wanjiru Kamau: "Thanks for the flashcards! Really helped 🙏"', time: '20m ago', action: 'chat-detail' as Screen },
-    { icon: '❤️', title: 'Forum Activity', body: 'Brian Omondi liked your post about the Podcast feature.', time: '1h ago', action: 'forum' as Screen },
-    { icon: '🚀', title: 'New Opportunity', body: 'New: KCB Graduate Analyst Programme – Deadline Sep 30', time: '2h ago', action: 'opportunity-detail' as Screen },
-    { icon: '✦', title: 'Prepza AI', body: 'Your ACT 101 podcast is ready! Tap to listen.', time: '3h ago', action: 'podcast-player' as Screen },
-    { icon: '📣', title: 'Prepza Announcement', body: 'New feature: Mind Maps now available in Document Study!', time: '1d ago', action: 'document-study' as Screen },
-    { icon: '🏆', title: 'Achievement Unlocked', body: 'You earned the "Quiz Master" badge – 10 quizzes completed!', time: '2d ago', action: 'profile' as Screen },
-  ]
+type NotificationItem = {
+  id: number; type: string; title: string; body: string | null
+  related_type: string | null; related_id: number | null
+  is_read: boolean; created_at: string | null
+}
+
+function NotificationsScreen({ setScreen, setActiveForumPostId }: { setScreen: (s: Screen) => void; setActiveForumPostId?: (id: number) => void }) {
+  const [notifs, setNotifs] = useState<NotificationItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    setLoading(true)
+    api<{ page: number; notifications: NotificationItem[] }>('/notifications?page=1')
+      .then(res => setNotifs(res.notifications))
+      .catch(() => setError('Could not load notifications.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const markRead = async (n: NotificationItem) => {
+    if (n.is_read) return
+    setNotifs(list => list.map(x => x.id === n.id ? { ...x, is_read: true } : x))
+    try { await api(`/notifications/${n.id}/read`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }) } catch {}
+  }
+  const markAllRead = async () => {
+    setNotifs(list => list.map(x => ({ ...x, is_read: true })))
+    try { await api('/notifications/read-all', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }) } catch {}
+  }
+  const removeNotif = async (id: number) => {
+    setNotifs(list => list.filter(x => x.id !== id))
+    try { await api(`/notifications/${id}`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } }) } catch {}
+  }
+  const openNotif = (n: NotificationItem) => {
+    markRead(n)
+    if (n.related_type === 'forum_post' && n.related_id && setActiveForumPostId) { setActiveForumPostId(n.related_id); setScreen('comments') }
+    else if (n.related_type === 'group' || n.related_type === 'group_post') setScreen('group-detail')
+    else if (n.related_type === 'user') setScreen('student-profile')
+  }
+  const iconFor = (type: string) => ({
+    group_post: '\ud83d\udcac', group_comment: '\ud83d\udcac', group_join_request: '\ud83d\udc65', new_follower: '\u2795',
+    forum_ai_reply: '\u2726', study_reminder: '\ud83d\udcda', opportunity: '\ud83d\ude80', achievement: '\ud83c\udfc6',
+    announcement: '\ud83d\udce3', group_like: '\u2764\ufe0f', group_vote: '\u2b06\ufe0f', group_promoted: '\u2b50', moderation_warning: '\u26a0\ufe0f',
+  } as Record<string,string>)[type] || '\ud83d\udd14'
+
   if (loading) return <SkeletonNotifications />
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
@@ -4332,18 +4371,26 @@ function NotificationsScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>Notifications</span>
+          {notifs.some(n => !n.is_read) && (
+            <button onClick={markAllRead} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, padding: '7px 12px', color: '#fff', fontWeight: 600, fontSize: 11, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Mark all read</button>
+          )}
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }} className="scrollbar-hide">
-        {notifs.map((n, i) => (
-          <button key={i} onClick={() => setScreen(n.action)} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: '#fff', border: 'none', borderRadius: 14, padding: '13px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans' }}>
-            <div style={{ width: 42, height: 42, background: `${N.gold}18`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{n.icon}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 2 }}>{n.title}</div>
-              <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.55 }} className="line-clamp-2">{n.body}</div>
-            </div>
-            <span style={{ fontSize: 10, color: '#9CA3AF', flexShrink: 0, marginTop: 2 }}>{n.time}</span>
-          </button>
+        {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>}
+        {!error && notifs.length === 0 && <EmptyState icon="\ud83d\udd14" title="No notifications yet" sub="You'll see updates about study activity, community, and your account here." />}
+        {notifs.map(n => (
+          <div key={n.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: n.is_read ? '#fff' : '#FFFBEF', border: n.is_read ? 'none' : `1px solid ${N.gold}30`, borderRadius: 14, padding: '13px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <button onClick={() => openNotif(n)} style={{ display: 'flex', gap: 12, flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans', padding: 0 }}>
+              <div style={{ width: 42, height: 42, background: `${N.gold}18`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{iconFor(n.type)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 2 }}>{n.title}</div>
+                {n.body && <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.55 }} className="line-clamp-2">{n.body}</div>}
+                <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 4 }}>{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</div>
+              </div>
+            </button>
+            <button onClick={() => removeNotif(n.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D1D5DB', flexShrink: 0, padding: 4 }}>{Ic.close('w-4 h-4')}</button>
+          </div>
         ))}
       </div>
     </div>
@@ -7250,7 +7297,7 @@ export default function App() {
       case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} />
       case 'profile':           return <ProfileScreen setScreen={setScreen} />
       case 'settings':          return <SettingsScreen setScreen={setScreen} />
-      case 'notifications':     return <NotificationsScreen setScreen={setScreen} />
+      case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} />
       case 'library':           return <LibraryScreen setScreen={setScreen} />
       case 'mind-map':          return <MindMapScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'new-chat':          return <NewChatScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
