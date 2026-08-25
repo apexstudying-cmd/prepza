@@ -1065,6 +1065,15 @@ function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) =>
 type HomeDocument = { id: number; title: string; status: string; file_type: string | null; page_count: number | null; created_at: string | null }
 type GamificationSummary = { xp_total: number; level: number; level_title: string; current_streak: number; longest_streak: number; documents_count: number; followers_count: number }
 
+// ─── Social (Chunk 12) ─────────────────────────────────────────────────────────
+// No dedicated "public user profile" endpoint exists on the backend beyond
+// follow-summary - display_name for a profile you're VIEWING (not your own)
+// has to be carried along from wherever the navigation originated (a follow
+// list row, a notification body, etc) rather than fetched fresh. This is a
+// known backend gap, not something to fabricate around.
+type FollowSummary = { user_id: number; followers_count: number; following_count: number; is_following: boolean; is_followed_by: boolean }
+type FollowListUser = { user_id: number; display_name: string; is_following: boolean }
+
 function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
   const [notifCount, setNotifCount] = useState(0)
   const loading = useLoading(1200)
@@ -3314,22 +3323,49 @@ function OppDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── SHARE SHEET ──────────────────────────────────────────────────────────────
+// There's no backend "share" endpoint (and no activeShareContext plumbing
+// yet to say WHAT is being shared from each of the many screens that open
+// this sheet), so this builds a generic Prepza link client-side and uses
+// navigator.share()/clipboard - it does not know or claim to know the
+// specific document/post/opportunity that triggered it.
 function ShareSheetScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [copied, setCopied] = useState(false)
+  const shareUrl = typeof window !== 'undefined' ? window.location.origin : 'https://prepza.app'
+  const shareText = 'Check this out on Prepza — the AI study companion for Kenyan university students.'
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch { /* clipboard permission denied - link still visible below */ }
+  }
+
+  const nativeShare = async () => {
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Prepza', text: shareText, url: shareUrl }) } catch { /* user cancelled */ }
+    } else {
+      copyLink()
+    }
+  }
+
+  const actions: { icon: string; label: string; onClick: () => void }[] = [
+    { icon: '💬', label: 'Chats', onClick: () => setScreen('new-chat') },
+    { icon: '📲', label: 'WhatsApp', onClick: () => window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`, '_blank') },
+    { icon: '📧', label: 'Email', onClick: () => window.open(`mailto:?subject=${encodeURIComponent('Check out Prepza')}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`, '_blank') },
+    { icon: '🔗', label: copied ? 'Copied!' : 'Copy Link', onClick: copyLink },
+    { icon: '📤', label: 'More', onClick: nativeShare },
+  ]
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#00000055', justifyContent: 'flex-end' }}>
       <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '20px 20px 32px' }}>
         <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
         <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 6 }}>Share</div>
-        <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20 }}>Safaricom Technology Intern – 2025</div>
+        <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, wordBreak: 'break-all' }}>{shareUrl}</div>
         <div style={{ display: 'flex', gap: 16, marginBottom: 24, overflowX: 'auto' }} className="scrollbar-hide">
-          {[
-            { icon: '💬', label: 'Chats' },
-            { icon: '📲', label: 'WhatsApp' },
-            { icon: '📧', label: 'Email' },
-            { icon: '🔗', label: 'Copy Link' },
-            { icon: '📤', label: 'More' },
-          ].map((s, i) => (
-            <button key={i} onClick={() => setScreen('home')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+          {actions.map((s, i) => (
+            <button key={i} onClick={s.onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
               <div style={{ width: 52, height: 52, background: '#F3F4F6', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{s.icon}</div>
               <span style={{ fontSize: 11, color: '#6B7280', fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{s.label}</span>
             </button>
@@ -3342,45 +3378,122 @@ function ShareSheetScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── STUDENT PROFILE ──────────────────────────────────────────────────────────
-function StudentProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const [following, setFollowing] = useState(false)
+// Viewing another student's profile. The backend has no dedicated "public
+// profile fields" endpoint (bio/course/university for a user who isn't you) -
+// only GET /users/:id/follow-summary, which gives counts + relationship
+// flags. fallbackName is whatever display name the calling screen already
+// had on hand (a follow-list row, a notification, etc) - real data, just
+// carried over rather than invented here.
+function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActiveConversationId }: {
+  setScreen: (s: Screen) => void
+  targetUserId: number | null
+  fallbackName?: string | null
+  setActiveConversationId?: (id: number) => void
+}) {
+  const [summary, setSummary] = useState<FollowSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
+  const [followBusy, setFollowBusy] = useState(false)
+  const [messageBusy, setMessageBusy] = useState(false)
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    if (targetUserId == null) { setLoading(false); setError('No student selected.'); return }
+    setLoading(true)
+    setError('')
+    api<FollowSummary>(`/users/${targetUserId}/follow-summary`)
+      .then(setSummary)
+      .catch(() => setError('Could not load this profile.'))
+      .finally(() => setLoading(false))
+  }, [targetUserId])
+
+  const toggleFollow = async () => {
+    if (targetUserId == null || !summary || followBusy) return
+    setFollowBusy(true)
+    const wasFollowing = summary.is_following
+    try {
+      const res = wasFollowing
+        ? await api<{ followers_count: number }>(`/users/${targetUserId}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
+        : await api<{ followers_count: number }>(`/users/${targetUserId}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      setSummary(s => s ? { ...s, is_following: !wasFollowing, followers_count: res.followers_count } : s)
+    } catch { /* leave state as-is on failure */ }
+    setFollowBusy(false)
+  }
+
+  // Reuses the Chunk 8 chat infra: starts (or reuses) a 1:1 conversation
+  // with this user, then hands off to ChatDetailScreen the same way
+  // NewChatScreen does.
+  const startMessage = async () => {
+    if (targetUserId == null || messageBusy) return
+    setMessageBusy(true)
+    try {
+      const res = await api<{ id: number; reused: boolean }>('/chats', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ is_group: false, participant_ids: [targetUserId] }),
+      })
+      setActiveConversationId?.(res.id)
+      setScreen('chat-detail')
+    } catch { /* stay put on failure */ }
+    setMessageBusy(false)
+  }
+
+  const displayName = fallbackName || 'Student'
+  const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <button onClick={() => setScreen('explore')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-          <div style={{ marginBottom: 14 }}><Avi name="WK" size={72} /></div>
-          <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>Wanjiru Kamau</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>BSc Computer Science · Year 2</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 14 }}>Kenyatta University</div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setFollowing(v => !v)} style={{ background: following ? 'rgba(201,168,76,0.2)' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: following ? N.gold : N.navy, fontWeight: 800, fontSize: 13, border: following ? `1px solid ${N.gold}44` : 'none', borderRadius: 12, padding: '10px 24px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{following ? 'Following ✓' : 'Follow'}</button>
-            <button onClick={() => setScreen('chat-detail')} style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 700, fontSize: 13, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '10px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Message</button>
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+            <div style={{ width: 30, height: 30, border: '2.5px solid rgba(255,255,255,0.2)', borderTopColor: N.gold, borderRadius: '50%', animation: 'spin-slow 0.7s linear infinite' }} />
+          </div>
+        ) : error ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>{error}</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <div style={{ marginBottom: 14 }}><Avi name={initials} size={72} /></div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>{displayName}</div>
+            {/* Course/university/year aren't exposed for other users' profiles
+                by the current backend (only your own /me includes them) -
+                omitted rather than guessed at. */}
+            <div style={{ marginBottom: 14 }} />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={toggleFollow} disabled={followBusy} style={{ background: summary?.is_following ? 'rgba(201,168,76,0.2)' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: summary?.is_following ? N.gold : N.navy, fontWeight: 800, fontSize: 13, border: summary?.is_following ? `1px solid ${N.gold}44` : 'none', borderRadius: 12, padding: '10px 24px', cursor: followBusy ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy ? 0.7 : 1 }}>{summary?.is_following ? 'Following ✓' : 'Follow'}</button>
+              <button onClick={startMessage} disabled={messageBusy} style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 700, fontSize: 13, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '10px 20px', cursor: messageBusy ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: messageBusy ? 0.7 : 1 }}>{messageBusy ? 'Opening…' : 'Message'}</button>
+            </div>
+          </div>
+        )}
+      </div>
+      {!loading && !error && summary && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10, padding: '16px 16px 0' }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{summary.followers_count}</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF' }}>Followers</div>
+          </div>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{summary.following_count}</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF' }}>Following</div>
           </div>
         </div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, padding: '16px 16px 0' }}>
-        {[['3,100', 'XP'], ['47', 'Followers'], ['23', 'Documents']].map(([v, l]) => (
-          <div key={l} style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{v}</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>{l}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ padding: '16px 16px' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: N.navy, marginBottom: 10 }}>Recent Posts</div>
-        {forumPosts.slice(0, 2).map(p => <ForumCard key={p.id} post={{ ...p, user: 'Wanjiru Kamau' }} setScreen={setScreen} />)}
-      </div>
+      )}
+      {/* XP total, document count, and recent posts for another user aren't
+          exposed by any current endpoint - not shown, rather than faked. */}
     </div>
   )
 }
 
 // ─── PROFILE ──────────────────────────────────────────────────────────────────
-type ProfileMe = { display_name: string | null; bio: string | null; university_id: number | null; program_id: number | null }
+type ProfileMe = { id: number; display_name: string | null; bio: string | null; university_id: number | null; program_id: number | null }
 
-function ProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function ProfileScreen({ setScreen, setActiveProfileUserId }: { setScreen: (s: Screen) => void; setActiveProfileUserId?: (id: number) => void }) {
   const [tab, setTab] = useState<'posts'|'saved'|'activity'|'materials'>('posts')
   const [showMenu, setShowMenu] = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
@@ -3451,7 +3564,13 @@ function ProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           { label: 'Docs', value: summary ? String(summary.documents_count) : '—', color: '#4C7BC9', dest: 'library' as Screen },
           { label: 'Followers', value: summary ? String(summary.followers_count) : '—', color: '#9B59B6', dest: 'followers' as Screen },
         ].map(s => (
-          <button key={s.label} onClick={() => setScreen(s.dest)} style={{ background: '#fff', borderRadius: 14, padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+          <button key={s.label} onClick={() => {
+            // Followers list is always scoped to a specific user id on the
+            // backend (GET /users/:id/followers) - carry the viewer's own
+            // id along so FollowListScreen knows whose list to fetch.
+            if (s.dest === 'followers' && me && setActiveProfileUserId) setActiveProfileUserId(me.id)
+            setScreen(s.dest)
+          }} style={{ background: '#fff', borderRadius: 14, padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: s.color }}>{s.value}</div>
             <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{s.label}</div>
           </button>
@@ -4432,7 +4551,7 @@ type NotificationItem = {
   is_read: boolean; created_at: string | null
 }
 
-function NotificationsScreen({ setScreen, setActiveForumPostId }: { setScreen: (s: Screen) => void; setActiveForumPostId?: (id: number) => void }) {
+function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfileUserId }: { setScreen: (s: Screen) => void; setActiveForumPostId?: (id: number) => void; setActiveProfileUserId?: (id: number) => void }) {
   const [notifs, setNotifs] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -4465,7 +4584,7 @@ function NotificationsScreen({ setScreen, setActiveForumPostId }: { setScreen: (
     markRead(n)
     if (n.related_type === 'forum_post' && n.related_id && setActiveForumPostId) { setActiveForumPostId(n.related_id); setScreen('comments') }
     else if (n.related_type === 'group' || n.related_type === 'group_post') setScreen('group-detail')
-    else if (n.related_type === 'user') setScreen('student-profile')
+    else if (n.related_type === 'user' && n.related_id && setActiveProfileUserId) { setActiveProfileUserId(n.related_id); setScreen('student-profile') }
   }
   const iconFor = (type: string) => ({
     group_post: '\ud83d\udcac', group_comment: '\ud83d\udcac', group_join_request: '\ud83d\udc65', new_follower: '\u2795',
@@ -5530,25 +5649,52 @@ const followPeople = [
   { name: 'James Kariuki', username: '@james.uon', uni: 'UoN', course: 'BSc Economics', following: false },
 ]
 
-function FollowListScreen({ mode, setScreen }: { mode: 'followers' | 'following'; setScreen: (s: Screen) => void }) {
+function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserId, setActiveProfileName }: {
+  mode: 'followers' | 'following'
+  setScreen: (s: Screen) => void
+  targetUserId: number | null
+  setActiveProfileUserId?: (id: number) => void
+  setActiveProfileName?: (name: string) => void
+}) {
   const [search, setSearch] = useState('')
-  const [states, setStates] = useState<Record<string, 'idle' | 'loading' | 'done'>>(
-    Object.fromEntries(followPeople.map(p => [p.username, 'idle']))
-  )
-  const [following, setFollowing] = useState<Record<string, boolean>>(
-    Object.fromEntries(followPeople.map(p => [p.username, p.following]))
-  )
+  const [people, setPeople] = useState<FollowListUser[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState<Record<number, boolean>>({})
+  const [csrfToken, setCsrfToken] = useState('')
 
-  const people = mode === 'followers' ? followPeople : followPeople.filter(p => p.following)
-  const filtered = people.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.username.includes(search.toLowerCase()))
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
 
-  const toggle = (username: string) => {
-    if (states[username] === 'loading') return
-    setStates(s => ({ ...s, [username]: 'loading' }))
-    setTimeout(() => {
-      setFollowing(f => ({ ...f, [username]: !f[username] }))
-      setStates(s => ({ ...s, [username]: 'idle' }))
-    }, 800)
+  useEffect(() => {
+    if (targetUserId == null) { setLoading(false); setError('No student selected.'); return }
+    setLoading(true)
+    setError('')
+    const key = mode // 'followers' | 'following'
+    api<{ page: number; followers?: FollowListUser[]; following?: FollowListUser[] }>(`/users/${targetUserId}/${key}?page=1`)
+      .then(res => setPeople((mode === 'followers' ? res.followers : res.following) || []))
+      .catch(() => setError(`Could not load ${mode}.`))
+      .finally(() => setLoading(false))
+  }, [mode, targetUserId])
+
+  const filtered = people.filter(p => !search || p.display_name.toLowerCase().includes(search.toLowerCase()))
+
+  const toggle = async (person: FollowListUser) => {
+    if (busy[person.user_id]) return
+    setBusy(b => ({ ...b, [person.user_id]: true }))
+    const wasFollowing = person.is_following
+    try {
+      wasFollowing
+        ? await api(`/users/${person.user_id}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
+        : await api(`/users/${person.user_id}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      setPeople(list => list.map(p => p.user_id === person.user_id ? { ...p, is_following: !wasFollowing } : p))
+    } catch { /* leave state as-is on failure */ }
+    setBusy(b => ({ ...b, [person.user_id]: false }))
+  }
+
+  const openProfile = (person: FollowListUser) => {
+    setActiveProfileUserId?.(person.user_id)
+    setActiveProfileName?.(person.display_name)
+    setScreen('student-profile')
   }
 
   return (
@@ -5565,23 +5711,27 @@ function FollowListScreen({ mode, setScreen }: { mode: 'followers' | 'following'
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px' }} className="scrollbar-hide">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '30px 0' }}>
+            <div style={{ width: 26, height: 26, border: '2.5px solid #E5E7EB', borderTopColor: N.gold, borderRadius: '50%', animation: 'spin-slow 0.7s linear infinite' }} />
+          </div>
+        ) : error ? (
+          <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>{error}</div>
+        ) : filtered.length === 0 ? (
           <EmptyState icon="👥" title={mode === 'followers' ? 'No followers yet' : 'Not following anyone'} sub={mode === 'followers' ? "When students follow you, they'll appear here." : 'Discover students and follow them from their profiles.'} action="Explore Students" onAction={() => setScreen('explore')} />
-        ) : filtered.map((p, i) => {
-          const isFollowing = following[p.username]
-          const isLoading = states[p.username] === 'loading'
+        ) : filtered.map(p => {
+          const isLoading = !!busy[p.user_id]
           return (
-            <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
-              <div onClick={() => setScreen('student-profile')} style={{ width: 44, height: 44, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: N.navy, flexShrink: 0, cursor: 'pointer' }}>
-                {p.name.split(' ').map(n => n[0]).join('')}
+            <div key={p.user_id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+              <div onClick={() => openProfile(p)} style={{ width: 44, height: 44, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: N.navy, flexShrink: 0, cursor: 'pointer' }}>
+                {p.display_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
               </div>
-              <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setScreen('student-profile')}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{p.name}</div>
-                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 1 }}>{p.course} · {p.uni}</div>
+              <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => openProfile(p)}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{p.display_name}</div>
               </div>
-              <button onClick={() => toggle(p.username)} disabled={isLoading} style={{ background: isFollowing ? '#F3F4F6' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: isFollowing ? '#374151' : N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', flexShrink: 0, opacity: isLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s' }}>
+              <button onClick={() => toggle(p)} disabled={isLoading} style={{ background: p.is_following ? '#F3F4F6' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: p.is_following ? '#374151' : N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', flexShrink: 0, opacity: isLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s' }}>
                 {isLoading ? <div style={{ width: 10, height: 10, border: '1.5px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.6s linear infinite' }} /> : null}
-                {isFollowing ? 'Following' : 'Follow'}
+                {p.is_following ? 'Following' : 'Follow'}
               </button>
             </div>
           )
@@ -8119,6 +8269,13 @@ export default function App() {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null)
   const [activeGroupId, setActiveGroupId] = useState<number | null>(null)
+  // Which user's profile is open in StudentProfileScreen / whose followers-
+  // following list is open in FollowListScreen. activeProfileName is a
+  // best-effort label carried over from wherever the navigation started
+  // (never fetched separately - there's no endpoint for it), so the screen
+  // isn't stuck showing "Student" when we already know the real name.
+  const [activeProfileUserId, setActiveProfileUserId] = useState<number | null>(null)
+  const [activeProfileName, setActiveProfileName] = useState<string | null>(null)
 
   // Handles the round-trip back from /auth/google/callback, which appends
   // ?complete_profile=1 (new Google account, needs university/course/year/
@@ -8206,10 +8363,10 @@ export default function App() {
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} />
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} />
       case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
-      case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} />
-      case 'profile':           return <ProfileScreen setScreen={setScreen} />
+      case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} />
+      case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} />
       case 'settings':          return <SettingsScreen setScreen={setScreen} />
-      case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} />
+      case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} setActiveProfileUserId={setActiveProfileUserId} />
       case 'library':           return <LibraryScreen setScreen={setScreen} />
       case 'mind-map':          return <MindMapScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'new-chat':          return <NewChatScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
@@ -8224,8 +8381,8 @@ export default function App() {
       case 'xp-progress':       return <XPProgressScreen setScreen={setScreen} />
       case 'study-streak':      return <StudyStreakScreen setScreen={setScreen} />
       case 'achievements':      return <AchievementsScreen setScreen={setScreen} />
-      case 'followers':         return <FollowListScreen mode="followers" setScreen={setScreen} />
-      case 'following':         return <FollowListScreen mode="following" setScreen={setScreen} />
+      case 'followers':         return <FollowListScreen mode="followers" setScreen={setScreen} targetUserId={activeProfileUserId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
+      case 'following':         return <FollowListScreen mode="following" setScreen={setScreen} targetUserId={activeProfileUserId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'group-detail':      return <GroupDetailScreen setScreen={setScreen} groupId={activeGroupId} />
       case 'group-create':      return <GroupCreateScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} />
       default:                  return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
