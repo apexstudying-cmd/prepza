@@ -1315,12 +1315,43 @@ function OppCard({ opp, setScreen }: { opp: typeof opportunities[0]; setScreen: 
 }
 
 // ─── EXPLORE ──────────────────────────────────────────────────────────────────
-function ExploreScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function ExploreScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void }) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All')
   const [following, setFollowing] = useState<string[]>([])
   const loading = useLoading(1000)
-  const filters = ['All','Notes','Past Papers','AI Content','Opportunities','Forums','Students']
+  const filters = ['All','Notes','Past Papers','AI Content','Groups','Opportunities','Forums','Students']
+
+  const [groups, setGroups] = useState<GroupSummary[]>([])
+  const [loadingGroups, setLoadingGroups] = useState(false)
+  const [groupsError, setGroupsError] = useState('')
+  const [joiningGroupId, setJoiningGroupId] = useState<number | null>(null)
+  const [csrfToken, setCsrfToken] = useState('')
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    if (filter !== 'All' && filter !== 'Groups') return
+    setLoadingGroups(true); setGroupsError('')
+    const params = new URLSearchParams()
+    if (query.trim()) params.set('q', query.trim())
+    api<{ page: number; groups: GroupSummary[] }>(`/groups?${params.toString()}`)
+      .then(res => setGroups(res.groups))
+      .catch(() => setGroupsError('Could not load groups.'))
+      .finally(() => setLoadingGroups(false))
+  }, [filter, query])
+
+  const quickJoin = async (g: GroupSummary) => {
+    if (joiningGroupId != null) return
+    setJoiningGroupId(g.id)
+    try {
+      await api(`/groups/${g.id}/join`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      setGroups(gs => gs.map(x => x.id === g.id ? { ...x, is_member: true, member_count: x.is_member ? x.member_count : x.member_count + 1 } : x))
+    } catch { /* surfaced inline is overkill for a quick-join button; card still lets them open the group */ }
+    finally { setJoiningGroupId(null) }
+  }
+
+  const openGroup = (id: number) => { setActiveGroupId(id); setScreen('group-detail') }
   const students = [
     { name: 'Wanjiru Kamau', course: 'Computer Science', year: 'Y2', xp: 3100, initials: 'WK' },
     { name: 'Brian Omondi', course: 'B.Com Finance', year: 'Y3', xp: 2240, initials: 'BO' },
@@ -1371,8 +1402,41 @@ function ExploreScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           </div>
         )}
 
+        {/* Groups */}
+        {(filter === 'All' || filter === 'Groups') && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: N.navy }}>👥 Groups</div>
+              <button onClick={() => setScreen('group-create')} style={{ fontSize: 12, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Create</button>
+            </div>
+            {loadingGroups ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF' }}>Loading groups…</div>
+            ) : groupsError ? (
+              <div style={{ fontSize: 12, color: '#C94C4C' }}>{groupsError}</div>
+            ) : groups.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF' }}>No groups found yet — be the first to start one.</div>
+            ) : (
+              groups.map(g => (
+                <div key={g.id} onClick={() => openGroup(g.id)} style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <div style={{ width: 42, height: 42, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: N.gold, flexShrink: 0 }}>{g.name.slice(0, 2).toUpperCase()}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{g.name}</div>
+                    <div style={{ fontSize: 11, color: '#6B7280' }}>{g.unit_code ? `${g.unit_code} · ` : ''}{g.member_count} member{g.member_count === 1 ? '' : 's'}</div>
+                    {g.privacy === 'course_only' && <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>Course-only</div>}
+                  </div>
+                  {g.is_member ? (
+                    <Pill text="Joined" color="#4CC97B" />
+                  ) : (
+                    <button onClick={e => { e.stopPropagation(); quickJoin(g) }} disabled={joiningGroupId === g.id} style={{ background: N.gold, color: N.navy, fontWeight: 700, fontSize: 11, border: 'none', borderRadius: 9, padding: '6px 12px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: joiningGroupId === g.id ? 0.6 : 1 }}>{joiningGroupId === g.id ? '…' : 'Join'}</button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
         {/* Documents */}
-        {filter !== 'Students' && filter !== 'Forums' && filter !== 'Opportunities' && (
+        {filter !== 'Students' && filter !== 'Forums' && filter !== 'Opportunities' && filter !== 'Groups' && (
           <div>
             <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>📄 {filter === 'Past Papers' ? 'Past Papers' : filter === 'Notes' ? 'Lecture Notes' : 'Recent Documents'}</div>
             {filtered.map((d, i) => (
@@ -2659,7 +2723,7 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 }
 
 // ─── FORUM ────────────────────────────────────────────────────────────────────
-function ForumScreen({ setScreen, setActiveForumPostId }: { setScreen: (s: Screen) => void; setActiveForumPostId: (id: number) => void }) {
+function ForumScreen({ setScreen, setActiveForumPostId, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveForumPostId: (id: number) => void; setActiveGroupId: (id: number) => void }) {
   const [units, setUnits] = useState<UnitOption[]>([])
   const [unitId, setUnitId] = useState<number | null>(null)
   const [posts, setPosts] = useState<ForumPostSummary[]>([])
@@ -2667,12 +2731,24 @@ function ForumScreen({ setScreen, setActiveForumPostId }: { setScreen: (s: Scree
   const [loadingPosts, setLoadingPosts] = useState(false)
   const [error, setError] = useState('')
 
+  const [myGroups, setMyGroups] = useState<GroupSummary[]>([])
+  const [loadingGroups, setLoadingGroups] = useState(true)
+
   useEffect(() => {
     api<UnitOption[]>('/units')
       .then(u => { setUnits(u); if (u.length) setUnitId(u[0].id) })
       .catch(() => setError('Could not load your units.'))
       .finally(() => setLoadingUnits(false))
   }, [])
+
+  useEffect(() => {
+    api<{ groups: GroupSummary[] }>('/groups/mine')
+      .then(res => setMyGroups(res.groups))
+      .catch(() => {})
+      .finally(() => setLoadingGroups(false))
+  }, [])
+
+  const openGroup = (id: number) => { setActiveGroupId(id); setScreen('group-detail') }
 
   useEffect(() => {
     if (unitId == null) return
@@ -2700,28 +2776,33 @@ function ForumScreen({ setScreen, setActiveForumPostId }: { setScreen: (s: Scree
           ))}
         </div>
       </div>
-      {/* My Groups - not yet wired to real data */}
+      {/* My Groups */}
       <div style={{ padding: '14px 16px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>My Groups</div>
           <button onClick={() => setScreen('group-create')} style={{ fontSize: 12, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ New</button>
         </div>
         <div style={{ display: 'flex', gap: 10, overflowX: 'auto', marginBottom: 16 }} className="scrollbar-hide">
-          {[
-            { name: 'ACT 101 · KU', members: 248, initials: 'A1' },
-            { name: 'STA 101 · KU', members: 183, initials: 'S1' },
-            { name: 'Year 1 Actuarial', members: 412, initials: 'YA' },
-          ].map((g, i) => (
-            <button key={i} onClick={() => setScreen('group-detail')} style={{ flexShrink: 0, background: '#fff', border: 'none', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans', minWidth: 130 }}>
-              <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.gold, marginBottom: 8 }}>{g.initials}</div>
-              <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 2 }}>{g.name}</div>
-              <div style={{ fontSize: 10, color: '#9CA3AF' }}>{g.members} members</div>
-            </button>
-          ))}
-          <button onClick={() => setScreen('explore')} style={{ flexShrink: 0, background: '#F3F4F6', border: '1.5px dashed #D1D5DB', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: 'none', fontFamily: 'Plus Jakarta Sans', minWidth: 130, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <div style={{ width: 38, height: 38, background: '#E5E7EB', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>+</div>
-            <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textAlign: 'center' }}>Find groups</div>
-          </button>
+          {loadingGroups ? (
+            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '10px 0' }}>Loading groups…</div>
+          ) : (
+            <>
+              {myGroups.map(g => (
+                <button key={g.id} onClick={() => openGroup(g.id)} style={{ flexShrink: 0, background: '#fff', border: 'none', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans', minWidth: 130 }}>
+                  <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.gold, marginBottom: 8 }}>{g.name.slice(0, 2).toUpperCase()}</div>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{g.name}</div>
+                  <div style={{ fontSize: 10, color: '#9CA3AF' }}>{g.member_count} member{g.member_count === 1 ? '' : 's'}</div>
+                </button>
+              ))}
+              {myGroups.length === 0 && (
+                <div style={{ fontSize: 12, color: '#9CA3AF', padding: '10px 0' }}>You haven't joined any groups yet.</div>
+              )}
+              <button onClick={() => setScreen('explore')} style={{ flexShrink: 0, background: '#F3F4F6', border: '1.5px dashed #D1D5DB', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: 'none', fontFamily: 'Plus Jakarta Sans', minWidth: 130, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <div style={{ width: 38, height: 38, background: '#E5E7EB', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>+</div>
+                <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textAlign: 'center' }}>Find groups</div>
+              </button>
+            </>
+          )}
         </div>
         <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Recent Posts</div>
         {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{error}</div>}
@@ -3882,6 +3963,34 @@ type ForumPostDetail = { id: number; title: string; body: string; author: string
 
 type UniversityOption = { id: number; name: string; short_code: string; country: string | null }
 type ProgramOption = { id: number; name: string; degree_level: string | null; discipline_category: string | null }
+
+// ─── Group types (Chunk 7) ─────────────────────────────────────────────────
+type GroupPrivacy = 'public' | 'private' | 'course_only'
+type GroupSummary = {
+  id: number; name: string; description: string | null; privacy: GroupPrivacy
+  university_id: number | null; program_id: number | null; unit_id: number | null; unit_code: string | null
+  year: number | null; member_count: number; created_by: number; created_at: string | null
+  is_member: boolean; role: 'admin' | 'member' | null
+}
+type GroupPostData = {
+  id: number; group_id: number; post_type: 'post' | 'question'; body: string | null; is_removed: boolean
+  author: string; author_id: number; like_count: number | null; viewer_liked: boolean
+  vote_count: number | null; viewer_voted: boolean; comment_count: number; created_at: string | null
+}
+type GroupPostCommentData = {
+  id: number; group_post_id: number; body: string | null; is_removed: boolean; author: string; author_id: number
+  marked_helpful: boolean; created_at: string | null
+}
+type GroupPostDetail = GroupPostData & { comments: GroupPostCommentData[] }
+type GroupMemberData = { user_id: number; display_name: string; role: 'admin' | 'member'; joined_at: string | null }
+type GroupFileData = {
+  id: number; group_id: number; document_id: number; title: string | null; file_type: string | null
+  file_size_bytes: number | null; page_count: number | null; view_url: string | null
+  shared_by: string; shared_by_user_id: number; created_at: string | null
+}
+// Note: UserSearchResult is declared once already (NewChatScreen), reused here for the
+// group-create member picker rather than redeclaring it.
+type MyDocumentSummary = { id: number; title: string; status: string; file_type: string | null; page_count: number | null; created_at: string | null }
 
 function SignupScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const steps = ['Name', 'Email', 'Password', 'University', 'Course', 'Year', 'Semester']
@@ -5484,37 +5593,251 @@ function FollowListScreen({ mode, setScreen }: { mode: 'followers' | 'following'
 }
 
 // ─── GROUP DETAIL ─────────────────────────────────────────────────────────────
-const sampleGroupPosts = [
-  { user: 'Wanjiru Kamau', time: '2h ago', text: "Has anyone found good resources for the Probability chapter in STA 101? I'm stuck on Bayes theorem applications.", likes: 12, comments: 5, userInitials: 'WK' },
-  { user: 'Brian Omondi', time: '4h ago', text: "Just uploaded my MAT 101 revision notes from last semester. Check the Files tab — might be useful for the upcoming test.", likes: 28, comments: 9, userInitials: 'BO' },
-  { user: 'David Njoroge', time: '1d ago', text: "Reminder: CAT 2 is on Thursday. Let's use this group to share any last-minute notes and questions.", likes: 45, comments: 18, userInitials: 'DN' },
-]
-
-function GroupDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => void; groupId: number | null }) {
   const [tab, setTab] = useState<'Posts' | 'Questions' | 'Files' | 'Members'>('Posts')
-  const [joined, setJoined] = useState(false)
+  const [group, setGroup] = useState<GroupSummary | null>(null)
+  const [loadingGroup, setLoadingGroup] = useState(true)
+  const [groupError, setGroupError] = useState('')
   const [joining, setJoining] = useState(false)
-  const [liked, setLiked] = useState<Record<number, boolean>>({})
+  const [leaving, setLeaving] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
 
-  const doJoin = () => {
-    if (joining) return
-    setJoining(true)
-    setTimeout(() => { setJoined(j => !j); setJoining(false) }, 900)
+  const [posts, setPosts] = useState<GroupPostData[]>([])
+  const [loadingPosts, setLoadingPosts] = useState(false)
+  const [postsError, setPostsError] = useState('')
+  const [composeText, setComposeText] = useState('')
+  const [composing, setComposing] = useState(false)
+
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [expandedDetail, setExpandedDetail] = useState<GroupPostDetail | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [commentInput, setCommentInput] = useState('')
+  const [sendingComment, setSendingComment] = useState(false)
+
+  const [members, setMembers] = useState<GroupMemberData[]>([])
+  const [loadingMembers, setLoadingMembers] = useState(false)
+  const [membersError, setMembersError] = useState('')
+
+  const [files, setFiles] = useState<GroupFileData[]>([])
+  const [loadingFiles, setLoadingFiles] = useState(false)
+  const [filesError, setFilesError] = useState('')
+  const [shareableDocs, setShareableDocs] = useState<MyDocumentSummary[]>([])
+  const [showFilePicker, setShowFilePicker] = useState(false)
+  const [sharing, setSharing] = useState(false)
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  const loadGroup = () => {
+    if (groupId == null) return
+    setLoadingGroup(true); setGroupError('')
+    api<GroupSummary>(`/groups/${groupId}`)
+      .then(setGroup)
+      .catch(() => setGroupError('Could not load this group.'))
+      .finally(() => setLoadingGroup(false))
+  }
+  useEffect(loadGroup, [groupId])
+
+  const postType = tab === 'Questions' ? 'question' : 'post'
+  const loadPosts = () => {
+    if (groupId == null || (tab !== 'Posts' && tab !== 'Questions')) return
+    setLoadingPosts(true); setPostsError('')
+    api<{ page: number; posts: GroupPostData[] }>(`/groups/${groupId}/posts?type=${postType}`)
+      .then(res => setPosts(res.posts))
+      .catch(() => setPostsError('Could not load this tab.'))
+      .finally(() => setLoadingPosts(false))
+  }
+  useEffect(loadPosts, [groupId, tab])
+
+  useEffect(() => {
+    if (groupId == null || tab !== 'Members') return
+    setLoadingMembers(true); setMembersError('')
+    api<{ members: GroupMemberData[] }>(`/groups/${groupId}/members`)
+      .then(res => setMembers(res.members))
+      .catch(() => setMembersError('Could not load members.'))
+      .finally(() => setLoadingMembers(false))
+  }, [groupId, tab])
+
+  const loadFiles = () => {
+    if (groupId == null || tab !== 'Files') return
+    setLoadingFiles(true); setFilesError('')
+    api<{ files: GroupFileData[] }>(`/groups/${groupId}/files`)
+      .then(res => setFiles(res.files))
+      .catch(() => setFilesError('Could not load files.'))
+      .finally(() => setLoadingFiles(false))
+  }
+  useEffect(loadFiles, [groupId, tab])
+
+  const doJoin = async () => {
+    if (groupId == null || joining) return
+    setJoining(true); setActionError('')
+    try {
+      await api(`/groups/${groupId}/join`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      loadGroup()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not join this group.')
+    } finally { setJoining(false) }
   }
 
-  const groupFiles = [
-    { name: 'MAT 101 Revision Notes.pdf', by: 'Brian Omondi', size: '2.1 MB', date: '4h ago' },
-    { name: 'STA 101 Past Paper 2023.pdf', by: 'Wanjiru Kamau', size: '1.4 MB', date: '1d ago' },
-    { name: 'ACT 101 Formula Sheet.pdf', by: 'Arnold Gichuru', size: '0.8 MB', date: '2d ago' },
-  ]
-  const members = [
-    { name: 'Arnold Gichuru', role: 'Admin', initials: 'AG' },
-    { name: 'Wanjiru Kamau', role: 'Member', initials: 'WK' },
-    { name: 'Brian Omondi', role: 'Member', initials: 'BO' },
-    { name: 'David Njoroge', role: 'Member', initials: 'DN' },
-    { name: 'Aisha Mohamed', role: 'Member', initials: 'AM' },
-    { name: 'James Kariuki', role: 'Member', initials: 'JK' },
-  ]
+  const doLeave = async () => {
+    if (groupId == null || leaving) return
+    setLeaving(true); setActionError('')
+    try {
+      await api(`/groups/${groupId}/leave`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      loadGroup()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not leave this group.')
+    } finally { setLeaving(false) }
+  }
+
+  const submitPost = async () => {
+    if (groupId == null || !composeText.trim() || composing) return
+    setComposing(true); setPostsError('')
+    try {
+      await api(`/groups/${groupId}/posts`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ post_type: postType, body: composeText.trim() }),
+      })
+      setComposeText('')
+      loadPosts()
+    } catch (e) {
+      setPostsError(e instanceof ApiError ? e.message : 'Could not post. Please try again.')
+    } finally { setComposing(false) }
+  }
+
+  const toggleLike = async (p: GroupPostData) => {
+    if (groupId == null) return
+    const method = p.viewer_liked ? 'DELETE' : 'POST'
+    try {
+      const res = await api<{ like_count: number }>(`/groups/${groupId}/posts/${p.id}/like`, { method, headers: { 'X-CSRF-Token': csrfToken } })
+      setPosts(ps => ps.map(x => x.id === p.id ? { ...x, viewer_liked: !p.viewer_liked, like_count: res.like_count } : x))
+    } catch { /* transient failure - the button just won't visually update, safe to ignore */ }
+  }
+
+  const toggleVote = async (p: GroupPostData) => {
+    if (groupId == null) return
+    const method = p.viewer_voted ? 'DELETE' : 'POST'
+    try {
+      const res = await api<{ vote_count: number }>(`/groups/${groupId}/posts/${p.id}/vote`, { method, headers: { 'X-CSRF-Token': csrfToken } })
+      setPosts(ps => ps.map(x => x.id === p.id ? { ...x, viewer_voted: !p.viewer_voted, vote_count: res.vote_count } : x))
+    } catch { /* transient failure - safe to ignore, same reasoning as toggleLike */ }
+  }
+
+  const openPost = (p: GroupPostData) => {
+    if (expandedId === p.id) { setExpandedId(null); setExpandedDetail(null); return }
+    if (groupId == null) return
+    setExpandedId(p.id); setLoadingDetail(true); setExpandedDetail(null)
+    api<GroupPostDetail>(`/groups/${groupId}/posts/${p.id}`)
+      .then(setExpandedDetail)
+      .catch(() => setPostsError('Could not load that thread.'))
+      .finally(() => setLoadingDetail(false))
+  }
+
+  const submitComment = async () => {
+    if (groupId == null || expandedId == null || !commentInput.trim() || sendingComment) return
+    setSendingComment(true)
+    try {
+      await api(`/groups/${groupId}/posts/${expandedId}/comments`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ body: commentInput.trim() }),
+      })
+      setCommentInput('')
+      const detail = await api<GroupPostDetail>(`/groups/${groupId}/posts/${expandedId}`)
+      setExpandedDetail(detail)
+      setPosts(ps => ps.map(x => x.id === expandedId ? { ...x, comment_count: detail.comments.length } : x))
+    } catch { /* best-effort; the comment box just stays populated so the user can retry */ }
+    finally { setSendingComment(false) }
+  }
+
+  const markHelpful = async (commentId: number) => {
+    if (groupId == null || expandedId == null) return
+    try {
+      await api(`/groups/${groupId}/posts/${expandedId}/comments/${commentId}/helpful`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      const detail = await api<GroupPostDetail>(`/groups/${groupId}/posts/${expandedId}`)
+      setExpandedDetail(detail)
+    } catch { /* best-effort */ }
+  }
+
+  const changeRole = async (userId: number, role: 'admin' | 'member') => {
+    if (groupId == null) return
+    try {
+      await api(`/groups/${groupId}/members/${userId}`, { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ role }) })
+      setMembers(ms => ms.map(m => m.user_id === userId ? { ...m, role } : m))
+    } catch (e) { setMembersError(e instanceof ApiError ? e.message : 'Could not update that member.') }
+  }
+
+  const removeMember = async (userId: number) => {
+    if (groupId == null) return
+    try {
+      await api(`/groups/${groupId}/members/${userId}`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
+      setMembers(ms => ms.filter(m => m.user_id !== userId))
+      setGroup(g => g ? { ...g, member_count: Math.max(0, g.member_count - 1) } : g)
+    } catch (e) { setMembersError(e instanceof ApiError ? e.message : 'Could not remove that member.') }
+  }
+
+  const openFilePicker = () => {
+    setShowFilePicker(true)
+    api<{ documents: MyDocumentSummary[] }>('/documents')
+      .then(res => setShareableDocs(res.documents.filter(d => d.status === 'ready')))
+      .catch(() => setShareableDocs([]))
+  }
+
+  const shareDoc = async (documentId: number) => {
+    if (groupId == null || sharing) return
+    setSharing(true)
+    try {
+      await api(`/groups/${groupId}/files`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ document_id: documentId }) })
+      setShowFilePicker(false)
+      loadFiles()
+    } catch (e) {
+      setFilesError(e instanceof ApiError ? e.message : 'Could not share that file.')
+    } finally { setSharing(false) }
+  }
+
+  const removeFile = async (fileId: number) => {
+    if (groupId == null) return
+    try {
+      await api(`/groups/${groupId}/files/${fileId}`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
+      setFiles(fs => fs.filter(f => f.id !== fileId))
+    } catch (e) { setFilesError(e instanceof ApiError ? e.message : 'Could not remove that file.') }
+  }
+
+  if (groupId == null) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => setScreen('forum')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Group</span>
+          </div>
+        </div>
+        <EmptyState icon="👥" title="No group selected" sub="Go back and pick a group first." action="Find Groups" onAction={() => setScreen('explore')} />
+      </div>
+    )
+  }
+
+  if (loadingGroup) {
+    return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: N.bg, fontSize: 12, color: '#9CA3AF' }}>Loading group…</div>
+  }
+
+  if (!group) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => setScreen('forum')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Group</span>
+          </div>
+        </div>
+        <ErrorState onRetry={loadGroup} />
+      </div>
+    )
+  }
+
+  const joined = group.is_member
+  const isAdmin = group.role === 'admin'
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
@@ -5523,14 +5846,16 @@ function GroupDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <button onClick={() => setScreen('forum')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>ACT 101 — Year 1 · KU</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>248 members · Actuarial Science</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.name}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>{group.member_count} member{group.member_count === 1 ? '' : 's'}{group.unit_code ? ` · ${group.unit_code}` : ''}</div>
           </div>
-          <button onClick={doJoin} disabled={joining} style={{ background: joined ? 'rgba(255,255,255,0.1)' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: joined ? 'rgba(255,255,255,0.8)' : N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: joining ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.3s' }}>
-            {joining ? <div style={{ width: 10, height: 10, border: '1.5px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.6s linear infinite' }} /> : null}
-            {joined ? 'Joined' : 'Join'}
-          </button>
+          {joined ? (
+            <button onClick={doLeave} disabled={leaving} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.8)', fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: leaving ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{leaving ? '…' : 'Joined'}</button>
+          ) : (
+            <button onClick={doJoin} disabled={joining} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: joining ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{joining ? '…' : 'Join'}</button>
+          )}
         </div>
+        {actionError && <div style={{ color: '#FFB4B4', fontSize: 11, fontWeight: 600, marginBottom: 10 }}>{actionError}</div>}
         <div style={{ display: 'flex', gap: 0 }}>
           {(['Posts', 'Questions', 'Files', 'Members'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ flex: 1, background: 'none', border: 'none', borderBottom: `2px solid ${tab === t ? N.gold : 'transparent'}`, color: tab === t ? N.gold : 'rgba(255,255,255,0.5)', fontWeight: tab === t ? 700 : 500, fontSize: 13, padding: '10px 0 10px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', transition: 'all 0.2s' }}>
@@ -5541,85 +5866,139 @@ function GroupDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }} className="scrollbar-hide">
-        {tab === 'Posts' && (
+        {(tab === 'Posts' || tab === 'Questions') && (
           <div style={{ padding: '14px 18px' }}>
-            {joined && (
-              <button onClick={() => setScreen('post-composer')} style={{ width: '100%', background: '#fff', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: 14, padding: '12px 16px', marginBottom: 14, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 14, color: '#9CA3AF', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
-                <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, color: N.navy }}>AG</div>
-                Write something…
-              </button>
+            {!joined && (
+              <div style={{ background: 'rgba(201,168,76,0.08)', border: `1px solid ${N.gold}30`, borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: '#6B7280' }}>Join this group to post, comment, like, and vote.</div>
             )}
-            {sampleGroupPosts.map((p, i) => (
-              <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-                  <div style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{p.userInitials}</div>
-                  <div><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{p.user}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.time}</div></div>
-                </div>
-                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, marginBottom: 12 }}>{p.text}</div>
-                <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #F3F4F6', paddingTop: 10 }}>
-                  <button onClick={() => setLiked(l => ({ ...l, [i]: !l[i] }))} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: liked[i] ? N.gold : '#9CA3AF', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill={liked[i] ? N.gold : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 12.5S1.5 9 1.5 5a2.5 2.5 0 015-0 2.5 2.5 0 015 0c0 4-5.5 7.5-5.5 7.5z"/></svg>
-                    {p.likes + (liked[i] ? 1 : 0)}
-                  </button>
-                  <button onClick={() => setScreen('comments')} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: '#9CA3AF', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 2h10a1 1 0 011 1v6a1 1 0 01-1 1H5l-3 3V3a1 1 0 011-1z"/></svg>
-                    {p.comments}
-                  </button>
+            {joined && (
+              <div style={{ background: '#fff', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: 14, padding: 12, marginBottom: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                <textarea value={composeText} onChange={e => setComposeText(e.target.value)} placeholder={tab === 'Questions' ? 'Ask the group a question…' : 'Write something…'} rows={2} style={{ width: '100%', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans', resize: 'none', boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+                  <button onClick={submitPost} disabled={!composeText.trim() || composing} style={{ background: composeText.trim() ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: composeText.trim() ? N.navy : '#9CA3AF', fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '7px 16px', cursor: composeText.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>{composing ? 'Posting…' : tab === 'Questions' ? 'Ask' : 'Post'}</button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-        {tab === 'Questions' && (
-          <div style={{ padding: '14px 18px' }}>
-            {joined && (
-              <button onClick={() => setScreen('question-composer')} style={{ width: '100%', background: '#fff', border: '1.5px dashed rgba(0,0,0,0.12)', borderRadius: 14, padding: '14px 16px', marginBottom: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 14, color: '#9CA3AF', textAlign: 'left', boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
-                Ask the group a question…
-              </button>
             )}
-            {[
-              { user: 'Faith Njeri', q: 'Can someone explain the difference between simple and compound interest in ACT 101?', replies: 4, votes: 11, initials: 'FN' },
-              { user: 'James Kariuki', q: 'What past papers are available for STA 101? The library seems incomplete.', replies: 7, votes: 23, initials: 'JK' },
-            ].map((q, i) => (
-              <div key={i} onClick={() => setScreen('comments')} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+            {postsError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{postsError}</div>}
+            {loadingPosts ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '20px 0' }}>Loading…</div>
+            ) : posts.length === 0 ? (
+              <EmptyState icon={tab === 'Questions' ? '❓' : '💬'} title={tab === 'Questions' ? 'No questions yet' : 'No posts yet'} sub={joined ? 'Be the first to share something.' : 'Join the group to get things started.'} />
+            ) : posts.map(p => (
+              <div key={p.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                 <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-                  <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: '#6B7280', flexShrink: 0 }}>{q.initials}</div>
-                  <div><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{q.user}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>asked a question</div></div>
+                  <div style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{p.author.slice(0, 2).toUpperCase()}</div>
+                  <div><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{p.author}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.created_at ? new Date(p.created_at).toLocaleString() : ''}</div></div>
                 </div>
-                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, marginBottom: 10 }}>{q.q}</div>
-                <div style={{ display: 'flex', gap: 14, fontSize: 12, color: '#9CA3AF' }}>
-                  <span>{q.votes} votes</span><span>{q.replies} replies</span>
+                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, marginBottom: 12 }}>{p.is_removed ? '[removed]' : p.body}</div>
+                <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #F3F4F6', paddingTop: 10 }}>
+                  {tab === 'Posts' ? (
+                    <button onClick={() => toggleLike(p)} disabled={!joined} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: p.viewer_liked ? N.gold : '#9CA3AF', cursor: joined ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill={p.viewer_liked ? N.gold : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 12.5S1.5 9 1.5 5a2.5 2.5 0 015-0 2.5 2.5 0 015 0c0 4-5.5 7.5-5.5 7.5z"/></svg>
+                      {p.like_count ?? 0}
+                    </button>
+                  ) : (
+                    <button onClick={() => toggleVote(p)} disabled={!joined} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: p.viewer_voted ? N.gold : '#9CA3AF', cursor: joined ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 2v10M3 6l4-4 4 4" /></svg>
+                      {p.vote_count ?? 0} vote{(p.vote_count ?? 0) === 1 ? '' : 's'}
+                    </button>
+                  )}
+                  <button onClick={() => openPost(p)} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: '#9CA3AF', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 2h10a1 1 0 011 1v6a1 1 0 01-1 1H5l-3 3V3a1 1 0 011-1z"/></svg>
+                    {p.comment_count} {expandedId === p.id ? '· hide' : ''}
+                  </button>
                 </div>
+                {expandedId === p.id && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #F3F4F6' }}>
+                    {loadingDetail ? (
+                      <div style={{ fontSize: 12, color: '#9CA3AF' }}>Loading replies…</div>
+                    ) : !expandedDetail ? (
+                      <div style={{ fontSize: 12, color: '#C94C4C' }}>Could not load replies.</div>
+                    ) : (
+                      <>
+                        {expandedDetail.comments.length === 0 && <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10 }}>No replies yet.</div>}
+                        {expandedDetail.comments.map(c => (
+                          <div key={c.id} style={{ background: N.bg, borderRadius: 12, padding: '10px 12px', marginBottom: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                              <span style={{ fontWeight: 700, fontSize: 12, color: N.navy }}>{c.author}{c.marked_helpful && <span style={{ marginLeft: 6, color: '#4CC97B', fontWeight: 700 }}>✓ Helpful</span>}</span>
+                              {tab === 'Questions' && p.author_id !== c.author_id && !c.marked_helpful && !c.is_removed && (
+                                <button onClick={() => markHelpful(c.id)} style={{ background: 'none', border: 'none', color: N.gold, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Mark helpful</button>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 12, color: '#374151' }}>{c.is_removed ? '[removed]' : c.body}</div>
+                          </div>
+                        ))}
+                        {joined && (
+                          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                            <input value={commentInput} onChange={e => setCommentInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && submitComment()} placeholder="Reply…" style={{ flex: 1, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '8px 12px', fontSize: 12, outline: 'none', fontFamily: 'Plus Jakarta Sans' }} />
+                            <button onClick={submitComment} disabled={!commentInput.trim() || sendingComment} style={{ background: N.gold, color: N.navy, border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{sendingComment ? '…' : 'Send'}</button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
         {tab === 'Files' && (
           <div style={{ padding: '14px 18px' }}>
-            {groupFiles.map((f, i) => (
-              <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)', cursor: 'pointer' }} onClick={() => setScreen('doc-ready')}>
-                <div style={{ width: 40, height: 44, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {joined && (
+              <button onClick={openFilePicker} style={{ width: '100%', background: '#fff', border: '1.5px dashed rgba(0,0,0,0.12)', borderRadius: 14, padding: '12px 16px', marginBottom: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: N.gold, fontWeight: 700, textAlign: 'center' }}>+ Share a document</button>
+            )}
+            {filesError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{filesError}</div>}
+            {loadingFiles ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '20px 0' }}>Loading…</div>
+            ) : files.length === 0 ? (
+              <EmptyState icon="📁" title="No files shared yet" sub="Members can share their own ready documents here." />
+            ) : files.map(f => (
+              <div key={f.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                <div style={{ width: 40, height: 44, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: f.view_url ? 'pointer' : 'default' }} onClick={() => f.view_url && window.open(f.view_url, '_blank')}>
                   <svg width="18" height="22" viewBox="0 0 20 24" fill="none"><path d="M4 0h8l8 8v16H4V0z" fill="#E5E7EB"/><path d="M12 0l8 8h-8V0z" fill="#D1D5DB"/></svg>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: N.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-                  <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{f.by} · {f.size} · {f.date}</div>
+                <div style={{ flex: 1, minWidth: 0, cursor: f.view_url ? 'pointer' : 'default' }} onClick={() => f.view_url && window.open(f.view_url, '_blank')}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: N.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.title || 'Untitled document'}</div>
+                  <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{f.shared_by}{f.page_count ? ` · ${f.page_count} pages` : ''}</div>
                 </div>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v9M4 8l4 4 4-4M2 14h12" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                {(isAdmin || f.shared_by_user_id !== undefined) && (
+                  <button onClick={() => removeFile(f.id)} style={{ background: 'none', border: 'none', color: '#C94C4C', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
+                )}
               </div>
             ))}
+            {showFilePicker && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-end', zIndex: 100 }} onClick={() => setShowFilePicker(false)}>
+                <div style={{ background: '#fff', width: '100%', borderRadius: '18px 18px 0 0', padding: 18, maxHeight: '60vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>Share a document</div>
+                  {shareableDocs.length === 0 ? (
+                    <div style={{ fontSize: 12, color: '#9CA3AF' }}>You have no ready documents to share yet.</div>
+                  ) : shareableDocs.map(d => (
+                    <button key={d.id} onClick={() => shareDoc(d.id)} disabled={sharing} style={{ width: '100%', textAlign: 'left', background: N.bg, border: 'none', borderRadius: 12, padding: '10px 14px', marginBottom: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: N.navy }}>{d.title}</button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
         {tab === 'Members' && (
           <div style={{ padding: '14px 18px' }}>
-            <div style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 600, marginBottom: 12 }}>248 MEMBERS</div>
-            {members.map((m, i) => (
-              <div key={i} onClick={() => setScreen('student-profile')} style={{ background: '#fff', borderRadius: 14, padding: '12px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
-                <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{m.initials}</div>
+            <div style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 600, marginBottom: 12 }}>{group.member_count} MEMBER{group.member_count === 1 ? '' : 'S'}</div>
+            {membersError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{membersError}</div>}
+            {loadingMembers ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '20px 0' }}>Loading…</div>
+            ) : members.map(m => (
+              <div key={m.user_id} style={{ background: '#fff', borderRadius: 14, padding: '12px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{m.display_name.slice(0, 2).toUpperCase()}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{m.name}</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{m.display_name}</div>
                 </div>
-                {m.role === 'Admin' && <Pill text="Admin" color={N.gold} />}
+                {m.role === 'admin' && <Pill text="Admin" color={N.gold} />}
+                {isAdmin && (
+                  <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+                    <button onClick={() => changeRole(m.user_id, m.role === 'admin' ? 'member' : 'admin')} style={{ background: 'none', border: 'none', color: N.gold, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{m.role === 'admin' ? 'Demote' : 'Promote'}</button>
+                    {m.role !== 'admin' && <button onClick={() => removeMember(m.user_id)} style={{ background: 'none', border: 'none', color: '#C94C4C', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Remove</button>}
+                  </div>
+                )}
               </div>
             ))}
             <div style={{ height: 16 }} />
@@ -5631,26 +6010,78 @@ function GroupDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── GROUP CREATE ─────────────────────────────────────────────────────────────
-function GroupCreateScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void }) {
   const [step, setStep] = useState(1)
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
   const [privacy, setPrivacy] = useState<'Public' | 'Private' | 'Course-only'>('Public')
-  const [uni, setUni] = useState('Kenyatta University')
-  const [course, setCourse] = useState('Actuarial Science')
-  const [unit, setUnit] = useState('ACT 101')
-  const [year, setYear] = useState('Year 1')
+
+  const [universities, setUniversities] = useState<UniversityOption[]>([])
+  const [universityId, setUniversityId] = useState<number | null>(null)
+  const [programs, setPrograms] = useState<ProgramOption[]>([])
+  const [programId, setProgramId] = useState<number | null>(null)
+  const [units, setUnits] = useState<UnitOption[]>([])
+  const [unitId, setUnitId] = useState<number | null>(null)
+  const [year, setYear] = useState<number | null>(null)
+
   const [memberSearch, setMemberSearch] = useState('')
-  const [selected, setSelected] = useState<string[]>([])
+  const [candidates, setCandidates] = useState<UserSearchResult[]>([])
+  const [selected, setSelected] = useState<UserSearchResult[]>([])
+  const [csrfToken, setCsrfToken] = useState('')
   const [creating, setCreating] = useState(false)
+  const [error, setError] = useState('')
   const [done, setDone] = useState(false)
 
-  const candidates = followPeople.filter(p => !memberSearch || p.name.toLowerCase().includes(memberSearch.toLowerCase()))
+  useEffect(() => {
+    api<{ csrf_token: string; university_id: number | null }>('/me')
+      .then(me => { setCsrfToken(me.csrf_token); if (me.university_id) setUniversityId(me.university_id) })
+      .catch(() => {})
+    api<UniversityOption[]>('/universities').then(setUniversities).catch(() => {})
+    api<UnitOption[]>('/units').then(setUnits).catch(() => {})
+  }, [])
 
-  const create = () => {
-    setCreating(true)
-    setTimeout(() => { setCreating(false); setDone(true) }, 1800)
-    setTimeout(() => setScreen('group-detail'), 3200)
+  useEffect(() => {
+    if (universityId == null) { setPrograms([]); return }
+    api<ProgramOption[]>(`/universities/${universityId}/programs`).then(setPrograms).catch(() => setPrograms([]))
+  }, [universityId])
+
+  useEffect(() => {
+    if (!memberSearch.trim()) { setCandidates([]); return }
+    const handle = setTimeout(() => {
+      api<{ users: UserSearchResult[] }>(`/users/search?q=${encodeURIComponent(memberSearch.trim())}`)
+        .then(res => setCandidates(res.users))
+        .catch(() => setCandidates([]))
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [memberSearch])
+
+  const create = async () => {
+    if (!name.trim() || creating) return
+    setCreating(true); setError('')
+    try {
+      const privacyValue: GroupPrivacy = privacy === 'Public' ? 'public' : privacy === 'Private' ? 'private' : 'course_only'
+      const res = await api<{ id: number }>('/groups', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: desc.trim() || undefined,
+          privacy: privacyValue,
+          university_id: universityId ?? undefined,
+          program_id: programId ?? undefined,
+          unit_id: unitId ?? undefined,
+          year: year ?? undefined,
+          member_user_ids: selected.map(s => s.id),
+        }),
+      })
+      setDone(true)
+      setActiveGroupId(res.id)
+      setTimeout(() => setScreen('group-detail'), 1400)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not create the group. Please try again.')
+    } finally {
+      setCreating(false)
+    }
   }
 
   if (done) return (
@@ -5710,19 +6141,34 @@ function GroupCreateScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
       {step === 2 && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
-          {[
-            { label: 'University', value: uni, set: setUni, opts: ['Kenyatta University', 'University of Nairobi', 'Strathmore University', 'JKUAT', 'Other'] },
-            { label: 'Course', value: course, set: setCourse, opts: ['Actuarial Science', 'Computer Science', 'Business Administration', 'Law', 'Medicine', 'Other'] },
-            { label: 'Unit / Module', value: unit, set: setUnit, opts: ['ACT 101', 'MAT 101', 'STA 101', 'Other'] },
-            { label: 'Year of Study', value: year, set: setYear, opts: ['Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5', 'Mixed'] },
-          ].map(f => (
-            <div key={f.label} style={{ marginBottom: 16 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>{f.label}</div>
-              <select value={f.value} onChange={e => f.set(e.target.value)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none', boxSizing: 'border-box' }}>
-                {f.opts.map(o => <option key={o}>{o}</option>)}
-              </select>
-            </div>
-          ))}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>University <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
+            <select value={universityId ?? ''} onChange={e => { setUniversityId(e.target.value ? Number(e.target.value) : null); setProgramId(null) }} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none', boxSizing: 'border-box' }}>
+              <option value="">Any university</option>
+              {universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Course <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
+            <select value={programId ?? ''} onChange={e => setProgramId(e.target.value ? Number(e.target.value) : null)} disabled={!universityId} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none', boxSizing: 'border-box', opacity: universityId ? 1 : 0.6 }}>
+              <option value="">Any course</option>
+              {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Unit / Module <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
+            <select value={unitId ?? ''} onChange={e => setUnitId(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none', boxSizing: 'border-box' }}>
+              <option value="">Not tied to a unit</option>
+              {units.map(u => <option key={u.id} value={u.id}>{u.code} — {u.name}</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Year of Study <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
+            <select value={year ?? ''} onChange={e => setYear(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none', boxSizing: 'border-box' }}>
+              <option value="">Mixed</option>
+              {[1,2,3,4,5].map(y => <option key={y} value={y}>Year {y}</option>)}
+            </select>
+          </div>
           <button onClick={() => setStep(3)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginTop: 8 }}>Continue</button>
         </div>
       )}
@@ -5738,23 +6184,27 @@ function GroupCreateScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             {selected.length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                 {selected.map(s => (
-                  <div key={s} style={{ background: `${N.gold}20`, borderRadius: 99, padding: '4px 10px 4px 8px', display: 'flex', gap: 5, alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: N.navy }}>{s.split(' ')[0]}</span>
-                    <button onClick={() => setSelected(arr => arr.filter(x => x !== s))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                  <div key={s.id} style={{ background: `${N.gold}20`, borderRadius: 99, padding: '4px 10px 4px 8px', display: 'flex', gap: 5, alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: N.navy }}>{s.display_name.split(' ')[0]}</span>
+                    <button onClick={() => setSelected(arr => arr.filter(x => x.id !== s.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                   </div>
                 ))}
               </div>
             )}
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px' }} className="scrollbar-hide">
-            {candidates.map((p, i) => {
-              const sel = selected.includes(p.name)
+            {memberSearch.trim() === '' ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '14px 0' }}>Search by name to invite classmates.</div>
+            ) : candidates.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '14px 0' }}>No students match "{memberSearch.trim()}".</div>
+            ) : candidates.map(p => {
+              const sel = selected.some(s => s.id === p.id)
               return (
-                <div key={i} onClick={() => setSelected(arr => sel ? arr.filter(x => x !== p.name) : [...arr, p.name])} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #F3F4F6', cursor: 'pointer' }}>
-                  <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
+                <div key={p.id} onClick={() => setSelected(arr => sel ? arr.filter(x => x.id !== p.id) : [...arr, p])} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #F3F4F6', cursor: 'pointer' }}>
+                  <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{p.display_name.slice(0, 2).toUpperCase()}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{p.name}</div>
-                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.course}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{p.display_name}</div>
+                    {p.year != null && <div style={{ fontSize: 11, color: '#9CA3AF' }}>Year {p.year}{p.semester != null ? `, Sem ${p.semester}` : ''}</div>}
                   </div>
                   <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${sel ? N.gold : '#D1D5DB'}`, background: sel ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
                     {sel && <div style={{ color: N.navy }}>{Ic.check('w-3 h-3')}</div>}
@@ -5764,6 +6214,7 @@ function GroupCreateScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             })}
           </div>
           <div style={{ padding: '14px 18px 20px', flexShrink: 0 }}>
+            {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{error}</div>}
             <button onClick={create} disabled={creating} style={{ width: '100%', background: creating ? '#E5E7EB' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: creating ? '#9CA3AF' : N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: creating ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: creating ? 'none' : `0 6px 24px ${N.gold}40` }}>
               {creating && <div style={{ width: 16, height: 16, border: '2px solid #9CA3AF', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.65s linear infinite' }} />}
               {creating ? 'Creating group…' : `Create Group${selected.length > 0 ? ` with ${selected.length} member${selected.length > 1 ? 's' : ''}` : ''}`}
@@ -6060,6 +6511,7 @@ const adminNav = [
   { key: 'analytics', label: 'Analytics', icon: '📈' },
   { key: 'moderation', label: 'Moderation', icon: '🛡️' },
   { key: 'system', label: 'System', icon: '⚙️' },
+  { key: 'ambassadors', label: 'Ambassadors', icon: '🤝' },
 ]
 
 const aUsers = [
@@ -6677,6 +7129,8 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     </div>
   )
 
+  if (section === 'ambassadors') return <AdminAmbassadorsPanel />
+
   // Light sections for community, universities, opportunities, communications
   const lightSections: Record<string, { icon: string; title: string; desc: string; features: string[] }> = {
     universities: { icon: '🏛️', title: 'University Management', desc: 'Manage universities, faculties, departments, courses, and units.', features: ['Kenyatta University — 843 students','University of Nairobi — 621 students','Strathmore University — 412 students','JKUAT — 389 students','Mount Kenya University — 334 students'] },
@@ -6735,6 +7189,337 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: '#9CA3AF', fontSize: 14 }}>Select a section from the sidebar</div>
+  )
+}
+
+// ─── ADMIN: AMBASSADORS (Chunk 9 admin review) ──────────────────────────────
+// Self-contained admin panel: fetches from GET/POST /admin/ambassadors* and
+// /admin/payouts* (see app.py). Owns all its own hooks so it can be dropped
+// into a section branch without touching AdminSection's existing state.
+
+interface AdminAmbassadorRow {
+  id: number
+  user_id: number
+  email: string | null
+  display_name: string | null
+  referral_code: string
+  status: 'pending' | 'active' | 'suspended' | 'rejected'
+  applied_at: string | null
+  reviewed_at: string | null
+  rejection_reason: string | null
+}
+
+interface AdminAmbassadorReferralRow {
+  id: number
+  referred_email: string | null
+  status: string
+  channel: string | null
+  converted: boolean
+  commission_amount: number | null
+  unlock_at: string | null
+  voided: boolean
+  void_reason: string | null
+  created_at: string | null
+}
+
+interface AdminAmbassadorDetail extends AdminAmbassadorRow {
+  reviewed_by: number | null
+  referred_count: number
+  paying_count: number
+  total_commission_awarded_kes: number
+  total_paid_kes: number
+  referrals: AdminAmbassadorReferralRow[]
+}
+
+interface AdminPayoutRow {
+  id: number
+  ambassador_id: number
+  email: string | null
+  amount: number
+  status: 'pending' | 'approved' | 'rejected' | 'paid'
+  payout_destination: string
+  kasapay_reference: string | null
+  requested_at: string | null
+  reviewed_at: string | null
+  rejection_reason: string | null
+  paid_at: string | null
+}
+
+const ADMIN_AMB_STATUS_COLOR: Record<string, string> = {
+  pending: 'amber', active: 'green', suspended: 'red', rejected: 'gray',
+  approved: 'blue', paid: 'green',
+}
+
+function AdminAmbassadorsPanel() {
+  const [tab, setTab] = useState<'applications' | 'payouts'>('applications')
+  const [csrfToken, setCsrfToken] = useState('')
+
+  const [appStatusFilter, setAppStatusFilter] = useState('pending')
+  const [applications, setApplications] = useState<AdminAmbassadorRow[]>([])
+  const [loadingApps, setLoadingApps] = useState(true)
+  const [appsError, setAppsError] = useState('')
+
+  const [selected, setSelected] = useState<AdminAmbassadorDetail | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+
+  const [payoutStatusFilter, setPayoutStatusFilter] = useState('pending')
+  const [payouts, setPayouts] = useState<AdminPayoutRow[]>([])
+  const [loadingPayouts, setLoadingPayouts] = useState(true)
+  const [payoutsError, setPayoutsError] = useState('')
+
+  const [actionBusy, setActionBusy] = useState(false)
+  const [rejectTarget, setRejectTarget] = useState<{ kind: 'ambassador' | 'payout'; id: number } | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+  }, [])
+
+  const loadApplications = (status: string) => {
+    setLoadingApps(true)
+    setAppsError('')
+    api<{ ambassadors: AdminAmbassadorRow[] }>(`/admin/ambassadors${status === 'all' ? '' : `?status=${status}`}`)
+      .then(res => setApplications(res.ambassadors))
+      .catch(e => setAppsError(e instanceof ApiError ? e.message : 'Could not load ambassador applications.'))
+      .finally(() => setLoadingApps(false))
+  }
+
+  const loadPayouts = (status: string) => {
+    setLoadingPayouts(true)
+    setPayoutsError('')
+    api<{ payouts: AdminPayoutRow[] }>(`/admin/payouts${status === 'all' ? '' : `?status=${status}`}`)
+      .then(res => setPayouts(res.payouts))
+      .catch(e => setPayoutsError(e instanceof ApiError ? e.message : 'Could not load payout requests.'))
+      .finally(() => setLoadingPayouts(false))
+  }
+
+  useEffect(() => { loadApplications(appStatusFilter) }, [appStatusFilter])
+  useEffect(() => { loadPayouts(payoutStatusFilter) }, [payoutStatusFilter])
+
+  const openDetail = (id: number) => {
+    setLoadingDetail(true)
+    api<AdminAmbassadorDetail>(`/admin/ambassadors/${id}`)
+      .then(setSelected)
+      .catch(e => alert(e instanceof ApiError ? e.message : 'Could not load ambassador detail.'))
+      .finally(() => setLoadingDetail(false))
+  }
+
+  const runAmbassadorAction = async (id: number, action: 'approve' | 'suspend' | 'reinstate') => {
+    setActionBusy(true)
+    try {
+      await api(`/admin/ambassadors/${id}/${action}`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+      })
+      loadApplications(appStatusFilter)
+      if (selected?.id === id) openDetail(id)
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : `Could not ${action} this ambassador.`)
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const rejectAmbassador = async (id: number, reason: string) => {
+    setActionBusy(true)
+    try {
+      await api(`/admin/ambassadors/${id}/reject`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ reason }),
+      })
+      loadApplications(appStatusFilter)
+      setSelected(null)
+      setRejectTarget(null)
+      setRejectReason('')
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not reject this ambassador.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const approvePayout = async (id: number) => {
+    setActionBusy(true)
+    try {
+      await api(`/admin/payouts/${id}/approve`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+      })
+      loadPayouts(payoutStatusFilter)
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not approve this payout.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const rejectPayout = async (id: number, reason: string) => {
+    setActionBusy(true)
+    try {
+      await api(`/admin/payouts/${id}/reject`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ reason }),
+      })
+      loadPayouts(payoutStatusFilter)
+      setRejectTarget(null)
+      setRejectReason('')
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not reject this payout.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const submitReject = () => {
+    if (!rejectTarget || !rejectReason.trim()) return
+    if (rejectTarget.kind === 'ambassador') rejectAmbassador(rejectTarget.id, rejectReason.trim())
+    else rejectPayout(rejectTarget.id, rejectReason.trim())
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {(['applications', 'payouts'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 18px', borderRadius: 10, background: tab === t ? N.navy : '#F3F4F6', color: tab === t ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>
+            {t === 'applications' ? 'Applications' : 'Payout Requests'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'applications' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {selected && (
+            <div style={{ background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: N.navy }}>{selected.display_name || selected.email}</div>
+                  <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{selected.email} · code {selected.referral_code}</div>
+                  <div style={{ marginTop: 6 }}><AdminBadge text={selected.status} color={ADMIN_AMB_STATUS_COLOR[selected.status] || 'gray'} /></div>
+                </div>
+                <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 20 }}>×</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
+                {[['Referred', selected.referred_count.toString()], ['Paying', selected.paying_count.toString()], ['Commission Awarded', 'KES ' + selected.total_commission_awarded_kes.toLocaleString()], ['Paid Out', 'KES ' + selected.total_paid_kes.toLocaleString()]].map(([k, v]) => (
+                  <div key={k} style={{ background: '#F9FAFB', borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 3 }}>{k}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: N.navy }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {selected.status === 'pending' && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  <button disabled={actionBusy} onClick={() => runAmbassadorAction(selected.id, 'approve')} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12 }}>Approve</button>
+                  <button disabled={actionBusy} onClick={() => setRejectTarget({ kind: 'ambassador', id: selected.id })} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12 }}>Reject</button>
+                </div>
+              )}
+              {selected.status === 'active' && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  <button disabled={actionBusy} onClick={() => runAmbassadorAction(selected.id, 'suspend')} style={{ background: '#FEF3C7', color: '#D97706', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12 }}>Suspend</button>
+                </div>
+              )}
+              {selected.status === 'suspended' && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  <button disabled={actionBusy} onClick={() => runAmbassadorAction(selected.id, 'reinstate')} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12 }}>Reinstate</button>
+                </div>
+              )}
+              {selected.rejection_reason && (
+                <div style={{ fontSize: 12, color: '#DC2626', marginBottom: 12 }}>Rejection reason: {selected.rejection_reason}</div>
+              )}
+              <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 8 }}>Referrals ({selected.referrals.length})</div>
+              {selected.referrals.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#9CA3AF' }}>No referrals yet.</div>
+              ) : (
+                <AdminTable
+                  cols={['Referred', 'Status', 'Commission', 'Voided']}
+                  rows={selected.referrals.map(r => [
+                    r.referred_email || `#${r.id}`,
+                    r.status,
+                    r.commission_amount != null ? 'KES ' + r.commission_amount.toLocaleString() : '—',
+                    r.voided ? (r.void_reason || 'Yes') : 'No',
+                  ])}
+                />
+              )}
+            </div>
+          )}
+
+          <AdminCard title={`Ambassador Applications — ${applications.length}`}>
+            <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6 }}>
+              {['pending', 'active', 'suspended', 'rejected', 'all'].map(f => (
+                <button key={f} onClick={() => setAppStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: appStatusFilter === f ? N.navy : '#F3F4F6', color: appStatusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
+              ))}
+            </div>
+            {loadingApps ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+            ) : appsError ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{appsError}</div>
+            ) : applications.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No applications with this status.</div>
+            ) : (
+              <AdminTable
+                cols={['Name', 'Email', 'Code', 'Applied', 'Status']}
+                rows={applications.map(a => [
+                  a.display_name || '—', a.email || '—', a.referral_code,
+                  a.applied_at ? new Date(a.applied_at).toLocaleDateString() : '—',
+                  <AdminBadge text={a.status} color={ADMIN_AMB_STATUS_COLOR[a.status] || 'gray'} />,
+                ])}
+                actions={i => (
+                  <button onClick={() => openDetail(applications[i].id)} style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{loadingDetail ? '…' : 'Review'}</button>
+                )}
+              />
+            )}
+          </AdminCard>
+        </div>
+      )}
+
+      {tab === 'payouts' && (
+        <AdminCard title={`Payout Requests — ${payouts.length}`}>
+          <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6 }}>
+            {['pending', 'approved', 'paid', 'rejected', 'all'].map(f => (
+              <button key={f} onClick={() => setPayoutStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: payoutStatusFilter === f ? N.navy : '#F3F4F6', color: payoutStatusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
+            ))}
+          </div>
+          {loadingPayouts ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+          ) : payoutsError ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{payoutsError}</div>
+          ) : payouts.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No payout requests with this status.</div>
+          ) : (
+            <AdminTable
+              cols={['Email', 'Amount', 'Destination', 'Requested', 'Status']}
+              rows={payouts.map(p => [
+                p.email || `#${p.ambassador_id}`,
+                'KES ' + p.amount.toLocaleString(),
+                p.payout_destination,
+                p.requested_at ? new Date(p.requested_at).toLocaleDateString() : '—',
+                <AdminBadge text={p.status} color={ADMIN_AMB_STATUS_COLOR[p.status] || 'gray'} />,
+              ])}
+              actions={i => payouts[i].status === 'pending' ? (
+                <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
+                  <button disabled={actionBusy} onClick={() => approvePayout(payouts[i].id)} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Approve</button>
+                  <button disabled={actionBusy} onClick={() => setRejectTarget({ kind: 'payout', id: payouts[i].id })} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Reject</button>
+                </div>
+              ) : null}
+            />
+          )}
+        </AdminCard>
+      )}
+
+      {rejectTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setRejectTarget(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 10 }}>Reason for rejection</div>
+            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={3} placeholder="Explain why this is being rejected…" style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', resize: 'none', marginBottom: 14 }} />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { setRejectTarget(null); setRejectReason('') }} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button disabled={actionBusy || !rejectReason.trim()} onClick={submitReject} style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, opacity: (actionBusy || !rejectReason.trim()) ? 0.6 : 1 }}>Confirm Reject</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -7207,6 +7992,7 @@ export default function App() {
   const [activeForumPostId, setActiveForumPostId] = useState<number | null>(null)
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null)
+  const [activeGroupId, setActiveGroupId] = useState<number | null>(null)
 
   // Handles the round-trip back from /auth/google/callback, which appends
   // ?complete_profile=1 (new Google account, needs university/course/year/
@@ -7271,7 +8057,7 @@ export default function App() {
       case 'reset-password':    return <ResetPasswordScreen setScreen={setScreen} />
       case 'verify-confirm':    return <VerifyConfirmScreen setScreen={setScreen} />
       case 'home':              return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
-      case 'explore':           return <ExploreScreen setScreen={setScreen} />
+      case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} />
       case 'create-modal':      return <CreateModal setScreen={setScreen} />
       case 'post-composer':     return <PostComposer setScreen={setScreen} />
       case 'question-composer': return <QuestionComposer setScreen={setScreen} />
@@ -7287,7 +8073,7 @@ export default function App() {
       case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} />
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'forum':             return <ForumScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} />
+      case 'forum':             return <ForumScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} setActiveGroupId={setActiveGroupId} />
       case 'comments':          return <CommentsScreen setScreen={setScreen} postId={activeForumPostId} />
       case 'chats':             return <ChatsScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
       case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} />
@@ -7314,8 +8100,8 @@ export default function App() {
       case 'achievements':      return <AchievementsScreen setScreen={setScreen} />
       case 'followers':         return <FollowListScreen mode="followers" setScreen={setScreen} />
       case 'following':         return <FollowListScreen mode="following" setScreen={setScreen} />
-      case 'group-detail':      return <GroupDetailScreen setScreen={setScreen} />
-      case 'group-create':      return <GroupCreateScreen setScreen={setScreen} />
+      case 'group-detail':      return <GroupDetailScreen setScreen={setScreen} groupId={activeGroupId} />
+      case 'group-create':      return <GroupCreateScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} />
       default:                  return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
     }
   }
