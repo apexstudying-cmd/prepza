@@ -7555,6 +7555,39 @@ def _serialize_message(message):
     }
 
 
+def _serialize_conversation_detail(conversation, viewer_id):
+    """
+    Full detail payload for GET /chats/<id> - the display name (reusing
+    the same logic /chats uses), the active (non-left) participant list
+    with display names, and who created it. Exists so the frontend can
+    label group-chat message senders and show a real member count/
+    creator in chat-options, without a message-by-message name lookup.
+    """
+    participant_rows = (
+        ConversationParticipant.query
+        .filter_by(conversation_id=conversation.id, left_at=None)
+        .all()
+    )
+    participants = []
+    for p in participant_rows:
+        member = db.session.get(User, p.user_id)
+        participants.append({
+            "user_id": p.user_id,
+            "display_name": _display_name(member) if member else "Deleted user",
+            "role": p.role,
+        })
+    creator = db.session.get(User, conversation.created_by)
+    return {
+        "id": conversation.id,
+        "is_group": conversation.is_group,
+        "name": _conversation_display_name(conversation, viewer_id),
+        "created_by": conversation.created_by,
+        "created_by_name": _display_name(creator) if creator else "Deleted user",
+        "member_count": len(participant_rows),
+        "participants": participants,
+    }
+
+
 @app.route("/chats")
 def list_chats():
     user_id = session.get("user_id")
@@ -7675,6 +7708,29 @@ def create_chat():
 
     db.session.commit()
     return jsonify({"id": conversation.id, "reused": False}), 201
+
+
+@app.route("/chats/<int:conversation_id>")
+def get_chat_detail(conversation_id):
+    """
+    Single-conversation detail: display name, participant list (with
+    names), member count, and creator - powers the chat-detail header,
+    group-message sender labels, and chat-options screen on the
+    frontend. 404s (not 403) for a non-participant, same "don't confirm
+    existence" pattern as other conversation routes.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Conversation not found"}), 404
+
+    conversation = db.session.get(Conversation, conversation_id)
+    if not conversation:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    return jsonify(_serialize_conversation_detail(conversation, user_id))
 
 
 @app.route("/chats/<int:conversation_id>/messages")
