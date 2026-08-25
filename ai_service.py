@@ -1710,6 +1710,14 @@ def generate_document_podcast_script(document_content_id, triggering_user_id, pl
 
 TUTOR_HISTORY_MESSAGE_LIMIT = 20
 
+# Minimum gap (in days) since the student's last message in a
+# tutoring conversation before a spaced-review nudge is even
+# considered - keeps this from firing mid-session, only when the
+# student is genuinely returning after time away. See the Ada
+# design doc's "know when to be proactive, not naggy" guidance
+# (section 25).
+SESSION_RETURN_GAP_DAYS = 3
+
 # Matches a trailing "[[CONCEPT: <name>]]" marker line the tutor system
 # prompt instructs the model to always end its reply with. Tolerant of
 # a leading blank line and trailing whitespace; anchored to the END of
@@ -1840,6 +1848,27 @@ def _format_diagnostic_instruction(prerequisite_concept):
     )
 
 
+def _format_spaced_review_instruction(due_concepts):
+    """
+    Builds a short, uncached system block nudging Ada to offer a
+    quick refresher on previously-learned concepts the student hasn't
+    practiced in a while. Only ever called when the caller has already
+    confirmed both a real session gap AND non-empty due_concepts - see
+    get_concepts_due_for_review() and generate_tutor_reply().
+    """
+    concept_list = ", ".join(f'"{c["name"]}"' for c in due_concepts)
+    return (
+        "WELCOME BACK: it's been a while since this student's last "
+        "message in this conversation, and they haven't practiced the "
+        f"following previously-learned concept(s) recently: {concept_list}. "
+        "If it fits naturally, briefly offer a quick refresher or "
+        "check-in on one of these before diving into new material - "
+        "phrase it warmly, not as a scheduled obligation, and don't "
+        "insist if the student wants to move straight on. Never mention "
+        "specific mastery scores or exact day counts to the student."
+    )
+
+
 def _fetch_tutor_history(conversation_id, limit=TUTOR_HISTORY_MESSAGE_LIMIT):
     """
     Returns up to the last `limit` TutorMessage rows for a conversation,
@@ -1944,11 +1973,17 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
         LearningConcept, LearningEvent, update_concept_mastery,
         get_student_mastery_snapshot, ConceptPrerequisite,
         should_diagnose, get_current_conversation_concept_id,
+        get_concepts_due_for_review,
     )
 
     conversation = db.session.get(TutorConversation, conversation_id)
     if not conversation:
         raise ValueError(f"TutorConversation {conversation_id} not found")
+
+    # Captured now, before anything below bumps conversation.updated_at,
+    # so the spaced-review gap check further down measures the gap
+    # BEFORE this turn, not after.
+    previous_activity_at = conversation.updated_at
 
     content = db.session.get(DocumentContent, conversation.document_content_id)
     if not content or not content.extracted_text:
@@ -2022,6 +2057,20 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
         system.append({
             "type": "text",
             "text": _format_diagnostic_instruction(diagnostic_prerequisite),
+        })
+
+    # Ada: spaced-review nudge. Only surfaces when the student is
+    # genuinely returning to this conversation after a real gap - not
+    # on every turn within an active session.
+    review_due = []
+    if previous_activity_at and (datetime.utcnow() - previous_activity_at).days >= SESSION_RETURN_GAP_DAYS:
+        review_due = get_concepts_due_for_review(triggering_user_id, content.id)
+    if review_due:
+        # Same uncached-block reasoning as the mastery/diagnostic
+        # blocks above - turn-dependent, not stable document content.
+        system.append({
+            "type": "text",
+            "text": _format_spaced_review_instruction(review_due),
         })
 
     provider, provider_name = _get_provider()

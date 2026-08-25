@@ -630,6 +630,77 @@ def should_diagnose(user_id, concept_id):
     return weakest_concept
 
 
+# Days since last practiced before a well-established concept counts
+# as "stale" and worth a spaced-review nudge. Deliberately a flat
+# constant for now, not per-concept/per-student - same "simple
+# algorithm, upgradeable later" tradeoff as _mastery_gain_for_exposure()
+# above (see section 19, MASTERy MODEL, and section 20, RETENTION AND
+# SPACED LEARNING, in the Ada design doc).
+REVIEW_STALENESS_DAYS = 7
+
+
+def get_concepts_due_for_review(user_id, document_content_id, limit=3):
+    """
+    Returns concepts this student has previously learned (within THIS
+    document's tutoring conversation - same per-document scoping as
+    get_student_mastery_snapshot(), for the same reason: a longer-term
+    cross-document profile is a later Ada phase, not built here) that
+    are now stale enough to be worth a review nudge.
+
+    "Due" means: genuinely learned (mastery_score >= 50, confidence
+    moderate or high - a "low" confidence concept hasn't really been
+    established yet, so recommending a review of it doesn't make sense;
+    that's a job for normal teaching, not spaced review) AND not
+    practiced in at least REVIEW_STALENESS_DAYS days.
+
+    Returns a list of dicts (most-overdue first), each:
+    {"name": str, "mastery_score": int, "days_since_practiced": int}.
+    Empty list if nothing is due - callers should treat that as "don't
+    mention review", never fabricate a reason to nudge.
+    """
+    concept_ids = [
+        row[0] for row in
+        db.session.query(LearningEvent.concept_id)
+        .filter(
+            LearningEvent.user_id == user_id,
+            LearningEvent.document_content_id == document_content_id,
+        )
+        .distinct()
+        .all()
+    ]
+    if not concept_ids:
+        return []
+
+    cutoff = datetime.utcnow() - timedelta(days=REVIEW_STALENESS_DAYS)
+    rows = (
+        StudentConceptMastery.query
+        .filter(
+            StudentConceptMastery.user_id == user_id,
+            StudentConceptMastery.concept_id.in_(concept_ids),
+            StudentConceptMastery.mastery_score >= 50,
+            StudentConceptMastery.confidence.in_(("moderate", "high")),
+            StudentConceptMastery.last_practiced_at.isnot(None),
+            StudentConceptMastery.last_practiced_at <= cutoff,
+        )
+        .order_by(StudentConceptMastery.last_practiced_at.asc())
+        .limit(limit)
+        .all()
+    )
+
+    now = datetime.utcnow()
+    due = []
+    for row in rows:
+        concept = db.session.get(LearningConcept, row.concept_id)
+        if not concept:
+            continue
+        due.append({
+            "name": concept.name,
+            "mastery_score": row.mastery_score,
+            "days_since_practiced": (now - row.last_practiced_at).days,
+        })
+    return due
+
+
 class ConceptPrerequisite(db.Model):
     """
     A directed edge: concept_id requires prerequisite_concept_id.
