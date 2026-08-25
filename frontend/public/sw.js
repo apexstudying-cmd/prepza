@@ -86,3 +86,29 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+self.addEventListener('push', (event) => {
+  let payload = { title: 'Prepza', body: '' };
+  try {
+    if (event.data) payload = event.data.json();
+  } catch (err) {
+    payload.body = event.data ? event.data.text() : '';
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title || 'Prepza', {
+      body: payload.body || '',
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {
+      for (const client of clientsList) {
+        if ('focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow('/');
+    })
+  );
+});
