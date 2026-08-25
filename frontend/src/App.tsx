@@ -6626,6 +6626,8 @@ function AdminCard({ title, children, action, actionLabel }: { title: string; ch
   )
 }
 
+type AdminAnnouncementItem = { id: number; title: string; body: string; reach: number; created_at: string | null }
+
 function AdminSection({ section, setSection }: { section: string; setSection: (s: string) => void }) {
   const [search, setSearch] = useState('')
   const [userFilter, setUserFilter] = useState('All')
@@ -6633,12 +6635,85 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   const [confirmAction, setConfirmAction] = useState<{ type: string; target: string } | null>(null)
   const [contentTab, setContentTab] = useState('Documents')
   const [commTab, setCommTab] = useState('Announcements')
-  const [announcementDraft, setAnnouncementDraft] = useState('')
-  const [announcements] = useState([
-    { title: 'Maintenance Window', body: 'Scheduled downtime: Aug 15, 2AM-4AM EAT', sent: 'Aug 12, 2025', reach: '2,847' },
-    { title: 'New Feature: Mind Maps', body: 'We just launched AI-powered mind maps from your documents!', sent: 'Aug 8, 2025', reach: '2,721' },
-    { title: 'Semester Plan Discount', body: 'August Special: 20% off Semester plans for new users.', sent: 'Aug 1, 2025', reach: '2,643' },
-  ])
+  const [csrfToken, setCsrfToken] = useState('')
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  const [annTitle, setAnnTitle] = useState('')
+  const [annBody, setAnnBody] = useState('')
+  const [annUniversityId, setAnnUniversityId] = useState<number | null>(null)
+  const [annProgramId, setAnnProgramId] = useState<number | null>(null)
+  const [annYear, setAnnYear] = useState<number | null>(null)
+  const [annSemester, setAnnSemester] = useState<number | null>(null)
+  const [annGroupId, setAnnGroupId] = useState<number | null>(null)
+  const [annGroupName, setAnnGroupName] = useState('')
+  const [annGroupSearch, setAnnGroupSearch] = useState('')
+  const [annGroupResults, setAnnGroupResults] = useState<{ id: number; name: string }[]>([])
+  const [annUniversities, setAnnUniversities] = useState<{ id: number; name: string }[]>([])
+  const [annPrograms, setAnnPrograms] = useState<{ id: number; name: string }[]>([])
+  const [annSending, setAnnSending] = useState(false)
+  const [annError, setAnnError] = useState('')
+  const [annSent, setAnnSent] = useState(false)
+
+  const [announcements, setAnnouncements] = useState<AdminAnnouncementItem[]>([])
+  const [announcementsLoading, setAnnouncementsLoading] = useState(true)
+
+  const loadAnnouncements = () => {
+    setAnnouncementsLoading(true)
+    api<AdminAnnouncementItem[]>('/admin/announcements')
+      .then(setAnnouncements)
+      .catch(() => {})
+      .finally(() => setAnnouncementsLoading(false))
+  }
+
+  useEffect(() => {
+    if (section !== 'communications') return
+    loadAnnouncements()
+    api<{ id: number; name: string }[]>('/universities').then(setAnnUniversities).catch(() => {})
+  }, [section])
+
+  useEffect(() => {
+    if (annUniversityId == null) { setAnnPrograms([]); setAnnProgramId(null); return }
+    api<{ id: number; name: string }[]>(`/universities/${annUniversityId}/programs`).then(setAnnPrograms).catch(() => {})
+  }, [annUniversityId])
+
+  useEffect(() => {
+    if (section !== 'communications') return
+    const q = annGroupSearch.trim()
+    if (!q) { setAnnGroupResults([]); return }
+    const t = setTimeout(() => {
+      api<{ page: number; groups: { id: number; name: string }[] }>(`/groups?q=${encodeURIComponent(q)}`)
+        .then(res => setAnnGroupResults(res.groups))
+        .catch(() => {})
+    }, 300)
+    return () => clearTimeout(t)
+  }, [annGroupSearch, section])
+
+  const sendAnnouncement = async () => {
+    if (!annTitle.trim() || !annBody.trim() || annSending) return
+    setAnnSending(true); setAnnError(''); setAnnSent(false)
+    try {
+      const payload: Record<string, number | string> = { title: annTitle.trim(), body: annBody.trim() }
+      if (annUniversityId != null) payload.university_id = annUniversityId
+      if (annProgramId != null) payload.program_id = annProgramId
+      if (annYear != null) payload.year = annYear
+      if (annSemester != null) payload.semester = annSemester
+      if (annGroupId != null) payload.group_id = annGroupId
+      await api('/admin/announcements', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify(payload),
+      })
+      setAnnTitle(''); setAnnBody('')
+      setAnnUniversityId(null); setAnnProgramId(null); setAnnYear(null); setAnnSemester(null)
+      setAnnGroupId(null); setAnnGroupName(''); setAnnGroupSearch(''); setAnnGroupResults([])
+      setAnnSent(true)
+      loadAnnouncements()
+    } catch (e) {
+      setAnnError(e instanceof ApiError ? e.message : 'Could not send announcement.')
+    } finally {
+      setAnnSending(false)
+    }
+  }
 
   const filteredUsers = aUsers.filter(u => {
     const q = search.toLowerCase()
@@ -7131,12 +7206,87 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
   if (section === 'ambassadors') return <AdminAmbassadorsPanel />
 
-  // Light sections for community, universities, opportunities, communications
+  if (section === 'communications') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <AdminCard title="Send Announcement">
+          <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <input value={annTitle} onChange={e => setAnnTitle(e.target.value)} placeholder="Announcement title…" maxLength={200} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy }} />
+            <textarea value={annBody} onChange={e => setAnnBody(e.target.value)} placeholder="Write your message…" rows={4} maxLength={500} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6 }} />
+
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4 }}>Audience (leave blank for everyone)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
+              <select value={annUniversityId ?? ''} onChange={e => setAnnUniversityId(e.target.value ? Number(e.target.value) : null)} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy, background: '#fff' }}>
+                <option value="">All universities</option>
+                {annUniversities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+              <select value={annProgramId ?? ''} onChange={e => setAnnProgramId(e.target.value ? Number(e.target.value) : null)} disabled={!annUniversityId} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy, background: '#fff', opacity: annUniversityId ? 1 : 0.5 }}>
+                <option value="">All courses</option>
+                {annPrograms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <select value={annYear ?? ''} onChange={e => setAnnYear(e.target.value ? Number(e.target.value) : null)} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy, background: '#fff' }}>
+                <option value="">All years</option>
+                {[1,2,3,4].map(y => <option key={y} value={y}>Year {y}</option>)}
+              </select>
+              <select value={annSemester ?? ''} onChange={e => setAnnSemester(e.target.value ? Number(e.target.value) : null)} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy, background: '#fff' }}>
+                <option value="">All semesters</option>
+                {[1,2].map(s => <option key={s} value={s}>Semester {s}</option>)}
+              </select>
+            </div>
+
+            <div>
+              {annGroupId ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: `${N.gold}15`, border: `1px solid ${N.gold}40`, borderRadius: 10, padding: '8px 12px' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: N.navy, flex: 1 }}>Group: {annGroupName}</span>
+                  <button onClick={() => { setAnnGroupId(null); setAnnGroupName('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14 }}>×</button>
+                </div>
+              ) : (
+                <div style={{ position: 'relative' }}>
+                  <input value={annGroupSearch} onChange={e => setAnnGroupSearch(e.target.value)} placeholder="Or search a specific group…" style={{ width: '100%', border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+                  {annGroupResults.length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, marginTop: 4, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', zIndex: 10, maxHeight: 180, overflowY: 'auto' }}>
+                      {annGroupResults.map(g => (
+                        <button key={g.id} onClick={() => { setAnnGroupId(g.id); setAnnGroupName(g.name); setAnnGroupSearch(''); setAnnGroupResults([]) }} style={{ display: 'block', width: '100%', padding: '10px 12px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy }}>{g.name}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {annError && <div style={{ color: '#DC2626', fontSize: 12, fontWeight: 600 }}>{annError}</div>}
+            {annSent && <div style={{ color: '#16A34A', fontSize: 12, fontWeight: 600 }}>Announcement sent.</div>}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={sendAnnouncement} disabled={annSending || !annTitle.trim() || !annBody.trim()} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, border: 'none', borderRadius: 10, padding: '8px 20px', cursor: annSending ? 'wait' : 'pointer', fontWeight: 800, fontSize: 13, fontFamily: 'Plus Jakarta Sans', opacity: (!annTitle.trim() || !annBody.trim()) ? 0.5 : 1 }}>{annSending ? 'Sending…' : 'Send Now'}</button>
+            </div>
+          </div>
+          <div style={{ borderTop: '1px solid #F3F4F6' }}>
+            {announcementsLoading ? (
+              <div style={{ padding: '18px 20px', fontSize: 12, color: '#9CA3AF' }}>Loading…</div>
+            ) : announcements.length === 0 ? (
+              <div style={{ padding: '18px 20px', fontSize: 12, color: '#9CA3AF' }}>No announcements sent yet.</div>
+            ) : announcements.map((a, i) => (
+              <div key={a.id} style={{ padding: '14px 20px', borderBottom: i < announcements.length - 1 ? '1px solid #F3F4F6' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{a.title}</div>
+                  <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{a.body}</div>
+                  <div style={{ fontSize: 11, color: '#D1D5DB', marginTop: 4 }}>{a.created_at ? new Date(a.created_at).toLocaleString() : ''} · Reached {a.reach} students</div>
+                </div>
+                <AdminBadge text="Sent" color="green" />
+              </div>
+            ))}
+          </div>
+        </AdminCard>
+      </div>
+    )
+  }
+
+  // Light sections for community, universities, opportunities
   const lightSections: Record<string, { icon: string; title: string; desc: string; features: string[] }> = {
     universities: { icon: '🏛️', title: 'University Management', desc: 'Manage universities, faculties, departments, courses, and units.', features: ['Kenyatta University — 843 students','University of Nairobi — 621 students','Strathmore University — 412 students','JKUAT — 389 students','Mount Kenya University — 334 students'] },
     community: { icon: '💬', title: 'Community Moderation', desc: 'Manage forum posts, comments, reports, and community health.', features: ['1,247 total posts','127 comments today','7 pending reports','0 active suspensions'] },
     opportunities: { icon: '🚀', title: 'Opportunities Management', desc: 'Create, approve, feature, and archive opportunities for students.', features: ['48 active opportunities','12 pending approval','3 featured','5 expiring this week'] },
-    communications: { icon: '📢', title: 'Communications', desc: 'Send announcements, push notifications, and in-app messages.', features: ['3 announcements sent this month','2,847 total reach','Email open rate: 41%','Push delivery: 89%'] },
   }
   if (lightSections[section]) {
     const s = lightSections[section]
@@ -7159,30 +7309,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>This section is live and will be expanded with full CRUD interfaces in the next sprint.</div>
           </div>
         </div>
-        {section === 'communications' && (
-          <AdminCard title="Send Announcement">
-            <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <input placeholder="Announcement title…" style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy }} />
-              <textarea value={announcementDraft} onChange={e => setAnnouncementDraft(e.target.value)} placeholder="Write your message to all students…" rows={4} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6 }} />
-              <div style={{ display: 'flex', gap: 8 }}>
-                {['All Students', 'Premium Only', 'Free Plan'].map(t => <button key={t} style={{ padding: '7px 14px', background: '#F3F4F6', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans' }}>{t}</button>)}
-                <button style={{ marginLeft: 'auto', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, border: 'none', borderRadius: 10, padding: '8px 20px', cursor: 'pointer', fontWeight: 800, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Send Now</button>
-              </div>
-            </div>
-            <div style={{ borderTop: '1px solid #F3F4F6' }}>
-              {announcements.map((a, i) => (
-                <div key={i} style={{ padding: '14px 20px', borderBottom: i < announcements.length - 1 ? '1px solid #F3F4F6' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{a.title}</div>
-                    <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{a.body}</div>
-                    <div style={{ fontSize: 11, color: '#D1D5DB', marginTop: 4 }}>Sent {a.sent} · Reached {a.reach} students</div>
-                  </div>
-                  <AdminBadge text="Sent" color="green" />
-                </div>
-              ))}
-            </div>
-          </AdminCard>
-        )}
       </div>
     )
   }
