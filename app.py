@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 from sqlalchemy.exc import IntegrityError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -6022,9 +6022,21 @@ def list_notifications():
         page = 1
     per_page = 20
 
+    # Announcements less than 24h old are pinned to the top of the feed,
+    # newest-first among themselves, ahead of everything else - after 24h
+    # an announcement just falls back into normal chronological order.
+    # A plain boolean SQL expression (not case()) keeps this portable
+    # across SQLAlchemy versions, same reasoning as the case()-avoidance
+    # elsewhere in this file.
+    pin_cutoff = datetime.utcnow() - timedelta(hours=24)
+    is_pinned_announcement = and_(
+        Notification.type == "announcement",
+        Notification.created_at >= pin_cutoff,
+    )
+
     notifications = (
         Notification.query.filter_by(user_id=user_id)
-        .order_by(Notification.created_at.desc())
+        .order_by(is_pinned_announcement.desc(), Notification.created_at.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()
