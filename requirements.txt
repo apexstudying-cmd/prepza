@@ -26,3 +26,4 @@ sentry-sdk==2.64.0
 typing_extensions==4.16.0
 urllib3==2.7.0
 audioop-lts
+pywebpush

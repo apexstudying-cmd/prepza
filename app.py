@@ -10947,6 +10947,21 @@ class AuditLog(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class PushSubscription(db.Model):
+    """
+    A single browser/device Web Push subscription for a user. One user can
+    have multiple rows (multiple devices/browsers) - no uniqueness on
+    user_id alone, only on endpoint (a device re-subscribing gets a fresh
+    endpoint from the browser, so upsert is keyed on endpoint, not user_id).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    endpoint = db.Column(db.String(500), unique=True, nullable=False)
+    p256dh_key = db.Column(db.String(255), nullable=False)
+    auth_key = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 def log_admin_action(actor_id, action, target_type=None, target_id=None, details=None):
     """
     Stages one audit log row on the current session. Deliberately does
