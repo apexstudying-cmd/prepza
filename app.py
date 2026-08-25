@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 import ai_service
 import document_pipeline
 import podcast_audio
+from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
 
 load_dotenv()
@@ -6096,6 +6097,78 @@ def delete_notification(notification_id):
     return jsonify({"message": "Notification deleted"})
 
 
+@app.route("/push/vapid-public-key")
+def get_vapid_public_key():
+    """
+    Public, unauthenticated - the frontend needs this before a push
+    subscription can be created, same reasoning as /universities being
+    public before a session exists.
+    """
+    public_key = os.environ.get("VAPID_PUBLIC_KEY")
+    if not public_key:
+        return jsonify({"error": "Push notifications are not configured"}), 503
+    return jsonify({"public_key": public_key})
+
+
+@app.route("/push/subscribe", methods=["POST"])
+@require_csrf
+def push_subscribe():
+    """
+    Upserts a push subscription for the logged-in user, keyed on endpoint
+    (not user_id) - a device re-subscribing gets a fresh endpoint from the
+    browser, so the same physical device never creates duplicate rows, but
+    a user can have many rows across devices.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    endpoint = (data.get("endpoint") or "").strip()
+    keys = data.get("keys") or {}
+    p256dh_key = (keys.get("p256dh") or "").strip()
+    auth_key = (keys.get("auth") or "").strip()
+
+    if not endpoint or not p256dh_key or not auth_key:
+        return jsonify({"error": "endpoint and keys.p256dh and keys.auth are required"}), 400
+
+    existing = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if existing:
+        existing.user_id = user_id
+        existing.p256dh_key = p256dh_key
+        existing.auth_key = auth_key
+    else:
+        db.session.add(PushSubscription(
+            user_id=user_id, endpoint=endpoint,
+            p256dh_key=p256dh_key, auth_key=auth_key,
+        ))
+    db.session.commit()
+
+    return jsonify({"message": "Subscribed"}), 201
+
+
+@app.route("/push/subscribe", methods=["DELETE"])
+@require_csrf
+def push_unsubscribe():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    endpoint = (data.get("endpoint") or "").strip()
+    if not endpoint:
+        return jsonify({"error": "endpoint is required"}), 400
+
+    sub = PushSubscription.query.filter_by(endpoint=endpoint, user_id=user_id).first()
+    if sub:
+        db.session.delete(sub)
+        db.session.commit()
+
+    return jsonify({"message": "Unsubscribed"})
+
 # ---------- Content routes (student-facing) ----------
 
 @app.route("/units")
@@ -7964,6 +8037,12 @@ def admin_send_announcement():
         ))
 
     db.session.commit()
+
+    # Best-effort push fan-out to the same audience - never blocks or fails
+    # the announcement itself if push sending has issues (see
+    # send_push_notification()'s own internal error handling).
+    for recipient_id in recipient_ids:
+        send_push_notification(recipient_id, title, body)
 
     return jsonify({
         "id": announcement.id,
@@ -10961,6 +11040,41 @@ class PushSubscription(db.Model):
     auth_key = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
+def send_push_notification(user_id, title, body):
+    """
+    Sends a Web Push notification to every subscribed device for a user.
+    Best-effort: never raises - a push failure must not break the calling
+    route (e.g. an admin announcement send). Auto-prunes subscriptions the
+    push service reports as gone (404/410 - expired or unsubscribed).
+    """
+    vapid_private_key = os.environ.get("VAPID_PRIVATE_KEY")
+    vapid_claims_email = os.environ.get("VAPID_CLAIMS_EMAIL")
+    if not vapid_private_key or not vapid_claims_email:
+        print("WARNING: VAPID keys not configured - skipping push send")
+        return
+
+    subscriptions = PushSubscription.query.filter_by(user_id=user_id).all()
+    for sub in subscriptions:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh_key, "auth": sub.auth_key},
+                },
+                data=json.dumps({"title": title, "body": body}),
+                vapid_private_key=vapid_private_key,
+                vapid_claims={"sub": vapid_claims_email},
+            )
+        except WebPushException as e:
+            status_code = e.response.status_code if e.response is not None else None
+            if status_code in (404, 410):
+                db.session.delete(sub)
+                db.session.commit()
+            else:
+                print(f"WARNING: push send failed for user {user_id}: {e}")
+        except Exception as e:
+            print(f"WARNING: push send failed for user {user_id}: {e}")
 
 def log_admin_action(actor_id, action, target_type=None, target_id=None, details=None):
     """
