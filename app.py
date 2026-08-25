@@ -7908,9 +7908,46 @@ def admin_send_announcement():
     if not body or len(body) > ANNOUNCEMENT_BODY_MAX:
         return jsonify({"error": f"body is required and must be {ANNOUNCEMENT_BODY_MAX} characters or fewer"}), 400
 
-    recipient_ids = [
-        row.id for row in User.query.filter(User.is_suspended.is_(False)).with_entities(User.id).all()
-    ]
+    university_id = data.get("university_id")
+    program_id = data.get("program_id")
+    year = data.get("year")
+    semester = data.get("semester")
+    group_id = data.get("group_id")
+
+    audience_query = User.query.filter(User.is_suspended.is_(False))
+
+    if university_id is not None:
+        if not isinstance(university_id, int) or isinstance(university_id, bool):
+            return jsonify({"error": "university_id must be an integer"}), 400
+        audience_query = audience_query.filter(User.university_id == university_id)
+
+    if program_id is not None:
+        if not isinstance(program_id, int) or isinstance(program_id, bool):
+            return jsonify({"error": "program_id must be an integer"}), 400
+        audience_query = audience_query.filter(User.program_id == program_id)
+
+    if year is not None:
+        if not isinstance(year, int) or isinstance(year, bool):
+            return jsonify({"error": "year must be an integer"}), 400
+        audience_query = audience_query.filter(User.year == year)
+
+    if semester is not None:
+        if not isinstance(semester, int) or isinstance(semester, bool):
+            return jsonify({"error": "semester must be an integer"}), 400
+        audience_query = audience_query.filter(User.semester == semester)
+
+    if group_id is not None:
+        if not isinstance(group_id, int) or isinstance(group_id, bool):
+            return jsonify({"error": "group_id must be an integer"}), 400
+        if not db.session.get(Group, group_id):
+            return jsonify({"error": "Group not found"}), 404
+        member_ids = [
+            row[0] for row in
+            db.session.query(GroupMember.user_id).filter(GroupMember.group_id == group_id).all()
+        ]
+        audience_query = audience_query.filter(User.id.in_(member_ids))
+
+    recipient_ids = [row.id for row in audience_query.with_entities(User.id).all()]
 
     announcement = Announcement(title=title, body=body, sent_by=acting_admin_id, reach=len(recipient_ids))
     db.session.add(announcement)
