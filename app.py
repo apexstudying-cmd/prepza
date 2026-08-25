@@ -5353,6 +5353,11 @@ def create_group_post_comment(group_id, post_id):
             related_type="group_post",
             related_id=post.id,
         ))
+        send_push_notification(
+            post.user_id,
+            "New comment" if post.post_type == "post" else "New reply",
+            f"{_display_name(commenter)} commented on your {post.post_type} in {group.name if group else 'a group'}",
+        )
 
     db.session.commit()
 
@@ -5603,6 +5608,11 @@ def update_group_member_role(group_id, target_user_id):
             related_type="group",
             related_id=group_id,
         ))
+        send_push_notification(
+            target_user_id,
+            "You're now an admin",
+            f"You were made an admin of {group.name if group else 'a group'}",
+        )
 
     db.session.commit()
 
@@ -5883,6 +5893,11 @@ def follow_user(target_user_id):
             related_type="user",
             related_id=user_id,
         ))
+        send_push_notification(
+            target_user_id,
+            "New follower",
+            f"{_display_name(follower)} started following you",
+        )
         db.session.commit()
 
     return jsonify({
@@ -8353,6 +8368,7 @@ def admin_warn_from_content_report(report_id):
         related_type="user_warning",
         related_id=warning.id,
     ))
+    send_push_notification(warned_user_id, "You've received a warning", f"{message} {consequence}")
 
     report.status = "actioned"
     report.action_taken = "warned"
