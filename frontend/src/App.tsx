@@ -3100,6 +3100,7 @@ function ChatsScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Sc
 
 // ─── CHAT DETAIL ──────────────────────────────────────────────────────────────
 type ChatMessageData = { id: number; conversation_id: number; sender_id: number; body: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null }
+type ChatDetail = { id: number; is_group: boolean; name: string; created_by: number; created_by_name: string; member_count: number; participants: { user_id: number; display_name: string; role: string }[] }
 
 function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
   const [input, setInput] = useState('')
@@ -3112,6 +3113,7 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
   const [meId, setMeId] = useState<number | null>(null)
   const [headerName, setHeaderName] = useState('Conversation')
   const [headerIsGroup, setHeaderIsGroup] = useState(false)
+  const [senderNames, setSenderNames] = useState<Record<number, string>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -3124,10 +3126,13 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
     setLoading(true)
     setError(null)
 
-    api<{ chats: ChatSummary[] }>('/chats').then(data => {
+    api<ChatDetail>(`/chats/${conversationId}`).then(detail => {
       if (cancelled) return
-      const summary = data.chats.find(c => c.id === conversationId)
-      if (summary) { setHeaderName(summary.name); setHeaderIsGroup(summary.is_group) }
+      setHeaderName(detail.name)
+      setHeaderIsGroup(detail.is_group)
+      const names: Record<number, string> = {}
+      detail.participants.forEach(p => { names[p.user_id] = p.display_name })
+      setSenderNames(names)
     }).catch(() => {})
 
     const loadMessages = () => api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
@@ -3194,8 +3199,10 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
         ) : msgs.map(m => {
           const isMe = m.sender_id === meId
           const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+          const senderLabel = senderNames[m.sender_id] || 'Deleted user'
           return (
             <div key={m.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 2 }}>
+              {!isMe && headerIsGroup && <span style={{ fontSize: 11, color: N.gold, fontWeight: 700, marginLeft: 4 }}>{senderLabel}</span>}
               <div style={{ maxWidth: '76%', background: isMe ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: isMe ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '10px 13px', boxShadow: '0 2px 6px rgba(0,0,0,0.07)' }}>
                 <div style={{ fontSize: 13, color: m.is_deleted ? (isMe ? 'rgba(255,255,255,0.5)' : '#9CA3AF') : (isMe ? '#fff' : '#374151'), lineHeight: 1.6, fontStyle: m.is_deleted ? 'italic' : 'normal' }}>{m.is_deleted ? 'This message was deleted' : m.body}</div>
                 <div style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.4)' : '#9CA3AF', textAlign: 'right', marginTop: 3 }}>{time}</div>
@@ -5057,27 +5064,113 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
 }
 
 // ─── CHAT OPTIONS ─────────────────────────────────────────────────────────────
-function ChatOptionsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
   const [notif, setNotif] = useState(true)
+  const [detail, setDetail] = useState<ChatDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [csrfToken, setCsrfToken] = useState('')
+  const [showRename, setShowRename] = useState(false)
+  const [renameVal, setRenameVal] = useState('')
+  const [renaming, setRenaming] = useState(false)
+  const [renameError, setRenameError] = useState<string | null>(null)
+  const [leaving, setLeaving] = useState(false)
+  const [leaveError, setLeaveError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (conversationId == null) { setLoading(false); return }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    api<ChatDetail>(`/chats/${conversationId}`)
+      .then(d => { if (!cancelled) { setDetail(d); setRenameVal(d.name) } })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load chat info') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [conversationId])
+
+  const saveRename = async () => {
+    if (!renameVal.trim() || conversationId == null || renaming) return
+    setRenaming(true)
+    setRenameError(null)
+    try {
+      const res = await api<{ id: number; name: string }>(`/chats/${conversationId}`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ name: renameVal.trim() }),
+      })
+      setDetail(d => d ? { ...d, name: res.name } : d)
+      setShowRename(false)
+    } catch (e) {
+      setRenameError(e instanceof Error ? e.message : 'Could not rename group')
+    } finally {
+      setRenaming(false)
+    }
+  }
+
+  const leaveGroup = async () => {
+    if (conversationId == null || leaving) return
+    setLeaving(true)
+    setLeaveError(null)
+    try {
+      await api(`/chats/${conversationId}/leave`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      setScreen('chats')
+    } catch (e) {
+      setLeaveError(e instanceof Error ? e.message : 'Could not leave group')
+    } finally {
+      setLeaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => setScreen('chat-detail')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Chat Info</span>
+          </div>
+        </div>
+        <div style={{ padding: '40px 20px', textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Loading…</div>
+      </div>
+    )
+  }
+
+  const initials = (detail?.name || '??').slice(0, 2).toUpperCase()
+
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: N.bg, position: 'relative' }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <button onClick={() => setScreen('chat-detail')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Group Info</span>
+          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>{detail?.is_group ? 'Group Info' : 'Chat Info'}</span>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Avi name="∑" size={64} emoji="∑" />
-          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff', marginTop: 12 }}>ACT 101 Study Group</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>18 members · Created by Arnold Gichuru</div>
-        </div>
+        {error ? (
+          <div style={{ color: '#ffb4bd', fontSize: 13, textAlign: 'center' }}>{error}</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <Avi name={initials} size={64} />
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff', marginTop: 12 }}>{detail?.name}</div>
+            {detail?.is_group && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{detail.member_count} member{detail.member_count === 1 ? '' : 's'} · Created by {detail.created_by_name}</div>}
+          </div>
+        )}
       </div>
       <div style={{ padding: 16 }}>
-        {[{ label: 'Shared Media', icon: '🖼️', sub: '12 files shared' }, { label: 'Search Messages', icon: '🔍', sub: 'Search in this chat' }].map((item, i) => (
-          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
-            <span style={{ fontSize: 20 }}>{item.icon}</span>
-            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{item.label}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{item.sub}</div></div>
+        {detail?.is_group && (
+          <div onClick={() => { setRenameError(null); setShowRename(true) }} style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+            <span style={{ fontSize: 20 }}>✏️</span>
+            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Rename Group</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{detail.name}</div></div>
             {Ic.chevR()}
+          </div>
+        )}
+        {[{ label: 'Shared Media', icon: '🖼️' }, { label: 'Search Messages', icon: '🔍' }].map((item, i) => (
+          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', opacity: 0.55 }}>
+            <span style={{ fontSize: 20 }}>{item.icon}</span>
+            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{item.label}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>Not available yet</div></div>
           </div>
         ))}
         <div style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
@@ -5085,13 +5178,30 @@ function ChatOptionsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Notifications</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{notif ? 'On' : 'Muted'}</div></div>
           <div onClick={() => setNotif(v => !v)}>{Ic.toggle(notif)}</div>
         </div>
-        <div style={{ background: '#fff', borderRadius: 14, marginTop: 12, overflow: 'hidden' }}>
-          <button onClick={() => setScreen('chats')} style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-            <span style={{ fontSize: 20 }}>🚪</span>
-            <span style={{ fontWeight: 700, fontSize: 13, color: '#C94C4C' }}>Leave Group</span>
-          </button>
-        </div>
+        {detail?.is_group && (
+          <div style={{ background: '#fff', borderRadius: 14, marginTop: 12, overflow: 'hidden' }}>
+            {leaveError && <div style={{ padding: '10px 16px', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{leaveError}</div>}
+            <button onClick={leaveGroup} disabled={leaving} style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', padding: '14px 16px', background: 'none', border: 'none', cursor: leaving ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: leaving ? 0.6 : 1 }}>
+              <span style={{ fontSize: 20 }}>🚪</span>
+              <span style={{ fontWeight: 700, fontSize: 13, color: '#C94C4C' }}>{leaving ? 'Leaving…' : 'Leave Group'}</span>
+            </button>
+          </div>
+        )}
       </div>
+
+      {showRename && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 16 }}>Rename Group</div>
+            <input value={renameVal} onChange={e => setRenameVal(e.target.value)} maxLength={100} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+            {renameError && <div style={{ color: '#C94C4C', fontSize: 12, marginTop: 8 }}>{renameError}</div>}
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button onClick={() => setShowRename(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+              <button onClick={saveRename} disabled={renaming} style={{ flex: 1, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '12px 0', cursor: renaming ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: N.navy, opacity: renaming ? 0.7 : 1 }}>{renaming ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -8426,7 +8536,7 @@ export default function App() {
       case 'library':           return <LibraryScreen setScreen={setScreen} />
       case 'mind-map':          return <MindMapScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'new-chat':          return <NewChatScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
-      case 'chat-options':      return <ChatOptionsScreen setScreen={setScreen} />
+      case 'chat-options':      return <ChatOptionsScreen setScreen={setScreen} conversationId={activeConversationId} />
       case 'edit-profile':      return <EditProfileScreen setScreen={setScreen} />
       case 'subscription':      return <SubscriptionScreen setScreen={setScreen} />
       case 'payment':           return <PaymentScreen setScreen={setScreen} />
