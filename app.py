@@ -7884,6 +7884,26 @@ def send_message(conversation_id):
         conversation.updated_at = datetime.utcnow()
 
     db.session.commit()
+
+    # Chat push follows a DM pattern (like Instagram) rather than the
+    # in-app Notification feed - push only, no Notification row, and
+    # suppressed for any recipient whose last_read_at is very recent
+    # (a cheap proxy for "still looking at this conversation right now",
+    # since this app is polling-based with no real presence/websockets).
+    sender = db.session.get(User, user_id)
+    sender_name = _display_name(sender) if sender else "Someone"
+    push_preview = body if len(body) <= 120 else body[:117] + "..."
+    recently_active_cutoff = datetime.utcnow() - timedelta(seconds=15)
+    other_participants = ConversationParticipant.query.filter(
+        ConversationParticipant.conversation_id == conversation_id,
+        ConversationParticipant.user_id != user_id,
+        ConversationParticipant.left_at.is_(None),
+    ).all()
+    for participant in other_participants:
+        if participant.last_read_at and participant.last_read_at >= recently_active_cutoff:
+            continue
+        send_push_notification(participant.user_id, sender_name, push_preview)
+
     return jsonify(_serialize_message(message)), 201
 
 
