@@ -963,6 +963,11 @@ class ConversationParticipant(db.Model):
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_read_at = db.Column(db.DateTime, nullable=True)
     left_at = db.Column(db.DateTime, nullable=True)
+    muted = db.Column(db.Boolean, nullable=False, default=False)
+    # Per-participant notification mute for this conversation - local to
+    # each participant row, so muting a group chat only silences it for
+    # you, not for other members. Purely a notification-suppression flag;
+    # does not affect message visibility, read receipts, or unread counts.
     __table_args__ = (
         db.UniqueConstraint("conversation_id", "user_id", name="uq_participant_conversation_user"),
     )
@@ -7677,6 +7682,7 @@ def _serialize_conversation_detail(conversation, viewer_id):
             "role": p.role,
         })
     creator = db.session.get(User, conversation.created_by)
+    viewer_participant = next((p for p in participant_rows if p.user_id == viewer_id), None)
     return {
         "id": conversation.id,
         "is_group": conversation.is_group,
@@ -7685,6 +7691,7 @@ def _serialize_conversation_detail(conversation, viewer_id):
         "created_by_name": _display_name(creator) if creator else "Deleted user",
         "member_count": len(participant_rows),
         "participants": participants,
+        "viewer_muted": bool(viewer_participant.muted) if viewer_participant else False,
     }
 
 
@@ -7921,6 +7928,36 @@ def mark_chat_read(conversation_id):
     participant.last_read_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"message": "Marked as read"})
+
+
+@app.route("/chats/<int:conversation_id>/mute", methods=["POST"])
+@require_csrf
+def toggle_chat_mute(conversation_id):
+    """
+    Sets (or toggles) the CALLER's own mute flag for this conversation -
+    purely a per-participant notification preference, not a moderation
+    action, so no admin/role check beyond being an active participant.
+    Body is optional: {"muted": true|false} sets it explicitly; an empty
+    body toggles the current value.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    participant = _active_participant(conversation_id, user_id)
+    if not participant:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    if "muted" in data:
+        if not isinstance(data["muted"], bool):
+            return jsonify({"error": "muted must be true or false"}), 400
+        participant.muted = data["muted"]
+    else:
+        participant.muted = not participant.muted
+
+    db.session.commit()
+    return jsonify({"muted": participant.muted})
 
 
 @app.route("/chats/<int:conversation_id>", methods=["PATCH"])
