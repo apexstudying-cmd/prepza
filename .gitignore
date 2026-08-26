@@ -29,3 +29,4 @@ remove_*.py
 /resolve_forum_conflict.py
 /mark_document_ready.py
 /diagnose_chat_patch_anchors.py
+*.patch
