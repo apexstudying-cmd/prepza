@@ -3100,7 +3100,7 @@ function ChatsScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Sc
 
 // ─── CHAT DETAIL ──────────────────────────────────────────────────────────────
 type ChatMessageData = { id: number; conversation_id: number; sender_id: number; body: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null }
-type ChatDetail = { id: number; is_group: boolean; name: string; created_by: number; created_by_name: string; member_count: number; participants: { user_id: number; display_name: string; role: string }[] }
+type ChatDetail = { id: number; is_group: boolean; name: string; created_by: number; created_by_name: string; member_count: number; participants: { user_id: number; display_name: string; role: string }[]; viewer_muted: boolean }
 
 function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
   const [input, setInput] = useState('')
@@ -5065,7 +5065,6 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
 
 // ─── CHAT OPTIONS ─────────────────────────────────────────────────────────────
 function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
-  const [notif, setNotif] = useState(true)
   const [detail, setDetail] = useState<ChatDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -5076,6 +5075,8 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
   const [renameError, setRenameError] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [leaveError, setLeaveError] = useState<string | null>(null)
+  const [mutingBusy, setMutingBusy] = useState(false)
+  const [muteError, setMuteError] = useState<string | null>(null)
 
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
@@ -5126,6 +5127,25 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
     }
   }
 
+  const toggleMute = async () => {
+    if (conversationId == null || detail == null || mutingBusy) return
+    setMutingBusy(true)
+    setMuteError(null)
+    const next = !detail.viewer_muted
+    try {
+      const res = await api<{ muted: boolean }>(`/chats/${conversationId}/mute`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ muted: next }),
+      })
+      setDetail(d => d ? { ...d, viewer_muted: res.muted } : d)
+    } catch (e) {
+      setMuteError(e instanceof Error ? e.message : 'Could not update notifications')
+    } finally {
+      setMutingBusy(false)
+    }
+  }
+
   if (loading) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
@@ -5173,11 +5193,29 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
             <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{item.label}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>Not available yet</div></div>
           </div>
         ))}
-        <div style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+        <div style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', opacity: mutingBusy ? 0.6 : 1 }}>
           <span style={{ fontSize: 20 }}>🔔</span>
-          <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Notifications</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{notif ? 'On' : 'Muted'}</div></div>
-          <div onClick={() => setNotif(v => !v)}>{Ic.toggle(notif)}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Notifications</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF' }}>{detail && !detail.viewer_muted ? 'On' : 'Muted'}</div>
+            {muteError && <div style={{ fontSize: 11, color: '#C94C4C', marginTop: 2 }}>{muteError}</div>}
+          </div>
+          <div onClick={toggleMute}>{Ic.toggle(!!detail && !detail.viewer_muted)}</div>
         </div>
+        {detail?.is_group && detail.participants.length > 0 && (
+          <div style={{ background: '#fff', borderRadius: 14, marginBottom: 8, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ padding: '12px 16px 8px', fontWeight: 700, fontSize: 12, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4 }}>Members ({detail.participants.length})</div>
+            {detail.participants.map(p => (
+              <div key={p.user_id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 16px', borderTop: '1px solid rgba(0,0,0,0.04)' }}>
+                <Avi name={(p.display_name || '??').slice(0, 2).toUpperCase()} size={34} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }} className="line-clamp-1">{p.display_name}{p.user_id === detail.created_by ? ' (Creator)' : ''}</div>
+                </div>
+                {p.role === 'admin' && <Pill text="Admin" />}
+              </div>
+            ))}
+          </div>
+        )}
         {detail?.is_group && (
           <div style={{ background: '#fff', borderRadius: 14, marginTop: 12, overflow: 'hidden' }}>
             {leaveError && <div style={{ padding: '10px 16px', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{leaveError}</div>}
