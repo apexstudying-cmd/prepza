@@ -7617,6 +7617,7 @@ def admin_sync_ambassador_payout_status(payout_id):
 CHAT_MESSAGE_MAX = 3000
 CHAT_GROUP_NAME_MAX = 100
 CHAT_MESSAGE_PAGE_SIZE = 50
+CHAT_MESSAGE_SEARCH_LIMIT = 50
 
 
 def _active_participant(conversation_id, user_id):
@@ -7860,6 +7861,40 @@ def list_messages(conversation_id):
         .all()
     )
     messages.reverse()  # oldest-first for the client's scroll-down feed
+
+    return jsonify({"messages": [_serialize_message(m) for m in messages]})
+
+
+@app.route("/chats/<int:conversation_id>/messages/search")
+def search_messages(conversation_id):
+    """
+    Substring search of this conversation's own message history. Scoped
+    to one conversation only (no cross-chat search) - same membership
+    gate as every other /chats/<id> route. Returns newest-first, capped
+    at CHAT_MESSAGE_SEARCH_LIMIT - this is a search result, not a feed,
+    so no before_id pagination like list_messages() has.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Conversation not found"}), 404
+
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"messages": []})
+
+    messages = (
+        Message.query.filter(
+            Message.conversation_id == conversation_id,
+            Message.is_deleted.is_(False),
+            Message.body.ilike(f"%{q}%"),
+        )
+        .order_by(Message.created_at.desc())
+        .limit(CHAT_MESSAGE_SEARCH_LIMIT)
+        .all()
+    )
 
     return jsonify({"messages": [_serialize_message(m) for m in messages]})
 
