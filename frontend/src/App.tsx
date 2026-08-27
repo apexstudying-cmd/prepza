@@ -210,6 +210,46 @@ const opportunities = [
   { id: 5, type: 'Event', title: 'Kenya Tech Summit 2025', org: 'ICT Authority Kenya', location: 'KICC, Nairobi', deadline: 'Aug 20, 2025', reward: 'Free (Student Pass)', tag: 'Upcoming', color: '#C94C4C', desc: 'Kenya\'s largest annual technology conference bringing together startups, corporates, government, and students. Features workshops, pitching competitions, and networking events.', reqs: ['Valid student ID', 'Free registration required', 'Open to all students'] },
 ]
 
+type OpportunityOrg = { id: number; name: string; logo_url: string | null; website: string | null }
+type OpportunityPublic = {
+  id: number
+  title: string
+  description: string
+  opportunity_type: string
+  location: string | null
+  is_remote: boolean
+  application_url: string | null
+  application_instructions: string | null
+  application_deadline: string | null
+  expiry_date: string | null
+  published_at: string | null
+  view_count: number
+  organisation: OpportunityOrg | null
+  promotion_type: string | null
+  saved: boolean
+}
+
+const OPP_TYPE_META: Record<string, { icon: string; color: string; label: string }> = {
+  job: { icon: '📋', color: '#9B59B6', label: 'Job' },
+  internship: { icon: '💼', color: '#4CC97B', label: 'Internship' },
+  scholarship: { icon: '🎓', color: '#C9A84C', label: 'Scholarship' },
+  competition: { icon: '🏆', color: '#4C7BC9', label: 'Competition' },
+  volunteering: { icon: '🤲', color: '#4CC97B', label: 'Volunteering' },
+  event: { icon: '🎪', color: '#C94C4C', label: 'Event' },
+  other: { icon: '🔖', color: '#6B7280', label: 'Other' },
+}
+function oppTypeMeta(t: string) { return OPP_TYPE_META[t] || OPP_TYPE_META.other }
+function fmtDeadline(iso: string | null) {
+  if (!iso) return null
+  return new Date(iso).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+const OPP_FILTERS = ['All','Internships','Scholarships','Competitions','Jobs','Events','Saved']
+const OPP_FILTER_TYPE_MAP: Record<string, string | undefined> = {
+  All: undefined, Internships: 'internship', Scholarships: 'scholarship',
+  Competitions: 'competition', Jobs: 'job', Events: 'event',
+}
+
 const chatList = [
   { id: 1, name: 'ACT 101 Study Group', avatar: '∑', last: 'Wanjiru: Anyone doing Chapter 3 tonight?', time: '9:41', unread: 5, isGroup: true },
   { id: 2, name: 'Wanjiru Kamau', avatar: 'WK', last: 'Thanks for the flashcards! Really helped 🙏', time: '9:20', unread: 0, isGroup: false },
@@ -3244,12 +3284,64 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
 }
 
 // ─── OPPORTUNITIES ────────────────────────────────────────────────────────────
-function OpportunitiesScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen: (s: Screen) => void; setActiveOpportunityId: (id: number | null) => void }) {
   const [filter, setFilter] = useState('All')
-  const loading = useLoading(1000)
-  const filters = ['All','Internships','Scholarships','Competitions','Jobs','Events']
-  const displayed = filter === 'All' ? opportunities : opportunities.filter(o => o.type + 's' === filter || o.type === filter.slice(0,-1) || (filter === 'Internships' && o.type === 'Internship') || (filter === 'Scholarships' && o.type === 'Scholarship') || (filter === 'Competitions' && o.type === 'Competition') || (filter === 'Jobs' && o.type === 'Job') || (filter === 'Events' && o.type === 'Event'))
-  if (loading) return <SkeletonOpportunities />
+  const [query, setQuery] = useState('')
+  const [opps, setOpps] = useState<OpportunityPublic[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true); setError('')
+    const load = async () => {
+      try {
+        if (filter === 'Saved') {
+          const res = await api<{ saved: OpportunityPublic[] }>('/opportunities/saved')
+          if (!cancelled) setOpps(res.saved)
+        } else {
+          const params = new URLSearchParams()
+          if (query.trim()) params.set('q', query.trim())
+          const type = OPP_FILTER_TYPE_MAP[filter]
+          if (type) params.set('opportunity_type', type)
+          const res = await api<{ page: number; opportunities: OpportunityPublic[] }>(`/opportunities?${params.toString()}`)
+          if (!cancelled) setOpps(res.opportunities)
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not load opportunities.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    const t = setTimeout(load, 300)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [filter, query])
+
+  const toggleSave = async (o: OpportunityPublic) => {
+    if (togglingId != null) return
+    setTogglingId(o.id)
+    const wasSaved = o.saved
+    setOpps(list => list.map(x => x.id === o.id ? { ...x, saved: !wasSaved } : x))
+    try {
+      if (wasSaved) {
+        await api(`/opportunities/${o.id}/save`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
+        if (filter === 'Saved') setOpps(list => list.filter(x => x.id !== o.id))
+      } else {
+        await api(`/opportunities/${o.id}/save`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      }
+    } catch {
+      setOpps(list => list.map(x => x.id === o.id ? { ...x, saved: wasSaved } : x))
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const openDetail = (id: number) => { setActiveOpportunityId(id); setScreen('opportunity-detail') }
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 14px' }}>
@@ -3261,74 +3353,144 @@ function OpportunitiesScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
           </div>
           <button onClick={() => setScreen('share-opp-form')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 10, padding: '7px 12px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12, color: N.navy }}>+ Share</button>
         </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(255,255,255,0.09)', borderRadius: 13, padding: '10px 14px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: 12 }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)' }}>{Ic.search()}</div>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search opportunities..." style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }} />
+        </div>
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }} className="scrollbar-hide">
-          {filters.map(f => (
+          {OPP_FILTERS.map(f => (
             <button key={f} onClick={() => setFilter(f)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, background: filter === f ? N.gold : 'rgba(255,255,255,0.1)', color: filter === f ? N.navy : 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{f}</button>
           ))}
         </div>
       </div>
       <div style={{ padding: 16 }}>
-        {displayed.map(o => (
-          <div key={o.id} onClick={() => setScreen('opportunity-detail')} style={{ background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.08)', marginBottom: 14, cursor: 'pointer' }}>
-            <div style={{ height: 5, background: `linear-gradient(90deg,${o.color},${o.color}66)` }} />
-            <div style={{ padding: 16 }}>
-              <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-                <div style={{ width: 48, height: 48, background: o.color + '18', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
-                  {o.type === 'Internship' ? '💼' : o.type === 'Scholarship' ? '🎓' : o.type === 'Competition' ? '🏆' : o.type === 'Job' ? '📋' : '🎪'}
+        {loading ? (
+          [1,2,3].map(i => <SkOppCard key={i} />)
+        ) : error ? (
+          <ErrorState onRetry={() => setFilter(f => f)} />
+        ) : opps.length === 0 ? (
+          <EmptyState icon="🚀" title={filter === 'Saved' ? 'No saved opportunities' : 'No opportunities found'} sub={filter === 'Saved' ? 'Save opportunities to find them here later.' : 'Try a different search or filter.'} />
+        ) : opps.map(o => {
+          const meta = oppTypeMeta(o.opportunity_type)
+          const deadline = fmtDeadline(o.application_deadline)
+          return (
+            <div key={o.id} onClick={() => openDetail(o.id)} style={{ background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.08)', marginBottom: 14, cursor: 'pointer' }}>
+              <div style={{ height: 5, background: `linear-gradient(90deg,${meta.color},${meta.color}66)` }} />
+              <div style={{ padding: 16 }}>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                  <div style={{ width: 48, height: 48, background: meta.color + '18', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{meta.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: N.navy }} className="line-clamp-1">{o.title}</div>
+                    <div style={{ fontSize: 12, color: '#6B7280' }} className="line-clamp-1">{o.organisation?.name || 'Unknown organisation'}</div>
+                  </div>
+                  <Pill text={o.promotion_type === 'sponsored' ? 'Sponsored' : o.promotion_type === 'featured' ? 'Featured' : meta.label} color={o.promotion_type ? N.gold : meta.color} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: N.navy }}>{o.title}</div>
-                  <div style={{ fontSize: 12, color: '#6B7280' }}>{o.org}</div>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+                  {o.location && <span style={{ fontSize: 11, color: '#6B7280' }}>📍 {o.location}{o.is_remote ? ' · Remote' : ''}</span>}
+                  {!o.location && o.is_remote && <span style={{ fontSize: 11, color: '#6B7280' }}>🌐 Remote</span>}
+                  {deadline && <span style={{ fontSize: 11, color: '#6B7280' }}>⏰ {deadline}</span>}
+                  <span style={{ fontSize: 11, color: '#9CA3AF' }}>👁 {o.view_count}</span>
                 </div>
-                <Pill text={o.tag} color={o.color} />
-              </div>
-              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
-                <span style={{ fontSize: 11, color: '#6B7280' }}>📍 {o.location}</span>
-                <span style={{ fontSize: 11, color: '#6B7280' }}>⏰ {o.deadline}</span>
-                <span style={{ fontSize: 11, color: o.color, fontWeight: 700 }}>💰 {o.reward}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={e => { e.stopPropagation(); setScreen('opportunity-detail') }} style={{ flex: 1, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, color: N.gold, fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 12, padding: '11px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View Details →</button>
-                <button onClick={e => e.stopPropagation()} style={{ width: 44, height: 44, background: '#F8F9FC', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#6B7280' }}>{Ic.bookmark('w-4 h-4')}</div></button>
-                <button onClick={e => { e.stopPropagation(); setScreen('share-sheet') }} style={{ width: 44, height: 44, background: '#F8F9FC', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#6B7280' }}>{Ic.share('w-4 h-4')}</div></button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={e => { e.stopPropagation(); openDetail(o.id) }} style={{ flex: 1, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, color: N.gold, fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 12, padding: '11px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View Details →</button>
+                  <button onClick={e => { e.stopPropagation(); toggleSave(o) }} disabled={togglingId === o.id} style={{ width: 44, height: 44, background: o.saved ? `${N.gold}20` : '#F8F9FC', border: `1px solid ${o.saved ? N.gold + '55' : 'rgba(0,0,0,0.06)'}`, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: o.saved ? N.gold : '#6B7280' }}>{Ic.bookmark('w-4 h-4')}</div></button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
 }
 
 // ─── OPPORTUNITY DETAIL ───────────────────────────────────────────────────────
-function OppDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const [saved, setSaved] = useState(false)
+function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) => void; opportunityId: number | null }) {
+  const [opp, setOpp] = useState<OpportunityPublic | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
+  const [saving, setSaving] = useState(false)
   const [showApply, setShowApply] = useState(false)
-  const loading = useLoading(800)
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    if (opportunityId == null) { setLoading(false); return }
+    setLoading(true); setError('')
+    api<OpportunityPublic>(`/opportunities/${opportunityId}`)
+      .then(setOpp)
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load this opportunity.'))
+      .finally(() => setLoading(false))
+  }, [opportunityId])
+
+  const toggleSave = async () => {
+    if (!opp || saving) return
+    setSaving(true)
+    const wasSaved = opp.saved
+    setOpp({ ...opp, saved: !wasSaved })
+    try {
+      await api(`/opportunities/${opp.id}/save`, { method: wasSaved ? 'DELETE' : 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+    } catch {
+      setOpp(o => o ? { ...o, saved: wasSaved } : o)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (opportunityId == null) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+          <TopBar title="Opportunity Details" onBack={() => setScreen('opportunities')} />
+        </div>
+        <EmptyState icon="🚀" title="No opportunity selected" sub="Go back and pick an opportunity to view its details." action="Back to Opportunities" onAction={() => setScreen('opportunities')} />
+      </div>
+    )
+  }
+
   if (loading) return <SkeletonOppDetail />
-  const o = opportunities[0]
+
+  if (error || !opp) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+          <TopBar title="Opportunity Details" onBack={() => setScreen('opportunities')} />
+        </div>
+        <ErrorState />
+      </div>
+    )
+  }
+
+  const meta = oppTypeMeta(opp.opportunity_type)
+  const deadline = fmtDeadline(opp.application_deadline)
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <button onClick={() => setScreen('opportunities')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Opportunity Details</span>
-          <button onClick={() => setSaved(v => !v)} style={{ width: 34, height: 34, background: saved ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ color: saved ? N.gold : '#fff' }}>{Ic.bookmark()}</div>
+          <button onClick={toggleSave} disabled={saving} style={{ width: 34, height: 34, background: opp.saved ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: opp.saved ? N.gold : '#fff' }}>{Ic.bookmark()}</div>
           </button>
         </div>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-          <div style={{ width: 60, height: 60, background: `${o.color}25`, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>💼</div>
+          <div style={{ width: 60, height: 60, background: `${meta.color}25`, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>{meta.icon}</div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>{o.title}</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{o.org}</div>
-            <Pill text={o.tag} color={o.color} />
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>{opp.title}</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{opp.organisation?.name || 'Unknown organisation'}</div>
+            {opp.promotion_type && <Pill text={opp.promotion_type === 'sponsored' ? 'Sponsored' : 'Featured'} color={N.gold} />}
           </div>
         </div>
       </div>
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {[['📍', o.location], ['⏰', `Deadline: ${o.deadline}`], ['💰', o.reward]].map(([icon, val]) => (
+          {[
+            opp.location ? ['📍', opp.location + (opp.is_remote ? ' · Remote' : '')] : (opp.is_remote ? ['🌐', 'Remote'] : null),
+            deadline ? ['⏰', `Deadline: ${deadline}`] : null,
+            ['👁', `${opp.view_count} views`],
+          ].filter((x): x is [string, string] => x !== null).map(([icon, val]) => (
             <div key={val} style={{ background: '#fff', borderRadius: 12, padding: '8px 12px', display: 'flex', gap: 6, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
               <span style={{ fontSize: 14 }}>{icon}</span>
               <span style={{ fontSize: 12, fontWeight: 600, color: N.navy }}>{val}</span>
@@ -3337,33 +3499,34 @@ function OppDetailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
         <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>About this Opportunity</div>
-          <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8 }}>{o.desc}</div>
+          <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{opp.description}</div>
         </div>
-        <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>Requirements</div>
-          {o.reqs.map((r, i) => (
-            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
-              <div style={{ width: 20, height: 20, background: `${N.gold}22`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}><div style={{ color: N.gold }}>{Ic.check('w-3 h-3')}</div></div>
-              <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.5 }}>{r}</span>
-            </div>
-          ))}
-        </div>
-        <button onClick={() => setShowApply(true)} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '15px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 6px 20px rgba(201,168,76,0.35)` }}>Apply Now →</button>
+        {opp.application_instructions && (
+          <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>How to Apply</div>
+            <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{opp.application_instructions}</div>
+          </div>
+        )}
+        {opp.application_url ? (
+          <button onClick={() => setShowApply(true)} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '15px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 6px 20px rgba(201,168,76,0.35)` }}>Apply Now →</button>
+        ) : (
+          <div style={{ background: '#F3F4F6', borderRadius: 16, padding: '14px 16px', textAlign: 'center', fontSize: 12, color: '#9CA3AF', fontWeight: 600 }}>No application link provided — check the description above for how to apply.</div>
+        )}
         <button onClick={() => setScreen('share-sheet')} style={{ background: '#fff', color: N.navy, fontWeight: 700, fontSize: 14, border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <div style={{ color: '#6B7280' }}>{Ic.share('w-4 h-4')}</div> Share Opportunity
         </button>
       </div>
 
-      {showApply && (
+      {showApply && opp.application_url && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', zIndex: 50 }}>
           <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '28px 24px 36px', width: '100%' }}>
             <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
             <div style={{ fontSize: 24, textAlign: 'center', marginBottom: 12 }}>🌐</div>
             <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 10 }}>You're leaving Prepza</div>
             <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 1.65, marginBottom: 24 }}>
-              You will be taken to <strong>{o.org}'s</strong> website to complete your application. Prepza is not responsible for third-party application processes.
+              You will be taken to <strong>{opp.organisation?.name || 'the organisation'}'s</strong> website to complete your application. Prepza is not responsible for third-party application processes.
             </div>
-            <button style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginBottom: 10 }}>Continue to Website →</button>
+            <a href={opp.application_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', width: '100%', boxSizing: 'border-box', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginBottom: 10 }}>Continue to Website →</a>
             <button onClick={() => setShowApply(false)} style={{ width: '100%', background: '#F3F4F6', color: '#374151', fontWeight: 700, fontSize: 14, border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel</button>
           </div>
         </div>
@@ -8611,6 +8774,7 @@ export default function App() {
   // isn't stuck showing "Student" when we already know the real name.
   const [activeProfileUserId, setActiveProfileUserId] = useState<number | null>(null)
   const [activeProfileName, setActiveProfileName] = useState<string | null>(null)
+  const [activeOpportunityId, setActiveOpportunityId] = useState<number | null>(null)
 
   // Handles the round-trip back from /auth/google/callback, which appends
   // ?complete_profile=1 (new Google account, needs university/course/year/
@@ -8695,8 +8859,8 @@ export default function App() {
       case 'comments':          return <CommentsScreen setScreen={setScreen} postId={activeForumPostId} />
       case 'chats':             return <ChatsScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
       case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} />
-      case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} />
-      case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} />
+      case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
+      case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} opportunityId={activeOpportunityId} />
       case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
       case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} />
       case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} />
