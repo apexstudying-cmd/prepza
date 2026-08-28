@@ -5751,6 +5751,88 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
           </div>
         </div>
       )}
+      {showSearch && (
+        <div style={{ position: 'absolute', inset: 0, background: N.bg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
+          <div style={{ background: N.navy, padding: '0 18px 14px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]) }} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+              <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Search Messages</span>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(255,255,255,0.09)', borderRadius: 12, padding: '9px 12px' }}>
+              <div style={{ color: 'rgba(255,255,255,0.4)' }}>{Ic.search('w-4 h-4')}</div>
+              <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search this conversation…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }} />
+            </div>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }} className="scrollbar-hide">
+            {searchError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{searchError}</div>}
+            {!searchQuery.trim() ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+                <div style={{ fontSize: 44, marginBottom: 12 }}>🔍</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>Search this chat</div>
+                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Start typing to find a message</div>
+              </div>
+            ) : searching ? (
+              <div style={{ padding: '20px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Searching…</div>
+            ) : searchResults.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+                <div style={{ fontSize: 44, marginBottom: 12 }}>🙁</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No messages found</div>
+              </div>
+            ) : searchResults.map(m => {
+              const sender = detail?.participants.find(p => p.user_id === m.sender_id)
+              const senderName = sender?.display_name || 'Deleted user'
+              return (
+                <div key={m.id} style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700, fontSize: 12, color: N.gold }}>{senderName}</span>
+                    <span style={{ fontSize: 11, color: '#9CA3AF' }}>{m.created_at ? new Date(m.created_at).toLocaleString() : ''}</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.55 }}>{m.body}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+      {showMedia && (
+        <div style={{ position: 'absolute', inset: 0, background: N.bg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
+          <div style={{ background: N.navy, padding: '0 18px 14px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={() => setShowMedia(false)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+              <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Shared Media</span>
+            </div>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }} className="scrollbar-hide">
+            {mediaError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{mediaError}</div>}
+            {mediaLoading ? (
+              <div style={{ padding: '20px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Loading…</div>
+            ) : mediaItems.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+                <div style={{ fontSize: 44, marginBottom: 12 }}>🖼️</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>Nothing shared yet</div>
+                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Files and images sent in this chat will show up here</div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                {mediaItems.map(item => (
+                  <a key={item.id} href={item.view_url || undefined} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                    {IMAGE_FILE_TYPES.includes(item.file_type) ? (
+                      <div style={{ aspectRatio: '1', borderRadius: 10, overflow: 'hidden', background: '#F3F4F6' }}>
+                        <img src={item.view_url || undefined} alt={item.original_filename} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      </div>
+                    ) : (
+                      <div style={{ aspectRatio: '1', borderRadius: 10, background: '#F3F4F6', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: 8 }}>
+                        <div style={{ fontSize: 22 }}>📎</div>
+                        <div style={{ fontSize: 9, color: '#6B7280', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{item.original_filename}</div>
+                      </div>
+                    )}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
