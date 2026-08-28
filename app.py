@@ -6045,6 +6045,45 @@ def follow_summary(target_user_id):
     })
 
 
+@app.route("/users/<int:target_user_id>/public-profile")
+def get_public_profile(target_user_id):
+    """
+    Lightweight public profile fields for VIEWING another student -
+    distinct from /me (your own full profile, includes email) and from
+    follow_summary above (just counts/relationship flags). Deliberately
+    excludes email and any other contact/sensitive fields - only what a
+    student's profile card needs to render for someone who isn't them.
+    Suspended users 404 the same way follow_summary treats a missing
+    user, so this can't be used to confirm a suspended account exists.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    target = db.session.get(User, target_user_id)
+    if not target or target.is_suspended:
+        return jsonify({"error": "User not found"}), 404
+
+    university = db.session.get(University, target.university_id) if target.university_id else None
+    program = db.session.get(Program, target.program_id) if target.program_id else None
+
+    documents_count = Document.query.filter_by(user_id=target_user_id, is_removed=False).count()
+    xp_total = db.session.query(func.coalesce(func.sum(XpEvent.xp_amount), 0)).filter(
+        XpEvent.user_id == target_user_id
+    ).scalar()
+
+    return jsonify({
+        "user_id": target.id,
+        "display_name": _display_name(target),
+        "bio": target.bio,
+        "year": target.year,
+        "university_name": university.name if university else None,
+        "program_name": program.name if program else None,
+        "documents_count": documents_count,
+        "xp_total": int(xp_total),
+    })
+
+
 # ---------- Notifications ----------
 
 def _serialize_notification(notification):
