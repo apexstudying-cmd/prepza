@@ -977,10 +977,40 @@ class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id", ondelete="CASCADE"), nullable=False)
     sender_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    body = db.Column(db.String(3000), nullable=False)
+    body = db.Column(db.String(3000), nullable=True)
+    # Nullable so an attachment-only message (no caption) is valid - see
+    # send_message()'s "must include text or an attachment" check, which
+    # is what actually enforces a message can't be completely empty.
     is_deleted = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     edited_at = db.Column(db.DateTime, nullable=True)
+
+
+class MessageAttachment(db.Model):
+    """
+    One file attached to (or in the process of being attached to) a chat
+    message. Two-phase upload, same pattern as Document/DocumentContent:
+    a row is created here first (status='uploading', message_id=None -
+    not yet linked to any sent message), the client PUTs bytes directly
+    to Supabase Storage via the returned signed URL, then confirms via
+    POST /chats/<id>/attachments/<id>/uploaded. Only once the message is
+    actually sent (POST /chats/<id>/messages with attachment_id) does
+    message_id get set - an initiated-but-abandoned upload just stays
+    orphaned (message_id NULL) rather than blocking anything; no cleanup
+    sweep for those yet, same "no cleanup job yet" tradeoff as other
+    unreferenced-storage notes elsewhere in this file.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id", ondelete="CASCADE"), nullable=False)
+    message_id = db.Column(db.Integer, db.ForeignKey("message.id", ondelete="CASCADE"), nullable=True)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    storage_path = db.Column(db.String(500), nullable=False)
+    file_type = db.Column(db.String(20), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    file_size_bytes = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="uploading")
+    # uploading -> ready | failed
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Group(db.Model):
@@ -7649,7 +7679,23 @@ def _conversation_display_name(conversation, viewer_id):
     return _display_name(other_user) if other_user else "Deleted user"
 
 
-def _serialize_message(message):
+def _serialize_message(message, attachment=None):
+    """
+    attachment is an optional pre-fetched MessageAttachment - callers
+    that serialize many messages at once (list_messages, search_messages)
+    batch-fetch attachments up front and pass the matching one in here,
+    rather than this function querying per-message (would be an N+1 on
+    a 50-row page).
+    """
+    attachment_data = None
+    if attachment and not message.is_deleted:
+        attachment_data = {
+            "id": attachment.id,
+            "file_type": attachment.file_type,
+            "original_filename": attachment.original_filename,
+            "file_size_bytes": attachment.file_size_bytes,
+            "view_url": get_signed_url(attachment.storage_path, bucket="documents"),
+        }
     return {
         "id": message.id,
         "conversation_id": message.conversation_id,
@@ -7658,6 +7704,7 @@ def _serialize_message(message):
         "is_deleted": message.is_deleted,
         "created_at": message.created_at.isoformat() if message.created_at else None,
         "edited_at": message.edited_at.isoformat() if message.edited_at else None,
+        "attachment": attachment_data,
     }
 
 
@@ -7862,7 +7909,18 @@ def list_messages(conversation_id):
     )
     messages.reverse()  # oldest-first for the client's scroll-down feed
 
-    return jsonify({"messages": [_serialize_message(m) for m in messages]})
+    message_ids = [m.id for m in messages]
+    attachments_by_message = {
+        a.message_id: a
+        for a in MessageAttachment.query.filter(
+            MessageAttachment.message_id.in_(message_ids),
+            MessageAttachment.status == "ready",
+        ).all()
+    } if message_ids else {}
+
+    return jsonify({
+        "messages": [_serialize_message(m, attachments_by_message.get(m.id)) for m in messages]
+    })
 
 
 @app.route("/chats/<int:conversation_id>/messages/search")
@@ -7896,7 +7954,18 @@ def search_messages(conversation_id):
         .all()
     )
 
-    return jsonify({"messages": [_serialize_message(m) for m in messages]})
+    message_ids = [m.id for m in messages]
+    attachments_by_message = {
+        a.message_id: a
+        for a in MessageAttachment.query.filter(
+            MessageAttachment.message_id.in_(message_ids),
+            MessageAttachment.status == "ready",
+        ).all()
+    } if message_ids else {}
+
+    return jsonify({
+        "messages": [_serialize_message(m, attachments_by_message.get(m.id)) for m in messages]
+    })
 
 
 @app.route("/chats/<int:conversation_id>/messages", methods=["POST"])
@@ -7914,12 +7983,34 @@ def send_message(conversation_id):
     if not data:
         return jsonify({"error": "Request body must be valid JSON"}), 400
 
-    body = (data.get("body") or "").strip()
-    if not body or len(body) > CHAT_MESSAGE_MAX:
-        return jsonify({"error": f"Message must be 1-{CHAT_MESSAGE_MAX} characters"}), 400
+    body = (data.get("body") or "").strip() or None
+    if body and len(body) > CHAT_MESSAGE_MAX:
+        return jsonify({"error": f"Message must be {CHAT_MESSAGE_MAX} characters or fewer"}), 400
+
+    attachment_id = data.get("attachment_id")
+    attachment = None
+    if attachment_id is not None:
+        if not isinstance(attachment_id, int) or isinstance(attachment_id, bool):
+            return jsonify({"error": "attachment_id must be an integer"}), 400
+        attachment = db.session.get(MessageAttachment, attachment_id)
+        if (
+            not attachment
+            or attachment.conversation_id != conversation_id
+            or attachment.uploaded_by_user_id != user_id
+            or attachment.status != "ready"
+            or attachment.message_id is not None
+        ):
+            return jsonify({"error": "Attachment not found or already sent"}), 404
+
+    if not body and not attachment:
+        return jsonify({"error": "Message must include text or an attachment"}), 400
 
     message = Message(conversation_id=conversation_id, sender_id=user_id, body=body)
     db.session.add(message)
+    db.session.flush()  # assign message.id before linking the attachment
+
+    if attachment:
+        attachment.message_id = message.id
 
     conversation = db.session.get(Conversation, conversation_id)
     if conversation:
@@ -7934,7 +8025,10 @@ def send_message(conversation_id):
     # since this app is polling-based with no real presence/websockets).
     sender = db.session.get(User, user_id)
     sender_name = _display_name(sender) if sender else "Someone"
-    push_preview = body if len(body) <= 120 else body[:117] + "..."
+    if body:
+        push_preview = body if len(body) <= 120 else body[:117] + "..."
+    else:
+        push_preview = "Sent an attachment"
     recently_active_cutoff = datetime.utcnow() - timedelta(seconds=15)
     other_participants = ConversationParticipant.query.filter(
         ConversationParticipant.conversation_id == conversation_id,
@@ -7946,7 +8040,154 @@ def send_message(conversation_id):
             continue
         send_push_notification(participant.user_id, sender_name, push_preview)
 
-    return jsonify(_serialize_message(message)), 201
+    return jsonify(_serialize_message(message, attachment)), 201
+
+
+CHAT_ATTACHMENT_MAX_SIZE_BYTES = 20 * 1024 * 1024
+# 20 MB - deliberately smaller than document uploads (50 MB); chat
+# attachments don't get AI processing or text extraction, so there's no
+# reason to allow document-sized files here.
+
+
+@app.route("/chats/<int:conversation_id>/attachments", methods=["POST"])
+@limiter.limit("30 per hour")
+@require_csrf
+def init_chat_attachment(conversation_id):
+    """
+    Step 1 of sending a chat attachment: registers a pending
+    MessageAttachment (status='uploading', message_id=None) and returns
+    a signed direct-upload URL - same two-phase pattern as POST
+    /documents. Reuses the existing "documents" Supabase bucket under a
+    chat-attachments/ prefix rather than provisioning a separate bucket.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Conversation not found"}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    original_filename = (data.get("original_filename") or "").strip()
+    file_size_bytes = data.get("file_size_bytes")
+
+    if not original_filename or len(original_filename) > 255:
+        return jsonify({"error": "original_filename is required and must be 255 characters or fewer"}), 400
+    ext = get_document_extension(original_filename)
+    if not ext:
+        return jsonify({"error": "Unsupported file type"}), 400
+    if not isinstance(file_size_bytes, int) or isinstance(file_size_bytes, bool) or file_size_bytes <= 0:
+        return jsonify({"error": "file_size_bytes must be a positive integer"}), 400
+    if file_size_bytes > CHAT_ATTACHMENT_MAX_SIZE_BYTES:
+        return jsonify({
+            "error": f"File exceeds the {CHAT_ATTACHMENT_MAX_SIZE_BYTES // (1024 * 1024)} MB limit"
+        }), 400
+
+    storage_path = f"chat-attachments/{conversation_id}/{secrets.token_hex(16)}.{ext}"
+    attachment = MessageAttachment(
+        conversation_id=conversation_id,
+        uploaded_by_user_id=user_id,
+        storage_path=storage_path,
+        file_type=ext,
+        original_filename=original_filename,
+        file_size_bytes=file_size_bytes,
+        status="uploading",
+    )
+    db.session.add(attachment)
+    db.session.commit()
+
+    upload_url = create_signed_upload_url("documents", storage_path)
+    if not upload_url:
+        return jsonify({"error": "Could not prepare upload - please try again shortly"}), 502
+
+    return jsonify({
+        "attachment_id": attachment.id,
+        "upload_url": upload_url,
+        "storage_path": storage_path,
+    }), 201
+
+
+@app.route("/chats/<int:conversation_id>/attachments/<int:attachment_id>/uploaded", methods=["POST"])
+@require_csrf
+def confirm_chat_attachment_uploaded(conversation_id, attachment_id):
+    """Step 2: confirms the direct upload landed in storage before
+    trusting the client's word for it - same verification as
+    POST /documents/<id>/uploaded."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Conversation not found"}), 404
+
+    attachment = db.session.get(MessageAttachment, attachment_id)
+    if (
+        not attachment
+        or attachment.conversation_id != conversation_id
+        or attachment.uploaded_by_user_id != user_id
+    ):
+        return jsonify({"error": "Attachment not found"}), 404
+
+    if attachment.status != "uploading":
+        return jsonify({"error": f"Attachment is not awaiting upload (status: {attachment.status})"}), 400
+
+    if not storage_object_exists("documents", attachment.storage_path):
+        return jsonify({"error": "Upload not found in storage yet - please retry"}), 409
+
+    attachment.status = "ready"
+    db.session.commit()
+
+    return jsonify({"attachment_id": attachment.id, "status": "ready"})
+
+
+@app.route("/chats/<int:conversation_id>/attachments")
+def list_chat_attachments(conversation_id):
+    """
+    Powers the Shared Media tab: every ready attachment sent in this
+    conversation (excluding ones on soft-deleted messages), newest
+    first. Only attachments actually attached to a sent message
+    (message_id set) are eligible - an initiated-but-abandoned upload
+    never shows up here.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Conversation not found"}), 404
+
+    rows = (
+        db.session.query(MessageAttachment, Message)
+        .join(Message, MessageAttachment.message_id == Message.id)
+        .filter(
+            MessageAttachment.conversation_id == conversation_id,
+            MessageAttachment.status == "ready",
+            Message.is_deleted.is_(False),
+        )
+        .order_by(MessageAttachment.created_at.desc())
+        .limit(100)
+        .all()
+    )
+
+    result = []
+    for attachment, message in rows:
+        uploader = db.session.get(User, attachment.uploaded_by_user_id)
+        result.append({
+            "id": attachment.id,
+            "message_id": attachment.message_id,
+            "file_type": attachment.file_type,
+            "original_filename": attachment.original_filename,
+            "file_size_bytes": attachment.file_size_bytes,
+            "view_url": get_signed_url(attachment.storage_path, bucket="documents"),
+            "uploaded_by_user_id": attachment.uploaded_by_user_id,
+            "uploaded_by_name": _display_name(uploader) if uploader else "Deleted user",
+            "created_at": attachment.created_at.isoformat() if attachment.created_at else None,
+        })
+
+    return jsonify({"attachments": result})
 
 
 @app.route("/chats/<int:conversation_id>/read", methods=["POST"])
