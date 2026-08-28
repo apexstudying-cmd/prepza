@@ -6392,11 +6392,14 @@ function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── STUDY STREAK ─────────────────────────────────────────────────────────────
-type StreakCalendarDay = { date: string; studied: boolean }
+type StreakCalendarDay = { date: string; studied: boolean; is_future: boolean }
 type StreakMilestone = { days: number; label: string; xp: string; done: boolean }
 type StreakResponse = {
   current_streak: number
   longest_streak: number
+  calendar_month: string
+  calendar_start_weekday: number
+  earliest_month: string
   calendar: StreakCalendarDay[]
   milestones: StreakMilestone[]
 }
@@ -6405,22 +6408,45 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<StreakResponse | null>(null)
+  const [viewMonth, setViewMonth] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
-    api<StreakResponse>('/streak')
-      .then(res => { if (!cancelled) setData(res) })
+    api<StreakResponse>('/streak' + (viewMonth ? `?month=${viewMonth}` : ''))
+      .then(res => {
+        if (cancelled) return
+        setData(res)
+        if (!viewMonth) setViewMonth(res.calendar_month)
+      })
       .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load streak') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [])
+  }, [viewMonth])
 
   const current = data?.current_streak ?? 0
   const longest = data?.longest_streak ?? 0
   const days = data?.calendar ?? []
   const milestones = data?.milestones ?? []
+  const calendarMonth = data?.calendar_month ?? viewMonth ?? ''
+  const startWeekday = data?.calendar_start_weekday ?? 0
+  const earliestMonth = data?.earliest_month ?? null
+
+  const realCurrentMonth = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}` })()
+  const atEarliest = !!earliestMonth && calendarMonth === earliestMonth
+  const atCurrent = calendarMonth === realCurrentMonth
+  const monthLabel = (() => {
+    if (!calendarMonth) return ''
+    const [y, m] = calendarMonth.split('-').map(Number)
+    return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  })()
+  const shiftMonth = (dir: 1 | -1) => {
+    if (!calendarMonth) return
+    const [y, m] = calendarMonth.split('-').map(Number)
+    const d = new Date(y, m - 1 + dir, 1)
+    setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
 
   if (loading) {
     return (
@@ -6472,11 +6498,16 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
         <div style={{ background: '#fff', borderRadius: 16, padding: '16px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 14 }}>Last 42 days</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <button onClick={() => shiftMonth(-1)} disabled={atEarliest} style={{ width: 28, height: 28, border: 'none', borderRadius: 8, background: '#F3F4F6', cursor: atEarliest ? 'default' : 'pointer', opacity: atEarliest ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: N.navy }}>‹</button>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{monthLabel}</div>
+            <button onClick={() => shiftMonth(1)} disabled={atCurrent} style={{ width: 28, height: 28, border: 'none', borderRadius: 8, background: '#F3F4F6', cursor: atCurrent ? 'default' : 'pointer', opacity: atCurrent ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: N.navy }}>›</button>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
             {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 4 }}>{d}</div>)}
+            {Array.from({ length: startWeekday }).map((_, i) => <div key={`pad-${i}`} />)}
             {days.map((d, i) => (
-              <div key={i} style={{ aspectRatio: '1', borderRadius: 6, background: d.studied ? N.gold : '#F3F4F6', transition: 'background 0.2s' }} title={new Date(d.date).toLocaleDateString()} />
+              <div key={i} style={{ aspectRatio: '1', borderRadius: 6, background: d.studied ? N.gold : '#F3F4F6', opacity: d.is_future ? 0.35 : 1, transition: 'background 0.2s' }} title={new Date(d.date).toLocaleDateString()} />
             ))}
           </div>
           <div style={{ display: 'flex', gap: 12, marginTop: 14, alignItems: 'center' }}>
