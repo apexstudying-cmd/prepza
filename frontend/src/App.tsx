@@ -7352,13 +7352,39 @@ function ErrorState({ onRetry }: { onRetry?: () => void }) {
 }
 
 // ─── SUBSCRIPTION ─────────────────────────────────────────────────────────────
-function SubscriptionScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const [selected, setSelected] = useState<'semester'|'annual'>('semester')
-  const plans = [
-    { id: 'free', name: 'Free', price: 'KES 0', period: '', active: true, color: '#6B7280', features: ['5 AI sessions/month','3 document uploads','Basic flashcards','Forum browsing'] },
-    { id: 'semester', name: 'Semester', price: 'KES 599', period: '/semester', badge: 'Popular', badgeColor: N.gold, color: N.gold, highlight: true, features: ['Unlimited AI sessions','Unlimited uploads','All learning tools','Priority processing','Offline access','Full forum access'] },
-    { id: 'annual', name: 'Annual', price: 'KES 999', period: '/year', badge: 'Best Value', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Everything in Semester','2 months free','Early feature access','Group study tools','Priority support'] },
-  ]
+type SubscriptionPlan = { id: string; name: string; price: number; period: string | null }
+type SubscriptionStatus = { plan: string; is_active: boolean; expires_at: string | null }
+
+// Static display metadata (badges/colors/feature bullets) keyed by plan id -
+// the backend only knows price/period, not marketing copy, so this stays
+// client-side and is merged onto whatever plans GET /subscription/plans
+// actually returns.
+const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: string; color: string; features: string[] }> = {
+  free: { color: '#6B7280', features: ['5 AI sessions/month', '3 document uploads', 'Basic flashcards', 'Forum browsing'] },
+  semester: { badge: 'Popular', badgeColor: N.gold, color: N.gold, features: ['Unlimited AI sessions', 'Unlimited uploads', 'All learning tools', 'Priority processing', 'Offline access', 'Full forum access'] },
+  annual: { badge: 'Best Value', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Everything in Semester', '2 months free', 'Early feature access', 'Group study tools', 'Priority support'] },
+}
+
+function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setScreen: (s: Screen) => void; selectedPlan: string; setSelectedPlan: (p: string) => void }) {
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([])
+  const [status, setStatus] = useState<SubscriptionStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setLoading(true); setError('')
+    Promise.all([
+      api<{ plans: SubscriptionPlan[] }>('/subscription/plans'),
+      api<SubscriptionStatus>('/subscription/status'),
+    ])
+      .then(([plansRes, statusRes]) => { setPlans(plansRes.plans); setStatus(statusRes) })
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load subscription plans - check your connection and try again.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const paidPlans = plans.filter(p => p.id !== 'free')
+  const selected = paidPlans.find(p => p.id === selectedPlan) || paidPlans[0]
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
@@ -7368,59 +7394,112 @@ function SubscriptionScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
         <div style={{ marginTop: 16, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 20 }}>🎓</span>
-          <div style={{ flex: 1 }}><div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>Current Plan: Free</div><div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>Upgrade to unlock everything</div></div>
-          <Pill text="Active" color="#4CC97B" />
+          <div style={{ flex: 1 }}>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>
+              {status ? `Current Plan: ${status.plan.charAt(0).toUpperCase() + status.plan.slice(1)}` : 'Loading plan…'}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
+              {status?.is_active && status.expires_at
+                ? `Renews/expires ${new Date(status.expires_at).toLocaleDateString()}`
+                : 'Upgrade to unlock everything'}
+            </div>
+          </div>
+          {status && <Pill text={status.is_active ? 'Active' : status.plan === 'free' ? 'Free' : 'Expired'} color={status.is_active ? '#4CC97B' : '#9CA3AF'} />}
         </div>
       </div>
       <div style={{ padding: '20px 18px' }}>
-        {plans.map(p => (
-          <div key={p.id} onClick={() => p.id !== 'free' && setSelected(p.id as any)}
-            style={{ background: '#fff', borderRadius: 18, padding: 18, marginBottom: 12, border: `2px solid ${selected === p.id ? p.color : 'rgba(0,0,0,0.06)'}`, cursor: p.id !== 'free' ? 'pointer' : 'default', position: 'relative', boxShadow: selected === p.id ? `0 4px 20px ${p.color}25` : '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
-            {(p as any).badge && <div style={{ position: 'absolute', top: -11, right: 16, background: (p as any).badgeColor, color: p.id === 'semester' ? N.navy : '#fff', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>{(p as any).badge}</div>}
-            {p.active && <div style={{ position: 'absolute', top: -11, left: 16, background: '#E5E7EB', color: '#6B7280', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>Current</div>}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: N.navy }}>{p.name}</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginTop: 2 }}>
-                  <span style={{ fontWeight: 800, fontSize: 22, color: p.color }}>{p.price}</span>
-                  <span style={{ fontSize: 11, color: '#9CA3AF' }}>{p.period}</span>
+        {loading ? (
+          <div style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: '30px 0' }}>Loading plans…</div>
+        ) : error ? (
+          <ErrorState />
+        ) : (
+          <>
+            {plans.map(p => {
+              const meta = SUBSCRIPTION_PLAN_META[p.id] || { color: '#6B7280', features: [] }
+              const isCurrent = status?.plan === p.id && status.is_active
+              const isSelectable = p.id !== 'free'
+              const isSelected = selected?.id === p.id
+              return (
+                <div key={p.id} onClick={() => isSelectable && setSelectedPlan(p.id)}
+                  style={{ background: '#fff', borderRadius: 18, padding: 18, marginBottom: 12, border: `2px solid ${isSelectable && isSelected ? meta.color : 'rgba(0,0,0,0.06)'}`, cursor: isSelectable ? 'pointer' : 'default', position: 'relative', boxShadow: isSelectable && isSelected ? `0 4px 20px ${meta.color}25` : '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
+                  {meta.badge && <div style={{ position: 'absolute', top: -11, right: 16, background: meta.badgeColor, color: p.id === 'semester' ? N.navy : '#fff', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>{meta.badge}</div>}
+                  {isCurrent && <div style={{ position: 'absolute', top: -11, left: 16, background: '#E5E7EB', color: '#6B7280', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>Current</div>}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: N.navy }}>{p.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginTop: 2 }}>
+                        <span style={{ fontWeight: 800, fontSize: 22, color: meta.color }}>KES {p.price.toLocaleString()}</span>
+                        <span style={{ fontSize: 11, color: '#9CA3AF' }}>{p.period ? `/${p.period}` : ''}</span>
+                      </div>
+                    </div>
+                    {isSelectable && (
+                      <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${isSelected ? meta.color : '#D1D5DB'}`, background: isSelected ? meta.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {isSelected && <div style={{ color: p.id === 'semester' ? N.navy : '#fff' }}>{Ic.check('w-3 h-3')}</div>}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    {meta.features.map((f, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <div style={{ width: 16, height: 16, borderRadius: '50%', background: `${meta.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><div style={{ color: meta.color }}>{Ic.check('w-2.5 h-2.5')}</div></div>
+                        <span style={{ fontSize: 12, color: '#4B5563' }}>{f}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              {p.id !== 'free' && (
-                <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${selected === p.id ? p.color : '#D1D5DB'}`, background: selected === p.id ? p.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {selected === p.id && <div style={{ color: p.id === 'semester' ? N.navy : '#fff' }}>{Ic.check('w-3 h-3')}</div>}
-                </div>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-              {p.features.map((f, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <div style={{ width: 16, height: 16, borderRadius: '50%', background: `${p.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><div style={{ color: p.color }}>{Ic.check('w-2.5 h-2.5')}</div></div>
-                  <span style={{ fontSize: 12, color: '#4B5563' }}>{f}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-        <button onClick={() => setScreen('payment')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 6px 24px rgba(201,168,76,0.4)`, marginTop: 4 }}>
-          Upgrade — {selected === 'semester' ? 'KES 599' : 'KES 999'}
-        </button>
+              )
+            })}
+            <button onClick={() => selected && setScreen('payment')} disabled={!selected} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: selected ? 'pointer' : 'default', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 6px 24px rgba(201,168,76,0.4)`, marginTop: 4, opacity: selected ? 1 : 0.6 }}>
+              {selected ? `Upgrade — KES ${selected.price.toLocaleString()}` : 'Upgrade'}
+            </button>
+          </>
+        )}
         <button onClick={() => setScreen('payment-history')} style={{ width: '100%', background: 'transparent', color: '#9CA3AF', fontSize: 12, fontWeight: 600, border: 'none', padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View payment history</button>
-        <div style={{ textAlign: 'center', fontSize: 11, color: '#D1D5DB', lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & Stripe. Cancel anytime.</div>
+        <div style={{ textAlign: 'center', fontSize: 11, color: '#D1D5DB', lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & card, powered by Pesapal.</div>
       </div>
     </div>
   )
 }
 
 // ─── PAYMENT ──────────────────────────────────────────────────────────────────
-function PaymentScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const [phone, setPhone] = useState('0712 345 678')
-  const [method, setMethod] = useState<'mpesa'|'card'>('mpesa')
-  const [step, setStep] = useState<'form'|'stk'>('form')
+// Real Pesapal checkout: POST /subscription/upgrade returns a redirect_url
+// to Pesapal's own hosted payment page (which handles M-Pesa/card itself),
+// so this screen no longer simulates a method picker or an STK push - it
+// just collects an optional phone number, kicks off the order, and does a
+// full-page redirect. Success/failure are decided on Pesapal's side and
+// land on /payment/pesapal/callback, which today renders a plain HTML page
+// outside the SPA rather than routing back here - see payment-history for
+// how a student confirms status after returning to the app.
+function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => void; selectedPlan: string }) {
+  const [phone, setPhone] = useState('')
+  const [plan, setPlan] = useState<SubscriptionPlan | null>(null)
+  const [loadingPlan, setLoadingPlan] = useState(true)
+  const [redirecting, setRedirecting] = useState(false)
+  const [error, setError] = useState('')
 
-  const pay = () => {
-    setStep('stk')
-    setTimeout(() => { Math.random() > 0.2 ? setScreen('payment-success') : setScreen('payment-failure') }, 3200)
+  useEffect(() => {
+    api<{ plans: SubscriptionPlan[] }>('/subscription/plans')
+      .then(res => setPlan(res.plans.find(p => p.id === selectedPlan) || null))
+      .catch(() => setError('Could not load plan details.'))
+      .finally(() => setLoadingPlan(false))
+  }, [selectedPlan])
+
+  const pay = async () => {
+    if (redirecting) return
+    setError('')
+    setRedirecting(true)
+    try {
+      const me = await api<{ csrf_token: string }>('/me')
+      const res = await api<{ redirect_url: string; order_tracking_id: string; merchant_reference: string }>('/subscription/upgrade', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': me.csrf_token },
+        body: JSON.stringify({ plan: selectedPlan, phone_number: phone.trim() || undefined }),
+      })
+      window.location.href = res.redirect_url
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not start checkout - please try again.')
+      setRedirecting(false)
+    }
   }
 
   return (
@@ -7432,76 +7511,40 @@ function PaymentScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
         <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '14px 16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>Prepza Semester Plan</span>
-            <span style={{ color: N.gold, fontWeight: 800 }}>KES 599</span>
+            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>{plan ? `Prepza ${plan.name} Plan` : 'Loading plan…'}</span>
+            <span style={{ color: N.gold, fontWeight: 800 }}>{plan ? `KES ${plan.price.toLocaleString()}` : '—'}</span>
           </div>
           <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 8 }} />
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>Total</span>
-            <span style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>KES 599</span>
+            <span style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>{plan ? `KES ${plan.price.toLocaleString()}` : '—'}</span>
           </div>
         </div>
       </div>
-      {step === 'stk' ? (
+      {redirecting ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: '0 32px', textAlign: 'center' }}>
-          <div style={{ width: 72, height: 72, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, animation: 'pulse-gold 2s infinite' }}>📱</div>
+          <div style={{ width: 72, height: 72, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, animation: 'pulse-gold 2s infinite' }}>🔒</div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>Check your phone</div>
-            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65 }}>An M-Pesa payment request was sent to <strong>{phone}</strong>. Enter your M-Pesa PIN to complete.</div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>Taking you to secure checkout…</div>
+            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65 }}>You'll complete payment on Pesapal's secure page, then return to Prepza.</div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: N.gold, opacity: 0.4 + i * 0.3, animation: `shimmer ${0.7 + i * 0.3}s ease-in-out infinite alternate` }} />)}
-          </div>
-          <button onClick={() => setStep('form')} style={{ color: '#9CA3AF', background: 'none', border: 'none', fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel request</button>
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Payment Method</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {[{ key: 'mpesa', label: 'M-Pesa', icon: '📱' }, { key: 'card', label: 'Card', icon: '💳' }].map(m => (
-                <button key={m.key} onClick={() => setMethod(m.key as any)} style={{ flex: 1, padding: '12px 8px', background: '#fff', border: `2px solid ${method === m.key ? N.gold : 'rgba(0,0,0,0.08)'}`, borderRadius: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: method === m.key ? N.navy : '#6B7280', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.2s' }}>
-                  <span>{m.icon}</span>{m.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {method === 'mpesa' ? (
-            <div style={{ background: '#fff', borderRadius: 16, padding: 18, marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <div style={{ width: 40, height: 40, background: '#4CC97B20', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>📱</div>
-                <div><div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>Lipa na M-Pesa</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>Safaricom M-Pesa</div></div>
-              </div>
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>M-Pesa Phone Number</div>
-                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XX XXX XXX" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 15, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box', letterSpacing: 0.5 }} />
-              </div>
-              <div style={{ background: 'rgba(76,201,123,0.08)', border: '1px solid rgba(76,201,123,0.2)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#4CC97B', fontWeight: 600 }}>
-                💡 You will receive an M-Pesa STK push to authorise this payment
-              </div>
-            </div>
-          ) : (
-            <div style={{ background: '#fff', borderRadius: 16, padding: 18, marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              {[['Card Number','1234 5678 9012 3456'],['Cardholder Name','Arnold Gichuru']].map(([label, placeholder]) => (
-                <div key={label} style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>{label}</div>
-                  <input placeholder={placeholder} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
-                </div>
-              ))}
-              <div style={{ display: 'flex', gap: 10 }}>
-                {[['Expiry','MM/YY'],['CVC','•••']].map(([label, ph]) => (
-                  <div key={label} style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>{label}</div>
-                    <input placeholder={ph} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
-                  </div>
-                ))}
-              </div>
-            </div>
+          {error && (
+            <div style={{ background: 'rgba(201,68,68,0.08)', border: '1px solid rgba(201,68,68,0.25)', borderRadius: 12, padding: '12px 14px', color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 16 }}>{error}</div>
           )}
-          <button onClick={pay} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)' }}>
-            {method === 'mpesa' ? '📱 Send M-Pesa Request' : '💳 Pay KES 599'}
+          <div style={{ background: '#fff', borderRadius: 16, padding: 18, marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <div style={{ width: 40, height: 40, background: '#4CC97B20', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>📱</div>
+              <div><div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>M-Pesa number</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>Optional - speeds up checkout on Pesapal's page</div></div>
+            </div>
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XX XXX XXX" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 15, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box', letterSpacing: 0.5 }} />
+          </div>
+          <button onClick={pay} disabled={loadingPlan || !plan} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: (loadingPlan || !plan) ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)', opacity: (loadingPlan || !plan) ? 0.6 : 1 }}>
+            {plan ? `Continue to Payment — KES ${plan.price.toLocaleString()}` : 'Loading…'}
           </button>
-          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: '#D1D5DB' }}>🔒 Secured by Stripe & Safaricom</div>
+          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: '#D1D5DB' }}>🔒 Secured by Pesapal (M-Pesa & card)</div>
         </div>
       )}
     </div>
@@ -7558,14 +7601,37 @@ function PaymentFailureScreen({ setScreen }: { setScreen: (s: Screen) => void })
   )
 }
 
+type PaymentHistoryItem = {
+  id: number
+  payment_type: string
+  content_title: string | null
+  plan: string | null
+  amount: number
+  status: string
+  provider: string | null
+  merchant_reference: string | null
+  created_at: string | null
+}
+
+const PAYMENT_STATUS_META: Record<string, { icon: string; color: string; label: string }> = {
+  success: { icon: '✅', color: '#4CC97B', label: 'Success' },
+  pending: { icon: '⏳', color: '#D97706', label: 'Pending' },
+  failed: { icon: '❌', color: '#C94C4C', label: 'Failed' },
+  refunded: { icon: '↩️', color: '#6B7280', label: 'Refunded' },
+}
+
 function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const txns = [
-    { ref: 'PZA-849201', plan: 'Semester Plan', amount: 'KES 599', date: 'Aug 10, 2025', method: 'M-Pesa', ok: true },
-    { ref: 'PZA-763410', plan: 'Semester Plan', amount: 'KES 599', date: 'Jan 15, 2025', method: 'M-Pesa', ok: true },
-    { ref: 'PZA-551024', plan: 'Semester Plan', amount: 'KES 599', date: 'Jul 20, 2024', method: 'Card', ok: true },
-    { ref: 'PZA-401009', plan: 'Semester Plan', amount: 'KES 599', date: 'Jan 08, 2024', method: 'M-Pesa', ok: true },
-    { ref: 'PZA-390003', plan: 'Semester Plan', amount: 'KES 599', date: 'Dec 30, 2023', method: 'M-Pesa', ok: false },
-  ]
+  const [payments, setPayments] = useState<PaymentHistoryItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<{ payments: PaymentHistoryItem[] }>('/payment-history')
+      .then(res => setPayments(res.payments))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load payment history - check your connection and try again.'))
+      .finally(() => setLoading(false))
+  }, [])
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
@@ -7575,20 +7641,32 @@ function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void })
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }} className="scrollbar-hide">
-        {txns.map((t, i) => (
-          <div key={i} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
-            <div style={{ width: 44, height: 44, background: t.ok ? 'rgba(76,201,123,0.1)' : 'rgba(201,76,76,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{t.ok ? '✅' : '❌'}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{t.plan}</div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{t.date} · {t.method}</div>
-              <div style={{ fontSize: 10, color: '#D1D5DB', fontFamily: 'monospace', marginTop: 2 }}>{t.ref}</div>
+        {loading ? (
+          <div style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: '30px 0' }}>Loading…</div>
+        ) : error ? (
+          <ErrorState />
+        ) : payments.length === 0 ? (
+          <EmptyState icon="💳" title="No payments yet" sub="Your subscription and content purchases will show up here." />
+        ) : payments.map(p => {
+          const meta = PAYMENT_STATUS_META[p.status] || { icon: '•', color: '#6B7280', label: p.status }
+          const label = p.payment_type === 'subscription'
+            ? `${(p.plan || 'Subscription').charAt(0).toUpperCase()}${(p.plan || 'Subscription').slice(1)} Plan`
+            : (p.content_title || 'Content purchase')
+          return (
+            <div key={p.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div style={{ width: 44, height: 44, background: `${meta.color}18`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{meta.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{label}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}{p.provider ? ` · ${p.provider.charAt(0).toUpperCase()}${p.provider.slice(1)}` : ''}</div>
+                {p.merchant_reference && <div style={{ fontSize: 10, color: '#D1D5DB', fontFamily: 'monospace', marginTop: 2 }}>{p.merchant_reference}</div>}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 4 }}>KES {p.amount.toLocaleString()}</div>
+                <Pill text={meta.label} color={meta.color} />
+              </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 800, fontSize: 14, color: t.ok ? N.navy : '#C94C4C', marginBottom: 4 }}>{t.amount}</div>
-              <Pill text={t.ok ? 'Success' : 'Failed'} color={t.ok ? '#4CC97B' : '#C94C4C'} />
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -9523,6 +9601,11 @@ export default function App() {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null)
   const [activeGroupId, setActiveGroupId] = useState<number | null>(null)
+  // Which subscription plan the user picked on SubscriptionScreen, carried
+  // over to PaymentScreen the same way activeDocumentId etc. are - these
+  // are two separate mounted components, not steps of one component, so
+  // the selection has to be lifted here rather than living in either screen.
+  const [selectedPlan, setSelectedPlan] = useState('semester')
   // Which user's profile is open in StudentProfileScreen / whose followers-
   // following list is open in FollowListScreen. activeProfileName is a
   // best-effort label carried over from wherever the navigation started
@@ -9627,8 +9710,8 @@ export default function App() {
       case 'new-chat':          return <NewChatScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
       case 'chat-options':      return <ChatOptionsScreen setScreen={setScreen} conversationId={activeConversationId} />
       case 'edit-profile':      return <EditProfileScreen setScreen={setScreen} />
-      case 'subscription':      return <SubscriptionScreen setScreen={setScreen} />
-      case 'payment':           return <PaymentScreen setScreen={setScreen} />
+      case 'subscription':      return <SubscriptionScreen setScreen={setScreen} selectedPlan={selectedPlan} setSelectedPlan={setSelectedPlan} />
+      case 'payment':           return <PaymentScreen setScreen={setScreen} selectedPlan={selectedPlan} />
       case 'payment-success':   return <PaymentSuccessScreen setScreen={setScreen} />
       case 'payment-failure':   return <PaymentFailureScreen setScreen={setScreen} />
       case 'payment-history':   return <PaymentHistoryScreen setScreen={setScreen} />
