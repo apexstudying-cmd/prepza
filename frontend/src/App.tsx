@@ -6502,7 +6502,7 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <button onClick={() => setScreen('share-sheet')} style={{ width: '100%', background: 'transparent', border: `1.5px solid ${N.gold}`, color: N.gold, fontWeight: 700, fontSize: 14, borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
           Share {current}-Day Streak
         </button>
-        <div style={{ height: 20 }} />
+        <div style={{ height: 100 }} />
       </div>
     </div>
   )
@@ -6632,7 +6632,7 @@ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             </div>
           </div>
         ))}
-        <div style={{ height: 20 }} />
+        <div style={{ height: 100 }} />
       </div>
     </div>
   )

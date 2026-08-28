@@ -4820,8 +4820,9 @@ STREAK_MILESTONE_LABELS = {7: "7-Day Scholar", 14: "14-Day Achiever", 21: "21-Da
 
 @app.route("/streak")
 def streak_detail():
-    """Powers StudyStreakScreen: current/longest streak, a 42-day
-    activity calendar, and milestone progress."""
+    """Powers StudyStreakScreen: current/longest streak, a
+    month-by-month activity calendar (GitHub-contributions style,
+    navigable via ?month=YYYY-MM), and milestone progress."""
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -4830,19 +4831,49 @@ def streak_detail():
     db.session.commit()
 
     today = datetime.utcnow().date()
-    window_start = today - timedelta(days=41)
+
+    month_param = request.args.get("month")
+    view_first_day = None
+    if month_param:
+        try:
+            y_str, m_str = month_param.split("-")
+            view_first_day = datetime(int(y_str), int(m_str), 1).date()
+        except (ValueError, TypeError):
+            view_first_day = None
+    if view_first_day is None:
+        view_first_day = today.replace(day=1)
+
+    if view_first_day.month == 12:
+        next_month_first_day = view_first_day.replace(year=view_first_day.year + 1, month=1)
+    else:
+        next_month_first_day = view_first_day.replace(month=view_first_day.month + 1)
+    view_last_day = next_month_first_day - timedelta(days=1)
+
     active_dates = {
         row.activity_date
         for row in StudyActivityLog.query.filter(
             StudyActivityLog.user_id == user_id,
-            StudyActivityLog.activity_date >= window_start,
+            StudyActivityLog.activity_date >= view_first_day,
+            StudyActivityLog.activity_date <= view_last_day,
         ).all()
     }
 
     calendar = []
-    for i in range(42):
-        day = window_start + timedelta(days=i)
-        calendar.append({"date": day.isoformat(), "studied": day in active_dates})
+    num_days_in_month = (view_last_day - view_first_day).days + 1
+    for i in range(num_days_in_month):
+        day = view_first_day + timedelta(days=i)
+        calendar.append({
+            "date": day.isoformat(),
+            "studied": day in active_dates,
+            "is_future": day > today,
+        })
+
+    earliest_activity = (
+        db.session.query(db.func.min(StudyActivityLog.activity_date))
+        .filter(StudyActivityLog.user_id == user_id)
+        .scalar()
+    )
+    earliest_month = (earliest_activity or today).strftime("%Y-%m")
 
     milestones = [
         {
@@ -4857,6 +4888,9 @@ def streak_detail():
     return jsonify({
         "current_streak": streak.current_streak,
         "longest_streak": streak.longest_streak,
+        "calendar_month": view_first_day.strftime("%Y-%m"),
+        "calendar_start_weekday": (view_first_day.weekday() + 1) % 7,  # 0=Sun..6=Sat to match S M T W T F S header
+        "earliest_month": earliest_month,
         "calendar": calendar,
         "milestones": milestones,
     })
