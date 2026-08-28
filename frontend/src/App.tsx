@@ -33,6 +33,8 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
 // ─── Document upload helpers ───────────────────────────────────────────────
 const ALLOWED_UPLOAD_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png']
 const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024 // 50 MB - matches backend MAX_DOCUMENT_SIZE_BYTES
+const MAX_CHAT_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024 // 20 MB - matches backend CHAT_ATTACHMENT_MAX_SIZE_BYTES
+const IMAGE_FILE_TYPES = ['jpg', 'jpeg', 'png']
 
 function getFileExtension(filename: string): string | null {
   const parts = filename.split('.')
@@ -3139,7 +3141,8 @@ function ChatsScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Sc
 }
 
 // ─── CHAT DETAIL ──────────────────────────────────────────────────────────────
-type ChatMessageData = { id: number; conversation_id: number; sender_id: number; body: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null }
+type MessageAttachmentData = { id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null }
+type ChatMessageData = { id: number; conversation_id: number; sender_id: number; body: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null; attachment: MessageAttachmentData | null }
 type ChatDetail = { id: number; is_group: boolean; name: string; created_by: number; created_by_name: string; member_count: number; participants: { user_id: number; display_name: string; role: string }[]; viewer_muted: boolean }
 
 function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
@@ -3154,6 +3157,9 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
   const [headerName, setHeaderName] = useState('Conversation')
   const [headerIsGroup, setHeaderIsGroup] = useState(false)
   const [senderNames, setSenderNames] = useState<Record<number, string>>({})
+  const [uploadingAttachment, setUploadingAttachment] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -3215,6 +3221,71 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
     }
   }
 
+  const startAttachmentUpload = async (file: File) => {
+    if (conversationId == null || uploadingAttachment) return
+    setAttachError(null)
+
+    const ext = getFileExtension(file.name)
+    if (!ext || !ALLOWED_UPLOAD_EXTENSIONS.includes(ext)) {
+      setAttachError(`Unsupported file type. Allowed: ${ALLOWED_UPLOAD_EXTENSIONS.join(', ').toUpperCase()}`)
+      return
+    }
+    if (file.size > MAX_CHAT_ATTACHMENT_SIZE_BYTES) {
+      setAttachError(`File exceeds the ${MAX_CHAT_ATTACHMENT_SIZE_BYTES / (1024 * 1024)} MB limit`)
+      return
+    }
+
+    setUploadingAttachment(true)
+    try {
+      const init = await api<{ attachment_id: number; upload_url: string; storage_path: string }>(
+        `/chats/${conversationId}/attachments`,
+        {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': csrfToken },
+          body: JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }),
+        }
+      )
+
+      const putRes = await fetch(init.upload_url, { method: 'PUT', body: file })
+      if (!putRes.ok) throw new Error('Upload to storage failed - please try again')
+
+      try {
+        await api(`/chats/${conversationId}/attachments/${init.attachment_id}/uploaded`, {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': csrfToken },
+        })
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 409) {
+          await new Promise(r => setTimeout(r, 1500))
+          await api(`/chats/${conversationId}/attachments/${init.attachment_id}/uploaded`, {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': csrfToken },
+          })
+        } else {
+          throw e
+        }
+      }
+
+      const message = await api<ChatMessageData>(`/chats/${conversationId}/messages`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ attachment_id: init.attachment_id }),
+      })
+      setMsgs(m => [...m, message])
+    } catch (e) {
+      setAttachError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Could not send attachment')
+    } finally {
+      setUploadingAttachment(false)
+    }
+  }
+
+  const handleAttachmentFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    setShowAttach(false)
+    if (file) startAttachmentUpload(file)
+    e.target.value = ''
+  }
+
   const initials = (headerName || '??').slice(0, 2).toUpperCase()
 
   return (
@@ -3244,7 +3315,28 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
             <div key={m.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 2 }}>
               {!isMe && headerIsGroup && <span style={{ fontSize: 11, color: N.gold, fontWeight: 700, marginLeft: 4 }}>{senderLabel}</span>}
               <div style={{ maxWidth: '76%', background: isMe ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: isMe ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '10px 13px', boxShadow: '0 2px 6px rgba(0,0,0,0.07)' }}>
-                <div style={{ fontSize: 13, color: m.is_deleted ? (isMe ? 'rgba(255,255,255,0.5)' : '#9CA3AF') : (isMe ? '#fff' : '#374151'), lineHeight: 1.6, fontStyle: m.is_deleted ? 'italic' : 'normal' }}>{m.is_deleted ? 'This message was deleted' : m.body}</div>
+                {m.is_deleted ? (
+                  <div style={{ fontSize: 13, color: isMe ? 'rgba(255,255,255,0.5)' : '#9CA3AF', lineHeight: 1.6, fontStyle: 'italic' }}>This message was deleted</div>
+                ) : (
+                  <>
+                    {m.attachment && (
+                      IMAGE_FILE_TYPES.includes(m.attachment.file_type) ? (
+                        <a href={m.attachment.view_url || undefined} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: m.body ? 8 : 0 }}>
+                          <img src={m.attachment.view_url || undefined} alt={m.attachment.original_filename} style={{ maxWidth: '100%', maxHeight: 220, borderRadius: 10, display: 'block' }} />
+                        </a>
+                      ) : (
+                        <a href={m.attachment.view_url || undefined} target="_blank" rel="noreferrer" style={{ display: 'flex', gap: 10, alignItems: 'center', background: isMe ? 'rgba(255,255,255,0.1)' : '#F8F9FC', borderRadius: 10, padding: '10px 12px', marginBottom: m.body ? 8 : 0, textDecoration: 'none' }}>
+                          <div style={{ width: 34, height: 34, background: isMe ? 'rgba(255,255,255,0.15)' : '#fff', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>📎</div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: isMe ? '#fff' : N.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.attachment.original_filename}</div>
+                            <div style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.5)' : '#9CA3AF' }}>{(m.attachment.file_size_bytes / (1024 * 1024)).toFixed(1)} MB</div>
+                          </div>
+                        </a>
+                      )
+                    )}
+                    {m.body && <div style={{ fontSize: 13, color: isMe ? '#fff' : '#374151', lineHeight: 1.6 }}>{m.body}</div>}
+                  </>
+                )}
                 <div style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.4)' : '#9CA3AF', textAlign: 'right', marginTop: 3 }}>{time}</div>
               </div>
             </div>
@@ -3253,14 +3345,17 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
         <div ref={bottomRef} />
       </div>
       <div style={{ padding: '10px 12px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)', position: 'relative' }}>
+        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleAttachmentFileChange} disabled={uploadingAttachment} />
+        {attachError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>{attachError}</div>}
+        {uploadingAttachment && <div style={{ color: '#9CA3AF', fontSize: 12, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>Sending attachment…</div>}
         {showAttach && (
           <div style={{ position: 'absolute', bottom: '100%', left: 12, right: 12, background: '#fff', borderRadius: 16, boxShadow: '0 -4px 24px rgba(0,0,0,0.12)', padding: 16, border: '1px solid rgba(0,0,0,0.06)' }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Send Attachment</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-              {[['📄','Document'],['🖼️','Image'],['📷','Camera'],['🎵','Audio']].map(([icon,label],i) => (
-                <button key={i} onClick={() => setShowAttach(false)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer' }}>
+              {[['📄','Document', true],['🖼️','Image', true],['📷','Camera', false],['🎵','Audio', false]].map(([icon,label,enabled],i) => (
+                <button key={i} onClick={() => { if (enabled) fileInputRef.current?.click(); else setShowAttach(false) }} disabled={!enabled} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: enabled ? 'pointer' : 'default', opacity: enabled ? 1 : 0.4 }}>
                   <div style={{ width: 52, height: 52, background: '#F3F4F6', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{icon}</div>
-                  <span style={{ fontSize: 11, color: '#6B7280', fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{label}</span>
+                  <span style={{ fontSize: 11, color: '#6B7280', fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{enabled ? label : `${label} (soon)`}</span>
                 </button>
               ))}
             </div>
@@ -3268,7 +3363,7 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
           </div>
         )}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => setShowAttach(v => !v)} style={{ width: 36, height: 36, background: '#F3F4F6', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={() => setShowAttach(v => !v)} disabled={uploadingAttachment} style={{ width: 36, height: 36, background: '#F3F4F6', border: 'none', borderRadius: 10, cursor: uploadingAttachment ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: uploadingAttachment ? 0.5 : 1 }}>
             <div style={{ color: '#6B7280' }}>{Ic.attach()}</div>
           </button>
           <div style={{ flex: 1, display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.06)' }}>
@@ -5220,6 +5315,45 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
           </div>
         </div>
       )}
+      {showMedia && (
+        <div style={{ position: 'absolute', inset: 0, background: N.bg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
+          <div style={{ background: N.navy, padding: '0 18px 14px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={() => setShowMedia(false)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+              <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Shared Media</span>
+            </div>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }} className="scrollbar-hide">
+            {mediaError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{mediaError}</div>}
+            {mediaLoading ? (
+              <div style={{ padding: '20px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Loading…</div>
+            ) : mediaItems.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+                <div style={{ fontSize: 44, marginBottom: 12 }}>🖼️</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>Nothing shared yet</div>
+                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Files and images sent in this chat will show up here</div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                {mediaItems.map(item => (
+                  <a key={item.id} href={item.view_url || undefined} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                    {IMAGE_FILE_TYPES.includes(item.file_type) ? (
+                      <div style={{ aspectRatio: '1', borderRadius: 10, overflow: 'hidden', background: '#F3F4F6' }}>
+                        <img src={item.view_url || undefined} alt={item.original_filename} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      </div>
+                    ) : (
+                      <div style={{ aspectRatio: '1', borderRadius: 10, background: '#F3F4F6', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: 8 }}>
+                        <div style={{ fontSize: 22 }}>📎</div>
+                        <div style={{ fontSize: 9, color: '#6B7280', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{item.original_filename}</div>
+                      </div>
+                    )}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -5379,6 +5513,8 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
 }
 
 // ─── CHAT OPTIONS ─────────────────────────────────────────────────────────────
+type SharedMediaItem = { id: number; message_id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null; uploaded_by_user_id: number; uploaded_by_name: string; created_at: string | null }
+
 function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
   const [detail, setDetail] = useState<ChatDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -5397,6 +5533,10 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
   const [searchResults, setSearchResults] = useState<ChatMessageData[]>([])
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
+  const [showMedia, setShowMedia] = useState(false)
+  const [mediaItems, setMediaItems] = useState<SharedMediaItem[]>([])
+  const [mediaLoading, setMediaLoading] = useState(false)
+  const [mediaError, setMediaError] = useState<string | null>(null)
 
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
@@ -5428,6 +5568,18 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
     }, 300)
     return () => { cancelled = true; clearTimeout(t) }
   }, [searchQuery, showSearch, conversationId])
+
+  useEffect(() => {
+    if (!showMedia || conversationId == null) return
+    let cancelled = false
+    setMediaLoading(true)
+    setMediaError(null)
+    api<{ attachments: SharedMediaItem[] }>(`/chats/${conversationId}/attachments`)
+      .then(res => { if (!cancelled) setMediaItems(res.attachments) })
+      .catch(e => { if (!cancelled) setMediaError(e instanceof Error ? e.message : 'Could not load shared media') })
+      .finally(() => { if (!cancelled) setMediaLoading(false) })
+    return () => { cancelled = true }
+  }, [showMedia, conversationId])
 
   const saveRename = async () => {
     if (!renameVal.trim() || conversationId == null || renaming) return
@@ -5522,9 +5674,10 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
             {Ic.chevR()}
           </div>
         )}
-        <div style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', opacity: 0.55 }}>
+        <div onClick={() => { setMediaError(null); setShowMedia(true) }} style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
           <span style={{ fontSize: 20 }}>🖼️</span>
-          <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Shared Media</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>Not available yet</div></div>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Shared Media</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>Files and images shared here</div></div>
+          {Ic.chevR()}
         </div>
         <div onClick={() => { setSearchError(null); setShowSearch(true) }} style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
           <span style={{ fontSize: 20 }}>🔍</span>
@@ -7219,6 +7372,7 @@ const adminNav = [
   { key: 'universities', label: 'Universities', icon: '🏛️' },
   { key: 'community', label: 'Community', icon: '💬' },
   { key: 'opportunities', label: 'Opportunities', icon: '🚀' },
+  { key: 'organisations', label: 'Organisations', icon: '🏢' },
   { key: 'ai-usage', label: 'AI & Usage', icon: '🤖' },
   { key: 'payments', label: 'Payments', icon: '💳' },
   { key: 'communications', label: 'Communications', icon: '📢' },
@@ -7996,6 +8150,10 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     )
   }
 
+  if (section === 'opportunities') return <AdminOpportunitiesPanel />
+
+  if (section === 'organisations') return <AdminOrganisationsPanel />
+
   // Light sections for community, universities, opportunities
   const lightSections: Record<string, { icon: string; title: string; desc: string; features: string[] }> = {
     universities: { icon: '🏛️', title: 'University Management', desc: 'Manage universities, faculties, departments, courses, and units.', features: ['Kenyatta University — 843 students','University of Nairobi — 621 students','Strathmore University — 412 students','JKUAT — 389 students','Mount Kenya University — 334 students'] },
@@ -8363,9 +8521,310 @@ function AdminAmbassadorsPanel() {
   )
 }
 
+// ─── ADMIN: OPPORTUNITIES REVIEW (Chunk 9 continued) ────────────────────────
+
+interface AdminOpportunityRow {
+  id: number
+  organisation_id: number
+  organisation_name: string | null
+  organisation_verification_status: string | null
+  organisation_is_active: boolean | null
+  title: string
+  opportunity_type: string
+  location: string | null
+  is_remote: boolean
+  application_deadline: string | null
+  expiry_date: string | null
+  status: string
+  rejection_reason: string | null
+  submitted_at: string | null
+  created_at: string | null
+}
+
+const ADMIN_OPP_STATUS_COLOR: Record<string, string> = {
+  draft: 'gray', pending_review: 'amber', approved: 'blue', rejected: 'red',
+  published: 'green', expired: 'gray', archived: 'gray', removed: 'red',
+}
+
+function AdminOpportunitiesPanel() {
+  const [csrfToken, setCsrfToken] = useState('')
+  const [statusFilter, setStatusFilter] = useState('pending_review')
+  const [rows, setRows] = useState<AdminOpportunityRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+  const [reasonTarget, setReasonTarget] = useState<{ kind: 'reject' | 'remove'; id: number } | null>(null)
+  const [reasonText, setReasonText] = useState('')
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+  }, [])
+
+  const load = (status: string) => {
+    setLoading(true)
+    setError('')
+    api<{ opportunities: AdminOpportunityRow[] }>(`/admin/opportunities?status=${status}`)
+      .then(res => setRows(res.opportunities))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load opportunities.'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load(statusFilter) }, [statusFilter])
+
+  const runAction = async (id: number, action: 'approve' | 'publish' | 'archive') => {
+    setActionBusy(true)
+    try {
+      await api(`/admin/opportunities/${id}/${action}`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      load(statusFilter)
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : `Could not ${action} this opportunity.`)
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const submitReason = async () => {
+    if (!reasonTarget) return
+    if (reasonTarget.kind === 'reject' && !reasonText.trim()) return
+    setActionBusy(true)
+    try {
+      const path = reasonTarget.kind === 'reject'
+        ? `/admin/opportunities/${reasonTarget.id}/reject`
+        : `/admin/opportunities/${reasonTarget.id}/remove`
+      await api(path, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ reason: reasonText.trim() || undefined }),
+      })
+      load(statusFilter)
+      setReasonTarget(null)
+      setReasonText('')
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not complete this action.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <AdminCard title={`Opportunities — ${rows.length}`}>
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {['pending_review', 'approved', 'published', 'rejected', 'expired', 'archived', 'removed', 'all'].map(f => (
+            <button key={f} onClick={() => setStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: statusFilter === f ? N.navy : '#F3F4F6', color: statusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f.replace('_', ' ')}</button>
+          ))}
+        </div>
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{error}</div>
+        ) : rows.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No opportunities with this status.</div>
+        ) : (
+          <AdminTable
+            cols={['Title', 'Organisation', 'Type', 'Deadline', 'Status']}
+            rows={rows.map(r => [
+              r.title,
+              r.organisation_name || `#${r.organisation_id}`,
+              r.opportunity_type,
+              r.application_deadline ? new Date(r.application_deadline).toLocaleDateString() : '—',
+              <AdminBadge text={r.status.replace('_', ' ')} color={ADMIN_OPP_STATUS_COLOR[r.status] || 'gray'} />,
+            ])}
+            actions={i => {
+              const r = rows[i]
+              return (
+                <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  {r.status === 'pending_review' && (
+                    <>
+                      <button disabled={actionBusy} onClick={() => runAction(r.id, 'approve')} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Approve</button>
+                      <button disabled={actionBusy} onClick={() => setReasonTarget({ kind: 'reject', id: r.id })} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Reject</button>
+                    </>
+                  )}
+                  {r.status === 'approved' && (
+                    <button disabled={actionBusy} onClick={() => runAction(r.id, 'publish')} style={{ background: '#DBEAFE', color: '#2563EB', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Publish</button>
+                  )}
+                  {(r.status === 'approved' || r.status === 'published' || r.status === 'expired') && (
+                    <button disabled={actionBusy} onClick={() => runAction(r.id, 'archive')} style={{ background: '#F3F4F6', color: '#6B7280', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Archive</button>
+                  )}
+                  {r.status !== 'removed' && (
+                    <button disabled={actionBusy} onClick={() => setReasonTarget({ kind: 'remove', id: r.id })} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
+                  )}
+                </div>
+              )
+            }}
+          />
+        )}
+      </AdminCard>
+
+      {reasonTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setReasonTarget(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 10 }}>{reasonTarget.kind === 'reject' ? 'Reason for rejection' : 'Reason for removal (optional)'}</div>
+            <textarea value={reasonText} onChange={e => setReasonText(e.target.value)} rows={3} placeholder="Explain why…" style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', resize: 'none', marginBottom: 14 }} />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { setReasonTarget(null); setReasonText('') }} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button disabled={actionBusy || (reasonTarget.kind === 'reject' && !reasonText.trim())} onClick={submitReason} style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, opacity: (actionBusy || (reasonTarget.kind === 'reject' && !reasonText.trim())) ? 0.6 : 1 }}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ADMIN: ORGANISATIONS VERIFICATION (Chunk 9 continued) ──────────────────
+
+interface AdminOrganisationRow {
+  id: number
+  name: string
+  contact_email: string
+  contact_phone: string | null
+  website: string | null
+  verification_status: 'pending' | 'verified' | 'rejected'
+  verification_notes: string | null
+  is_active: boolean
+  owner_email: string | null
+  created_at: string | null
+}
+
+const ADMIN_ORG_STATUS_COLOR: Record<string, string> = {
+  pending: 'amber', verified: 'green', rejected: 'red',
+}
+
+function AdminOrganisationsPanel() {
+  const [csrfToken, setCsrfToken] = useState('')
+  const [statusFilter, setStatusFilter] = useState('pending')
+  const [rows, setRows] = useState<AdminOrganisationRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+  const [rejectTarget, setRejectTarget] = useState<number | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+  }, [])
+
+  const load = (status: string) => {
+    setLoading(true)
+    setError('')
+    const qs = status === 'all' ? '' : `?verification_status=${status}`
+    api<{ organisations: AdminOrganisationRow[] }>(`/admin/organisations${qs}`)
+      .then(res => setRows(res.organisations))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load organisations.'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load(statusFilter) }, [statusFilter])
+
+  const verify = async (id: number) => {
+    setActionBusy(true)
+    try {
+      await api(`/admin/organisations/${id}/verify`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      load(statusFilter)
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not verify this organisation.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const submitReject = async () => {
+    if (rejectTarget == null || !rejectReason.trim()) return
+    setActionBusy(true)
+    try {
+      await api(`/admin/organisations/${rejectTarget}/reject`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ reason: rejectReason.trim() }),
+      })
+      load(statusFilter)
+      setRejectTarget(null)
+      setRejectReason('')
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not reject this organisation.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const toggleActive = async (id: number, nextActive: boolean) => {
+    setActionBusy(true)
+    try {
+      await api(`/admin/organisations/${id}`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ is_active: nextActive }),
+      })
+      load(statusFilter)
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not update this organisation.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <AdminCard title={`Organisations — ${rows.length}`}>
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6 }}>
+          {['pending', 'verified', 'rejected', 'all'].map(f => (
+            <button key={f} onClick={() => setStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: statusFilter === f ? N.navy : '#F3F4F6', color: statusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
+          ))}
+        </div>
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{error}</div>
+        ) : rows.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No organisations with this status.</div>
+        ) : (
+          <AdminTable
+            cols={['Name', 'Contact', 'Owner', 'Active', 'Status']}
+            rows={rows.map(r => [
+              r.name,
+              r.contact_email,
+              r.owner_email || '—',
+              r.is_active ? 'Yes' : 'No',
+              <AdminBadge text={r.verification_status} color={ADMIN_ORG_STATUS_COLOR[r.verification_status] || 'gray'} />,
+            ])}
+            actions={i => {
+              const r = rows[i]
+              return (
+                <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  {r.verification_status !== 'verified' && (
+                    <button disabled={actionBusy} onClick={() => verify(r.id)} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Verify</button>
+                  )}
+                  {r.verification_status === 'pending' && (
+                    <button disabled={actionBusy} onClick={() => setRejectTarget(r.id)} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Reject</button>
+                  )}
+                  <button disabled={actionBusy} onClick={() => toggleActive(r.id, !r.is_active)} style={{ background: r.is_active ? '#FEF3C7' : '#DBEAFE', color: r.is_active ? '#D97706' : '#2563EB', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{r.is_active ? 'Deactivate' : 'Activate'}</button>
+                </div>
+              )
+            }}
+          />
+        )}
+      </AdminCard>
+
+      {rejectTarget != null && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setRejectTarget(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 10 }}>Reason for rejection</div>
+            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={3} placeholder="Explain why this organisation is being rejected…" style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', resize: 'none', marginBottom: 14 }} />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { setRejectTarget(null); setRejectReason('') }} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button disabled={actionBusy || !rejectReason.trim()} onClick={submitReject} style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, opacity: (actionBusy || !rejectReason.trim()) ? 0.6 : 1 }}>Confirm Reject</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AdminPlatform({ onExit }: { onExit: () => void }) {
   const [section, setSection] = useState('dashboard')
-  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System' }
+  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System' }
 
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#F4F6FA', fontFamily: 'Plus Jakarta Sans', overflow: 'hidden' }}>
