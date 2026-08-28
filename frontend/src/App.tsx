@@ -1151,13 +1151,18 @@ type HomeDocument = { id: number; title: string; status: string; file_type: stri
 type GamificationSummary = { xp_total: number; level: number; level_title: string; current_streak: number; longest_streak: number; documents_count: number; followers_count: number }
 
 // ─── Social (Chunk 12) ─────────────────────────────────────────────────────────
-// No dedicated "public user profile" endpoint exists on the backend beyond
-// follow-summary - display_name for a profile you're VIEWING (not your own)
-// has to be carried along from wherever the navigation originated (a follow
-// list row, a notification body, etc) rather than fetched fresh. This is a
-// known backend gap, not something to fabricate around.
+// GET /users/:id/public-profile (added in the Chunk 12 close-out patch)
+// supplies bio/year/university/program/documents/XP for a profile you're
+// VIEWING (not your own) - display_name is still carried along from wherever
+// navigation originated (a follow list row, a notification body, etc) as a
+// fallback while this loads, same as before.
 type FollowSummary = { user_id: number; followers_count: number; following_count: number; is_following: boolean; is_followed_by: boolean }
 type FollowListUser = { user_id: number; display_name: string; is_following: boolean }
+type PublicProfile = {
+  user_id: number; display_name: string; bio: string | null; year: number | null
+  university_name: string | null; program_name: string | null
+  documents_count: number; xp_total: number
+}
 
 function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
   const [notifCount, setNotifCount] = useState(0)
@@ -3686,18 +3691,19 @@ function ShareSheetScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── STUDENT PROFILE ──────────────────────────────────────────────────────────
-// Viewing another student's profile. The backend has no dedicated "public
-// profile fields" endpoint (bio/course/university for a user who isn't you) -
-// only GET /users/:id/follow-summary, which gives counts + relationship
-// flags. fallbackName is whatever display name the calling screen already
-// had on hand (a follow-list row, a notification, etc) - real data, just
-// carried over rather than invented here.
+// Viewing another student's profile. Combines GET /users/:id/public-profile
+// (bio/year/university/program/documents/XP) with GET /users/:id/follow-summary
+// (counts + relationship flags) - two calls, fired in parallel, since neither
+// endpoint alone has both halves. fallbackName is whatever display name the
+// calling screen already had on hand (a follow-list row, a notification,
+// etc) - used only until public-profile's own display_name arrives.
 function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActiveConversationId }: {
   setScreen: (s: Screen) => void
   targetUserId: number | null
   fallbackName?: string | null
   setActiveConversationId?: (id: number) => void
 }) {
+  const [profile, setProfile] = useState<PublicProfile | null>(null)
   const [summary, setSummary] = useState<FollowSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -3711,8 +3717,11 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
     if (targetUserId == null) { setLoading(false); setError('No student selected.'); return }
     setLoading(true)
     setError('')
-    api<FollowSummary>(`/users/${targetUserId}/follow-summary`)
-      .then(setSummary)
+    Promise.all([
+      api<PublicProfile>(`/users/${targetUserId}/public-profile`),
+      api<FollowSummary>(`/users/${targetUserId}/follow-summary`),
+    ])
+      .then(([profileRes, summaryRes]) => { setProfile(profileRes); setSummary(summaryRes) })
       .catch(() => setError('Could not load this profile.'))
       .finally(() => setLoading(false))
   }, [targetUserId])
@@ -3748,8 +3757,11 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
     setMessageBusy(false)
   }
 
-  const displayName = fallbackName || 'Student'
+  const displayName = profile?.display_name || fallbackName || 'Student'
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
+  const courseLine = profile && (profile.program_name || profile.year != null)
+    ? [profile.program_name, profile.year != null ? `Year ${profile.year}` : null].filter(Boolean).join(' · ')
+    : null
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
@@ -3769,9 +3781,9 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
             <div style={{ marginBottom: 14 }}><Avi name={initials} size={72} /></div>
             <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>{displayName}</div>
-            {/* Course/university/year aren't exposed for other users' profiles
-                by the current backend (only your own /me includes them) -
-                omitted rather than guessed at. */}
+            {courseLine && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{courseLine}</div>}
+            {profile?.university_name && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{profile.university_name}</div>}
+            {profile?.bio && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 8, maxWidth: 260, lineHeight: 1.5 }}>{profile.bio}</div>}
             <div style={{ marginBottom: 14 }} />
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={toggleFollow} disabled={followBusy} style={{ background: summary?.is_following ? 'rgba(201,168,76,0.2)' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: summary?.is_following ? N.gold : N.navy, fontWeight: 800, fontSize: 13, border: summary?.is_following ? `1px solid ${N.gold}44` : 'none', borderRadius: 12, padding: '10px 24px', cursor: followBusy ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy ? 0.7 : 1 }}>{summary?.is_following ? 'Following ✓' : 'Follow'}</button>
@@ -3780,8 +3792,12 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
           </div>
         )}
       </div>
-      {!loading && !error && summary && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10, padding: '16px 16px 0' }}>
+      {!loading && !error && summary && profile && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, padding: '16px 16px 0' }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{profile.xp_total.toLocaleString()}</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF' }}>XP</div>
+          </div>
           <div style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
             <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{summary.followers_count}</div>
             <div style={{ fontSize: 11, color: '#9CA3AF' }}>Followers</div>
@@ -3790,10 +3806,14 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
             <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{summary.following_count}</div>
             <div style={{ fontSize: 11, color: '#9CA3AF' }}>Following</div>
           </div>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{profile.documents_count}</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF' }}>Documents</div>
+          </div>
         </div>
       )}
-      {/* XP total, document count, and recent posts for another user aren't
-          exposed by any current endpoint - not shown, rather than faked. */}
+      {/* Recent posts for another user still aren't exposed by any current
+          endpoint - not shown, rather than faked. */}
     </div>
   )
 }
