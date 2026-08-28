@@ -6390,18 +6390,63 @@ function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── STUDY STREAK ─────────────────────────────────────────────────────────────
-function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const current = 12
-  const longest = 21
+type StreakCalendarDay = { date: string; studied: boolean }
+type StreakMilestone = { days: number; label: string; xp: string; done: boolean }
+type StreakResponse = {
+  current_streak: number
+  longest_streak: number
+  calendar: StreakCalendarDay[]
+  milestones: StreakMilestone[]
+}
 
-  // Build last 42 days of study activity (mock)
-  const today = new Date()
-  const days = Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(today)
-    d.setDate(today.getDate() - (41 - i))
-    const studied = i > 10 ? (Math.random() > 0.3) : i >= 30 // recent 12 are studied
-    return { date: d, studied: i >= 30 || (i >= 15 && Math.random() > 0.4) }
-  })
+function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<StreakResponse | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    api<StreakResponse>('/streak')
+      .then(res => { if (!cancelled) setData(res) })
+      .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load streak') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const current = data?.current_streak ?? 0
+  const longest = data?.longest_streak ?? 0
+  const days = data?.calendar ?? []
+  const milestones = data?.milestones ?? []
+
+  if (loading) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+            <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Study Streak</div>
+          </div>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#9CA3AF' }}>Loading…</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+            <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Study Streak</div>
+          </div>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#EF4444', padding: '0 24px', textAlign: 'center' }}>{error}</div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
@@ -6429,7 +6474,7 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
             {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 4 }}>{d}</div>)}
             {days.map((d, i) => (
-              <div key={i} style={{ aspectRatio: '1', borderRadius: 6, background: d.studied ? N.gold : '#F3F4F6', opacity: d.studied ? (i >= 30 ? 1 : 0.55) : 1, transition: 'background 0.2s' }} title={d.date.toLocaleDateString()} />
+              <div key={i} style={{ aspectRatio: '1', borderRadius: 6, background: d.studied ? N.gold : '#F3F4F6', transition: 'background 0.2s' }} title={new Date(d.date).toLocaleDateString()} />
             ))}
           </div>
           <div style={{ display: 'flex', gap: 12, marginTop: 14, alignItems: 'center' }}>
@@ -6439,8 +6484,8 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
         <div style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
           <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Streak milestones</div>
-          {[{ days: 7, label: '7-Day Scholar', xp: '+50 XP', done: true }, { days: 14, label: '14-Day Achiever', xp: '+100 XP', done: false }, { days: 21, label: '21-Day Legend', xp: '+150 XP', done: false }, { days: 30, label: '30-Day Master', xp: '+200 XP', done: false }].map((m, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < 3 ? 12 : 0 }}>
+          {milestones.map((m, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < milestones.length - 1 ? 12 : 0 }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: m.done ? `${N.gold}20` : '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {m.done ? <span style={{ fontSize: 16 }}>🏆</span> : <span style={{ fontSize: 16, opacity: 0.4 }}>🔒</span>}
               </div>
@@ -6453,7 +6498,7 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           ))}
         </div>
         <button onClick={() => setScreen('share-sheet')} style={{ width: '100%', background: 'transparent', border: `1.5px solid ${N.gold}`, color: N.gold, fontWeight: 700, fontSize: 14, borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-          Share 12-Day Streak
+          Share {current}-Day Streak
         </button>
         <div style={{ height: 20 }} />
       </div>
