@@ -3811,10 +3811,12 @@ function ProfileScreen({ setScreen, setActiveProfileUserId }: { setScreen: (s: S
   const [uniName, setUniName] = useState<string | null>(null)
   const [programName, setProgramName] = useState<string | null>(null)
   const [summary, setSummary] = useState<GamificationSummary | null>(null)
+  const [achievementsList, setAchievementsList] = useState<Achievement[]>([])
 
   useEffect(() => {
     api<ProfileMe>('/me').then(setMe).catch(() => {})
     api<GamificationSummary>('/gamification/summary').then(setSummary).catch(() => {})
+    api<AchievementsResponse>('/achievements').then(res => setAchievementsList(res.achievements)).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -3892,7 +3894,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId }: { setScreen: (s: S
         </div>
         <div style={{ display: 'flex', gap: 14, overflowX: 'auto' }} className="scrollbar-hide">
           {achievementsList.filter(a => a.done).map(a => (
-            <button key={a.id} onClick={() => setScreen('achievements')} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer' }}>
+            <button key={a.code} onClick={() => setScreen('achievements')} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer' }}>
               <div style={{ width: 46, height: 46, background: `${N.gold}18`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, border: `2px solid ${N.gold}33` }}>{a.icon}</div>
               <div style={{ fontSize: 9, color: '#6B7280', textAlign: 'center', maxWidth: 50, lineHeight: 1.3 }}>{a.name}</div>
             </button>
@@ -6507,21 +6509,70 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── ACHIEVEMENTS ─────────────────────────────────────────────────────────────
-const achievementsList = [
-  { id: 'a1', icon: '📄', name: 'First Document', desc: 'Upload your first document', req: '1 document uploaded', done: true, date: 'Aug 1, 2025', progress: 1, total: 1 },
-  { id: 'a2', icon: '❓', name: 'Quiz Starter', desc: 'Complete your first quiz', req: '1 quiz completed', done: true, date: 'Aug 3, 2025', progress: 1, total: 1 },
-  { id: 'a3', icon: '🔥', name: '7-Day Scholar', desc: 'Maintain a 7-day study streak', req: '7 consecutive study days', done: true, date: 'Aug 8, 2025', progress: 7, total: 7 },
-  { id: 'a4', icon: '📚', name: 'Library Contributor', desc: 'Get a material approved in the library', req: '1 approved submission', done: true, date: 'Aug 9, 2025', progress: 1, total: 1 },
-  { id: 'a5', icon: '🧠', name: 'Quiz Master', desc: 'Complete 25 quizzes', req: '25 quizzes', done: false, progress: 8, total: 25 },
-  { id: 'a6', icon: '🃏', name: 'Flashcard Champ', desc: 'Complete 50 flashcard sessions', req: '50 sessions', done: false, progress: 12, total: 50 },
-  { id: 'a7', icon: '💬', name: 'Community Helper', desc: 'Receive 10 helpful votes on replies', req: '10 helpful votes', done: false, progress: 3, total: 10 },
-  { id: 'a8', icon: '🔥', name: '30-Day Master', desc: 'Maintain a 30-day study streak', req: '30 consecutive days', done: false, progress: 12, total: 30 },
-]
+type Achievement = {
+  code: string
+  icon: string
+  name: string
+  desc: string
+  done: boolean
+  unlocked_at: string | null
+  progress: number
+  total: number
+}
+type AchievementsResponse = { unlocked_count: number; total_count: number; achievements: Achievement[] }
+
+function formatAchievementDate(iso: string | null): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
 
 function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [sharing, setSharing] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [achievementsList, setAchievementsList] = useState<Achievement[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    api<AchievementsResponse>('/achievements')
+      .then(res => { if (!cancelled) setAchievementsList(res.achievements) })
+      .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load achievements') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
   const unlocked = achievementsList.filter(a => a.done)
   const locked = achievementsList.filter(a => !a.done)
+
+  if (loading) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Achievements</div>
+          </div>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#9CA3AF' }}>Loading…</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Achievements</div>
+          </div>
+        </div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#EF4444', padding: '0 24px', textAlign: 'center' }}>{error}</div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
@@ -6529,7 +6580,7 @@ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
           <div style={{ width: 390, background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 32px' }}>
             <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
-            {(() => { const a = achievementsList.find(x => x.id === sharing)!; return (
+            {(() => { const a = achievementsList.find(x => x.code === sharing)!; return (
               <div>
                 <div style={{ background: N.navy, borderRadius: 16, padding: '20px', marginBottom: 16, textAlign: 'center' }}>
                   <div style={{ fontSize: 40, marginBottom: 10 }}>{a.icon}</div>
@@ -6557,27 +6608,27 @@ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }} className="scrollbar-hide">
         <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Unlocked ({unlocked.length})</div>
         {unlocked.map(a => (
-          <div key={a.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, border: `1.5px solid ${N.gold}30`, boxShadow: `0 4px 16px ${N.gold}10`, display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div key={a.code} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, border: `1.5px solid ${N.gold}30`, boxShadow: `0 4px 16px ${N.gold}10`, display: 'flex', gap: 12, alignItems: 'center' }}>
             <div style={{ width: 48, height: 48, background: `${N.gold}15`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{a.icon}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{a.name}</div>
               <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{a.desc}</div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>Achieved {a.date}</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>Achieved {formatAchievementDate(a.unlocked_at)}</div>
             </div>
-            <button onClick={() => setSharing(a.id)} style={{ background: '#F3F4F6', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans', flexShrink: 0 }}>Share</button>
+            <button onClick={() => setSharing(a.code)} style={{ background: '#F3F4F6', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans', flexShrink: 0 }}>Share</button>
           </div>
         ))}
         <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, margin: '20px 0 12px' }}>In progress ({locked.length})</div>
         {locked.map(a => (
-          <div key={a.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, opacity: 0.7, boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div key={a.code} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, opacity: 0.7, boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', gap: 12, alignItems: 'center' }}>
             <div style={{ width: 48, height: 48, background: '#F3F4F6', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, filter: 'grayscale(1)', opacity: 0.5 }}>{a.icon}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: '#6B7280' }}>{a.name}</div>
               <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{a.desc}</div>
               <div style={{ background: '#F3F4F6', borderRadius: 99, height: 5, marginTop: 8, overflow: 'hidden' }}>
-                <div style={{ background: '#D1D5DB', height: 5, width: `${(a.progress / a.total) * 100}%`, borderRadius: 99 }} />
+                <div style={{ background: '#D1D5DB', height: 5, width: `${a.total > 0 ? (a.progress / a.total) * 100 : 0}%`, borderRadius: 99 }} />
               </div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{a.progress} / {a.total} {a.req.split(' ').slice(-1)[0]}</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{a.progress} / {a.total}</div>
             </div>
           </div>
         ))}
