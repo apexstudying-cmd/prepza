@@ -2090,6 +2090,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
 
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
   const [docLoadError, setDocLoadError] = useState('')
+  const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
 
   useEffect(() => {
     if (activeDocumentId == null) return
@@ -2097,6 +2098,25 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
       .then(d => { setDoc(d); setRenameVal(d.title) })
       .catch(e => setDocLoadError(e instanceof ApiError ? e.message : 'Could not load this document.'))
   }, [activeDocumentId])
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
+  }, [])
+
+  // Study-time heartbeat: only while actually reading the document
+  // (tab === 'doc') and the browser tab is visible - backgrounding
+  // or switching to the AI/tools tab stops the clock. Errors are
+  // swallowed since a missed heartbeat just means a bit less credited
+  // time, not a broken experience.
+  useEffect(() => {
+    if (tab !== 'doc' || activeDocumentId == null) return
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return
+      api('/study-time/heartbeat', { method: 'POST', headers: { 'X-CSRF-Token': heartbeatCsrf } }).catch(() => {})
+    }
+    const interval = setInterval(ping, 20000)
+    return () => clearInterval(interval)
+  }, [tab, activeDocumentId, heartbeatCsrf])
 
   if (loading) return <SkeletonDocument />
 
