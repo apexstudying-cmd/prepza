@@ -3,6 +3,7 @@ import re
 import base64
 import secrets
 import hmac
+import hashlib
 import json
 import requests
 import sentry_sdk
@@ -29,6 +30,8 @@ sentry_dsn = os.environ.get("SENTRY_DSN")
 anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY")
+PAYSTACK_PUBLIC_KEY = os.environ.get("PAYSTACK_PUBLIC_KEY")
 if sentry_dsn:
     sentry_sdk.init(
         dsn=sentry_dsn,
@@ -184,10 +187,17 @@ class Payment(db.Model):
     status = db.Column(db.String(20), default="pending")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # ---- Pesapal (Chunk 8) ----
-    provider = db.Column(db.String(20), nullable=False, default="pesapal")
-    merchant_reference = db.Column(db.String(50), unique=True, nullable=True)
-    order_tracking_id = db.Column(db.String(100), unique=True, nullable=True)
+    # ---- Paystack (Chunk 8, migrated from Pesapal) ----
+    provider = db.Column(db.String(20), nullable=False, default="paystack")
+    reference = db.Column(db.String(50), unique=True, nullable=True)
+    # Reference WE generate and pass to Paystack on initialize - this is
+    # what Paystack's webhook/callback hand back to us, and what
+    # /transaction/verify/<reference> is keyed on. Renamed from
+    # merchant_reference (Pesapal-specific naming).
+    provider_reference = db.Column(db.String(100), unique=True, nullable=True)
+    # Paystack's own internal transaction id (the "id" field from a
+    # verify-transaction response), stored for support/audit lookups in
+    # the Paystack dashboard. Renamed from order_tracking_id.
 
     # 'content' (one-off document/item purchase) or 'subscription' (plan purchase)
     payment_type = db.Column(db.String(20), nullable=False, default="content")
@@ -836,6 +846,26 @@ class StudyActivityLog(db.Model):
     )
 
 
+class StudyTimeLog(db.Model):
+    """
+    Minutes actually spent studying, one row per user per calendar
+    day. Deliberately a SEPARATE table from StudyActivityLog - see
+    the design note at the top of the patch script that added this.
+    study_time_seconds accumulates across every heartbeat that day
+    (any document/feature); last_heartbeat_at is used server-side to
+    compute each new heartbeat's elapsed time, capped per call, so a
+    backgrounded tab can never retroactively credit a large gap.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    activity_date = db.Column(db.Date, nullable=False)
+    study_time_seconds = db.Column(db.Integer, nullable=False, default=0)
+    last_heartbeat_at = db.Column(db.DateTime, nullable=True)
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "activity_date", name="uq_study_time_user_date"),
+    )
+
+
 class QuizAttempt(db.Model):
     """
     A single quiz completion. Deliberately not deduplicated - a student
@@ -1441,85 +1471,58 @@ class AmbassadorPayout(db.Model):
     paid_at = db.Column(db.DateTime, nullable=True)
 
 
-# ---------- Pesapal (Chunk 8) ----------
-# API 3.0. PESAPAL_ENV switches base URL the same way Daraja used to
-# switch on shortcode. Docs: developer.pesapal.com/how-to-integrate
-PESAPAL_SANDBOX_BASE = "https://cybqa.pesapal.com/pesapalv3"
-PESAPAL_PRODUCTION_BASE = "https://pay.pesapal.com/v3"
+# ---------- Paystack (Chunk 8, migrated from Pesapal) ----------
+# Docs: paystack.com/docs/payments/accept-payments /
+# paystack.com/docs/api/transaction. PAYSTACK_SECRET_KEY's own prefix
+# (sk_test_ vs sk_live_) determines sandbox vs live - unlike Pesapal,
+# Paystack has no separate base URL per environment.
+PAYSTACK_BASE_URL = "https://api.paystack.co"
 SUBSCRIPTION_PLAN_DURATIONS_DAYS = {"semester": 120, "annual": 365}
 
-_pesapal_token_cache = {"token": None, "expires_at": None}
 
-
-def pesapal_base_url():
-    env = os.environ.get("PESAPAL_ENV", "sandbox").strip().lower()
-    return PESAPAL_PRODUCTION_BASE if env == "production" else PESAPAL_SANDBOX_BASE
-
-
-def get_pesapal_token():
-    """Cached bearer token - Pesapal tokens last 5 minutes."""
-    cached = _pesapal_token_cache["token"]
-    expires_at = _pesapal_token_cache["expires_at"]
-    if cached and expires_at and datetime.utcnow() < expires_at - timedelta(seconds=30):
-        return cached
-
-    response = requests.post(
-        f"{pesapal_base_url()}/api/Auth/RequestToken",
-        json={
-            "consumer_key": os.environ.get("PESAPAL_CONSUMER_KEY"),
-            "consumer_secret": os.environ.get("PESAPAL_CONSUMER_SECRET"),
-        },
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
-        timeout=15,
-    )
-    response.raise_for_status()
-    data = response.json()
-    token = data.get("token")
-    if not token:
-        raise RuntimeError(f"Pesapal auth failed: {data.get('message') or data}")
-
-    _pesapal_token_cache["token"] = token
-    _pesapal_token_cache["expires_at"] = datetime.utcnow() + timedelta(minutes=5)
-    return token
-
-
-def pesapal_request(method, path, **kwargs):
-    token = get_pesapal_token()
+def paystack_request(method, path, **kwargs):
+    if not PAYSTACK_SECRET_KEY:
+        raise RuntimeError("PAYSTACK_SECRET_KEY is not configured")
     headers = kwargs.pop("headers", {})
     headers.setdefault("Accept", "application/json")
     headers.setdefault("Content-Type", "application/json")
-    headers["Authorization"] = f"Bearer {token}"
+    headers["Authorization"] = f"Bearer {PAYSTACK_SECRET_KEY}"
     response = requests.request(
-        method, f"{pesapal_base_url()}{path}", headers=headers, timeout=20, **kwargs
+        method, f"{PAYSTACK_BASE_URL}{path}", headers=headers, timeout=20, **kwargs
     )
     response.raise_for_status()
-    return response.json()
+    data = response.json()
+    if not data.get("status"):
+        raise RuntimeError(f"Paystack request failed: {data.get('message') or data}")
+    return data
 
 
-def create_pesapal_order(merchant_reference, amount, description, user):
-    """Submits an order to Pesapal. Returns (order_tracking_id, redirect_url)."""
-    notification_id = os.environ.get("PESAPAL_IPN_ID")
-    if not notification_id:
-        raise RuntimeError("PESAPAL_IPN_ID is not configured")
-
+def create_paystack_transaction(reference, amount, description, user):
+    """
+    Initializes a Paystack transaction. amount is in whole KES (same unit
+    the rest of this file uses) - Paystack expects the lowest currency
+    unit, so it's multiplied by 100 here. Returns (provider_reference,
+    authorization_url) - provider_reference is Paystack's own transaction
+    id (from the initialize response's "reference" field, which Paystack
+    generates unless overridden; we pass our own `reference` as the
+    canonical merchant-side identifier and get it back unchanged on
+    webhook/callback).
+    """
     payload = {
-        "id": merchant_reference,
+        "reference": reference,
+        "amount": amount * 100,
         "currency": "KES",
-        "amount": amount,
-        "description": description[:100],
-        "callback_url": f"{BASE_URL}/payment/pesapal/callback",
-        "notification_id": notification_id,
-        "billing_address": {
-            "email_address": user.email,
-            "country_code": "KE",
-        },
+        "email": user.email,
+        "callback_url": f"{BASE_URL}/payment/paystack/callback",
+        "metadata": {"description": description[:100]},
     }
-    data = pesapal_request("POST", "/api/Transactions/SubmitOrderRequest", json=payload)
-    order_tracking_id = data.get("order_tracking_id")
-    redirect_url = data.get("redirect_url")
-    if not order_tracking_id or not redirect_url:
-        raise RuntimeError(f"Pesapal order creation failed: {data}")
-    return order_tracking_id, redirect_url
+    data = paystack_request("POST", "/transaction/initialize", json=payload)
+    tx = data.get("data") or {}
+    authorization_url = tx.get("authorization_url")
+    provider_reference = tx.get("reference") or reference
+    if not authorization_url:
+        raise RuntimeError(f"Paystack transaction initialization failed: {data}")
+    return provider_reference, authorization_url
 
 
 def get_plan_prices():
@@ -1644,7 +1647,7 @@ def _sync_referral_progress(user):
 
 def _maybe_award_referral_commission(payment):
     """
-    Called from sync_pesapal_payment_status() right after a Payment's
+    Called from sync_paystack_payment_status() right after a Payment's
     status is set to 'success' in memory, before that change is
     committed. Awards a ONE-TIME referral commission on a user's FIRST
     successful payment ever (content or subscription) - never on
@@ -1734,25 +1737,28 @@ def compute_new_subscription_expiry(user_id, plan):
     return base + timedelta(days=duration_days)
 
 
-def sync_pesapal_payment_status(order_tracking_id):
+def sync_paystack_payment_status(reference):
     """
-    Fetches the authoritative status from Pesapal and updates the matching
-    Payment row. Idempotent - a payment already resolved is left alone.
+    Fetches the authoritative status from Paystack's verify-transaction
+    endpoint and updates the matching Payment row. Idempotent - a payment
+    already resolved is left alone. Called from both the browser callback
+    (best-effort, user is waiting) and the webhook (authoritative,
+    server-to-server) - either can be first, both are safe to call.
     """
-    payment = Payment.query.filter_by(order_tracking_id=order_tracking_id).first()
+    payment = Payment.query.filter_by(reference=reference).first()
     if not payment or payment.status != "pending":
         return payment
 
-    data = pesapal_request(
-        "GET", f"/api/Transactions/GetTransactionStatus?orderTrackingId={order_tracking_id}"
-    )
-    status_code = data.get("status_code")  # 0 INVALID, 1 COMPLETED, 2 FAILED, 3 REVERSED
+    data = paystack_request("GET", f"/transaction/verify/{reference}")
+    tx = data.get("data") or {}
+    tx_status = tx.get("status")  # "success" | "failed" | "abandoned" | ...
+    payment.provider_reference = str(tx.get("id")) if tx.get("id") is not None else payment.provider_reference
 
-    if status_code == 1:
-        paid_amount = data.get("amount")
-        if paid_amount is not None and round(float(paid_amount)) != payment.amount:
-            print(f"Pesapal amount mismatch on payment {payment.id}: "
-                  f"expected {payment.amount}, got {paid_amount}")
+    if tx_status == "success":
+        paid_amount_kobo = tx.get("amount")
+        if paid_amount_kobo is not None and round(float(paid_amount_kobo) / 100) != payment.amount:
+            print(f"Paystack amount mismatch on payment {payment.id}: "
+                  f"expected {payment.amount}, got {paid_amount_kobo}")
             payment.status = "failed"
         else:
             payment.status = "success"
@@ -1761,9 +1767,9 @@ def sync_pesapal_payment_status(order_tracking_id):
                     payment.user_id, payment.plan
                 )
             _maybe_award_referral_commission(payment)
-    elif status_code in (2, 3, 0):
+    elif tx_status in ("failed", "abandoned", "reversed"):
         payment.status = "failed"
-    # else: still processing on Pesapal's side, leave as pending
+    # else: still processing on Paystack's side, leave as pending
 
     db.session.commit()
     return payment
@@ -2771,7 +2777,7 @@ def payment_history():
             "amount": p.amount,
             "status": p.status,
             "provider": p.provider,
-            "merchant_reference": p.merchant_reference,
+            "reference": p.reference,
             "created_at": p.created_at.isoformat() if p.created_at else None,
         })
 
@@ -4684,6 +4690,38 @@ def _document_study_event_id(user_id, document_content_id):
     return row.id if row else None
 
 
+MAX_HEARTBEAT_INTERVAL_SECONDS = 30
+MAX_STUDY_TIME_SECONDS_PER_DAY = 8 * 60 * 60  # anti-gaming ceiling, 8h/day
+
+
+def record_study_time_heartbeat(user_id):
+    """
+    Credits up to MAX_HEARTBEAT_INTERVAL_SECONDS for the gap since
+    this user's last heartbeat today, onto their StudyTimeLog row
+    for today (created on first heartbeat of the day). The very
+    first heartbeat of a day only sets the baseline timestamp and
+    credits nothing, since there's no prior heartbeat to measure
+    from. Returns today's running total in seconds.
+    """
+    today = datetime.utcnow().date()
+    now = datetime.utcnow()
+
+    row = StudyTimeLog.query.filter_by(user_id=user_id, activity_date=today).first()
+    if not row:
+        row = StudyTimeLog(user_id=user_id, activity_date=today, study_time_seconds=0)
+        db.session.add(row)
+        db.session.flush()
+
+    if row.last_heartbeat_at is not None:
+        elapsed = (now - row.last_heartbeat_at).total_seconds()
+        credited = max(0, min(elapsed, MAX_HEARTBEAT_INTERVAL_SECONDS))
+        room = max(0, MAX_STUDY_TIME_SECONDS_PER_DAY - row.study_time_seconds)
+        row.study_time_seconds += int(min(credited, room))
+
+    row.last_heartbeat_at = now
+    return row.study_time_seconds
+
+
 def check_and_unlock_achievements(user_id):
     """
     Evaluates every achievement definition and unlocks any newly-earned
@@ -4893,6 +4931,68 @@ def streak_detail():
         "earliest_month": earliest_month,
         "calendar": calendar,
         "milestones": milestones,
+    })
+
+
+@app.route("/study-time/heartbeat", methods=["POST"])
+@limiter.limit(
+    "200 per hour",
+    key_func=lambda: f"study-heartbeat:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def study_time_heartbeat():
+    """
+    Called by the client every ~20s while a document/summary is open
+    and the tab is visible. Also marks today as a study day (streak)
+    via record_study_activity() - reading is a legitimate study
+    action - but awards no XP itself; only record_document_studied()
+    (called from the generation routes) does that.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    seconds_today = record_study_time_heartbeat(user_id)
+    record_study_activity(user_id)
+    db.session.commit()
+
+    return jsonify({"study_time_seconds_today": seconds_today})
+
+
+@app.route("/study-time")
+def study_time_summary():
+    """
+    Powers TimeStudiedScreen. by_feature is not yet implemented -
+    StudyTimeLog only tracks a daily total today, not a per-feature
+    breakdown - so it's returned as an empty object rather than
+    fabricated. See the patch script that added this route for why.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    period = request.args.get("period", "week")
+    today = datetime.utcnow().date()
+    if period == "day":
+        start_date = today
+    elif period == "month":
+        start_date = today.replace(day=1)
+    else:
+        period = "week"
+        start_date = today - timedelta(days=today.weekday())
+
+    total_seconds = db.session.query(
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+    ).filter(
+        StudyTimeLog.user_id == user_id,
+        StudyTimeLog.activity_date >= start_date,
+        StudyTimeLog.activity_date <= today,
+    ).scalar()
+
+    return jsonify({
+        "period": period,
+        "total_seconds": total_seconds,
+        "by_feature": {},
     })
 
 
@@ -6770,12 +6870,12 @@ def pay_for_content(content_id):
 
     user = db.session.get(User, user_id)
     data = request.get_json(silent=True) or {}
-    phone_number = data.get("phone_number")  # optional - Pesapal collects payment details itself
-    merchant_reference = f"PZA-content-{content_id}-{secrets.token_hex(6)}"
+    phone_number = data.get("phone_number")  # optional - Paystack collects payment details itself
+    reference = f"PZA-content-{content_id}-{secrets.token_hex(6)}"
 
     try:
-        order_tracking_id, redirect_url = create_pesapal_order(
-            merchant_reference, price, f"Prepza - {content_item.title}", user
+        provider_reference, authorization_url = create_paystack_transaction(
+            reference, price, f"Prepza - {content_item.title}", user
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -6785,9 +6885,9 @@ def pay_for_content(content_id):
         content_item_id=content_id,
         phone_number=phone_number,
         amount=price,
-        provider="pesapal",
-        merchant_reference=merchant_reference,
-        order_tracking_id=order_tracking_id,
+        provider="paystack",
+        reference=reference,
+        provider_reference=provider_reference,
         payment_type="content",
         status="pending",
     )
@@ -6795,72 +6895,73 @@ def pay_for_content(content_id):
     db.session.commit()
 
     return jsonify({
-        "redirect_url": redirect_url,
-        "order_tracking_id": order_tracking_id,
-        "merchant_reference": merchant_reference,
+        # Field kept as "redirect_url" (aliasing Paystack's own
+        # "authorization_url") so the existing frontend payment flow
+        # doesn't need a parallel change just for a field rename.
+        "redirect_url": authorization_url,
+        "reference": reference,
     })
 
 
-@app.route("/payment/pesapal/callback")
-def pesapal_callback():
+@app.route("/payment/paystack/callback")
+def paystack_callback():
     """
-    Browser redirect target after the user finishes on Pesapal's hosted
-    payment page. Pesapal's docs say this must NOT return JSON - show the
-    customer a result page instead. Real frontend wiring is a later chunk;
-    this is a minimal built-in placeholder so the flow is testable end to
-    end against the sandbox right now.
+    Browser redirect target after the user finishes on Paystack's hosted
+    checkout page. Unlike the old Pesapal callback (which rendered a
+    standalone HTML page outside the app), this redirects back INTO the
+    SPA with a query param, so PaymentSuccessScreen/PaymentFailureScreen
+    become reachable. This is a best-effort, user-is-waiting sync - the
+    webhook below is the authoritative source of truth and will also
+    resolve the payment even if the user closes the tab here.
     """
-    order_tracking_id = request.args.get("OrderTrackingId")
+    reference = request.args.get("reference") or request.args.get("trxref")
     status = "error"
-    if order_tracking_id:
+    if reference:
         try:
-            payment = sync_pesapal_payment_status(order_tracking_id)
+            payment = sync_paystack_payment_status(reference)
             status = payment.status if payment else "error"
         except Exception as e:
-            print("Pesapal callback sync error:", str(e))
+            print("Paystack callback sync error:", str(e))
 
-    html = f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Prepza Payment</title></head>
-<body style="font-family:sans-serif;text-align:center;padding:60px 20px;">
-<h2>Payment {status}</h2>
-<p>You can close this window and return to the Prepza app.</p>
-</body></html>"""
-    return Response(html, mimetype="text/html")
+    return redirect(f"/?payment_status={status}")
 
 
-@app.route("/payment/pesapal/ipn", methods=["GET", "POST"])
-def pesapal_ipn():
+@app.route("/payment/paystack/webhook", methods=["POST"])
+def paystack_webhook():
     """
-    Server-to-server notification. Accepts both GET and POST since which
-    one Pesapal actually uses depends on what was chosen at IPN
-    registration time (see register_pesapal_ipn.py).
+    Server-to-server webhook - the authoritative confirmation, per
+    Paystack's own docs ("do not rely on the callback URL alone").
+    Verifies the request actually came from Paystack via HMAC-SHA512 over
+    the raw request body, keyed with the secret key, compared against the
+    X-Paystack-Signature header (constant-time compare) - anyone who
+    doesn't have the secret key cannot forge this.
     """
-    if request.method == "POST":
-        data = request.get_json(silent=True) or {}
-        order_tracking_id = data.get("OrderTrackingId")
-        order_merchant_reference = data.get("OrderMerchantReference")
-        order_notification_type = data.get("OrderNotificationType", "IPNCHANGE")
-    else:
-        order_tracking_id = request.args.get("OrderTrackingId")
-        order_merchant_reference = request.args.get("OrderMerchantReference")
-        order_notification_type = request.args.get("OrderNotificationType", "IPNCHANGE")
+    if not PAYSTACK_SECRET_KEY:
+        return jsonify({"error": "Paystack is not configured"}), 503
 
-    if not order_tracking_id:
-        return jsonify({"error": "Missing OrderTrackingId"}), 400
+    raw_body = request.get_data()
+    signature = request.headers.get("X-Paystack-Signature", "")
+    expected_signature = hmac.new(
+        PAYSTACK_SECRET_KEY.encode("utf-8"), raw_body, hashlib.sha512
+    ).hexdigest()
+    if not signature or not hmac.compare_digest(signature, expected_signature):
+        return jsonify({"error": "Invalid signature"}), 401
 
-    try:
-        sync_pesapal_payment_status(order_tracking_id)
-        ack_status = 200
-    except Exception as e:
-        print("Pesapal IPN sync error:", str(e))
-        ack_status = 500
+    payload = request.get_json(silent=True) or {}
+    event = payload.get("event")
+    reference = (payload.get("data") or {}).get("reference")
 
-    return jsonify({
-        "orderNotificationType": order_notification_type,
-        "orderTrackingId": order_tracking_id,
-        "orderMerchantReference": order_merchant_reference,
-        "status": ack_status,
-    })
+    if event == "charge.success" and reference:
+        try:
+            sync_paystack_payment_status(reference)
+        except Exception as e:
+            print("Paystack webhook sync error:", str(e))
+            return jsonify({"status": "error"}), 500
+    # Other event types (charge.failed, etc.) don't need action here -
+    # a payment stays "pending" until a successful charge resolves it,
+    # and pending payments simply never unlock access.
+
+    return jsonify({"status": "ok"}), 200
 
 
 # ---------- Subscriptions (Chunk 8) ----------
@@ -6906,11 +7007,11 @@ def subscription_upgrade():
         return jsonify({"error": "This plan is not currently available"}), 400
 
     user = db.session.get(User, user_id)
-    merchant_reference = f"PZA-sub-{plan}-{secrets.token_hex(6)}"
+    reference = f"PZA-sub-{plan}-{secrets.token_hex(6)}"
 
     try:
-        order_tracking_id, redirect_url = create_pesapal_order(
-            merchant_reference, price, f"Prepza {plan.title()} Plan", user
+        provider_reference, authorization_url = create_paystack_transaction(
+            reference, price, f"Prepza {plan.title()} Plan", user
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -6920,9 +7021,9 @@ def subscription_upgrade():
         content_item_id=None,
         phone_number=data.get("phone_number"),
         amount=price,
-        provider="pesapal",
-        merchant_reference=merchant_reference,
-        order_tracking_id=order_tracking_id,
+        provider="paystack",
+        reference=reference,
+        provider_reference=provider_reference,
         payment_type="subscription",
         plan=plan,
         status="pending",
@@ -6931,9 +7032,9 @@ def subscription_upgrade():
     db.session.commit()
 
     return jsonify({
-        "redirect_url": redirect_url,
-        "order_tracking_id": order_tracking_id,
-        "merchant_reference": merchant_reference,
+        # Same alias reasoning as pay_for_content() above.
+        "redirect_url": authorization_url,
+        "reference": reference,
     })
 
 
@@ -9132,7 +9233,7 @@ def admin_list_payments():
             "amount": p.amount,
             "status": p.status,
             "provider": p.provider,
-            "merchant_reference": p.merchant_reference,
+            "reference": p.reference,
             "created_at": p.created_at.isoformat() if p.created_at else None,
         })
 
