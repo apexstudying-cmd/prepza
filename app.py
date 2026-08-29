@@ -846,23 +846,31 @@ class StudyActivityLog(db.Model):
     )
 
 
+STUDY_TIME_FEATURES = {"reading", "podcast", "quiz", "flashcards", "tutor_chat"}
+
+
 class StudyTimeLog(db.Model):
     """
     Minutes actually spent studying, one row per user per calendar
-    day. Deliberately a SEPARATE table from StudyActivityLog - see
-    the design note at the top of the patch script that added this.
+    day PER FEATURE (reading/podcast/quiz/flashcards/tutor_chat).
+    Deliberately a SEPARATE table from StudyActivityLog - see the
+    design note at the top of the patch script that added this.
     study_time_seconds accumulates across every heartbeat that day
-    (any document/feature); last_heartbeat_at is used server-side to
+    for that feature; last_heartbeat_at is used server-side to
     compute each new heartbeat's elapsed time, capped per call, so a
-    backgrounded tab can never retroactively credit a large gap.
+    backgrounded tab can never retroactively credit a large gap. The
+    8h/day anti-gaming ceiling (MAX_STUDY_TIME_SECONDS_PER_DAY) is
+    enforced across ALL of a user's feature rows for that day
+    combined, not per-feature - see record_study_time_heartbeat().
     """
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     activity_date = db.Column(db.Date, nullable=False)
+    feature = db.Column(db.String(20), nullable=False, default="reading")
     study_time_seconds = db.Column(db.Integer, nullable=False, default=0)
     last_heartbeat_at = db.Column(db.DateTime, nullable=True)
     __table_args__ = (
-        db.UniqueConstraint("user_id", "activity_date", name="uq_study_time_user_date"),
+        db.UniqueConstraint("user_id", "activity_date", "feature", name="uq_study_time_user_date_feature"),
     )
 
 
@@ -4694,32 +4702,50 @@ MAX_HEARTBEAT_INTERVAL_SECONDS = 30
 MAX_STUDY_TIME_SECONDS_PER_DAY = 8 * 60 * 60  # anti-gaming ceiling, 8h/day
 
 
-def record_study_time_heartbeat(user_id):
+def record_study_time_heartbeat(user_id, feature="reading"):
     """
     Credits up to MAX_HEARTBEAT_INTERVAL_SECONDS for the gap since
-    this user's last heartbeat today, onto their StudyTimeLog row
-    for today (created on first heartbeat of the day). The very
-    first heartbeat of a day only sets the baseline timestamp and
-    credits nothing, since there's no prior heartbeat to measure
-    from. Returns today's running total in seconds.
+    this user's last heartbeat today for this FEATURE, onto that
+    feature's StudyTimeLog row for today (created on first heartbeat
+    of the day for that feature). The very first heartbeat of a
+    feature/day only sets the baseline timestamp and credits nothing,
+    since there's no prior heartbeat to measure from.
+
+    The 8h/day anti-gaming ceiling applies across ALL of this user's
+    features combined for today, not per-feature - otherwise 8h
+    reading + 8h quiz + 8h podcast would all separately be allowed in
+    one day. Returns this user's total study time across all
+    features today, in seconds.
     """
     today = datetime.utcnow().date()
     now = datetime.utcnow()
 
-    row = StudyTimeLog.query.filter_by(user_id=user_id, activity_date=today).first()
+    row = StudyTimeLog.query.filter_by(user_id=user_id, activity_date=today, feature=feature).first()
     if not row:
-        row = StudyTimeLog(user_id=user_id, activity_date=today, study_time_seconds=0)
+        row = StudyTimeLog(user_id=user_id, activity_date=today, feature=feature, study_time_seconds=0)
         db.session.add(row)
         db.session.flush()
 
     if row.last_heartbeat_at is not None:
         elapsed = (now - row.last_heartbeat_at).total_seconds()
         credited = max(0, min(elapsed, MAX_HEARTBEAT_INTERVAL_SECONDS))
-        room = max(0, MAX_STUDY_TIME_SECONDS_PER_DAY - row.study_time_seconds)
+        total_today = db.session.query(
+            db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+        ).filter(
+            StudyTimeLog.user_id == user_id,
+            StudyTimeLog.activity_date == today,
+        ).scalar()
+        room = max(0, MAX_STUDY_TIME_SECONDS_PER_DAY - total_today)
         row.study_time_seconds += int(min(credited, room))
 
     row.last_heartbeat_at = now
-    return row.study_time_seconds
+
+    return db.session.query(
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+    ).filter(
+        StudyTimeLog.user_id == user_id,
+        StudyTimeLog.activity_date == today,
+    ).scalar()
 
 
 def check_and_unlock_achievements(user_id):
@@ -4952,7 +4978,12 @@ def study_time_heartbeat():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    seconds_today = record_study_time_heartbeat(user_id)
+    data = request.get_json(silent=True) or {}
+    feature = data.get("feature", "reading")
+    if feature not in STUDY_TIME_FEATURES:
+        return jsonify({"error": f"feature must be one of {sorted(STUDY_TIME_FEATURES)}"}), 400
+
+    seconds_today = record_study_time_heartbeat(user_id, feature=feature)
     record_study_activity(user_id)
     db.session.commit()
 
@@ -4981,18 +5012,22 @@ def study_time_summary():
         period = "week"
         start_date = today - timedelta(days=today.weekday())
 
-    total_seconds = db.session.query(
-        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+    rows = db.session.query(
+        StudyTimeLog.feature,
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0),
     ).filter(
         StudyTimeLog.user_id == user_id,
         StudyTimeLog.activity_date >= start_date,
         StudyTimeLog.activity_date <= today,
-    ).scalar()
+    ).group_by(StudyTimeLog.feature).all()
+
+    by_feature = {feature: seconds for feature, seconds in rows}
+    total_seconds = sum(by_feature.values())
 
     return jsonify({
         "period": period,
         "total_seconds": total_seconds,
-        "by_feature": {},
+        "by_feature": by_feature,
     })
 
 
