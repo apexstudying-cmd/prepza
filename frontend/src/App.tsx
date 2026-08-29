@@ -186,7 +186,7 @@ type Screen =
   | 'notifications' | 'library' | 'mind-map' | 'new-chat' | 'chat-options' | 'edit-profile'
   | 'subscription' | 'payment' | 'payment-success' | 'payment-failure' | 'payment-history'
   | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements'
-  | 'followers' | 'following' | 'group-detail' | 'group-create' | 'ambassador'
+  | 'followers' | 'following' | 'group-detail' | 'group-create' | 'ambassador' | 'time-studied'
 
 // ─── Kenyan Data ──────────────────────────────────────────────────────────────
 const USER = { name: 'Arnold Gichuru', initials: 'AG', course: 'Actuarial Science', year: 'Year 1', uni: 'Kenyatta University' }
@@ -2775,14 +2775,18 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
   const [summary, setSummary] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
 
   useEffect(() => {
     if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
     api<{ csrf_token: string }>('/me')
-      .then(me => api<{ material_id: number; reused: boolean; summary: any }>(`/documents/${activeDocumentId}/summarize`, {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': me.csrf_token },
-      }))
+      .then(me => {
+        setHeartbeatCsrf(me.csrf_token)
+        return api<{ material_id: number; reused: boolean; summary: any }>(`/documents/${activeDocumentId}/summarize`, {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': me.csrf_token },
+        })
+      })
       .then(res => setSummary(res.summary))
       .catch(e => {
         if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
@@ -2791,6 +2795,20 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
       })
       .finally(() => setLoading(false))
   }, [activeDocumentId])
+
+  // Study-time heartbeat: only once the summary has actually loaded
+  // (not while generating, not on error) and the tab is visible -
+  // this is 'reading' time, distinct from the generation call above
+  // which already recorded a discrete document_studied event.
+  useEffect(() => {
+    if (loading || error || !summary || !heartbeatCsrf) return
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return
+      api('/study-time/heartbeat', { method: 'POST', headers: { 'X-CSRF-Token': heartbeatCsrf } }).catch(() => {})
+    }
+    const interval = setInterval(ping, 20000)
+    return () => clearInterval(interval)
+  }, [loading, error, summary, heartbeatCsrf])
 
   // Renders whatever ai_service.py returned, without assuming one fixed
   // shape: a plain string, an array of {title, body}-like sections, or
@@ -3852,11 +3870,13 @@ function ProfileScreen({ setScreen, setActiveProfileUserId }: { setScreen: (s: S
   const [programName, setProgramName] = useState<string | null>(null)
   const [summary, setSummary] = useState<GamificationSummary | null>(null)
   const [achievementsList, setAchievementsList] = useState<Achievement[]>([])
+  const [weeklyStudySeconds, setWeeklyStudySeconds] = useState<number | null>(null)
 
   useEffect(() => {
     api<ProfileMe>('/me').then(setMe).catch(() => {})
     api<GamificationSummary>('/gamification/summary').then(setSummary).catch(() => {})
     api<AchievementsResponse>('/achievements').then(res => setAchievementsList(res.achievements)).catch(() => {})
+    api<StudyTimeResponse>('/study-time?period=week').then(res => setWeeklyStudySeconds(res.total_seconds)).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -3907,12 +3927,13 @@ function ProfileScreen({ setScreen, setActiveProfileUserId }: { setScreen: (s: S
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, padding: '14px 14px 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8, padding: '14px 14px 0' }}>
         {[
           { label: 'Streak', value: summary ? `${summary.current_streak}🔥` : '—', color: N.gold, dest: 'study-streak' as Screen },
           { label: 'XP', value: summary ? summary.xp_total.toLocaleString() : '—', color: '#4CC97B', dest: 'xp-progress' as Screen },
           { label: 'Docs', value: summary ? String(summary.documents_count) : '—', color: '#4C7BC9', dest: 'library' as Screen },
           { label: 'Followers', value: summary ? String(summary.followers_count) : '—', color: '#9B59B6', dest: 'followers' as Screen },
+          { label: 'Time', value: weeklyStudySeconds != null ? formatStudyTime(weeklyStudySeconds) : '—', color: '#E67E22', dest: 'time-studied' as Screen },
         ].map(s => (
           <button key={s.label} onClick={() => {
             // Followers list is always scoped to a specific user id on the
@@ -6703,6 +6724,65 @@ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             </div>
           </div>
         ))}
+        <div style={{ height: 100 }} />
+      </div>
+    </div>
+  )
+}
+
+// ─── TIME STUDIED ─────────────────────────────────────────────────────────────
+type StudyTimeResponse = { period: string; total_seconds: number; by_feature: Record<string, number> }
+
+function formatStudyTime(totalSeconds: number): string {
+  const hours = totalSeconds / 3600
+  if (hours >= 1) return `${hours.toFixed(1)}h`
+  return `${Math.round(totalSeconds / 60)}m`
+}
+
+function TimeStudiedScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [period, setPeriod] = useState<'day' | 'week' | 'month'>('week')
+  const [data, setData] = useState<StudyTimeResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    api<StudyTimeResponse>(`/study-time?period=${period}`)
+      .then(res => { if (!cancelled) setData(res) })
+      .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load study time') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [period])
+
+  const totalLabel = data ? formatStudyTime(data.total_seconds) : '—'
+  const periodLabel = period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month'
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Time Studied</div>
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '18px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: 42, fontWeight: 800, color: N.gold, lineHeight: 1 }}>{loading ? '…' : totalLabel}</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 6 }}>studied {periodLabel}</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
+        {error && <div style={{ background: '#FEF2F2', color: '#B91C1C', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+          {(['day', 'week', 'month'] as const).map(p => (
+            <button key={p} onClick={() => setPeriod(p)} style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', background: period === p ? N.gold : '#fff', color: period === p ? N.navy : '#6B7280', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+            {p.charAt(0).toUpperCase() + p.slice(1)}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setScreen('share-sheet')} style={{ width: '100%', background: 'transparent', border: `1.5px solid ${N.gold}`, color: N.gold, fontWeight: 700, fontSize: 14, borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+          Share {totalLabel} Studied 🔥
+        </button>
         <div style={{ height: 100 }} />
       </div>
     </div>
@@ -9841,6 +9921,7 @@ export default function App() {
       case 'xp-progress':       return <XPProgressScreen setScreen={setScreen} />
       case 'study-streak':      return <StudyStreakScreen setScreen={setScreen} />
       case 'achievements':      return <AchievementsScreen setScreen={setScreen} />
+      case 'time-studied':      return <TimeStudiedScreen setScreen={setScreen} />
       case 'followers':         return <FollowListScreen mode="followers" setScreen={setScreen} targetUserId={activeProfileUserId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'following':         return <FollowListScreen mode="following" setScreen={setScreen} targetUserId={activeProfileUserId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'group-detail':      return <GroupDetailScreen setScreen={setScreen} groupId={activeGroupId} />
