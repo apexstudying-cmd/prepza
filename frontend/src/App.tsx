@@ -189,7 +189,7 @@ type Screen =
   | 'followers' | 'following' | 'group-detail' | 'group-create' | 'ambassador' | 'time-studied'
 
 // ─── Kenyan Data ──────────────────────────────────────────────────────────────
-const USER = { name: 'Arnold Gichuru', initials: 'AG', course: 'Actuarial Science', year: 'Year 1', uni: 'Kenyatta University' }
+// USER mock constant removed (Chunk 14 sweep) - PostComposer and CommentsScreen now derive display name/initials from GET /me
 
 const studyDocs = [
   { id: 1, subject: 'ACT 101 – Actuarial Mathematics', chapter: 'Ch.3 – Interest Theory & Annuities', progress: 52, color: '#C9A84C', icon: '∑' },
@@ -1623,11 +1623,16 @@ function PostComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [csrfToken, setCsrfToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [displayName, setDisplayName] = useState('')
 
   useEffect(() => {
     api<UnitOption[]>('/units').then(u => { setUnits(u); if (u.length) setUnitId(u[0].id) }).catch(() => setError('Could not load your units.'))
-    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+    api<{ csrf_token: string; display_name: string | null }>('/me')
+      .then(me => { setCsrfToken(me.csrf_token); setDisplayName(me.display_name || 'Student') })
+      .catch(() => {})
   }, [])
+
+  const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
 
   const submit = async () => {
     if (!unitId || !title.trim() || !text.trim() || submitting) return
@@ -1657,10 +1662,9 @@ function PostComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
       </div>
       <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }} className="scrollbar-hide">
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <Avi name="AG" size={40} />
+          <Avi name={initials} size={40} />
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{USER.name}</div>
-            <div style={{ fontSize: 11, color: '#6B7280' }}>{USER.course} · {USER.year}</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{displayName || 'Student'}</div>
           </div>
         </div>
         {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>}
@@ -3111,6 +3115,7 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
   const [sending, setSending] = useState(false)
   const [askingAi, setAskingAi] = useState(false)
   const [error, setError] = useState('')
+  const [myInitials, setMyInitials] = useState('ST')
 
   const loadPost = () => {
     if (postId == null) return
@@ -3122,7 +3127,15 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
   }
 
   useEffect(() => { loadPost() }, [postId])
-  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+  useEffect(() => {
+    api<{ csrf_token: string; display_name: string | null }>('/me')
+      .then(me => {
+        setCsrfToken(me.csrf_token)
+        const name = me.display_name || 'Student'
+        setMyInitials(name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST')
+      })
+      .catch(() => {})
+  }, [])
 
   const sendComment = async () => {
     if (!input.trim() || postId == null || sending) return
@@ -3220,7 +3233,7 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
       </div>
       <div style={{ padding: '10px 14px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.07)' }}>
-          <Avi name={USER.initials} size={28} />
+          <Avi name={myInitials} size={28} />
           <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendComment()} placeholder="Add a reply… (mention @Prepza AI to ask it directly)" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
           <button onClick={sendComment} disabled={sending} style={{ width: 30, height: 30, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: sending ? 0.6 : 1 }}>
             <div style={{ color: N.navy }}>{Ic.send('w-3 h-3')}</div>
