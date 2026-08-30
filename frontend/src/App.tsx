@@ -4021,7 +4021,7 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
 // ─── PROFILE ──────────────────────────────────────────────────────────────────
 type ProfileMe = { id: number; display_name: string | null; bio: string | null; university_id: number | null; program_id: number | null }
 
-function ProfileScreen({ setScreen, setActiveProfileUserId }: { setScreen: (s: Screen) => void; setActiveProfileUserId?: (id: number) => void }) {
+function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: { setScreen: (s: Screen) => void; setActiveProfileUserId?: (id: number) => void; onOpenOrgPortal?: () => void }) {
   const [tab, setTab] = useState<'posts'|'saved'|'activity'|'materials'>('posts')
   const [showMenu, setShowMenu] = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
@@ -4064,7 +4064,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId }: { setScreen: (s: S
             <button onClick={() => setShowMenu(v => !v)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
             {showMenu && (
               <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, width: 170, overflow: 'hidden' }}>
-                {[['Edit Profile', () => { setShowMenu(false); setScreen('edit-profile') }], ['Ambassador Program', () => { setShowMenu(false); setScreen('ambassador') }], ['Settings', () => { setShowMenu(false); setScreen('settings') }], ['Share Profile', () => { setShowMenu(false); setScreen('share-sheet') }]].map(([label, action]) => (
+                {[['Edit Profile', () => { setShowMenu(false); setScreen('edit-profile') }], ['Ambassador Program', () => { setShowMenu(false); setScreen('ambassador') }], ['Organisation Portal', () => { setShowMenu(false); onOpenOrgPortal?.() }], ['Settings', () => { setShowMenu(false); setScreen('settings') }], ['Share Profile', () => { setShowMenu(false); setScreen('share-sheet') }]].map(([label, action]) => (
                   <button key={label as string} onClick={action as () => void} style={{ display: 'block', width: '100%', padding: '13px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>{label as string}</button>
                 ))}
               </div>
@@ -9951,9 +9951,573 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   )
 }
 
+// ─── ORGANISATION PORTAL ──────────────────────────────────────────────────
+// Lets any logged-in user register/manage an Organisation and submit
+// Opportunities for admin review. Not a separate account type - the
+// backend ties an Organisation to the caller's existing Prepza session via
+// OrganisationMember (see POST /organisations in app.py), so "registering"
+// is just a POST while already logged in. Self-contained full-screen shell
+// (not part of the Screen union), entered/exited via a toggle in App() -
+// same pattern as AdminPlatform.
+
+const ORG_COLORS = { navy: N.navy, navy3: N.navy3, gold: N.gold, goldLight: N.goldL, bg: N.bg, green: '#16A34A', red: '#C94C4C', gray: '#9CA3AF' }
+
+type OrgSummary = {
+  id: number; name: string; description: string | null; website: string | null
+  logo_url: string | null; contact_email: string; contact_phone: string | null
+  verification_status: 'pending' | 'verified' | 'rejected'; verification_notes: string | null
+  is_active: boolean; created_by: number; created_at: string | null; updated_at: string | null
+  is_member: boolean; role: 'owner' | 'manager' | null
+}
+
+type OrgOpportunity = {
+  id: number; organisation_id: number; created_by: number
+  title: string; description: string; opportunity_type: string
+  location: string | null; is_remote: boolean
+  application_url: string | null; application_instructions: string | null
+  application_deadline: string | null; expiry_date: string | null
+  status: string; rejection_reason: string | null
+  submitted_at: string | null; reviewed_at: string | null; published_at: string | null
+  view_count: number; created_at: string | null; updated_at: string | null
+}
+
+const ORG_OPP_STATUS_META: Record<string, { label: string; color: string }> = {
+  draft: { label: 'Draft', color: ORG_COLORS.gray },
+  pending_review: { label: 'Pending Review', color: ORG_COLORS.gold },
+  approved: { label: 'Approved', color: '#4C7BC9' },
+  rejected: { label: 'Rejected', color: ORG_COLORS.red },
+  published: { label: 'Published', color: ORG_COLORS.green },
+  expired: { label: 'Expired', color: ORG_COLORS.gray },
+  archived: { label: 'Archived', color: ORG_COLORS.gray },
+  removed: { label: 'Removed', color: ORG_COLORS.red },
+}
+
+function orgPill(text: string, color: string) {
+  return <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, color, background: color + '20', border: `1px solid ${color}55`, borderRadius: 99, padding: '2px 9px', whiteSpace: 'nowrap' }}>{text}</span>
+}
+
+const ORG_OPPORTUNITY_TYPES = ['job', 'internship', 'scholarship', 'competition', 'volunteering', 'event', 'other']
+
+function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
+  const [csrfToken, setCsrfToken] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [orgs, setOrgs] = useState<OrgSummary[]>([])
+  const [activeOrgId, setActiveOrgId] = useState<number | null>(null)
+  const [tab, setTab] = useState<'opportunities' | 'create' | 'analytics' | 'profile'>('opportunities')
+
+  const [regName, setRegName] = useState('')
+  const [regEmail, setRegEmail] = useState('')
+  const [regDesc, setRegDesc] = useState('')
+  const [regWebsite, setRegWebsite] = useState('')
+  const [regPhone, setRegPhone] = useState('')
+  const [registering, setRegistering] = useState(false)
+  const [regError, setRegError] = useState('')
+
+  const loadOrgs = () => {
+    setLoading(true); setLoadError('')
+    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+    api<{ organisations: OrgSummary[] }>('/organisations/mine')
+      .then(res => {
+        setOrgs(res.organisations)
+        if (res.organisations.length > 0) {
+          setActiveOrgId(prev => prev && res.organisations.some(o => o.id === prev) ? prev : res.organisations[0].id)
+        }
+      })
+      .catch(e => setLoadError(e instanceof ApiError ? e.message : 'Could not load your organisations.'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { loadOrgs() }, [])
+
+  const register = async () => {
+    if (!regName.trim() || !regEmail.trim() || registering) return
+    setRegistering(true); setRegError('')
+    try {
+      await api('/organisations', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({
+          name: regName.trim(),
+          contact_email: regEmail.trim(),
+          description: regDesc.trim() || undefined,
+          website: regWebsite.trim() || undefined,
+          contact_phone: regPhone.trim() || undefined,
+        }),
+      })
+      loadOrgs()
+    } catch (e) {
+      setRegError(e instanceof ApiError ? e.message : 'Could not register your organisation. Please try again.')
+    } finally {
+      setRegistering(false)
+    }
+  }
+
+  const activeOrg = orgs.find(o => o.id === activeOrgId) || null
+
+  const Header = ({ title, onBack }: { title: string; onBack?: () => void }) => (
+    <div style={{ background: ORG_COLORS.navy, padding: '0 18px 16px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button onClick={onBack ?? onExit} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', color: '#fff', fontSize: 18, fontFamily: 'Plus Jakarta Sans' }}>‹</button>
+        <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>{title}</div>
+      </div>
+    </div>
+  )
+
+  if (loading) return (
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: ORG_COLORS.bg }}>
+      <Header title="Organisation Portal" />
+      <div style={{ padding: 40, textAlign: 'center', color: ORG_COLORS.gray, fontSize: 13 }}>Loading…</div>
+    </div>
+  )
+
+  if (loadError && orgs.length === 0) return (
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: ORG_COLORS.bg }}>
+      <Header title="Organisation Portal" />
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <div style={{ fontSize: 13, color: ORG_COLORS.gray, marginBottom: 14 }}>{loadError}</div>
+        <button onClick={loadOrgs} style={{ background: ORG_COLORS.gold, color: ORG_COLORS.navy, border: 'none', borderRadius: 12, padding: '12px 24px', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>Retry</button>
+      </div>
+    </div>
+  )
+
+  if (!activeOrg) {
+    return (
+      <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: ORG_COLORS.bg, overflow: 'hidden' }}>
+        <Header title="Organisation Portal" />
+        <div style={{ flex: 1, overflowY: 'auto', padding: 18 }}>
+          <div style={{ background: `linear-gradient(135deg,${ORG_COLORS.navy},${ORG_COLORS.navy3})`, borderRadius: 20, padding: 22, marginBottom: 18, textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🏢</div>
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff', marginBottom: 6 }}>Post opportunities on Prepza</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>Register your organisation to submit jobs, internships, scholarships and events to Kenyan university students.</div>
+          </div>
+          {regError && <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#B91C1C', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, fontWeight: 600 }}>{regError}</div>}
+          <div style={{ background: '#fff', borderRadius: 16, padding: 18, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Organisation name *</div>
+              <input value={regName} onChange={e => setRegName(e.target.value)} placeholder="e.g. Safaricom PLC" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Contact email *</div>
+              <input value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="careers@company.com" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Website</div>
+              <input value={regWebsite} onChange={e => setRegWebsite(e.target.value)} placeholder="https://company.com" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Contact phone</div>
+              <input value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="+254 7XX XXX XXX" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Description</div>
+              <textarea value={regDesc} onChange={e => setRegDesc(e.target.value)} rows={3} placeholder="What does your organisation do?" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy, resize: 'none', lineHeight: 1.6 }} />
+            </div>
+            <button onClick={register} disabled={!regName.trim() || !regEmail.trim() || registering} style={{ width: '100%', background: (!regName.trim() || !regEmail.trim()) ? '#E5E7EB' : `linear-gradient(135deg,${ORG_COLORS.gold},${ORG_COLORS.goldLight})`, color: (!regName.trim() || !regEmail.trim()) ? '#9CA3AF' : ORG_COLORS.navy, border: 'none', borderRadius: 14, padding: '14px 0', fontWeight: 800, fontSize: 14, cursor: (!regName.trim() || !regEmail.trim()) ? 'not-allowed' : 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+              {registering ? 'Registering…' : 'Register Organisation'}
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>Your organisation will need to be verified by Prepza before opportunities can be published.</div>
+        </div>
+      </div>
+    )
+  }
+
+  const verifMeta: Record<string, { label: string; color: string }> = {
+    pending: { label: 'Verification Pending', color: ORG_COLORS.gold },
+    verified: { label: 'Verified', color: ORG_COLORS.green },
+    rejected: { label: 'Verification Rejected', color: ORG_COLORS.red },
+  }
+  const vm = verifMeta[activeOrg.verification_status] || verifMeta.pending
+
+  return (
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: ORG_COLORS.bg, overflow: 'hidden' }}>
+      <div style={{ background: ORG_COLORS.navy, padding: '0 18px 14px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <button onClick={onExit} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', color: '#fff', fontSize: 18, fontFamily: 'Plus Jakarta Sans' }}>‹</button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeOrg.name}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{activeOrg.role === 'owner' ? 'Owner' : 'Manager'}{!activeOrg.is_active ? ' · Deactivated' : ''}</div>
+          </div>
+          {orgPill(vm.label, vm.color)}
+        </div>
+        {activeOrg.verification_status === 'rejected' && activeOrg.verification_notes && (
+          <div style={{ background: 'rgba(201,68,68,0.15)', border: '1px solid rgba(201,68,68,0.3)', borderRadius: 10, padding: '8px 12px', marginBottom: 10, fontSize: 11, color: '#ffb4bd' }}>{activeOrg.verification_notes}</div>
+        )}
+        <div style={{ display: 'flex', gap: 0 }}>
+          {(['opportunities', 'create', 'analytics', 'profile'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, background: 'none', border: 'none', borderBottom: `2px solid ${tab === t ? ORG_COLORS.gold : 'transparent'}`, color: tab === t ? ORG_COLORS.gold : 'rgba(255,255,255,0.5)', fontWeight: tab === t ? 700 : 500, fontSize: 12, padding: '9px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+              {t === 'opportunities' ? 'Opportunities' : t === 'create' ? '+ Create' : t === 'analytics' ? 'Analytics' : 'Profile'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {tab === 'opportunities' && <OrgOpportunitiesTab orgId={activeOrg.id} csrfToken={csrfToken} onCreate={() => setTab('create')} />}
+        {tab === 'create' && <OrgCreateOpportunityTab orgId={activeOrg.id} org={activeOrg} csrfToken={csrfToken} onDone={() => setTab('opportunities')} />}
+        {tab === 'analytics' && <OrgAnalyticsTab orgId={activeOrg.id} />}
+        {tab === 'profile' && <OrgProfileTab org={activeOrg} csrfToken={csrfToken} onSaved={loadOrgs} />}
+      </div>
+    </div>
+  )
+}
+
+function OrgOpportunitiesTab({ orgId, csrfToken, onCreate }: { orgId: number; csrfToken: string; onCreate: () => void }) {
+  const [items, setItems] = useState<OrgOpportunity[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState<number | null>(null)
+  const [actionError, setActionError] = useState('')
+
+  const load = () => {
+    setLoading(true); setError('')
+    api<{ opportunities: OrgOpportunity[] }>(`/organisations/${orgId}/opportunities`)
+      .then(res => setItems(res.opportunities))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load your opportunities.'))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [orgId])
+
+  const submitForReview = async (oppId: number) => {
+    setBusyId(oppId); setActionError('')
+    try {
+      await api(`/organisations/${orgId}/opportunities/${oppId}/submit`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      load()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not submit for review.')
+    } finally { setBusyId(null) }
+  }
+
+  const withdraw = async (oppId: number) => {
+    setBusyId(oppId); setActionError('')
+    try {
+      await api(`/organisations/${orgId}/opportunities/${oppId}`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
+      load()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not withdraw this opportunity.')
+    } finally { setBusyId(null) }
+  }
+
+  const archive = async (oppId: number) => {
+    setBusyId(oppId); setActionError('')
+    try {
+      await api(`/organisations/${orgId}/opportunities/${oppId}/archive`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      load()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not archive this opportunity.')
+    } finally { setBusyId(null) }
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+  if (error) return <div style={{ padding: 40, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{error}</div>
+
+  return (
+    <div style={{ padding: 16 }}>
+      {actionError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{actionError}</div>}
+      {items.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>🚀</div>
+          <div style={{ fontWeight: 700, fontSize: 15, color: N.navy, marginBottom: 6 }}>No opportunities yet</div>
+          <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 16 }}>Create your first posting to reach Prepza students.</div>
+          <button onClick={onCreate} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, border: 'none', borderRadius: 12, padding: '11px 22px', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Create Opportunity</button>
+        </div>
+      ) : items.map(o => {
+        const meta = ORG_OPP_STATUS_META[o.status] || ORG_OPP_STATUS_META.draft
+        const busy = busyId === o.id
+        return (
+          <div key={o.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{o.title}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{o.opportunity_type}{o.application_deadline ? ` · Deadline ${new Date(o.application_deadline).toLocaleDateString()}` : ''}</div>
+              </div>
+              {orgPill(meta.label, meta.color)}
+            </div>
+            <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 10 }}>👁 {o.view_count} views</div>
+            {o.status === 'rejected' && o.rejection_reason && (
+              <div style={{ fontSize: 11, color: '#C94C4C', marginBottom: 10 }}>Rejected: {o.rejection_reason}</div>
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {(o.status === 'draft' || o.status === 'rejected') && (
+                <button onClick={() => submitForReview(o.id)} disabled={busy} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{busy ? '…' : 'Submit for Review'}</button>
+              )}
+              {(o.status === 'published' || o.status === 'expired') && (
+                <button onClick={() => archive(o.id)} disabled={busy} style={{ background: '#F3F4F6', color: '#6B7280', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{busy ? '…' : 'Archive'}</button>
+              )}
+              {o.status !== 'removed' && (
+                <button onClick={() => withdraw(o.id)} disabled={busy} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{busy ? '…' : 'Withdraw'}</button>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function OrgCreateOpportunityTab({ orgId, org, csrfToken, onDone }: { orgId: number; org: OrgSummary; csrfToken: string; onDone: () => void }) {
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [oppType, setOppType] = useState('internship')
+  const [location, setLocation] = useState('')
+  const [isRemote, setIsRemote] = useState(false)
+  const [applicationUrl, setApplicationUrl] = useState('')
+  const [instructions, setInstructions] = useState('')
+  const [deadline, setDeadline] = useState('')
+  const [expiry, setExpiry] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [created, setCreated] = useState<{ id: number; status: string } | null>(null)
+  const [submittingReview, setSubmittingReview] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+
+  const canSubmit = Boolean(title.trim() && description.trim() && deadline && expiry)
+
+  const create = async () => {
+    if (!canSubmit || submitting) return
+    setSubmitting(true); setError('')
+    try {
+      const res = await api<{ id: number; status: string }>(`/organisations/${orgId}/opportunities`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          opportunity_type: oppType,
+          location: location.trim() || undefined,
+          is_remote: isRemote,
+          application_url: applicationUrl.trim() || undefined,
+          application_instructions: instructions.trim() || undefined,
+          application_deadline: new Date(deadline).toISOString(),
+          expiry_date: new Date(expiry).toISOString(),
+        }),
+      })
+      setCreated(res)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not create this opportunity. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const submitForReview = async () => {
+    if (!created || submittingReview) return
+    setSubmittingReview(true); setSubmitError('')
+    try {
+      await api(`/organisations/${orgId}/opportunities/${created.id}/submit`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      onDone()
+    } catch (e) {
+      setSubmitError(e instanceof ApiError ? e.message : "Could not submit for review - it's saved as a draft, you can submit it later from Opportunities.")
+    } finally {
+      setSubmittingReview(false)
+    }
+  }
+
+  if (created) {
+    return (
+      <div style={{ padding: 20, textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+        <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 8 }}>Saved as draft</div>
+        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 18, lineHeight: 1.6 }}>
+          {org.verification_status === 'verified'
+            ? 'Submit it for Prepza review to get it published.'
+            : "Your organisation isn't verified yet, so this can't be submitted for review until an admin approves it. It's saved as a draft in the meantime."}
+        </div>
+        {submitError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{submitError}</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button onClick={submitForReview} disabled={submittingReview} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, border: 'none', borderRadius: 14, padding: '13px 0', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{submittingReview ? 'Submitting…' : 'Submit for Review'}</button>
+          <button onClick={onDone} style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 14, padding: '12px 0', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Opportunities</button>
+        </div>
+      </div>
+    )
+  }
+
+  const inputStyle = { width: '100%', boxSizing: 'border-box' as const, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy }
+
+  return (
+    <div style={{ padding: 18 }}>
+      {error && <div style={{ background: '#FEE2E2', color: '#B91C1C', border: '1px solid #FCA5A5', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, fontWeight: 600 }}>{error}</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Title *</div>
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Software Engineering Intern" maxLength={200} style={inputStyle} />
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Type</div>
+          <select value={oppType} onChange={e => setOppType(e.target.value)} style={{ ...inputStyle, background: '#fff', appearance: 'none' }}>
+            {ORG_OPPORTUNITY_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Description *</div>
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} maxLength={5000} placeholder="Role summary, requirements, what students should know…" style={{ ...inputStyle, resize: 'none', lineHeight: 1.6 }} />
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Location</div>
+            <input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Nairobi, Kenya" style={inputStyle} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 26, fontSize: 12, color: '#374151', fontWeight: 600 }}>
+            <input type="checkbox" checked={isRemote} onChange={e => setIsRemote(e.target.checked)} /> Remote
+          </label>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Application link</div>
+          <input value={applicationUrl} onChange={e => setApplicationUrl(e.target.value)} placeholder="https://…" style={inputStyle} />
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Application instructions</div>
+          <textarea value={instructions} onChange={e => setInstructions(e.target.value)} rows={2} maxLength={3000} placeholder="Optional - e.g. what to include in your application" style={{ ...inputStyle, resize: 'none', lineHeight: 1.6 }} />
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Application deadline *</div>
+            <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Listing expiry *</div>
+            <input type="datetime-local" value={expiry} onChange={e => setExpiry(e.target.value)} style={inputStyle} />
+          </div>
+        </div>
+        <button onClick={create} disabled={!canSubmit || submitting} style={{ background: canSubmit ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canSubmit ? N.navy : '#9CA3AF', border: 'none', borderRadius: 14, padding: '14px 0', fontWeight: 800, fontSize: 14, cursor: canSubmit ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', marginTop: 4 }}>
+          {submitting ? 'Saving…' : 'Save as Draft'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function OrgAnalyticsTab({ orgId }: { orgId: number }) {
+  const [items, setItems] = useState<OrgOpportunity[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setLoading(true); setError('')
+    api<{ opportunities: OrgOpportunity[] }>(`/organisations/${orgId}/opportunities`)
+      .then(res => setItems(res.opportunities))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load analytics.'))
+      .finally(() => setLoading(false))
+  }, [orgId])
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+  if (error) return <div style={{ padding: 40, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{error}</div>
+
+  const totalViews = items.reduce((sum, o) => sum + (o.view_count || 0), 0)
+  const publishedCount = items.filter(o => o.status === 'published').length
+  const sorted = [...items].sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
+        {[['Total Views', totalViews], ['Live', publishedCount], ['Total Postings', items.length]].map(([label, val]) => (
+          <div key={label as string} style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{val as number}</div>
+            <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginTop: 2 }}>{label as string}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ background: '#FEF9F0', border: `1px solid ${N.gold}30`, borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 11, color: '#92400E', lineHeight: 1.6 }}>
+        Views are tracked per opportunity. Click-through tracking on application links isn't available yet.
+      </div>
+      <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>By opportunity</div>
+      {sorted.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#9CA3AF', textAlign: 'center', padding: '20px 0' }}>Nothing posted yet.</div>
+      ) : sorted.map(o => {
+        const meta = ORG_OPP_STATUS_META[o.status] || ORG_OPP_STATUS_META.draft
+        return (
+          <div key={o.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 12, color: N.navy }} className="line-clamp-1">{o.title}</div>
+              {orgPill(meta.label, meta.color)}
+            </div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: N.gold, flexShrink: 0 }}>{o.view_count} 👁</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function OrgProfileTab({ org, csrfToken, onSaved }: { org: OrgSummary; csrfToken: string; onSaved: () => void }) {
+  const [name, setName] = useState(org.name)
+  const [email, setEmail] = useState(org.contact_email)
+  const [website, setWebsite] = useState(org.website || '')
+  const [phone, setPhone] = useState(org.contact_phone || '')
+  const [description, setDescription] = useState(org.description || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  const isOwner = org.role === 'owner'
+
+  const save = async () => {
+    if (saving) return
+    setSaving(true); setError(''); setSaved(false)
+    try {
+      await api(`/organisations/${org.id}`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({
+          name: name.trim(),
+          contact_email: email.trim(),
+          website: website.trim() || null,
+          contact_phone: phone.trim() || null,
+          description: description.trim() || null,
+        }),
+      })
+      setSaved(true)
+      onSaved()
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not save changes.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fieldStyle = { width: '100%', boxSizing: 'border-box' as const, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy }
+
+  return (
+    <div style={{ padding: 18 }}>
+      {!isOwner && (
+        <div style={{ background: '#FEF9F0', border: `1px solid ${N.gold}30`, borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#92400E' }}>Only the organisation owner can edit this profile.</div>
+      )}
+      {error && <div style={{ background: '#FEE2E2', color: '#B91C1C', border: '1px solid #FCA5A5', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, fontWeight: 600 }}>{error}</div>}
+      {saved && <div style={{ background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, fontWeight: 600 }}>Saved.</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Organisation name</div>
+          <input value={name} disabled={!isOwner} onChange={e => setName(e.target.value)} style={{ ...fieldStyle, opacity: isOwner ? 1 : 0.6 }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Contact email</div>
+          <input value={email} disabled={!isOwner} onChange={e => setEmail(e.target.value)} style={{ ...fieldStyle, opacity: isOwner ? 1 : 0.6 }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Website</div>
+          <input value={website} disabled={!isOwner} onChange={e => setWebsite(e.target.value)} style={{ ...fieldStyle, opacity: isOwner ? 1 : 0.6 }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Contact phone</div>
+          <input value={phone} disabled={!isOwner} onChange={e => setPhone(e.target.value)} style={{ ...fieldStyle, opacity: isOwner ? 1 : 0.6 }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Description</div>
+          <textarea value={description} disabled={!isOwner} onChange={e => setDescription(e.target.value)} rows={3} style={{ ...fieldStyle, opacity: isOwner ? 1 : 0.6, resize: 'none', lineHeight: 1.6 }} />
+        </div>
+        {isOwner && (
+          <button onClick={save} disabled={saving || !name.trim() || !email.trim()} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, border: 'none', borderRadius: 14, padding: '13px 0', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{saving ? 'Saving…' : 'Save Changes'}</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>('splash')
   const [adminMode, setAdminMode] = useState(false)
+  const [orgPortalMode, setOrgPortalMode] = useState(false)
   const [oauthError, setOauthError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   // Which ForumPost is open in CommentsScreen, and which Document is open
@@ -10026,6 +10590,7 @@ export default function App() {
   }, [])
 
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
+  if (orgPortalMode) return <OrganisationPortalScreen onExit={() => setOrgPortalMode(false)} />
 
   const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','payment','payment-success','payment-failure']
   const darkHomeIndicator: Screen[] = ['processing','splash','login']
@@ -10066,7 +10631,7 @@ export default function App() {
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} opportunityId={activeOpportunityId} />
       case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
       case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} />
-      case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} />
+      case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} onOpenOrgPortal={() => setOrgPortalMode(true)} />
       case 'settings':          return <SettingsScreen setScreen={setScreen} />
       case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} setActiveProfileUserId={setActiveProfileUserId} />
       case 'library':           return <LibraryScreen setScreen={setScreen} />
