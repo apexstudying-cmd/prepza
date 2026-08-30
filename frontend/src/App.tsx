@@ -2386,6 +2386,25 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
   const [csrfToken, setCsrfToken] = useState('')
   const [finished, setFinished] = useState(false)
   const [completion, setCompletion] = useState<CompletionResponse | null>(null)
+  const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (loading || error || cards.length === 0 || finished || !heartbeatCsrf) return
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return
+      api('/study-time/heartbeat', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': heartbeatCsrf },
+        body: JSON.stringify({ feature: 'flashcards' }),
+      }).catch(() => {})
+    }
+    const interval = setInterval(ping, 20000)
+    return () => clearInterval(interval)
+  }, [loading, error, cards.length, finished, heartbeatCsrf])
 
   // Normalizes ai_service.py's flashcards payload defensively - tries a
   // few likely field names for the front/back of each card.
@@ -2507,6 +2526,25 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) =>
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
   const [completion, setCompletion] = useState<CompletionResponse | null>(null)
+  const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (loading || error || questions.length === 0 || done || !heartbeatCsrf) return
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return
+      api('/study-time/heartbeat', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': heartbeatCsrf },
+        body: JSON.stringify({ feature: 'quiz' }),
+      }).catch(() => {})
+    }
+    const interval = setInterval(ping, 20000)
+    return () => clearInterval(interval)
+  }, [loading, error, questions.length, done, heartbeatCsrf])
 
   // Normalizes ai_service.py's quiz payload defensively: tries a few
   // likely field names for the question text, options list, and
@@ -2645,6 +2683,25 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
+  const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!playing || !heartbeatCsrf) return
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return
+      api('/study-time/heartbeat', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': heartbeatCsrf },
+        body: JSON.stringify({ feature: 'podcast' }),
+      }).catch(() => {})
+    }
+    const interval = setInterval(ping, 20000)
+    return () => clearInterval(interval)
+  }, [playing, heartbeatCsrf])
 
   useEffect(() => {
     if (activeDocumentId == null) { setError('No document selected.'); return }
