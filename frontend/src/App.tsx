@@ -191,27 +191,6 @@ type Screen =
 // ─── Kenyan Data ──────────────────────────────────────────────────────────────
 // USER mock constant removed (Chunk 14 sweep) - PostComposer and CommentsScreen now derive display name/initials from GET /me
 
-const studyDocs = [
-  { id: 1, subject: 'ACT 101 – Actuarial Mathematics', chapter: 'Ch.3 – Interest Theory & Annuities', progress: 52, color: '#C9A84C', icon: '∑' },
-  { id: 2, subject: 'MAT 101 – Calculus I', chapter: 'Ch.5 – Integration Techniques', progress: 34, color: '#4C7BC9', icon: '∫' },
-  { id: 3, subject: 'STA 101 – Probability & Statistics', chapter: 'Ch.2 – Probability Distributions', progress: 78, color: '#4CC97B', icon: 'σ' },
-]
-
-const forumPosts = [
-  { id: 1, user: 'Wanjiru Kamau', avatar: 'WK', course: 'BSc Computer Science · Y2', time: '1h ago', content: "Just used Prepza AI to summarize my ACT 101 notes on Interest Theory. Generated 35 flashcards in 90 seconds. My CATS revision just got 10x easier 🔥", likes: 87, comments: 24, tag: 'Study Win', liked: false, saved: true },
-  { id: 2, user: 'Brian Omondi', avatar: 'BO', course: 'B.Com Finance · Y3', time: '3h ago', content: "The podcast feature is a game changer. Created a 10-minute study podcast from my STA 101 notes and listened during my matatu ride to KU. Arrived already revised 🎧", likes: 134, comments: 41, tag: 'Pro Tip', liked: true, saved: false },
-  { id: 3, user: 'Aisha Mohamed', avatar: 'AM', course: 'LLB Law · Y2', time: '5h ago', content: "Anyone have the Constitutional Law past papers from 2020-2023? Looking for them in the Prepza library. Will upload my own notes as trade 📚", likes: 43, comments: 18, tag: 'Request', liked: false, saved: false },
-  { id: 4, user: 'David Njoroge', avatar: 'DN', course: 'MBBS Medicine · Y3', time: '1d ago', content: "Kenyatta University students — the Physiology library on Prepza has 47 past papers now. Someone uploaded the full KU 2018-2023 set. Go grab them before your upcoming block exam!", likes: 221, comments: 67, tag: 'Announcement', liked: false, saved: false },
-]
-
-const opportunities = [
-  { id: 1, type: 'Internship', title: 'Technology Intern – Safaricom', org: 'Safaricom PLC', location: 'Nairobi, Kenya', deadline: 'Aug 30, 2025', reward: 'KES 35,000/mo', tag: 'Hot', color: '#4CC97B', desc: 'Join Safaricom\'s technology division for a 3-month internship covering software engineering, data analytics, and network operations. Open to 2nd and 3rd year students in Computer Science, Engineering, and related fields.', reqs: ['2nd or 3rd year student', 'Relevant STEM degree', 'Strong analytical skills', 'Kenyan citizen'] },
-  { id: 2, type: 'Scholarship', title: 'Equity Leaders Programme', org: 'Equity Bank Foundation', location: 'All Kenya', deadline: 'Sep 15, 2025', reward: 'Full Scholarship + KES 8,000/mo stipend', tag: 'Flagship', color: '#C9A84C', desc: 'The Equity Leaders Programme offers full scholarships to outstanding Kenyan university students, including tuition, accommodation, mentorship, and a monthly stipend.', reqs: ['Kenyan citizen', 'Mean grade of A- or above', 'Demonstrated financial need', 'Year 1 or 2 student'] },
-  { id: 3, type: 'Competition', title: 'Africa Prize for Engineering Innovation', org: 'Royal Academy of Engineering', location: 'Pan-Africa', deadline: 'Oct 1, 2025', reward: 'KES 600,000 prize', tag: 'Prestigious', color: '#4C7BC9', desc: 'The Africa Prize rewards early-stage engineering innovations that can make a real difference to people\'s lives across Sub-Saharan Africa. Open to African engineers with a working prototype.', reqs: ['African engineer', 'Working prototype required', 'Problem must affect Sub-Saharan Africa', 'Open to teams or individuals'] },
-  { id: 4, type: 'Job', title: 'Graduate Analyst Programme', org: 'KCB Group', location: 'Nairobi, Kenya', deadline: 'Sep 30, 2025', reward: 'KES 65,000/mo', tag: 'Entry Level', color: '#9B59B6', desc: 'KCB Group\'s Graduate Analyst Programme recruits fresh graduates across Finance, Technology, Risk Management, and Operations. Includes a structured 12-month rotation programme.', reqs: ['University degree (any field)', 'Min. Upper Second class honours', 'Graduated within last 2 years', 'Strong communication skills'] },
-  { id: 5, type: 'Event', title: 'Kenya Tech Summit 2025', org: 'ICT Authority Kenya', location: 'KICC, Nairobi', deadline: 'Aug 20, 2025', reward: 'Free (Student Pass)', tag: 'Upcoming', color: '#C94C4C', desc: 'Kenya\'s largest annual technology conference bringing together startups, corporates, government, and students. Features workshops, pitching competitions, and networking events.', reqs: ['Valid student ID', 'Free registration required', 'Open to all students'] },
-]
-
 type OpportunityOrg = { id: number; name: string; logo_url: string | null; website: string | null }
 type OpportunityPublic = {
   id: number
@@ -252,43 +231,11 @@ const OPP_FILTER_TYPE_MAP: Record<string, string | undefined> = {
   Competitions: 'competition', Jobs: 'job', Events: 'event',
 }
 
-const chatList = [
-  { id: 1, name: 'ACT 101 Study Group', avatar: '∑', last: 'Wanjiru: Anyone doing Chapter 3 tonight?', time: '9:41', unread: 5, isGroup: true },
-  { id: 2, name: 'Wanjiru Kamau', avatar: 'WK', last: 'Thanks for the flashcards! Really helped 🙏', time: '9:20', unread: 0, isGroup: false },
-  { id: 3, name: 'KU Actuarial Science Y1', avatar: '📐', last: 'CAT dates confirmed – check pinned message', time: 'Yesterday', unread: 12, isGroup: true },
-  { id: 4, name: 'Brian Omondi', avatar: 'BO', last: 'Did you see the new AI Podcast feature?', time: 'Yesterday', unread: 0, isGroup: false },
-  { id: 5, name: 'MAT 101 Class', avatar: '∫', last: 'Prepza AI: Here is the Integration summary...', time: 'Mon', unread: 3, isGroup: true },
-]
-
-const chatMessages = [
-  { sender: 'Wanjiru', text: 'Has anyone done Chapter 3 of ACT 101 yet? The annuities section is confusing 😭', time: '9:10', me: false },
-  { sender: 'Me', text: 'Yes! I uploaded the lecture notes to Prepza and asked the AI to explain it. Way clearer now.', time: '9:12', me: true },
-  { sender: 'Wanjiru', text: 'Send the link! Did you use the document study feature?', time: '9:13', me: false },
-  { sender: 'Me', text: 'Yeah, highlight any paragraph and tap "Explain" – it gives you examples with KES amounts too which makes it actually relatable 😄', time: '9:15', me: true },
-  { sender: 'Brian', text: 'I generated a quiz from the notes. Got 14/15 on first try 🔥', time: '9:22', me: false },
-  { sender: 'Wanjiru', text: 'Okay I NEED to try this. Uploading now 📤', time: '9:35', me: false },
-]
-
 const podcasts = [
   { id: 1, title: 'Interest Theory Explained', subject: 'ACT 101', duration: '9 min', icon: '∑', color: '#C9A84C' },
   { id: 2, title: 'Integration Techniques', subject: 'MAT 101', duration: '12 min', icon: '∫', color: '#4C7BC9' },
   { id: 3, title: 'Normal Distributions', subject: 'STA 101', duration: '7 min', icon: 'σ', color: '#4CC97B' },
   { id: 4, title: 'Probability Foundations', subject: 'STA 101', duration: '14 min', icon: 'P', color: '#9B59B6' },
-]
-
-const flashcardData = [
-  { q: 'What is the present value formula for an annuity-immediate?', a: 'PV = a(n,i) = (1 - vⁿ) / i\n\nWhere v = 1/(1+i) is the discount factor and i is the interest rate per period.' },
-  { q: 'Define the force of interest (δ).', a: 'δ = ln(1+i)\n\nIt is the continuously compounded interest rate equivalent to the effective annual rate i.' },
-  { q: 'What is the difference between an annuity-immediate and annuity-due?', a: 'Annuity-immediate: payments at END of each period\nAnnuity-due: payments at BEGINNING of each period\n\nä(n,i) = (1+i) × a(n,i)' },
-  { q: 'State the compound interest accumulation function.', a: 'A(t) = A(0)(1+i)ᵗ\n\nFor KES 10,000 at 8% for 3 years:\nA(3) = 10,000 × (1.08)³ = KES 12,597' },
-  { q: 'What is a perpetuity-immediate?', a: 'An annuity with payments continuing forever.\n\nPV = 1/i\n\nExample: KES 5,000/year at 10% = PV of KES 50,000' },
-]
-
-const quizData = [
-  { q: 'If KES 50,000 is invested at 12% p.a. compound interest, what is the accumulated value after 2 years?', opts: ['KES 56,000', 'KES 62,720', 'KES 60,000', 'KES 58,400'], ans: 1 },
-  { q: 'The present value of an annuity-immediate of KES 1 per annum for n years at effective interest rate i is:', opts: ['vⁿ/i', '(1-vⁿ)/i', '(1+i)ⁿ-1)/i', 'vⁿ × i'], ans: 1 },
-  { q: 'Which of the following correctly defines the discount factor v?', opts: ['v = 1+i', 'v = i/(1+i)', 'v = 1/(1+i)', 'v = ln(1+i)'], ans: 2 },
-  { q: 'A perpetuity pays KES 2,400 per month. At an annual effective interest rate of 6%, what is the present value?', opts: ['KES 480,000', 'KES 40,000', 'KES 474,000', 'KES 490,000'], ans: 0 },
 ]
 
 // ─── Shared atoms ─────────────────────────────────────────────────────────────
@@ -1173,6 +1120,25 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
   const [docsLoading, setDocsLoading] = useState(true)
   const [summary, setSummary] = useState<GamificationSummary | null>(null)
 
+  const [previewPosts, setPreviewPosts] = useState<ForumPostSummary[]>([])
+  const [previewOpps, setPreviewOpps] = useState<OpportunityPublic[]>([])
+
+  useEffect(() => {
+    // Community preview: no cross-unit "recent posts" endpoint exists yet,
+    // so this shows the top 2 recent posts from the student's first unit
+    // (same default ForumScreen itself uses) rather than a true global feed.
+    api<UnitOption[]>('/units')
+      .then(units => {
+        if (!units.length) return
+        return api<{ posts: ForumPostSummary[] }>(`/units/${units[0].id}/forum`)
+      })
+      .then(res => res && setPreviewPosts(res.posts.slice(0, 2)))
+      .catch(() => {})
+    api<{ opportunities: OpportunityPublic[] }>('/opportunities')
+      .then(res => setPreviewOpps(res.opportunities.slice(0, 2)))
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     api<{ display_name: string | null }>('/me')
       .then(me => setDisplayName(me.display_name))
@@ -1316,62 +1282,50 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
         </section>
 
         {/* Community */}
-        <section style={{ padding: '0 18px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Community</span>
-            <span onClick={() => setScreen('forum')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
-          </div>
-          {forumPosts.slice(0, 2).map(p => <ForumCard key={p.id} post={p} setScreen={setScreen} />)}
-        </section>
+        {previewPosts.length > 0 && (
+          <section style={{ padding: '0 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Community</span>
+              <span onClick={() => setScreen('forum')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
+            </div>
+            {previewPosts.map(p => <RealForumCard key={p.id} post={p} onOpen={() => setScreen('forum')} />)}
+          </section>
+        )}
 
         {/* Opportunities */}
-        <section style={{ padding: '0 18px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Opportunities 🚀</span>
-            <span onClick={() => setScreen('opportunities')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
-          </div>
-          {opportunities.slice(0, 2).map(o => (
-            <OppCard key={o.id} opp={o} setScreen={setScreen} />
-          ))}
-        </section>
+        {previewOpps.length > 0 && (
+          <section style={{ padding: '0 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Opportunities 🚀</span>
+              <span onClick={() => setScreen('opportunities')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
+            </div>
+            {previewOpps.map(o => {
+              const meta = oppTypeMeta(o.opportunity_type)
+              const deadline = fmtDeadline(o.application_deadline)
+              return (
+                <div key={o.id} onClick={() => setScreen('opportunities')} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
+                  <div style={{ width: 44, height: 44, background: meta.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{meta.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{o.title}</div>
+                    <div style={{ fontSize: 11, color: '#6B7280' }}>{o.organisation?.name || 'Unknown organisation'}</div>
+                    {(o.location || deadline) && (
+                      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{o.location ? `📍 ${o.location}` : ''}{o.location && deadline ? ' · ' : ''}{deadline ? `⏰ ${deadline}` : ''}</div>
+                    )}
+                  </div>
+                  <Pill text={meta.label} color={meta.color} />
+                </div>
+              )
+            })}
+          </section>
+        )}
       </div>
     </div>
   )
 }
 
 // ─── SHARED CARDS ─────────────────────────────────────────────────────────────
-function ForumCard({ post, setScreen }: { post: typeof forumPosts[0]; setScreen: (s: Screen) => void }) {
-  const [liked, setLiked] = useState(post.liked)
-  const [saved, setSaved] = useState(post.saved)
-  return (
-    <div style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)' }}>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-        <Avi name={post.avatar} size={38} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{post.user}</div>
-          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{post.course} · {post.time}</div>
-        </div>
-        <Pill text={post.tag} />
-      </div>
-      <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, margin: '0 0 12px' }}>{post.content}</p>
-      <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-        <button onClick={() => setLiked(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: liked ? '#C94C4C' : '#9CA3AF', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
-          {Ic.heart('w-4 h-4')} {post.likes + (liked ? 1 : 0)}
-        </button>
-        <button onClick={() => setScreen('comments')} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
-          {Ic.comment('w-4 h-4')} {post.comments}
-        </button>
-        <div style={{ flex: 1 }} />
-        <button onClick={() => setSaved(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: saved ? N.gold : '#9CA3AF' }}>{Ic.bookmark('w-4 h-4')}</button>
-        <button onClick={() => setScreen('share-sheet')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}>{Ic.share('w-4 h-4')}</button>
-      </div>
-    </div>
-  )
-}
-
-// Real, per-unit ForumPost card - separate from the mock ForumCard above
-// (still used by the Home screen's preview strip) since ForumPost has no
-// like feature and a different shape than the mock forumPosts data.
+// Real, per-unit ForumPost card - used by both ForumScreen and the Home
+// screen's Community preview strip.
 function RealForumCard({ post, onOpen }: { post: ForumPostSummary; onOpen: () => void }) {
   return (
     <div onClick={onOpen} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }}>
@@ -1388,26 +1342,6 @@ function RealForumCard({ post, onOpen }: { post: ForumPostSummary; onOpen: () =>
         {Ic.comment('w-4 h-4')} {post.reply_count} {post.reply_count === 1 ? 'reply' : 'replies'}
         <span style={{ flex: 1 }} />
         <span style={{ color: N.gold, fontWeight: 700 }}>Ask Prepza AI →</span>
-      </div>
-    </div>
-  )
-}
-
-function OppCard({ opp, setScreen }: { opp: typeof opportunities[0]; setScreen: (s: Screen) => void }) {
-  const [saved, setSaved] = useState(false)
-  return (
-    <div onClick={() => setScreen('opportunity-detail')} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
-      <div style={{ width: 44, height: 44, background: opp.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
-        {opp.type === 'Internship' ? '💼' : opp.type === 'Scholarship' ? '🎓' : opp.type === 'Competition' ? '🏆' : opp.type === 'Job' ? '📋' : '🎪'}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{opp.title}</div>
-        <div style={{ fontSize: 11, color: '#6B7280' }}>{opp.org}</div>
-        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>📍 {opp.location} · ⏰ {opp.deadline}</div>
-      </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <Pill text={opp.tag} color={opp.color} />
-        <div style={{ fontSize: 11, fontWeight: 800, color: opp.color, marginTop: 4 }}>{opp.reward}</div>
       </div>
     </div>
   )
@@ -3247,12 +3181,18 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
 // ─── CHATS ────────────────────────────────────────────────────────────────────
 type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; unread_count: number }
 
-function ChatsScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void }) {
+function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void; setActiveGroupId?: (id: number) => void }) {
   const [tab, setTab] = useState<'Chats'|'Groups'|'Requests'>('Chats')
   const [search, setSearch] = useState('')
   const [chats, setChats] = useState<ChatSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Study Groups (Chunk 7's Group model - posts/members/files) are a
+  // separate concept from these Conversation-based chats, and previously
+  // only surfaced via Explore. Fetched here too so the Groups tab shows
+  // both: the study groups you've joined AND any ad-hoc group chats.
+  const [myGroups, setMyGroups] = useState<GroupSummary[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -3263,6 +3203,12 @@ function ChatsScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Sc
       .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load chats') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    api<{ groups: GroupSummary[] }>('/groups/mine')
+      .then(res => setMyGroups(res.groups))
+      .catch(() => {})
   }, [])
 
   if (loading) return <SkeletonChats />
@@ -3315,6 +3261,62 @@ function ChatsScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Sc
             <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No requests</div>
             <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>New chat requests will appear here</div>
           </div>
+        ) : tab === 'Groups' ? (
+          <>
+            {myGroups.length === 0 && displayed.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+                <div style={{ fontSize: 44, marginBottom: 12 }}>👥</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No groups yet</div>
+                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Join a study group or start a group chat to see it here</div>
+                <button onClick={() => setScreen('explore')} style={{ marginTop: 16, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 12, border: 'none', borderRadius: 12, padding: '10px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Browse Study Groups</button>
+              </div>
+            ) : (
+              <>
+                {myGroups.length > 0 && (
+                  <>
+                    <div style={{ padding: '12px 16px 6px', fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5 }}>Study Groups</div>
+                    {myGroups.map(g => (
+                      <div key={`group-${g.id}`} onClick={() => { setActiveGroupId?.(g.id); setScreen('group-detail') }} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                        <div style={{ position: 'relative' }}>
+                          <Avi name={(g.name || '??').slice(0, 2).toUpperCase()} size={46} />
+                          <div style={{ position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: N.navy, fontWeight: 800 }}>G</div>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{g.name}</span>
+                          <div style={{ fontSize: 12, color: '#6B7280' }} className="line-clamp-1">{g.member_count} member{g.member_count === 1 ? '' : 's'}{g.unit_code ? ` · ${g.unit_code}` : ''}</div>
+                        </div>
+                        <div style={{ color: '#9CA3AF' }}>{Ic.chevR('w-4 h-4')}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {displayed.length > 0 && (
+                  <>
+                    <div style={{ padding: '14px 16px 6px', fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5 }}>Group Chats</div>
+                    {displayed.map(chat => {
+                      const initials = (chat.name || '??').slice(0, 2).toUpperCase()
+                      return (
+                        <div key={chat.id} onClick={() => openChat(chat.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                          <div style={{ position: 'relative' }}>
+                            <Avi name={initials} size={46} />
+                            <div style={{ position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: N.navy, fontWeight: 800 }}>G</div>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                              <span style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{chat.name}</span>
+                              <span style={{ fontSize: 11, color: '#9CA3AF' }}>{chat.last_message_at ? new Date(chat.last_message_at).toLocaleString() : ''}</span>
+                            </div>
+                            <div style={{ fontSize: 12, color: '#6B7280' }} className="line-clamp-1">{chat.last_message || 'No messages yet'}</div>
+                          </div>
+                          {chat.unread_count > 0 && <div style={{ width: 22, height: 22, background: N.gold, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread_count}</div>}
+                        </div>
+                      )
+                    })}
+                  </>
+                )}
+              </>
+            )}
+          </>
         ) : displayed.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 44, marginBottom: 12 }}>💬</div>
@@ -6952,15 +6954,6 @@ function TimeStudiedScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── FOLLOWERS / FOLLOWING ────────────────────────────────────────────────────
-const followPeople = [
-  { name: 'Wanjiru Kamau', username: '@wanjiru.ku', uni: 'UoN', course: 'Computer Science', following: false },
-  { name: 'Brian Omondi', username: '@brian.str', uni: 'Strathmore', course: 'B.Com Finance', following: true },
-  { name: 'Aisha Mohamed', username: '@aisha.mku', uni: 'MKU', course: 'LLB Law', following: false },
-  { name: 'David Njoroge', username: '@david.ku', uni: 'Kenyatta University', course: 'MBBS Medicine', following: true },
-  { name: 'Faith Njeri', username: '@faith.daystar', uni: 'Daystar University', course: 'BA Psychology', following: false },
-  { name: 'James Kariuki', username: '@james.uon', uni: 'UoN', course: 'BSc Economics', following: false },
-]
-
 function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserId, setActiveProfileName }: {
   mode: 'followers' | 'following'
   setScreen: (s: Screen) => void
@@ -10625,7 +10618,7 @@ export default function App() {
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'forum':             return <ForumScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} setActiveGroupId={setActiveGroupId} />
       case 'comments':          return <CommentsScreen setScreen={setScreen} postId={activeForumPostId} />
-      case 'chats':             return <ChatsScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
+      case 'chats':             return <ChatsScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} setActiveGroupId={setActiveGroupId} />
       case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} />
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} opportunityId={activeOpportunityId} />
