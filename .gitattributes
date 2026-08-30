@@ -11,3 +11,4 @@
 app.py text eol=crlf
 static/admin.html text eol=crlf
 static/sw.js text eol=lf
+frontend/src/App.tsx text eol=crlf
