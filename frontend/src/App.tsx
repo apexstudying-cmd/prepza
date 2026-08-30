@@ -1279,7 +1279,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
             {[
               { icon: '📤', label: 'Upload', action: () => setScreen('upload') },
-              { icon: '✦', label: 'AI Tutor', action: () => setScreen('ai-tutor') },
+              { icon: '✦', label: 'Ada', action: () => setScreen('ai-tutor') },
               { icon: '🃏', label: 'Flashcards', action: () => setScreen('flashcards') },
               { icon: '📝', label: 'Practice', action: () => setScreen('quiz') },
               { icon: '🎙️', label: 'Podcasts', action: () => setScreen('podcast-player') },
@@ -2295,7 +2295,9 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
 // ─── AI TUTOR ─────────────────────────────────────────────────────────────────
 type TutorMsg = { id: number | string; role: 'user' | 'assistant'; content: string }
 
-function AITutorScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+type PickableDoc = { id: number; title: string; status: string }
+
+function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null; setActiveDocumentId: (id: number | null) => void }) {
   const [messages, setMessages] = useState<TutorMsg[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -2306,8 +2308,22 @@ function AITutorScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
   const [voiceMode, setVoiceMode] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  const [pickerDocs, setPickerDocs] = useState<PickableDoc[]>([])
+  const [pickerLoading, setPickerLoading] = useState(false)
+  const [pickerError, setPickerError] = useState('')
+
   useEffect(() => {
-    if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
+    if (activeDocumentId != null) return
+    setPickerLoading(true)
+    api<{ documents: PickableDoc[] }>('/documents')
+      .then(res => setPickerDocs(res.documents.filter(d => d.status === 'ready')))
+      .catch(e => setPickerError(e instanceof ApiError ? e.message : 'Could not load your documents.'))
+      .finally(() => setPickerLoading(false))
+  }, [activeDocumentId])
+
+  useEffect(() => {
+    if (activeDocumentId == null) { setLoading(false); return }
+    setLoading(true)
     api<{ csrf_token: string }>('/me')
       .then(me => {
         setCsrfToken(me.csrf_token)
@@ -2343,6 +2359,39 @@ function AITutorScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
     }
   }
 
+  if (activeDocumentId == null) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+        <div style={{ background: N.navy, padding: '0 18px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✦</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Ada</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', fontWeight: 600 }}>Pick a document to start</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+          {pickerLoading && <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, marginTop: 24 }}>Loading your documents…</div>}
+          {pickerError && <GenerationError error={pickerError} />}
+          {!pickerLoading && !pickerError && pickerDocs.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '32px 20px' }}>
+              <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 14 }}>You don't have any documents ready yet. Upload one to start asking Ada questions.</div>
+              <button onClick={() => setScreen('upload')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 14, padding: '12px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Upload a Document</button>
+            </div>
+          )}
+          {!pickerLoading && !pickerError && pickerDocs.map(d => (
+            <div key={d.id} onClick={() => setActiveDocumentId(d.id)} style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
+              <div style={{ width: 38, height: 38, background: 'rgba(201,168,76,0.12)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>📄</div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{d.title}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   if (loading) return <SkeletonAITutor />
   if (error) return <GenerationError error={error} />
 
@@ -2353,7 +2402,7 @@ function AITutorScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
           <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✦</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Prepza AI Tutor</div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Ada</div>
             <div style={{ fontSize: 11, color: '#4CC97B', fontWeight: 600 }}>● Online · Ready to help</div>
           </div>
         </div>
@@ -3234,7 +3283,7 @@ function ChatsScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Sc
       <div onClick={() => setScreen('ai-tutor')} style={{ margin: '12px 14px 0', background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: `1px solid ${N.gold}25` }}>
         <div style={{ width: 44, height: 44, background: `rgba(201,168,76,0.18)`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>✦</div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>Prepza AI Tutor</div>
+          <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>Ada</div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Your personal study assistant</div>
         </div>
         <Pill text="AI" color={N.gold} />
@@ -9990,7 +10039,7 @@ export default function App() {
       case 'processing':        return <ProcessingScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'document-study':    return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
+      case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} activeDocumentId={activeDocumentId} setActiveDocumentId={setActiveDocumentId} />
       case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'quiz':              return <QuizScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
