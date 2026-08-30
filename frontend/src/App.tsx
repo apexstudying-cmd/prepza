@@ -2293,24 +2293,58 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
 }
 
 // ─── AI TUTOR ─────────────────────────────────────────────────────────────────
-function AITutorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const [messages, setMessages] = useState([
-    { role: 'ai', text: "Hello Arnold! 👋 I'm your Prepza AI Tutor. I can help you with ACT 101, MAT 101, STA 101 — or any topic you're studying.\n\nWhat would you like to work on today?" },
-    { role: 'user', text: 'Explain the concept of present value with a Kenyan example' },
-    { role: 'ai', text: "Great question! Present Value (PV) answers: \"How much is a future amount worth today?\"\n\nFormula: PV = FV / (1+i)ⁿ\n\nKenyan Example:\nYou're promised KES 100,000 in 2 years. Safaricom Money offers 10% p.a. What's it worth today?\n\nPV = 100,000 / (1.10)² = KES 82,645\n\nSo KES 82,645 today is equivalent to KES 100,000 in 2 years at 10%. This is exactly the kind of calculation an actuary at Jubilee Insurance would do daily! 💡" },
-  ])
-  const [input, setInput] = useState('')
-  const [context, setContext] = useState('ACT 101')
-  const [voiceMode, setVoiceMode] = useState(false)
-  const loadingAI = useLoading(600)
-  if (loadingAI) return <SkeletonAITutor />
+type TutorMsg = { id: number | string; role: 'user' | 'assistant'; content: string }
 
-  const send = () => {
-    if (!input.trim()) return
-    const q = input; setInput('')
-    setMessages(m => [...m, { role: 'user', text: q }])
-    setTimeout(() => setMessages(m => [...m, { role: 'ai', text: `Good question! Here's a clear explanation related to your ${context} studies…` }]), 900)
+function AITutorScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const [messages, setMessages] = useState<TutorMsg[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState('')
+  const [voiceMode, setVoiceMode] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
+    api<{ csrf_token: string }>('/me')
+      .then(me => {
+        setCsrfToken(me.csrf_token)
+        return api<{ conversation_id: number | null; messages: TutorMsg[] }>(`/documents/${activeDocumentId}/tutor`)
+      })
+      .then(res => setMessages(res.messages))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load this conversation.'))
+      .finally(() => setLoading(false))
+  }, [activeDocumentId])
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+  }, [messages, sending])
+
+  const send = async () => {
+    if (!input.trim() || sending || activeDocumentId == null) return
+    const body = input; setInput(''); setSendError('')
+    setMessages(m => [...m, { id: `local-${Date.now()}`, role: 'user', content: body }])
+    setSending(true)
+    try {
+      const res = await api<{ reply: TutorMsg }>(`/documents/${activeDocumentId}/tutor/messages`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ body }),
+      })
+      setMessages(m => [...m, res.reply])
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 429) setSendError("You've hit the hourly message limit - try again later.")
+      else if (e instanceof ApiError && e.status === 503) setSendError('AI budget exceeded for now - try again later.')
+      else setSendError(e instanceof ApiError ? e.message : 'Could not send that message. Please try again.')
+    } finally {
+      setSending(false)
+    }
   }
+
+  if (loading) return <SkeletonAITutor />
+  if (error) return <GenerationError error={error} />
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
@@ -2323,12 +2357,6 @@ function AITutorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ fontSize: 11, color: '#4CC97B', fontWeight: 600 }}>● Online · Ready to help</div>
           </div>
         </div>
-        {/* Context selector */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, overflowX: 'auto' }} className="scrollbar-hide">
-          {['ACT 101','MAT 101','STA 101','All Materials','General'].map(c => (
-            <button key={c} onClick={() => setContext(c)} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 20, background: context === c ? 'rgba(201,168,76,0.25)' : 'rgba(255,255,255,0.08)', border: `1px solid ${context === c ? N.gold+'55' : 'rgba(255,255,255,0.1)'}`, color: context === c ? N.gold : 'rgba(255,255,255,0.6)', fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{c}</button>
-          ))}
-        </div>
         {/* Quick actions */}
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }} className="scrollbar-hide">
           {['Explain','Quiz Me','Summarize','Flashcards','Podcast'].map(a => (
@@ -2337,16 +2365,31 @@ function AITutorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }} className="scrollbar-hide">
-        {messages.map((m, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', gap: 10, alignItems: 'flex-start' }}>
-            {m.role === 'ai' && <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>✦</div>}
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }} className="scrollbar-hide">
+        {messages.length === 0 && (
+          <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, marginTop: 40 }}>Ask me anything about this document to get started.</div>
+        )}
+        {messages.map((m) => (
+          <div key={m.id} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', gap: 10, alignItems: 'flex-start' }}>
+            {m.role === 'assistant' && <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>✦</div>}
             <div style={{ maxWidth: '80%', background: m.role === 'user' ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: m.role === 'user' ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
-              <div style={{ fontSize: 13, color: m.role === 'user' ? '#fff' : '#374151', lineHeight: 1.75, whiteSpace: 'pre-line' }}>{m.text}</div>
+              <div style={{ fontSize: 13, color: m.role === 'user' ? '#fff' : '#374151', lineHeight: 1.75, whiteSpace: 'pre-line' }}>{m.content}</div>
             </div>
           </div>
         ))}
+        {sending && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>✦</div>
+            <div style={{ background: '#fff', borderRadius: '0 14px 14px 14px', padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
+              <div style={{ fontSize: 13, color: '#9CA3AF' }}>Thinking…</div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {sendError && (
+        <div style={{ margin: '0 16px 8px', fontSize: 12, color: '#C94C4C', fontWeight: 600 }}>{sendError}</div>
+      )}
 
       {voiceMode && (
         <div style={{ margin: '0 16px 8px', background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
@@ -2360,11 +2403,11 @@ function AITutorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
       <div style={{ padding: '10px 14px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(11,20,55,0.08)' }}>
-          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Ask your AI tutor anything…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} disabled={sending} placeholder="Ask your AI tutor anything…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
           <button onClick={() => setVoiceMode(v => !v)} style={{ width: 32, height: 32, background: voiceMode ? `rgba(201,168,76,0.2)` : '#F3F4F6', border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ color: voiceMode ? N.gold : '#6B7280' }}>{Ic.mic('w-4 h-4')}</div>
           </button>
-          <button onClick={send} style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={send} disabled={sending || !input.trim()} style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: sending ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: sending || !input.trim() ? 0.5 : 1 }}>
             <div style={{ color: N.navy }}>{Ic.send('w-4 h-4')}</div>
           </button>
         </div>
@@ -9947,7 +9990,7 @@ export default function App() {
       case 'processing':        return <ProcessingScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'document-study':    return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} />
+      case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'quiz':              return <QuizScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
