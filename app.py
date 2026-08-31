@@ -5012,6 +5012,25 @@ def streak_detail():
         ).all()
     }
 
+    # Per-day study duration (summed across all StudyTimeLog features)
+    # for the viewed month, so the frontend can shade each calendar
+    # tile by how long the student studied that day - GitHub-style
+    # contribution intensity - rather than a flat studied/not-studied
+    # boolean.
+    study_seconds_by_date = dict(
+        db.session.query(
+            StudyTimeLog.activity_date,
+            db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0),
+        )
+        .filter(
+            StudyTimeLog.user_id == user_id,
+            StudyTimeLog.activity_date >= view_first_day,
+            StudyTimeLog.activity_date <= view_last_day,
+        )
+        .group_by(StudyTimeLog.activity_date)
+        .all()
+    )
+
     calendar = []
     num_days_in_month = (view_last_day - view_first_day).days + 1
     for i in range(num_days_in_month):
@@ -5020,14 +5039,18 @@ def streak_detail():
             "date": day.isoformat(),
             "studied": day in active_dates,
             "is_future": day > today,
+            "study_seconds": int(study_seconds_by_date.get(day, 0)),
         })
 
-    earliest_activity = (
-        db.session.query(db.func.min(StudyActivityLog.activity_date))
-        .filter(StudyActivityLog.user_id == user_id)
-        .scalar()
-    )
-    earliest_month = (earliest_activity or today).strftime("%Y-%m")
+    # Bound backward navigation by account creation, not first study
+    # activity - a brand-new account whose only activity is this month
+    # would otherwise have earliest_month == calendar_month and
+    # permanently disable the prev button on load. Matches GitHub's
+    # own contribution calendar, which scrolls back through empty
+    # months to account creation, not just to first contribution.
+    user = db.session.get(User, user_id)
+    account_created = user.created_at.date() if (user and user.created_at) else today
+    earliest_month = account_created.strftime("%Y-%m")
 
     milestones = [
         {

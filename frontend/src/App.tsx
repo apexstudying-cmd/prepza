@@ -6713,7 +6713,7 @@ function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── STUDY STREAK ─────────────────────────────────────────────────────────────
-type StreakCalendarDay = { date: string; studied: boolean; is_future: boolean }
+type StreakCalendarDay = { date: string; studied: boolean; is_future: boolean; study_seconds: number }
 type StreakMilestone = { days: number; label: string; xp: string; done: boolean }
 type StreakResponse = {
   current_streak: number
@@ -6750,6 +6750,7 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const longest = data?.longest_streak ?? 0
   const days = data?.calendar ?? []
   const milestones = data?.milestones ?? []
+  const unlockedMilestones = milestones.filter(m => m.done)
   const calendarMonth = data?.calendar_month ?? viewMonth ?? ''
   const startWeekday = data?.calendar_start_weekday ?? 0
   const earliestMonth = data?.earliest_month ?? null
@@ -6767,6 +6768,31 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     const [y, m] = calendarMonth.split('-').map(Number)
     const d = new Date(y, m - 1 + dir, 1)
     setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+
+  // GitHub-contributions-style shading: darker gold the longer the
+  // student studied that day, rather than a flat studied/not color.
+  const SHADE_LEVELS = [
+    { color: '#F3F4F6', border: '1px solid #E5E7EB' }, // no activity
+    { color: `${N.gold}35`, border: 'none' },           // < 15 min
+    { color: `${N.gold}70`, border: 'none' },           // 15-45 min
+    { color: `${N.gold}A8`, border: 'none' },           // 45-90 min
+    { color: N.gold, border: 'none' },                  // 90+ min
+  ]
+  const shadeForSeconds = (seconds: number) => {
+    if (!seconds || seconds <= 0) return SHADE_LEVELS[0]
+    if (seconds < 900) return SHADE_LEVELS[1]
+    if (seconds < 2700) return SHADE_LEVELS[2]
+    if (seconds < 5400) return SHADE_LEVELS[3]
+    return SHADE_LEVELS[4]
+  }
+  const formatStudyDuration = (seconds: number) => {
+    if (!seconds || seconds <= 0) return 'No study time logged'
+    const mins = Math.round(seconds / 60)
+    if (mins < 60) return `Studied ${mins} min`
+    const hrs = Math.floor(mins / 60)
+    const remMins = mins % 60
+    return remMins > 0 ? `Studied ${hrs}h ${remMins}m` : `Studied ${hrs}h`
   }
 
   if (loading) {
@@ -6827,34 +6853,48 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
             {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 4 }}>{d}</div>)}
             {Array.from({ length: startWeekday }).map((_, i) => <div key={`pad-${i}`} />)}
-            {days.map((d, i) => (
-              <div key={i} style={{ aspectRatio: '1', borderRadius: 6, background: d.studied ? N.gold : '#F3F4F6', opacity: d.is_future ? 0.35 : 1, transition: 'background 0.2s' }} title={new Date(d.date).toLocaleDateString()} />
-            ))}
+            {days.map((d, i) => {
+              const shade = shadeForSeconds(d.study_seconds)
+              const dateLabel = new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              const tooltip = `${dateLabel} — ${d.is_future ? 'Upcoming' : formatStudyDuration(d.study_seconds)}`
+              return (
+                <div key={i} style={{ aspectRatio: '1', borderRadius: 6, background: shade.color, border: shade.border, opacity: d.is_future ? 0.35 : 1, transition: 'background 0.2s' }} title={tooltip} />
+              )
+            })}
           </div>
-          <div style={{ display: 'flex', gap: 12, marginTop: 14, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><div style={{ width: 12, height: 12, borderRadius: 3, background: N.gold }} /><span style={{ fontSize: 11, color: '#9CA3AF' }}>Studied</span></div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><div style={{ width: 12, height: 12, borderRadius: 3, background: '#F3F4F6', border: '1px solid #E5E7EB' }} /><span style={{ fontSize: 11, color: '#9CA3AF' }}>No activity</span></div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 14, alignItems: 'center', justifyContent: 'flex-end' }}>
+            <span style={{ fontSize: 10, color: '#9CA3AF' }}>Less</span>
+            {SHADE_LEVELS.map((lvl, i) => (
+              <div key={i} style={{ width: 12, height: 12, borderRadius: 3, background: lvl.color, border: lvl.border }} />
+            ))}
+            <span style={{ fontSize: 10, color: '#9CA3AF' }}>More</span>
           </div>
         </div>
         <div style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Streak milestones</div>
-          {milestones.map((m, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: i < milestones.length - 1 ? 12 : 0 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: m.done ? `${N.gold}20` : '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {m.done ? <span style={{ fontSize: 16 }}>🏆</span> : <span style={{ fontSize: 16, opacity: 0.4 }}>🔒</span>}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: m.done ? N.navy : '#9CA3AF' }}>{m.days}-Day Streak</div>
-                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{m.label}</div>
-              </div>
-              <Pill text={m.xp} color={m.done ? N.gold : '#9CA3AF'} />
+          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Streak milestones{unlockedMilestones.length > 0 ? ` (${unlockedMilestones.length})` : ''}</div>
+          {unlockedMilestones.length === 0 ? (
+            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '4px 0 2px' }}>No milestones reached yet — keep your streak going to unlock your first one.</div>
+          ) : (
+            <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className="scrollbar-hide">
+              {unlockedMilestones.map((m, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: `${N.gold}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span style={{ fontSize: 16 }}>🏆</span>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{m.days}-Day Streak</div>
+                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{m.label}</div>
+                  </div>
+                  <Pill text={m.xp} color={N.gold} />
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
         <button onClick={() => setScreen('share-sheet')} style={{ width: '100%', background: 'transparent', border: `1.5px solid ${N.gold}`, color: N.gold, fontWeight: 700, fontSize: 14, borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
           Share {current}-Day Streak
         </button>
-        <div style={{ height: 100 }} />
+        <div style={{ height: 'calc(96px + env(safe-area-inset-bottom, 0px))' }} />
       </div>
     </div>
   )
