@@ -8144,6 +8144,32 @@ const adminNav = [
   { key: 'ambassadors', label: 'Ambassadors', icon: '🤝' },
 ]
 
+type AdminLibraryQueueItem = {
+  id: number
+  document_id: number
+  title: string
+  description: string | null
+  material_type: string
+  unit_id: number | null
+  unit_code: string | null
+  author_email: string | null
+  original_filename: string | null
+  created_at: string | null
+}
+
+type AdminLibraryReportItem = {
+  id: number
+  library_publication_id: number
+  publication_title: string | null
+  publication_status: string | null
+  reporter_email: string | null
+  reason: string
+  details: string | null
+  status: string
+  admin_notes: string | null
+  created_at: string | null
+}
+
 type AdminUserRow = {
   id: number
   email: string
@@ -8269,7 +8295,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   const [userFilter, setUserFilter] = useState('All')
   const [selectedUser, setSelectedUser] = useState<AdminUserRow | null>(null)
   const [confirmAction, setConfirmAction] = useState<{ type: string; target: string; userId?: number; nextSuspended?: boolean } | null>(null)
-  const [contentTab, setContentTab] = useState('Documents')
+  const [contentTab, setContentTab] = useState('Pending Review')
   const [commTab, setCommTab] = useState('Announcements')
   const [csrfToken, setCsrfToken] = useState('')
   useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
@@ -8386,6 +8412,87 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     })
       .then(() => { loadAdminUsers(); setSelectedUser(null); setConfirmAction(null) })
       .catch(e => setUserActionError(e instanceof ApiError ? e.message : 'Could not update user.'))
+  }
+
+  const [libraryQueue, setLibraryQueue] = useState<AdminLibraryQueueItem[]>([])
+  const [libraryQueueLoading, setLibraryQueueLoading] = useState(true)
+  const [libraryQueueError, setLibraryQueueError] = useState('')
+  const [libraryReports, setLibraryReports] = useState<AdminLibraryReportItem[]>([])
+  const [libraryReportsLoading, setLibraryReportsLoading] = useState(true)
+  const [libraryReportsError, setLibraryReportsError] = useState('')
+  const [contentActionError, setContentActionError] = useState('')
+  const [rejectPromptId, setRejectPromptId] = useState<number | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [removePromptTarget, setRemovePromptTarget] = useState<{ publicationId: number; reportId: number } | null>(null)
+  const [removeReason, setRemoveReason] = useState('')
+
+  const loadLibraryQueue = () => {
+    setLibraryQueueLoading(true)
+    setLibraryQueueError('')
+    api<{ queue: AdminLibraryQueueItem[] }>('/admin/library/queue')
+      .then(res => setLibraryQueue(res.queue))
+      .catch(e => setLibraryQueueError(e instanceof ApiError ? e.message : 'Could not load the review queue.'))
+      .finally(() => setLibraryQueueLoading(false))
+  }
+
+  const loadLibraryReports = () => {
+    setLibraryReportsLoading(true)
+    setLibraryReportsError('')
+    api<{ reports: AdminLibraryReportItem[] }>('/admin/library/reports')
+      .then(res => setLibraryReports(res.reports))
+      .catch(e => setLibraryReportsError(e instanceof ApiError ? e.message : 'Could not load reports.'))
+      .finally(() => setLibraryReportsLoading(false))
+  }
+
+  useEffect(() => {
+    if (section !== 'content') return
+    loadLibraryQueue()
+    loadLibraryReports()
+  }, [section])
+
+  const approveLibraryItem = (publicationId: number) => {
+    setContentActionError('')
+    api(`/admin/library/${publicationId}/approve`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      .then(() => loadLibraryQueue())
+      .catch(e => setContentActionError(e instanceof ApiError ? e.message : 'Could not approve this item.'))
+  }
+
+  const rejectLibraryItem = (publicationId: number, reason: string) => {
+    setContentActionError('')
+    api(`/admin/library/${publicationId}/reject`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ reason }),
+    })
+      .then(() => { loadLibraryQueue(); setRejectPromptId(null); setRejectReason('') })
+      .catch(e => setContentActionError(e instanceof ApiError ? e.message : 'Could not reject this item.'))
+  }
+
+  const removeLibraryItem = (publicationId: number, reportId: number, reason: string) => {
+    setContentActionError('')
+    api(`/admin/library/${publicationId}/remove`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ reason }),
+    })
+      .then(() => api(`/admin/library/reports/${reportId}/resolve`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ status: 'actioned' }),
+      }))
+      .then(() => { loadLibraryReports(); setRemovePromptTarget(null); setRemoveReason('') })
+      .catch(e => setContentActionError(e instanceof ApiError ? e.message : 'Could not remove this item.'))
+  }
+
+  const resolveLibraryReport = (reportId: number, status: 'dismissed' | 'actioned') => {
+    setContentActionError('')
+    api(`/admin/library/reports/${reportId}/resolve`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ status }),
+    })
+      .then(() => loadLibraryReports())
+      .catch(e => setContentActionError(e instanceof ApiError ? e.message : 'Could not resolve this report.'))
   }
 
   const filteredUsers = adminUsers
@@ -8597,44 +8704,107 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   )
 
   if (section === 'content') {
-    const contentRows: Record<string,(string|React.ReactNode)[][]> = {
-      Documents: [
-        ['ACT 101 Lecture Notes – Week 1-6', 'Arnold Gichuru', 'Kenyatta University', 'PDF · 38p', 'Aug 10', <AdminBadge text="Approved" color="green" />],
-        ['KU Past Papers 2020-2023 (MAT 101)', 'Student Library', 'Kenyatta University', 'PDF · 72p', 'Aug 9', <AdminBadge text="Approved" color="green" />],
-        ['STA 101 Probability Slides', 'Dr. Njuguna', 'University of Nairobi', 'PPT · 44p', 'Aug 8', <AdminBadge text="Pending" color="amber" />],
-        ['Constitutional Law Notes 2025', 'Aisha Mohamed', 'Mount Kenya University', 'PDF · 55p', 'Aug 7', <AdminBadge text="Pending" color="amber" />],
-        ['MBBS Pharmacology Revision', 'David Njoroge', 'Kenyatta University', 'PDF · 91p', 'Aug 6', <AdminBadge text="Flagged" color="red" />],
-      ],
-      Podcasts: [
-        ['Introduction to Interest Theory', 'Arnold Gichuru', 'AI-Generated', '9 min', 'Aug 10', <AdminBadge text="Published" color="green" />],
-        ['Present Value Explained Simply', 'Brian Omondi', 'AI-Generated', '12 min', 'Aug 9', <AdminBadge text="Published" color="green" />],
-        ['Probability Foundations', 'Wanjiru Kamau', 'AI-Generated', '14 min', 'Aug 8', <AdminBadge text="Review" color="amber" />],
-      ],
-      Flashcards: [
-        ['ACT 101 – Interest Theory (35 cards)', 'Arnold Gichuru', 'AI-Generated', '35 cards', 'Aug 10', <AdminBadge text="Active" color="green" />],
-        ['STA 101 Probability (28 cards)', 'Faith Njeri', 'AI-Generated', '28 cards', 'Aug 9', <AdminBadge text="Active" color="green" />],
-      ],
-      Quizzes: [
-        ['ACT 101 – Interest Theory Quiz', 'Arnold Gichuru', 'AI-Generated', '15 Qs', 'Aug 10', <AdminBadge text="Active" color="green" />],
-        ['MAT 101 Integration Quiz', 'James Kariuki', 'AI-Generated', '10 Qs', 'Aug 8', <AdminBadge text="Active" color="green" />],
-      ],
-    }
+    const CONTENT_TABS = ['Pending Review', 'Reported']
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Reject prompt */}
+        {rejectPromptId != null && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setRejectPromptId(null); setRejectReason('') }}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>Reject submission</div>
+              <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason (required, shown to the student)" rows={3} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 16, resize: 'vertical' }} />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => { setRejectPromptId(null); setRejectReason('') }} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+                <button onClick={() => rejectLibraryItem(rejectPromptId, rejectReason.trim())} disabled={!rejectReason.trim()} style={{ flex: 1, background: rejectReason.trim() ? '#DC2626' : '#FCA5A5', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: rejectReason.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}>Reject</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Remove (takedown) prompt */}
+        {removePromptTarget != null && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setRemovePromptTarget(null); setRemoveReason('') }}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>Remove published item</div>
+              <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 12, lineHeight: 1.5 }}>This takes the item down from the public Library. The report will be marked actioned.</div>
+              <textarea value={removeReason} onChange={e => setRemoveReason(e.target.value)} placeholder="Reason (required)" rows={3} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 16, resize: 'vertical' }} />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => { setRemovePromptTarget(null); setRemoveReason('') }} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+                <button onClick={() => removePromptTarget && removeLibraryItem(removePromptTarget.publicationId, removePromptTarget.reportId, removeReason.trim())} disabled={!removeReason.trim()} style={{ flex: 1, background: removeReason.trim() ? '#DC2626' : '#FCA5A5', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: removeReason.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}>Remove</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <AdminCard title="Content Management">
           <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6 }}>
-            {Object.keys(contentRows).map(t => <button key={t} onClick={() => setContentTab(t)} style={{ padding: '7px 16px', borderRadius: 8, background: contentTab === t ? N.navy : '#F3F4F6', color: contentTab === t ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{t}</button>)}
+            {CONTENT_TABS.map(t => (
+              <button key={t} onClick={() => setContentTab(t)} style={{ padding: '7px 16px', borderRadius: 8, background: contentTab === t ? N.navy : '#F3F4F6', color: contentTab === t ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+                {t}{t === 'Pending Review' && libraryQueue.length > 0 ? ` (${libraryQueue.length})` : ''}
+                {t === 'Reported' && libraryReports.length > 0 ? ` (${libraryReports.length})` : ''}
+              </button>
+            ))}
           </div>
-          <AdminTable
-            cols={['Title', 'Author', 'Institution', 'Size', 'Date', 'Status']}
-            rows={contentRows[contentTab]}
-            actions={() => (
-              <div style={{ display: 'flex', gap: 5 }}>
-                <button style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Approve</button>
-                <button style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
-              </div>
-            )}
-          />
+
+          {contentActionError && <div style={{ padding: '10px 18px', color: '#DC2626', fontSize: 12 }}>{contentActionError}</div>}
+
+          {contentTab === 'Pending Review' && (
+            libraryQueueLoading ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading queue…</div>
+            ) : libraryQueueError ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{libraryQueueError}</div>
+            ) : libraryQueue.length === 0 ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Nothing pending review.</div>
+            ) : (
+              <AdminTable
+                cols={['Title', 'Author', 'Type', 'Unit', 'Submitted', '']}
+                rows={libraryQueue.map(item => [
+                  item.title,
+                  item.author_email || '—',
+                  materialTypeLabel(item.material_type),
+                  item.unit_code || '—',
+                  item.created_at ? new Date(item.created_at).toLocaleDateString() : '—',
+                  '',
+                ])}
+                actions={i => (
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    <button onClick={() => approveLibraryItem(libraryQueue[i].id)} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Approve</button>
+                    <button onClick={() => setRejectPromptId(libraryQueue[i].id)} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Reject</button>
+                  </div>
+                )}
+              />
+            )
+          )}
+
+          {contentTab === 'Reported' && (
+            libraryReportsLoading ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading reports…</div>
+            ) : libraryReportsError ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{libraryReportsError}</div>
+            ) : libraryReports.length === 0 ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No open reports.</div>
+            ) : (
+              <AdminTable
+                cols={['Item', 'Reported By', 'Reason', 'Item Status', 'Received', '']}
+                rows={libraryReports.map(r => [
+                  r.publication_title || '(item removed)',
+                  r.reporter_email || 'Anonymous',
+                  r.reason,
+                  r.publication_status || '—',
+                  r.created_at ? new Date(r.created_at).toLocaleDateString() : '—',
+                  '',
+                ])}
+                actions={i => (
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    <button onClick={() => resolveLibraryReport(libraryReports[i].id, 'dismissed')} style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Dismiss</button>
+                    {libraryReports[i].publication_status === 'approved' && (
+                      <button onClick={() => setRemovePromptTarget({ publicationId: libraryReports[i].library_publication_id, reportId: libraryReports[i].id })} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
+                    )}
+                  </div>
+                )}
+              />
+            )
+          )}
         </AdminCard>
       </div>
     )
