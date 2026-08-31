@@ -3563,6 +3563,56 @@ def get_podcast_audio(document_id):
         "duration_seconds": envelope.get("duration_seconds"),
     })
 
+@app.route("/podcasts")
+def list_podcasts():
+    """
+    Cross-document podcast library for the current user. Previously
+    missing entirely - Home's Study Podcasts strip and PodcastLibraryScreen
+    were both mock as a result, since there was no way to list a student's
+    generated podcasts without already knowing a specific document_id.
+
+    One row per Document the student owns that has a ready podcast
+    GeneratedMaterial row attached to its content. Sourced from the same
+    GeneratedMaterial rows the per-document podcast-script/podcast-audio
+    endpoints already use, so it can never disagree with them.
+
+    Deliberately does NOT include a signed audio_url - that stays a
+    per-document concern via GET /documents/<id>/podcast-audio, called by
+    PodcastPlayerScreen only when the student actually opens an episode.
+    Keeps this list cheap to call even as a student's podcast count grows.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    rows = (
+        db.session.query(Document, GeneratedMaterial)
+        .join(DocumentContent, Document.document_content_id == DocumentContent.id)
+        .join(GeneratedMaterial, GeneratedMaterial.document_content_id == DocumentContent.id)
+        .filter(
+            Document.user_id == user_id,
+            Document.is_removed.is_(False),
+            GeneratedMaterial.material_type == "podcast",
+            GeneratedMaterial.status == "ready",
+        )
+        .order_by(GeneratedMaterial.updated_at.desc())
+        .all()
+    )
+
+    podcasts = []
+    for document, material in rows:
+        envelope = json.loads(material.payload) if material.payload else {}
+        podcasts.append({
+            "document_id": document.id,
+            "title": document.title,
+            "audio_status": envelope.get("audio_status", "pending"),
+            "duration_seconds": envelope.get("duration_seconds"),
+            "created_at": material.created_at.isoformat() if material.created_at else None,
+        })
+
+    return jsonify({"podcasts": podcasts})
+
+
 @app.route("/documents/<int:document_id>/mindmap", methods=["POST"])
 @limiter.limit(
     "20 per hour",
