@@ -1111,6 +1111,12 @@ type PublicProfile = {
   documents_count: number; xp_total: number
 }
 
+type PodcastItem = { document_id: number; title: string; audio_status: string; duration_seconds: number | null; created_at: string | null }
+
+const PODCAST_COLORS = ['#C9A84C', '#4C7BC9', '#4CC97B', '#9B59B6', '#C94C4C', '#E67E22']
+const podcastColor = (id: number) => PODCAST_COLORS[id % PODCAST_COLORS.length]
+const podcastDuration = (seconds: number | null) => seconds == null ? '—' : `${Math.max(1, Math.round(seconds / 60))} min`
+
 function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
   const [notifCount, setNotifCount] = useState(0)
   const loading = useLoading(1200)
@@ -1122,6 +1128,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
 
   const [previewPosts, setPreviewPosts] = useState<ForumPostSummary[]>([])
   const [previewOpps, setPreviewOpps] = useState<OpportunityPublic[]>([])
+  const [homePodcasts, setHomePodcasts] = useState<PodcastItem[]>([])
 
   useEffect(() => {
     // Community preview: no cross-unit "recent posts" endpoint exists yet,
@@ -1136,6 +1143,9 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
       .catch(() => {})
     api<{ opportunities: OpportunityPublic[] }>('/opportunities')
       .then(res => setPreviewOpps(res.opportunities.slice(0, 2)))
+      .catch(() => {})
+    api<{ podcasts: PodcastItem[] }>('/podcasts')
+      .then(res => setHomePodcasts(res.podcasts.slice(0, 4)))
       .catch(() => {})
   }, [])
 
@@ -1259,27 +1269,31 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
         </section>
 
         {/* Podcasts */}
-        <section>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 18px', marginBottom: 12 }}>
-            <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Study Podcasts 🎙️</span>
-            <span onClick={() => setScreen('podcast-library')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
-          </div>
-          <div style={{ display: 'flex', gap: 12, padding: '0 18px', overflowX: 'auto' }} className="scrollbar-hide">
-            {podcasts.map(p => (
-              <div key={p.id} onClick={() => setScreen('podcast-player')} style={{ flexShrink: 0, width: 140, borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.09)', cursor: 'pointer' }}>
-                <div style={{ height: 90, background: `linear-gradient(135deg,${p.color},${p.color}99)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#fff', fontWeight: 800 }}>{p.icon}</div>
-                <div style={{ background: '#fff', padding: '10px 10px 12px' }}>
-                  <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{p.title}</div>
-                  <div style={{ fontSize: 10, color: '#6B7280', marginBottom: 5 }}>{p.subject}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ color: p.color }}>{Ic.play('w-3 h-3')}</div>
-                    <span style={{ fontSize: 10, color: p.color, fontWeight: 700 }}>{p.duration}</span>
+        {homePodcasts.length > 0 && (
+          <section>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 18px', marginBottom: 12 }}>
+              <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Study Podcasts 🎙️</span>
+              <span onClick={() => setScreen('podcast-library')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
+            </div>
+            <div style={{ display: 'flex', gap: 12, padding: '0 18px', overflowX: 'auto' }} className="scrollbar-hide">
+              {homePodcasts.map(p => {
+                const color = podcastColor(p.document_id)
+                return (
+                  <div key={p.document_id} onClick={() => { setActiveDocumentId(p.document_id); setScreen('podcast-player') }} style={{ flexShrink: 0, width: 140, borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.09)', cursor: 'pointer' }}>
+                    <div style={{ height: 90, background: `linear-gradient(135deg,${color},${color}99)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#fff', fontWeight: 800 }}>🎙️</div>
+                    <div style={{ background: '#fff', padding: '10px 10px 12px' }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 5 }} className="line-clamp-1">{p.title}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <div style={{ color }}>{Ic.play('w-3 h-3')}</div>
+                        <span style={{ fontSize: 10, color, fontWeight: 700 }}>{p.audio_status === 'ready' ? podcastDuration(p.duration_seconds) : 'Processing…'}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+                )
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Community */}
         {previewPosts.length > 0 && (
@@ -5469,14 +5483,20 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 
 // ─── PODCAST LIBRARY ──────────────────────────────────────────────────────────
-function PodcastLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const loading = useLoading(900)
+function PodcastLibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
+  const [podcastList, setPodcastList] = useState<PodcastItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<{ podcasts: PodcastItem[] }>('/podcasts')
+      .then(res => setPodcastList(res.podcasts))
+      .catch(() => setError('Could not load your podcasts.'))
+      .finally(() => setLoading(false))
+  }, [])
+
   if (loading) return <SkeletonPodcastLibrary />
-  const allPodcasts = [
-    ...podcasts,
-    { id: 5, title: 'Probability Foundations', subject: 'STA 101', duration: '14 min', icon: 'P', color: '#9B59B6' },
-    { id: 6, title: 'Microeconomics Basics', subject: 'ECO 101', duration: '11 min', icon: '📊', color: '#C94C4C' },
-  ]
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
@@ -5487,17 +5507,28 @@ function PodcastLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>AI-generated from your notes</div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
-        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Your Episodes</div>
-        {allPodcasts.map((p) => (
-          <div key={p.id} onClick={() => setScreen('podcast-player')} style={{ display: 'flex', gap: 14, alignItems: 'center', background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
-            <div style={{ width: 52, height: 52, background: `linear-gradient(135deg,${p.color},${p.color}99)`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#fff', fontWeight: 800, flexShrink: 0 }}>{p.icon}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{p.title}</div>
-              <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{p.subject} · {p.duration}</div>
-            </div>
-            <div style={{ color: N.gold }}>{Ic.play()}</div>
-          </div>
-        ))}
+        {error ? (
+          <ErrorState />
+        ) : podcastList.length === 0 ? (
+          <EmptyState icon="🎙️" title="No podcasts yet" sub="Open a document and generate a study podcast from your notes to see it here." />
+        ) : (
+          <>
+            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Your Episodes</div>
+            {podcastList.map((p) => {
+              const color = podcastColor(p.document_id)
+              return (
+                <div key={p.document_id} onClick={() => { setActiveDocumentId(p.document_id); setScreen('podcast-player') }} style={{ display: 'flex', gap: 14, alignItems: 'center', background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+                  <div style={{ width: 52, height: 52, background: `linear-gradient(135deg,${color},${color}99)`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#fff', fontWeight: 800, flexShrink: 0 }}>🎙️</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{p.title}</div>
+                    <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{p.audio_status === 'ready' ? podcastDuration(p.duration_seconds) : 'Processing…'}</div>
+                  </div>
+                  <div style={{ color: N.gold }}>{Ic.play()}</div>
+                </div>
+              )
+            })}
+          </>
+        )}
       </div>
     </div>
   )
@@ -10614,7 +10645,7 @@ export default function App() {
       case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'quiz':              return <QuizScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} />
+      case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'forum':             return <ForumScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} setActiveGroupId={setActiveGroupId} />
       case 'comments':          return <CommentsScreen setScreen={setScreen} postId={activeForumPostId} />
