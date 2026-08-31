@@ -4070,6 +4070,7 @@ def browse_library():
         author = db.session.get(User, pub.user_id)
         result.append({
             "id": pub.id,
+            "document_id": pub.document_id,
             "title": pub.title,
             "description": pub.description,
             "material_type": pub.material_type,
