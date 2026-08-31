@@ -1362,7 +1362,7 @@ function RealForumCard({ post, onOpen }: { post: ForumPostSummary; onOpen: () =>
 }
 
 // ─── EXPLORE ──────────────────────────────────────────────────────────────────
-function ExploreScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void }) {
+function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void }) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All')
   const [following, setFollowing] = useState<string[]>([])
@@ -1404,13 +1404,23 @@ function ExploreScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Screen)
     { name: 'Brian Omondi', course: 'B.Com Finance', year: 'Y3', xp: 2240, initials: 'BO' },
     { name: 'Aisha Mohamed', course: 'LLB Law', year: 'Y2', xp: 1870, initials: 'AM' },
   ]
-  const docs = [
-    { title: 'ACT 101 Lecture Notes – Week 1-6', by: 'Prof. Kamau', dept: 'Actuarial Science', pages: 38, downloads: 312, type: 'PDF' },
-    { title: 'KU Past Papers 2020-2023 (MAT 101)', by: 'Student Library', dept: 'Mathematics', pages: 72, downloads: 891, type: 'PDF' },
-    { title: 'STA 101 Probability Slides', by: 'Dr. Njuguna', dept: 'Statistics', pages: 44, downloads: 567, type: 'PPT' },
-    { title: 'Interest Theory – Study Guide', by: 'Arnold Gichuru', dept: 'Actuarial Science', pages: 12, downloads: 148, type: 'PDF' },
-  ]
-  const filtered = filter === 'All' ? docs : filter === 'Notes' ? docs.filter(d => d.by.includes('Prof') || d.by.includes('Dr')) : filter === 'Past Papers' ? docs.filter(d => d.title.includes('Past')) : docs
+  const [docs, setDocs] = useState<LibraryPublicationSummary[]>([])
+  const [loadingDocs, setLoadingDocs] = useState(false)
+  const [docsError, setDocsError] = useState('')
+
+  useEffect(() => {
+    if (filter === 'Students' || filter === 'Forums' || filter === 'Opportunities' || filter === 'Groups') return
+    setLoadingDocs(true); setDocsError('')
+    const params = new URLSearchParams()
+    if (query.trim()) params.set('q', query.trim())
+    if (filter === 'Past Papers') params.set('material_type', 'past_paper')
+    api<{ page: number; publications: LibraryPublicationSummary[] }>(`/library?${params.toString()}`)
+      .then(res => setDocs(filter === 'Notes' ? res.publications.filter(d => d.material_type !== 'past_paper') : res.publications))
+      .catch(() => setDocsError('Could not load documents.'))
+      .finally(() => setLoadingDocs(false))
+  }, [filter, query])
+
+  const filtered = docs
   if (loading) return <SkeletonExplore />
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
@@ -1486,15 +1496,21 @@ function ExploreScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Screen)
         {filter !== 'Students' && filter !== 'Forums' && filter !== 'Opportunities' && filter !== 'Groups' && (
           <div>
             <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>📄 {filter === 'Past Papers' ? 'Past Papers' : filter === 'Notes' ? 'Lecture Notes' : 'Recent Documents'}</div>
-            {filtered.map((d, i) => (
-              <div key={i} onClick={() => setScreen('document-study')} style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div style={{ width: 42, height: 42, background: d.type === 'PDF' ? 'rgba(201,68,68,0.1)' : 'rgba(76,123,201,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{d.type === 'PDF' ? '📕' : '📊'}</div>
+            {loadingDocs ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF' }}>Loading documents…</div>
+            ) : docsError ? (
+              <div style={{ fontSize: 12, color: '#C94C4C' }}>{docsError}</div>
+            ) : filtered.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF' }}>No documents found yet.</div>
+            ) : filtered.map(d => (
+              <div key={d.id} onClick={() => { setActiveDocumentId(d.document_id); setScreen('document-study') }} style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ width: 42, height: 42, background: d.material_type === 'summary' ? 'rgba(76,123,201,0.1)' : 'rgba(201,68,68,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{d.material_type === 'summary' ? '📊' : '📕'}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{d.title}</div>
-                  <div style={{ fontSize: 11, color: '#6B7280' }}>{d.by} · {d.dept}</div>
-                  <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>{d.pages} pages · ↓ {d.downloads}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>{d.author}{d.unit_code ? ` · ${d.unit_code}` : ''}</div>
+                  <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>{d.save_count} saves</div>
                 </div>
-                <Pill text={d.type} />
+                <Pill text={materialTypeLabel(d.material_type)} />
               </div>
             ))}
           </div>
@@ -5189,7 +5205,7 @@ function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfile
 
 // ─── LIBRARY ──────────────────────────────────────────────────────────────────
 type LibraryPublicationSummary = {
-  id: number; title: string; description: string | null; material_type: string
+  id: number; document_id: number; title: string; description: string | null; material_type: string
   unit_id: number | null; unit_code: string | null; author: string
   view_count: number; save_count: number; created_at: string | null
 }
@@ -10631,7 +10647,7 @@ export default function App() {
       case 'reset-password':    return <ResetPasswordScreen setScreen={setScreen} />
       case 'verify-confirm':    return <VerifyConfirmScreen setScreen={setScreen} />
       case 'home':              return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
-      case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} />
+      case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} setActiveDocumentId={setActiveDocumentId} />
       case 'create-modal':      return <CreateModal setScreen={setScreen} />
       case 'post-composer':     return <PostComposer setScreen={setScreen} />
       case 'question-composer': return <QuestionComposer setScreen={setScreen} />
