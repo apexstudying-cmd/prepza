@@ -4057,8 +4057,11 @@ def browse_library():
         page = 1
     per_page = 20
 
+    sort = request.args.get("sort")
+    order_col = LibraryPublication.view_count.desc() if sort == "trending" else LibraryPublication.created_at.desc()
+
     publications = (
-        query.order_by(LibraryPublication.created_at.desc())
+        query.order_by(order_col)
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()
@@ -8541,6 +8544,83 @@ def leave_chat(conversation_id):
     participant.left_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"message": "Left group"})
+
+
+@app.route("/students")
+def browse_students():
+    """
+    Browse students for the Explore > Students tab. Unlike /users/search
+    (a narrow contact-picker for chat), this is a real directory: ranked
+    by lifetime XP, filterable by university/program, with follow state
+    for the viewer. Excludes email and any other sensitive fields -
+    same exposure level as get_public_profile.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    q = (request.args.get("q") or "").strip()
+    university_id = request.args.get("university_id", type=int)
+    program_id = request.args.get("program_id", type=int)
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    per_page = 20
+
+    xp_subq = (
+        db.session.query(
+            XpEvent.user_id.label("user_id"),
+            func.sum(XpEvent.xp_amount).label("xp_total"),
+        )
+        .group_by(XpEvent.user_id)
+        .subquery()
+    )
+
+    xp_col = func.coalesce(xp_subq.c.xp_total, 0)
+    query = (
+        db.session.query(User, xp_col.label("xp_total"))
+        .outerjoin(xp_subq, xp_subq.c.user_id == User.id)
+        .filter(User.is_suspended.is_(False))
+        .filter(User.id != user_id)
+    )
+    if q:
+        query = query.filter(User.display_name.ilike(f"%{q}%"))
+    if university_id:
+        query = query.filter(User.university_id == university_id)
+    if program_id:
+        query = query.filter(User.program_id == program_id)
+
+    rows = (
+        query.order_by(xp_col.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    page_user_ids = [u.id for u, _ in rows]
+    followed_ids = set()
+    if page_user_ids:
+        followed_ids = {
+            f.followed_id for f in Follow.query.filter(
+                Follow.follower_id == user_id,
+                Follow.followed_id.in_(page_user_ids),
+            ).all()
+        }
+
+    result = []
+    for u, xp_total in rows:
+        program = db.session.get(Program, u.program_id) if u.program_id else None
+        result.append({
+            "user_id": u.id,
+            "display_name": _display_name(u),
+            "program_name": program.name if program else None,
+            "year": u.year,
+            "xp_total": int(xp_total),
+            "is_following": u.id in followed_ids,
+        })
+
+    return jsonify({"page": page, "students": result})
 
 
 @app.route("/users/search")
