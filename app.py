@@ -4358,6 +4358,42 @@ def admin_reject_library_item(publication_id):
     return jsonify({"id": publication.id, "status": publication.status})
 
 
+@app.route("/admin/library/<int:publication_id>/remove", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_remove_library_item(publication_id):
+    """
+    Takedown for an already-approved publication (e.g. a reported item
+    an admin has decided to act on) - the counterpart to reject, which
+    only covers not-yet-approved submissions. Requires a reason, stored
+    in the same rejection_reason column reject uses (kept generic
+    rather than adding a parallel column for what is functionally the
+    same "why did an admin act on this" note - same pattern as
+    admin_remove_opportunity).
+    """
+    acting_admin_id = session.get("user_id")
+
+    publication = db.session.get(LibraryPublication, publication_id)
+    if not publication:
+        return jsonify({"error": "Publication not found"}), 404
+    if publication.status != "approved":
+        return jsonify({"error": f"Can only remove an approved publication (status: {publication.status})"}), 400
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get("reason") or "").strip()
+    if not reason or len(reason) > 500:
+        return jsonify({"error": "reason is required and must be 500 characters or fewer"}), 400
+
+    publication.status = "removed"
+    publication.rejection_reason = reason
+    publication.reviewed_by = acting_admin_id
+    publication.reviewed_at = datetime.utcnow()
+    log_admin_action(acting_admin_id, "library_publication_removed", target_type="library_publication", target_id=publication.id, details={"reason": reason})
+    db.session.commit()
+
+    return jsonify({"id": publication.id, "status": publication.status})
+
+
 LIBRARY_REPORT_RESOLUTIONS = {"dismissed", "actioned"}
 LIBRARY_REPORT_ADMIN_NOTES_MAX = 500
 
