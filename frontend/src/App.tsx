@@ -1362,10 +1362,12 @@ function RealForumCard({ post, onOpen }: { post: ForumPostSummary; onOpen: () =>
 }
 
 // ─── EXPLORE ──────────────────────────────────────────────────────────────────
-function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void }) {
+type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number; is_following: boolean }
+
+function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All')
-  const [following, setFollowing] = useState<string[]>([])
+  const [csrfToken2, setCsrfToken2] = useState('')
   const loading = useLoading(1000)
   const filters = ['All','Notes','Past Papers','AI Content','Groups','Opportunities','Forums','Students']
 
@@ -1399,11 +1401,42 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId }: { s
   }
 
   const openGroup = (id: number) => { setActiveGroupId(id); setScreen('group-detail') }
-  const students = [
-    { name: 'Wanjiru Kamau', course: 'Computer Science', year: 'Y2', xp: 3100, initials: 'WK' },
-    { name: 'Brian Omondi', course: 'B.Com Finance', year: 'Y3', xp: 2240, initials: 'BO' },
-    { name: 'Aisha Mohamed', course: 'LLB Law', year: 'Y2', xp: 1870, initials: 'AM' },
-  ]
+  const [students, setStudents] = useState<ExploreStudent[]>([])
+  const [loadingStudents, setLoadingStudents] = useState(false)
+  const [studentsError, setStudentsError] = useState('')
+  const [followBusy, setFollowBusy] = useState<Record<number, boolean>>({})
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken2(me.csrf_token)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    if (filter !== 'All' && filter !== 'Students') return
+    setLoadingStudents(true); setStudentsError('')
+    const params = new URLSearchParams()
+    if (query.trim()) params.set('q', query.trim())
+    api<{ page: number; students: ExploreStudent[] }>(`/students?${params.toString()}`)
+      .then(res => setStudents(res.students))
+      .catch(() => setStudentsError('Could not load students.'))
+      .finally(() => setLoadingStudents(false))
+  }, [filter, query])
+
+  const toggleFollow = async (s: ExploreStudent) => {
+    if (followBusy[s.user_id]) return
+    setFollowBusy(b => ({ ...b, [s.user_id]: true }))
+    const wasFollowing = s.is_following
+    try {
+      wasFollowing
+        ? await api(`/users/${s.user_id}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken2 } })
+        : await api(`/users/${s.user_id}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken2 } })
+      setStudents(list => list.map(x => x.user_id === s.user_id ? { ...x, is_following: !wasFollowing } : x))
+    } catch { /* leave state as-is on failure */ }
+    setFollowBusy(b => ({ ...b, [s.user_id]: false }))
+  }
+
+  const openStudentProfile = (s: ExploreStudent) => {
+    setActiveProfileUserId?.(s.user_id)
+    setActiveProfileName?.(s.display_name)
+    setScreen('student-profile')
+  }
   const [docs, setDocs] = useState<LibraryPublicationSummary[]>([])
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [docsError, setDocsError] = useState('')
@@ -1421,6 +1454,14 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId }: { s
   }, [filter, query])
 
   const filtered = docs
+
+  const [trending, setTrending] = useState<LibraryPublicationSummary[]>([])
+  useEffect(() => {
+    if (filter !== 'All' && filter !== 'Notes' && filter !== 'Past Papers') return
+    api<{ page: number; publications: LibraryPublicationSummary[] }>('/library?sort=trending')
+      .then(res => setTrending(res.publications.slice(0, 6)))
+      .catch(() => setTrending([]))
+  }, [filter])
   if (loading) return <SkeletonExplore />
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
@@ -1441,21 +1482,18 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId }: { s
         {/* Trending */}
         {(filter === 'All' || filter === 'Notes' || filter === 'Past Papers') && (
           <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>🔥 Trending at Kenyatta University</div>
-            <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
-              {[
-                { label: 'ACT 101 Interest Theory', count: '1.2k views', icon: '∑' },
-                { label: 'MAT 101 Integration', count: '980 views', icon: '∫' },
-                { label: 'STA 101 Distributions', count: '876 views', icon: 'σ' },
-                { label: 'ECO 101 Microeconomics', count: '644 views', icon: '📊' },
-              ].map((t, i) => (
-                <div key={i} onClick={() => setScreen('document-study')} style={{ flexShrink: 0, background: '#fff', borderRadius: 14, padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', minWidth: 148, cursor: 'pointer' }}>
-                  <div style={{ fontWeight: 800, fontSize: 20, color: N.gold, marginBottom: 6, fontFamily: 'Plus Jakarta Sans' }}>{t.icon}</div>
-                  <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 2 }}>{t.label}</div>
-                  <div style={{ fontSize: 11, color: '#9CA3AF' }}>{t.count}</div>
-                </div>
-              ))}
-            </div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>🔥 Trending</div>
+            {trending.length === 0 ? null : (
+              <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
+                {trending.map(t => (
+                  <div key={t.id} onClick={() => { setActiveDocumentId(t.document_id); setScreen('document-study') }} style={{ flexShrink: 0, background: '#fff', borderRadius: 14, padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', minWidth: 148, cursor: 'pointer' }}>
+                    <div style={{ fontWeight: 800, fontSize: 20, color: N.gold, marginBottom: 6, fontFamily: 'Plus Jakarta Sans' }}>{t.material_type === 'summary' ? '📊' : '📕'}</div>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{t.title}</div>
+                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{t.view_count} views</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1519,23 +1557,34 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId }: { s
         {/* Students */}
         {(filter === 'All' || filter === 'Students') && (
           <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>👥 Students to Follow</div>
-            <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
-              {students.map((s, i) => (
-                <div key={i} style={{ flexShrink: 0, background: '#fff', borderRadius: 16, padding: '16px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', width: 148, textAlign: 'center' }}>
-                  <div onClick={() => setScreen('student-profile')} style={{ cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><Avi name={s.initials} size={48} /></div>
-                    <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }}>{s.name.split(' ')[0]} {s.name.split(' ')[1]}</div>
-                    <div style={{ fontSize: 10, color: '#6B7280', marginBottom: 2 }}>{s.course} · {s.year}</div>
-                    <div style={{ fontSize: 10, color: N.gold, fontWeight: 700 }}>⭐ {s.xp.toLocaleString()} XP</div>
-                  </div>
-                  <button onClick={() => setFollowing(f => f.includes(s.initials) ? f.filter(x => x !== s.initials) : [...f, s.initials])}
-                    style={{ marginTop: 10, background: following.includes(s.initials) ? 'rgba(201,168,76,0.15)' : N.navy, color: following.includes(s.initials) ? N.gold : N.gold, border: following.includes(s.initials) ? `1px solid ${N.gold}44` : 'none', borderRadius: 10, padding: '6px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-                    {following.includes(s.initials) ? 'Following ✓' : 'Follow'}
-                  </button>
-                </div>
-              ))}
-            </div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>👥 Students</div>
+            {loadingStudents ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF' }}>Loading students…</div>
+            ) : studentsError ? (
+              <div style={{ fontSize: 12, color: '#C94C4C' }}>{studentsError}</div>
+            ) : students.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF' }}>No students found yet.</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
+                {students.map(s => {
+                  const initials = s.display_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
+                  return (
+                    <div key={s.user_id} style={{ flexShrink: 0, background: '#fff', borderRadius: 16, padding: '16px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', width: 148, textAlign: 'center' }}>
+                      <div onClick={() => openStudentProfile(s)} style={{ cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><Avi name={initials} size={48} /></div>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{s.display_name}</div>
+                        <div style={{ fontSize: 10, color: '#6B7280', marginBottom: 2 }} className="line-clamp-1">{s.program_name || 'Student'}{s.year ? ` · Y${s.year}` : ''}</div>
+                        <div style={{ fontSize: 10, color: N.gold, fontWeight: 700 }}>⭐ {s.xp_total.toLocaleString()} XP</div>
+                      </div>
+                      <button onClick={() => toggleFollow(s)} disabled={followBusy[s.user_id]}
+                        style={{ marginTop: 10, background: s.is_following ? 'rgba(201,168,76,0.15)' : N.navy, color: N.gold, border: s.is_following ? `1px solid ${N.gold}44` : 'none', borderRadius: 10, padding: '6px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy[s.user_id] ? 0.6 : 1 }}>
+                        {followBusy[s.user_id] ? '…' : s.is_following ? 'Following ✓' : 'Follow'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -10647,7 +10696,7 @@ export default function App() {
       case 'reset-password':    return <ResetPasswordScreen setScreen={setScreen} />
       case 'verify-confirm':    return <VerifyConfirmScreen setScreen={setScreen} />
       case 'home':              return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
-      case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} setActiveDocumentId={setActiveDocumentId} />
+      case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} setActiveDocumentId={setActiveDocumentId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'create-modal':      return <CreateModal setScreen={setScreen} />
       case 'post-composer':     return <PostComposer setScreen={setScreen} />
       case 'question-composer': return <QuestionComposer setScreen={setScreen} />
