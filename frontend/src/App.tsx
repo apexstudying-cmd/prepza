@@ -8144,16 +8144,22 @@ const adminNav = [
   { key: 'ambassadors', label: 'Ambassadors', icon: '🤝' },
 ]
 
-const aUsers = [
-  { id: 'U001', name: 'Arnold Gichuru', email: 'arnold@ku.ac.ke', uni: 'Kenyatta University', course: 'Actuarial Science', year: 'Y1', sub: 'Semester', status: 'Active', joined: 'Aug 1, 2025', docs: 8, aiReqs: 142 },
-  { id: 'U002', name: 'Wanjiru Kamau', email: 'wanjiru@uon.ac.ke', uni: 'UoN', course: 'Computer Science', year: 'Y2', sub: 'Annual', status: 'Active', joined: 'Jul 15, 2025', docs: 24, aiReqs: 389 },
-  { id: 'U003', name: 'Brian Omondi', email: 'brian@strathmore.edu', uni: 'Strathmore', course: 'B.Com Finance', year: 'Y3', sub: 'Semester', status: 'Active', joined: 'Jul 10, 2025', docs: 15, aiReqs: 211 },
-  { id: 'U004', name: 'Aisha Mohamed', email: 'aisha@mku.ac.ke', uni: 'MKU', course: 'LLB Law', year: 'Y2', sub: 'Free', status: 'Active', joined: 'Jun 28, 2025', docs: 3, aiReqs: 12 },
-  { id: 'U005', name: 'David Njoroge', email: 'david@ku.ac.ke', uni: 'Kenyatta University', course: 'MBBS Medicine', year: 'Y3', sub: 'Annual', status: 'Active', joined: 'Jun 20, 2025', docs: 31, aiReqs: 456 },
-  { id: 'U006', name: 'Grace Muthoni', email: 'grace@jkuat.ac.ke', uni: 'JKUAT', course: 'BSc Comp Sci', year: 'Y1', sub: 'Free', status: 'Suspended', joined: 'Jun 5, 2025', docs: 0, aiReqs: 0 },
-  { id: 'U007', name: 'James Kariuki', email: 'james@uon.ac.ke', uni: 'UoN', course: 'BSc Economics', year: 'Y2', sub: 'Semester', status: 'Active', joined: 'May 30, 2025', docs: 11, aiReqs: 178 },
-  { id: 'U008', name: 'Faith Njeri', email: 'faith@daystar.ac.ke', uni: 'Daystar University', course: 'BA Psychology', year: 'Y3', sub: 'Free', status: 'Active', joined: 'May 20, 2025', docs: 4, aiReqs: 28 },
-]
+type AdminUserRow = {
+  id: number
+  email: string
+  display_name: string | null
+  year: number | null
+  semester: number | null
+  is_admin: boolean
+  is_suspended: boolean
+  created_at: string | null
+  university_name: string | null
+  program_name: string | null
+  documents_count: number
+  ai_requests_count: number
+  subscription_plan: string
+  subscription_active: boolean
+}
 
 function AdminBadge({ text, color }: { text: string; color: string }) {
   const bg = color === 'green' ? '#DCFCE7' : color === 'amber' ? '#FEF3C7' : color === 'red' ? '#FEE2E2' : color === 'blue' ? '#DBEAFE' : '#F3F4F6'
@@ -8261,8 +8267,8 @@ type AdminAnnouncementItem = { id: number; title: string; body: string; reach: n
 function AdminSection({ section, setSection }: { section: string; setSection: (s: string) => void }) {
   const [search, setSearch] = useState('')
   const [userFilter, setUserFilter] = useState('All')
-  const [selectedUser, setSelectedUser] = useState<typeof aUsers[0] | null>(null)
-  const [confirmAction, setConfirmAction] = useState<{ type: string; target: string } | null>(null)
+  const [selectedUser, setSelectedUser] = useState<AdminUserRow | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ type: string; target: string; userId?: number; nextSuspended?: boolean } | null>(null)
   const [contentTab, setContentTab] = useState('Documents')
   const [commTab, setCommTab] = useState('Announcements')
   const [csrfToken, setCsrfToken] = useState('')
@@ -8345,12 +8351,44 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     }
   }
 
-  const filteredUsers = aUsers.filter(u => {
-    const q = search.toLowerCase()
-    const matchQ = !q || u.name.toLowerCase().includes(q) || u.email.includes(q) || u.uni.toLowerCase().includes(q)
-    const matchF = userFilter === 'All' || (userFilter === 'Active' && u.status === 'Active') || (userFilter === 'Suspended' && u.status === 'Suspended') || (userFilter === 'Premium' && u.sub !== 'Free') || (userFilter === 'Free' && u.sub === 'Free')
-    return matchQ && matchF
-  })
+  const [adminUsers, setAdminUsers] = useState<AdminUserRow[]>([])
+  const [adminUsersLoading, setAdminUsersLoading] = useState(true)
+  const [adminUsersError, setAdminUsersError] = useState('')
+  const [userActionError, setUserActionError] = useState('')
+
+  const loadAdminUsers = () => {
+    setAdminUsersLoading(true)
+    setAdminUsersError('')
+    const params = new URLSearchParams()
+    if (search.trim()) params.set('search', search.trim())
+    if (userFilter === 'Active') params.set('status', 'active')
+    if (userFilter === 'Suspended') params.set('status', 'suspended')
+    if (userFilter === 'Premium') params.set('sub', 'premium')
+    if (userFilter === 'Free') params.set('sub', 'free')
+    api<AdminUserRow[]>(`/admin/users?${params.toString()}`)
+      .then(setAdminUsers)
+      .catch(e => setAdminUsersError(e instanceof ApiError ? e.message : 'Could not load users.'))
+      .finally(() => setAdminUsersLoading(false))
+  }
+
+  useEffect(() => {
+    if (section !== 'users') return
+    const t = setTimeout(() => { loadAdminUsers() }, search.trim() ? 350 : 0)
+    return () => clearTimeout(t)
+  }, [section, search, userFilter])
+
+  const setUserSuspended = (userId: number, suspended: boolean) => {
+    setUserActionError('')
+    api(`/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ is_suspended: suspended }),
+    })
+      .then(() => { loadAdminUsers(); setSelectedUser(null); setConfirmAction(null) })
+      .catch(e => setUserActionError(e instanceof ApiError ? e.message : 'Could not update user.'))
+  }
+
+  const filteredUsers = adminUsers
 
   const revenueData = [89000, 102000, 118000, 95000, 134000, 127000, 142250]
   const revLabels = ['Feb','Mar','Apr','May','Jun','Jul','Aug']
@@ -8453,35 +8491,42 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
         <div style={{ background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-              <div style={{ width: 52, height: 52, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, color: N.navy }}>{selectedUser.name.split(' ').map(n => n[0]).join('')}</div>
+              <div style={{ width: 52, height: 52, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, color: N.navy }}>{(selectedUser.display_name || selectedUser.email).split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</div>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 17, color: N.navy }}>{selectedUser.name}</div>
+                <div style={{ fontWeight: 800, fontSize: 17, color: N.navy }}>{selectedUser.display_name || '(no name)'}</div>
                 <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{selectedUser.email}</div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                  <AdminBadge text={selectedUser.status} color={selectedUser.status === 'Active' ? 'green' : 'red'} />
-                  <AdminBadge text={selectedUser.sub} color={selectedUser.sub === 'Free' ? 'gray' : 'amber'} />
+                  <AdminBadge text={selectedUser.is_suspended ? 'Suspended' : 'Active'} color={selectedUser.is_suspended ? 'red' : 'green'} />
+                  <AdminBadge text={selectedUser.subscription_plan === 'free' ? 'Free' : selectedUser.subscription_plan} color={selectedUser.subscription_plan === 'free' ? 'gray' : 'amber'} />
+                  {selectedUser.is_admin && <AdminBadge text="Admin" color="blue" />}
                 </div>
               </div>
             </div>
             <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 20 }}>×</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
-            {[['University', selectedUser.uni], ['Course', selectedUser.course], ['Year', selectedUser.year], ['Joined', selectedUser.joined], ['Documents', selectedUser.docs.toString()], ['AI Requests', selectedUser.aiReqs.toString()], ['User ID', selectedUser.id], ['Subscription', selectedUser.sub]].map(([k, v]) => (
+            {[
+              ['University', selectedUser.university_name || '—'],
+              ['Program', selectedUser.program_name || '—'],
+              ['Year', selectedUser.year != null ? String(selectedUser.year) : '—'],
+              ['Joined', selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleDateString() : '—'],
+              ['Documents', selectedUser.documents_count.toString()],
+              ['AI Requests', selectedUser.ai_requests_count.toString()],
+              ['User ID', selectedUser.id.toString()],
+              ['Subscription', selectedUser.subscription_plan],
+            ].map(([k, v]) => (
               <div key={k} style={{ background: '#F9FAFB', borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 3 }}>{k}</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{v}</div>
               </div>
             ))}
           </div>
+          {userActionError && <div style={{ color: '#DC2626', fontSize: 12, marginBottom: 10 }}>{userActionError}</div>}
           <div style={{ display: 'flex', gap: 8 }}>
-            {[
-              { label: 'Suspend', color: '#FEF3C7', fg: '#D97706' },
-              { label: 'Reset Password', color: '#DBEAFE', fg: '#2563EB' },
-              { label: 'Change Role', color: '#F3F4F6', fg: '#374151' },
-              { label: 'View Activity', color: '#F0FDF4', fg: '#16A34A' },
-            ].map(a => (
-              <button key={a.label} onClick={() => setConfirmAction({ type: a.label, target: selectedUser.name })} style={{ background: a.color, color: a.fg, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12 }}>{a.label}</button>
-            ))}
+            <button
+              onClick={() => setConfirmAction({ type: selectedUser.is_suspended ? 'Reactivate' : 'Suspend', target: selectedUser.display_name || selectedUser.email, userId: selectedUser.id, nextSuspended: !selectedUser.is_suspended })}
+              style={{ background: selectedUser.is_suspended ? '#F0FDF4' : '#FEF3C7', color: selectedUser.is_suspended ? '#16A34A' : '#D97706', border: 'none', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12 }}
+            >{selectedUser.is_suspended ? 'Reactivate' : 'Suspend'}</button>
           </div>
         </div>
       )}
@@ -8494,13 +8539,16 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, lineHeight: 1.6 }}>Are you sure you want to <strong>{confirmAction.type.toLowerCase()}</strong> for <strong>{confirmAction.target}</strong>? This action will be logged.</div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setConfirmAction(null)} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
-              <button onClick={() => setConfirmAction(null)} style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}>Confirm</button>
+              <button
+                onClick={() => { if (confirmAction.userId != null && confirmAction.nextSuspended != null) { setUserSuspended(confirmAction.userId, confirmAction.nextSuspended) } else { setConfirmAction(null) } }}
+                style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}
+              >Confirm</button>
             </div>
           </div>
         </div>
       )}
 
-      <AdminCard title={`Users — ${filteredUsers.length} of ${aUsers.length}`}>
+      <AdminCard title={`Users — ${filteredUsers.length}${adminUsersLoading ? '' : ' loaded'}`}>
         <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 10, padding: '8px 12px', minWidth: 200 }}>
             <span style={{ color: '#9CA3AF', fontSize: 14 }}>🔍</span>
@@ -8512,30 +8560,38 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             ))}
           </div>
         </div>
-        <AdminTable
-          cols={['User', 'University', 'Plan', 'Docs', 'AI Reqs', 'Status', 'Joined']}
-          rows={filteredUsers.map(u => [
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, color: N.navy, flexShrink: 0 }}>{u.name.split(' ').map(n => n[0]).join('')}</div>
-              <div><div style={{ fontWeight: 600, color: N.navy }}>{u.name}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{u.email}</div></div>
-            </div>,
-            u.uni, u.sub, u.docs.toString(), u.aiReqs.toString(),
-            <AdminBadge text={u.status} color={u.status === 'Active' ? 'green' : 'red'} />,
-            u.joined
-          ])}
-          actions={i => (
-            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-              <button onClick={() => setSelectedUser(filteredUsers[i])} style={{ background: '#F3F4F6', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans' }}>View</button>
-              <button onClick={() => setConfirmAction({ type: 'Suspend', target: filteredUsers[i].name })} style={{ background: '#FEF3C7', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#D97706', fontFamily: 'Plus Jakarta Sans' }}>Suspend</button>
-            </div>
-          )}
-        />
-        <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #F3F4F6' }}>
-          <span style={{ fontSize: 12, color: '#9CA3AF' }}>Showing {filteredUsers.length} results</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[1,2,3,'…',47].map((p, i) => <button key={i} style={{ width: 30, height: 30, borderRadius: 6, background: p === 1 ? N.navy : '#F3F4F6', color: p === 1 ? '#fff' : '#374151', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{p}</button>)}
-          </div>
-        </div>
+        {adminUsersLoading ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading users…</div>
+        ) : adminUsersError ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{adminUsersError}</div>
+        ) : filteredUsers.length === 0 ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No users match this filter.</div>
+        ) : (
+          <AdminTable
+            cols={['User', 'University', 'Plan', 'Docs', 'AI Reqs', 'Status', 'Joined']}
+            rows={filteredUsers.map(u => [
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, color: N.navy, flexShrink: 0 }}>{(u.display_name || u.email).split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</div>
+                <div><div style={{ fontWeight: 600, color: N.navy }}>{u.display_name || '(no name)'}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{u.email}</div></div>
+              </div>,
+              u.university_name || '—',
+              u.subscription_plan === 'free' ? 'Free' : u.subscription_plan,
+              u.documents_count.toString(),
+              u.ai_requests_count.toString(),
+              <AdminBadge text={u.is_suspended ? 'Suspended' : 'Active'} color={u.is_suspended ? 'red' : 'green'} />,
+              u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'
+            ])}
+            actions={i => (
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button onClick={() => setSelectedUser(filteredUsers[i])} style={{ background: '#F3F4F6', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans' }}>View</button>
+                <button
+                  onClick={() => setConfirmAction({ type: filteredUsers[i].is_suspended ? 'Reactivate' : 'Suspend', target: filteredUsers[i].display_name || filteredUsers[i].email, userId: filteredUsers[i].id, nextSuspended: !filteredUsers[i].is_suspended })}
+                  style={{ background: filteredUsers[i].is_suspended ? '#F0FDF4' : '#FEF3C7', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: filteredUsers[i].is_suspended ? '#16A34A' : '#D97706', fontFamily: 'Plus Jakarta Sans' }}
+                >{filteredUsers[i].is_suspended ? 'Reactivate' : 'Suspend'}</button>
+              </div>
+            )}
+          />
+        )}
       </AdminCard>
     </div>
   )
