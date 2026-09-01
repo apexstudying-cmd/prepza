@@ -2771,6 +2771,52 @@ def update_profile():
     })
 
 
+@app.route("/change-password", methods=["POST"])
+@limiter.limit(
+    "5 per hour",
+    key_func=lambda: f"change-password:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def change_password():
+    """
+    Lets a logged-in student change their own password from Settings,
+    given their current password for confirmation. Uses the same
+    strength rules as /signup and /reset-password
+    (password_strength_error) so this can never disagree with what
+    those endpoints accept.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    current_password = data.get("current_password") or ""
+    new_password = data.get("new_password") or ""
+
+    if not current_password:
+        return jsonify({"error": "Current password is required"}), 400
+
+    user = db.session.get(User, user_id)
+    if not user or not check_password_hash(user.password_hash, current_password):
+        return jsonify({"error": "Current password is incorrect"}), 401
+
+    if len(new_password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters long"}), 400
+    strength_error = password_strength_error(new_password)
+    if strength_error:
+        return jsonify({"error": strength_error}), 400
+    if check_password_hash(user.password_hash, new_password):
+        return jsonify({"error": "New password must be different from your current password"}), 400
+
+    user.password_hash = generate_password_hash(new_password)
+    db.session.commit()
+
+    return jsonify({"message": "Password changed successfully."})
+
+
 @app.route("/payment-history")
 def payment_history():
     user_id = session.get("user_id")
