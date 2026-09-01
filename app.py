@@ -2817,6 +2817,71 @@ def change_password():
     return jsonify({"message": "Password changed successfully."})
 
 
+@app.route("/change-email", methods=["POST"])
+@limiter.limit(
+    "5 per hour",
+    key_func=lambda: f"change-email:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def change_email():
+    """
+    Lets a logged-in student change their own login email from
+    Settings, given their current password for confirmation. The new
+    email is applied immediately but the account is marked unverified
+    (same fields /signup uses) until the student clicks the link in a
+    fresh verification email sent to the new address - reusing
+    login()'s existing unverified-account gate rather than adding new
+    enforcement.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    password = data.get("password") or ""
+    new_email = (data.get("new_email") or "").strip().lower()
+
+    if not password:
+        return jsonify({"error": "Your current password is required to change your email"}), 400
+
+    user = db.session.get(User, user_id)
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({"error": "Password is incorrect"}), 401
+
+    if not new_email:
+        return jsonify({"error": "New email is required"}), 400
+    if not EMAIL_REGEX.match(new_email):
+        return jsonify({"error": "Email format is invalid"}), 400
+    if new_email == user.email:
+        return jsonify({"error": "That's already your current email"}), 400
+
+    existing = User.query.filter_by(email=new_email).first()
+    if existing:
+        return jsonify({"error": "An account with this email already exists"}), 409
+
+    token = secrets.token_urlsafe(32)
+    user.email = new_email
+    user.email_verified = False
+    user.verification_token = token
+    db.session.commit()
+
+    try:
+        send_verification_email(new_email, token)
+        email_status = "Verification email sent"
+    except Exception as e:
+        email_status = f"Email updated but verification email failed to send: {str(e)}"
+
+    return jsonify({
+        "message": "Email updated - please verify your new address before your next login.",
+        "email": user.email,
+        "email_verified": user.email_verified,
+        "email_status": email_status,
+    })
+
+
 @app.route("/payment-history")
 def payment_history():
     user_id = session.get("user_id")
