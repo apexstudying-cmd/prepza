@@ -8210,6 +8210,23 @@ type AdminLibraryReportItem = {
   created_at: string | null
 }
 
+type AdminPayment = {
+  id: number
+  user_id: number | null
+  user_email: string | null
+  user_display_name: string | null
+  payment_type: string
+  content_title: string | null
+  plan: string | null
+  phone_number: string | null
+  amount: number
+  status: string
+  provider: string
+  reference: string | null
+  subscription_expires_at: string | null
+  created_at: string | null
+}
+
 type AdminUserRow = {
   id: number
   email: string
@@ -8533,6 +8550,32 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     })
       .then(() => loadLibraryReports())
       .catch(e => setContentActionError(e instanceof ApiError ? e.message : 'Could not resolve this report.'))
+  }
+
+  const [adminPayments, setAdminPayments] = useState<AdminPayment[]>([])
+  const [adminPaymentsLoading, setAdminPaymentsLoading] = useState(true)
+  const [adminPaymentsError, setAdminPaymentsError] = useState('')
+  const [paymentActionError, setPaymentActionError] = useState('')
+
+  const loadAdminPayments = () => {
+    setAdminPaymentsLoading(true)
+    setAdminPaymentsError('')
+    api<{ payments: AdminPayment[] }>('/admin/payments')
+      .then(res => setAdminPayments(res.payments))
+      .catch(e => setAdminPaymentsError(e instanceof ApiError ? e.message : 'Could not load payments.'))
+      .finally(() => setAdminPaymentsLoading(false))
+  }
+
+  useEffect(() => {
+    if (section !== 'payments') return
+    loadAdminPayments()
+  }, [section])
+
+  const refundPayment = (paymentId: number) => {
+    setPaymentActionError('')
+    api(`/admin/payments/${paymentId}/refund`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      .then(() => loadAdminPayments())
+      .catch(e => setPaymentActionError(e instanceof ApiError ? e.message : 'Could not refund this payment.'))
   }
 
   const filteredUsers = adminUsers
@@ -8902,66 +8945,88 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     </div>
   )
 
-  if (section === 'payments') return (
+  if (section === 'payments') {
+    const now = new Date()
+    const isThisMonth = (iso: string | null) => {
+      if (!iso) return false
+      const d = new Date(iso)
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+    }
+    const successPayments = adminPayments.filter(p => p.status === 'success')
+    const revenueMtd = successPayments.filter(p => isThisMonth(p.created_at)).reduce((sum, p) => sum + p.amount, 0)
+    const failedThisMonth = adminPayments.filter(p => p.status === 'failed' && isThisMonth(p.created_at)).length
+    const subPaymentsThisMonth = successPayments.filter(p => p.payment_type === 'subscription' && isThisMonth(p.created_at))
+    const avgPlanValue = subPaymentsThisMonth.length > 0 ? Math.round(subPaymentsThisMonth.reduce((s, p) => s + p.amount, 0) / subPaymentsThisMonth.length) : 0
+
+    // Active subscribers: latest subscription payment per user, only if still unexpired -
+    // same dedup logic as the real /admin/users endpoint uses.
+    const latestSubByUser = new Map<number, AdminPayment>()
+    for (const p of adminPayments) {
+      if (p.payment_type !== 'subscription' || p.status !== 'success' || !p.subscription_expires_at || p.user_id == null) continue
+      const existing = latestSubByUser.get(p.user_id)
+      if (!existing || new Date(p.subscription_expires_at) > new Date(existing.subscription_expires_at as string)) {
+        latestSubByUser.set(p.user_id, p)
+      }
+    }
+    const activeSubs = [...latestSubByUser.values()].filter(p => new Date(p.subscription_expires_at as string) > now)
+    const activeByPlan: Record<string, number> = {}
+    for (const p of activeSubs) { const plan = p.plan || 'other'; activeByPlan[plan] = (activeByPlan[plan] || 0) + 1 }
+    const totalActive = activeSubs.length
+
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-        <AdminKPI label="Revenue (MTD)" value="KES 142K" sub="Aug 2025" trend="+12% vs Jul" color="#16A34A" chartData={revenueData} />
-        <AdminKPI label="Active Subscriptions" value="893" sub="Semester: 721 · Annual: 172" trend="+34 this week" color={N.gold} chartData={studentsData.map(v => v * 0.31)} />
-        <AdminKPI label="Failed Payments" value="14" sub="Aug 2025" trend="+3 this week" color="#DC2626" chartData={[8,12,7,15,11,9,14]} />
-        <AdminKPI label="Avg. Plan Value" value="KES 159" sub="Weighted average" trend="+KES 8 vs Jul" color={N.navy} chartData={[140,142,148,151,155,156,159]} />
+        <AdminKPI label="Revenue (MTD)" value={`KES ${revenueMtd.toLocaleString()}`} sub={now.toLocaleString('default', { month: 'long', year: 'numeric' })} color="#16A34A" />
+        <AdminKPI label="Active Subscriptions" value={totalActive.toLocaleString()} sub={Object.entries(activeByPlan).map(([plan, count]) => `${plan}: ${count}`).join(' · ') || 'None yet'} color={N.gold} />
+        <AdminKPI label="Failed Payments" value={failedThisMonth.toString()} sub="This month" color="#DC2626" />
+        <AdminKPI label="Avg. Plan Value" value={`KES ${avgPlanValue.toLocaleString()}`} sub="This month, subscriptions" color={N.navy} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 14 }}>
-        <AdminCard title="Revenue — Last 7 Months">
-          <div style={{ padding: '16px 18px' }}>
-            <AdminBarChart data={revenueData} labels={revLabels} height={100} color={N.gold} />
-          </div>
-        </AdminCard>
-        <AdminCard title="Subscription Breakdown">
-          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {[
-              { label: 'Semester Plan', count: 721, pct: 81, color: N.gold, price: 'KES 599' },
-              { label: 'Annual Plan', count: 172, pct: 19, color: '#4C7BC9', price: 'KES 999' },
-            ].map(r => (
-              <div key={r.label}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: N.navy }}>{r.label}</span>
-                  <span style={{ fontSize: 12, color: '#6B7280' }}>{r.count} · {r.price}</span>
-                </div>
-                <div style={{ background: '#F3F4F6', borderRadius: 99, height: 8 }}>
-                  <div style={{ background: r.color, borderRadius: 99, height: 8, width: `${r.pct}%` }} />
-                </div>
+      <AdminCard title="Subscription Breakdown">
+        <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {Object.keys(activeByPlan).length === 0 ? (
+            <div style={{ fontSize: 13, color: '#9CA3AF' }}>No active paid subscriptions yet.</div>
+          ) : Object.entries(activeByPlan).map(([plan, count]) => (
+            <div key={plan}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: N.navy, textTransform: 'capitalize' }}>{plan}</span>
+                <span style={{ fontSize: 12, color: '#6B7280' }}>{count}</span>
               </div>
-            ))}
-            <div style={{ marginTop: 8, padding: '12px 14px', background: '#F9FAFB', borderRadius: 10 }}>
-              <div style={{ fontSize: 11, color: '#9CA3AF' }}>Free plan</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: N.navy }}>1,954</div>
-              <div style={{ fontSize: 11, color: '#9CA3AF' }}>Conversion opportunity</div>
+              <div style={{ background: '#F3F4F6', borderRadius: 99, height: 8 }}>
+                <div style={{ background: N.gold, borderRadius: 99, height: 8, width: `${totalActive > 0 ? (count / totalActive) * 100 : 0}%` }} />
+              </div>
             </div>
-          </div>
-        </AdminCard>
-      </div>
-      <AdminCard title="Recent Transactions">
-        <AdminTable
-          cols={['Reference', 'Student', 'Plan', 'Amount', 'Method', 'Status', 'Date']}
-          rows={[
-            ['PZA-849201', 'Arnold Gichuru', 'Semester', 'KES 599', 'M-Pesa', <AdminBadge text="Success" color="green" />, 'Aug 10, 2025'],
-            ['PZA-849198', 'James Kariuki', 'Annual', 'KES 999', 'Card', <AdminBadge text="Success" color="green" />, 'Aug 10, 2025'],
-            ['PZA-849190', 'Faith Njeri', 'Semester', 'KES 599', 'M-Pesa', <AdminBadge text="Failed" color="red" />, 'Aug 10, 2025'],
-            ['PZA-849187', 'Wanjiru Kamau', 'Annual', 'KES 999', 'M-Pesa', <AdminBadge text="Success" color="green" />, 'Aug 9, 2025'],
-            ['PZA-849173', 'Brian Omondi', 'Semester', 'KES 599', 'Card', <AdminBadge text="Success" color="green" />, 'Aug 9, 2025'],
-            ['PZA-849160', 'David Njoroge', 'Annual', 'KES 999', 'M-Pesa', <AdminBadge text="Refunded" color="amber" />, 'Aug 8, 2025'],
-          ]}
-          actions={() => <button style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>View</button>}
-        />
-        <div style={{ padding: '12px 18px', borderTop: '1px solid #F3F4F6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: '#9CA3AF' }}>Page 1 of 312</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {['←', '1', '2', '3', '→'].map((p, i) => <button key={i} style={{ width: 30, height: 30, borderRadius: 6, background: p === '1' ? N.navy : '#F3F4F6', color: p === '1' ? '#fff' : '#374151', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{p}</button>)}
-          </div>
+          ))}
         </div>
       </AdminCard>
+      {paymentActionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{paymentActionError}</div>}
+      <AdminCard title={`Transactions${adminPaymentsLoading ? '' : ` — ${adminPayments.length}`}`}>
+        {adminPaymentsLoading ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading transactions…</div>
+        ) : adminPaymentsError ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{adminPaymentsError}</div>
+        ) : adminPayments.length === 0 ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No transactions yet.</div>
+        ) : (
+          <AdminTable
+            cols={['Reference', 'Student', 'Plan / Item', 'Amount', 'Method', 'Status', 'Date']}
+            rows={adminPayments.map(p => [
+              p.reference || '—',
+              p.user_display_name || p.user_email || '—',
+              p.payment_type === 'subscription' ? (p.plan || '—') : (p.content_title || 'One-off purchase'),
+              `KES ${p.amount.toLocaleString()}`,
+              p.provider,
+              <AdminBadge text={p.status} color={p.status === 'success' ? 'green' : p.status === 'refunded' ? 'amber' : p.status === 'failed' ? 'red' : 'gray'} />,
+              p.created_at ? new Date(p.created_at).toLocaleDateString() : '—',
+            ])}
+            actions={i => adminPayments[i].status === 'success' ? (
+              <button onClick={() => refundPayment(adminPayments[i].id)} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Refund</button>
+            ) : null}
+          />
+        )}
+      </AdminCard>
     </div>
-  )
+    )
+  }
 
   if (section === 'moderation') return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
