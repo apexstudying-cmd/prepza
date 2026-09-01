@@ -9421,9 +9421,12 @@ def admin_list_payments():
     result = []
     for p in payments:
         content_item = db.session.get(ContentItem, p.content_item_id) if p.content_item_id else None
+        user = db.session.get(User, p.user_id) if p.user_id else None
         result.append({
             "id": p.id,
             "user_id": p.user_id,
+            "user_email": user.email if user else None,
+            "user_display_name": user.display_name if user else None,
             "payment_type": p.payment_type,
             "content_title": content_item.title if content_item else None,
             "plan": p.plan,
@@ -9432,6 +9435,7 @@ def admin_list_payments():
             "status": p.status,
             "provider": p.provider,
             "reference": p.reference,
+            "subscription_expires_at": p.subscription_expires_at.isoformat() if p.subscription_expires_at else None,
             "created_at": p.created_at.isoformat() if p.created_at else None,
         })
 
