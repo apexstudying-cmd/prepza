@@ -8210,6 +8210,21 @@ type AdminLibraryReportItem = {
   created_at: string | null
 }
 
+type AdminAnalytics = {
+  total_revenue: number
+  revenue_last_30d: number
+  total_users: number
+  active_today: number
+  storage_used_bytes: number
+  total_units: number
+  total_content_items: number
+  content_by_type: Record<string, number>
+  payments_by_status: Record<string, number>
+  signups_per_day: { date: string; count: number }[]
+  revenue_per_day: { date: string; amount: number }[]
+  top_performing_content: { id: number; title: string; content_type: string; revenue: number; purchases: number }[]
+}
+
 type AdminContentReport = {
   id: number
   target_type: string
@@ -8730,6 +8745,20 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       .then(() => { loadModReports(); loadModSummary(); setWarnPromptId(null); setWarnMessage(''); setWarnConsequence(''); setWarnRemoveContent(false) })
       .catch(e => setModActionError(e instanceof ApiError ? e.message : 'Could not issue this warning.'))
   }
+
+  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(true)
+  const [analyticsError, setAnalyticsError] = useState('')
+
+  useEffect(() => {
+    if (section !== 'analytics') return
+    setAnalyticsLoading(true)
+    setAnalyticsError('')
+    api<AdminAnalytics>('/admin/analytics')
+      .then(setAnalytics)
+      .catch(e => setAnalyticsError(e instanceof ApiError ? e.message : 'Could not load analytics.'))
+      .finally(() => setAnalyticsLoading(false))
+  }, [section])
 
   const filteredUsers = adminUsers
 
@@ -9315,51 +9344,125 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     )
   }
 
-  if (section === 'analytics') return (
+  if (section === 'analytics') {
+    const fmtBytes = (n: number) => {
+      if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`
+      if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`
+      if (n >= 1e3) return `${(n / 1e3).toFixed(1)} KB`
+      return `${n} B`
+    }
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <AdminCard title="Student Growth — 7 Months">
-          <div style={{ padding: '16px 18px' }}>
-            <div style={{ fontSize: 28, fontWeight: 800, color: N.navy, marginBottom: 4 }}>+54% <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>growth this semester</span></div>
-            <AdminLineChart data={studentsData} color={N.navy} height={80} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-              {revLabels.map(l => <span key={l} style={{ fontSize: 10, color: '#D1D5DB' }}>{l}</span>)}
-            </div>
+      {analyticsLoading ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading analytics…</div>
+      ) : analyticsError ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{analyticsError}</div>
+      ) : analytics && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+            <AdminKPI label="Total Users" value={analytics.total_users.toLocaleString()} sub={`${analytics.active_today.toLocaleString()} active today`} color={N.navy} />
+            <AdminKPI label="Total Revenue" value={`KES ${analytics.total_revenue.toLocaleString()}`} sub={`KES ${analytics.revenue_last_30d.toLocaleString()} last 30d`} color="#16A34A" />
+            <AdminKPI label="Content Items" value={analytics.total_content_items.toLocaleString()} sub={`${analytics.total_units.toLocaleString()} units`} color={N.gold} />
+            <AdminKPI label="Storage Used" value={fmtBytes(analytics.storage_used_bytes)} sub="Deduplicated files" color="#4C7BC9" />
           </div>
-        </AdminCard>
-        <AdminCard title="Revenue Growth — 7 Months">
-          <div style={{ padding: '16px 18px' }}>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#16A34A', marginBottom: 4 }}>KES 807K <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>total 7-month</span></div>
-            <AdminLineChart data={revenueData} color="#16A34A" height={80} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-              {revLabels.map(l => <span key={l} style={{ fontSize: 10, color: '#D1D5DB' }}>{l}</span>)}
-            </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <AdminCard title="New Signups — Last 30 Days">
+              <div style={{ padding: '16px 18px' }}>
+                {analytics.signups_per_day.length === 0 ? (
+                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No signups in this period.</div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: N.navy, marginBottom: 4 }}>
+                      {analytics.signups_per_day.reduce((s, d) => s + d.count, 0).toLocaleString()} <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>new users, 30 days</span>
+                    </div>
+                    <AdminLineChart data={analytics.signups_per_day.map(d => d.count)} color={N.navy} height={80} />
+                  </>
+                )}
+              </div>
+            </AdminCard>
+            <AdminCard title="Revenue — Last 30 Days">
+              <div style={{ padding: '16px 18px' }}>
+                {analytics.revenue_per_day.length === 0 ? (
+                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No revenue in this period.</div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#16A34A', marginBottom: 4 }}>
+                      KES {analytics.revenue_per_day.reduce((s, d) => s + d.amount, 0).toLocaleString()} <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>30-day total</span>
+                    </div>
+                    <AdminLineChart data={analytics.revenue_per_day.map(d => d.amount)} color="#16A34A" height={80} />
+                  </>
+                )}
+              </div>
+            </AdminCard>
           </div>
-        </AdminCard>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <AdminCard title="Document Uploads — 14 Days">
-          <div style={{ padding: '16px 18px' }}><AdminBarChart data={uploadsData} height={80} color="#4C7BC9" /></div>
-        </AdminCard>
-        <AdminCard title="AI Requests — 7 Days">
-          <div style={{ padding: '16px 18px' }}><AdminBarChart data={aiData} labels={aiLabels} height={80} color="#7C3AED" /></div>
-        </AdminCard>
-      </div>
-      <AdminCard title="Top Universities by Engagement">
-        <AdminTable
-          cols={['University', 'Students', 'Documents', 'AI Requests', 'Premium Users', 'Engagement']}
-          rows={[
-            ['Kenyatta University', '843', '4,102', '28,441', '287', <AdminBadge text="Very High" color="green" />],
-            ['University of Nairobi', '621', '2,890', '19,882', '194', <AdminBadge text="High" color="green" />],
-            ['Strathmore University', '412', '1,744', '13,102', '178', <AdminBadge text="High" color="green" />],
-            ['JKUAT', '389', '1,502', '11,441', '134', <AdminBadge text="Medium" color="amber" />],
-            ['Mount Kenya University', '334', '1,203', '9,812', '87', <AdminBadge text="Medium" color="amber" />],
-            ['Daystar University', '248', '891', '7,102', '63', <AdminBadge text="Medium" color="amber" />],
-          ]}
-        />
-      </AdminCard>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <AdminCard title="Content by Type">
+              <div style={{ padding: '16px 18px' }}>
+                {Object.keys(analytics.content_by_type).length === 0 ? (
+                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No content items yet.</div>
+                ) : (() => {
+                  const entries = Object.entries(analytics.content_by_type)
+                  const max = Math.max(...entries.map(([, c]) => c))
+                  return entries.map(([type, count]) => (
+                    <div key={type} style={{ marginBottom: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, textTransform: 'capitalize' }}>{type.replace(/_/g, ' ')}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{count}</span>
+                      </div>
+                      <div style={{ background: '#F3F4F6', borderRadius: 99, height: 6 }}>
+                        <div style={{ background: N.gold, borderRadius: 99, height: 6, width: `${max > 0 ? (count / max) * 100 : 0}%` }} />
+                      </div>
+                    </div>
+                  ))
+                })()}
+              </div>
+            </AdminCard>
+            <AdminCard title="Payments by Status">
+              <div style={{ padding: '16px 18px' }}>
+                {Object.keys(analytics.payments_by_status).length === 0 ? (
+                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No payments yet.</div>
+                ) : (() => {
+                  const entries = Object.entries(analytics.payments_by_status)
+                  const max = Math.max(...entries.map(([, c]) => c))
+                  const colorFor = (s: string) => s === 'success' ? '#16A34A' : s === 'refunded' ? '#D97706' : s === 'failed' ? '#DC2626' : '#9CA3AF'
+                  return entries.map(([status, count]) => (
+                    <div key={status} style={{ marginBottom: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, textTransform: 'capitalize' }}>{status}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{count}</span>
+                      </div>
+                      <div style={{ background: '#F3F4F6', borderRadius: 99, height: 6 }}>
+                        <div style={{ background: colorFor(status), borderRadius: 99, height: 6, width: `${max > 0 ? (count / max) * 100 : 0}%` }} />
+                      </div>
+                    </div>
+                  ))
+                })()}
+              </div>
+            </AdminCard>
+          </div>
+
+          <AdminCard title="Top Performing Content">
+            {analytics.top_performing_content.length === 0 ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No paid content purchases yet.</div>
+            ) : (
+              <AdminTable
+                cols={['Title', 'Type', 'Purchases', 'Revenue']}
+                rows={analytics.top_performing_content.map(c => [
+                  c.title,
+                  c.content_type,
+                  c.purchases.toString(),
+                  `KES ${c.revenue.toLocaleString()}`,
+                ])}
+              />
+            )}
+          </AdminCard>
+        </>
+      )}
     </div>
-  )
+    )
+  }
 
   if (section === 'system') return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
