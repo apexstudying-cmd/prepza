@@ -1464,14 +1464,23 @@ class AmbassadorPayout(db.Model):
     status = db.Column(db.String(20), nullable=False, default="pending")
     # pending -> approved -> paid ; pending -> rejected (bundled referrals released)
     payout_destination = db.Column(db.String(20), nullable=False)
-    # phone number for Kasapay mobile money disbursement
+    # phone number for Paystack mobile money transfer
     recipient_first_name = db.Column(db.String(100), nullable=False)
     recipient_last_name = db.Column(db.String(100), nullable=False)
-    # Kasapay's payout payload requires a real first/last name, not just
-    # a phone number - collected explicitly at request time rather than
-    # split from User.display_name, since that field is an optional
-    # nickname and unreliable for an actual money transfer.
-    kasapay_reference = db.Column(db.String(100), nullable=True)
+    # Paystack's transfer recipient payload requires a real first/last
+    # name, not just a phone number - collected explicitly at request
+    # time rather than split from User.display_name, since that field
+    # is an optional nickname and unreliable for an actual money transfer.
+    paystack_recipient_code = db.Column(db.String(100), nullable=True)
+    # Paystack recipient_code from POST /transferrecipient - created
+    # once per payout on first approval attempt, then reused. Paystack
+    # requires a recipient to exist before a transfer can be initiated,
+    # unlike Kasapay's single-call B2C.
+    paystack_transfer_code = db.Column(db.String(100), nullable=True)
+    # Our own reference string passed to POST /transfer - this is what
+    # GET /transfer/verify/<reference> and the transfer.* webhook events
+    # are keyed on. Named to mirror Payment.reference/provider_reference
+    # naming from the checkout migration.
     requested_at = db.Column(db.DateTime, default=datetime.utcnow)
     reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     reviewed_at = db.Column(db.DateTime, nullable=True)
@@ -7105,6 +7114,19 @@ def paystack_webhook():
         except Exception as e:
             print("Paystack webhook sync error:", str(e))
             return jsonify({"status": "error"}), 500
+    elif event in ("transfer.success", "transfer.failed", "transfer.reversed") and reference:
+        # Ambassador payout confirmation - shares this route with checkout
+        # events since Paystack only supports one webhook URL per account.
+        transfer_status = event.split(".", 1)[1]  # "success" | "failed" | "reversed"
+        payout = AmbassadorPayout.query.filter_by(paystack_transfer_code=reference).first()
+        if payout:
+            try:
+                _apply_paystack_transfer_result(payout, transfer_status)
+            except Exception as e:
+                print("Paystack transfer webhook sync error:", str(e))
+                return jsonify({"status": "error"}), 500
+        else:
+            print(f"WARNING: Paystack transfer webhook for unknown reference {reference}")
     # Other event types (charge.failed, etc.) don't need action here -
     # a payment stays "pending" until a successful charge resolves it,
     # and pending payments simply never unlock access.
@@ -7471,162 +7493,115 @@ def ambassador_request_payout():
     return jsonify({"id": payout.id, "amount": payout.amount, "status": payout.status}), 201
 
 
-# ---------- Kasapay B2C Payouts (Chunk 9) ----------
-# Local mobile-money disbursements for ambassador commissions. Auth
-# mirrors the Pesapal pattern (cached token, refreshed on expiry) but
-# Kasapay passes its token via an x-access-token header rather than
-# Authorization: Bearer, and payouts are asynchronous - initiate only
-# returns an acknowledgement, the real result lands later via callback
-# or a manual status poll. Docs: developer.kasapay.com/docs/payouts
+# ---------- Paystack Transfers (Chunk 9, migrated from Kasapay) ----------
+# Ambassador commission payouts via Paystack's Transfers API. Two-step,
+# unlike Kasapay's single-call B2C: a transfer recipient must exist
+# before a transfer can be initiated (POST /transferrecipient once per
+# payout, then cached and reused on retries), then POST /transfer moves
+# the money. The result is confirmed via the SAME unified webhook route
+# used for checkout (/payment/paystack/webhook below), branching on the
+# event field - Paystack only supports one webhook URL per account, so
+# there's no separate /payment/paystack/payout-webhook route.
+# Docs: paystack.com/docs/transfers
 
-KASAPAY_SANDBOX_BASE = "https://sandbox.api.gateway.kasapay.com"
-KASAPAY_PRODUCTION_BASE = "https://api.gateway.kasapay.com"
-
-_kasapay_token_cache = {"token": None, "expires_at": None}
-
-
-def kasapay_base_url():
-    env = os.environ.get("KASAPAY_ENV", "sandbox").strip().lower()
-    return KASAPAY_PRODUCTION_BASE if env == "production" else KASAPAY_SANDBOX_BASE
-
-
-def get_kasapay_token():
-    """Cached access token - Kasapay tokens last up to 1 hour."""
-    cached = _kasapay_token_cache["token"]
-    expires_at = _kasapay_token_cache["expires_at"]
-    if cached and expires_at and datetime.utcnow() < expires_at - timedelta(seconds=30):
-        return cached
-
-    response = requests.post(
-        f"{kasapay_base_url()}/v1/auth",
-        json={
-            "consumer_key": os.environ.get("KASAPAY_CONSUMER_KEY"),
-            "consumer_secret": os.environ.get("KASAPAY_CONSUMER_SECRET"),
-        },
-        headers={"Content-Type": "application/json"},
-        timeout=15,
-    )
-    response.raise_for_status()
-    data = response.json()
-    token = data.get("access_token")
-    if not token:
-        raise RuntimeError(f"Kasapay auth failed: {data.get('message') or data}")
-
-    expires_in = data.get("expiresIn") or 3600
-    _kasapay_token_cache["token"] = token
-    _kasapay_token_cache["expires_at"] = datetime.utcnow() + timedelta(seconds=expires_in)
-    return token
+PAYSTACK_MOBILE_MONEY_BANK_CODE = os.environ.get("PAYSTACK_MOBILE_MONEY_BANK_CODE", "MPESA")
+# "MPESA" is Paystack's Kenya mobile-money bank_code for M-Pesa
+# recipients - confirmed via Paystack's Kenya docs. account_reference is
+# only needed for Paybill/Till transfers, not personal M-Pesa numbers,
+# so it's correctly omitted from the recipient payload below.
 
 
-def kasapay_request(method, path, **kwargs):
-    token = get_kasapay_token()
-    headers = kwargs.pop("headers", {})
-    headers.setdefault("Content-Type", "application/json")
-    headers["x-access-token"] = token
-    response = requests.request(
-        method, f"{kasapay_base_url()}{path}", headers=headers, timeout=20, **kwargs
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-def initiate_kasapay_payout(payout):
+def _ensure_paystack_transfer_recipient(payout):
     """
-    Submits a local mobile-money payout to Kasapay for one approved
-    AmbassadorPayout. Returns (payout_reference, ack_response) - the ack
-    only confirms Kasapay ACCEPTED the request for processing, not that
-    money has landed. The real outcome arrives later via the callback
-    route, or can be checked with sync_kasapay_payout_status().
+    Creates (and caches) a Paystack transfer recipient for this payout's
+    destination phone number. Idempotent - if payout.paystack_recipient_code
+    is already set, reuses it rather than creating a duplicate recipient
+    on a retried approval.
     """
-    service_code = os.environ.get("KASAPAY_SERVICE_CODE")
-    if not service_code:
-        raise RuntimeError("KASAPAY_SERVICE_CODE is not configured")
+    if payout.paystack_recipient_code:
+        return payout.paystack_recipient_code
 
-    payout_reference = f"PZA-amb-{payout.id}-{secrets.token_hex(4)}"
     recipient_name = f"{payout.recipient_first_name} {payout.recipient_last_name}"
+    payload = {
+        "type": "mobile_money",
+        "name": recipient_name,
+        "account_number": payout.payout_destination,
+        "bank_code": PAYSTACK_MOBILE_MONEY_BANK_CODE,
+        "currency": "KES",
+    }
+    data = paystack_request("POST", "/transferrecipient", json=payload)
+    recipient_code = (data.get("data") or {}).get("recipient_code")
+    if not recipient_code:
+        raise RuntimeError(f"Paystack recipient creation failed: {data}")
+
+    payout.paystack_recipient_code = recipient_code
+    db.session.commit()
+    return recipient_code
+
+
+def initiate_paystack_transfer(payout):
+    """
+    Submits a Paystack transfer for one approved AmbassadorPayout,
+    creating a transfer recipient first if needed. Returns
+    (transfer_reference, transfer_status) - transfer_reference is OUR
+    reference, stored on payout.paystack_transfer_code for later
+    lookups (webhook + manual sync). transfer_status is Paystack's own
+    status string - in sandbox this is already "success" by the time
+    this returns, since test-mode transfers auto-succeed with no OTP
+    step at all; once live keys are in use it will typically come back
+    "pending" until OTP confirmation is disabled under Settings ->
+    Preferences, or via the Transfer Control API's /transfer/disable_otp.
+    """
+    recipient_code = _ensure_paystack_transfer_recipient(payout)
+    reference = f"PZA-amb-{payout.id}-{secrets.token_hex(4)}"
 
     payload = {
-        "payout_reference": payout_reference,
-        "service_code": service_code,
-        "recipient_first_name": payout.recipient_first_name,
-        "recipient_last_name": payout.recipient_last_name,
-        "destination_type": "MOBILE",
-        "destination_name": "MPESA_KEN",
-        "recipient_phone_number": payout.payout_destination,
-        "recipient_account_number": payout.payout_destination,
-        "recipient_account_name": recipient_name,
-        "source_currency": "KES",
-        "destination_currency": "KES",
-        "exchange_rate": "1",
-        "sender_amount": str(payout.amount),
-        "sender_country_code": "KEN",
-        "recipient_amount": str(payout.amount),
-        "payment_description": "Prepza ambassador commission payout",
-        "callback_url": f"{BASE_URL}/payment/kasapay/callback",
+        "source": "balance",
+        "amount": payout.amount * 100,
+        "recipient": recipient_code,
+        "reason": "Prepza ambassador commission payout",
+        "reference": reference,
     }
-    ack = kasapay_request("POST", "/v1/payouts/initiate", json=payload)
-    return payout_reference, ack
+    data = paystack_request("POST", "/transfer", json=payload)
+    tx = data.get("data") or {}
+    if not tx.get("transfer_code"):
+        raise RuntimeError(f"Paystack transfer initiation failed: {data}")
+    return reference, tx.get("status")
 
 
-def _apply_kasapay_payout_result(payout, result_payload):
+def _apply_paystack_transfer_result(payout, transfer_status):
     """
-    Shared by the callback route and the manual status-poll route -
-    both receive the same {"data": {"payment_status": ..., ...}} shape
-    (Kasapay's callback payload and Status API response are identical).
-    No-ops if the payout is already resolved to 'paid', so a retried
+    Shared by the webhook and the manual status-poll route. Idempotent -
+    no-ops if the payout is already resolved to 'paid', so a retried
     webhook or a repeated manual poll can never double-apply a result.
     """
     if payout.status == "paid":
         return payout
 
-    data = result_payload.get("data") or {}
-    payment_status = data.get("payment_status")
-
-    if payment_status == 700:
+    if transfer_status == "success":
         payout.status = "paid"
         payout.paid_at = datetime.utcnow()
-    elif payment_status in (701, 702, 705):
-        # failed / reversed / refunded - release the bundled referrals
-        # so the ambassador's commissions become requestable again.
+    elif transfer_status in ("failed", "reversed"):
+        # Release the bundled referrals so the ambassador's commissions
+        # become requestable again, same pattern as admin_reject_ambassador_payout.
         payout.status = "rejected"
-        payout.rejection_reason = data.get("result_description") or "Payout failed at Kasapay"
+        payout.rejection_reason = f"Payout {transfer_status} at Paystack"
         Referral.query.filter_by(payout_id=payout.id).update({"payout_id": None})
-    # else: 703 pending / 704 jammed / 706-708 in progress - leave the
-    # payout as 'approved' and check again later (retry or manual sync).
+    # else: still pending/otp/processing on Paystack's side - leave the
+    # payout as 'approved' and check again later (webhook retry or manual sync).
 
     db.session.commit()
     return payout
 
 
-def sync_kasapay_payout_status(payout):
-    """Polls Kasapay's Status API directly - their docs explicitly warn
-    not to rely on webhooks alone for the final result."""
-    if not payout.kasapay_reference or payout.status == "paid":
+def sync_paystack_transfer_status(payout):
+    """Polls Paystack's verify-transfer endpoint directly - a manual
+    fallback since webhooks can occasionally be missed."""
+    if not payout.paystack_transfer_code or payout.status == "paid":
         return payout
-    data = kasapay_request("GET", f"/v1/payouts/{payout.kasapay_reference}/status")
-    return _apply_kasapay_payout_result(payout, data)
-
-
-@app.route("/payment/kasapay/callback", methods=["POST"])
-def kasapay_payout_callback():
-    """
-    Server-to-server webhook Kasapay calls once a payout's final result
-    is ready. Always acknowledges with 200 - even for an unrecognised
-    reference - so Kasapay doesn't keep retrying; unmatched references
-    are logged instead of raising.
-    """
-    payload = request.get_json(silent=True) or {}
-    payout_reference = payload.get("payout_reference")
-    if not payout_reference:
-        return jsonify({"status": "ignored", "reason": "missing payout_reference"}), 200
-
-    payout = AmbassadorPayout.query.filter_by(kasapay_reference=payout_reference).first()
-    if not payout:
-        print(f"WARNING: Kasapay callback for unknown payout_reference {payout_reference}")
-        return jsonify({"status": "ignored", "reason": "unknown reference"}), 200
-
-    _apply_kasapay_payout_result(payout, payload)
-    return jsonify({"status": "ok"}), 200
+    data = paystack_request("GET", f"/transfer/verify/{payout.paystack_transfer_code}")
+    tx = data.get("data") or {}
+    return _apply_paystack_transfer_result(payout, tx.get("status"))
 
 
 # ---------- Admin: ambassador management (Chunk 9) ----------
@@ -7842,7 +7817,7 @@ def admin_list_ambassador_payouts():
             "amount": p.amount,
             "status": p.status,
             "payout_destination": p.payout_destination,
-            "kasapay_reference": p.kasapay_reference,
+            "paystack_transfer_code": p.paystack_transfer_code,
             "requested_at": p.requested_at.isoformat() if p.requested_at else None,
             "reviewed_at": p.reviewed_at.isoformat() if p.reviewed_at else None,
             "rejection_reason": p.rejection_reason,
@@ -7857,18 +7832,19 @@ def admin_list_ambassador_payouts():
 @require_admin
 def admin_approve_ambassador_payout(payout_id):
     """
-    Greenlights a payout request AND fires the actual Kasapay
-    disbursement in the same action - approving IS sending, which is
-    the fraud checkpoint you get instead of a separate "send" button.
-    If Kasapay's acknowledgement isn't a success code, nothing is
-    marked approved and the payout stays 'pending', so the admin can
-    fix whatever's wrong (float balance, recipient details) and retry
-    the same click.
+    Greenlights a payout request AND fires the actual Paystack transfer
+    in the same action - approving IS sending, which is the fraud
+    checkpoint you get instead of a separate "send" button. If the
+    Paystack request fails, nothing is marked approved and the payout
+    stays 'pending', so the admin can fix whatever's wrong (balance,
+    recipient details) and retry the same click.
 
-    A successful acknowledgement here only means Kasapay ACCEPTED the
-    request for processing - not that money has landed. The real
-    outcome arrives later via /payment/kasapay/callback, or can be
-    checked manually via /admin/payouts/<id>/sync-status.
+    In sandbox, test-mode transfers always auto-succeed - the payout may
+    already be 'paid' by the time this returns. Once switching to live
+    keys, a successful call here only means Paystack ACCEPTED the
+    transfer for processing - the real outcome arrives later via
+    /payment/paystack/webhook, or can be checked manually via
+    /admin/payouts/<id>/sync-status.
     """
     acting_admin_id = session.get("user_id")
 
@@ -7879,24 +7855,21 @@ def admin_approve_ambassador_payout(payout_id):
         return jsonify({"error": f"Payout is not pending (status: {payout.status})"}), 400
 
     try:
-        payout_reference, ack = initiate_kasapay_payout(payout)
+        transfer_reference, transfer_status = initiate_paystack_transfer(payout)
     except Exception as e:
-        return jsonify({"error": f"Kasapay payout request failed: {e}"}), 502
-
-    if ack.get("response_code") != 720:
-        return jsonify({
-            "error": ack.get("response_description") or "Kasapay rejected the payout request",
-            "kasapay_error_code": ack.get("error_code"),
-        }), 502
+        return jsonify({"error": f"Paystack transfer request failed: {e}"}), 502
 
     payout.status = "approved"
-    payout.kasapay_reference = payout_reference
+    payout.paystack_transfer_code = transfer_reference
     payout.reviewed_by = acting_admin_id
     payout.reviewed_at = datetime.utcnow()
     db.session.commit()
 
+    if transfer_status:
+        _apply_paystack_transfer_result(payout, transfer_status)
+
     return jsonify({
-        "id": payout.id, "status": payout.status, "kasapay_reference": payout.kasapay_reference,
+        "id": payout.id, "status": payout.status, "paystack_transfer_code": payout.paystack_transfer_code,
     })
 
 
@@ -7940,21 +7913,21 @@ def admin_reject_ambassador_payout(payout_id):
 @require_admin
 def admin_sync_ambassador_payout_status(payout_id):
     """
-    Manually re-checks a payout's status directly against Kasapay's
-    Status API - their own docs warn not to rely on webhooks alone for
-    the final result. Safe to call any time after a payout has a
-    kasapay_reference (i.e. after it's been approved/sent).
+    Manually re-checks a payout's status directly against Paystack's
+    verify-transfer endpoint - useful if a webhook was missed. Safe to
+    call any time after a payout has a paystack_transfer_code (i.e.
+    after it's been approved/sent).
     """
     payout = db.session.get(AmbassadorPayout, payout_id)
     if not payout:
         return jsonify({"error": "Payout not found"}), 404
-    if not payout.kasapay_reference:
-        return jsonify({"error": "This payout has not been sent to Kasapay yet"}), 400
+    if not payout.paystack_transfer_code:
+        return jsonify({"error": "This payout has not been sent to Paystack yet"}), 400
 
     try:
-        sync_kasapay_payout_status(payout)
+        sync_paystack_transfer_status(payout)
     except Exception as e:
-        return jsonify({"error": f"Kasapay status check failed: {e}"}), 502
+        return jsonify({"error": f"Paystack status check failed: {e}"}), 502
 
     return jsonify({
         "id": payout.id,
