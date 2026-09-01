@@ -8210,6 +8210,30 @@ type AdminLibraryReportItem = {
   created_at: string | null
 }
 
+type AdminContentReport = {
+  id: number
+  target_type: string
+  target_id: number
+  reporter_email: string
+  reason: string
+  details: string | null
+  priority: string
+  status: string
+  action_taken: string | null
+  admin_notes: string | null
+  created_at: string | null
+  author_id: number | null
+  author_email: string | null
+  snippet: string | null
+}
+
+type AdminModerationSummary = {
+  open_reports: number
+  resolved_today: number
+  suspended_users: number
+  warnings_issued: number
+}
+
 type AdminAiUsage = {
   period_days: number
   total_requests: number
@@ -8649,6 +8673,62 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     api(`/admin/ai-jobs/${jobId}/retry`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
       .then(() => loadAiJobs())
       .catch(e => setAiJobActionError(e instanceof ApiError ? e.message : 'Could not retry this job.'))
+  }
+
+  const [modReports, setModReports] = useState<AdminContentReport[]>([])
+  const [modReportsLoading, setModReportsLoading] = useState(true)
+  const [modReportsError, setModReportsError] = useState('')
+  const [modSummary, setModSummary] = useState<AdminModerationSummary | null>(null)
+  const [modActionError, setModActionError] = useState('')
+  const [warnPromptId, setWarnPromptId] = useState<number | null>(null)
+  const [warnMessage, setWarnMessage] = useState('')
+  const [warnConsequence, setWarnConsequence] = useState('')
+  const [warnRemoveContent, setWarnRemoveContent] = useState(false)
+
+  const loadModReports = () => {
+    setModReportsLoading(true)
+    setModReportsError('')
+    api<{ reports: AdminContentReport[] }>('/admin/content-reports')
+      .then(res => setModReports(res.reports))
+      .catch(e => setModReportsError(e instanceof ApiError ? e.message : 'Could not load reports.'))
+      .finally(() => setModReportsLoading(false))
+  }
+
+  const loadModSummary = () => {
+    api<AdminModerationSummary>('/admin/content-reports/summary')
+      .then(setModSummary)
+      .catch(() => {})
+  }
+
+  useEffect(() => {
+    if (section !== 'moderation') return
+    loadModReports()
+    loadModSummary()
+  }, [section])
+
+  const dismissModReport = (reportId: number) => {
+    setModActionError('')
+    api(`/admin/content-reports/${reportId}/dismiss`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      .then(() => { loadModReports(); loadModSummary() })
+      .catch(e => setModActionError(e instanceof ApiError ? e.message : 'Could not dismiss this report.'))
+  }
+
+  const removeModReportContent = (reportId: number) => {
+    setModActionError('')
+    api(`/admin/content-reports/${reportId}/remove`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      .then(() => { loadModReports(); loadModSummary() })
+      .catch(e => setModActionError(e instanceof ApiError ? e.message : 'Could not remove this content.'))
+  }
+
+  const warnFromModReport = (reportId: number, message: string, consequence: string, removeContent: boolean) => {
+    setModActionError('')
+    api(`/admin/content-reports/${reportId}/warn`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ message, consequence, remove_content: removeContent }),
+    })
+      .then(() => { loadModReports(); loadModSummary(); setWarnPromptId(null); setWarnMessage(''); setWarnConsequence(''); setWarnRemoveContent(false) })
+      .catch(e => setModActionError(e instanceof ApiError ? e.message : 'Could not issue this warning.'))
   }
 
   const filteredUsers = adminUsers
@@ -9157,37 +9237,83 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     )
   }
 
-  if (section === 'moderation') return (
+  if (section === 'moderation') {
+    const targetTypeLabel: Record<string, string> = {
+      forum_post: 'Forum Post',
+      forum_reply: 'Forum Reply',
+      group_post: 'Group Post',
+      group_post_comment: 'Group Comment',
+      user: 'User',
+    }
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-        <AdminKPI label="Open Reports" value="7" sub="Avg resolution: 4h" trend="+2 since yesterday" color="#DC2626" />
-        <AdminKPI label="Resolved Today" value="3" sub="Dismiss: 2 · Remove: 1" color="#16A34A" />
-        <AdminKPI label="Total Posts" value="1,247" sub="Forums + Comments" color={N.navy} />
-        <AdminKPI label="Suspended Users" value="1" sub="Pending review: 0" color="#D97706" />
-      </div>
-      <AdminCard title="Report Queue — 7 Open">
-        <AdminTable
-          cols={['#', 'Type', 'Content', 'Reported By', 'Reason', 'Priority', 'Received']}
-          rows={[
-            ['R-107', 'Post', '"Does anyone have exam leaks for…"', 'Wanjiru Kamau', 'Academic Dishonesty', <AdminBadge text="High" color="red" />, '2h ago'],
-            ['R-106', 'Document', 'ACT 101 Notes (copyrighted claim)', 'Anonymous', 'Copyright', <AdminBadge text="High" color="red" />, '4h ago'],
-            ['R-105', 'User', 'User selling answers in DMs', 'Brian Omondi', 'Spam / Scam', <AdminBadge text="Medium" color="amber" />, '6h ago'],
-            ['R-104', 'Comment', 'Offensive reply in forum', 'David Njoroge', 'Offensive Content', <AdminBadge text="Medium" color="amber" />, '8h ago'],
-            ['R-103', 'Post', 'Misleading study tips post', 'Faith Njeri', 'Misinformation', <AdminBadge text="Low" color="gray" />, '1d ago'],
-            ['R-102', 'Document', 'Duplicate upload of same notes', 'James Kariuki', 'Duplicate', <AdminBadge text="Low" color="gray" />, '1d ago'],
-            ['R-101', 'User', 'Suspected spam account', 'System (Auto)', 'Bot Activity', <AdminBadge text="Low" color="gray" />, '2d ago'],
-          ]}
-          actions={() => (
-            <div style={{ display: 'flex', gap: 5 }}>
-              <button style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Dismiss</button>
-              <button style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
-              <button style={{ background: '#FEF3C7', color: '#D97706', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Warn</button>
+      {/* Warn prompt */}
+      {warnPromptId != null && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setWarnPromptId(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 420, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 12 }}>Issue a warning</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginBottom: 4 }}>WHAT THEY DID WRONG</div>
+            <textarea value={warnMessage} onChange={e => setWarnMessage(e.target.value)} placeholder="e.g. Your post violated our academic integrity policy." rows={2} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 10, resize: 'vertical' }} />
+            <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginBottom: 4 }}>CONSEQUENCE</div>
+            <textarea value={warnConsequence} onChange={e => setWarnConsequence(e.target.value)} placeholder="e.g. Further violations may result in suspension." rows={2} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 10, resize: 'vertical' }} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#374151', marginBottom: 16, cursor: 'pointer' }}>
+              <input type="checkbox" checked={warnRemoveContent} onChange={e => setWarnRemoveContent(e.target.checked)} />
+              Also remove the reported content
+            </label>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setWarnPromptId(null)} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button
+                onClick={() => warnFromModReport(warnPromptId, warnMessage.trim(), warnConsequence.trim(), warnRemoveContent)}
+                disabled={!warnMessage.trim() || !warnConsequence.trim()}
+                style={{ flex: 1, background: (warnMessage.trim() && warnConsequence.trim()) ? '#D97706' : '#FDE68A', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: (warnMessage.trim() && warnConsequence.trim()) ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}
+              >Send Warning</button>
             </div>
-          )}
-        />
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+        <AdminKPI label="Open Reports" value={(modSummary?.open_reports ?? '—').toString()} color="#DC2626" />
+        <AdminKPI label="Resolved Today" value={(modSummary?.resolved_today ?? '—').toString()} color="#16A34A" />
+        <AdminKPI label="Warnings Issued" value={(modSummary?.warnings_issued ?? '—').toString()} sub="All time" color="#D97706" />
+        <AdminKPI label="Suspended Users" value={(modSummary?.suspended_users ?? '—').toString()} color={N.navy} />
+      </div>
+
+      {modActionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{modActionError}</div>}
+      <AdminCard title={`Report Queue${modReportsLoading ? '' : ` — ${modReports.length} Open`}`}>
+        {modReportsLoading ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading reports…</div>
+        ) : modReportsError ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{modReportsError}</div>
+        ) : modReports.length === 0 ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No open reports.</div>
+        ) : (
+          <AdminTable
+            cols={['#', 'Type', 'Content', 'Reported By', 'Reason', 'Priority', 'Received']}
+            rows={modReports.map(r => [
+              `#${r.id}`,
+              targetTypeLabel[r.target_type] || r.target_type,
+              r.snippet ? `"${r.snippet.slice(0, 60)}${r.snippet.length > 60 ? '…' : ''}"` : (r.target_type === 'user' ? (r.author_email || '—') : '(content removed)'),
+              r.reporter_email,
+              r.reason,
+              <AdminBadge text={r.priority} color={r.priority === 'high' ? 'red' : r.priority === 'medium' ? 'amber' : 'gray'} />,
+              r.created_at ? new Date(r.created_at).toLocaleString() : '—',
+            ])}
+            actions={i => (
+              <div style={{ display: 'flex', gap: 5 }}>
+                <button onClick={() => dismissModReport(modReports[i].id)} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Dismiss</button>
+                {modReports[i].target_type !== 'user' && (
+                  <button onClick={() => removeModReportContent(modReports[i].id)} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
+                )}
+                <button onClick={() => setWarnPromptId(modReports[i].id)} style={{ background: '#FEF3C7', color: '#D97706', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Warn</button>
+              </div>
+            )}
+          />
+        )}
       </AdminCard>
     </div>
-  )
+    )
+  }
 
   if (section === 'analytics') return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
