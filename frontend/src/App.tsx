@@ -8787,99 +8787,136 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
   const filteredUsers = adminUsers
 
-  const revenueData = [89000, 102000, 118000, 95000, 134000, 127000, 142250]
-  const revLabels = ['Feb','Mar','Apr','May','Jun','Jul','Aug']
-  const studentsData = [1840, 1980, 2124, 2267, 2488, 2643, 2847]
-  const aiData = [2840, 3100, 2650, 3890, 4234, 3102, 3214]
-  const aiLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-  const uploadsData = [45, 62, 38, 74, 55, 68, 59, 83, 71, 49, 94, 78, 65, 72]
+  const [dashAnalytics, setDashAnalytics] = useState<AdminAnalytics | null>(null)
+  const [dashAnalyticsLoading, setDashAnalyticsLoading] = useState(true)
+  const [dashAiUsage, setDashAiUsage] = useState<AdminAiUsage | null>(null)
+  const [dashPayments, setDashPayments] = useState<AdminPayment[]>([])
+  const [dashPaymentsLoading, setDashPaymentsLoading] = useState(true)
+  const [dashModSummary, setDashModSummary] = useState<AdminModerationSummary | null>(null)
+  const [dashLibraryQueueCount, setDashLibraryQueueCount] = useState<number | null>(null)
+  const [dashRecentUsers, setDashRecentUsers] = useState<AdminUserRow[]>([])
+  const [dashError, setDashError] = useState('')
+
+  useEffect(() => {
+    if (section !== 'dashboard') return
+    setDashAnalyticsLoading(true)
+    setDashPaymentsLoading(true)
+    setDashError('')
+    api<AdminAnalytics>('/admin/analytics').then(setDashAnalytics).catch(() => setDashError('Some dashboard data could not be loaded.')).finally(() => setDashAnalyticsLoading(false))
+    api<AdminAiUsage>('/admin/ai-usage?days=30').then(setDashAiUsage).catch(() => {})
+    api<{ payments: AdminPayment[] }>('/admin/payments').then(res => setDashPayments(res.payments)).catch(() => setDashError('Some dashboard data could not be loaded.')).finally(() => setDashPaymentsLoading(false))
+    api<AdminModerationSummary>('/admin/content-reports/summary').then(setDashModSummary).catch(() => {})
+    api<{ queue: AdminLibraryQueueItem[] }>('/admin/library/queue').then(res => setDashLibraryQueueCount(res.queue.length)).catch(() => {})
+    api<AdminUserRow[]>('/admin/users').then(res => setDashRecentUsers(res.slice(0, 5))).catch(() => {})
+  }, [section])
 
   const ActivityDot = ({ color }: { color: string }) => <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, marginTop: 3 }} />
 
-  if (section === 'dashboard') return (
+  if (section === 'dashboard') {
+    const fmtBytesDash = (n: number) => {
+      if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`
+      if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`
+      if (n >= 1e3) return `${(n / 1e3).toFixed(1)} KB`
+      return `${n} B`
+    }
+    const nowDash = new Date()
+    const dashSuccess = dashPayments.filter(p => p.status === 'success')
+    const dashFailedThisMonth = dashPayments.filter(p => p.status === 'failed' && p.created_at && new Date(p.created_at).getMonth() === nowDash.getMonth() && new Date(p.created_at).getFullYear() === nowDash.getFullYear()).length
+    const dashLatestSub = new Map<number, AdminPayment>()
+    for (const p of dashPayments) {
+      if (p.payment_type !== 'subscription' || p.status !== 'success' || !p.subscription_expires_at || p.user_id == null) continue
+      const existing = dashLatestSub.get(p.user_id)
+      if (!existing || new Date(p.subscription_expires_at) > new Date(existing.subscription_expires_at as string)) dashLatestSub.set(p.user_id, p)
+    }
+    const dashActiveSubs = [...dashLatestSub.values()].filter(p => new Date(p.subscription_expires_at as string) > nowDash).length
+
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {dashError && <div style={{ color: '#DC2626', fontSize: 12 }}>{dashError}</div>}
+
       {/* KPI grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
-        <AdminKPI label="Total Students" value="2,847" sub="All time" trend="+124 this week" color={N.navy} chartData={studentsData} />
-        <AdminKPI label="Active Today" value="891" sub="31% of total" trend="+8% vs yesterday" color="#4C7BC9" chartData={aiData} />
-        <AdminKPI label="Revenue (MTD)" value="KES 142K" sub="Aug 2025" trend="+12% vs Jul" color="#16A34A" chartData={revenueData} />
-        <AdminKPI label="Active Subscriptions" value="893" sub="Free: 1,954" trend="+34 this week" color={N.gold} chartData={studentsData.map(v => v * 0.31)} />
-        <AdminKPI label="AI Requests Today" value="3,214" sub="Avg 1.13 per user" trend="+18% vs yesterday" color="#7C3AED" chartData={aiData} />
-        <AdminKPI label="Est. AI Cost (MTD)" value="KES 12.4K" sub="~KES 4.35/user" trend="-3% vs Jul" color="#DC2626" chartData={aiData.map(v => v * 3.9)} />
-        <AdminKPI label="Docs Uploaded" value="14,302" sub="Today: 72" trend="+287 this week" color={N.navy} chartData={uploadsData} />
-        <AdminKPI label="Storage Used" value="342 GB" sub="of 1 TB (34%)" color="#6B7280" chartData={[210,240,265,290,315,328,342]} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 14 }}>
-        {/* Revenue chart */}
-        <AdminCard title="Revenue — Last 7 Months">
-          <div style={{ padding: '16px 18px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 11, color: '#9CA3AF' }}>KES</span>
-              <AdminBadge text="+12% MoM" color="green" />
-            </div>
-            <AdminBarChart data={revenueData} labels={revLabels} height={100} color={N.gold} />
+      {dashAnalyticsLoading ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading dashboard…</div>
+      ) : dashAnalytics && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
+            <AdminKPI label="Total Students" value={dashAnalytics.total_users.toLocaleString()} sub="All time" color={N.navy} chartData={dashAnalytics.signups_per_day.map(d => d.count)} />
+            <AdminKPI label="Active Today" value={dashAnalytics.active_today.toLocaleString()} sub={`${dashAnalytics.total_users > 0 ? Math.round((dashAnalytics.active_today / dashAnalytics.total_users) * 100) : 0}% of total`} color="#4C7BC9" />
+            <AdminKPI label="Revenue (30d)" value={`KES ${dashAnalytics.revenue_last_30d.toLocaleString()}`} sub={`All time: KES ${dashAnalytics.total_revenue.toLocaleString()}`} color="#16A34A" chartData={dashAnalytics.revenue_per_day.map(d => d.amount)} />
+            <AdminKPI label="Active Subscriptions" value={dashPaymentsLoading ? '—' : dashActiveSubs.toLocaleString()} color={N.gold} />
+            <AdminKPI label="AI Requests Today" value={(dashAiUsage?.requests_today ?? '—').toString()} sub={dashAiUsage ? `${dashAiUsage.total_requests.toLocaleString()} in 30d` : ''} color="#7C3AED" chartData={dashAiUsage?.daily_trend.map(d => d.requests)} />
+            <AdminKPI label="AI Cost (30d)" value={dashAiUsage ? `$${dashAiUsage.total_cost_usd.toFixed(2)}` : '—'} color="#DC2626" />
+            <AdminKPI label="Content Items" value={dashAnalytics.total_content_items.toLocaleString()} sub={`${dashAnalytics.total_units.toLocaleString()} units`} color={N.navy} />
+            <AdminKPI label="Storage Used" value={fmtBytesDash(dashAnalytics.storage_used_bytes)} color="#6B7280" />
           </div>
-        </AdminCard>
-        {/* AI usage */}
-        <AdminCard title="AI Requests — This Week">
-          <div style={{ padding: '16px 18px' }}>
-            <AdminBarChart data={aiData} labels={aiLabels} height={100} color="#7C3AED" />
-          </div>
-        </AdminCard>
-      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        {/* Student growth */}
-        <AdminCard title="Student Growth — Last 7 Months">
-          <div style={{ padding: '16px 18px' }}>
-            <div style={{ fontSize: 28, fontWeight: 800, color: N.navy, marginBottom: 4 }}>2,847 <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>total</span></div>
-            <AdminLineChart data={studentsData} color={N.navy} height={60} />
-          </div>
-        </AdminCard>
-
-        {/* Recent activity */}
-        <AdminCard title="Recent Activity">
-          <div style={{ padding: '0 18px' }}>
-            {[
-              { dot: '#4CC97B', text: 'Faith Njeri registered · Daystar University', time: '2 min ago' },
-              { dot: N.gold, text: 'Arnold Gichuru upgraded to Semester Plan', time: '5 min ago' },
-              { dot: '#7C3AED', text: 'AI processed ACT 101 (3 flashcard sets, 1 podcast)', time: '9 min ago' },
-              { dot: '#4C7BC9', text: 'Brian Omondi uploaded MAT 101 Past Papers.pdf', time: '14 min ago' },
-              { dot: '#DC2626', text: 'Report: Aisha Mohamed reported post #1047', time: '22 min ago' },
-              { dot: N.gold, text: 'James Kariuki renewed Annual Plan — KES 999', time: '31 min ago' },
-              { dot: '#6B7280', text: 'System: Nightly AI job completed (847 docs processed)', time: '2h ago' },
-            ].map((a, i) => (
-              <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderBottom: i < 6 ? '1px solid #F3F4F6' : 'none' }}>
-                <ActivityDot color={a.dot} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.4 }}>{a.text}</div>
-                  <div style={{ fontSize: 11, color: '#D1D5DB', marginTop: 2 }}>{a.time}</div>
-                </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 14 }}>
+            <AdminCard title="Revenue — Last 30 Days">
+              <div style={{ padding: '16px 18px' }}>
+                {dashAnalytics.revenue_per_day.length === 0 ? (
+                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No revenue in this period.</div>
+                ) : (
+                  <AdminBarChart data={dashAnalytics.revenue_per_day.map(d => d.amount)} height={100} color={N.gold} />
+                )}
               </div>
+            </AdminCard>
+            <AdminCard title="AI Requests — Last 30 Days">
+              <div style={{ padding: '16px 18px' }}>
+                {dashAiUsage && dashAiUsage.daily_trend.length > 0 ? (
+                  <AdminBarChart data={dashAiUsage.daily_trend.map(d => d.requests)} height={100} color="#7C3AED" />
+                ) : (
+                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No AI requests in this period.</div>
+                )}
+              </div>
+            </AdminCard>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <AdminCard title="Student Growth — Last 30 Days">
+              <div style={{ padding: '16px 18px' }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: N.navy, marginBottom: 4 }}>{dashAnalytics.total_users.toLocaleString()} <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>total</span></div>
+                {dashAnalytics.signups_per_day.length > 0 && <AdminLineChart data={dashAnalytics.signups_per_day.map(d => d.count)} color={N.navy} height={60} />}
+              </div>
+            </AdminCard>
+
+            <AdminCard title="Recent Signups">
+              <div style={{ padding: '0 18px' }}>
+                {dashRecentUsers.length === 0 ? (
+                  <div style={{ padding: '18px 0', fontSize: 13, color: '#9CA3AF' }}>No signups yet.</div>
+                ) : dashRecentUsers.map((u, i) => (
+                  <div key={u.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderBottom: i < dashRecentUsers.length - 1 ? '1px solid #F3F4F6' : 'none' }}>
+                    <ActivityDot color="#4CC97B" />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.4 }}>{u.display_name || u.email} registered{u.university_name ? ` · ${u.university_name}` : ''}</div>
+                      <div style={{ fontSize: 11, color: '#D1D5DB', marginTop: 2 }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </AdminCard>
+          </div>
+
+          {/* Alerts */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+            {[
+              { icon: '🛡️', label: 'Pending Reports', value: (dashModSummary?.open_reports ?? '—').toString(), color: '#FEF3C7', fg: '#D97706', action: () => setSection('moderation') },
+              { icon: '📄', label: 'Content Awaiting Review', value: (dashLibraryQueueCount ?? '—').toString(), color: '#DBEAFE', fg: '#2563EB', action: () => setSection('content') },
+              { icon: '💳', label: 'Failed Payments (30d)', value: dashPaymentsLoading ? '—' : dashFailedThisMonth.toString(), color: '#FEE2E2', fg: '#DC2626', action: () => setSection('payments') },
+            ].map(a => (
+              <button key={a.label} onClick={a.action} style={{ background: a.color, border: 'none', borderRadius: 14, padding: '14px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left' }}>
+                <span style={{ fontSize: 22 }}>{a.icon}</span>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: a.fg }}>{a.value}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: a.fg, opacity: 0.8 }}>{a.label}</div>
+                </div>
+              </button>
             ))}
           </div>
-        </AdminCard>
-      </div>
-
-      {/* Alerts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-        {[
-          { icon: '🛡️', label: 'Pending Reports', value: '7', color: '#FEF3C7', fg: '#D97706', action: () => setSection('moderation') },
-          { icon: '📄', label: 'Content Awaiting Review', value: '23', color: '#DBEAFE', fg: '#2563EB', action: () => setSection('content') },
-          { icon: '💳', label: 'Failed Payments', value: '14', color: '#FEE2E2', fg: '#DC2626', action: () => setSection('payments') },
-        ].map(a => (
-          <button key={a.label} onClick={a.action} style={{ background: a.color, border: 'none', borderRadius: 14, padding: '14px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left' }}>
-            <span style={{ fontSize: 22 }}>{a.icon}</span>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: a.fg }}>{a.value}</div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: a.fg, opacity: 0.8 }}>{a.label}</div>
-            </div>
-          </button>
-        ))}
-      </div>
+        </>
+      )}
     </div>
-  )
+    )
+  }
 
   if (section === 'users') return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
