@@ -8210,6 +8210,16 @@ type AdminLibraryReportItem = {
   created_at: string | null
 }
 
+type AdminUniversityEngagement = {
+  university_id: number
+  university_name: string
+  students: number
+  documents: number
+  ai_requests: number
+  premium_users: number
+  engagement: string
+}
+
 type AdminAnalytics = {
   total_revenue: number
   revenue_last_30d: number
@@ -8758,6 +8768,20 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       .then(setAnalytics)
       .catch(e => setAnalyticsError(e instanceof ApiError ? e.message : 'Could not load analytics.'))
       .finally(() => setAnalyticsLoading(false))
+  }, [section])
+
+  const [universityEngagement, setUniversityEngagement] = useState<AdminUniversityEngagement[]>([])
+  const [universityEngagementLoading, setUniversityEngagementLoading] = useState(true)
+  const [universityEngagementError, setUniversityEngagementError] = useState('')
+
+  useEffect(() => {
+    if (section !== 'analytics') return
+    setUniversityEngagementLoading(true)
+    setUniversityEngagementError('')
+    api<{ universities: AdminUniversityEngagement[] }>('/admin/analytics/universities')
+      .then(res => setUniversityEngagement(res.universities))
+      .catch(e => setUniversityEngagementError(e instanceof ApiError ? e.message : 'Could not load university engagement.'))
+      .finally(() => setUniversityEngagementLoading(false))
   }, [section])
 
   const filteredUsers = adminUsers
@@ -9454,6 +9478,28 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                   c.content_type,
                   c.purchases.toString(),
                   `KES ${c.revenue.toLocaleString()}`,
+                ])}
+              />
+            )}
+          </AdminCard>
+
+          <AdminCard title="Top Universities by Engagement">
+            {universityEngagementLoading ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+            ) : universityEngagementError ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{universityEngagementError}</div>
+            ) : universityEngagement.length === 0 ? (
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No students with a university on file yet.</div>
+            ) : (
+              <AdminTable
+                cols={['University', 'Students', 'Documents', 'AI Requests', 'Premium Users', 'Engagement']}
+                rows={universityEngagement.map(u => [
+                  u.university_name,
+                  u.students.toLocaleString(),
+                  u.documents.toLocaleString(),
+                  u.ai_requests.toLocaleString(),
+                  u.premium_users.toLocaleString(),
+                  <AdminBadge text={u.engagement} color={u.engagement === 'Very High' || u.engagement === 'High' ? 'green' : u.engagement === 'Medium' ? 'amber' : 'gray'} />,
                 ])}
               />
             )}
