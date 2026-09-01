@@ -52,6 +52,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 db = SQLAlchemy(app)
 
 EMAIL_REGEX = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+PHONE_NUMBER_REGEX = re.compile(r"^\+?\d{9,15}$")
 BASE_URL = os.environ.get("BASE_URL", "https://prepza-sf60.onrender.com")
 
 COMMON_WEAK_PASSWORDS = {
@@ -109,6 +110,9 @@ class User(db.Model):
     semester = db.Column(db.Integer, nullable=True)
     display_name = db.Column(db.String(50), nullable=True)
     bio = db.Column(db.String(160), nullable=True)
+    phone_number = db.Column(db.String(20), nullable=True)
+    # Private field only - never exposed on public/other-user profile
+    # endpoints, not searchable. See patch_add_phone_number.py.
     email_verified = db.Column(db.Boolean, default=False)
     verification_token = db.Column(db.String(64), nullable=True)
     reset_token = db.Column(db.String(64), nullable=True)
@@ -2658,6 +2662,7 @@ def me():
         "semester": user.semester,
         "display_name": user.display_name,
         "bio": user.bio,
+        "phone_number": user.phone_number,
         "email_verified": user.email_verified,
         "is_admin": user.is_admin,
         "university_id": user.university_id,
@@ -2714,6 +2719,11 @@ def update_profile():
 
     display_name = data.get("display_name", None)
     bio = data.get("bio", None)
+    phone_number = data.get("phone_number", None)
+    if phone_number is not None:
+        phone_number = phone_number.strip()
+        if phone_number and not PHONE_NUMBER_REGEX.match(phone_number):
+            return jsonify({"error": "Phone number must be a valid number (e.g. +254712345678)"}), 400
     if display_name is not None:
         display_name = display_name.strip()
         if len(display_name) > 50:
@@ -2753,6 +2763,8 @@ def update_profile():
         user.display_name = display_name or None
     if bio is not None:
         user.bio = bio or None
+    if phone_number is not None:
+        user.phone_number = phone_number or None
     if university_id is not None:
         user.university_id = university_id
     if program_id is not None:
@@ -2766,6 +2778,7 @@ def update_profile():
         "semester": user.semester,
         "display_name": user.display_name,
         "bio": user.bio,
+        "phone_number": user.phone_number,
         "university_id": user.university_id,
         "program_id": user.program_id,
     })
