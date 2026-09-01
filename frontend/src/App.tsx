@@ -8174,6 +8174,7 @@ const adminNav = [
   { key: 'universities', label: 'Universities', icon: '🏛️' },
   { key: 'community', label: 'Community', icon: '💬' },
   { key: 'opportunities', label: 'Opportunities', icon: '🚀' },
+  { key: 'promotions', label: 'Promotions', icon: '✦' },
   { key: 'organisations', label: 'Organisations', icon: '🏢' },
   { key: 'ai-usage', label: 'AI & Usage', icon: '🤖' },
   { key: 'payments', label: 'Payments', icon: '💳' },
@@ -9649,6 +9650,8 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
   if (section === 'opportunities') return <AdminOpportunitiesPanel />
 
+  if (section === 'promotions') return <AdminPromotionsPanel />
+
   if (section === 'organisations') return <AdminOrganisationsPanel />
 
   // Light sections for community, universities, opportunities
@@ -10188,6 +10191,97 @@ const ADMIN_ORG_STATUS_COLOR: Record<string, string> = {
   pending: 'amber', verified: 'green', rejected: 'red',
 }
 
+interface AdminPromotionRow {
+  id: number
+  opportunity_id: number
+  organisation_id: number
+  promotion_type: string
+  start_date: string | null
+  end_date: string | null
+  price: number
+  payment_status: string
+  approval_status: 'pending' | 'approved' | 'rejected'
+  reviewed_at: string | null
+  created_at: string | null
+  opportunity_title?: string | null
+  organisation_name?: string | null
+}
+
+const ADMIN_PROMO_STATUS_COLOR: Record<string, string> = { pending: 'amber', approved: 'green', rejected: 'red' }
+
+function AdminPromotionsPanel() {
+  const [csrfToken, setCsrfToken] = useState('')
+  const [statusFilter, setStatusFilter] = useState('pending')
+  const [rows, setRows] = useState<AdminPromotionRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+  }, [])
+
+  const load = (status: string) => {
+    setLoading(true)
+    setError('')
+    api<{ promotions: AdminPromotionRow[] }>(`/admin/opportunity-promotions?approval_status=${status}`)
+      .then(res => setRows(res.promotions))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load promotion requests.'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load(statusFilter) }, [statusFilter])
+
+  const runAction = async (id: number, action: 'approve' | 'reject') => {
+    setActionBusy(true)
+    try {
+      await api(`/admin/opportunity-promotions/${id}/${action}`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      load(statusFilter)
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : `Could not ${action} this promotion.`)
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <AdminCard title={`Promotion Requests — ${rows.length}`}>
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {['pending', 'approved', 'rejected', 'all'].map(f => (
+            <button key={f} onClick={() => setStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: statusFilter === f ? N.navy : '#F3F4F6', color: statusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
+          ))}
+        </div>
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{error}</div>
+        ) : rows.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No promotion requests with this status.</div>
+        ) : (
+          <AdminTable
+            cols={['Opportunity', 'Organisation', 'Type', 'Window', 'Price', 'Status']}
+            rows={rows.map(r => [
+              r.opportunity_title || `#${r.opportunity_id}`,
+              r.organisation_name || `#${r.organisation_id}`,
+              r.promotion_type.charAt(0).toUpperCase() + r.promotion_type.slice(1),
+              `${r.start_date ? new Date(r.start_date).toLocaleDateString() : '—'} – ${r.end_date ? new Date(r.end_date).toLocaleDateString() : '—'}`,
+              r.price > 0 ? `KES ${r.price.toLocaleString()}` : 'Free',
+              <AdminBadge text={r.approval_status} color={ADMIN_PROMO_STATUS_COLOR[r.approval_status] || 'gray'} />,
+            ])}
+            actions={i => rows[i].approval_status === 'pending' ? (
+              <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
+                <button disabled={actionBusy} onClick={() => runAction(rows[i].id, 'approve')} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Approve</button>
+                <button disabled={actionBusy} onClick={() => runAction(rows[i].id, 'reject')} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Reject</button>
+              </div>
+            ) : null}
+          />
+        )}
+      </AdminCard>
+    </div>
+  )
+}
+
 function AdminOrganisationsPanel() {
   const [csrfToken, setCsrfToken] = useState('')
   const [statusFilter, setStatusFilter] = useState('pending')
@@ -10321,7 +10415,7 @@ function AdminOrganisationsPanel() {
 
 function AdminPlatform({ onExit }: { onExit: () => void }) {
   const [section, setSection] = useState('dashboard')
-  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System' }
+  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System' }
 
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#F4F6FA', fontFamily: 'Plus Jakarta Sans', overflow: 'hidden' }}>
@@ -10828,7 +10922,7 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
   const [loadError, setLoadError] = useState('')
   const [orgs, setOrgs] = useState<OrgSummary[]>([])
   const [activeOrgId, setActiveOrgId] = useState<number | null>(null)
-  const [tab, setTab] = useState<'opportunities' | 'create' | 'analytics' | 'profile'>('opportunities')
+  const [tab, setTab] = useState<'opportunities' | 'create' | 'analytics' | 'team' | 'profile'>('opportunities')
 
   const [regName, setRegName] = useState('')
   const [regEmail, setRegEmail] = useState('')
@@ -10968,10 +11062,10 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
         {activeOrg.verification_status === 'rejected' && activeOrg.verification_notes && (
           <div style={{ background: 'rgba(201,68,68,0.15)', border: '1px solid rgba(201,68,68,0.3)', borderRadius: 10, padding: '8px 12px', marginBottom: 10, fontSize: 11, color: '#ffb4bd' }}>{activeOrg.verification_notes}</div>
         )}
-        <div style={{ display: 'flex', gap: 0 }}>
-          {(['opportunities', 'create', 'analytics', 'profile'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, background: 'none', border: 'none', borderBottom: `2px solid ${tab === t ? ORG_COLORS.gold : 'transparent'}`, color: tab === t ? ORG_COLORS.gold : 'rgba(255,255,255,0.5)', fontWeight: tab === t ? 700 : 500, fontSize: 12, padding: '9px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-              {t === 'opportunities' ? 'Opportunities' : t === 'create' ? '+ Create' : t === 'analytics' ? 'Analytics' : 'Profile'}
+        <div style={{ display: 'flex', gap: 0, overflowX: 'auto' }} className="scrollbar-hide">
+          {(['opportunities', 'create', 'analytics', 'team', 'profile'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ flexShrink: 0, flex: '1 0 auto', minWidth: 66, background: 'none', border: 'none', borderBottom: `2px solid ${tab === t ? ORG_COLORS.gold : 'transparent'}`, color: tab === t ? ORG_COLORS.gold : 'rgba(255,255,255,0.5)', fontWeight: tab === t ? 700 : 500, fontSize: 12, padding: '9px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+              {t === 'opportunities' ? 'Opportunities' : t === 'create' ? '+ Create' : t === 'analytics' ? 'Analytics' : t === 'team' ? 'Team' : 'Profile'}
             </button>
           ))}
         </div>
@@ -10980,10 +11074,26 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
         {tab === 'opportunities' && <OrgOpportunitiesTab orgId={activeOrg.id} csrfToken={csrfToken} onCreate={() => setTab('create')} />}
         {tab === 'create' && <OrgCreateOpportunityTab orgId={activeOrg.id} org={activeOrg} csrfToken={csrfToken} onDone={() => setTab('opportunities')} />}
         {tab === 'analytics' && <OrgAnalyticsTab orgId={activeOrg.id} />}
+        {tab === 'team' && <OrgTeamTab orgId={activeOrg.id} isOwner={activeOrg.role === 'owner'} csrfToken={csrfToken} />}
         {tab === 'profile' && <OrgProfileTab org={activeOrg} csrfToken={csrfToken} onSaved={loadOrgs} />}
       </div>
     </div>
   )
+}
+
+type OrgPromotion = {
+  id: number; opportunity_id: number; organisation_id: number; promotion_type: string
+  start_date: string | null; end_date: string | null; price: number
+  payment_status: string; approval_status: 'pending' | 'approved' | 'rejected'
+  reviewed_at: string | null; created_at: string | null
+}
+
+const ORG_PROMOTABLE_STATUSES = ['pending_review', 'approved', 'published']
+const ORG_PROMOTION_TYPES = ['standard', 'featured', 'sponsored']
+const ORG_PROMOTION_APPROVAL_META: Record<string, { label: string; color: string }> = {
+  pending: { label: 'Pending Review', color: N.gold },
+  approved: { label: 'Approved', color: '#16A34A' },
+  rejected: { label: 'Rejected', color: '#C94C4C' },
 }
 
 function OrgOpportunitiesTab({ orgId, csrfToken, onCreate }: { orgId: number; csrfToken: string; onCreate: () => void }) {
@@ -10992,6 +11102,46 @@ function OrgOpportunitiesTab({ orgId, csrfToken, onCreate }: { orgId: number; cs
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState<number | null>(null)
   const [actionError, setActionError] = useState('')
+
+  const [promoTarget, setPromoTarget] = useState<OrgOpportunity | null>(null)
+  const [promoType, setPromoType] = useState('featured')
+  const [promoStart, setPromoStart] = useState('')
+  const [promoEnd, setPromoEnd] = useState('')
+  const [promoHistory, setPromoHistory] = useState<OrgPromotion[]>([])
+  const [promoHistoryLoading, setPromoHistoryLoading] = useState(false)
+  const [promoSubmitting, setPromoSubmitting] = useState(false)
+  const [promoError, setPromoError] = useState('')
+
+  const openPromoModal = (o: OrgOpportunity) => {
+    setPromoTarget(o); setPromoType('featured'); setPromoStart(''); setPromoEnd(''); setPromoError('')
+    setPromoHistoryLoading(true)
+    api<{ promotions: OrgPromotion[] }>(`/organisations/${orgId}/opportunities/${o.id}/promotions`)
+      .then(res => setPromoHistory(res.promotions))
+      .catch(() => setPromoHistory([]))
+      .finally(() => setPromoHistoryLoading(false))
+  }
+
+  const submitPromotion = async () => {
+    if (!promoTarget || !promoStart || !promoEnd || promoSubmitting) return
+    setPromoSubmitting(true); setPromoError('')
+    try {
+      const res = await api<OrgPromotion>(`/organisations/${orgId}/opportunities/${promoTarget.id}/promotions`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({
+          promotion_type: promoType,
+          start_date: new Date(promoStart).toISOString(),
+          end_date: new Date(promoEnd).toISOString(),
+        }),
+      })
+      setPromoHistory(h => [res, ...h])
+      setPromoStart(''); setPromoEnd('')
+    } catch (e) {
+      setPromoError(e instanceof ApiError ? e.message : 'Could not submit this promotion request.')
+    } finally {
+      setPromoSubmitting(false)
+    }
+  }
 
   const load = () => {
     setLoading(true); setError('')
@@ -11071,10 +11221,63 @@ function OrgOpportunitiesTab({ orgId, csrfToken, onCreate }: { orgId: number; cs
               {o.status !== 'removed' && (
                 <button onClick={() => withdraw(o.id)} disabled={busy} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{busy ? '…' : 'Withdraw'}</button>
               )}
+              {ORG_PROMOTABLE_STATUSES.includes(o.status) && (
+                <button onClick={() => openPromoModal(o)} style={{ background: `${N.gold}20`, color: N.gold, border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>✦ Promote</button>
+              )}
             </div>
           </div>
         )
       })}
+
+      {promoTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }} onClick={() => setPromoTarget(null)}>
+          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '22px 20px 32px', width: '100%', maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 18px' }} />
+            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 2 }}>Promote Opportunity</div>
+            <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 16 }} className="line-clamp-1">{promoTarget.title}</div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Promotion type</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              {ORG_PROMOTION_TYPES.map(t => (
+                <button key={t} onClick={() => setPromoType(t)} style={{ flex: 1, padding: '9px 0', borderRadius: 10, border: `1.5px solid ${promoType === t ? N.gold : 'rgba(0,0,0,0.1)'}`, background: promoType === t ? `${N.gold}18` : '#fff', color: promoType === t ? N.gold : '#6B7280', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{t}</button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Start</div>
+                <input type="datetime-local" value={promoStart} onChange={e => setPromoStart(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '10px 12px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>End</div>
+                <input type="datetime-local" value={promoEnd} onChange={e => setPromoEnd(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '10px 12px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy }} />
+              </div>
+            </div>
+            {promoError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{promoError}</div>}
+            <button onClick={submitPromotion} disabled={!promoStart || !promoEnd || promoSubmitting} style={{ width: '100%', background: (!promoStart || !promoEnd) ? '#E5E7EB' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: (!promoStart || !promoEnd) ? '#9CA3AF' : N.navy, border: 'none', borderRadius: 14, padding: '13px 0', fontWeight: 800, fontSize: 13, cursor: (!promoStart || !promoEnd) ? 'not-allowed' : 'pointer', fontFamily: 'Plus Jakarta Sans', marginBottom: 16 }}>
+              {promoSubmitting ? 'Submitting…' : 'Request Promotion'}
+            </button>
+
+            <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 8 }}>Past requests</div>
+            {promoHistoryLoading ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF' }}>Loading…</div>
+            ) : promoHistory.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#9CA3AF' }}>No promotion requests yet for this opportunity.</div>
+            ) : promoHistory.map(p => {
+              const meta = ORG_PROMOTION_APPROVAL_META[p.approval_status] || ORG_PROMOTION_APPROVAL_META.pending
+              return (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid #F3F4F6' }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: N.navy, textTransform: 'capitalize' }}>{p.promotion_type}</div>
+                    <div style={{ fontSize: 10, color: '#9CA3AF' }}>{p.start_date ? new Date(p.start_date).toLocaleDateString() : ''} – {p.end_date ? new Date(p.end_date).toLocaleDateString() : ''}</div>
+                  </div>
+                  {orgPill(meta.label, meta.color)}
+                </div>
+              )
+            })}
+            <button onClick={() => setPromoTarget(null)} style={{ width: '100%', background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 12, padding: '11px 0', marginTop: 14, cursor: 'pointer', fontWeight: 700, fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>Close</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -11269,6 +11472,7 @@ function OrgProfileTab({ org, csrfToken, onSaved }: { org: OrgSummary; csrfToken
   const [website, setWebsite] = useState(org.website || '')
   const [phone, setPhone] = useState(org.contact_phone || '')
   const [description, setDescription] = useState(org.description || '')
+  const [logoUrl, setLogoUrl] = useState(org.logo_url || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -11288,6 +11492,7 @@ function OrgProfileTab({ org, csrfToken, onSaved }: { org: OrgSummary; csrfToken
           website: website.trim() || null,
           contact_phone: phone.trim() || null,
           description: description.trim() || null,
+          logo_url: logoUrl.trim() || null,
         }),
       })
       setSaved(true)
@@ -11329,10 +11534,130 @@ function OrgProfileTab({ org, csrfToken, onSaved }: { org: OrgSummary; csrfToken
           <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Description</div>
           <textarea value={description} disabled={!isOwner} onChange={e => setDescription(e.target.value)} rows={3} style={{ ...fieldStyle, opacity: isOwner ? 1 : 0.6, resize: 'none', lineHeight: 1.6 }} />
         </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Logo URL</div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {logoUrl.trim() && (
+              <img src={logoUrl.trim()} alt="" style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover', background: '#F3F4F6', flexShrink: 0 }} onError={e => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden' }} />
+            )}
+            <input value={logoUrl} disabled={!isOwner} onChange={e => setLogoUrl(e.target.value)} placeholder="https://…/logo.png" style={{ ...fieldStyle, opacity: isOwner ? 1 : 0.6 }} />
+          </div>
+          <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 6 }}>Shown next to your opportunities in the student browse view.</div>
+        </div>
         {isOwner && (
           <button onClick={save} disabled={saving || !name.trim() || !email.trim()} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, border: 'none', borderRadius: 14, padding: '13px 0', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{saving ? 'Saving…' : 'Save Changes'}</button>
         )}
       </div>
+    </div>
+  )
+}
+
+type OrgMember = { user_id: number; email: string | null; display_name: string; role: 'owner' | 'manager'; joined_at: string | null }
+
+function OrgTeamTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner: boolean; csrfToken: string }) {
+  const [members, setMembers] = useState<OrgMember[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState<number | null>(null)
+  const [actionError, setActionError] = useState('')
+
+  const [search, setSearch] = useState('')
+  const [results, setResults] = useState<UserSearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [adding, setAdding] = useState<number | null>(null)
+
+  const load = () => {
+    setLoading(true); setError('')
+    api<{ members: OrgMember[] }>(`/organisations/${orgId}/members`)
+      .then(res => setMembers(res.members))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load your team.'))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [orgId])
+
+  useEffect(() => {
+    if (!isOwner) return
+    const q = search.trim()
+    if (!q) { setResults([]); return }
+    setSearching(true)
+    const t = setTimeout(() => {
+      api<{ users: UserSearchResult[] }>(`/users/search?q=${encodeURIComponent(q)}`)
+        .then(res => setResults(res.users))
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [search, isOwner])
+
+  const addMember = async (userId: number) => {
+    setAdding(userId); setActionError('')
+    try {
+      await api(`/organisations/${orgId}/members`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ user_id: userId }),
+      })
+      setSearch(''); setResults([])
+      load()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not add this person as staff.')
+    } finally {
+      setAdding(null)
+    }
+  }
+
+  const removeMember = async (userId: number) => {
+    setBusyId(userId); setActionError('')
+    try {
+      await api(`/organisations/${orgId}/members/${userId}`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
+      load()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not remove this staff member.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+  if (error) return <div style={{ padding: 40, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{error}</div>
+
+  return (
+    <div style={{ padding: 16 }}>
+      {!isOwner && (
+        <div style={{ background: '#FEF9F0', border: `1px solid ${N.gold}30`, borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#92400E' }}>Only the organisation owner can add or remove staff.</div>
+      )}
+      {actionError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{actionError}</div>}
+      {isOwner && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Add staff by name</div>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search students to add as manager…" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '11px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, marginBottom: 8 }} />
+          {searching && <div style={{ fontSize: 11, color: '#9CA3AF' }}>Searching…</div>}
+          {results.length > 0 && (
+            <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+              {results.map(u => (
+                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid #F3F4F6' }}>
+                  <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: N.navy }}>{u.display_name}</div>
+                  <button onClick={() => addMember(u.id)} disabled={adding === u.id} style={{ background: `${N.gold}20`, color: N.gold, border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{adding === u.id ? '…' : 'Add'}</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 8 }}>Staff ({members.length})</div>
+      {members.map(m => (
+        <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', borderRadius: 12, padding: '11px 14px', marginBottom: 8, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+          <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, color: N.navy, flexShrink: 0 }}>{m.display_name.slice(0, 2).toUpperCase()}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: N.navy }} className="line-clamp-1">{m.display_name}</div>
+            {m.email && <div style={{ fontSize: 10, color: '#9CA3AF' }} className="line-clamp-1">{m.email}</div>}
+          </div>
+          {orgPill(m.role === 'owner' ? 'Owner' : 'Manager', m.role === 'owner' ? N.gold : '#4C7BC9')}
+          {isOwner && m.role !== 'owner' && (
+            <button onClick={() => removeMember(m.user_id)} disabled={busyId === m.user_id} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{busyId === m.user_id ? '…' : 'Remove'}</button>
+          )}
+        </div>
+      ))}
     </div>
   )
 }

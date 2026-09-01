@@ -10703,6 +10703,139 @@ def admin_update_organisation(organisation_id):
     return jsonify(_serialize_organisation(org))
 
 
+# ---------- Organisation staff management ----------
+# Lets an org 'owner' invite/remove 'manager' staff. Deliberately does NOT
+# support transferring ownership or promoting a manager to owner - every
+# Organisation has exactly one owner (the creator, set at POST
+# /organisations time) and that never changes here, same "no speculative
+# building" tradeoff as elsewhere in this file. A manager can submit/edit
+# opportunities (per the existing OrganisationMember role split) but has
+# no say over org staffing itself.
+
+def _serialize_org_member(membership):
+    user = db.session.get(User, membership.user_id)
+    return {
+        "user_id": membership.user_id,
+        "email": user.email if user else None,
+        "display_name": _display_name(user) if user else "Deleted user",
+        "role": membership.role,
+        "joined_at": membership.joined_at.isoformat() if membership.joined_at else None,
+    }
+
+
+@app.route("/organisations/<int:organisation_id>/members")
+def list_organisation_members(organisation_id):
+    """Any member (owner or manager) can view the staff list. Non-members
+    get a 404, same "don't confirm existence" pattern as get_organisation()."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    org = db.session.get(Organisation, organisation_id)
+    if not org:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    members = (
+        OrganisationMember.query.filter_by(organisation_id=organisation_id)
+        .order_by(OrganisationMember.joined_at.asc())
+        .all()
+    )
+    members.sort(key=lambda m: 0 if m.role == "owner" else 1)
+
+    return jsonify({"members": [_serialize_org_member(m) for m in members]})
+
+
+@app.route("/organisations/<int:organisation_id>/members", methods=["POST"])
+@require_csrf
+def add_organisation_member(organisation_id):
+    """
+    Owner-only: invites an existing Prepza user as a 'manager'. Takes a
+    user_id (not an email) - same "search then add" pattern as group
+    creation's member_user_ids, resolved client-side via the existing
+    GET /users/search picker rather than an email-invite flow, since
+    every staffer must already have a Prepza account to sign in as.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    org = db.session.get(Organisation, organisation_id)
+    if not org:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership or membership.role != "owner":
+        return jsonify({"error": "Only the organisation owner can add staff"}), 403
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    target_user_id = data.get("user_id")
+    if not isinstance(target_user_id, int) or isinstance(target_user_id, bool):
+        return jsonify({"error": "user_id is required"}), 400
+    if target_user_id == user_id:
+        return jsonify({"error": "You're already the owner of this organisation"}), 400
+
+    target_user = db.session.get(User, target_user_id)
+    if not target_user or target_user.is_suspended:
+        return jsonify({"error": "User not found"}), 404
+
+    existing = OrganisationMember.query.filter_by(
+        organisation_id=organisation_id, user_id=target_user_id
+    ).first()
+    if existing:
+        return jsonify({"message": "Already staff", "member": _serialize_org_member(existing)}), 200
+
+    new_member = OrganisationMember(organisation_id=organisation_id, user_id=target_user_id, role="manager")
+    db.session.add(new_member)
+    db.session.commit()
+
+    return jsonify(_serialize_org_member(new_member)), 201
+
+
+@app.route("/organisations/<int:organisation_id>/members/<int:target_user_id>", methods=["DELETE"])
+@require_csrf
+def remove_organisation_member(organisation_id, target_user_id):
+    """
+    Owner-only removal of a manager. Refuses to remove the owner (there's
+    no ownership-transfer flow, so removing the owner would strand the
+    org with no one able to manage staff or edit its profile) and refuses
+    self-removal for the same reason.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    org = db.session.get(Organisation, organisation_id)
+    if not org:
+        return jsonify({"error": "Organisation not found"}), 404
+
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership or membership.role != "owner":
+        return jsonify({"error": "Only the organisation owner can remove staff"}), 403
+
+    if target_user_id == user_id:
+        return jsonify({"error": "The owner can't remove themselves"}), 400
+
+    target = OrganisationMember.query.filter_by(
+        organisation_id=organisation_id, user_id=target_user_id
+    ).first()
+    if not target:
+        return jsonify({"error": "Staff member not found"}), 404
+    if target.role == "owner":
+        return jsonify({"error": "Can't remove the organisation owner"}), 400
+
+    db.session.delete(target)
+    db.session.commit()
+
+    return jsonify({"message": "Staff member removed"})
+
+
 # ---------- Opportunities (organisation-side CRUD) ----------
 
 from datetime import timezone
