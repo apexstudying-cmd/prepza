@@ -8210,6 +8210,33 @@ type AdminLibraryReportItem = {
   created_at: string | null
 }
 
+type AdminAiUsage = {
+  period_days: number
+  total_requests: number
+  requests_today: number
+  total_cost_usd: number
+  total_tokens: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
+  by_feature: { request_type: string; requests: number; cost_usd: number }[]
+  daily_trend: { date: string; requests: number; cost_usd: number }[]
+  document_pipeline_jobs: { completed: number; failed: number; note: string }
+}
+
+type AdminAiJob = {
+  id: number
+  document_content_id: number
+  feature: string
+  status: string
+  started_at: string | null
+  completed_at: string | null
+  error_message: string | null
+  retry_count: number
+  created_at: string | null
+}
+
 type AdminPayment = {
   id: number
   user_id: number | null
@@ -8578,6 +8605,52 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       .catch(e => setPaymentActionError(e instanceof ApiError ? e.message : 'Could not refund this payment.'))
   }
 
+  const [aiUsage, setAiUsage] = useState<AdminAiUsage | null>(null)
+  const [aiUsageLoading, setAiUsageLoading] = useState(true)
+  const [aiUsageError, setAiUsageError] = useState('')
+  const [aiUsageDays, setAiUsageDays] = useState(30)
+  const [aiJobs, setAiJobs] = useState<AdminAiJob[]>([])
+  const [aiJobsLoading, setAiJobsLoading] = useState(true)
+  const [aiJobsError, setAiJobsError] = useState('')
+  const [aiJobsFilter, setAiJobsFilter] = useState<'all' | 'failed' | 'completed'>('all')
+  const [aiJobActionError, setAiJobActionError] = useState('')
+
+  const loadAiUsage = () => {
+    setAiUsageLoading(true)
+    setAiUsageError('')
+    api<AdminAiUsage>(`/admin/ai-usage?days=${aiUsageDays}`)
+      .then(setAiUsage)
+      .catch(e => setAiUsageError(e instanceof ApiError ? e.message : 'Could not load AI usage.'))
+      .finally(() => setAiUsageLoading(false))
+  }
+
+  const loadAiJobs = () => {
+    setAiJobsLoading(true)
+    setAiJobsError('')
+    const params = aiJobsFilter !== 'all' ? `?status=${aiJobsFilter}` : ''
+    api<AdminAiJob[]>(`/admin/ai-jobs${params}`)
+      .then(setAiJobs)
+      .catch(e => setAiJobsError(e instanceof ApiError ? e.message : 'Could not load AI jobs.'))
+      .finally(() => setAiJobsLoading(false))
+  }
+
+  useEffect(() => {
+    if (section !== 'ai-usage') return
+    loadAiUsage()
+  }, [section, aiUsageDays])
+
+  useEffect(() => {
+    if (section !== 'ai-usage') return
+    loadAiJobs()
+  }, [section, aiJobsFilter])
+
+  const retryAiJob = (jobId: number) => {
+    setAiJobActionError('')
+    api(`/admin/ai-jobs/${jobId}/retry`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      .then(() => loadAiJobs())
+      .catch(e => setAiJobActionError(e instanceof ApiError ? e.message : 'Could not retry this job.'))
+  }
+
   const filteredUsers = adminUsers
 
   const revenueData = [89000, 102000, 118000, 95000, 134000, 127000, 142250]
@@ -8893,57 +8966,113 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     )
   }
 
-  if (section === 'ai-usage') return (
+  if (section === 'ai-usage') {
+    const fmtDuration = (started: string | null, completed: string | null) => {
+      if (!started || !completed) return '—'
+      const ms = new Date(completed).getTime() - new Date(started).getTime()
+      return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+    }
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-        <AdminKPI label="AI Requests Today" value="3,214" sub="Successful: 3,188" trend="+18% vs yesterday" color="#7C3AED" chartData={aiData} />
-        <AdminKPI label="Failed Requests" value="26" sub="0.8% error rate" trend="-2% vs yesterday" color="#DC2626" chartData={[40,28,35,22,30,18,26]} />
-        <AdminKPI label="Tokens Used (MTD)" value="84.2M" sub="~KES 12,400 cost" trend="+9% vs Jul" color={N.gold} chartData={aiData.map(v => v * 870)} />
-        <AdminKPI label="Avg Response Time" value="1.4s" sub="P95: 3.2s" trend="-0.2s vs last week" color="#16A34A" chartData={[1.8, 1.9, 1.6, 1.7, 1.5, 1.4, 1.4]} />
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>Period:</span>
+        {[7, 30, 90].map(d => (
+          <button key={d} onClick={() => setAiUsageDays(d)} style={{ padding: '6px 14px', borderRadius: 8, background: aiUsageDays === d ? N.navy : '#F3F4F6', color: aiUsageDays === d ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{d}d</button>
+        ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <AdminCard title="AI Requests by Feature">
-          <div style={{ padding: '16px 18px' }}>
-            {[
-              { label: 'Document Processing', pct: 38, color: N.navy, count: '1,221' },
-              { label: 'Flashcard Generation', pct: 24, color: N.gold, count: '772' },
-              { label: 'Quiz Generation', pct: 18, color: '#7C3AED', count: '579' },
-              { label: 'Podcast Creation', pct: 12, color: '#4C7BC9', count: '386' },
-              { label: 'AI Tutor Chat', pct: 8, color: '#4CC97B', count: '256' },
-            ].map(r => (
-              <div key={r.label} style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, color: '#374151', fontWeight: 500 }}>{r.label}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{r.count}</span>
-                </div>
-                <div style={{ background: '#F3F4F6', borderRadius: 99, height: 6 }}>
-                  <div style={{ background: r.color, borderRadius: 99, height: 6, width: `${r.pct}%`, transition: 'width 0.5s' }} />
-                </div>
+
+      {aiUsageLoading ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading AI usage…</div>
+      ) : aiUsageError ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{aiUsageError}</div>
+      ) : aiUsage && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+            <AdminKPI label="AI Requests Today" value={aiUsage.requests_today.toLocaleString()} sub={`${aiUsage.total_requests.toLocaleString()} in last ${aiUsage.period_days}d`} color="#7C3AED" />
+            <AdminKPI label="Doc Pipeline Jobs" value={aiUsage.document_pipeline_jobs.completed.toLocaleString()} sub={`${aiUsage.document_pipeline_jobs.failed} failed`} color={aiUsage.document_pipeline_jobs.failed > 0 ? '#DC2626' : '#16A34A'} />
+            <AdminKPI label="Tokens Used" value={aiUsage.total_tokens >= 1000000 ? `${(aiUsage.total_tokens / 1000000).toFixed(1)}M` : aiUsage.total_tokens.toLocaleString()} sub={`In: ${aiUsage.input_tokens.toLocaleString()} · Out: ${aiUsage.output_tokens.toLocaleString()}`} color={N.gold} />
+            <AdminKPI label="Total Cost" value={`$${aiUsage.total_cost_usd.toFixed(2)}`} sub={`Last ${aiUsage.period_days} days`} color="#16A34A" />
+          </div>
+          <div style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.5 }}>{aiUsage.document_pipeline_jobs.note}</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <AdminCard title="AI Requests by Feature">
+              <div style={{ padding: '16px 18px' }}>
+                {aiUsage.by_feature.length === 0 ? (
+                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No AI requests in this period.</div>
+                ) : (() => {
+                  const maxReq = Math.max(...aiUsage.by_feature.map(f => f.requests))
+                  const colors = [N.navy, N.gold, '#7C3AED', '#4C7BC9', '#4CC97B', '#DC2626']
+                  return aiUsage.by_feature.map((f, i) => (
+                    <div key={f.request_type} style={{ marginBottom: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, textTransform: 'capitalize' }}>{f.request_type.replace(/_/g, ' ')}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{f.requests.toLocaleString()}</span>
+                      </div>
+                      <div style={{ background: '#F3F4F6', borderRadius: 99, height: 6 }}>
+                        <div style={{ background: colors[i % colors.length], borderRadius: 99, height: 6, width: `${maxReq > 0 ? (f.requests / maxReq) * 100 : 0}%`, transition: 'width 0.5s' }} />
+                      </div>
+                    </div>
+                  ))
+                })()}
               </div>
+            </AdminCard>
+            <AdminCard title={`Requests — Last ${aiUsage.period_days} Days`}>
+              <div style={{ padding: '16px 18px' }}>
+                {aiUsage.daily_trend.length === 0 ? (
+                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No data yet.</div>
+                ) : (
+                  <AdminBarChart data={aiUsage.daily_trend.map(d => d.requests)} labels={aiUsage.daily_trend.map(d => new Date(d.date).toLocaleDateString('default', { month: 'short', day: 'numeric' }))} height={120} color="#7C3AED" />
+                )}
+              </div>
+            </AdminCard>
+          </div>
+        </>
+      )}
+
+      {aiJobActionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{aiJobActionError}</div>}
+      <AdminCard title="Recent AI Jobs">
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(['all', 'failed', 'completed'] as const).map(f => (
+              <button key={f} onClick={() => setAiJobsFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: aiJobsFilter === f ? N.navy : '#F3F4F6', color: aiJobsFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
             ))}
           </div>
-        </AdminCard>
-        <AdminCard title="AI Requests — Last 7 Days">
-          <div style={{ padding: '16px 18px' }}>
-            <AdminBarChart data={aiData} labels={aiLabels} height={120} color="#7C3AED" />
-          </div>
-        </AdminCard>
-      </div>
-      <AdminCard title="Recent AI Jobs">
-        <AdminTable
-          cols={['Job ID', 'Type', 'User', 'Document', 'Status', 'Duration', 'Time']}
-          rows={[
-            ['AI-9847', 'Quiz Generation', 'Arnold Gichuru', 'ACT 101 Notes', <AdminBadge text="Success" color="green" />, '1.2s', '2 min ago'],
-            ['AI-9846', 'Flashcard Gen.', 'Wanjiru Kamau', 'CS 201 Algorithms', <AdminBadge text="Success" color="green" />, '0.9s', '5 min ago'],
-            ['AI-9845', 'Podcast Creation', 'Brian Omondi', 'MAT 101 Notes', <AdminBadge text="Processing" color="blue" />, '—', '8 min ago'],
-            ['AI-9844', 'Doc Processing', 'David Njoroge', 'Pharmacology.pdf', <AdminBadge text="Success" color="green" />, '3.4s', '12 min ago'],
-            ['AI-9843', 'AI Tutor Chat', 'Faith Njeri', 'Context: STA 101', <AdminBadge text="Success" color="green" />, '0.6s', '15 min ago'],
-            ['AI-9842', 'Quiz Generation', 'James Kariuki', 'ECO 101 Notes', <AdminBadge text="Failed" color="red" />, '—', '18 min ago'],
-          ]}
-        />
+          {(() => {
+            const withDuration = aiJobs.filter(j => j.started_at && j.completed_at)
+            if (withDuration.length === 0) return null
+            const avgMs = withDuration.reduce((sum, j) => sum + (new Date(j.completed_at as string).getTime() - new Date(j.started_at as string).getTime()), 0) / withDuration.length
+            const avgLabel = avgMs < 1000 ? `${Math.round(avgMs)}ms` : `${(avgMs / 1000).toFixed(1)}s`
+            return <span style={{ fontSize: 11, color: '#9CA3AF' }}>Avg duration (this list, {withDuration.length} jobs): <strong style={{ color: '#374151' }}>{avgLabel}</strong></span>
+          })()}
+        </div>
+        {aiJobsLoading ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading jobs…</div>
+        ) : aiJobsError ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{aiJobsError}</div>
+        ) : aiJobs.length === 0 ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No jobs match this filter.</div>
+        ) : (
+          <AdminTable
+            cols={['Job ID', 'Feature', 'Status', 'Retries', 'Duration', 'Error', 'Created']}
+            rows={aiJobs.map(j => [
+              `#${j.id}`,
+              j.feature.replace(/_/g, ' '),
+              <AdminBadge text={j.status} color={j.status === 'completed' ? 'green' : j.status === 'failed' ? 'red' : j.status === 'processing' ? 'blue' : 'gray'} />,
+              j.retry_count.toString(),
+              fmtDuration(j.started_at, j.completed_at),
+              j.error_message || '—',
+              j.created_at ? new Date(j.created_at).toLocaleString() : '—',
+            ])}
+            actions={i => (aiJobs[i].status === 'failed' && aiJobs[i].feature === 'text_extraction') ? (
+              <button onClick={() => retryAiJob(aiJobs[i].id)} style={{ background: '#DBEAFE', color: '#2563EB', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Retry</button>
+            ) : null}
+          />
+        )}
       </AdminCard>
     </div>
-  )
+    )
+  }
 
   if (section === 'payments') {
     const now = new Date()
