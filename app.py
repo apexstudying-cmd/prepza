@@ -9565,6 +9565,111 @@ def admin_analytics():
     })
 
 
+@app.route("/admin/analytics/universities")
+@require_admin
+def admin_analytics_universities():
+    """
+    Per-university engagement rollup for the admin Analytics tab.
+    Only includes universities with at least one signed-up student.
+    Engagement tier is a relative ranking (top/bottom quartile of a
+    combined documents+AI-requests score) among the universities
+    returned here, not an absolute scale - same reasoning as the
+    percentile-based work used elsewhere (e.g. XP leaderboards): with
+    a handful of universities, fixed thresholds like ">10000 requests
+    = Very High" would be meaningless noise, whereas relative ranking
+    stays useful regardless of platform size.
+
+    "Premium users" reuses the same latest-successful-subscription
+    dedup logic as GET /admin/users, just grouped by university
+    instead of returned per-user.
+    """
+    student_counts = dict(
+        db.session.query(User.university_id, func.count(User.id))
+        .filter(User.university_id.isnot(None))
+        .group_by(User.university_id)
+        .all()
+    )
+    if not student_counts:
+        return jsonify({"universities": []})
+
+    uni_ids = list(student_counts.keys())
+    universities = {u.id: u.name for u in University.query.filter(University.id.in_(uni_ids)).all()}
+
+    doc_counts = dict(
+        db.session.query(User.university_id, func.count(Document.id))
+        .select_from(Document)
+        .join(User, Document.user_id == User.id)
+        .filter(Document.is_removed.is_(False), User.university_id.in_(uni_ids))
+        .group_by(User.university_id)
+        .all()
+    )
+
+    ai_counts = dict(
+        db.session.query(User.university_id, func.count(AiUsageLog.id))
+        .select_from(AiUsageLog)
+        .join(User, AiUsageLog.user_id == User.id)
+        .filter(User.university_id.in_(uni_ids))
+        .group_by(User.university_id)
+        .all()
+    )
+
+    # Same active-subscription dedup as GET /admin/users, then grouped
+    # by university instead of returned per-user.
+    sub_rows = (
+        db.session.query(Payment.user_id, Payment.subscription_expires_at)
+        .join(User, Payment.user_id == User.id)
+        .filter(
+            User.university_id.in_(uni_ids),
+            Payment.payment_type == "subscription",
+            Payment.status == "success",
+            Payment.subscription_expires_at.isnot(None),
+        )
+        .all()
+    )
+    latest_expiry = {}
+    for uid, expires_at in sub_rows:
+        if uid not in latest_expiry or expires_at > latest_expiry[uid]:
+            latest_expiry[uid] = expires_at
+    now = datetime.utcnow()
+    active_user_ids = [uid for uid, expires_at in latest_expiry.items() if expires_at > now]
+    premium_counts = dict(
+        db.session.query(User.university_id, func.count(User.id))
+        .filter(User.id.in_(active_user_ids), User.university_id.in_(uni_ids))
+        .group_by(User.university_id)
+        .all()
+    ) if active_user_ids else {}
+
+    rows = []
+    for uid in uni_ids:
+        docs = doc_counts.get(uid, 0)
+        ai_reqs = ai_counts.get(uid, 0)
+        rows.append({
+            "university_id": uid,
+            "university_name": universities.get(uid, "Unknown"),
+            "students": student_counts.get(uid, 0),
+            "documents": docs,
+            "ai_requests": ai_reqs,
+            "premium_users": premium_counts.get(uid, 0),
+            "_score": docs + ai_reqs,
+        })
+
+    rows.sort(key=lambda r: r["_score"], reverse=True)
+    n = len(rows)
+    for i, r in enumerate(rows):
+        percentile = i / n
+        if percentile < 0.25:
+            r["engagement"] = "Very High"
+        elif percentile < 0.5:
+            r["engagement"] = "High"
+        elif percentile < 0.75:
+            r["engagement"] = "Medium"
+        else:
+            r["engagement"] = "Low"
+        del r["_score"]
+
+    return jsonify({"universities": rows})
+
+
 @app.route("/admin/payments/<int:payment_id>/refund", methods=["POST"])
 @require_csrf
 @require_admin
