@@ -9736,7 +9736,7 @@ interface AdminPayoutRow {
   amount: number
   status: 'pending' | 'approved' | 'rejected' | 'paid'
   payout_destination: string
-  kasapay_reference: string | null
+  paystack_transfer_code: string | null
   requested_at: string | null
   reviewed_at: string | null
   rejection_reason: string | null
