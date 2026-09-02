@@ -2271,13 +2271,11 @@ def signup():
     if strength_error:
         return jsonify({"error": strength_error}), 400
 
-    if year is not None:
-        if not isinstance(year, int) or year < 1 or year > 4:
-            return jsonify({"error": "Year must be a number between 1 and 4"}), 400
+    if year is None or not isinstance(year, int) or year < 1 or year > 4:
+        return jsonify({"error": "Year is required and must be a number between 1 and 4"}), 400
 
-    if semester is not None:
-        if not isinstance(semester, int) or semester not in (1, 2):
-            return jsonify({"error": "Semester must be 1 or 2"}), 400
+    if semester is None or not isinstance(semester, int) or semester not in (1, 2):
+        return jsonify({"error": "Semester is required and must be 1 or 2"}), 400
 
     if not university_id or not isinstance(university_id, int):
         return jsonify({"error": "University is required"}), 400
@@ -2285,12 +2283,11 @@ def signup():
     if not university:
         return jsonify({"error": "Selected university was not found"}), 400
 
-    if program_id is not None:
-        if not isinstance(program_id, int):
-            return jsonify({"error": "Invalid program"}), 400
-        program = Program.query.filter_by(id=program_id, university_id=university_id, is_active=True).first()
-        if not program:
-            return jsonify({"error": "Selected course does not belong to the selected university"}), 400
+    if not program_id or not isinstance(program_id, int):
+        return jsonify({"error": "Course is required"}), 400
+    program = Program.query.filter_by(id=program_id, university_id=university_id, is_active=True).first()
+    if not program:
+        return jsonify({"error": "Selected course does not belong to the selected university"}), 400
 
     if requested_program_name is not None:
         if not isinstance(requested_program_name, str):
