@@ -1180,6 +1180,25 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class NotificationPreference(db.Model):
+    """
+    Per-user, per-category notification opt-out (Settings > Notifications).
+    A missing row means "everything on" (see get_or_create_notification_prefs) -
+    rows are created lazily on first read/write, not at signup. Only
+    categories with an actual notification-producing code path are
+    represented here - "push" (browser subscription on/off) is handled
+    entirely by PushSubscription and isn't duplicated here.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), unique=True, nullable=False)
+    community_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    # gates: new_follower, group_like, group_vote, group_comment, group_promoted
+    messages_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    # gates: chat DM push (see send_message())
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Announcement(db.Model):
     """
     A record of one admin broadcast (Communications tab). Sending an
@@ -5792,7 +5811,7 @@ def create_group_post_comment(group_id, post_id):
     comment = GroupPostComment(group_post_id=post_id, user_id=user_id, body=body)
     db.session.add(comment)
 
-    if post.user_id != user_id:
+    if post.user_id != user_id and should_notify(post.user_id, "community"):
         commenter = db.session.get(User, user_id)
         group = db.session.get(Group, group_id)
         db.session.add(Notification(
@@ -5884,7 +5903,7 @@ def like_group_post(group_id, post_id):
     existing = GroupPostLike.query.filter_by(group_post_id=post_id, user_id=user_id).first()
     if not existing:
         db.session.add(GroupPostLike(group_post_id=post_id, user_id=user_id))
-        if post.user_id != user_id:
+        if post.user_id != user_id and should_notify(post.user_id, "community"):
             liker = db.session.get(User, user_id)
             db.session.add(Notification(
                 user_id=post.user_id,
@@ -5942,7 +5961,7 @@ def vote_group_post(group_id, post_id):
     existing = GroupQuestionVote.query.filter_by(group_post_id=post_id, user_id=user_id).first()
     if not existing:
         db.session.add(GroupQuestionVote(group_post_id=post_id, user_id=user_id))
-        if post.user_id != user_id:
+        if post.user_id != user_id and should_notify(post.user_id, "community"):
             voter = db.session.get(User, user_id)
             db.session.add(Notification(
                 user_id=post.user_id,
@@ -6048,7 +6067,7 @@ def update_group_member_role(group_id, target_user_id):
     was_admin = target.role == "admin"
     target.role = role
 
-    if role == "admin" and not was_admin:
+    if role == "admin" and not was_admin and should_notify(target_user_id, "community"):
         group = db.session.get(Group, group_id)
         db.session.add(Notification(
             user_id=target_user_id,
@@ -6335,19 +6354,20 @@ def follow_user(target_user_id):
     if not existing:
         db.session.add(Follow(follower_id=user_id, followed_id=target_user_id))
         follower = db.session.get(User, user_id)
-        db.session.add(Notification(
-            user_id=target_user_id,
-            type="new_follower",
-            title="New follower",
-            body=f"{_display_name(follower)} started following you",
-            related_type="user",
-            related_id=user_id,
-        ))
-        send_push_notification(
-            target_user_id,
-            "New follower",
-            f"{_display_name(follower)} started following you",
-        )
+        if should_notify(target_user_id, "community"):
+            db.session.add(Notification(
+                user_id=target_user_id,
+                type="new_follower",
+                title="New follower",
+                body=f"{_display_name(follower)} started following you",
+                related_type="user",
+                related_id=user_id,
+            ))
+            send_push_notification(
+                target_user_id,
+                "New follower",
+                f"{_display_name(follower)} started following you",
+            )
         db.session.commit()
 
     return jsonify({
@@ -6611,6 +6631,67 @@ def delete_notification(notification_id):
     db.session.commit()
 
     return jsonify({"message": "Notification deleted"})
+
+
+def get_or_create_notification_prefs(user_id):
+    prefs = NotificationPreference.query.filter_by(user_id=user_id).first()
+    if not prefs:
+        prefs = NotificationPreference(user_id=user_id)
+        db.session.add(prefs)
+        db.session.flush()
+    return prefs
+
+
+def should_notify(user_id, category):
+    """category: 'community' or 'messages'. Anything else (moderation
+    warnings, announcements) is not gated here and always sends."""
+    prefs = NotificationPreference.query.filter_by(user_id=user_id).first()
+    if not prefs:
+        return True
+    return getattr(prefs, f"{category}_enabled", True)
+
+
+@app.route("/notification-preferences")
+def get_notification_preferences():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    prefs = get_or_create_notification_prefs(user_id)
+    db.session.commit()
+
+    return jsonify({
+        "community_enabled": prefs.community_enabled,
+        "messages_enabled": prefs.messages_enabled,
+    })
+
+
+@app.route("/notification-preferences", methods=["PATCH"])
+@require_csrf
+def update_notification_preferences():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    prefs = get_or_create_notification_prefs(user_id)
+
+    if "community_enabled" in data:
+        if not isinstance(data["community_enabled"], bool):
+            return jsonify({"error": "community_enabled must be a boolean"}), 400
+        prefs.community_enabled = data["community_enabled"]
+
+    if "messages_enabled" in data:
+        if not isinstance(data["messages_enabled"], bool):
+            return jsonify({"error": "messages_enabled must be a boolean"}), 400
+        prefs.messages_enabled = data["messages_enabled"]
+
+    db.session.commit()
+
+    return jsonify({
+        "community_enabled": prefs.community_enabled,
+        "messages_enabled": prefs.messages_enabled,
+    })
 
 
 @app.route("/push/vapid-public-key")
@@ -8456,6 +8537,8 @@ def send_message(conversation_id):
     ).all()
     for participant in other_participants:
         if participant.last_read_at and participant.last_read_at >= recently_active_cutoff:
+            continue
+        if not should_notify(participant.user_id, "messages"):
             continue
         send_push_notification(participant.user_id, sender_name, push_preview)
 
