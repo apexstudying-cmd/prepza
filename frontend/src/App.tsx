@@ -11941,7 +11941,35 @@ function OrgTeamTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner: boo
 
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('splash')
+  // Real navigation history instead of a flat useState<Screen>. setScreen(x)
+  // still means "go to x" everywhere - none of the ~100 existing call sites
+  // need to change, since it now pushes onto a stack instead of replacing a
+  // single value. Every push also does a browser history.pushState, and a
+  // popstate listener (fired by Android's hardware back button, browser
+  // back, or a PWA back gesture) pops our stack to match. That's what stops
+  // Android's back button from falling through and closing the app - there's
+  // now always a real history entry for it to consume. Swapping the many
+  // hardcoded "back" buttons (onClick={() => setScreen('specific-screen')})
+  // over to a real goBack() so they return to the ACTUAL previous screen is
+  // a separate, screen-by-screen pass - not done here.
+  const [screenStack, setScreenStack] = useState<Screen[]>(['splash'])
+  const screen = screenStack[screenStack.length - 1]
+
+  const setScreen = (s: Screen) => {
+    if (s === screen) return
+    setScreenStack(stack => [...stack, s])
+    window.history.pushState({ prepzaNav: true }, '')
+  }
+
+  useEffect(() => {
+    window.history.replaceState({ prepzaNav: true }, '')
+    const onPopState = () => {
+      setScreenStack(stack => (stack.length > 1 ? stack.slice(0, -1) : stack))
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
   const [adminMode, setAdminMode] = useState(false)
   const [orgPortalMode, setOrgPortalMode] = useState(false)
   const [oauthError, setOauthError] = useState('')
