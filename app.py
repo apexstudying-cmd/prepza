@@ -6763,6 +6763,73 @@ def push_unsubscribe():
 
     return jsonify({"message": "Unsubscribed"})
 
+
+# ---------- E2EE key management (Chats only - Study Groups/Forum unaffected) ----------
+
+USER_KEY_PUBLIC_KEY_MAX_LEN = 2000
+# Generous ceiling for a base64url-exported raw EC public key (P-256 raw
+# point is ~91 chars base64) - this just guards against garbage/abuse,
+# not a tight format check, since the server never inspects key contents.
+
+
+@app.route("/keys/register", methods=["POST"])
+@require_csrf
+def register_user_key():
+    """
+    Upserts the logged-in user's Chats identity public key. Called
+    once by the client after it generates (or loads from IndexedDB) an
+    identity keypair - see frontend/src/crypto/keys.ts. Idempotent:
+    re-registering the same or a rotated public key just overwrites
+    the existing row for this user (UserKey.user_id is unique).
+
+    The server stores only the PUBLIC key here - it has no way to
+    decrypt any conversation this key is later used to wrap, and never
+    receives the private key in this endpoint.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    public_key = (data.get("public_key") or "").strip()
+    if not public_key:
+        return jsonify({"error": "public_key is required"}), 400
+    if len(public_key) > USER_KEY_PUBLIC_KEY_MAX_LEN:
+        return jsonify({"error": f"public_key must be {USER_KEY_PUBLIC_KEY_MAX_LEN} characters or fewer"}), 400
+
+    existing = UserKey.query.filter_by(user_id=user_id).first()
+    if existing:
+        existing.public_key = public_key
+    else:
+        db.session.add(UserKey(user_id=user_id, public_key=public_key))
+    db.session.commit()
+
+    return jsonify({"message": "Key registered"}), 200
+
+
+@app.route("/keys/<int:user_id>")
+def get_user_public_key(user_id):
+    """
+    Returns another user's Chats identity public key, so the caller's
+    client can wrap a new conversation key to them (starts being used
+    in the 1:1/group chat encryption chunk - harmless and login-gated
+    like every other content route in this file, so exposing it now
+    doesn't require waiting for that chunk).
+    """
+    requester_id = session.get("user_id")
+    if not requester_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    key = UserKey.query.filter_by(user_id=user_id).first()
+    if not key:
+        return jsonify({"error": "This user has not set up secure chat yet"}), 404
+
+    return jsonify({"user_id": user_id, "public_key": key.public_key})
+
+
 # ---------- Content routes (student-facing) ----------
 
 @app.route("/units")
@@ -12317,6 +12384,28 @@ class PushSubscription(db.Model):
     p256dh_key = db.Column(db.String(255), nullable=False)
     auth_key = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class UserKey(db.Model):
+    """
+    End-to-end encryption key material for a user's Chats identity
+    (Chats/Conversation/Message only - Study Groups and Forum are not
+    encrypted and never touch this table). public_key is shared with
+    other participants so they can wrap a per-conversation symmetric
+    key to this user (see ConversationKey, added in a later E2EE
+    chunk). encrypted_private_key + kdf_salt are reserved for the
+    passphrase-wrapped multi-device backup blob (Chunk 2) - both stay
+    NULL until that chunk lands; this chunk only registers the public
+    key. The server never has access to the passphrase or the raw
+    private key, only this ciphertext blob once Chunk 2 adds it.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), unique=True, nullable=False)
+    public_key = db.Column(db.Text, nullable=False)
+    encrypted_private_key = db.Column(db.Text, nullable=True)
+    kdf_salt = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 def send_push_notification(user_id, title, body):
