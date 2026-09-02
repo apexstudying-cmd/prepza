@@ -8045,8 +8045,37 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
 }
 
 function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  useEffect(() => { const t = setTimeout(() => setScreen('home'), 5000); return () => clearTimeout(t) }, [])
-  const ref = `PZA-${Math.floor(100000 + Math.random() * 900000)}`
+  const [payment, setPayment] = useState<PaymentHistoryItem | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+
+  useEffect(() => {
+    api<{ payments: PaymentHistoryItem[] }>('/payment-history')
+      .then(res => setPayment(res.payments[0] || null))
+      .catch(() => setLoadError('Could not load your payment details.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => setScreen('home'), 6000)
+    return () => clearTimeout(t)
+  }, [])
+
+  const itemLabel = payment
+    ? (payment.payment_type === 'subscription'
+        ? `${(payment.plan || 'Subscription').charAt(0).toUpperCase()}${(payment.plan || 'Subscription').slice(1)} Plan`
+        : (payment.content_title || 'Content purchase'))
+    : null
+
+  const detailRows: [string, string][] = payment
+    ? [
+        ['Item', itemLabel || '—'],
+        ['Amount', `KES ${payment.amount.toLocaleString()}`],
+        ['Status', payment.status.charAt(0).toUpperCase() + payment.status.slice(1)],
+        ...(payment.reference ? ([['Reference', payment.reference]] as [string, string][]) : []),
+      ]
+    : []
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: '0 28px', textAlign: 'center', gap: 20 }}>
       <div style={{ width: 80, height: 80, background: 'rgba(76,201,123,0.12)', borderRadius: '50%', border: '3px solid #4CC97B', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeSlideUp 0.5s ease both' }}>
@@ -8054,16 +8083,26 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
       </div>
       <div>
         <div style={{ fontWeight: 800, fontSize: 22, color: N.navy, marginBottom: 8 }}>Payment Successful! 🎉</div>
-        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7 }}>Welcome to Prepza Premium. Your Semester plan is now active — enjoy unlimited AI sessions and all learning tools.</div>
+        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7 }}>
+          {itemLabel
+            ? `Your ${itemLabel} payment has gone through${payment?.payment_type === 'subscription' ? ' — enjoy unlimited AI sessions and all learning tools.' : '.'}`
+            : 'Your payment has gone through. Welcome to Prepza Premium.'}
+        </div>
       </div>
-      <div style={{ background: '#fff', borderRadius: 16, padding: '16px 20px', width: '100%', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {[['Plan','Semester'],['Amount','KES 599'],['Valid Until','Jan 15, 2026'],['Reference',ref]].map(([k,v]) => (
-          <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 12, color: '#9CA3AF' }}>{k}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: N.navy, fontFamily: k === 'Reference' ? 'monospace' : 'Plus Jakarta Sans' }}>{v}</span>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <div style={{ fontSize: 12, color: '#9CA3AF' }}>Loading your payment details…</div>
+      ) : loadError ? (
+        <div style={{ fontSize: 12, color: '#9CA3AF' }}>{loadError} You can check <span onClick={() => setScreen('payment-history')} style={{ color: N.gold, fontWeight: 700, cursor: 'pointer' }}>Payment History</span> for details.</div>
+      ) : payment && (
+        <div style={{ background: '#fff', borderRadius: 16, padding: '16px 20px', width: '100%', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {detailRows.map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, color: '#9CA3AF' }}>{k}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: N.navy, fontFamily: k === 'Reference' ? 'monospace' : 'Plus Jakarta Sans' }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <button onClick={() => setScreen('home')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)' }}>
         Start Studying Premium
       </button>
@@ -8073,23 +8112,41 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
 }
 
 function PaymentFailureScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const [payment, setPayment] = useState<PaymentHistoryItem | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api<{ payments: PaymentHistoryItem[] }>('/payment-history')
+      .then(res => setPayment(res.payments[0] || null))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const isPending = payment?.status === 'pending'
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: '0 28px', textAlign: 'center', gap: 20 }}>
-      <div style={{ width: 80, height: 80, background: 'rgba(201,76,76,0.1)', borderRadius: '50%', border: '3px solid #C94C4C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: '#C94C4C' }}>{Ic.close('w-9 h-9')}</div>
+      <div style={{ width: 80, height: 80, background: isPending ? 'rgba(217,119,6,0.1)' : 'rgba(201,76,76,0.1)', borderRadius: '50%', border: `3px solid ${isPending ? '#D97706' : '#C94C4C'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {isPending ? <span style={{ fontSize: 32 }}>⏳</span> : <div style={{ color: '#C94C4C' }}>{Ic.close('w-9 h-9')}</div>}
       </div>
       <div>
-        <div style={{ fontWeight: 800, fontSize: 22, color: N.navy, marginBottom: 8 }}>Payment Failed</div>
-        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7 }}>Your M-Pesa request was cancelled or timed out. Please try again or switch to card payment.</div>
+        <div style={{ fontWeight: 800, fontSize: 22, color: N.navy, marginBottom: 8 }}>{isPending ? 'Payment Still Processing' : 'Payment Failed'}</div>
+        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7 }}>
+          {isPending
+            ? "We haven't received final confirmation yet. This can take a minute — check Payment History shortly, or try again if it doesn't update."
+            : 'Your payment was cancelled or could not be completed. Please try again or use a different payment method.'}
+        </div>
       </div>
-      <div style={{ background: '#fff', borderRadius: 16, padding: '14px 18px', width: '100%', border: '1px solid rgba(201,76,76,0.2)', textAlign: 'left' }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#C94C4C', marginBottom: 8 }}>Common reasons:</div>
-        {['Insufficient M-Pesa balance','Incorrect PIN entered','Payment request timed out','Phone off or unavailable'].map((r, i) => (
-          <div key={i} style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>• {r}</div>
-        ))}
-      </div>
-      <button onClick={() => setScreen('payment')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Try Again</button>
-      <button onClick={() => setScreen('subscription')} style={{ width: '100%', background: 'transparent', color: '#6B7280', fontWeight: 600, fontSize: 13, border: '1.5px solid rgba(0,0,0,0.1)', borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Plans</button>
+      {!loading && !isPending && (
+        <div style={{ background: '#fff', borderRadius: 16, padding: '14px 18px', width: '100%', border: '1px solid rgba(201,76,76,0.2)', textAlign: 'left' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#C94C4C', marginBottom: 8 }}>Common reasons:</div>
+          {['Insufficient M-Pesa balance or card funds', 'Incorrect PIN or OTP entered', 'Payment request timed out', 'Card declined by your bank'].map((r, i) => (
+            <div key={i} style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>• {r}</div>
+          ))}
+        </div>
+      )}
+      <button onClick={() => setScreen('subscription')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Try Again</button>
+      <button onClick={() => setScreen('payment-history')} style={{ width: '100%', background: 'transparent', color: '#6B7280', fontWeight: 600, fontSize: 13, border: '1.5px solid rgba(0,0,0,0.1)', borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Check Payment History</button>
     </div>
   )
 }
@@ -8102,7 +8159,7 @@ type PaymentHistoryItem = {
   amount: number
   status: string
   provider: string | null
-  merchant_reference: string | null
+  reference: string | null
   created_at: string | null
 }
 
@@ -8151,7 +8208,7 @@ function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void })
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{label}</div>
                 <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}{p.provider ? ` · ${p.provider.charAt(0).toUpperCase()}${p.provider.slice(1)}` : ''}</div>
-                {p.merchant_reference && <div style={{ fontSize: 10, color: '#D1D5DB', fontFamily: 'monospace', marginTop: 2 }}>{p.merchant_reference}</div>}
+                {p.reference && <div style={{ fontSize: 10, color: '#D1D5DB', fontFamily: 'monospace', marginTop: 2 }}>{p.reference}</div>}
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 4 }}>KES {p.amount.toLocaleString()}</div>
@@ -8209,6 +8266,21 @@ type AdminLibraryReportItem = {
   status: string
   admin_notes: string | null
   created_at: string | null
+}
+
+type AdminSystemCapacity = {
+  tier: string
+  available_tiers: string[]
+  db_size_bytes: number
+  db_size_limit_bytes: number
+  storage_used_bytes: number
+  storage_limit_bytes: number
+  active_connections: number
+  connection_limit: number
+  ai_spend_mtd_usd: number
+  ai_spend_projected_month_end_usd: number
+  days_elapsed_this_month: number
+  days_in_month: number
 }
 
 type AdminUniversityEngagement = {
@@ -11871,6 +11943,14 @@ export default function App() {
     if (path === '/verify-email') {
       setScreen('verify-confirm')
       return
+    }
+
+    const paymentStatus = params.get('payment_status')
+    if (paymentStatus) {
+      setScreen(paymentStatus === 'success' ? 'payment-success' : 'payment-failure')
+      const cleanUrl = new URL(window.location.href)
+      cleanUrl.searchParams.delete('payment_status')
+      window.history.replaceState({}, '', cleanUrl.toString())
     }
 
     const wantsCompleteProfile = params.get('complete_profile') === '1'
