@@ -4322,6 +4322,12 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       .catch(() => {})
   }, [])
 
+  useEffect(() => {
+    api<{ community_enabled: boolean; messages_enabled: boolean }>('/notification-preferences')
+      .then(p => setNotifs(n => ({ ...n, community: p.community_enabled, messages: p.messages_enabled })))
+      .catch(() => {})
+  }, [])
+
   const handleDeleteAccount = async () => {
     setDeleting(true)
     setDeleteError('')
@@ -4374,7 +4380,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </Section>
 
         <Section title="Notifications">
-          {([['push','Push Notifications'],['messages','Messages'],['opportunities','Opportunities'],['community','Community'],['reminders','Study Reminders']] as [keyof typeof notifs, string][]).map(([k, l]) => (
+          {([['push','Push Notifications'],['messages','Messages'],['community','Community']] as [keyof typeof notifs, string][]).map(([k, l]) => (
             <Row key={k} label={l} right={<div onClick={e => {
               e.stopPropagation()
               if (k === 'push') {
@@ -4386,10 +4392,15 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                   unsubscribeFromPush(csrfToken).catch(() => {})
                 }
               } else {
-                setNotifs(n => ({ ...n, [k]: !n[k] }))
+                const next = !notifs[k]
+                setNotifs(n => ({ ...n, [k]: next }))
+                api('/notification-preferences', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ [`${k}_enabled`]: next }) })
+                  .catch(() => setNotifs(n => ({ ...n, [k]: !next })))
               }
             }}>{Ic.toggle(notifs[k])}</div>} />
           ))}
+          <Row label="Opportunities" sub="Coming soon" right={<Pill text="Soon" color="#9CA3AF" />} />
+          <Row label="Study Reminders" sub="Coming soon" right={<Pill text="Soon" color="#9CA3AF" />} />
         </Section>
 
         <Section title="Privacy">
