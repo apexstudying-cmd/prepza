@@ -9794,6 +9794,105 @@ def admin_analytics_universities():
     return jsonify({"universities": rows})
 
 
+# Plan tiers a bootstrapped single-operator app can pick between on the
+# System tab - approximate published Supabase limits per tier. Not
+# fetched from a Supabase API (that would need a separate integration);
+# the admin just clicks which tier they're currently on, and it's
+# persisted in SystemSetting like other admin-editable values (see
+# admin_get_settings / admin_update_settings above for the same
+# pattern). Add a new key here if Supabase adds/changes a tier.
+SUPABASE_TIER_LIMITS = {
+    "free": {"db_size_bytes": 500 * 1024 * 1024, "storage_bytes": 1 * 1024 * 1024 * 1024, "connections": 60},
+    "pro": {"db_size_bytes": 8 * 1024 * 1024 * 1024, "storage_bytes": 100 * 1024 * 1024 * 1024, "connections": 200},
+    "team": {"db_size_bytes": 8 * 1024 * 1024 * 1024, "storage_bytes": 200 * 1024 * 1024 * 1024, "connections": 400},
+}
+SUPABASE_DEFAULT_TIER = "free"
+
+
+def _get_supabase_tier():
+    setting = SystemSetting.query.filter_by(key="supabase_tier").first()
+    tier = setting.value if setting and setting.value in SUPABASE_TIER_LIMITS else SUPABASE_DEFAULT_TIER
+    return tier
+
+
+@app.route("/admin/system/capacity")
+@require_admin
+def admin_system_capacity():
+    """
+    Capacity/budget tracking for a bootstrapped, single-operator app -
+    answers "am I about to outgrow my plan" and "what's my AI burn
+    rate," not "is SendGrid up right now" (that would need a real
+    health-check system with historical uptime storage, out of scope
+    here). Plan limits come from SUPABASE_TIER_LIMITS keyed by whichever
+    tier is currently selected in SystemSetting - see
+    /admin/system/capacity/tier to change it.
+    """
+    tier = _get_supabase_tier()
+    limits = SUPABASE_TIER_LIMITS[tier]
+
+    db_size_bytes = db.session.execute(
+        db.text("SELECT pg_database_size(current_database())")
+    ).scalar()
+
+    storage_used_bytes = db.session.query(
+        func.coalesce(func.sum(DocumentContent.file_size_bytes), 0)
+    ).scalar()
+
+    active_connections = db.session.execute(
+        db.text("SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()")
+    ).scalar()
+
+    now = datetime.utcnow()
+    month_start = datetime(now.year, now.month, 1)
+    ai_spend_mtd = db.session.query(
+        func.coalesce(func.sum(AiUsageLog.cost_usd), 0)
+    ).filter(AiUsageLog.created_at >= month_start).scalar()
+
+    days_elapsed = max((now - month_start).days + 1, 1)
+    if now.month == 12:
+        next_month_start = datetime(now.year + 1, 1, 1)
+    else:
+        next_month_start = datetime(now.year, now.month + 1, 1)
+    days_in_month = (next_month_start - month_start).days
+    ai_spend_projected = float(ai_spend_mtd) / days_elapsed * days_in_month
+
+    return jsonify({
+        "tier": tier,
+        "available_tiers": list(SUPABASE_TIER_LIMITS.keys()),
+        "db_size_bytes": int(db_size_bytes),
+        "db_size_limit_bytes": limits["db_size_bytes"],
+        "storage_used_bytes": int(storage_used_bytes),
+        "storage_limit_bytes": limits["storage_bytes"],
+        "active_connections": int(active_connections),
+        "connection_limit": limits["connections"],
+        "ai_spend_mtd_usd": float(ai_spend_mtd),
+        "ai_spend_projected_month_end_usd": round(ai_spend_projected, 2),
+        "days_elapsed_this_month": days_elapsed,
+        "days_in_month": days_in_month,
+    })
+
+
+@app.route("/admin/system/capacity/tier", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_set_supabase_tier():
+    """Switches which Supabase plan tier the capacity bars are measured against."""
+    data = request.get_json(silent=True) or {}
+    tier = data.get("tier")
+    if tier not in SUPABASE_TIER_LIMITS:
+        return jsonify({"error": "tier must be one of: " + ", ".join(SUPABASE_TIER_LIMITS.keys())}), 400
+
+    setting = SystemSetting.query.filter_by(key="supabase_tier").first()
+    if not setting:
+        setting = SystemSetting(key="supabase_tier", value=tier)
+        db.session.add(setting)
+    else:
+        setting.value = tier
+    db.session.commit()
+
+    return jsonify({"tier": tier})
+
+
 @app.route("/admin/payments/<int:payment_id>/refund", methods=["POST"])
 @require_csrf
 @require_admin

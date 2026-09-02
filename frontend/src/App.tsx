@@ -8810,6 +8810,64 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     api<AdminUserRow[]>('/admin/users').then(res => setDashRecentUsers(res.slice(0, 5))).catch(() => {})
   }, [section])
 
+  const [systemCapacity, setSystemCapacity] = useState<AdminSystemCapacity | null>(null)
+  const [systemCapacityLoading, setSystemCapacityLoading] = useState(true)
+  const [systemCapacityError, setSystemCapacityError] = useState('')
+  const [tierSwitching, setTierSwitching] = useState(false)
+  const [tierSwitchError, setTierSwitchError] = useState('')
+  const [adminAccounts, setAdminAccounts] = useState<AdminUserRow[]>([])
+  const [adminAccountsLoading, setAdminAccountsLoading] = useState(true)
+  const [adminAccountsError, setAdminAccountsError] = useState('')
+  const [adminAccountActionError, setAdminAccountActionError] = useState('')
+
+  const loadSystemCapacity = () => {
+    setSystemCapacityLoading(true)
+    setSystemCapacityError('')
+    api<AdminSystemCapacity>('/admin/system/capacity')
+      .then(setSystemCapacity)
+      .catch(e => setSystemCapacityError(e instanceof ApiError ? e.message : 'Could not load system capacity.'))
+      .finally(() => setSystemCapacityLoading(false))
+  }
+
+  const switchSupabaseTier = (tier: string) => {
+    setTierSwitching(true)
+    setTierSwitchError('')
+    api('/admin/system/capacity/tier', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ tier }),
+    })
+      .then(() => loadSystemCapacity())
+      .catch(e => setTierSwitchError(e instanceof ApiError ? e.message : 'Could not switch tier.'))
+      .finally(() => setTierSwitching(false))
+  }
+
+  const loadAdminAccounts = () => {
+    setAdminAccountsLoading(true)
+    setAdminAccountsError('')
+    api<AdminUserRow[]>('/admin/users')
+      .then(res => setAdminAccounts(res.filter(u => u.is_admin)))
+      .catch(e => setAdminAccountsError(e instanceof ApiError ? e.message : 'Could not load admin accounts.'))
+      .finally(() => setAdminAccountsLoading(false))
+  }
+
+  useEffect(() => {
+    if (section !== 'system') return
+    loadSystemCapacity()
+    loadAdminAccounts()
+  }, [section])
+
+  const setAdminAccountRole = (userId: number, isAdmin: boolean) => {
+    setAdminAccountActionError('')
+    api(`/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ is_admin: isAdmin }),
+    })
+      .then(() => loadAdminAccounts())
+      .catch(e => setAdminAccountActionError(e instanceof ApiError ? e.message : 'Could not update this admin account.'))
+  }
+
   const ActivityDot = ({ color }: { color: string }) => <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, marginTop: 3 }} />
 
   if (section === 'dashboard') {
@@ -9548,64 +9606,128 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     )
   }
 
-  if (section === 'system') return (
+  if (section === 'system') {
+    const fmtBytesSys = (n: number) => {
+      if (n >= 1e9) return `${(n / 1e9).toFixed(2)} GB`
+      if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`
+      if (n >= 1e3) return `${(n / 1e3).toFixed(1)} KB`
+      return `${n} B`
+    }
+    const barColor = (pct: number) => pct >= 90 ? '#DC2626' : pct >= 70 ? '#D97706' : '#16A34A'
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-        {[
-          { label: 'API Gateway', status: 'Operational', uptime: '99.98%', color: 'green', ping: '12ms' },
-          { label: 'AI Service (Claude)', status: 'Operational', uptime: '99.91%', color: 'green', ping: '1.4s avg' },
-          { label: 'M-Pesa API', status: 'Operational', uptime: '99.85%', color: 'green', ping: '340ms' },
-          { label: 'Email (SendGrid)', status: 'Degraded', uptime: '97.20%', color: 'amber', ping: '—' },
-          { label: 'File Storage (S3)', status: 'Operational', uptime: '100%', color: 'green', ping: '28ms' },
-          { label: 'Database (Postgres)', status: 'Operational', uptime: '99.99%', color: 'green', ping: '4ms' },
-          { label: 'Auth Service', status: 'Operational', uptime: '99.97%', color: 'green', ping: '18ms' },
-          { label: 'Push Notifications', status: 'Operational', uptime: '99.76%', color: 'green', ping: '89ms' },
-        ].map(s => (
-          <div key={s.label} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: N.navy }}>{s.label}</span>
-              <AdminBadge text={s.status} color={s.color} />
-            </div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <div><div style={{ fontSize: 10, color: '#9CA3AF' }}>Uptime</div><div style={{ fontSize: 14, fontWeight: 700, color: '#16A34A' }}>{s.uptime}</div></div>
-              <div><div style={{ fontSize: 10, color: '#9CA3AF' }}>Response</div><div style={{ fontSize: 14, fontWeight: 700, color: N.navy }}>{s.ping}</div></div>
-            </div>
-          </div>
-        ))}
+      <div style={{ fontSize: 12, color: '#9CA3AF', lineHeight: 1.5 }}>
+        Tracks whether the current infrastructure can handle real usage, and what it's costing — not third-party uptime (that would need a separate monitoring integration, not built yet).
       </div>
-      <AdminCard title="System Resources">
-        <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {[
-            { label: 'Storage', used: 342, total: 1024, unit: 'GB', color: N.gold },
-            { label: 'Database', used: 18, total: 100, unit: 'GB', color: '#7C3AED' },
-            { label: 'API Credits (MTD)', used: 84, total: 200, unit: 'M tokens', color: '#4C7BC9' },
-            { label: 'CPU (average)', used: 34, total: 100, unit: '%', color: '#4CC97B' },
-          ].map(r => (
-            <div key={r.label}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{r.label}</span>
-                <span style={{ fontSize: 12, color: '#9CA3AF' }}>{r.used} / {r.total} {r.unit}</span>
+
+      {systemCapacityLoading ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading capacity data…</div>
+      ) : systemCapacityError ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{systemCapacityError}</div>
+      ) : systemCapacity && (() => {
+        const dbPct = (systemCapacity.db_size_bytes / systemCapacity.db_size_limit_bytes) * 100
+        const storagePct = (systemCapacity.storage_used_bytes / systemCapacity.storage_limit_bytes) * 100
+        const connPct = (systemCapacity.active_connections / systemCapacity.connection_limit) * 100
+        return (
+          <>
+            <AdminCard title={`Supabase ${systemCapacity.tier.charAt(0).toUpperCase()}${systemCapacity.tier.slice(1)} Tier — Capacity`}>
+              <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600 }}>Plan:</span>
+                  {systemCapacity.available_tiers.map(t => (
+                    <button
+                      key={t}
+                      onClick={() => switchSupabaseTier(t)}
+                      disabled={tierSwitching || t === systemCapacity.tier}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 8,
+                        background: t === systemCapacity.tier ? N.navy : '#F3F4F6',
+                        color: t === systemCapacity.tier ? '#fff' : '#6B7280',
+                        border: 'none',
+                        cursor: (tierSwitching || t === systemCapacity.tier) ? 'default' : 'pointer',
+                        opacity: tierSwitching && t !== systemCapacity.tier ? 0.5 : 1,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        fontFamily: 'Plus Jakarta Sans',
+                        textTransform: 'capitalize',
+                      }}
+                    >{t}</button>
+                  ))}
+                  {tierSwitching && <span style={{ fontSize: 11, color: '#9CA3AF' }}>Switching…</span>}
+                </div>
+                {tierSwitchError && <div style={{ color: '#DC2626', fontSize: 12 }}>{tierSwitchError}</div>}
+                {[
+                  { label: 'Database Size', used: fmtBytesSys(systemCapacity.db_size_bytes), total: fmtBytesSys(systemCapacity.db_size_limit_bytes), pct: dbPct },
+                  { label: 'File Storage', used: fmtBytesSys(systemCapacity.storage_used_bytes), total: fmtBytesSys(systemCapacity.storage_limit_bytes), pct: storagePct },
+                  { label: 'DB Connections (live)', used: systemCapacity.active_connections.toString(), total: systemCapacity.connection_limit.toString(), pct: connPct },
+                ].map(r => (
+                  <div key={r.label}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{r.label}</span>
+                      <span style={{ fontSize: 12, color: r.pct >= 90 ? '#DC2626' : '#9CA3AF', fontWeight: r.pct >= 90 ? 700 : 400 }}>{r.used} / {r.total} ({Math.round(r.pct)}%)</span>
+                    </div>
+                    <div style={{ background: '#F3F4F6', borderRadius: 99, height: 8 }}>
+                      <div style={{ background: barColor(r.pct), borderRadius: 99, height: 8, width: `${Math.min(r.pct, 100)}%`, transition: 'width 0.5s' }} />
+                    </div>
+                  </div>
+                ))}
+                {(dbPct >= 80 || storagePct >= 80) && (
+                  <div style={{ background: '#FEF3C7', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#92400E', fontWeight: 600 }}>
+                    ⚠️ You're approaching the Supabase free tier limit — worth planning the Pro tier upgrade (~$25/mo) soon.
+                  </div>
+                )}
               </div>
-              <div style={{ background: '#F3F4F6', borderRadius: 99, height: 8 }}>
-                <div style={{ background: r.color, borderRadius: 99, height: 8, width: `${(r.used / r.total) * 100}%`, transition: 'width 0.5s' }} />
+            </AdminCard>
+
+            <AdminCard title="AI (Anthropic) Spend">
+              <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>Spent this month ({systemCapacity.days_elapsed_this_month}/{systemCapacity.days_in_month} days)</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: N.navy }}>${systemCapacity.ai_spend_mtd_usd.toFixed(2)}</div>
+                  </div>
+                  <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>Projected month-end (at current pace)</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: N.gold }}>${systemCapacity.ai_spend_projected_month_end_usd.toFixed(2)}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: '#9CA3AF' }}>No fixed budget cap set — this is a raw spend tracker so you can decide what to budget as usage grows.</div>
               </div>
-            </div>
-          ))}
-        </div>
-      </AdminCard>
+            </AdminCard>
+          </>
+        )
+      })()}
+
+      {adminAccountActionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{adminAccountActionError}</div>}
       <AdminCard title="Admin Accounts">
-        <AdminTable
-          cols={['Name', 'Email', 'Role', 'Last Login', 'Status']}
-          rows={[
-            ['Prepza Admin', 'admin@prepza.co', 'Super Admin', 'Aug 10, 2025 09:14', <AdminBadge text="Active" color="green" />],
-            ['Content Lead', 'content@prepza.co', 'Content Manager', 'Aug 9, 2025 14:22', <AdminBadge text="Active" color="green" />],
-            ['Support Lead', 'support@prepza.co', 'Support', 'Aug 8, 2025 11:05', <AdminBadge text="Active" color="green" />],
-          ]}
-          actions={() => <button style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Edit</button>}
-        />
+        {adminAccountsLoading ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading admin accounts…</div>
+        ) : adminAccountsError ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{adminAccountsError}</div>
+        ) : adminAccounts.length === 0 ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No admin accounts found.</div>
+        ) : (
+          <AdminTable
+            cols={['Name', 'Email', 'Joined', 'Status']}
+            rows={adminAccounts.map(a => [
+              a.display_name || '(no name)',
+              a.email,
+              a.created_at ? new Date(a.created_at).toLocaleDateString() : '—',
+              <AdminBadge text={a.is_suspended ? 'Suspended' : 'Active'} color={a.is_suspended ? 'red' : 'green'} />,
+            ])}
+            actions={i => (
+              <button
+                onClick={() => setAdminAccountRole(adminAccounts[i].id, false)}
+                style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}
+              >Revoke Admin</button>
+            )}
+          />
+        )}
       </AdminCard>
     </div>
-  )
+    )
+  }
 
   if (section === 'ambassadors') return <AdminAmbassadorsPanel />
 
