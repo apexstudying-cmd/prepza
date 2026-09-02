@@ -241,6 +241,38 @@ const podcasts = [
 // ─── Shared atoms ─────────────────────────────────────────────────────────────
 const N = { navy: '#0B1437', navy2: '#132046', navy3: '#1A2A5E', gold: '#C9A84C', goldL: '#E8C97E', bg: '#F8F9FC' }
 
+// ─── Theme (light/dark) ─────────────────────────────────────────────────────
+// N above stays constant in both modes - it's brand color (navy header/hero
+// backgrounds, gold button accents) and is meant to look the same either
+// way. These tokens are for surfaces/text that actually need to invert.
+// Rollout is screen-by-screen: only components that call useTheme() react
+// to a mode change - everything else still reads N/raw hex directly until
+// it's migrated in a later pass.
+type ThemeTokens = { pageBg: string; card: string; text: string; textMuted: string; border: string }
+const LIGHT_THEME: ThemeTokens = { pageBg: '#F8F9FC', card: '#FFFFFF', text: '#0B1437', textMuted: '#9CA3AF', border: 'rgba(0,0,0,0.05)' }
+const DARK_THEME: ThemeTokens = { pageBg: '#0A0E1A', card: '#132046', text: '#F5F6FA', textMuted: '#9AA3B8', border: 'rgba(255,255,255,0.08)' }
+type ThemeMode = 'light' | 'dark'
+const THEME_STORAGE_KEY = 'prepza-theme'
+let currentThemeMode: ThemeMode = (typeof window !== 'undefined' && (window.localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode)) || 'light'
+const themeListeners = new Set<() => void>()
+function setThemeMode(next: ThemeMode) {
+  currentThemeMode = next
+  try { window.localStorage.setItem(THEME_STORAGE_KEY, next) } catch { /* private browsing etc */ }
+  themeListeners.forEach(fn => fn())
+}
+function toggleThemeMode() {
+  setThemeMode(currentThemeMode === 'light' ? 'dark' : 'light')
+}
+function useTheme() {
+  const [, forceRerender] = useState(0)
+  useEffect(() => {
+    const listener = () => forceRerender(n => n + 1)
+    themeListeners.add(listener)
+    return () => { themeListeners.delete(listener) }
+  }, [])
+  return { mode: currentThemeMode, tokens: currentThemeMode === 'dark' ? DARK_THEME : LIGHT_THEME, toggleTheme: toggleThemeMode }
+}
+
 function Pill({ text, color = N.gold, bg }: { text: string; color?: string; bg?: string }) {
   return <span style={{ background: bg ?? color + '20', color, border: `1px solid ${color}33`, borderRadius: 99, fontSize: 10, fontWeight: 700, padding: '2px 9px', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>{text}</span>
 }
@@ -4339,23 +4371,26 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       setDeleting(false)
     }
   }
+
+  const { tokens: T, mode: themeMode, toggleTheme } = useTheme()
+
   const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
     <div style={{ marginBottom: 8 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, padding: '12px 18px 6px' }}>{title}</div>
-      <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', margin: '0 16px' }}>{children}</div>
+      <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: 'uppercase', letterSpacing: 1, padding: '12px 18px 6px' }}>{title}</div>
+      <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', margin: '0 16px' }}>{children}</div>
     </div>
   )
   const Row = ({ label, sub, onPress, right, danger }: { label: string; sub?: string; onPress?: () => void; right?: React.ReactNode; danger?: boolean }) => (
-    <button onClick={onPress} style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 14, padding: '14px 16px', background: 'none', border: 'none', borderBottom: '1px solid rgba(0,0,0,0.05)', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', textAlign: 'left' }}>
+    <button onClick={onPress} style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 14, padding: '14px 16px', background: 'none', border: 'none', borderBottom: `1px solid ${T.border}`, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', textAlign: 'left' }}>
       <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, color: danger ? '#C94C4C' : N.navy }}>{label}</div>
-        {sub && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 1 }}>{sub}</div>}
+        <div style={{ fontWeight: 600, fontSize: 13, color: danger ? '#C94C4C' : T.text }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 1 }}>{sub}</div>}
       </div>
-      {right ?? <div style={{ color: '#9CA3AF' }}>{Ic.chevR()}</div>}
+      {right ?? <div style={{ color: T.textMuted }}>{Ic.chevR()}</div>}
     </button>
   )
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -4376,7 +4411,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <Row label="Study Preferences" sub="Goals, daily target, subjects" onPress={() => setShowModal('study-prefs')} />
           <Row label="AI Preferences" sub="Language, explanation style" onPress={() => setShowModal('ai-prefs')} />
           <Row label="Language" sub="English" onPress={() => setShowModal('language')} />
-          <Row label="Appearance" sub="Light mode" onPress={() => setShowModal('appearance')} />
+          <Row label="Appearance" sub={themeMode === 'dark' ? 'Dark mode' : 'Light mode'} right={<div onClick={e => { e.stopPropagation(); toggleTheme() }}>{Ic.toggle(themeMode === 'dark')}</div>} />
         </Section>
 
         <Section title="Notifications">
