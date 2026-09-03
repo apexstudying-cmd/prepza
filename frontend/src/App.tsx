@@ -1840,7 +1840,7 @@ function EduUploadForm({ setScreen }: { setScreen: (s: Screen) => void }) {
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <TopBar title="Upload Educational Content" onBack={() => setScreen('create-modal')} />
+        <TopBar title="Upload Educational Content" onBack={() => window.history.back()} />
       </div>
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div>
@@ -2925,7 +2925,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
-        <TopBar title="Study Podcast" onBack={() => setScreen('document-study')} />
+        <TopBar title="Study Podcast" onBack={() => window.history.back()} />
       </div>
       {error ? <GenerationError error={error} /> : stage !== 'ready' ? (
         <GenerationLoading label={stage === 'script' ? 'Writing your podcast script…' : 'Generating audio — this can take a minute…'} />
@@ -3855,9 +3855,9 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
         <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-          <TopBar title="Opportunity Details" onBack={() => setScreen('opportunities')} />
+          <TopBar title="Opportunity Details" onBack={() => window.history.back()} />
         </div>
-        <EmptyState icon="🚀" title="No opportunity selected" sub="Go back and pick an opportunity to view its details." action="Back to Opportunities" onAction={() => setScreen('opportunities')} />
+        <EmptyState icon="🚀" title="No opportunity selected" sub="Go back and pick an opportunity to view its details." action="Back to Opportunities" onAction={() => window.history.back()} />
       </div>
     )
   }
@@ -3868,7 +3868,7 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
         <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-          <TopBar title="Opportunity Details" onBack={() => setScreen('opportunities')} />
+          <TopBar title="Opportunity Details" onBack={() => window.history.back()} />
         </div>
         <ErrorState />
       </div>
@@ -3882,7 +3882,7 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <button onClick={() => setScreen('opportunities')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Opportunity Details</span>
           <button onClick={toggleSave} disabled={saving} style={{ width: 34, height: 34, background: opp.saved ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ color: opp.saved ? N.gold : '#fff' }}>{Ic.bookmark()}</div>
