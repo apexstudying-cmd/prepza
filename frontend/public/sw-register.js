@@ -78,12 +78,19 @@
 
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('/sw.js').then(function (registration) {
-      // Case 1: a previous visit already left an update waiting.
+      // Case 1: a previous visit already left an update waiting. This is a
+      // fresh page load (e.g. an installed PWA being reopened) - there's no
+      // in-progress session to disrupt, and the user is likely staring at
+      // the *old* shell right now (stale splash, stale logo, etc), so we
+      // apply the update immediately instead of making them notice and tap
+      // a toast on a screen that looks fine to them.
       if (registration.waiting && navigator.serviceWorker.controller) {
-        showUpdateToast(registration.waiting);
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
       }
 
-      // Case 2: a new worker starts installing during this visit.
+      // Case 2: a new worker starts installing during this visit, i.e. the
+      // user already has the app open and in use. Prompt instead of
+      // swapping content out from under them mid-session.
       registration.addEventListener('updatefound', function () {
         var newWorker = registration.installing;
         if (!newWorker) return;
@@ -97,6 +104,13 @@
           }
         });
       });
+
+      // Browsers (especially for installed/standalone PWAs launched outside
+      // a normal navigation) can be slow or inconsistent about checking for
+      // a new sw.js in the background. Ask explicitly on every load so a
+      // waiting worker shows up as soon as possible instead of sitting
+      // unnoticed for days.
+      registration.update().catch(function () {});
     }).catch(function (err) {
       console.warn('Service worker registration failed:', err);
     });

@@ -54,15 +54,19 @@ function timeout(ms) {
 }
 
 async function handleNavigate(request) {
-  const networkPromise = fetch(request).then((res) => {
-    if (res && res.ok) {
-      caches.open(SHELL_CACHE_NAME).then((cache) => cache.put(request, res.clone())).catch(() => {});
-    }
-    return res;
-  });
+  const networkPromise = fetch(request)
+    .then((res) => {
+      if (res && res.ok) {
+        caches.open(SHELL_CACHE_NAME).then((cache) => cache.put(request, res.clone())).catch(() => {});
+      }
+      return res;
+    })
+    .catch(() => undefined);
 
   try {
-    return await Promise.race([networkPromise, timeout(NAV_TIMEOUT_MS)]);
+    const res = await Promise.race([networkPromise, timeout(NAV_TIMEOUT_MS)]);
+    if (res) return res;
+    throw new Error('network-failed');
   } catch (err) {
     const cached = await caches.match(request, { ignoreSearch: true });
     if (cached) return cached;
