@@ -4900,6 +4900,7 @@ function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── COMPLETE PROFILE (lands here after a first-time Google Sign-In) ──────────
 function CompleteProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const steps = ['University', 'Course', 'Year', 'Semester']
   const [step, setStep] = useState(0)
   const [data, setData] = useState({
@@ -6226,6 +6227,7 @@ const LIBRARY_MATERIAL_TYPES: { value: string; label: string }[] = [
 const materialTypeLabel = (v: string) => LIBRARY_MATERIAL_TYPES.find(t => t.value === v)?.label ?? v
 
 function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [step, setStep] = useState(1)
 
   const [csrfToken, setCsrfToken] = useState('')
@@ -6293,7 +6295,7 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
   const stepLabel = ['Select Document', 'Add Details', 'Confirm Rights', '', ''][step - 1]
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       {/* Header */}
       <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: step <= 3 ? 14 : 0 }}>
@@ -6317,34 +6319,34 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
           <div style={{ background: `${N.gold}10`, border: `1px solid ${N.gold}30`, borderRadius: 14, padding: '12px 16px', marginBottom: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: N.gold, marginBottom: 4 }}>Free to publish · Earn XP on approval</div>
-            <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.6 }}>Share educational materials with students across Kenya. Approved contributions earn XP and build your contributor reputation.</div>
+            <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.6 }}>Share educational materials with students across Kenya. Approved contributions earn XP and build your contributor reputation.</div>
           </div>
-          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Select a document</div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Select a document</div>
           {docsLoading ? (
-            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '12px 0' }}>Loading your documents…</div>
+            <div style={{ fontSize: 12, color: T.textMuted, padding: '12px 0' }}>Loading your documents…</div>
           ) : docsError ? (
             <div style={{ fontSize: 12, color: '#C94C4C', fontWeight: 600, padding: '12px 0' }}>{docsError}</div>
           ) : docs.length === 0 ? (
             <EmptyState icon="📄" title="No ready documents" sub="Upload and finish processing a document before publishing it to the library." action="Upload Document" onAction={() => setScreen('upload')} />
           ) : docs.map(d => (
             <div key={d.id} onClick={() => { setSelectedDocId(d.id); setTitle(d.title) }}
-              style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, border: `2px solid ${selectedDocId === d.id ? N.gold : 'rgba(0,0,0,0.06)'}`, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center', boxShadow: selectedDocId === d.id ? `0 4px 16px ${N.gold}20` : '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s' }}>
+              style={{ background: T.card, borderRadius: 14, padding: '14px 16px', marginBottom: 10, border: `2px solid ${selectedDocId === d.id ? N.gold : 'rgba(0,0,0,0.06)'}`, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center', boxShadow: selectedDocId === d.id ? `0 4px 16px ${N.gold}20` : '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s' }}>
               <div style={{ width: 40, height: 44, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <svg width="20" height="24" viewBox="0 0 20 24" fill="none"><path d="M4 0h8l8 8v16H4V0z" fill="#E5E7EB"/><path d="M12 0l8 8h-8V0z" fill="#D1D5DB"/><rect x="6" y="12" width="8" height="1.5" rx="0.75" fill="#9CA3AF"/><rect x="6" y="15" width="6" height="1.5" rx="0.75" fill="#9CA3AF"/><rect x="6" y="18" width="7" height="1.5" rx="0.75" fill="#9CA3AF"/></svg>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: N.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
-                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{(d.file_type || '').toUpperCase()}{d.page_count != null ? ` · ${d.page_count} pages` : ''}</div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+                <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{(d.file_type || '').toUpperCase()}{d.page_count != null ? ` · ${d.page_count} pages` : ''}</div>
               </div>
               {selectedDocId === d.id && <div style={{ color: N.gold, flexShrink: 0 }}>{Ic.check('w-5 h-5')}</div>}
             </div>
           ))}
           <div style={{ marginTop: 8, marginBottom: 20 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Publication title</div>
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. ACT 101 Lecture Notes – Semester 1" maxLength={200} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
-            <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>This will be the public title visible to other students.</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Publication title</div>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. ACT 101 Lecture Notes – Semester 1" maxLength={200} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 6 }}>This will be the public title visible to other students.</div>
           </div>
-          <button onClick={() => canProceed1 && setStep(2)} style={{ width: '100%', background: canProceed1 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed1 ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed1 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>
+          <button onClick={() => canProceed1 && setStep(2)} style={{ width: '100%', background: canProceed1 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed1 ? N.navy : T.textMuted, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed1 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>
             Continue
           </button>
         </div>
@@ -6354,21 +6356,21 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
       {step === 2 && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Material Type</div>
-            <select value={matType} onChange={e => setMatType(e.target.value)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Material Type</div>
+            <select value={matType} onChange={e => setMatType(e.target.value)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none' }}>
               {LIBRARY_MATERIAL_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Unit / Module <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
-            <select value={unitId ?? ''} onChange={e => setUnitId(e.target.value ? Number(e.target.value) : null)} disabled={unitsLoading} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Unit / Module <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
+            <select value={unitId ?? ''} onChange={e => setUnitId(e.target.value ? Number(e.target.value) : null)} disabled={unitsLoading} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none' }}>
               <option value="">{unitsLoading ? 'Loading units…' : 'No specific unit'}</option>
               {units.map(u => <option key={u.id} value={u.id}>{u.code} — {u.name}</option>)}
             </select>
           </div>
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Description <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
-            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} maxLength={1000} placeholder="What does this material cover? Who is it useful for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Description <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} maxLength={1000} placeholder="What does this material cover? Who is it useful for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
           </div>
           <button onClick={() => canProceed2 && setStep(3)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
             Continue
@@ -6379,34 +6381,34 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
       {/* Step 3: Rights confirmation */}
       {step === 3 && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
-          <div style={{ background: '#fff', borderRadius: 16, padding: '18px 18px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 12 }}>Publishing: {title}</div>
+          <div style={{ background: T.card, borderRadius: 16, padding: '18px 18px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 12 }}>Publishing: {title}</div>
             {[['Type', materialTypeLabel(matType)], ['Unit', units.find(u => u.id === unitId)?.code ?? 'Not specified']].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F3F4F6' }}>
-                <span style={{ fontSize: 12, color: '#9CA3AF' }}>{k}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: N.navy, maxWidth: 180, textAlign: 'right' }}>{v}</span>
+                <span style={{ fontSize: 12, color: T.textMuted }}>{k}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: T.text, maxWidth: 180, textAlign: 'right' }}>{v}</span>
               </div>
             ))}
           </div>
           <div style={{ background: '#FEF9F0', border: '1px solid rgba(201,168,76,0.25)', borderRadius: 14, padding: '16px 16px', marginBottom: 20 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E', marginBottom: 8 }}>Content responsibility</div>
-            <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.75 }}>
+            <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.75 }}>
               You are responsible for ensuring you have the right or permission to share this material. Prepza does not claim ownership of student-uploaded content. Unauthorised sharing of copyrighted materials may result in removal of the content and restrictions on your account.
             </div>
           </div>
           {submitError && (
             <div style={{ background: 'rgba(201,68,68,0.08)', border: '1px solid rgba(201,68,68,0.25)', borderRadius: 12, padding: '12px 14px', color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 16 }}>{submitError}</div>
           )}
-          <div onClick={() => setRightsChecked(r => !r)} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', background: '#fff', borderRadius: 14, border: `2px solid ${rightsChecked ? N.gold : 'rgba(0,0,0,0.08)'}`, cursor: 'pointer', marginBottom: 16, transition: 'border-color 0.2s' }}>
+          <div onClick={() => setRightsChecked(r => !r)} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', background: T.card, borderRadius: 14, border: `2px solid ${rightsChecked ? N.gold : 'rgba(0,0,0,0.08)'}`, cursor: 'pointer', marginBottom: 16, transition: 'border-color 0.2s' }}>
             <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${rightsChecked ? N.gold : '#D1D5DB'}`, background: rightsChecked ? N.gold : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
-              {rightsChecked && <div style={{ color: N.navy }}>{Ic.check('w-3 h-3')}</div>}
+              {rightsChecked && <div style={{ color: T.text }}>{Ic.check('w-3 h-3')}</div>}
             </div>
-            <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>I confirm that I have the right or permission to share this material, and I agree to Prepza's <span style={{ color: N.gold, fontWeight: 700 }}>Terms of Service</span>, <span style={{ color: N.gold, fontWeight: 700 }}>Content Policy</span>, and <span style={{ color: N.gold, fontWeight: 700 }}>Copyright Policy</span>.</div>
+            <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6 }}>I confirm that I have the right or permission to share this material, and I agree to Prepza's <span style={{ color: N.gold, fontWeight: 700 }}>Terms of Service</span>, <span style={{ color: N.gold, fontWeight: 700 }}>Content Policy</span>, and <span style={{ color: N.gold, fontWeight: 700 }}>Copyright Policy</span>.</div>
           </div>
-          <button onClick={() => canProceed3 && !submitting && submit()} style={{ width: '100%', background: canProceed3 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed3 ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed3 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', boxShadow: canProceed3 ? `0 6px 24px ${N.gold}40` : 'none' }}>
+          <button onClick={() => canProceed3 && !submitting && submit()} style={{ width: '100%', background: canProceed3 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed3 ? N.navy : T.textMuted, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed3 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', boxShadow: canProceed3 ? `0 6px 24px ${N.gold}40` : 'none' }}>
             Submit for Review
           </button>
-          <button onClick={() => setScreen('home')} style={{ width: '100%', background: 'transparent', color: '#9CA3AF', fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel — don't publish</button>
+          <button onClick={() => setScreen('home')} style={{ width: '100%', background: 'transparent', color: T.textMuted, fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel — don't publish</button>
         </div>
       )}
 
@@ -6417,8 +6419,8 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
             <div style={{ width: 28, height: 28, border: '3px solid rgba(11,20,55,0.4)', borderTopColor: N.navy, borderRadius: '50%', animation: 'spin-slow 0.7s linear infinite' }} />
           </div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 18, color: N.navy, marginBottom: 6 }}>Submitting…</div>
-            <div style={{ fontSize: 13, color: '#9CA3AF' }}>Uploading to Prepza Library</div>
+            <div style={{ fontWeight: 800, fontSize: 18, color: T.text, marginBottom: 6 }}>Submitting…</div>
+            <div style={{ fontSize: 13, color: T.textMuted }}>Uploading to Prepza Library</div>
           </div>
         </div>
       )}
@@ -6428,19 +6430,19 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px' }} className="scrollbar-hide">
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
             <div style={{ width: 72, height: 72, background: 'rgba(76,201,123,0.1)', borderRadius: '50%', border: '3px solid #4CC97B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 28 }}>📥</div>
-            <div style={{ fontWeight: 800, fontSize: 20, color: N.navy, marginBottom: 8 }}>Submitted for Review</div>
-            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65 }}>Your material has been received and is {submittedStatus || 'pending'}. Our team reviews every submission to maintain quality standards — this usually takes 24-48h. You'll be notified of the outcome.</div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 8 }}>Submitted for Review</div>
+            <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65 }}>Your material has been received and is {submittedStatus || 'pending'}. Our team reviews every submission to maintain quality standards — this usually takes 24-48h. You'll be notified of the outcome.</div>
           </div>
 
-          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: N.navy, marginBottom: 4 }}>What happens if rejected?</div>
-            <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.65 }}>You'll receive a notification with the reason. You can revise and resubmit, or contact support if you believe it's a mistake.</div>
+          <div style={{ background: T.card, borderRadius: 14, padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>What happens if rejected?</div>
+            <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.65 }}>You'll receive a notification with the reason. You can revise and resubmit, or contact support if you believe it's a mistake.</div>
           </div>
 
           <button onClick={() => setScreen('library')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 6px 24px ${N.gold}40` }}>
             Go to My Library
           </button>
-          <button onClick={() => setScreen('home')} style={{ width: '100%', background: 'transparent', color: '#9CA3AF', fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Home</button>
+          <button onClick={() => setScreen('home')} style={{ width: '100%', background: 'transparent', color: T.textMuted, fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Home</button>
         </div>
       )}
     </div>
@@ -6944,6 +6946,7 @@ function formatStudyTime(totalSeconds: number): string {
 }
 
 function TimeStudiedScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('week')
   const [data, setData] = useState<StudyTimeResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -6964,7 +6967,7 @@ function TimeStudiedScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const periodLabel = period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month'
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -6979,7 +6982,7 @@ function TimeStudiedScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         {error && <div style={{ background: '#FEF2F2', color: '#B91C1C', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
           {(['day', 'week', 'month'] as const).map(p => (
-            <button key={p} onClick={() => setPeriod(p)} style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', background: period === p ? N.gold : '#fff', color: period === p ? N.navy : '#6B7280', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+            <button key={p} onClick={() => setPeriod(p)} style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', background: period === p ? N.gold : '#fff', color: period === p ? N.navy : T.textMuted, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
             {p.charAt(0).toUpperCase() + p.slice(1)}
             </button>
           ))}
@@ -7001,6 +7004,7 @@ function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserI
   setActiveProfileUserId?: (id: number) => void
   setActiveProfileName?: (name: string) => void
 }) {
+  const { tokens: T } = useTheme()
   const [search, setSearch] = useState('')
   const [people, setPeople] = useState<FollowListUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -7043,7 +7047,7 @@ function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserI
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -7061,20 +7065,20 @@ function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserI
             <div style={{ width: 26, height: 26, border: '2.5px solid #E5E7EB', borderTopColor: N.gold, borderRadius: '50%', animation: 'spin-slow 0.7s linear infinite' }} />
           </div>
         ) : error ? (
-          <div style={{ textAlign: 'center', padding: '30px 0', color: '#9CA3AF', fontSize: 13 }}>{error}</div>
+          <div style={{ textAlign: 'center', padding: '30px 0', color: T.textMuted, fontSize: 13 }}>{error}</div>
         ) : filtered.length === 0 ? (
           <EmptyState icon="👥" title={mode === 'followers' ? 'No followers yet' : 'Not following anyone'} sub={mode === 'followers' ? "When students follow you, they'll appear here." : 'Discover students and follow them from their profiles.'} action="Explore Students" onAction={() => setScreen('explore')} />
         ) : filtered.map(p => {
           const isLoading = !!busy[p.user_id]
           return (
-            <div key={p.user_id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+            <div key={p.user_id} style={{ background: T.card, borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
               <div onClick={() => openProfile(p)} style={{ width: 44, height: 44, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: N.navy, flexShrink: 0, cursor: 'pointer' }}>
                 {p.display_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
               </div>
               <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => openProfile(p)}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{p.display_name}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{p.display_name}</div>
               </div>
-              <button onClick={() => toggle(p)} disabled={isLoading} style={{ background: p.is_following ? '#F3F4F6' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: p.is_following ? '#374151' : N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', flexShrink: 0, opacity: isLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s' }}>
+              <button onClick={() => toggle(p)} disabled={isLoading} style={{ background: p.is_following ? '#F3F4F6' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: p.is_following ? T.text : N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', flexShrink: 0, opacity: isLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s' }}>
                 {isLoading ? <div style={{ width: 10, height: 10, border: '1.5px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.6s linear infinite' }} /> : null}
                 {p.is_following ? 'Following' : 'Follow'}
               </button>
@@ -7089,6 +7093,7 @@ function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserI
 
 // ─── GROUP DETAIL ─────────────────────────────────────────────────────────────
 function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => void; groupId: number | null }) {
+  const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'Posts' | 'Questions' | 'Files' | 'Members'>('Posts')
   const [group, setGroup] = useState<GroupSummary | null>(null)
   const [loadingGroup, setLoadingGroup] = useState(true)
@@ -7301,7 +7306,7 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
 
   if (groupId == null) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -7314,12 +7319,12 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
   }
 
   if (loadingGroup) {
-    return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: N.bg, fontSize: 12, color: '#9CA3AF' }}>Loading group…</div>
+    return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.pageBg, fontSize: 12, color: T.textMuted }}>Loading group…</div>
   }
 
   if (!group) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -7335,7 +7340,7 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
   const isAdmin = group.role === 'admin'
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       {/* Header */}
       <div style={{ background: N.navy, padding: '0 18px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
@@ -7364,41 +7369,41 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
         {(tab === 'Posts' || tab === 'Questions') && (
           <div style={{ padding: '14px 18px' }}>
             {!joined && (
-              <div style={{ background: 'rgba(201,168,76,0.08)', border: `1px solid ${N.gold}30`, borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: '#6B7280' }}>Join this group to post, comment, like, and vote.</div>
+              <div style={{ background: 'rgba(201,168,76,0.08)', border: `1px solid ${N.gold}30`, borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: T.textMuted }}>Join this group to post, comment, like, and vote.</div>
             )}
             {joined && (
-              <div style={{ background: '#fff', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: 14, padding: 12, marginBottom: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
-                <textarea value={composeText} onChange={e => setComposeText(e.target.value)} placeholder={tab === 'Questions' ? 'Ask the group a question…' : 'Write something…'} rows={2} style={{ width: '100%', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans', resize: 'none', boxSizing: 'border-box' }} />
+              <div style={{ background: T.card, border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: 14, padding: 12, marginBottom: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                <textarea value={composeText} onChange={e => setComposeText(e.target.value)} placeholder={tab === 'Questions' ? 'Ask the group a question…' : 'Write something…'} rows={2} style={{ width: '100%', border: 'none', outline: 'none', fontSize: 13, color: T.text, fontFamily: 'Plus Jakarta Sans', resize: 'none', boxSizing: 'border-box' }} />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-                  <button onClick={submitPost} disabled={!composeText.trim() || composing} style={{ background: composeText.trim() ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: composeText.trim() ? N.navy : '#9CA3AF', fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '7px 16px', cursor: composeText.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>{composing ? 'Posting…' : tab === 'Questions' ? 'Ask' : 'Post'}</button>
+                  <button onClick={submitPost} disabled={!composeText.trim() || composing} style={{ background: composeText.trim() ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: composeText.trim() ? N.navy : T.textMuted, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '7px 16px', cursor: composeText.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>{composing ? 'Posting…' : tab === 'Questions' ? 'Ask' : 'Post'}</button>
                 </div>
               </div>
             )}
             {postsError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{postsError}</div>}
             {loadingPosts ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '20px 0' }}>Loading…</div>
+              <div style={{ fontSize: 12, color: T.textMuted, padding: '20px 0' }}>Loading…</div>
             ) : posts.length === 0 ? (
               <EmptyState icon={tab === 'Questions' ? '❓' : '💬'} title={tab === 'Questions' ? 'No questions yet' : 'No posts yet'} sub={joined ? 'Be the first to share something.' : 'Join the group to get things started.'} />
             ) : posts.map(p => (
-              <div key={p.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+              <div key={p.id} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                 <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                   <div style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{p.author.slice(0, 2).toUpperCase()}</div>
-                  <div><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{p.author}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{p.created_at ? new Date(p.created_at).toLocaleString() : ''}</div></div>
+                  <div><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{p.author}</div><div style={{ fontSize: 11, color: T.textMuted }}>{p.created_at ? new Date(p.created_at).toLocaleString() : ''}</div></div>
                 </div>
-                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, marginBottom: 12 }}>{p.is_removed ? '[removed]' : p.body}</div>
+                <div style={{ fontSize: 13, color: T.text, lineHeight: 1.65, marginBottom: 12 }}>{p.is_removed ? '[removed]' : p.body}</div>
                 <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #F3F4F6', paddingTop: 10 }}>
                   {tab === 'Posts' ? (
-                    <button onClick={() => toggleLike(p)} disabled={!joined} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: p.viewer_liked ? N.gold : '#9CA3AF', cursor: joined ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+                    <button onClick={() => toggleLike(p)} disabled={!joined} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: p.viewer_liked ? N.gold : T.textMuted, cursor: joined ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
                       <svg width="14" height="14" viewBox="0 0 14 14" fill={p.viewer_liked ? N.gold : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 12.5S1.5 9 1.5 5a2.5 2.5 0 015-0 2.5 2.5 0 015 0c0 4-5.5 7.5-5.5 7.5z"/></svg>
                       {p.like_count ?? 0}
                     </button>
                   ) : (
-                    <button onClick={() => toggleVote(p)} disabled={!joined} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: p.viewer_voted ? N.gold : '#9CA3AF', cursor: joined ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+                    <button onClick={() => toggleVote(p)} disabled={!joined} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: p.viewer_voted ? N.gold : T.textMuted, cursor: joined ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 2v10M3 6l4-4 4 4" /></svg>
                       {p.vote_count ?? 0} vote{(p.vote_count ?? 0) === 1 ? '' : 's'}
                     </button>
                   )}
-                  <button onClick={() => openPost(p)} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: '#9CA3AF', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+                  <button onClick={() => openPost(p)} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: T.textMuted, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 2h10a1 1 0 011 1v6a1 1 0 01-1 1H5l-3 3V3a1 1 0 011-1z"/></svg>
                     {p.comment_count} {expandedId === p.id ? '· hide' : ''}
                   </button>
@@ -7406,21 +7411,21 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
                 {expandedId === p.id && (
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #F3F4F6' }}>
                     {loadingDetail ? (
-                      <div style={{ fontSize: 12, color: '#9CA3AF' }}>Loading replies…</div>
+                      <div style={{ fontSize: 12, color: T.textMuted }}>Loading replies…</div>
                     ) : !expandedDetail ? (
                       <div style={{ fontSize: 12, color: '#C94C4C' }}>Could not load replies.</div>
                     ) : (
                       <>
-                        {expandedDetail.comments.length === 0 && <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10 }}>No replies yet.</div>}
+                        {expandedDetail.comments.length === 0 && <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 10 }}>No replies yet.</div>}
                         {expandedDetail.comments.map(c => (
-                          <div key={c.id} style={{ background: N.bg, borderRadius: 12, padding: '10px 12px', marginBottom: 8 }}>
+                          <div key={c.id} style={{ background: T.pageBg, borderRadius: 12, padding: '10px 12px', marginBottom: 8 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                              <span style={{ fontWeight: 700, fontSize: 12, color: N.navy }}>{c.author}{c.marked_helpful && <span style={{ marginLeft: 6, color: '#4CC97B', fontWeight: 700 }}>✓ Helpful</span>}</span>
+                              <span style={{ fontWeight: 700, fontSize: 12, color: T.text }}>{c.author}{c.marked_helpful && <span style={{ marginLeft: 6, color: '#4CC97B', fontWeight: 700 }}>✓ Helpful</span>}</span>
                               {tab === 'Questions' && p.author_id !== c.author_id && !c.marked_helpful && !c.is_removed && (
                                 <button onClick={() => markHelpful(c.id)} style={{ background: 'none', border: 'none', color: N.gold, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Mark helpful</button>
                               )}
                             </div>
-                            <div style={{ fontSize: 12, color: '#374151' }}>{c.is_removed ? '[removed]' : c.body}</div>
+                            <div style={{ fontSize: 12, color: T.text }}>{c.is_removed ? '[removed]' : c.body}</div>
                           </div>
                         ))}
                         {joined && (
@@ -7440,21 +7445,21 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
         {tab === 'Files' && (
           <div style={{ padding: '14px 18px' }}>
             {joined && (
-              <button onClick={openFilePicker} style={{ width: '100%', background: '#fff', border: '1.5px dashed rgba(0,0,0,0.12)', borderRadius: 14, padding: '12px 16px', marginBottom: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: N.gold, fontWeight: 700, textAlign: 'center' }}>+ Share a document</button>
+              <button onClick={openFilePicker} style={{ width: '100%', background: T.card, border: '1.5px dashed rgba(0,0,0,0.12)', borderRadius: 14, padding: '12px 16px', marginBottom: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: N.gold, fontWeight: 700, textAlign: 'center' }}>+ Share a document</button>
             )}
             {filesError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{filesError}</div>}
             {loadingFiles ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '20px 0' }}>Loading…</div>
+              <div style={{ fontSize: 12, color: T.textMuted, padding: '20px 0' }}>Loading…</div>
             ) : files.length === 0 ? (
               <EmptyState icon="📁" title="No files shared yet" sub="Members can share their own ready documents here." />
             ) : files.map(f => (
-              <div key={f.id} style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+              <div key={f.id} style={{ background: T.card, borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
                 <div style={{ width: 40, height: 44, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: f.view_url ? 'pointer' : 'default' }} onClick={() => f.view_url && window.open(f.view_url, '_blank')}>
                   <svg width="18" height="22" viewBox="0 0 20 24" fill="none"><path d="M4 0h8l8 8v16H4V0z" fill="#E5E7EB"/><path d="M12 0l8 8h-8V0z" fill="#D1D5DB"/></svg>
                 </div>
                 <div style={{ flex: 1, minWidth: 0, cursor: f.view_url ? 'pointer' : 'default' }} onClick={() => f.view_url && window.open(f.view_url, '_blank')}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: N.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.title || 'Untitled document'}</div>
-                  <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{f.shared_by}{f.page_count ? ` · ${f.page_count} pages` : ''}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.title || 'Untitled document'}</div>
+                  <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{f.shared_by}{f.page_count ? ` · ${f.page_count} pages` : ''}</div>
                 </div>
                 {(isAdmin || f.shared_by_user_id !== undefined) && (
                   <button onClick={() => removeFile(f.id)} style={{ background: 'none', border: 'none', color: '#C94C4C', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
@@ -7463,12 +7468,12 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
             ))}
             {showFilePicker && (
               <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-end', zIndex: 100 }} onClick={() => setShowFilePicker(false)}>
-                <div style={{ background: '#fff', width: '100%', borderRadius: '18px 18px 0 0', padding: 18, maxHeight: '60vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>Share a document</div>
+                <div style={{ background: T.card, width: '100%', borderRadius: '18px 18px 0 0', padding: 18, maxHeight: '60vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>Share a document</div>
                   {shareableDocs.length === 0 ? (
-                    <div style={{ fontSize: 12, color: '#9CA3AF' }}>You have no ready documents to share yet.</div>
+                    <div style={{ fontSize: 12, color: T.textMuted }}>You have no ready documents to share yet.</div>
                   ) : shareableDocs.map(d => (
-                    <button key={d.id} onClick={() => shareDoc(d.id)} disabled={sharing} style={{ width: '100%', textAlign: 'left', background: N.bg, border: 'none', borderRadius: 12, padding: '10px 14px', marginBottom: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: N.navy }}>{d.title}</button>
+                    <button key={d.id} onClick={() => shareDoc(d.id)} disabled={sharing} style={{ width: '100%', textAlign: 'left', background: T.pageBg, border: 'none', borderRadius: 12, padding: '10px 14px', marginBottom: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: T.text }}>{d.title}</button>
                   ))}
                 </div>
               </div>
@@ -7477,15 +7482,15 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
         )}
         {tab === 'Members' && (
           <div style={{ padding: '14px 18px' }}>
-            <div style={{ fontSize: 12, color: '#9CA3AF', fontWeight: 600, marginBottom: 12 }}>{group.member_count} MEMBER{group.member_count === 1 ? '' : 'S'}</div>
+            <div style={{ fontSize: 12, color: T.textMuted, fontWeight: 600, marginBottom: 12 }}>{group.member_count} MEMBER{group.member_count === 1 ? '' : 'S'}</div>
             {membersError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{membersError}</div>}
             {loadingMembers ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '20px 0' }}>Loading…</div>
+              <div style={{ fontSize: 12, color: T.textMuted, padding: '20px 0' }}>Loading…</div>
             ) : members.map(m => (
-              <div key={m.user_id} style={{ background: '#fff', borderRadius: 14, padding: '12px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+              <div key={m.user_id} style={{ background: T.card, borderRadius: 14, padding: '12px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
                 <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{m.display_name.slice(0, 2).toUpperCase()}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{m.display_name}</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: T.text }}>{m.display_name}</div>
                 </div>
                 {m.role === 'admin' && <Pill text="Admin" color={N.gold} />}
                 {isAdmin && (
@@ -7506,6 +7511,7 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
 
 // ─── GROUP CREATE ─────────────────────────────────────────────────────────────
 function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void }) {
+  const { tokens: T } = useTheme()
   const [step, setStep] = useState(1)
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
@@ -7580,17 +7586,17 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
   }
 
   if (done) return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, gap: 20, padding: '0 28px', textAlign: 'center', animation: 'fadeSlideUp 0.4s ease' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: T.pageBg, gap: 20, padding: '0 28px', textAlign: 'center', animation: 'fadeSlideUp 0.4s ease' }}>
       <div style={{ width: 72, height: 72, background: 'rgba(76,201,123,0.1)', borderRadius: '50%', border: '3px solid #4CC97B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>✓</div>
       <div>
-        <div style={{ fontWeight: 800, fontSize: 20, color: N.navy, marginBottom: 8 }}>{name} created!</div>
-        <div style={{ fontSize: 13, color: '#6B7280' }}>Taking you to the group…</div>
+        <div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 8 }}>{name} created!</div>
+        <div style={{ fontSize: 13, color: T.textMuted }}>Taking you to the group…</div>
       </div>
     </div>
   )
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: step < 3 ? 14 : 0 }}>
           <button onClick={() => step > 1 ? setStep(s => s - 1) : setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -7609,57 +7615,57 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
       {step === 1 && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Group name</div>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. ACT 101 — Year 1 · KU" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Group name</div>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. ACT 101 — Year 1 · KU" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
           </div>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Description <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
-            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="What is this group for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Description <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="What is this group for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
           </div>
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Privacy</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Privacy</div>
             {(['Public', 'Private', 'Course-only'] as const).map(p => (
-              <div key={p} onClick={() => setPrivacy(p)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 14px', background: '#fff', borderRadius: 12, border: `1.5px solid ${privacy === p ? N.gold : 'rgba(0,0,0,0.08)'}`, marginBottom: 8, cursor: 'pointer', transition: 'border-color 0.2s' }}>
+              <div key={p} onClick={() => setPrivacy(p)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 14px', background: T.card, borderRadius: 12, border: `1.5px solid ${privacy === p ? N.gold : 'rgba(0,0,0,0.08)'}`, marginBottom: 8, cursor: 'pointer', transition: 'border-color 0.2s' }}>
                 <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${privacy === p ? N.gold : '#D1D5DB'}`, background: privacy === p ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {privacy === p && <div style={{ width: 6, height: 6, borderRadius: '50%', background: N.navy }} />}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{p}</div>
-                  <div style={{ fontSize: 11, color: '#9CA3AF' }}>{p === 'Public' ? 'Anyone can find and join' : p === 'Private' ? 'Invite-only, hidden from search' : 'Only students on this course'}</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: T.text }}>{p}</div>
+                  <div style={{ fontSize: 11, color: T.textMuted }}>{p === 'Public' ? 'Anyone can find and join' : p === 'Private' ? 'Invite-only, hidden from search' : 'Only students on this course'}</div>
                 </div>
               </div>
             ))}
           </div>
-          <button onClick={() => name.trim() && setStep(2)} style={{ width: '100%', background: name.trim() ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: name.trim() ? N.navy : '#9CA3AF', fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: name.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>Continue</button>
+          <button onClick={() => name.trim() && setStep(2)} style={{ width: '100%', background: name.trim() ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: name.trim() ? N.navy : T.textMuted, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: name.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>Continue</button>
         </div>
       )}
 
       {step === 2 && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>University <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
-            <select value={universityId ?? ''} onChange={e => { setUniversityId(e.target.value ? Number(e.target.value) : null); setProgramId(null) }} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none', boxSizing: 'border-box' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>University <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
+            <select value={universityId ?? ''} onChange={e => { setUniversityId(e.target.value ? Number(e.target.value) : null); setProgramId(null) }} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box' }}>
               <option value="">Any university</option>
               {universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </div>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Course <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
-            <select value={programId ?? ''} onChange={e => setProgramId(e.target.value ? Number(e.target.value) : null)} disabled={!universityId} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none', boxSizing: 'border-box', opacity: universityId ? 1 : 0.6 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Course <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
+            <select value={programId ?? ''} onChange={e => setProgramId(e.target.value ? Number(e.target.value) : null)} disabled={!universityId} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box', opacity: universityId ? 1 : 0.6 }}>
               <option value="">Any course</option>
               {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Unit / Module <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
-            <select value={unitId ?? ''} onChange={e => setUnitId(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none', boxSizing: 'border-box' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Unit / Module <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
+            <select value={unitId ?? ''} onChange={e => setUnitId(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box' }}>
               <option value="">Not tied to a unit</option>
               {units.map(u => <option key={u.id} value={u.id}>{u.code} — {u.name}</option>)}
             </select>
           </div>
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 8 }}>Year of Study <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional)</span></div>
-            <select value={year ?? ''} onChange={e => setYear(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, background: '#fff', appearance: 'none', boxSizing: 'border-box' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Year of Study <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
+            <select value={year ?? ''} onChange={e => setYear(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box' }}>
               <option value="">Mixed</option>
               {[1,2,3,4,5].map(y => <option key={y} value={y}>Year {y}</option>)}
             </select>
@@ -7671,17 +7677,17 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
       {step === 3 && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '14px 18px 0' }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Add members <span style={{ color: '#9CA3AF', fontWeight: 500 }}>(optional — you can add later)</span></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '10px 14px', marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Add members <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional — you can add later)</span></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.card, border: '1.5px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '10px 14px', marginBottom: 12 }}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="5" stroke="#9CA3AF" strokeWidth="1.5"/><path d="M10 10l2.5 2.5" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              <input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Search students…" style={{ flex: 1, border: 'none', outline: 'none', fontSize: 14, fontFamily: 'Plus Jakarta Sans', color: N.navy }} />
+              <input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Search students…" style={{ flex: 1, border: 'none', outline: 'none', fontSize: 14, fontFamily: 'Plus Jakarta Sans', color: T.text }} />
             </div>
             {selected.length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                 {selected.map(s => (
                   <div key={s.id} style={{ background: `${N.gold}20`, borderRadius: 99, padding: '4px 10px 4px 8px', display: 'flex', gap: 5, alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: N.navy }}>{s.display_name.split(' ')[0]}</span>
-                    <button onClick={() => setSelected(arr => arr.filter(x => x.id !== s.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{s.display_name.split(' ')[0]}</span>
+                    <button onClick={() => setSelected(arr => arr.filter(x => x.id !== s.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                   </div>
                 ))}
               </div>
@@ -7689,20 +7695,20 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px' }} className="scrollbar-hide">
             {memberSearch.trim() === '' ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '14px 0' }}>Search by name to invite classmates.</div>
+              <div style={{ fontSize: 12, color: T.textMuted, padding: '14px 0' }}>Search by name to invite classmates.</div>
             ) : candidates.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '14px 0' }}>No students match "{memberSearch.trim()}".</div>
+              <div style={{ fontSize: 12, color: T.textMuted, padding: '14px 0' }}>No students match "{memberSearch.trim()}".</div>
             ) : candidates.map(p => {
               const sel = selected.some(s => s.id === p.id)
               return (
                 <div key={p.id} onClick={() => setSelected(arr => sel ? arr.filter(x => x.id !== p.id) : [...arr, p])} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #F3F4F6', cursor: 'pointer' }}>
                   <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy, flexShrink: 0 }}>{p.display_name.slice(0, 2).toUpperCase()}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{p.display_name}</div>
-                    {p.year != null && <div style={{ fontSize: 11, color: '#9CA3AF' }}>Year {p.year}{p.semester != null ? `, Sem ${p.semester}` : ''}</div>}
+                    <div style={{ fontWeight: 600, fontSize: 13, color: T.text }}>{p.display_name}</div>
+                    {p.year != null && <div style={{ fontSize: 11, color: T.textMuted }}>Year {p.year}{p.semester != null ? `, Sem ${p.semester}` : ''}</div>}
                   </div>
                   <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${sel ? N.gold : '#D1D5DB'}`, background: sel ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
-                    {sel && <div style={{ color: N.navy }}>{Ic.check('w-3 h-3')}</div>}
+                    {sel && <div style={{ color: T.text }}>{Ic.check('w-3 h-3')}</div>}
                   </div>
                 </div>
               )
@@ -7710,11 +7716,11 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
           </div>
           <div style={{ padding: '14px 18px 20px', flexShrink: 0 }}>
             {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{error}</div>}
-            <button onClick={create} disabled={creating} style={{ width: '100%', background: creating ? '#E5E7EB' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: creating ? '#9CA3AF' : N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: creating ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: creating ? 'none' : `0 6px 24px ${N.gold}40` }}>
+            <button onClick={create} disabled={creating} style={{ width: '100%', background: creating ? '#E5E7EB' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: creating ? T.textMuted : N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: creating ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: creating ? 'none' : `0 6px 24px ${N.gold}40` }}>
               {creating && <div style={{ width: 16, height: 16, border: '2px solid #9CA3AF', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.65s linear infinite' }} />}
               {creating ? 'Creating group…' : `Create Group${selected.length > 0 ? ` with ${selected.length} member${selected.length > 1 ? 's' : ''}` : ''}`}
             </button>
-            <button onClick={() => !creating && setScreen('home')} style={{ width: '100%', background: 'transparent', color: '#9CA3AF', fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel</button>
+            <button onClick={() => !creating && setScreen('home')} style={{ width: '100%', background: 'transparent', color: T.textMuted, fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel</button>
           </div>
         </div>
       )}
