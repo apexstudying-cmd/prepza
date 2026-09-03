@@ -4080,7 +4080,7 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-          <button onClick={() => setScreen('explore')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
         </div>
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
@@ -5704,7 +5704,7 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Mind Map</div>
           </div>
@@ -5829,7 +5829,7 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('chats')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>New Conversation</span>
         </div>
       </div>
@@ -6027,7 +6027,7 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
         <div style={{ background: N.navy, padding: '0 18px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => setScreen('chat-detail')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
             <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Chat Info</span>
           </div>
         </div>
@@ -6042,7 +6042,7 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg, position: 'relative' }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <button onClick={() => setScreen('chat-detail')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>{detail?.is_group ? 'Group Info' : 'Chat Info'}</span>
         </div>
         {error ? (
@@ -6293,7 +6293,7 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Edit Profile</span>
           <button onClick={handleSave} disabled={saving} style={{ background: saved ? '#4CC97B' : `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '8px 16px', cursor: saving ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: saved ? '#fff' : N.navy, opacity: saving ? 0.7 : 1 }}>{saved ? '✓ Saved' : saving ? 'Saving...' : 'Save'}</button>
         </div>
