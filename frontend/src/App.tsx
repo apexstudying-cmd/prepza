@@ -981,6 +981,7 @@ const podcastColor = (id: number) => PODCAST_COLORS[id % PODCAST_COLORS.length]
 const podcastDuration = (seconds: number | null) => seconds == null ? '—' : `${Math.max(1, Math.round(seconds / 60))} min`
 
 function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
+  const { tokens: T } = useTheme()
   const [notifCount, setNotifCount] = useState(0)
   const loading = useLoading(1200)
 
@@ -1035,7 +1036,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
 
   if (loading) return <SkeletonHome />
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       {/* Header */}
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -1073,14 +1074,14 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
         {/* Continue Studying */}
         <section style={{ padding: '20px 18px 0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Continue Studying</span>
+            <span style={{ fontWeight: 800, fontSize: 15, color: T.text }}>Continue Studying</span>
             <span onClick={() => setScreen('library')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>My Library →</span>
           </div>
           {docsLoading ? (
-            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '12px 0' }}>Loading your documents...</div>
+            <div style={{ fontSize: 12, color: T.textMuted, padding: '12px 0' }}>Loading your documents...</div>
           ) : !featuredDoc ? (
-            <div onClick={() => setScreen('upload')} style={{ background: '#fff', borderRadius: 14, padding: '18px 16px', textAlign: 'center', cursor: 'pointer', border: '1px dashed rgba(0,0,0,0.15)' }}>
-              <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>No documents yet — upload one to get started 📤</div>
+            <div onClick={() => setScreen('upload')} style={{ background: T.card, borderRadius: 14, padding: '18px 16px', textAlign: 'center', cursor: 'pointer', border: '1px dashed rgba(0,0,0,0.15)' }}>
+              <div style={{ fontSize: 12, color: T.textMuted, fontWeight: 600 }}>No documents yet — upload one to get started 📤</div>
             </div>
           ) : (
             <>
@@ -1100,11 +1101,11 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
               </div>
               {/* Other docs */}
               {restDocs.map(d => (
-                <div key={d.id} onClick={() => { setActiveDocumentId(d.id); setScreen('document-study') }} style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div key={d.id} onClick={() => { setActiveDocumentId(d.id); setScreen('document-study') }} style={{ background: T.card, borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
                   <div style={{ width: 40, height: 40, background: N.gold + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: N.gold, fontWeight: 800 }}>📄</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{d.title}</div>
-                    <div style={{ fontSize: 11, color: '#6B7280', textTransform: 'capitalize' }}>{d.status}</div>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{d.title}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted, textTransform: 'capitalize' }}>{d.status}</div>
                   </div>
                 </div>
               ))}
@@ -1114,7 +1115,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
 
         {/* AI Study Tools */}
         <section style={{ padding: '0 18px' }}>
-          <div style={{ fontWeight: 800, fontSize: 15, color: N.navy, marginBottom: 14 }}>AI Study Tools</div>
+          <div style={{ fontWeight: 800, fontSize: 15, color: T.text, marginBottom: 14 }}>AI Study Tools</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
             {[
               { icon: '📤', label: 'Upload', action: () => setScreen('upload') },
@@ -1125,7 +1126,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
             ].map((t, i) => (
               <button key={i} onClick={t.action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                 <div style={{ width: 52, height: 52, borderRadius: 16, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, border: '1px solid rgba(201,168,76,0.15)' }}>{t.icon}</div>
-                <span style={{ fontSize: 10, fontWeight: 600, color: '#6B7280', fontFamily: 'Plus Jakarta Sans' }}>{t.label}</span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: T.textMuted, fontFamily: 'Plus Jakarta Sans' }}>{t.label}</span>
               </button>
             ))}
           </div>
@@ -1135,7 +1136,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
         {homePodcasts.length > 0 && (
           <section>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 18px', marginBottom: 12 }}>
-              <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Study Podcasts 🎙️</span>
+              <span style={{ fontWeight: 800, fontSize: 15, color: T.text }}>Study Podcasts 🎙️</span>
               <span onClick={() => setScreen('podcast-library')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
             </div>
             <div style={{ display: 'flex', gap: 12, padding: '0 18px', overflowX: 'auto' }} className="scrollbar-hide">
@@ -1144,8 +1145,8 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
                 return (
                   <div key={p.document_id} onClick={() => { setActiveDocumentId(p.document_id); setScreen('podcast-player') }} style={{ flexShrink: 0, width: 140, borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.09)', cursor: 'pointer' }}>
                     <div style={{ height: 90, background: `linear-gradient(135deg,${color},${color}99)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#fff', fontWeight: 800 }}>🎙️</div>
-                    <div style={{ background: '#fff', padding: '10px 10px 12px' }}>
-                      <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 5 }} className="line-clamp-1">{p.title}</div>
+                    <div style={{ background: T.card, padding: '10px 10px 12px' }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: T.text, marginBottom: 5 }} className="line-clamp-1">{p.title}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <div style={{ color }}>{Ic.play('w-3 h-3')}</div>
                         <span style={{ fontSize: 10, color, fontWeight: 700 }}>{p.audio_status === 'ready' ? podcastDuration(p.duration_seconds) : 'Processing…'}</span>
@@ -1162,7 +1163,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
         {previewPosts.length > 0 && (
           <section style={{ padding: '0 18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Community</span>
+              <span style={{ fontWeight: 800, fontSize: 15, color: T.text }}>Community</span>
               <span onClick={() => setScreen('forum')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
             </div>
             {previewPosts.map(p => <RealForumCard key={p.id} post={p} onOpen={() => setScreen('forum')} />)}
@@ -1173,20 +1174,20 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
         {previewOpps.length > 0 && (
           <section style={{ padding: '0 18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontWeight: 800, fontSize: 15, color: N.navy }}>Opportunities 🚀</span>
+              <span style={{ fontWeight: 800, fontSize: 15, color: T.text }}>Opportunities 🚀</span>
               <span onClick={() => setScreen('opportunities')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
             </div>
             {previewOpps.map(o => {
               const meta = oppTypeMeta(o.opportunity_type)
               const deadline = fmtDeadline(o.application_deadline)
               return (
-                <div key={o.id} onClick={() => setScreen('opportunities')} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div key={o.id} onClick={() => setScreen('opportunities')} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
                   <div style={{ width: 44, height: 44, background: meta.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{meta.icon}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{o.title}</div>
-                    <div style={{ fontSize: 11, color: '#6B7280' }}>{o.organisation?.name || 'Unknown organisation'}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: T.text }} className="line-clamp-1">{o.title}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted }}>{o.organisation?.name || 'Unknown organisation'}</div>
                     {(o.location || deadline) && (
-                      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{o.location ? `📍 ${o.location}` : ''}{o.location && deadline ? ' · ' : ''}{deadline ? `⏰ ${deadline}` : ''}</div>
+                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{o.location ? `📍 ${o.location}` : ''}{o.location && deadline ? ' · ' : ''}{deadline ? `⏰ ${deadline}` : ''}</div>
                     )}
                   </div>
                   <Pill text={meta.label} color={meta.color} />
@@ -1228,6 +1229,7 @@ function RealForumCard({ post, onOpen }: { post: ForumPostSummary; onOpen: () =>
 type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number; is_following: boolean }
 
 function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
+  const { tokens: T } = useTheme()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All')
   const [csrfToken2, setCsrfToken2] = useState('')
@@ -1327,7 +1329,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
   }, [filter])
   if (loading) return <SkeletonExplore />
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 12 }}>Explore</div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(255,255,255,0.09)', borderRadius: 13, padding: '10px 14px', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1345,14 +1347,14 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
         {/* Trending */}
         {(filter === 'All' || filter === 'Notes' || filter === 'Past Papers') && (
           <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>🔥 Trending</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>🔥 Trending</div>
             {trending.length === 0 ? null : (
               <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
                 {trending.map(t => (
-                  <div key={t.id} onClick={() => { setActiveDocumentId(t.document_id); setScreen('document-study') }} style={{ flexShrink: 0, background: '#fff', borderRadius: 14, padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', minWidth: 148, cursor: 'pointer' }}>
+                  <div key={t.id} onClick={() => { setActiveDocumentId(t.document_id); setScreen('document-study') }} style={{ flexShrink: 0, background: T.card, borderRadius: 14, padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', minWidth: 148, cursor: 'pointer' }}>
                     <div style={{ fontWeight: 800, fontSize: 20, color: N.gold, marginBottom: 6, fontFamily: 'Plus Jakarta Sans' }}>{t.material_type === 'summary' ? '📊' : '📕'}</div>
-                    <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{t.title}</div>
-                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{t.view_count} views</div>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: T.text, marginBottom: 2 }} className="line-clamp-1">{t.title}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted }}>{t.view_count} views</div>
                   </div>
                 ))}
               </div>
@@ -1364,23 +1366,23 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
         {(filter === 'All' || filter === 'Groups') && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontWeight: 800, fontSize: 14, color: N.navy }}>👥 Groups</div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>👥 Groups</div>
               <button onClick={() => setScreen('group-create')} style={{ fontSize: 12, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Create</button>
             </div>
             {loadingGroups ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF' }}>Loading groups…</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>Loading groups…</div>
             ) : groupsError ? (
               <div style={{ fontSize: 12, color: '#C94C4C' }}>{groupsError}</div>
             ) : groups.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF' }}>No groups found yet — be the first to start one.</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>No groups found yet — be the first to start one.</div>
             ) : (
               groups.map(g => (
-                <div key={g.id} onClick={() => openGroup(g.id)} style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div key={g.id} onClick={() => openGroup(g.id)} style={{ background: T.card, borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
                   <div style={{ width: 42, height: 42, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: N.gold, flexShrink: 0 }}>{g.name.slice(0, 2).toUpperCase()}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{g.name}</div>
-                    <div style={{ fontSize: 11, color: '#6B7280' }}>{g.unit_code ? `${g.unit_code} · ` : ''}{g.member_count} member{g.member_count === 1 ? '' : 's'}</div>
-                    {g.privacy === 'course_only' && <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>Course-only</div>}
+                    <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{g.name}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted }}>{g.unit_code ? `${g.unit_code} · ` : ''}{g.member_count} member{g.member_count === 1 ? '' : 's'}</div>
+                    {g.privacy === 'course_only' && <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>Course-only</div>}
                   </div>
                   {g.is_member ? (
                     <Pill text="Joined" color="#4CC97B" />
@@ -1396,20 +1398,20 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
         {/* Documents */}
         {filter !== 'Students' && filter !== 'Forums' && filter !== 'Opportunities' && filter !== 'Groups' && (
           <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>📄 {filter === 'Past Papers' ? 'Past Papers' : filter === 'Notes' ? 'Lecture Notes' : 'Recent Documents'}</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>📄 {filter === 'Past Papers' ? 'Past Papers' : filter === 'Notes' ? 'Lecture Notes' : 'Recent Documents'}</div>
             {loadingDocs ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF' }}>Loading documents…</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>Loading documents…</div>
             ) : docsError ? (
               <div style={{ fontSize: 12, color: '#C94C4C' }}>{docsError}</div>
             ) : filtered.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF' }}>No documents found yet.</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>No documents found yet.</div>
             ) : filtered.map(d => (
-              <div key={d.id} onClick={() => { setActiveDocumentId(d.document_id); setScreen('document-study') }} style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div key={d.id} onClick={() => { setActiveDocumentId(d.document_id); setScreen('document-study') }} style={{ background: T.card, borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
                 <div style={{ width: 42, height: 42, background: d.material_type === 'summary' ? 'rgba(76,123,201,0.1)' : 'rgba(201,68,68,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{d.material_type === 'summary' ? '📊' : '📕'}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{d.title}</div>
-                  <div style={{ fontSize: 11, color: '#6B7280' }}>{d.author}{d.unit_code ? ` · ${d.unit_code}` : ''}</div>
-                  <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>{d.save_count} saves</div>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{d.title}</div>
+                  <div style={{ fontSize: 11, color: T.textMuted }}>{d.author}{d.unit_code ? ` · ${d.unit_code}` : ''}</div>
+                  <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>{d.save_count} saves</div>
                 </div>
                 <Pill text={materialTypeLabel(d.material_type)} />
               </div>
@@ -1420,23 +1422,23 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
         {/* Students */}
         {(filter === 'All' || filter === 'Students') && (
           <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 12 }}>👥 Students</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>👥 Students</div>
             {loadingStudents ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF' }}>Loading students…</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>Loading students…</div>
             ) : studentsError ? (
               <div style={{ fontSize: 12, color: '#C94C4C' }}>{studentsError}</div>
             ) : students.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF' }}>No students found yet.</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>No students found yet.</div>
             ) : (
               <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
                 {students.map(s => {
                   const initials = s.display_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
                   return (
-                    <div key={s.user_id} style={{ flexShrink: 0, background: '#fff', borderRadius: 16, padding: '16px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', width: 148, textAlign: 'center' }}>
+                    <div key={s.user_id} style={{ flexShrink: 0, background: T.card, borderRadius: 16, padding: '16px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', width: 148, textAlign: 'center' }}>
                       <div onClick={() => openStudentProfile(s)} style={{ cursor: 'pointer' }}>
                         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><Avi name={initials} size={48} /></div>
-                        <div style={{ fontWeight: 700, fontSize: 12, color: N.navy }} className="line-clamp-1">{s.display_name}</div>
-                        <div style={{ fontSize: 10, color: '#6B7280', marginBottom: 2 }} className="line-clamp-1">{s.program_name || 'Student'}{s.year ? ` · Y${s.year}` : ''}</div>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{s.display_name}</div>
+                        <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }} className="line-clamp-1">{s.program_name || 'Student'}{s.year ? ` · Y${s.year}` : ''}</div>
                         <div style={{ fontSize: 10, color: N.gold, fontWeight: 700 }}>⭐ {s.xp_total.toLocaleString()} XP</div>
                       </div>
                       <button onClick={() => toggleFollow(s)} disabled={followBusy[s.user_id]}
@@ -3966,6 +3968,7 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
 type ProfileMe = { id: number; display_name: string | null; bio: string | null; university_id: number | null; program_id: number | null }
 
 function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: { setScreen: (s: Screen) => void; setActiveProfileUserId?: (id: number) => void; onOpenOrgPortal?: () => void }) {
+  const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'posts'|'saved'|'activity'|'materials'>('posts')
   const [showMenu, setShowMenu] = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
@@ -4001,15 +4004,15 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
   const displayName = me?.display_name || 'Student'
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowMenu(v => !v)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
             {showMenu && (
-              <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, width: 170, overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', right: 0, top: 40, background: T.card, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, width: 170, overflow: 'hidden' }}>
                 {[['Edit Profile', () => { setShowMenu(false); setScreen('edit-profile') }], ['Ambassador Program', () => { setShowMenu(false); setScreen('ambassador') }], ['Organisation Portal', () => { setShowMenu(false); onOpenOrgPortal?.() }], ['Settings', () => { setShowMenu(false); setScreen('settings') }], ['Share Profile', () => { setShowMenu(false); setScreen('share-sheet') }]].map(([label, action]) => (
-                  <button key={label as string} onClick={action as () => void} style={{ display: 'block', width: '100%', padding: '13px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>{label as string}</button>
+                  <button key={label as string} onClick={action as () => void} style={{ display: 'block', width: '100%', padding: '13px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>{label as string}</button>
                 ))}
               </div>
             )}
@@ -4019,7 +4022,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
           <div style={{ position: 'relative', marginBottom: 14 }}>
             <div style={{ width: 76, height: 76, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy, border: `3px solid rgba(201,168,76,0.4)` }}>{initials}</div>
             <button onClick={() => setShowAvatarPicker(true)} style={{ position: 'absolute', bottom: 0, right: 0, width: 22, height: 22, background: N.gold, borderRadius: '50%', border: `2px solid ${N.navy}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <div style={{ color: N.navy }}>{Ic.edit('w-3 h-3')}</div>
+              <div style={{ color: T.text }}>{Ic.edit('w-3 h-3')}</div>
             </button>
           </div>
           <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>{displayName}</div>
@@ -4047,29 +4050,29 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
             // id along so FollowListScreen knows whose list to fetch.
             if (s.dest === 'followers' && me && setActiveProfileUserId) setActiveProfileUserId(me.id)
             setScreen(s.dest)
-          }} style={{ background: '#fff', borderRadius: 14, padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+          }} style={{ background: T.card, borderRadius: 14, padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{s.label}</div>
+            <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 600 }}>{s.label}</div>
           </button>
         ))}
       </div>
 
-      <div style={{ margin: '14px 14px 0', background: '#fff', borderRadius: 16, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+      <div style={{ margin: '14px 14px 0', background: T.card, borderRadius: 16, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontWeight: 800, fontSize: 13, color: N.navy }}>Achievements</div>
+          <div style={{ fontWeight: 800, fontSize: 13, color: T.text }}>Achievements</div>
           <button onClick={() => setScreen('achievements')} style={{ fontSize: 11, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>See all</button>
         </div>
         <div style={{ display: 'flex', gap: 14, overflowX: 'auto' }} className="scrollbar-hide">
           {achievementsList.filter(a => a.done).map(a => (
             <button key={a.code} onClick={() => setScreen('achievements')} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer' }}>
               <div style={{ width: 46, height: 46, background: `${N.gold}18`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, border: `2px solid ${N.gold}33` }}>{a.icon}</div>
-              <div style={{ fontSize: 9, color: '#6B7280', textAlign: 'center', maxWidth: 50, lineHeight: 1.3 }}>{a.name}</div>
+              <div style={{ fontSize: 9, color: T.textMuted, textAlign: 'center', maxWidth: 50, lineHeight: 1.3 }}>{a.name}</div>
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ margin: '14px 14px 0', background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+      <div style={{ margin: '14px 14px 0', background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
           {(['posts','saved','activity','materials'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '11px 0', background: 'none', border: 'none', fontWeight: tab === t ? 800 : 500, fontSize: 11, color: tab === t ? N.navy : '#9CA3AF', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', borderBottom: tab === t ? `2px solid ${N.gold}` : '2px solid transparent' }}>
@@ -4083,7 +4086,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
               {[{ text: 'Just started my ACT 101 journey on Prepza! First flashcard set generated 🎉', likes: 14, time: '1d ago' }].map((p, i) => (
                 <div key={i} style={{ paddingBottom: 12 }}>
                   <div style={{ marginBottom: 6, lineHeight: 1.6 }}>{p.text}</div>
-                  <div style={{ display: 'flex', gap: 12, fontSize: 11, color: '#9CA3AF' }}>
+                  <div style={{ display: 'flex', gap: 12, fontSize: 11, color: T.textMuted }}>
                     <span style={{ color: '#C94C4C' }}>❤️ {p.likes}</span><span>{p.time}</span>
                   </div>
                 </div>
@@ -4095,8 +4098,8 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
               {['ACT 101 Lecture Notes – Week 1-6', 'Equity Leaders Programme', 'STA 101 Flashcards'].map((item, i) => (
                 <button key={i} onClick={() => setScreen(i === 0 ? 'document-study' : i === 1 ? 'opportunity-detail' : 'flashcards')} style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: '6px 0', borderBottom: i < 2 ? '1px solid rgba(0,0,0,0.05)' : 'none', fontFamily: 'Plus Jakarta Sans' }}>
                   <div style={{ width: 32, height: 32, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{i === 0 ? '📄' : i === 1 ? '🚀' : '🃏'}</div>
-                  <div style={{ fontSize: 13, color: N.navy, fontWeight: 600 }}>{item}</div>
-                  <div style={{ marginLeft: 'auto', color: '#9CA3AF' }}>{Ic.chevR('w-4 h-4')}</div>
+                  <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{item}</div>
+                  <div style={{ marginLeft: 'auto', color: T.textMuted }}>{Ic.chevR('w-4 h-4')}</div>
                 </button>
               ))}
             </div>
@@ -4111,8 +4114,8 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
               ].map((a, i) => (
                 <button key={i} onClick={() => setScreen(a.screen)} style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, fontFamily: 'Plus Jakarta Sans' }}>
                   <span style={{ fontSize: 18 }}>{a.icon}</span>
-                  <div style={{ flex: 1, fontSize: 13, color: N.navy, fontWeight: 500 }}>{a.action}</div>
-                  <span style={{ fontSize: 11, color: '#9CA3AF', flexShrink: 0 }}>{a.time}</span>
+                  <div style={{ flex: 1, fontSize: 13, color: T.text, fontWeight: 500 }}>{a.action}</div>
+                  <span style={{ fontSize: 11, color: T.textMuted, flexShrink: 0 }}>{a.time}</span>
                 </button>
               ))}
             </div>
@@ -4121,9 +4124,9 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {['ACT 101 Notes – Week 1-6.pdf', 'MAT 101 Past Papers 2023.pdf', 'STA 101 Flashcard Set'].map((m, i) => (
                 <button key={i} onClick={() => setScreen(i < 2 ? 'document-study' : 'flashcards')} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#F8F9FC', border: 'none', borderRadius: 12, padding: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-                  <div style={{ width: 36, height: 36, background: '#fff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{i < 2 ? '📕' : '🃏'}</div>
-                  <div style={{ flex: 1, fontSize: 12, color: N.navy, fontWeight: 600, textAlign: 'left' }}>{m}</div>
-                  <div style={{ color: '#9CA3AF' }}>{Ic.chevR('w-4 h-4')}</div>
+                  <div style={{ width: 36, height: 36, background: T.card, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{i < 2 ? '📕' : '🃏'}</div>
+                  <div style={{ flex: 1, fontSize: 12, color: T.text, fontWeight: 600, textAlign: 'left' }}>{m}</div>
+                  <div style={{ color: T.textMuted }}>{Ic.chevR('w-4 h-4')}</div>
                 </button>
               ))}
             </div>
@@ -4134,13 +4137,13 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
 
       {showAvatarPicker && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }}>
-          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 36px', width: '100%' }}>
+          <div style={{ background: T.card, borderRadius: '24px 24px 0 0', padding: '24px 20px 36px', width: '100%' }}>
             <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
-            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 16 }}>Change Profile Photo</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 16 }}>Change Profile Photo</div>
             {[['📷','Take Photo'],['🖼️','Choose from Library'],['🔗','Enter Avatar URL']].map(([icon,label],i) => (
               <button key={i} onClick={() => setShowAvatarPicker(false)} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 12, padding: '13px 16px', marginBottom: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
                 <span style={{ fontSize: 22 }}>{icon}</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{label}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{label}</span>
               </button>
             ))}
             <button onClick={() => setShowAvatarPicker(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', marginTop: 4, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
@@ -5056,6 +5059,7 @@ type NotificationItem = {
 }
 
 function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfileUserId }: { setScreen: (s: Screen) => void; setActiveForumPostId?: (id: number) => void; setActiveProfileUserId?: (id: number) => void }) {
+  const { tokens: T } = useTheme()
   const [notifs, setNotifs] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -5098,7 +5102,7 @@ function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfile
 
   if (loading) return <SkeletonNotifications />
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -5116,9 +5120,9 @@ function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfile
             <button onClick={() => openNotif(n)} style={{ display: 'flex', gap: 12, flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans', padding: 0 }}>
               <div style={{ width: 42, height: 42, background: `${N.gold}18`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{iconFor(n.type)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 2 }}>{n.title}</div>
-                {n.body && <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.55 }} className="line-clamp-2">{n.body}</div>}
-                <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 4 }}>{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 2 }}>{n.title}</div>
+                {n.body && <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.55 }} className="line-clamp-2">{n.body}</div>}
+                <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</div>
               </div>
             </button>
             <button onClick={() => removeNotif(n.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D1D5DB', flexShrink: 0, padding: 4 }}>{Ic.close('w-4 h-4')}</button>
@@ -5143,6 +5147,7 @@ type MySubmission = {
 }
 
 function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')
   const [materialTypeFilter, setMaterialTypeFilter] = useState<string | null>(null)
   const [csrfToken, setCsrfToken] = useState('')
@@ -5277,24 +5282,24 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const statusColor = (status: string) => status === 'approved' ? '#4CC97B' : status === 'rejected' ? '#C94C4C' : N.gold
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       {reportItem && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 99 }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 360 }}>
+          <div style={{ background: T.card, borderRadius: 20, padding: 24, width: '100%', maxWidth: 360 }}>
             {reportSubmitted ? (
               <>
-                <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 8 }}>Report submitted</div>
-                <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20 }}>Thanks - our team will review "{reportItem.title}".</div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 8 }}>Report submitted</div>
+                <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 20 }}>Thanks - our team will review "{reportItem.title}".</div>
                 <button onClick={closeReportModal} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: N.navy }}>Done</button>
               </>
             ) : (
               <>
-                <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 4 }}>Report Material</div>
-                <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 14 }} className="line-clamp-1">{reportItem.title}</div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 4 }}>Report Material</div>
+                <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 14 }} className="line-clamp-1">{reportItem.title}</div>
                 {REPORT_REASONS.map(r => (
                   <button key={r.value} onClick={() => setReportReason(r.value)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: reportReason === r.value ? 'rgba(201,168,76,0.12)' : '#F8F9FC', border: reportReason === r.value ? `1px solid ${N.gold}55` : '1px solid transparent', borderRadius: 10, padding: '11px 14px', marginBottom: 8, textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>{r.label}</button>
                 ))}
-                <textarea value={reportDetails} onChange={e => setReportDetails(e.target.value)} placeholder="Additional details (optional)" rows={2} maxLength={500} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '10px 12px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', boxSizing: 'border-box', marginTop: 4, marginBottom: 10 }} />
+                <textarea value={reportDetails} onChange={e => setReportDetails(e.target.value)} placeholder="Additional details (optional)" rows={2} maxLength={500} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '10px 12px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', boxSizing: 'border-box', marginTop: 4, marginBottom: 10 }} />
                 {reportError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{reportError}</div>}
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={closeReportModal} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
@@ -5344,36 +5349,36 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
         {activeTab === 'Browse' && (
           browseLoading ? (
-            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '12px 0' }}>Loading the library…</div>
+            <div style={{ fontSize: 12, color: T.textMuted, padding: '12px 0' }}>Loading the library…</div>
           ) : browseError ? (
             <ErrorState onRetry={loadBrowse} />
           ) : browseItems.length === 0 ? (
             <EmptyState icon="📚" title="Nothing published yet" sub="Be the first to share notes or past papers with other students." action="Publish Material" onAction={() => setScreen('publish-library')} />
           ) : browseItems.map(pub => (
-            <div key={pub.id} style={{ background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div key={pub.id} style={{ background: T.card, borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
               <div style={{ width: 44, height: 44, background: '#F3F4F6', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📕</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{pub.title}</div>
-                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{pub.author}{pub.unit_code ? ` · ${pub.unit_code}` : ''} · {pub.view_count} views · {pub.save_count} saves</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 2 }} className="line-clamp-1">{pub.title}</div>
+                <div style={{ fontSize: 11, color: T.textMuted }}>{pub.author}{pub.unit_code ? ` · ${pub.unit_code}` : ''} · {pub.view_count} views · {pub.save_count} saves</div>
               </div>
               <button onClick={() => toggleSave(pub)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: savedIds.has(pub.id) ? N.gold : '#9CA3AF', flexShrink: 0 }}>{Ic.bookmark('w-5 h-5')}</button>
-              <button onClick={() => setReportItem(pub)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', flexShrink: 0 }}>{Ic.dots('w-4 h-4')}</button>
+              <button onClick={() => setReportItem(pub)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, flexShrink: 0 }}>{Ic.dots('w-4 h-4')}</button>
             </div>
           ))
         )}
         {activeTab === 'Saved' && (
           savedLoading ? (
-            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '12px 0' }}>Loading your saved items…</div>
+            <div style={{ fontSize: 12, color: T.textMuted, padding: '12px 0' }}>Loading your saved items…</div>
           ) : savedError ? (
             <ErrorState onRetry={loadSaved} />
           ) : savedItems.length === 0 ? (
             <EmptyState icon="📚" title="No saved items yet" sub="Bookmark items from the library to find them here." action="Browse Library" onAction={() => setActiveTab('Browse')} />
           ) : savedItems.map(pub => (
-            <div key={pub.id} style={{ background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div key={pub.id} style={{ background: T.card, borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
               <div style={{ width: 44, height: 44, background: '#F3F4F6', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📕</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{pub.title}</div>
-                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{pub.author}{pub.unit_code ? ` · ${pub.unit_code}` : ''}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 2 }} className="line-clamp-1">{pub.title}</div>
+                <div style={{ fontSize: 11, color: T.textMuted }}>{pub.author}{pub.unit_code ? ` · ${pub.unit_code}` : ''}</div>
               </div>
               <button onClick={() => toggleSave(pub)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: N.gold, flexShrink: 0 }}>{Ic.bookmark('w-5 h-5')}</button>
             </div>
@@ -5382,26 +5387,26 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         {activeTab === 'Published' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: '#9CA3AF' }}>Materials you've submitted to the Prepza Library</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>Materials you've submitted to the Prepza Library</div>
               <button onClick={() => setScreen('publish-library')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 11, border: 'none', borderRadius: 10, padding: '6px 12px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Publish</button>
             </div>
             {submissionsLoading ? (
-              <div style={{ fontSize: 12, color: '#9CA3AF', padding: '12px 0' }}>Loading your submissions…</div>
+              <div style={{ fontSize: 12, color: T.textMuted, padding: '12px 0' }}>Loading your submissions…</div>
             ) : submissionsError ? (
               <ErrorState onRetry={loadSubmissions} />
             ) : submissions.length === 0 ? (
               <EmptyState icon="📖" title="Nothing published yet" sub="Share your notes and materials with students across Kenya. Earn XP for approved contributions." action="Publish Material" onAction={() => setScreen('publish-library')} />
             ) : submissions.map(p => (
-              <div key={p.id} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1.5px solid ${p.status === 'approved' ? 'rgba(76,201,123,0.2)' : 'rgba(0,0,0,0.06)'}` }}>
+              <div key={p.id} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1.5px solid ${p.status === 'approved' ? 'rgba(76,201,123,0.2)' : 'rgba(0,0,0,0.06)'}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 3 }} className="line-clamp-1">{p.title}</div>
-                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{materialTypeLabel(p.material_type)}{p.unit_code ? ` · ${p.unit_code}` : ''}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 3 }} className="line-clamp-1">{p.title}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted }}>{materialTypeLabel(p.material_type)}{p.unit_code ? ` · ${p.unit_code}` : ''}</div>
                   </div>
                   <Pill text={p.status.charAt(0).toUpperCase() + p.status.slice(1)} color={statusColor(p.status)} />
                 </div>
                 {p.status === 'approved' && (
-                  <div style={{ display: 'flex', gap: 16, fontSize: 11, color: '#9CA3AF', marginTop: 8, paddingTop: 8, borderTop: '1px solid #F3F4F6' }}>
+                  <div style={{ display: 'flex', gap: 16, fontSize: 11, color: T.textMuted, marginTop: 8, paddingTop: 8, borderTop: '1px solid #F3F4F6' }}>
                     <span>{p.view_count} views</span>
                     <span>{p.save_count} saves</span>
                     <span style={{ marginLeft: 'auto' }}>{p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}</span>
