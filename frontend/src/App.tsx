@@ -1815,6 +1815,7 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
 
 // ─── PROCESSING ───────────────────────────────────────────────────────────────
 function ProcessingScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const { tokens: T } = useTheme()
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
   const [pollError, setPollError] = useState('')
 
@@ -1892,6 +1893,7 @@ function ProcessingScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
 
 // ─── DOC READY ────────────────────────────────────────────────────────────────
 function DocReadyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const { tokens: T } = useTheme()
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
   const [loadError, setLoadError] = useState('')
 
@@ -1918,7 +1920,7 @@ function DocReadyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen
   const metaParts = [fileTypeLabel, pageLabel, sizeLabel].filter(Boolean)
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <TopBar title="Document Ready ✓" onBack={() => window.history.back()} />
         <div style={{ background: 'rgba(76,201,123,0.12)', border: '1px solid rgba(76,201,123,0.3)', borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -1932,22 +1934,22 @@ function DocReadyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen
       <div style={{ padding: 18 }}>
         {loadError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 14 }}>{loadError}</div>}
         {/* Doc info */}
-        <div style={{ background: '#fff', borderRadius: 16, padding: 16, marginBottom: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', display: 'flex', gap: 14, alignItems: 'center' }}>
+        <div style={{ background: T.card, borderRadius: 16, padding: 16, marginBottom: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', display: 'flex', gap: 14, alignItems: 'center' }}>
           <div style={{ width: 52, height: 52, background: 'rgba(201,68,68,0.1)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>📕</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy }} className="line-clamp-1">{doc?.title || 'Loading…'}</div>
-            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{metaParts.length > 0 ? metaParts.join(' · ') : '—'}</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: T.text }} className="line-clamp-1">{doc?.title || 'Loading…'}</div>
+            <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>{metaParts.length > 0 ? metaParts.join(' · ') : '—'}</div>
           </div>
         </div>
-        <div style={{ fontWeight: 800, fontSize: 15, color: N.navy, marginBottom: 12 }}>What would you like to do?</div>
+        <div style={{ fontWeight: 800, fontSize: 15, color: T.text, marginBottom: 12 }}>What would you like to do?</div>
         {actions.map((a, i) => (
-          <button key={i} onClick={() => setScreen(a.dest)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 14, padding: '14px 16px', marginBottom: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+          <button key={i} onClick={() => setScreen(a.dest)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, background: T.card, border: '1px solid rgba(0,0,0,0.05)', borderRadius: 14, padding: '14px 16px', marginBottom: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
             <div style={{ width: 44, height: 44, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{a.icon}</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{a.label}</div>
-              <div style={{ fontSize: 11, color: '#6B7280' }}>{a.sub}</div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{a.label}</div>
+              <div style={{ fontSize: 11, color: T.textMuted }}>{a.sub}</div>
             </div>
-            <div style={{ color: '#9CA3AF' }}>{Ic.chevR()}</div>
+            <div style={{ color: T.textMuted }}>{Ic.chevR()}</div>
           </button>
         ))}
       </div>
@@ -2808,6 +2810,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
 
 // ─── SUMMARY ──────────────────────────────────────────────────────────────────
 function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const { tokens: T } = useTheme()
   const [saved, setSaved] = useState(false)
   const [summary, setSummary] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -2852,27 +2855,27 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
   // (as a last resort) raw JSON so nothing is silently hidden.
   const renderSummaryBody = () => {
     if (typeof summary === 'string') {
-      return <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{summary}</div>
+      return <div style={{ fontSize: 13, color: T.text, lineHeight: 1.8, whiteSpace: 'pre-line' }}>{summary}</div>
     }
     if (Array.isArray(summary)) {
       return summary.map((s: any, i: number) => (
         <div key={i} style={{ marginBottom: 20 }}>
-          {(s.title || s.heading) && <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 8 }}>{s.title || s.heading}</div>}
-          <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{s.body || s.content || s.text || JSON.stringify(s)}</div>
+          {(s.title || s.heading) && <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 8 }}>{s.title || s.heading}</div>}
+          <div style={{ fontSize: 13, color: T.text, lineHeight: 1.8, whiteSpace: 'pre-line' }}>{s.body || s.content || s.text || JSON.stringify(s)}</div>
           {i < summary.length - 1 && <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', marginTop: 20 }} />}
         </div>
       ))
     }
     if (summary && typeof summary === 'object') {
       const text = summary.text || summary.content || summary.body
-      if (text) return <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{text}</div>
-      return <pre style={{ fontSize: 11, color: '#374151', whiteSpace: 'pre-wrap', background: '#F8F9FC', borderRadius: 10, padding: 12 }}>{JSON.stringify(summary, null, 2)}</pre>
+      if (text) return <div style={{ fontSize: 13, color: T.text, lineHeight: 1.8, whiteSpace: 'pre-line' }}>{text}</div>
+      return <pre style={{ fontSize: 11, color: T.text, whiteSpace: 'pre-wrap', background: '#F8F9FC', borderRadius: 10, padding: 12 }}>{JSON.stringify(summary, null, 2)}</pre>
     }
     return null
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -2886,7 +2889,7 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
       </div>
       {loading ? <GenerationLoading label="Generating your summary…" /> : error ? <GenerationError error={error} /> : (
         <div style={{ flex: 1, overflowY: 'auto', padding: 18 }} className="scrollbar-hide">
-          <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
+          <div style={{ background: T.card, borderRadius: 16, padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>
             <Pill text="AI Generated" />
             {renderSummaryBody()}
           </div>
@@ -3541,6 +3544,7 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
 
 // ─── OPPORTUNITIES ────────────────────────────────────────────────────────────
 function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen: (s: Screen) => void; setActiveOpportunityId: (id: number | null) => void }) {
+  const { tokens: T } = useTheme()
   const [filter, setFilter] = useState('All')
   const [query, setQuery] = useState('')
   const [opps, setOpps] = useState<OpportunityPublic[]>([])
@@ -3599,7 +3603,7 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
   const openDetail = (id: number) => { setActiveOpportunityId(id); setScreen('opportunity-detail') }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -3630,26 +3634,26 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
           const meta = oppTypeMeta(o.opportunity_type)
           const deadline = fmtDeadline(o.application_deadline)
           return (
-            <div key={o.id} onClick={() => openDetail(o.id)} style={{ background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.08)', marginBottom: 14, cursor: 'pointer' }}>
+            <div key={o.id} onClick={() => openDetail(o.id)} style={{ background: T.card, borderRadius: 18, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.08)', marginBottom: 14, cursor: 'pointer' }}>
               <div style={{ height: 5, background: `linear-gradient(90deg,${meta.color},${meta.color}66)` }} />
               <div style={{ padding: 16 }}>
                 <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
                   <div style={{ width: 48, height: 48, background: meta.color + '18', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{meta.icon}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, fontSize: 14, color: N.navy }} className="line-clamp-1">{o.title}</div>
-                    <div style={{ fontSize: 12, color: '#6B7280' }} className="line-clamp-1">{o.organisation?.name || 'Unknown organisation'}</div>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: T.text }} className="line-clamp-1">{o.title}</div>
+                    <div style={{ fontSize: 12, color: T.textMuted }} className="line-clamp-1">{o.organisation?.name || 'Unknown organisation'}</div>
                   </div>
                   <Pill text={o.promotion_type === 'sponsored' ? 'Sponsored' : o.promotion_type === 'featured' ? 'Featured' : meta.label} color={o.promotion_type ? N.gold : meta.color} />
                 </div>
                 <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
-                  {o.location && <span style={{ fontSize: 11, color: '#6B7280' }}>📍 {o.location}{o.is_remote ? ' · Remote' : ''}</span>}
-                  {!o.location && o.is_remote && <span style={{ fontSize: 11, color: '#6B7280' }}>🌐 Remote</span>}
-                  {deadline && <span style={{ fontSize: 11, color: '#6B7280' }}>⏰ {deadline}</span>}
-                  <span style={{ fontSize: 11, color: '#9CA3AF' }}>👁 {o.view_count}</span>
+                  {o.location && <span style={{ fontSize: 11, color: T.textMuted }}>📍 {o.location}{o.is_remote ? ' · Remote' : ''}</span>}
+                  {!o.location && o.is_remote && <span style={{ fontSize: 11, color: T.textMuted }}>🌐 Remote</span>}
+                  {deadline && <span style={{ fontSize: 11, color: T.textMuted }}>⏰ {deadline}</span>}
+                  <span style={{ fontSize: 11, color: T.textMuted }}>👁 {o.view_count}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={e => { e.stopPropagation(); openDetail(o.id) }} style={{ flex: 1, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, color: N.gold, fontWeight: 700, fontSize: 13, border: 'none', borderRadius: 12, padding: '11px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View Details →</button>
-                  <button onClick={e => { e.stopPropagation(); toggleSave(o) }} disabled={togglingId === o.id} style={{ width: 44, height: 44, background: o.saved ? `${N.gold}20` : '#F8F9FC', border: `1px solid ${o.saved ? N.gold + '55' : 'rgba(0,0,0,0.06)'}`, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: o.saved ? N.gold : '#6B7280' }}>{Ic.bookmark('w-4 h-4')}</div></button>
+                  <button onClick={e => { e.stopPropagation(); toggleSave(o) }} disabled={togglingId === o.id} style={{ width: 44, height: 44, background: o.saved ? `${N.gold}20` : '#F8F9FC', border: `1px solid ${o.saved ? N.gold + '55' : 'rgba(0,0,0,0.06)'}`, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: o.saved ? N.gold : T.textMuted }}>{Ic.bookmark('w-4 h-4')}</div></button>
                 </div>
               </div>
             </div>
@@ -3662,6 +3666,7 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
 
 // ─── OPPORTUNITY DETAIL ───────────────────────────────────────────────────────
 function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) => void; opportunityId: number | null }) {
+  const { tokens: T } = useTheme()
   const [opp, setOpp] = useState<OpportunityPublic | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -3696,7 +3701,7 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
 
   if (opportunityId == null) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 16px' }}>
           <TopBar title="Opportunity Details" onBack={() => window.history.back()} />
         </div>
@@ -3709,7 +3714,7 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
 
   if (error || !opp) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 16px' }}>
           <TopBar title="Opportunity Details" onBack={() => window.history.back()} />
         </div>
@@ -3722,7 +3727,7 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
   const deadline = fmtDeadline(opp.application_deadline)
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -3747,43 +3752,43 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
             deadline ? ['⏰', `Deadline: ${deadline}`] : null,
             ['👁', `${opp.view_count} views`],
           ].filter((x): x is [string, string] => x !== null).map(([icon, val]) => (
-            <div key={val} style={{ background: '#fff', borderRadius: 12, padding: '8px 12px', display: 'flex', gap: 6, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div key={val} style={{ background: T.card, borderRadius: 12, padding: '8px 12px', display: 'flex', gap: 6, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
               <span style={{ fontSize: 14 }}>{icon}</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: N.navy }}>{val}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{val}</span>
             </div>
           ))}
         </div>
-        <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>About this Opportunity</div>
-          <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{opp.description}</div>
+        <div style={{ background: T.card, borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 10 }}>About this Opportunity</div>
+          <div style={{ fontSize: 13, color: T.text, lineHeight: 1.8, whiteSpace: 'pre-line' }}>{opp.description}</div>
         </div>
         {opp.application_instructions && (
-          <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>How to Apply</div>
-            <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-line' }}>{opp.application_instructions}</div>
+          <div style={{ background: T.card, borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 10 }}>How to Apply</div>
+            <div style={{ fontSize: 13, color: T.text, lineHeight: 1.8, whiteSpace: 'pre-line' }}>{opp.application_instructions}</div>
           </div>
         )}
         {opp.application_url ? (
           <button onClick={() => setShowApply(true)} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '15px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 6px 20px rgba(201,168,76,0.35)` }}>Apply Now →</button>
         ) : (
-          <div style={{ background: '#F3F4F6', borderRadius: 16, padding: '14px 16px', textAlign: 'center', fontSize: 12, color: '#9CA3AF', fontWeight: 600 }}>No application link provided — check the description above for how to apply.</div>
+          <div style={{ background: '#F3F4F6', borderRadius: 16, padding: '14px 16px', textAlign: 'center', fontSize: 12, color: T.textMuted, fontWeight: 600 }}>No application link provided — check the description above for how to apply.</div>
         )}
-        <button onClick={() => setScreen('share-sheet')} style={{ background: '#fff', color: N.navy, fontWeight: 700, fontSize: 14, border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <div style={{ color: '#6B7280' }}>{Ic.share('w-4 h-4')}</div> Share Opportunity
+        <button onClick={() => setScreen('share-sheet')} style={{ background: T.card, color: T.text, fontWeight: 700, fontSize: 14, border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <div style={{ color: T.textMuted }}>{Ic.share('w-4 h-4')}</div> Share Opportunity
         </button>
       </div>
 
       {showApply && opp.application_url && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', zIndex: 50 }}>
-          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '28px 24px 36px', width: '100%' }}>
+          <div style={{ background: T.card, borderRadius: '24px 24px 0 0', padding: '28px 24px 36px', width: '100%' }}>
             <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
             <div style={{ fontSize: 24, textAlign: 'center', marginBottom: 12 }}>🌐</div>
-            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 10 }}>You're leaving Prepza</div>
-            <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 1.65, marginBottom: 24 }}>
+            <div style={{ fontWeight: 800, fontSize: 17, color: T.text, textAlign: 'center', marginBottom: 10 }}>You're leaving Prepza</div>
+            <div style={{ fontSize: 13, color: T.textMuted, textAlign: 'center', lineHeight: 1.65, marginBottom: 24 }}>
               You will be taken to <strong>{opp.organisation?.name || 'the organisation'}'s</strong> website to complete your application. Prepza is not responsible for third-party application processes.
             </div>
             <a href={opp.application_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', width: '100%', boxSizing: 'border-box', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginBottom: 10 }}>Continue to Website →</a>
-            <button onClick={() => setShowApply(false)} style={{ width: '100%', background: '#F3F4F6', color: '#374151', fontWeight: 700, fontSize: 14, border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel</button>
+            <button onClick={() => setShowApply(false)} style={{ width: '100%', background: '#F3F4F6', color: T.text, fontWeight: 700, fontSize: 14, border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel</button>
           </div>
         </div>
       )}
@@ -3798,6 +3803,7 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
 // navigator.share()/clipboard - it does not know or claim to know the
 // specific document/post/opportunity that triggered it.
 function ShareSheetScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [copied, setCopied] = useState(false)
   const shareUrl = typeof window !== 'undefined' ? window.location.origin : 'https://prepza.app'
   const shareText = 'Check this out on Prepza — the AI study companion for Kenyan university students.'
@@ -3828,19 +3834,19 @@ function ShareSheetScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#00000055', justifyContent: 'flex-end' }}>
-      <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '20px 20px 32px' }}>
+      <div style={{ background: T.card, borderRadius: '24px 24px 0 0', padding: '20px 20px 32px' }}>
         <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
-        <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 6 }}>Share</div>
-        <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, wordBreak: 'break-all' }}>{shareUrl}</div>
+        <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 6 }}>Share</div>
+        <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 20, wordBreak: 'break-all' }}>{shareUrl}</div>
         <div style={{ display: 'flex', gap: 16, marginBottom: 24, overflowX: 'auto' }} className="scrollbar-hide">
           {actions.map((s, i) => (
             <button key={i} onClick={s.onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
               <div style={{ width: 52, height: 52, background: '#F3F4F6', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{s.icon}</div>
-              <span style={{ fontSize: 11, color: '#6B7280', fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{s.label}</span>
+              <span style={{ fontSize: 11, color: T.textMuted, fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{s.label}</span>
             </button>
           ))}
         </div>
-        <button onClick={() => setScreen('home')} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: N.navy }}>Cancel</button>
+        <button onClick={() => setScreen('home')} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
       </div>
     </div>
   )
