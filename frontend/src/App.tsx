@@ -1698,6 +1698,7 @@ function EduUploadForm({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── UPLOAD ───────────────────────────────────────────────────────────────────
 function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
+  const { tokens: T } = useTheme()
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -1781,7 +1782,7 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
   }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <TopBar title="Upload Document" onBack={() => window.history.back()} />
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: -8 }}>Prepza AI processes your document instantly</div>
@@ -1799,11 +1800,11 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
         >
           <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleFileChange} disabled={uploading} />
           <div style={{ fontSize: 48, marginBottom: 12 }}>{uploading ? '⏳' : '📤'}</div>
-          <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 6 }}>{uploading ? (uploadStage || 'Uploading...') : 'Drop your file here'}</div>
-          {!uploading && <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>or tap to browse from your device</div>}
+          <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 6 }}>{uploading ? (uploadStage || 'Uploading...') : 'Drop your file here'}</div>
+          {!uploading && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 16 }}>or tap to browse from your device</div>}
           {!uploading && (
             <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-              {['PDF','Word','PowerPoint','JPG','PNG'].map(t => <span key={t} style={{ background: '#F3F4F6', color: '#374151', fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 20 }}>{t}</span>)}
+              {['PDF','Word','PowerPoint','JPG','PNG'].map(t => <span key={t} style={{ background: '#F3F4F6', color: T.text, fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 20 }}>{t}</span>)}
             </div>
           )}
         </div>
@@ -2351,6 +2352,7 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
 
 // ─── FLASHCARDS ───────────────────────────────────────────────────────────────
 function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const { tokens: T } = useTheme()
   const [idx, setIdx] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [known, setKnown] = useState<number[]>([])
@@ -2442,10 +2444,10 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
   if (cards.length === 0) return <GenerationError error="No flashcards were returned." />
 
   if (finished) return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: 32 }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: T.pageBg, padding: 32 }}>
       <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
-      <div style={{ fontWeight: 800, fontSize: 24, color: N.navy, marginBottom: 6 }}>Review Complete!</div>
-      <div style={{ fontSize: 15, color: '#6B7280', marginBottom: 16 }}>{known.length}/{cards.length} marked as known</div>
+      <div style={{ fontWeight: 800, fontSize: 24, color: T.text, marginBottom: 6 }}>Review Complete!</div>
+      <div style={{ fontSize: 15, color: T.textMuted, marginBottom: 16 }}>{known.length}/{cards.length} marked as known</div>
       {completion && completion.xp_awarded > 0 && (
         <div style={{ fontSize: 13, color: N.gold, fontWeight: 700, marginBottom: 8 }}>+{completion.xp_awarded} XP</div>
       )}
@@ -2455,7 +2457,7 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
   )
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -2471,9 +2473,9 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
         <div style={{ textAlign: 'right', marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{idx + 1} / {cards.length}</div>
       </div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', gap: 24 }}>
-        <div onClick={() => setFlipped(v => !v)} style={{ width: '100%', minHeight: 220, background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 8px 32px rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: `2px solid ${flipped ? N.gold + '44' : 'transparent'}`, transition: 'border-color 0.2s' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: flipped ? N.gold : '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>{flipped ? 'Answer' : 'Question — tap to reveal'}</div>
-          <div style={{ fontSize: 14, color: N.navy, fontWeight: flipped ? 600 : 700, lineHeight: 1.7, whiteSpace: 'pre-line' }}>{flipped ? card.a : card.q}</div>
+        <div onClick={() => setFlipped(v => !v)} style={{ width: '100%', minHeight: 220, background: T.card, borderRadius: 24, padding: 28, boxShadow: '0 8px 32px rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: `2px solid ${flipped ? N.gold + '44' : 'transparent'}`, transition: 'border-color 0.2s' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: flipped ? N.gold : T.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 }}>{flipped ? 'Answer' : 'Question — tap to reveal'}</div>
+          <div style={{ fontSize: 14, color: T.text, fontWeight: flipped ? 600 : 700, lineHeight: 1.7, whiteSpace: 'pre-line' }}>{flipped ? card.a : card.q}</div>
         </div>
         {flipped && (
           <div style={{ display: 'flex', gap: 14, width: '100%' }}>
@@ -2482,7 +2484,7 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
           </div>
         )}
         {!flipped && (
-          <div style={{ color: '#9CA3AF', fontSize: 12, textAlign: 'center' }}>Tap the card to see the answer</div>
+          <div style={{ color: T.textMuted, fontSize: 12, textAlign: 'center' }}>Tap the card to see the answer</div>
         )}
       </div>
     </div>
@@ -2491,6 +2493,7 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
 
 // ─── QUIZ ─────────────────────────────────────────────────────────────────────
 function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const { tokens: T } = useTheme()
   const [qi, setQi] = useState(0)
   const [selected, setSelected] = useState<number|null>(null)
   const [score, setScore] = useState(0)
@@ -2588,10 +2591,10 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) =>
   if (questions.length === 0) return <GenerationError error="No quiz questions were returned." />
 
   if (done) return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: 32 }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: T.pageBg, padding: 32 }}>
       <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
-      <div style={{ fontWeight: 800, fontSize: 24, color: N.navy, marginBottom: 6 }}>Quiz Complete!</div>
-      <div style={{ fontSize: 15, color: '#6B7280', marginBottom: 16 }}>You scored {score}/{questions.length}</div>
+      <div style={{ fontWeight: 800, fontSize: 24, color: T.text, marginBottom: 6 }}>Quiz Complete!</div>
+      <div style={{ fontSize: 15, color: T.textMuted, marginBottom: 16 }}>You scored {score}/{questions.length}</div>
       {completion && completion.xp_awarded > 0 && (
         <div style={{ fontSize: 13, color: N.gold, fontWeight: 700, marginBottom: 8 }}>+{completion.xp_awarded} XP</div>
       )}
@@ -2605,7 +2608,7 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) =>
     </div>
   )
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button onClick={() => setScreen('document-study')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -2620,9 +2623,9 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) =>
         <div style={{ textAlign: 'right', marginTop: 4, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Q{qi+1} of {questions.length}</div>
       </div>
       <div style={{ flex: 1, padding: 20 }}>
-        <div style={{ background: '#fff', borderRadius: 18, padding: 20, marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
+        <div style={{ background: T.card, borderRadius: 18, padding: 20, marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: N.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Question {qi+1}</div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: N.navy, lineHeight: 1.7 }}>{q.q}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text, lineHeight: 1.7 }}>{q.q}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {q.opts.map((opt, i) => {
@@ -2649,6 +2652,7 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) =>
 
 // ─── PODCAST PLAYER ───────────────────────────────────────────────────────────
 function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const { tokens: T } = useTheme()
   const audioRef = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -2758,7 +2762,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const fmt = (s: number) => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <TopBar title="Study Podcast" onBack={() => window.history.back()} />
       </div>
@@ -2778,23 +2782,23 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
           {/* Album art */}
           <div style={{ width: 200, height: 200, borderRadius: 28, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 16px 48px rgba(201,168,76,0.35)`, fontSize: 80, fontWeight: 800, color: N.navy, fontFamily: 'Plus Jakarta Sans' }}>🎙️</div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontWeight: 800, fontSize: 20, color: N.navy, marginBottom: 4 }}>{title}</div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 4 }}>{title}</div>
             <Pill text="AI Generated" color={N.gold} />
           </div>
           {/* Progress */}
           <div style={{ width: '100%' }}>
             <input type="range" min={0} max={duration || 1} step={0.5} value={progress} onChange={e => { const v = +e.target.value; setProgress(v); if (audioRef.current) audioRef.current.currentTime = v }} style={{ width: '100%', accentColor: N.gold, cursor: 'pointer' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.textMuted, marginTop: 4 }}>
               <span>{fmt(progress)}</span><span>{fmt(duration)}</span>
             </div>
           </div>
           {/* Controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-            <button onClick={() => seek(-15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: N.navy }}>{Ic.rewind()}</button>
+            <button onClick={() => seek(-15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.text }}>{Ic.rewind()}</button>
             <button onClick={togglePlay} style={{ width: 64, height: 64, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 20px rgba(201,168,76,0.4)` }}>
-              <div style={{ color: N.navy }}>{playing ? Ic.pause() : Ic.play()}</div>
+              <div style={{ color: T.text }}>{playing ? Ic.pause() : Ic.play()}</div>
             </button>
-            <button onClick={() => seek(15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: N.navy }}>{Ic.skip()}</button>
+            <button onClick={() => seek(15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.text }}>{Ic.skip()}</button>
           </div>
         </div>
       )}
@@ -3302,6 +3306,7 @@ type ChatMessageData = { id: number; conversation_id: number; sender_id: number;
 type ChatDetail = { id: number; is_group: boolean; name: string; created_by: number; created_by_name: string; member_count: number; participants: { user_id: number; display_name: string; role: string }[]; viewer_muted: boolean }
 
 function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
+  const { tokens: T } = useTheme()
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState<ChatMessageData[]>([])
   const [showAttach, setShowAttach] = useState(false)
@@ -3445,7 +3450,7 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
   const initials = (headerName || '??').slice(0, 2).toUpperCase()
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 16px 14px' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -3460,9 +3465,9 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
       <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }} className="scrollbar-hide">
         {error && <div style={{ textAlign: 'center', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{error}</div>}
         {conversationId == null ? (
-          <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginTop: 40 }}>No conversation selected</div>
+          <div style={{ textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginTop: 40 }}>No conversation selected</div>
         ) : msgs.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginTop: 40 }}>No messages yet - say hi 👋</div>
+          <div style={{ textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginTop: 40 }}>No messages yet - say hi 👋</div>
         ) : msgs.map(m => {
           const isMe = m.sender_id === meId
           const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
@@ -3472,7 +3477,7 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
               {!isMe && headerIsGroup && <span style={{ fontSize: 11, color: N.gold, fontWeight: 700, marginLeft: 4 }}>{senderLabel}</span>}
               <div style={{ maxWidth: '76%', background: isMe ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: isMe ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '10px 13px', boxShadow: '0 2px 6px rgba(0,0,0,0.07)' }}>
                 {m.is_deleted ? (
-                  <div style={{ fontSize: 13, color: isMe ? 'rgba(255,255,255,0.5)' : '#9CA3AF', lineHeight: 1.6, fontStyle: 'italic' }}>This message was deleted</div>
+                  <div style={{ fontSize: 13, color: isMe ? 'rgba(255,255,255,0.5)' : T.textMuted, lineHeight: 1.6, fontStyle: 'italic' }}>This message was deleted</div>
                 ) : (
                   <>
                     {m.attachment && (
@@ -3485,48 +3490,48 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
                           <div style={{ width: 34, height: 34, background: isMe ? 'rgba(255,255,255,0.15)' : '#fff', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>📎</div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 12, fontWeight: 700, color: isMe ? '#fff' : N.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.attachment.original_filename}</div>
-                            <div style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.5)' : '#9CA3AF' }}>{(m.attachment.file_size_bytes / (1024 * 1024)).toFixed(1)} MB</div>
+                            <div style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.5)' : T.textMuted }}>{(m.attachment.file_size_bytes / (1024 * 1024)).toFixed(1)} MB</div>
                           </div>
                         </a>
                       )
                     )}
-                    {m.body && <div style={{ fontSize: 13, color: isMe ? '#fff' : '#374151', lineHeight: 1.6 }}>{m.body}</div>}
+                    {m.body && <div style={{ fontSize: 13, color: isMe ? '#fff' : T.text, lineHeight: 1.6 }}>{m.body}</div>}
                   </>
                 )}
-                <div style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.4)' : '#9CA3AF', textAlign: 'right', marginTop: 3 }}>{time}</div>
+                <div style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.4)' : T.textMuted, textAlign: 'right', marginTop: 3 }}>{time}</div>
               </div>
             </div>
           )
         })}
         <div ref={bottomRef} />
       </div>
-      <div style={{ padding: '10px 12px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)', position: 'relative' }}>
+      <div style={{ padding: '10px 12px 14px', background: T.card, borderTop: '1px solid rgba(0,0,0,0.06)', position: 'relative' }}>
         <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleAttachmentFileChange} disabled={uploadingAttachment} />
         {attachError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>{attachError}</div>}
-        {uploadingAttachment && <div style={{ color: '#9CA3AF', fontSize: 12, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>Sending attachment…</div>}
+        {uploadingAttachment && <div style={{ color: T.textMuted, fontSize: 12, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>Sending attachment…</div>}
         {showAttach && (
-          <div style={{ position: 'absolute', bottom: '100%', left: 12, right: 12, background: '#fff', borderRadius: 16, boxShadow: '0 -4px 24px rgba(0,0,0,0.12)', padding: 16, border: '1px solid rgba(0,0,0,0.06)' }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Send Attachment</div>
+          <div style={{ position: 'absolute', bottom: '100%', left: 12, right: 12, background: T.card, borderRadius: 16, boxShadow: '0 -4px 24px rgba(0,0,0,0.12)', padding: 16, border: '1px solid rgba(0,0,0,0.06)' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 12 }}>Send Attachment</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
               {[['📄','Document', true],['🖼️','Image', true],['📷','Camera', false],['🎵','Audio', false]].map(([icon,label,enabled],i) => (
                 <button key={i} onClick={() => { if (enabled) fileInputRef.current?.click(); else setShowAttach(false) }} disabled={!enabled} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: enabled ? 'pointer' : 'default', opacity: enabled ? 1 : 0.4 }}>
                   <div style={{ width: 52, height: 52, background: '#F3F4F6', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{icon}</div>
-                  <span style={{ fontSize: 11, color: '#6B7280', fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{enabled ? label : `${label} (soon)`}</span>
+                  <span style={{ fontSize: 11, color: T.textMuted, fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{enabled ? label : `${label} (soon)`}</span>
                 </button>
               ))}
             </div>
-            <button onClick={() => setShowAttach(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 0', marginTop: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+            <button onClick={() => setShowAttach(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 0', marginTop: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: T.text }}>Cancel</button>
           </div>
         )}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => setShowAttach(v => !v)} disabled={uploadingAttachment} style={{ width: 36, height: 36, background: '#F3F4F6', border: 'none', borderRadius: 10, cursor: uploadingAttachment ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: uploadingAttachment ? 0.5 : 1 }}>
-            <div style={{ color: '#6B7280' }}>{Ic.attach()}</div>
+            <div style={{ color: T.textMuted }}>{Ic.attach()}</div>
           </button>
-          <div style={{ flex: 1, display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.06)' }}>
-            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Message…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} disabled={sending} />
+          <div style={{ flex: 1, display: 'flex', gap: 8, alignItems: 'center', background: T.pageBg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.06)' }}>
+            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Message…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: T.text, fontFamily: 'Plus Jakarta Sans' }} disabled={sending} />
           </div>
           <button onClick={send} disabled={sending} style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 10, cursor: sending ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: sending ? 0.6 : 1 }}>
-            <div style={{ color: N.navy }}>{Ic.send('w-4 h-4')}</div>
+            <div style={{ color: T.text }}>{Ic.send('w-4 h-4')}</div>
           </button>
         </div>
       </div>
