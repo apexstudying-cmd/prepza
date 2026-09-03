@@ -562,6 +562,16 @@ function SkeletonExplore() {
             ))}
           </div>
         </div>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><Sk w={100} h={14} /><Sk w={60} h={12} /></div>
+          {[1,2,3].map(i => (
+            <div key={i} style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center' }}>
+              <Sk w={42} h={42} r={12} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={12} w="60%" /><Sk h={10} w="40%" /></div>
+              <Sk w={44} h={22} r={9} />
+            </div>
+          ))}
+        </div>
         <div><Sk w={160} h={14} style={{ marginBottom: 12 }} />{[1,2,3].map(i => <SkDocCard key={i} />)}</div>
         <div>
           <Sk w={160} h={14} style={{ marginBottom: 12 }} />
@@ -573,26 +583,6 @@ function SkeletonExplore() {
             ))}
           </div>
         </div>
-      </div>
-    </div>
-  )
-}
-
-function SkeletonLibrary() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}><Sk w={34} h={34} r={10} dark /><Sk w={120} h={18} dark /></div>
-        <div style={{ display: 'flex', gap: 8 }}>{[40,60,80,70,55].map((w,i) => <Sk key={i} w={w} h={28} r={20} dark />)}</div>
-      </div>
-      <div style={{ flex: 1, padding: 16 }}>
-        {[1,2,3,4,5,6].map(i => (
-          <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-            <Sk w={44} h={44} r={12} />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={13} w="75%" /><Sk h={10} w="50%" /></div>
-            <Sk w={50} h={18} r={99} />
-          </div>
-        ))}
       </div>
     </div>
   )
@@ -610,7 +600,7 @@ function SkeletonDocument() {
         <Sk h={34} r={12} dark />
       </div>
       <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', gap: 8 }}>{[1,2,3,4].map(i => <Sk key={i} w={80} h={28} r={20} />)}</div>
+        <div style={{ display: 'flex', gap: 8 }}>{[1,2,3].map(i => <Sk key={i} w={80} h={28} r={20} />)}</div>
         <div style={{ background: '#fff', borderRadius: 16, padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Sk h={18} w="60%" /><Sk h={11} w="40%" /><div style={{ height: 4 }} />
           {[100,85,100,75,100,90,100,65].map((w,i) => <Sk key={i} h={12} w={`${w}%`} />)}
@@ -657,89 +647,6 @@ function SkeletonAITutor() {
   )
 }
 
-function SkeletonQuiz() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-          <Sk w={34} h={34} r={10} dark />
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={110} h={14} dark /><Sk w={160} h={10} dark /></div>
-          <Sk w={60} h={20} r={99} dark />
-        </div>
-        <Sk h={5} r={99} dark style={{ marginBottom: 4 }} />
-        <Sk w={60} h={10} dark style={{ marginLeft: 'auto' }} />
-      </div>
-      <div style={{ flex: 1, padding: 20 }}>
-        <div style={{ background: '#fff', borderRadius: 18, padding: 20, marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
-          <Sk w={80} h={10} style={{ marginBottom: 14 }} />
-          <Sk h={16} style={{ marginBottom: 8 }} /><Sk h={16} w="80%" />
-        </div>
-        {[1,2,3,4].map(i => (
-          <div key={i} style={{ background: '#fff', border: '2px solid rgba(0,0,0,0.06)', borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
-            <Sk w={26} h={26} r={13} /><Sk h={14} />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function SkeletonFlashcards() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-          <Sk w={34} h={34} r={10} dark />
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={100} h={14} dark /><Sk w={200} h={10} dark /></div>
-          <Sk w={80} h={20} r={99} dark />
-        </div>
-        <Sk h={5} r={99} dark style={{ marginBottom: 4 }} />
-        <Sk w={50} h={10} dark style={{ marginLeft: 'auto' }} />
-      </div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', gap: 24 }}>
-        <div style={{ width: '100%', minHeight: 220, background: '#fff', borderRadius: 24, padding: 28, boxShadow: '0 8px 32px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Sk w={140} h={11} /><div style={{ height: 16 }} />
-          <Sk h={16} /><Sk h={16} w="80%" /><Sk h={16} w="60%" />
-        </div>
-        <Sk w={180} h={13} r={99} />
-      </div>
-    </div>
-  )
-}
-
-function SkeletonPodcast() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
-      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Sk w={34} h={34} r={10} dark /><Sk w={120} h={16} dark /></div>
-      </div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 28px', gap: 28 }}>
-        <Sk w={200} h={200} r={28} />
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-          <Sk w={200} h={22} /><Sk w={160} h={14} /><Sk w={80} h={18} r={99} />
-        </div>
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <Sk h={4} r={99} />
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><Sk w={40} h={12} /><Sk w={40} h={12} /></div>
-        </div>
-        <div style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
-          <Sk w={24} h={24} r={4} /><Sk w={64} h={64} r={32} /><Sk w={24} h={24} r={4} />
-        </div>
-        <div style={{ width: '100%' }}>
-          <Sk w={120} h={14} style={{ marginBottom: 12 }} />
-          {[1,2,3].map(i => (
-            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', borderRadius: 14, padding: 12, marginBottom: 8 }}>
-              <Sk w={42} h={42} r={12} />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={13} w="70%" /><Sk h={10} w="50%" /></div>
-              <Sk w={20} h={20} r={4} />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function SkeletonPodcastLibrary() {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
@@ -771,23 +678,20 @@ function SkeletonForum() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>{[1,2,3,4].map(i => <Sk key={i} w={80} h={28} r={20} dark />)}</div>
       </div>
-      <div style={{ padding: '16px 16px' }}>{[1,2,3,4].map(i => <SkPostCard key={i} />)}</div>
-    </div>
-  )
-}
-
-function SkeletonOpportunities() {
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
-      <div style={{ background: N.navy, padding: '0 18px 14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <Sk w={34} h={34} r={10} dark />
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={150} h={18} dark /><Sk w={200} h={10} dark /></div>
-          <Sk w={60} h={30} r={10} dark />
+      <div style={{ padding: '14px 16px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <Sk w={80} h={13} /><Sk w={50} h={12} />
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>{[40,80,100,50,60].map((w,i) => <Sk key={i} w={w} h={28} r={20} dark />)}</div>
+        <div style={{ display: 'flex', gap: 10, overflowX: 'hidden', marginBottom: 16 }}>
+          {[1,2,3].map(i => (
+            <div key={i} style={{ flexShrink: 0, background: '#fff', borderRadius: 14, padding: '12px 14px', minWidth: 130, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Sk w={38} h={38} r={10} /><Sk h={12} /><Sk h={10} w="70%" />
+            </div>
+          ))}
+        </div>
+        <Sk w={100} h={13} style={{ marginBottom: 10 }} />
       </div>
-      <div style={{ padding: 16 }}>{[1,2,3].map(i => <SkOppCard key={i} />)}</div>
+      <div style={{ padding: '0 16px' }}>{[1,2,3,4].map(i => <SkPostCard key={i} />)}</div>
     </div>
   )
 }
@@ -919,79 +823,6 @@ function SkeletonNotifications() {
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }} className="scrollbar-hide">
         {[1,2,3,4,5,6,7].map(i => <SkNotifRow key={i} />)}
-      </div>
-    </div>
-  )
-}
-
-function SkeletonMindMap() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Sk w={34} h={34} r={10} dark />
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk w={100} h={14} dark /><Sk w={160} h={10} dark /></div>
-        </div>
-      </div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <div style={{ background: '#fff', borderRadius: 20, padding: 16, width: '100%', marginBottom: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
-          <Sk h={260} r={12} />
-        </div>
-        {[1,2,3,4,5,6].map(i => (
-          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fff', borderRadius: 12, padding: '10px 14px', marginBottom: 8, width: '100%' }}>
-            <Sk w={10} h={10} r={5} /><Sk h={13} />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function SkeletonAdminDashboard() {
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
-      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><Sk w={80} h={12} dark /><Sk w={160} h={20} dark /></div>
-          <div style={{ display: 'flex', gap: 8 }}><Sk w={38} h={38} r={12} dark /><SkCircle size={38} dark /></div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
-          {[1,2,3,4].map(i => (
-            <div key={i} style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Sk w={80} h={11} dark /><Sk w={60} h={22} dark /><Sk w={90} h={10} dark />
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}><Sk w={140} h={14} /><Sk w={60} h={24} r={8} /></div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 100 }}>
-            {[70,50,85,60,90,45,75].map((h,i) => <Sk key={i} h={h} r={6} />)}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-            {['M','T','W','T','F','S','S'].map((_,i) => <Sk key={i} w={20} h={10} />)}
-          </div>
-        </div>
-        <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><Sk w={100} h={14} /><Sk w={60} h={24} r={8} /></div>
-          {[1,2,3,4,5].map(i => (
-            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', paddingBottom: 12, marginBottom: 12, borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-              <SkCircle size={36} />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk h={12} w="60%" /><Sk h={10} w="40%" /></div>
-              <Sk w={50} h={18} r={99} /><Sk w={60} h={12} />
-            </div>
-          ))}
-        </div>
-        <div style={{ background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <Sk w={120} h={14} style={{ marginBottom: 14 }} />
-          {[1,2,3,4].map(i => (
-            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
-              <Sk w={8} h={8} r={4} style={{ marginTop: 4, flexShrink: 0 }} />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}><Sk h={12} /><Sk h={10} w="50%" /></div>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   )
