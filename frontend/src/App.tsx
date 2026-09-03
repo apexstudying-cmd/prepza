@@ -1950,7 +1950,7 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
-        <TopBar title="Upload Document" onBack={() => setScreen('home')} />
+        <TopBar title="Upload Document" onBack={() => window.history.back()} />
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: -8 }}>Prepza AI processes your document instantly</div>
       </div>
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -2086,7 +2086,7 @@ function DocReadyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
-        <TopBar title="Document Ready ✓" onBack={() => setScreen('home')} />
+        <TopBar title="Document Ready ✓" onBack={() => window.history.back()} />
         <div style={{ background: 'rgba(76,201,123,0.12)', border: '1px solid rgba(76,201,123,0.3)', borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'center' }}>
           <span style={{ fontSize: 24 }}>✅</span>
           <div>
