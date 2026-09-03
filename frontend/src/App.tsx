@@ -3865,6 +3865,7 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
   fallbackName?: string | null
   setActiveConversationId?: (id: number) => void
 }) {
+  const { tokens: T } = useTheme()
   const [profile, setProfile] = useState<PublicProfile | null>(null)
   const [summary, setSummary] = useState<FollowSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -3926,7 +3927,7 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
     : null
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -3956,21 +3957,21 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
       </div>
       {!loading && !error && summary && profile && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, padding: '16px 16px 0' }}>
-          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+          <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
             <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{profile.xp_total.toLocaleString()}</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>XP</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>XP</div>
           </div>
-          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+          <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
             <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{summary.followers_count}</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>Followers</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Followers</div>
           </div>
-          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+          <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
             <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{summary.following_count}</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>Following</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Following</div>
           </div>
-          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+          <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
             <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{profile.documents_count}</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>Documents</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Documents</div>
           </div>
         </div>
       )}
@@ -5447,6 +5448,7 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── PODCAST LIBRARY ──────────────────────────────────────────────────────────
 function PodcastLibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
+  const { tokens: T } = useTheme()
   const [podcastList, setPodcastList] = useState<PodcastItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -5461,7 +5463,7 @@ function PodcastLibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (
   if (loading) return <SkeletonPodcastLibrary />
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -5476,15 +5478,15 @@ function PodcastLibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (
           <EmptyState icon="🎙️" title="No podcasts yet" sub="Open a document and generate a study podcast from your notes to see it here." />
         ) : (
           <>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Your Episodes</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 12 }}>Your Episodes</div>
             {podcastList.map((p) => {
               const color = podcastColor(p.document_id)
               return (
-                <div key={p.document_id} onClick={() => { setActiveDocumentId(p.document_id); setScreen('podcast-player') }} style={{ display: 'flex', gap: 14, alignItems: 'center', background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+                <div key={p.document_id} onClick={() => { setActiveDocumentId(p.document_id); setScreen('podcast-player') }} style={{ display: 'flex', gap: 14, alignItems: 'center', background: T.card, borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
                   <div style={{ width: 52, height: 52, background: `linear-gradient(135deg,${color},${color}99)`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#fff', fontWeight: 800, flexShrink: 0 }}>🎙️</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{p.title}</div>
-                    <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{p.audio_status === 'ready' ? podcastDuration(p.duration_seconds) : 'Processing…'}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: T.text }} className="line-clamp-1">{p.title}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{p.audio_status === 'ready' ? podcastDuration(p.duration_seconds) : 'Processing…'}</div>
                   </div>
                   <div style={{ color: N.gold }}>{Ic.play()}</div>
                 </div>
@@ -5501,6 +5503,7 @@ function PodcastLibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (
 type MindMapNode = { id: string; label: string; x: number; y: number; r: number; color: string; textColor: string; fontSize: number }
 
 function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const { tokens: T } = useTheme()
   const [raw, setRaw] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -5553,7 +5556,7 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
   const layout = buildLayout()
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -5564,11 +5567,11 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
       </div>
       {loading ? <GenerationLoading label="Generating your mind map…" /> : error ? <GenerationError error={error} /> : !layout ? (
         <div style={{ flex: 1, overflowY: 'auto', padding: 20 }} className="scrollbar-hide">
-          <pre style={{ fontSize: 11, color: '#374151', whiteSpace: 'pre-wrap', background: '#fff', borderRadius: 12, padding: 14, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>{JSON.stringify(raw, null, 2)}</pre>
+          <pre style={{ fontSize: 11, color: T.text, whiteSpace: 'pre-wrap', background: T.card, borderRadius: 12, padding: 14, boxShadow: '0 2px 10px rgba(0,0,0,0.06)' }}>{JSON.stringify(raw, null, 2)}</pre>
         </div>
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: 16, boxShadow: '0 4px 20px rgba(0,0,0,0.08)', width: '100%', marginBottom: 16 }}>
+          <div style={{ background: T.card, borderRadius: 20, padding: 16, boxShadow: '0 4px 20px rgba(0,0,0,0.08)', width: '100%', marginBottom: 16 }}>
             <svg viewBox="-10 -10 320 320" style={{ width: '100%', height: 300 }}>
               {layout.lines.map(([from, to]) => {
                 const f = layout.nodes.find(n => n.id === from)!
@@ -5587,9 +5590,9 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
             {layout.nodes.slice(1).map(node => (
-              <div key={node.id} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fff', borderRadius: 12, padding: '10px 14px', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+              <div key={node.id} style={{ display: 'flex', gap: 10, alignItems: 'center', background: T.card, borderRadius: 12, padding: '10px 14px', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: node.color, flexShrink: 0 }} />
-                <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{node.label.replace('\n',' ')}</div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: T.text }}>{node.label.replace('\n',' ')}</div>
               </div>
             ))}
           </div>
@@ -5603,6 +5606,7 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 type UserSearchResult = { id: number; display_name: string; year: number | null; semester: number | null }
 
 function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void }) {
+  const { tokens: T } = useTheme()
   const [mode, setMode] = useState<'select'|'new-chat'|'new-group'>('select')
   const [search, setSearch] = useState('')
   const [results, setResults] = useState<UserSearchResult[]>([])
@@ -5678,7 +5682,7 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
   }
 
   if (mode === 'select') return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -5686,19 +5690,19 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
         </div>
       </div>
       <div style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <button onClick={() => setMode('new-chat')} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: 'none', borderRadius: 16, padding: 16, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans' }}>
+        <button onClick={() => setMode('new-chat')} style={{ display: 'flex', alignItems: 'center', gap: 14, background: T.card, border: 'none', borderRadius: 16, padding: 16, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans' }}>
           <div style={{ width: 48, height: 48, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>💬</div>
-          <div style={{ textAlign: 'left' }}><div style={{ fontWeight: 800, fontSize: 14, color: N.navy }}>New Chat</div><div style={{ fontSize: 12, color: '#6B7280' }}>Message a classmate directly</div></div>
+          <div style={{ textAlign: 'left' }}><div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>New Chat</div><div style={{ fontSize: 12, color: T.textMuted }}>Message a classmate directly</div></div>
         </button>
-        <button onClick={() => setMode('new-group')} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: 'none', borderRadius: 16, padding: 16, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans' }}>
+        <button onClick={() => setMode('new-group')} style={{ display: 'flex', alignItems: 'center', gap: 14, background: T.card, border: 'none', borderRadius: 16, padding: 16, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans' }}>
           <div style={{ width: 48, height: 48, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>👥</div>
-          <div style={{ textAlign: 'left' }}><div style={{ fontWeight: 800, fontSize: 14, color: N.navy }}>New Group</div><div style={{ fontSize: 12, color: '#6B7280' }}>Create a study group chat</div></div>
+          <div style={{ textAlign: 'left' }}><div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>New Group</div><div style={{ fontSize: 12, color: T.textMuted }}>Create a study group chat</div></div>
         </button>
       </div>
     </div>
   )
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.card }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button onClick={() => setMode('select')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -5718,15 +5722,15 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
         {!search.trim() ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 44, marginBottom: 12 }}>🔍</div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>Search for students</div>
-            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Start typing a name to find classmates</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>Search for students</div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>Start typing a name to find classmates</div>
           </div>
         ) : searching ? (
-          <div style={{ padding: '20px 16px', textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Searching…</div>
+          <div style={{ padding: '20px 16px', textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Searching…</div>
         ) : results.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 44, marginBottom: 12 }}>🙁</div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No students found</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>No students found</div>
           </div>
         ) : results.map(c => {
           const initials = (c.display_name || '??').slice(0, 2).toUpperCase()
@@ -5735,7 +5739,7 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
           return (
             <div key={c.id} onClick={() => mode === 'new-chat' ? startDirectChat(c.id) : toggleSelected(c.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '13px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)', opacity: creating ? 0.6 : 1 }}>
               <Avi name={initials} size={44} />
-              <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{c.display_name}</div><div style={{ fontSize: 12, color: '#6B7280' }}>{course}</div></div>
+              <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{c.display_name}</div><div style={{ fontSize: 12, color: T.textMuted }}>{course}</div></div>
               {mode === 'new-chat' && <div style={{ color: N.gold }}>{Ic.chevR()}</div>}
               {mode === 'new-group' && (
                 <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${selected ? N.gold : '#D1D5DB'}`, background: selected ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: N.navy, fontWeight: 800, flexShrink: 0 }}>{selected ? '✓' : ''}</div>
@@ -5757,6 +5761,7 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
 type SharedMediaItem = { id: number; message_id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null; uploaded_by_user_id: number; uploaded_by_name: string; created_at: string | null }
 
 function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
+  const { tokens: T } = useTheme()
   const [detail, setDetail] = useState<ChatDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -5876,14 +5881,14 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
 
   if (loading) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
             <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Chat Info</span>
           </div>
         </div>
-        <div style={{ padding: '40px 20px', textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Loading…</div>
+        <div style={{ padding: '40px 20px', textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Loading…</div>
       </div>
     )
   }
@@ -5891,7 +5896,7 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
   const initials = (detail?.name || '??').slice(0, 2).toUpperCase()
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg, position: 'relative' }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg, position: 'relative' }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -5909,39 +5914,39 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
       </div>
       <div style={{ padding: 16 }}>
         {detail?.is_group && (
-          <div onClick={() => { setRenameError(null); setShowRename(true) }} style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+          <div onClick={() => { setRenameError(null); setShowRename(true) }} style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
             <span style={{ fontSize: 20 }}>✏️</span>
-            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Rename Group</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{detail.name}</div></div>
+            <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>Rename Group</div><div style={{ fontSize: 11, color: T.textMuted }}>{detail.name}</div></div>
             {Ic.chevR()}
           </div>
         )}
-        <div onClick={() => { setMediaError(null); setShowMedia(true) }} style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+        <div onClick={() => { setMediaError(null); setShowMedia(true) }} style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
           <span style={{ fontSize: 20 }}>🖼️</span>
-          <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Shared Media</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>Files and images shared here</div></div>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>Shared Media</div><div style={{ fontSize: 11, color: T.textMuted }}>Files and images shared here</div></div>
           {Ic.chevR()}
         </div>
-        <div onClick={() => { setSearchError(null); setShowSearch(true) }} style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+        <div onClick={() => { setSearchError(null); setShowSearch(true) }} style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
           <span style={{ fontSize: 20 }}>🔍</span>
-          <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Search Messages</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>Find something in this chat</div></div>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>Search Messages</div><div style={{ fontSize: 11, color: T.textMuted }}>Find something in this chat</div></div>
           {Ic.chevR()}
         </div>
-        <div style={{ background: '#fff', borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', opacity: mutingBusy ? 0.6 : 1 }}>
+        <div style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', opacity: mutingBusy ? 0.6 : 1 }}>
           <span style={{ fontSize: 20 }}>🔔</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>Notifications</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>{detail && !detail.viewer_muted ? 'On' : 'Muted'}</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>Notifications</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>{detail && !detail.viewer_muted ? 'On' : 'Muted'}</div>
             {muteError && <div style={{ fontSize: 11, color: '#C94C4C', marginTop: 2 }}>{muteError}</div>}
           </div>
           <div onClick={toggleMute}>{Ic.toggle(!!detail && !detail.viewer_muted)}</div>
         </div>
         {detail?.is_group && detail.participants.length > 0 && (
-          <div style={{ background: '#fff', borderRadius: 14, marginBottom: 8, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ padding: '12px 16px 8px', fontWeight: 700, fontSize: 12, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.4 }}>Members ({detail.participants.length})</div>
+          <div style={{ background: T.card, borderRadius: 14, marginBottom: 8, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ padding: '12px 16px 8px', fontWeight: 700, fontSize: 12, color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Members ({detail.participants.length})</div>
             {detail.participants.map(p => (
               <div key={p.user_id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 16px', borderTop: '1px solid rgba(0,0,0,0.04)' }}>
                 <Avi name={(p.display_name || '??').slice(0, 2).toUpperCase()} size={34} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }} className="line-clamp-1">{p.display_name}{p.user_id === detail.created_by ? ' (Creator)' : ''}</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: T.text }} className="line-clamp-1">{p.display_name}{p.user_id === detail.created_by ? ' (Creator)' : ''}</div>
                 </div>
                 {p.role === 'admin' && <Pill text="Admin" />}
               </div>
@@ -5949,7 +5954,7 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
           </div>
         )}
         {detail?.is_group && (
-          <div style={{ background: '#fff', borderRadius: 14, marginTop: 12, overflow: 'hidden' }}>
+          <div style={{ background: T.card, borderRadius: 14, marginTop: 12, overflow: 'hidden' }}>
             {leaveError && <div style={{ padding: '10px 16px', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{leaveError}</div>}
             <button onClick={leaveGroup} disabled={leaving} style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', padding: '14px 16px', background: 'none', border: 'none', cursor: leaving ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: leaving ? 0.6 : 1 }}>
               <span style={{ fontSize: 20 }}>🚪</span>
@@ -5961,19 +5966,19 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
 
       {showRename && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 16 }}>Rename Group</div>
-            <input value={renameVal} onChange={e => setRenameVal(e.target.value)} maxLength={100} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+          <div style={{ background: T.card, borderRadius: 20, padding: 24, width: '100%' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 16 }}>Rename Group</div>
+            <input value={renameVal} onChange={e => setRenameVal(e.target.value)} maxLength={100} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
             {renameError && <div style={{ color: '#C94C4C', fontSize: 12, marginTop: 8 }}>{renameError}</div>}
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button onClick={() => setShowRename(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+              <button onClick={() => setShowRename(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: T.text }}>Cancel</button>
               <button onClick={saveRename} disabled={renaming} style={{ flex: 1, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '12px 0', cursor: renaming ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: N.navy, opacity: renaming ? 0.7 : 1 }}>{renaming ? 'Saving…' : 'Save'}</button>
             </div>
           </div>
         </div>
       )}
       {showSearch && (
-        <div style={{ position: 'absolute', inset: 0, background: N.bg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
+        <div style={{ position: 'absolute', inset: 0, background: T.pageBg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
           <div style={{ background: N.navy, padding: '0 18px 14px', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]) }} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -5989,26 +5994,26 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
             {!searchQuery.trim() ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
                 <div style={{ fontSize: 44, marginBottom: 12 }}>🔍</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>Search this chat</div>
-                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Start typing to find a message</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>Search this chat</div>
+                <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>Start typing to find a message</div>
               </div>
             ) : searching ? (
-              <div style={{ padding: '20px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Searching…</div>
+              <div style={{ padding: '20px 0', textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Searching…</div>
             ) : searchResults.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
                 <div style={{ fontSize: 44, marginBottom: 12 }}>🙁</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No messages found</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>No messages found</div>
               </div>
             ) : searchResults.map(m => {
               const sender = detail?.participants.find(p => p.user_id === m.sender_id)
               const senderName = sender?.display_name || 'Deleted user'
               return (
-                <div key={m.id} style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+                <div key={m.id} style={{ background: T.card, borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span style={{ fontWeight: 700, fontSize: 12, color: N.gold }}>{senderName}</span>
-                    <span style={{ fontSize: 11, color: '#9CA3AF' }}>{m.created_at ? new Date(m.created_at).toLocaleString() : ''}</span>
+                    <span style={{ fontSize: 11, color: T.textMuted }}>{m.created_at ? new Date(m.created_at).toLocaleString() : ''}</span>
                   </div>
-                  <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.55 }}>{m.body}</div>
+                  <div style={{ fontSize: 13, color: T.text, lineHeight: 1.55 }}>{m.body}</div>
                 </div>
               )
             })}
@@ -6016,7 +6021,7 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
         </div>
       )}
       {showMedia && (
-        <div style={{ position: 'absolute', inset: 0, background: N.bg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
+        <div style={{ position: 'absolute', inset: 0, background: T.pageBg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
           <div style={{ background: N.navy, padding: '0 18px 14px', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button onClick={() => setShowMedia(false)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -6026,12 +6031,12 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }} className="scrollbar-hide">
             {mediaError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{mediaError}</div>}
             {mediaLoading ? (
-              <div style={{ padding: '20px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Loading…</div>
+              <div style={{ padding: '20px 0', textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Loading…</div>
             ) : mediaItems.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
                 <div style={{ fontSize: 44, marginBottom: 12 }}>🖼️</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>Nothing shared yet</div>
-                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Files and images sent in this chat will show up here</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>Nothing shared yet</div>
+                <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>Files and images sent in this chat will show up here</div>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
@@ -6044,7 +6049,7 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
                     ) : (
                       <div style={{ aspectRatio: '1', borderRadius: 10, background: '#F3F4F6', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: 8 }}>
                         <div style={{ fontSize: 22 }}>📎</div>
-                        <div style={{ fontSize: 9, color: '#6B7280', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{item.original_filename}</div>
+                        <div style={{ fontSize: 9, color: T.textMuted, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{item.original_filename}</div>
                       </div>
                     )}
                   </a>
@@ -6062,6 +6067,7 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
 type EditProfileMe = { display_name: string | null; bio: string | null; year: number | null; semester: number | null; university_id: number | null; program_id: number | null; csrf_token: string }
 
 function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [csrfToken, setCsrfToken] = useState('')
   const [loadingMe, setLoadingMe] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -6130,19 +6136,19 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     }
   }
 
-  const inputStyle = { width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' as const }
+  const inputStyle = { width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' as const }
   const initials = (form.display_name || 'ST').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 
   if (loadingMe) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: N.bg }}>
-        <div style={{ color: '#9CA3AF', fontSize: 14 }}>Loading your profile...</div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.pageBg }}>
+        <div style={{ color: T.textMuted, fontSize: 14 }}>Loading your profile...</div>
       </div>
     )
   }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -6155,29 +6161,29 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ position: 'relative', marginBottom: 20 }}>
           <div style={{ width: 80, height: 80, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy }}>{initials}</div>
           <div style={{ position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ color: N.navy }}>{Ic.edit('w-3 h-3')}</div>
+            <div style={{ color: T.text }}>{Ic.edit('w-3 h-3')}</div>
           </div>
         </div>
-        <div style={{ fontSize: 12, color: '#9CA3AF' }}>Change photo (coming soon)</div>
+        <div style={{ fontSize: 12, color: T.textMuted }}>Change photo (coming soon)</div>
       </div>
       <div style={{ padding: '0 20px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Full Name</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Full Name</div>
           <input value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} maxLength={50} style={inputStyle} />
         </div>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Bio</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Bio</div>
           <textarea value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} rows={3} maxLength={160} style={{ ...inputStyle, resize: 'none', lineHeight: 1.6 }} />
         </div>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>University</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>University</div>
           <select value={form.university_id ?? ''} onChange={e => setForm(f => ({ ...f, university_id: e.target.value ? Number(e.target.value) : null, program_id: null }))} style={inputStyle}>
             <option value="">Select university</option>
             {universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </div>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Course</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Course</div>
           <select value={form.program_id ?? ''} onChange={e => setForm(f => ({ ...f, program_id: e.target.value ? Number(e.target.value) : null }))} disabled={!form.university_id} style={{ ...inputStyle, opacity: form.university_id ? 1 : 0.5 }}>
             <option value="">Select course</option>
             {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -6185,14 +6191,14 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Year</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Year</div>
             <select value={form.year ?? ''} onChange={e => setForm(f => ({ ...f, year: e.target.value ? Number(e.target.value) : null }))} style={inputStyle}>
               <option value="">—</option>
               {[1, 2, 3, 4].map(y => <option key={y} value={y}>Year {y}</option>)}
             </select>
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Semester</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Semester</div>
             <select value={form.semester ?? ''} onChange={e => setForm(f => ({ ...f, semester: e.target.value ? Number(e.target.value) : null }))} style={inputStyle}>
               <option value="">—</option>
               {[1, 2].map(s => <option key={s} value={s}>Semester {s}</option>)}
