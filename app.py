@@ -40,7 +40,7 @@ if sentry_dsn:
     )
 
 app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
-limiter = Limiter(get_remote_address, app=app, default_limits=[])
+limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"])
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
@@ -2119,6 +2119,39 @@ def enforce_maintenance_mode():
     return jsonify({"error": "maintenance", "message": message}), 503
 
 
+# ---------- Session invalidation ----------
+# Lets the server kill an existing session early (e.g. on password change)
+# without waiting for the 7-day cookie to naturally expire. Every login
+# stamps the CURRENT session_version into the cookie; this hook compares
+# that stamp against the live database value on every request.
+@app.before_request
+def enforce_session_version():
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+
+    stamped_version = session.get("_session_version")
+    user = db.session.get(User, user_id)
+    if not user:
+        session.pop("user_id", None)
+        session.pop("_session_version", None)
+        return None
+
+    if stamped_version is None:
+        # Legacy session created before this feature existed - it has no
+        # stamp to compare against. Trust it once (it was already a valid
+        # login) and stamp the current version in, so any FUTURE password
+        # change still invalidates it correctly from this point on.
+        session["_session_version"] = user.session_version
+        return None
+
+    if stamped_version != user.session_version:
+        session.pop("user_id", None)
+        session.pop("_session_version", None)
+
+    return None
+
+
 # ---------- Activity tracking (for admin "Active Today") ----------
 # Broad, cheap DAU signal: touches on ANY authenticated request (login,
 # browsing, chatting, studying - not just specific study actions like
@@ -2407,6 +2440,7 @@ def verify_email_confirm():
     # lands straight in the dashboard instead of having to log in again.
     session.permanent = True
     session["user_id"] = user.id
+    session["_session_version"] = user.session_version
 
     return jsonify({
         "message": "Email verified successfully",
@@ -2497,6 +2531,7 @@ def reset_password():
     user.password_hash = generate_password_hash(new_password)
     user.reset_token = None
     user.reset_token_expiry = None
+    user.session_version = (user.session_version or 0) + 1
     db.session.commit()
 
     return jsonify({"message": "Password reset successfully. You can now log in."})
@@ -2528,6 +2563,7 @@ def login():
 
     session.permanent = True
     session["user_id"] = user.id
+    session["_session_version"] = user.session_version
     return jsonify({"message": "Logged in successfully", "user_id": user.id})
 
 
@@ -2644,6 +2680,7 @@ def google_auth_callback():
 
     session.permanent = True
     session["user_id"] = user.id
+    session["_session_version"] = user.session_version
 
     if is_new or user.university_id is None:
         return redirect("/?complete_profile=1")
@@ -2841,6 +2878,7 @@ def change_password():
         return jsonify({"error": "New password must be different from your current password"}), 400
 
     user.password_hash = generate_password_hash(new_password)
+    user.session_version = (user.session_version or 0) + 1
     db.session.commit()
 
     return jsonify({"message": "Password changed successfully."})
