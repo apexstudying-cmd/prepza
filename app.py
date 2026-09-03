@@ -127,6 +127,11 @@ class User(db.Model):
     signup_source = db.Column(db.String(100), nullable=True)
     is_suspended = db.Column(db.Boolean, nullable=False, default=False)
     last_active_at = db.Column(db.DateTime, nullable=True)
+    # Bumped whenever this user's password changes (or an admin needs to
+    # force-logout them). Every request compares this to the number
+    # stamped in the session cookie at login time - a mismatch means the
+    # cookie is stale and gets cleared. See enforce_session_version().
+    session_version = db.Column(db.Integer, nullable=False, default=0)
     # Updated (throttled, see track_last_active()) on any authenticated
     # request - login, browsing, chatting, anything - not just specific
     # study actions. That's a different, broader signal than
