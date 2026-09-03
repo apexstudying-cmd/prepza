@@ -4378,6 +4378,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── FORGOT PASSWORD ──────────────────────────────────────────────────────────
 function ForgotPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
@@ -4433,6 +4434,7 @@ function ForgotPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void })
 
 // ─── RESET PASSWORD (reached via the emailed /reset-password?token= link) ────
 function ResetPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const token = new URLSearchParams(window.location.search).get('token') || ''
   const [password, setPassword] = useState('')
   const [done, setDone] = useState(false)
@@ -4518,6 +4520,7 @@ function ResetPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
 
 // ─── VERIFY EMAIL (reached via the emailed /verify-email?token= link) ────────
 function VerifyConfirmScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [status, setStatus] = useState<'confirming' | 'success' | 'error'>('confirming')
   const [error, setError] = useState('')
   const [resendEmail, setResendEmail] = useState('')
@@ -4636,6 +4639,7 @@ type GroupFileData = {
 type MyDocumentSummary = { id: number; title: string; status: string; file_type: string | null; page_count: number | null; created_at: string | null }
 
 function SignupScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const steps = ['Name', 'Email', 'Password', 'University', 'Course', 'Year', 'Semester']
   const [step, setStep] = useState(0)
   const [data, setData] = useState({
@@ -4882,6 +4886,7 @@ function SignupScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── CHECK EMAIL ────────────────────────────────────────────────────────────
 function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 32px', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)`, textAlign: 'center' }}>
       <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(201,168,76,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
