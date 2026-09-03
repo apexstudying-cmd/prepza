@@ -54,7 +54,7 @@ async function deriveWrappingKey(passphrase: string, salt: Uint8Array): Promise<
     ['deriveKey'],
   )
   return window.crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: salt as BufferSource, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     baseKey,
     { name: 'AES-GCM', length: AES_KEY_LENGTH },
     false,
