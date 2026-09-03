@@ -1956,6 +1956,7 @@ function DocReadyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen
 
 // ─── DOCUMENT STUDY ───────────────────────────────────────────────────────────
 function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'doc'|'ai'|'tools'>('doc')
   const [askInput, setAskInput] = useState('')
   const [showMenu, setShowMenu] = useState(false)
@@ -2004,9 +2005,9 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
 
   if (activeDocumentId == null) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: N.bg, padding: 32, textAlign: 'center' }}>
-        <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 8 }}>No document selected</div>
-        <div style={{ color: '#6B7280', fontSize: 13, marginBottom: 24 }}>Open a document from Home to study it here.</div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: T.pageBg, padding: 32, textAlign: 'center' }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 8 }}>No document selected</div>
+        <div style={{ color: T.textMuted, fontSize: 13, marginBottom: 24 }}>Open a document from Home to study it here.</div>
         <button onClick={() => setScreen('home')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '12px 28px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Go Home</button>
       </div>
     )
@@ -2028,7 +2029,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -2039,11 +2040,11 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowDots(v => !v)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
             {showDots && (
-              <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, width: 160, overflow: 'hidden' }}>
-                <button onClick={() => { setShowDots(false); setShowRename(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>Rename</button>
-                <button onClick={() => { setShowDots(false); setSavedToLib(true); setTimeout(() => setSavedToLib(false), 2000) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>Download ↓</button>
-                <button onClick={() => { setShowDots(false); setScreen('share-sheet') }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>Share</button>
-                <button onClick={() => { setShowDots(false); setSavedToLib(true); setTimeout(() => setSavedToLib(false), 2000) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>Save to Library</button>
+              <div style={{ position: 'absolute', right: 0, top: 40, background: T.card, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, width: 160, overflow: 'hidden' }}>
+                <button onClick={() => { setShowDots(false); setShowRename(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Rename</button>
+                <button onClick={() => { setShowDots(false); setSavedToLib(true); setTimeout(() => setSavedToLib(false), 2000) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Download ↓</button>
+                <button onClick={() => { setShowDots(false); setScreen('share-sheet') }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Share</button>
+                <button onClick={() => { setShowDots(false); setSavedToLib(true); setTimeout(() => setSavedToLib(false), 2000) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Save to Library</button>
                 <button onClick={() => { setShowDots(false); setShowDelete(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: '#C94C4C', cursor: 'pointer' }}>Delete</button>
                 <button onClick={() => { setShowDots(false); setShowReport(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: '#C94C4C', cursor: 'pointer' }}>Report</button>
               </div>
@@ -2070,7 +2071,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
             </div>
             {docLoadError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{docLoadError}</div>}
             {doc?.view_url ? (
-              <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.06)', height: '60vh' }}>
+              <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.06)', height: '60vh' }}>
                 {doc.file_type && ['jpg', 'jpeg', 'png'].includes(doc.file_type) ? (
                   <img src={doc.view_url} alt={doc.title} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
                 ) : (
@@ -2078,9 +2079,9 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
                 )}
               </div>
             ) : (
-              <div style={{ background: '#fff', borderRadius: 16, padding: 18, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', textAlign: 'center' }}>
-                <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 6 }}>{doc?.title || 'Loading document…'}</div>
-                <div style={{ fontSize: 12, color: '#9CA3AF' }}>{doc ? 'Preview not available for this file type - use the tools above to study it.' : 'Fetching your document…'}</div>
+              <div style={{ background: T.card, borderRadius: 16, padding: 18, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', textAlign: 'center' }}>
+                <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 6 }}>{doc?.title || 'Loading document…'}</div>
+                <div style={{ fontSize: 12, color: T.textMuted }}>{doc ? 'Preview not available for this file type - use the tools above to study it.' : 'Fetching your document…'}</div>
               </div>
             )}
           </div>
@@ -2092,7 +2093,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
               <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', gap: 10, alignItems: 'flex-start' }}>
                 {m.role === 'ai' && <div style={{ width: 30, height: 30, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>✦</div>}
                 <div style={{ maxWidth: '78%', background: m.role === 'user' ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: m.role === 'user' ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '11px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
-                  <div style={{ fontSize: 13, color: m.role === 'user' ? '#fff' : '#374151', lineHeight: 1.7 }}>{m.text}</div>
+                  <div style={{ fontSize: 13, color: m.role === 'user' ? '#fff' : T.text, lineHeight: 1.7 }}>{m.text}</div>
                 </div>
               </div>
             ))}
@@ -2107,27 +2108,27 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
               { icon: '📝', title: 'Summary', sub: '2-page condensed notes', action: () => setScreen('summary'), color: '#4CC97B' },
               { icon: '🎙️', title: 'Study Podcast', sub: '9 min AI-generated episode', action: () => setScreen('podcast-player'), color: '#C94C4C' },
               { icon: '🗺️', title: 'Mind Map', sub: 'Visual concept overview', action: () => setScreen('mind-map'), color: '#9B59B6' },
-              { icon: '📚', title: 'Save to Library', sub: 'Access offline anytime', action: () => setSavedToLib(true), color: '#6B7280' },
+              { icon: '📚', title: 'Save to Library', sub: 'Access offline anytime', action: () => setSavedToLib(true), color: T.textMuted },
             ].map((t, i) => (
-              <button key={i} onClick={t.action} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: '1px solid rgba(0,0,0,0.04)', borderRadius: 14, padding: '13px 15px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', fontFamily: 'Plus Jakarta Sans' }}>
+              <button key={i} onClick={t.action} style={{ display: 'flex', alignItems: 'center', gap: 12, background: T.card, border: '1px solid rgba(0,0,0,0.04)', borderRadius: 14, padding: '13px 15px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', fontFamily: 'Plus Jakarta Sans' }}>
                 <div style={{ width: 44, height: 44, background: t.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{t.icon}</div>
                 <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{t.title}</div>
-                  <div style={{ fontSize: 11, color: '#6B7280' }}>{t.sub}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{t.title}</div>
+                  <div style={{ fontSize: 11, color: T.textMuted }}>{t.sub}</div>
                 </div>
-                <div style={{ color: '#9CA3AF' }}>{Ic.chevR()}</div>
+                <div style={{ color: T.textMuted }}>{Ic.chevR()}</div>
               </button>
             ))}
           </div>
         )}
       </div>
 
-      <div style={{ padding: '10px 14px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+      <div style={{ padding: '10px 14px 14px', background: T.card, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
         {savedToLib && <div style={{ background: '#D1FAE5', color: '#065F46', fontSize: 12, fontWeight: 700, padding: '8px 14px', borderRadius: 10, marginBottom: 8, textAlign: 'center' }}>✓ Saved to Library</div>}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(11,20,55,0.08)' }}>
-          <input value={askInput} onChange={e => setAskInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMsg()} placeholder="Ask about this document…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: T.pageBg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(11,20,55,0.08)' }}>
+          <input value={askInput} onChange={e => setAskInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMsg()} placeholder="Ask about this document…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: T.text, fontFamily: 'Plus Jakarta Sans' }} />
           <button onClick={sendMsg} style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ color: N.navy }}>{Ic.send('w-4 h-4')}</div>
+            <div style={{ color: T.text }}>{Ic.send('w-4 h-4')}</div>
           </button>
         </div>
       </div>
@@ -2135,11 +2136,11 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
       {/* Rename modal */}
       {showRename && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 16 }}>Rename Document</div>
-            <input value={renameVal} onChange={e => setRenameVal(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+          <div style={{ background: T.card, borderRadius: 20, padding: 24, width: '100%' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 16 }}>Rename Document</div>
+            <input value={renameVal} onChange={e => setRenameVal(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button onClick={() => setShowRename(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+              <button onClick={() => setShowRename(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: T.text }}>Cancel</button>
               <button onClick={() => setShowRename(false)} style={{ flex: 1, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: N.navy }}>Save</button>
             </div>
           </div>
@@ -2148,11 +2149,11 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
       {/* Delete modal */}
       {showDelete && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 8 }}>Delete Document?</div>
-            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20 }}>This will permanently remove "ACT 101 – Interest Theory" from your library.</div>
+          <div style={{ background: T.card, borderRadius: 20, padding: 24, width: '100%' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 8 }}>Delete Document?</div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 20 }}>This will permanently remove "ACT 101 – Interest Theory" from your library.</div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setShowDelete(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+              <button onClick={() => setShowDelete(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: T.text }}>Cancel</button>
               <button onClick={() => { setShowDelete(false); setScreen('home') }} style={{ flex: 1, background: '#C94C4C', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: '#fff' }}>Delete</button>
             </div>
           </div>
@@ -2161,12 +2162,12 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
       {/* Report modal */}
       {showReport && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 14 }}>Report Document</div>
+          <div style={{ background: T.card, borderRadius: 20, padding: 24, width: '100%' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 14 }}>Report Document</div>
             {['Inaccurate content','Plagiarised material','Inappropriate content','Copyright violation','Other'].map((r, i) => (
-              <button key={i} onClick={() => setShowReport(false)} style={{ display: 'block', width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 10, padding: '11px 14px', marginBottom: 8, textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: N.navy, cursor: 'pointer' }}>{r}</button>
+              <button key={i} onClick={() => setShowReport(false)} style={{ display: 'block', width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 10, padding: '11px 14px', marginBottom: 8, textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>{r}</button>
             ))}
-            <button onClick={() => setShowReport(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', marginTop: 4, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
+            <button onClick={() => setShowReport(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', marginTop: 4, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: T.text }}>Cancel</button>
           </div>
         </div>
       )}
@@ -2180,6 +2181,7 @@ type TutorMsg = { id: number | string; role: 'user' | 'assistant'; content: stri
 type PickableDoc = { id: number; title: string; status: string }
 
 function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null; setActiveDocumentId: (id: number | null) => void }) {
+  const { tokens: T } = useTheme()
   const [messages, setMessages] = useState<TutorMsg[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -2243,7 +2245,7 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
 
   if (activeDocumentId == null) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -2255,18 +2257,18 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-          {pickerLoading && <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, marginTop: 24 }}>Loading your documents…</div>}
+          {pickerLoading && <div style={{ textAlign: 'center', color: T.textMuted, fontSize: 13, marginTop: 24 }}>Loading your documents…</div>}
           {pickerError && <GenerationError error={pickerError} />}
           {!pickerLoading && !pickerError && pickerDocs.length === 0 && (
             <div style={{ textAlign: 'center', padding: '32px 20px' }}>
-              <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 14 }}>You don't have any documents ready yet. Upload one to start asking Ada questions.</div>
+              <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 14 }}>You don't have any documents ready yet. Upload one to start asking Ada questions.</div>
               <button onClick={() => setScreen('upload')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 14, padding: '12px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Upload a Document</button>
             </div>
           )}
           {!pickerLoading && !pickerError && pickerDocs.map(d => (
-            <div key={d.id} onClick={() => setActiveDocumentId(d.id)} style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
+            <div key={d.id} onClick={() => setActiveDocumentId(d.id)} style={{ background: T.card, borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
               <div style={{ width: 38, height: 38, background: 'rgba(201,168,76,0.12)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>📄</div>
-              <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }} className="line-clamp-1">{d.title}</div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: T.text }} className="line-clamp-1">{d.title}</div>
             </div>
           ))}
         </div>
@@ -2278,7 +2280,7 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
   if (error) return <GenerationError error={error} />
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -2298,21 +2300,21 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }} className="scrollbar-hide">
         {messages.length === 0 && (
-          <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: 13, marginTop: 40 }}>Ask me anything about this document to get started.</div>
+          <div style={{ textAlign: 'center', color: T.textMuted, fontSize: 13, marginTop: 40 }}>Ask me anything about this document to get started.</div>
         )}
         {messages.map((m) => (
           <div key={m.id} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', gap: 10, alignItems: 'flex-start' }}>
             {m.role === 'assistant' && <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>✦</div>}
             <div style={{ maxWidth: '80%', background: m.role === 'user' ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: m.role === 'user' ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
-              <div style={{ fontSize: 13, color: m.role === 'user' ? '#fff' : '#374151', lineHeight: 1.75, whiteSpace: 'pre-line' }}>{m.content}</div>
+              <div style={{ fontSize: 13, color: m.role === 'user' ? '#fff' : T.text, lineHeight: 1.75, whiteSpace: 'pre-line' }}>{m.content}</div>
             </div>
           </div>
         ))}
         {sending && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
             <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>✦</div>
-            <div style={{ background: '#fff', borderRadius: '0 14px 14px 14px', padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
-              <div style={{ fontSize: 13, color: '#9CA3AF' }}>Thinking…</div>
+            <div style={{ background: T.card, borderRadius: '0 14px 14px 14px', padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
+              <div style={{ fontSize: 13, color: T.textMuted }}>Thinking…</div>
             </div>
           </div>
         )}
@@ -2332,14 +2334,14 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
         </div>
       )}
 
-      <div style={{ padding: '10px 14px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(11,20,55,0.08)' }}>
-          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} disabled={sending} placeholder="Ask your AI tutor anything…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
+      <div style={{ padding: '10px 14px 14px', background: T.card, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: T.pageBg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(11,20,55,0.08)' }}>
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} disabled={sending} placeholder="Ask your AI tutor anything…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: T.text, fontFamily: 'Plus Jakarta Sans' }} />
           <button onClick={() => setVoiceMode(v => !v)} style={{ width: 32, height: 32, background: voiceMode ? `rgba(201,168,76,0.2)` : '#F3F4F6', border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ color: voiceMode ? N.gold : '#6B7280' }}>{Ic.mic('w-4 h-4')}</div>
+            <div style={{ color: voiceMode ? N.gold : T.textMuted }}>{Ic.mic('w-4 h-4')}</div>
           </button>
           <button onClick={send} disabled={sending || !input.trim()} style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: sending ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: sending || !input.trim() ? 0.5 : 1 }}>
-            <div style={{ color: N.navy }}>{Ic.send('w-4 h-4')}</div>
+            <div style={{ color: T.text }}>{Ic.send('w-4 h-4')}</div>
           </button>
         </div>
       </div>
@@ -2892,6 +2894,7 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 
 // ─── FORUM ────────────────────────────────────────────────────────────────────
 function ForumScreen({ setScreen, setActiveForumPostId, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveForumPostId: (id: number) => void; setActiveGroupId: (id: number) => void }) {
+  const { tokens: T } = useTheme()
   const [units, setUnits] = useState<UnitOption[]>([])
   const [unitId, setUnitId] = useState<number | null>(null)
   const [posts, setPosts] = useState<ForumPostSummary[]>([])
@@ -2931,7 +2934,7 @@ function ForumScreen({ setScreen, setActiveForumPostId, setActiveGroupId }: { se
 
   if (loadingUnits) return <SkeletonForum />
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -2947,35 +2950,35 @@ function ForumScreen({ setScreen, setActiveForumPostId, setActiveGroupId }: { se
       {/* My Groups */}
       <div style={{ padding: '14px 16px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>My Groups</div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>My Groups</div>
           <button onClick={() => setScreen('group-create')} style={{ fontSize: 12, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ New</button>
         </div>
         <div style={{ display: 'flex', gap: 10, overflowX: 'auto', marginBottom: 16 }} className="scrollbar-hide">
           {loadingGroups ? (
-            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '10px 0' }}>Loading groups…</div>
+            <div style={{ fontSize: 12, color: T.textMuted, padding: '10px 0' }}>Loading groups…</div>
           ) : (
             <>
               {myGroups.map(g => (
-                <button key={g.id} onClick={() => openGroup(g.id)} style={{ flexShrink: 0, background: '#fff', border: 'none', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans', minWidth: 130 }}>
+                <button key={g.id} onClick={() => openGroup(g.id)} style={{ flexShrink: 0, background: T.card, border: 'none', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans', minWidth: 130 }}>
                   <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.gold, marginBottom: 8 }}>{g.name.slice(0, 2).toUpperCase()}</div>
-                  <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 2 }} className="line-clamp-1">{g.name}</div>
-                  <div style={{ fontSize: 10, color: '#9CA3AF' }}>{g.member_count} member{g.member_count === 1 ? '' : 's'}</div>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: T.text, marginBottom: 2 }} className="line-clamp-1">{g.name}</div>
+                  <div style={{ fontSize: 10, color: T.textMuted }}>{g.member_count} member{g.member_count === 1 ? '' : 's'}</div>
                 </button>
               ))}
               {myGroups.length === 0 && (
-                <div style={{ fontSize: 12, color: '#9CA3AF', padding: '10px 0' }}>You haven't joined any groups yet.</div>
+                <div style={{ fontSize: 12, color: T.textMuted, padding: '10px 0' }}>You haven't joined any groups yet.</div>
               )}
               <button onClick={() => setScreen('explore')} style={{ flexShrink: 0, background: '#F3F4F6', border: '1.5px dashed #D1D5DB', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: 'none', fontFamily: 'Plus Jakarta Sans', minWidth: 130, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                 <div style={{ width: 38, height: 38, background: '#E5E7EB', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>+</div>
-                <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textAlign: 'center' }}>Find groups</div>
+                <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600, textAlign: 'center' }}>Find groups</div>
               </button>
             </>
           )}
         </div>
-        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>Recent Posts</div>
+        <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Recent Posts</div>
         {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{error}</div>}
         {loadingPosts ? (
-          <div style={{ fontSize: 12, color: '#9CA3AF', padding: '20px 0' }}>Loading posts…</div>
+          <div style={{ fontSize: 12, color: T.textMuted, padding: '20px 0' }}>Loading posts…</div>
         ) : posts.length === 0 ? (
           <EmptyState icon="💬" title="No posts yet" sub="Be the first to post in this unit." action="New Post" onAction={() => setScreen('post-composer')} />
         ) : posts.map(p => <RealForumCard key={p.id} post={p} onOpen={() => openPost(p.id)} />)}
@@ -2986,6 +2989,7 @@ function ForumScreen({ setScreen, setActiveForumPostId, setActiveGroupId }: { se
 
 // ─── COMMENTS ────────────────────────────────────────────────────────────────
 function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void; postId: number | null }) {
+  const { tokens: T } = useTheme()
   const [post, setPost] = useState<ForumPostDetail | null>(null)
   const [input, setInput] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
@@ -3048,7 +3052,7 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
 
   if (postId == null) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -3063,7 +3067,7 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
   const replyCount = post ? post.replies.filter(r => !r.is_removed).length : 0
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -3072,21 +3076,21 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }} className="scrollbar-hide">
         {loading ? (
-          <div style={{ fontSize: 12, color: '#9CA3AF', padding: '20px 0' }}>Loading…</div>
+          <div style={{ fontSize: 12, color: T.textMuted, padding: '20px 0' }}>Loading…</div>
         ) : !post ? (
           <div style={{ fontSize: 12, color: '#C94C4C' }}>{error || 'Post not found.'}</div>
         ) : (
           <>
-            <div style={{ background: '#fff', borderRadius: 14, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ background: T.card, borderRadius: 14, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
                 <Avi name={post.author.slice(0, 2).toUpperCase()} size={34} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{post.author}</div>
-                  <div style={{ fontSize: 11, color: '#9CA3AF' }}>{post.created_at ? new Date(post.created_at).toLocaleString() : ''}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{post.author}</div>
+                  <div style={{ fontSize: 11, color: T.textMuted }}>{post.created_at ? new Date(post.created_at).toLocaleString() : ''}</div>
                 </div>
               </div>
-              <div style={{ fontWeight: 800, fontSize: 15, color: N.navy, marginBottom: 6 }}>{post.title}</div>
-              <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65 }}>{post.body}</div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: T.text, marginBottom: 6 }}>{post.title}</div>
+              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.65 }}>{post.body}</div>
             </div>
             <button onClick={askAi} disabled={askingAi} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(201,168,76,0.1)', border: `1px solid ${N.gold}40`, borderRadius: 12, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12, color: N.gold, opacity: askingAi ? 0.6 : 1 }}>
               ✦ {askingAi ? 'Asking Prepza AI…' : 'Ask Prepza AI to answer'}
@@ -3099,22 +3103,22 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
                     ? <div style={{ width: 34, height: 34, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>✦</div>
                     : <Avi name={(r.author || '??').slice(0, 2).toUpperCase()} size={34} />}
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{r.is_ai ? 'Prepza AI' : (r.author || 'Deleted user')}</div>
-                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{r.is_ai ? 'Prepza AI' : (r.author || 'Deleted user')}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted }}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</div>
                   </div>
                 </div>
-                <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, whiteSpace: 'pre-line' }}>{r.is_removed ? '[removed]' : r.body}</div>
+                <div style={{ fontSize: 13, color: T.text, lineHeight: 1.65, whiteSpace: 'pre-line' }}>{r.is_removed ? '[removed]' : r.body}</div>
               </div>
             ))}
           </>
         )}
       </div>
-      <div style={{ padding: '10px 14px 14px', background: '#fff', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: N.bg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.07)' }}>
+      <div style={{ padding: '10px 14px 14px', background: T.card, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: T.pageBg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.07)' }}>
           <Avi name={myInitials} size={28} />
-          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendComment()} placeholder="Add a reply… (mention @Prepza AI to ask it directly)" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: '#374151', fontFamily: 'Plus Jakarta Sans' }} />
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendComment()} placeholder="Add a reply… (mention @Prepza AI to ask it directly)" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: T.text, fontFamily: 'Plus Jakarta Sans' }} />
           <button onClick={sendComment} disabled={sending} style={{ width: 30, height: 30, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: sending ? 0.6 : 1 }}>
-            <div style={{ color: N.navy }}>{Ic.send('w-3 h-3')}</div>
+            <div style={{ color: T.text }}>{Ic.send('w-3 h-3')}</div>
           </button>
         </div>
       </div>
@@ -3126,6 +3130,7 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
 type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; unread_count: number }
 
 function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void; setActiveGroupId?: (id: number) => void }) {
+  const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'Chats'|'Groups'|'Requests'>('Chats')
   const [search, setSearch] = useState('')
   const [chats, setChats] = useState<ChatSummary[]>([])
@@ -3163,7 +3168,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
   })
   const openChat = (id: number) => { setActiveConversationId(id); setScreen('chat-detail') }
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.card }}>
       <div style={{ background: N.navy, padding: '0 18px 14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <span style={{ fontWeight: 800, fontSize: 20, color: '#fff' }}>Chats</span>
@@ -3196,29 +3201,29 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
         {error ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 44, marginBottom: 12 }}>⚠️</div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>Couldn't load chats</div>
-            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>{error}</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>Couldn't load chats</div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>{error}</div>
           </div>
         ) : tab === 'Requests' ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 44, marginBottom: 12 }}>📬</div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No requests</div>
-            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>New chat requests will appear here</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>No requests</div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>New chat requests will appear here</div>
           </div>
         ) : tab === 'Groups' ? (
           <>
             {myGroups.length === 0 && displayed.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
                 <div style={{ fontSize: 44, marginBottom: 12 }}>👥</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No groups yet</div>
-                <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Join a study group or start a group chat to see it here</div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>No groups yet</div>
+                <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>Join a study group or start a group chat to see it here</div>
                 <button onClick={() => setScreen('explore')} style={{ marginTop: 16, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 12, border: 'none', borderRadius: 12, padding: '10px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Browse Study Groups</button>
               </div>
             ) : (
               <>
                 {myGroups.length > 0 && (
                   <>
-                    <div style={{ padding: '12px 16px 6px', fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5 }}>Study Groups</div>
+                    <div style={{ padding: '12px 16px 6px', fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Study Groups</div>
                     {myGroups.map(g => (
                       <div key={`group-${g.id}`} onClick={() => { setActiveGroupId?.(g.id); setScreen('group-detail') }} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
                         <div style={{ position: 'relative' }}>
@@ -3226,17 +3231,17 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
                           <div style={{ position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: N.navy, fontWeight: 800 }}>G</div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{g.name}</span>
-                          <div style={{ fontSize: 12, color: '#6B7280' }} className="line-clamp-1">{g.member_count} member{g.member_count === 1 ? '' : 's'}{g.unit_code ? ` · ${g.unit_code}` : ''}</div>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{g.name}</span>
+                          <div style={{ fontSize: 12, color: T.textMuted }} className="line-clamp-1">{g.member_count} member{g.member_count === 1 ? '' : 's'}{g.unit_code ? ` · ${g.unit_code}` : ''}</div>
                         </div>
-                        <div style={{ color: '#9CA3AF' }}>{Ic.chevR('w-4 h-4')}</div>
+                        <div style={{ color: T.textMuted }}>{Ic.chevR('w-4 h-4')}</div>
                       </div>
                     ))}
                   </>
                 )}
                 {displayed.length > 0 && (
                   <>
-                    <div style={{ padding: '14px 16px 6px', fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5 }}>Group Chats</div>
+                    <div style={{ padding: '14px 16px 6px', fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Group Chats</div>
                     {displayed.map(chat => {
                       const initials = (chat.name || '??').slice(0, 2).toUpperCase()
                       return (
@@ -3247,10 +3252,10 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                              <span style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{chat.name}</span>
-                              <span style={{ fontSize: 11, color: '#9CA3AF' }}>{chat.last_message_at ? new Date(chat.last_message_at).toLocaleString() : ''}</span>
+                              <span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{chat.name}</span>
+                              <span style={{ fontSize: 11, color: T.textMuted }}>{chat.last_message_at ? new Date(chat.last_message_at).toLocaleString() : ''}</span>
                             </div>
-                            <div style={{ fontSize: 12, color: '#6B7280' }} className="line-clamp-1">{chat.last_message || 'No messages yet'}</div>
+                            <div style={{ fontSize: 12, color: T.textMuted }} className="line-clamp-1">{chat.last_message || 'No messages yet'}</div>
                           </div>
                           {chat.unread_count > 0 && <div style={{ width: 22, height: 22, background: N.gold, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread_count}</div>}
                         </div>
@@ -3264,8 +3269,8 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
         ) : displayed.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 44, marginBottom: 12 }}>💬</div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: N.navy }}>No conversations</div>
-            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Start a new chat to connect with classmates</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>No conversations</div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>Start a new chat to connect with classmates</div>
           </div>
         ) : displayed.map(chat => {
           const initials = (chat.name || '??').slice(0, 2).toUpperCase()
@@ -3277,10 +3282,10 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{chat.name}</span>
-                  <span style={{ fontSize: 11, color: '#9CA3AF' }}>{chat.last_message_at ? new Date(chat.last_message_at).toLocaleString() : ''}</span>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{chat.name}</span>
+                  <span style={{ fontSize: 11, color: T.textMuted }}>{chat.last_message_at ? new Date(chat.last_message_at).toLocaleString() : ''}</span>
                 </div>
-                <div style={{ fontSize: 12, color: '#6B7280' }} className="line-clamp-1">{chat.last_message || 'No messages yet'}</div>
+                <div style={{ fontSize: 12, color: T.textMuted }} className="line-clamp-1">{chat.last_message || 'No messages yet'}</div>
               </div>
               {chat.unread_count > 0 && <div style={{ width: 22, height: 22, background: N.gold, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread_count}</div>}
             </div>
