@@ -824,6 +824,7 @@ function SkeletonNotifications() {
 
 // ─── SPLASH ───────────────────────────────────────────────────────────────────
 function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   // Restores an existing backend session (cookie lasts 7 days) instead of
   // always dropping the user back to the login screen on every app open.
   // Keeps the branded 2.2s splash beat either way.
@@ -884,6 +885,7 @@ function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) => void; oauthError?: string }) {
+  const { tokens: T } = useTheme()
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [showPass, setShowPass] = useState(false)
