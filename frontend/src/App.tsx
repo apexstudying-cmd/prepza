@@ -366,8 +366,9 @@ function BottomNav({ active, setScreen }: { active: Screen; setScreen: (s: Scree
 // ─── LOADING SYSTEM ───────────────────────────────────────────────────────────
 
 function Sk({ w, h = 14, r = 8, dark, style: sx }: { w?: string | number; h?: number; r?: number; dark?: boolean; style?: React.CSSProperties }) {
+  const { mode } = useTheme()
   const base: React.CSSProperties = { width: w ?? '100%', height: h, borderRadius: r, flexShrink: 0, ...sx }
-  return dark
+  return (dark || mode === 'dark')
     ? <div style={{ ...base, background: 'linear-gradient(90deg,rgba(255,255,255,0.05) 25%,rgba(255,255,255,0.12) 50%,rgba(255,255,255,0.05) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.8s infinite' }} />
     : <div className="shimmer" style={base} />
 }
