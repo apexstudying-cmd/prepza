@@ -10240,6 +10240,7 @@ const ADMIN_OPP_STATUS_COLOR: Record<string, string> = {
 }
 
 function AdminOpportunitiesPanel() {
+  const { mode, tokens: T } = useTheme()
   const [csrfToken, setCsrfToken] = useState('')
   const [statusFilter, setStatusFilter] = useState('pending_review')
   const [rows, setRows] = useState<AdminOpportunityRow[]>([])
@@ -10302,17 +10303,17 @@ function AdminOpportunitiesPanel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <AdminCard title={`Opportunities — ${rows.length}`}>
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {['pending_review', 'approved', 'published', 'rejected', 'expired', 'archived', 'removed', 'all'].map(f => (
-            <button key={f} onClick={() => setStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: statusFilter === f ? N.navy : '#F3F4F6', color: statusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f.replace('_', ' ')}</button>
+            <button key={f} onClick={() => setStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: statusFilter === f ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: statusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f.replace('_', ' ')}</button>
           ))}
         </div>
         {loading ? (
-          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+          <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading…</div>
         ) : error ? (
           <div style={{ padding: 24, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{error}</div>
         ) : rows.length === 0 ? (
-          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No opportunities with this status.</div>
+          <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No opportunities with this status.</div>
         ) : (
           <AdminTable
             cols={['Title', 'Organisation', 'Type', 'Deadline', 'Status']}
@@ -10337,7 +10338,7 @@ function AdminOpportunitiesPanel() {
                     <button disabled={actionBusy} onClick={() => runAction(r.id, 'publish')} style={{ background: '#DBEAFE', color: '#2563EB', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Publish</button>
                   )}
                   {(r.status === 'approved' || r.status === 'published' || r.status === 'expired') && (
-                    <button disabled={actionBusy} onClick={() => runAction(r.id, 'archive')} style={{ background: '#F3F4F6', color: '#6B7280', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Archive</button>
+                    <button disabled={actionBusy} onClick={() => runAction(r.id, 'archive')} style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.textMuted, border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Archive</button>
                   )}
                   {r.status !== 'removed' && (
                     <button disabled={actionBusy} onClick={() => setReasonTarget({ kind: 'remove', id: r.id })} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
@@ -10351,11 +10352,11 @@ function AdminOpportunitiesPanel() {
 
       {reasonTarget && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setReasonTarget(null)}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 10 }}>{reasonTarget.kind === 'reject' ? 'Reason for rejection' : 'Reason for removal (optional)'}</div>
-            <textarea value={reasonText} onChange={e => setReasonText(e.target.value)} rows={3} placeholder="Explain why…" style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', resize: 'none', marginBottom: 14 }} />
+          <div style={{ background: T.card, borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 10 }}>{reasonTarget.kind === 'reject' ? 'Reason for rejection' : 'Reason for removal (optional)'}</div>
+            <textarea value={reasonText} onChange={e => setReasonText(e.target.value)} rows={3} placeholder="Explain why…" style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', resize: 'none', marginBottom: 14 }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { setReasonTarget(null); setReasonText('') }} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button onClick={() => { setReasonTarget(null); setReasonText('') }} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
               <button disabled={actionBusy || (reasonTarget.kind === 'reject' && !reasonText.trim())} onClick={submitReason} style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, opacity: (actionBusy || (reasonTarget.kind === 'reject' && !reasonText.trim())) ? 0.6 : 1 }}>Confirm</button>
             </div>
           </div>
