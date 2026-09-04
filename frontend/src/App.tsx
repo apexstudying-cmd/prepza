@@ -10610,11 +10610,12 @@ function AdminOrganisationsPanel() {
 }
 
 function AdminPlatform({ onExit }: { onExit: () => void }) {
+  const { mode, tokens: T } = useTheme()
   const [section, setSection] = useState('dashboard')
   const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System' }
 
   return (
-    <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#F4F6FA', fontFamily: 'Plus Jakarta Sans', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', width: '100vw', height: '100vh', background: T.pageBg, fontFamily: 'Plus Jakarta Sans', overflow: 'hidden' }}>
       {/* Sidebar */}
       <div style={{ width: 220, background: N.navy, display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto' }} className="scrollbar-hide">
         <div style={{ padding: '20px 16px 14px' }}>
@@ -10656,17 +10657,17 @@ function AdminPlatform({ onExit }: { onExit: () => void }) {
       {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
         {/* Top bar */}
-        <div style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', padding: '0 24px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <div style={{ background: T.card, borderBottom: `1px solid ${T.border}`, padding: '0 24px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 18, color: N.navy }}>{sectionLabels[section]}</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>Prepza Admin · {new Date().toLocaleDateString('en-KE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            <div style={{ fontWeight: 800, fontSize: 18, color: T.text }}>{sectionLabels[section]}</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Prepza Admin · {new Date().toLocaleDateString('en-KE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 99, padding: '4px 12px' }}>
               <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#16A34A' }} />
               <span style={{ fontSize: 11, fontWeight: 600, color: '#16A34A' }}>All Systems Operational</span>
             </div>
-            <button style={{ width: 36, height: 36, background: '#F3F4F6', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 16 }}>🔔</button>
+            <button style={{ width: 36, height: 36, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 16 }}>🔔</button>
             <div style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.navy }}>PA</div>
           </div>
         </div>
