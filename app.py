@@ -1024,10 +1024,21 @@ class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id", ondelete="CASCADE"), nullable=False)
     sender_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    body = db.Column(db.String(3000), nullable=True)
-    # Nullable so an attachment-only message (no caption) is valid - see
-    # send_message()'s "must include text or an attachment" check, which
-    # is what actually enforces a message can't be completely empty.
+    body = db.Column(db.Text, nullable=True)
+    # E2EE (Chats only, 1:1 chunk): body is AES-GCM ciphertext,
+    # base64-encoded, client-encrypted before it ever reaches this
+    # server. Widened from String(3000) to Text because ciphertext
+    # + base64 encoding overhead can exceed the old plaintext-sized
+    # cap - CHAT_MESSAGE_CIPHERTEXT_MAX enforces the real ceiling at
+    # the application layer instead. Still nullable so an
+    # attachment-only message (no caption) is valid - see
+    # send_message()'s "must include text or an attachment" check.
+    nonce = db.Column(db.String(64), nullable=True)
+    # AES-GCM IV used to encrypt body, base64 - required whenever
+    # body is set, meaningless (and left null) for attachment-only
+    # messages. The server never has the key to decrypt this; it
+    # only stores and returns nonce+body together so the recipient's
+    # own client can.
     is_deleted = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     edited_at = db.Column(db.DateTime, nullable=True)
@@ -8329,6 +8340,15 @@ def admin_sync_ambassador_payout_status(payout_id):
 # ---------- Chat routes (Chunk 6) ----------
 
 CHAT_MESSAGE_MAX = 3000
+# Retained as the reference plaintext-length limit surfaced in the
+# frontend UI (e.g. a character counter) - no longer what the
+# server itself validates against, since body is ciphertext.
+CHAT_MESSAGE_CIPHERTEXT_MAX = 20000
+# What send_message() actually checks. Generous ceiling accounting
+# for AES-GCM overhead (16-byte tag) + base64 encoding (~4/3
+# expansion) + worst-case 4-byte-per-character UTF-8 plaintext at
+# the CHAT_MESSAGE_MAX length - guards against abuse/garbage, not a
+# tight format check.
 CHAT_GROUP_NAME_MAX = 100
 CHAT_MESSAGE_PAGE_SIZE = 50
 CHAT_MESSAGE_SEARCH_LIMIT = 50
@@ -8385,6 +8405,7 @@ def _serialize_message(message, attachment=None):
         "conversation_id": message.conversation_id,
         "sender_id": message.sender_id,
         "body": message.body if not message.is_deleted else None,
+        "nonce": message.nonce if not message.is_deleted else None,
         "is_deleted": message.is_deleted,
         "created_at": message.created_at.isoformat() if message.created_at else None,
         "edited_at": message.edited_at.isoformat() if message.edited_at else None,
@@ -8668,8 +8689,11 @@ def send_message(conversation_id):
         return jsonify({"error": "Request body must be valid JSON"}), 400
 
     body = (data.get("body") or "").strip() or None
-    if body and len(body) > CHAT_MESSAGE_MAX:
-        return jsonify({"error": f"Message must be {CHAT_MESSAGE_MAX} characters or fewer"}), 400
+    nonce = (data.get("nonce") or "").strip() or None
+    if body and len(body) > CHAT_MESSAGE_CIPHERTEXT_MAX:
+        return jsonify({"error": f"Message must be {CHAT_MESSAGE_CIPHERTEXT_MAX} characters or fewer"}), 400
+    if body and not nonce:
+        return jsonify({"error": "nonce is required alongside an encrypted body"}), 400
 
     attachment_id = data.get("attachment_id")
     attachment = None
@@ -8689,7 +8713,7 @@ def send_message(conversation_id):
     if not body and not attachment:
         return jsonify({"error": "Message must include text or an attachment"}), 400
 
-    message = Message(conversation_id=conversation_id, sender_id=user_id, body=body)
+    message = Message(conversation_id=conversation_id, sender_id=user_id, body=body, nonce=nonce)
     db.session.add(message)
     db.session.flush()  # assign message.id before linking the attachment
 
@@ -8709,10 +8733,12 @@ def send_message(conversation_id):
     # since this app is polling-based with no real presence/websockets).
     sender = db.session.get(User, user_id)
     sender_name = _display_name(sender) if sender else "Someone"
-    if body:
-        push_preview = body if len(body) <= 120 else body[:117] + "..."
-    else:
-        push_preview = "Sent an attachment"
+    # E2EE (Chats only): body is ciphertext as of the 1:1 chat
+    # encryption chunk, so the server can no longer build a content
+    # preview here - generic preview instead, same reasoning as the
+    # design doc's WhatsApp-style push fallback. Pulled forward into
+    # this chunk since it's the same function already being edited.
+    push_preview = "New message" if body else "Sent an attachment"
     recently_active_cutoff = datetime.utcnow() - timedelta(seconds=15)
     other_participants = ConversationParticipant.query.filter(
         ConversationParticipant.conversation_id == conversation_id,
