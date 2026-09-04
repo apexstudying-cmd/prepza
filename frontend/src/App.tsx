@@ -8355,6 +8355,7 @@ function AdminBadge({ text, color }: { text: string; color: string }) {
 }
 
 function AdminBarChart({ data, labels, height = 80, color = N.gold }: { data: number[]; labels?: string[]; height?: number; color?: string }) {
+  const { tokens: T } = useTheme()
   const max = Math.max(...data) || 1
   const w = data.length * 28
   return (
@@ -8364,7 +8365,7 @@ function AdminBarChart({ data, labels, height = 80, color = N.gold }: { data: nu
         return (
           <g key={i}>
             <rect x={i * 28 + 2} y={height - bh} width={24} height={bh} rx={4} fill={color} opacity={0.75 + (i === data.length - 1 ? 0.25 : 0)} />
-            {labels && <text x={i * 28 + 14} y={height + 14} textAnchor="middle" fontSize="9" fill="#9CA3AF" fontFamily="Plus Jakarta Sans">{labels[i]}</text>}
+            {labels && <text x={i * 28 + 14} y={height + 14} textAnchor="middle" fontSize="9" fill={T.textMuted} fontFamily="Plus Jakarta Sans">{labels[i]}</text>}
           </g>
         )
       })}
@@ -8373,6 +8374,7 @@ function AdminBarChart({ data, labels, height = 80, color = N.gold }: { data: nu
 }
 
 function AdminLineChart({ data, color = N.gold, height = 60 }: { data: number[]; color?: string; height?: number }) {
+  const { tokens: T } = useTheme()
   const max = Math.max(...data) || 1
   const min = Math.min(...data)
   const range = max - min || 1
@@ -8394,19 +8396,20 @@ function AdminLineChart({ data, color = N.gold, height = 60 }: { data: number[];
       </defs>
       <path d={areaPath} fill={`url(#${gid})`} />
       <path d={linePath} stroke={color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      {pts.map((p, i) => i === pts.length - 1 && <circle key={i} cx={p[0]} cy={p[1]} r={4} fill={color} stroke="#fff" strokeWidth={1.5} />)}
+      {pts.map((p, i) => i === pts.length - 1 && <circle key={i} cx={p[0]} cy={p[1]} r={4} fill={color} stroke={T.card} strokeWidth={1.5} />)}
     </svg>
   )
 }
 
 function AdminKPI({ label, value, sub, trend, color = N.navy, chartData }: { label: string; value: string; sub?: string; trend?: string; color?: string; chartData?: number[] }) {
+  const { tokens: T } = useTheme()
   const isUp = trend?.startsWith('+')
   return (
-    <div style={{ background: '#fff', borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF', letterSpacing: 0.3 }}>{label}</div>
+    <div style={{ background: T.card, borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, letterSpacing: 0.3 }}>{label}</div>
       <div style={{ fontWeight: 800, fontSize: 24, color, letterSpacing: '-0.5px', lineHeight: 1 }}>{value}</div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: 11, color: '#9CA3AF' }}>{sub}</div>
+        <div style={{ fontSize: 11, color: T.textMuted }}>{sub}</div>
         {trend && <span style={{ fontSize: 11, fontWeight: 700, color: isUp ? '#16A34A' : '#DC2626' }}>{trend}</span>}
       </div>
       {chartData && <div style={{ marginTop: 4 }}><AdminLineChart data={chartData} color={color === N.navy ? N.gold : color} height={40} /></div>}
@@ -8415,19 +8418,20 @@ function AdminKPI({ label, value, sub, trend, color = N.navy, chartData }: { lab
 }
 
 function AdminTable({ cols, rows, actions }: { cols: string[]; rows: (string | React.ReactNode)[][]; actions?: (i: number) => React.ReactNode }) {
+  const { mode, tokens: T } = useTheme()
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>
         <thead>
-          <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
-            {cols.map(c => <th key={c} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#6B7280', fontSize: 11, whiteSpace: 'nowrap' }}>{c}</th>)}
-            {actions && <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#6B7280', fontSize: 11 }}>Actions</th>}
+          <tr style={{ background: mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#F9FAFB', borderBottom: `1px solid ${T.border}` }}>
+            {cols.map(c => <th key={c} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: T.textMuted, fontSize: 11, whiteSpace: 'nowrap' }}>{c}</th>)}
+            {actions && <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: T.textMuted, fontSize: 11 }}>Actions</th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} style={{ borderBottom: '1px solid #F3F4F6', transition: 'background 0.1s' }}>
-              {row.map((cell, j) => <td key={j} style={{ padding: '12px 14px', color: j === 0 ? N.navy : '#4B5563', fontWeight: j === 0 ? 600 : 400, verticalAlign: 'middle', whiteSpace: 'nowrap' }}>{cell}</td>)}
+            <tr key={i} style={{ borderBottom: `1px solid ${T.border}`, transition: 'background 0.1s' }}>
+              {row.map((cell, j) => <td key={j} style={{ padding: '12px 14px', color: j === 0 ? T.text : T.textMuted, fontWeight: j === 0 ? 600 : 400, verticalAlign: 'middle', whiteSpace: 'nowrap' }}>{cell}</td>)}
               {actions && <td style={{ padding: '12px 14px', textAlign: 'right' }}>{actions(i)}</td>}
             </tr>
           ))}
@@ -8438,10 +8442,11 @@ function AdminTable({ cols, rows, actions }: { cols: string[]; rows: (string | R
 }
 
 function AdminCard({ title, children, action, actionLabel }: { title: string; children: React.ReactNode; action?: () => void; actionLabel?: string }) {
+  const { tokens: T } = useTheme()
   return (
-    <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-      <div style={{ padding: '14px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{title}</div>
+    <div style={{ background: T.card, borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${T.border}`, overflow: 'hidden' }}>
+      <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{title}</div>
         {action && <button onClick={action} style={{ fontSize: 12, fontWeight: 600, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{actionLabel ?? 'View all'}</button>}
       </div>
       {children}
