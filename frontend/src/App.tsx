@@ -8457,6 +8457,7 @@ function AdminCard({ title, children, action, actionLabel }: { title: string; ch
 type AdminAnnouncementItem = { id: number; title: string; body: string; reach: number; created_at: string | null }
 
 function AdminSection({ section, setSection }: { section: string; setSection: (s: string) => void }) {
+  const { mode, tokens: T } = useTheme()
   const [search, setSearch] = useState('')
   const [userFilter, setUserFilter] = useState('All')
   const [selectedUser, setSelectedUser] = useState<AdminUserRow | null>(null)
@@ -8926,17 +8927,17 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
       {/* KPI grid */}
       {dashAnalyticsLoading ? (
-        <div style={{ padding: '24px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading dashboard…</div>
+        <div style={{ padding: '24px 0', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading dashboard…</div>
       ) : dashAnalytics && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
-            <AdminKPI label="Total Students" value={dashAnalytics.total_users.toLocaleString()} sub="All time" color={N.navy} chartData={dashAnalytics.signups_per_day.map(d => d.count)} />
+            <AdminKPI label="Total Students" value={dashAnalytics.total_users.toLocaleString()} sub="All time" color={T.text} chartData={dashAnalytics.signups_per_day.map(d => d.count)} />
             <AdminKPI label="Active Today" value={dashAnalytics.active_today.toLocaleString()} sub={`${dashAnalytics.total_users > 0 ? Math.round((dashAnalytics.active_today / dashAnalytics.total_users) * 100) : 0}% of total`} color="#4C7BC9" />
             <AdminKPI label="Revenue (30d)" value={`KES ${dashAnalytics.revenue_last_30d.toLocaleString()}`} sub={`All time: KES ${dashAnalytics.total_revenue.toLocaleString()}`} color="#16A34A" chartData={dashAnalytics.revenue_per_day.map(d => d.amount)} />
             <AdminKPI label="Active Subscriptions" value={dashPaymentsLoading ? '—' : dashActiveSubs.toLocaleString()} color={N.gold} />
             <AdminKPI label="AI Requests Today" value={(dashAiUsage?.requests_today ?? '—').toString()} sub={dashAiUsage ? `${dashAiUsage.total_requests.toLocaleString()} in 30d` : ''} color="#7C3AED" chartData={dashAiUsage?.daily_trend.map(d => d.requests)} />
             <AdminKPI label="AI Cost (30d)" value={dashAiUsage ? `$${dashAiUsage.total_cost_usd.toFixed(2)}` : '—'} color="#DC2626" />
-            <AdminKPI label="Content Items" value={dashAnalytics.total_content_items.toLocaleString()} sub={`${dashAnalytics.total_units.toLocaleString()} units`} color={N.navy} />
+            <AdminKPI label="Content Items" value={dashAnalytics.total_content_items.toLocaleString()} sub={`${dashAnalytics.total_units.toLocaleString()} units`} color={T.text} />
             <AdminKPI label="Storage Used" value={fmtBytesDash(dashAnalytics.storage_used_bytes)} color="#6B7280" />
           </div>
 
@@ -8944,7 +8945,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <AdminCard title="Revenue — Last 30 Days">
               <div style={{ padding: '16px 18px' }}>
                 {dashAnalytics.revenue_per_day.length === 0 ? (
-                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No revenue in this period.</div>
+                  <div style={{ fontSize: 13, color: T.textMuted }}>No revenue in this period.</div>
                 ) : (
                   <AdminBarChart data={dashAnalytics.revenue_per_day.map(d => d.amount)} height={100} color={N.gold} />
                 )}
@@ -8955,7 +8956,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                 {dashAiUsage && dashAiUsage.daily_trend.length > 0 ? (
                   <AdminBarChart data={dashAiUsage.daily_trend.map(d => d.requests)} height={100} color="#7C3AED" />
                 ) : (
-                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No AI requests in this period.</div>
+                  <div style={{ fontSize: 13, color: T.textMuted }}>No AI requests in this period.</div>
                 )}
               </div>
             </AdminCard>
@@ -8964,21 +8965,21 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <AdminCard title="Student Growth — Last 30 Days">
               <div style={{ padding: '16px 18px' }}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: N.navy, marginBottom: 4 }}>{dashAnalytics.total_users.toLocaleString()} <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>total</span></div>
-                {dashAnalytics.signups_per_day.length > 0 && <AdminLineChart data={dashAnalytics.signups_per_day.map(d => d.count)} color={N.navy} height={60} />}
+                <div style={{ fontSize: 28, fontWeight: 800, color: T.text, marginBottom: 4 }}>{dashAnalytics.total_users.toLocaleString()} <span style={{ fontSize: 13, color: T.textMuted, fontWeight: 500 }}>total</span></div>
+                {dashAnalytics.signups_per_day.length > 0 && <AdminLineChart data={dashAnalytics.signups_per_day.map(d => d.count)} color={T.text} height={60} />}
               </div>
             </AdminCard>
 
             <AdminCard title="Recent Signups">
               <div style={{ padding: '0 18px' }}>
                 {dashRecentUsers.length === 0 ? (
-                  <div style={{ padding: '18px 0', fontSize: 13, color: '#9CA3AF' }}>No signups yet.</div>
+                  <div style={{ padding: '18px 0', fontSize: 13, color: T.textMuted }}>No signups yet.</div>
                 ) : dashRecentUsers.map((u, i) => (
-                  <div key={u.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderBottom: i < dashRecentUsers.length - 1 ? '1px solid #F3F4F6' : 'none' }}>
+                  <div key={u.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderBottom: i < dashRecentUsers.length - 1 ? `1px solid ${T.border}` : 'none' }}>
                     <ActivityDot color="#4CC97B" />
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.4 }}>{u.display_name || u.email} registered{u.university_name ? ` · ${u.university_name}` : ''}</div>
-                      <div style={{ fontSize: 11, color: '#D1D5DB', marginTop: 2 }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</div>
+                      <div style={{ fontSize: 12, color: T.text, lineHeight: 1.4 }}>{u.display_name || u.email} registered{u.university_name ? ` · ${u.university_name}` : ''}</div>
+                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</div>
                     </div>
                   </div>
                 ))}
@@ -9012,13 +9013,13 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* User detail panel */}
       {selectedUser && (
-        <div style={{ background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)' }}>
+        <div style={{ background: T.card, borderRadius: 14, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${T.border}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
               <div style={{ width: 52, height: 52, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, color: N.navy }}>{(selectedUser.display_name || selectedUser.email).split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</div>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 17, color: N.navy }}>{selectedUser.display_name || '(no name)'}</div>
-                <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{selectedUser.email}</div>
+                <div style={{ fontWeight: 800, fontSize: 17, color: T.text }}>{selectedUser.display_name || '(no name)'}</div>
+                <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>{selectedUser.email}</div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                   <AdminBadge text={selectedUser.is_suspended ? 'Suspended' : 'Active'} color={selectedUser.is_suspended ? 'red' : 'green'} />
                   <AdminBadge text={selectedUser.subscription_plan === 'free' ? 'Free' : selectedUser.subscription_plan} color={selectedUser.subscription_plan === 'free' ? 'gray' : 'amber'} />
@@ -9026,7 +9027,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                 </div>
               </div>
             </div>
-            <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 20 }}>×</button>
+            <button onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, fontSize: 20 }}>×</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
             {[
@@ -9039,9 +9040,9 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               ['User ID', selectedUser.id.toString()],
               ['Subscription', selectedUser.subscription_plan],
             ].map(([k, v]) => (
-              <div key={k} style={{ background: '#F9FAFB', borderRadius: 10, padding: '10px 12px' }}>
-                <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 3 }}>{k}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{v}</div>
+              <div key={k} style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#F9FAFB'), borderRadius: 10, padding: '10px 12px' }}>
+                <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 600, marginBottom: 3 }}>{k}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{v}</div>
               </div>
             ))}
           </div>
@@ -9058,11 +9059,11 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       {/* Confirm modal */}
       {confirmAction && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmAction(null)}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>Confirm: {confirmAction.type}</div>
-            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, lineHeight: 1.6 }}>Are you sure you want to <strong>{confirmAction.type.toLowerCase()}</strong> for <strong>{confirmAction.target}</strong>? This action will be logged.</div>
+          <div style={{ background: T.card, borderRadius: 16, padding: 24, maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 17, color: T.text, marginBottom: 8 }}>Confirm: {confirmAction.type}</div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 20, lineHeight: 1.6 }}>Are you sure you want to <strong>{confirmAction.type.toLowerCase()}</strong> for <strong>{confirmAction.target}</strong>? This action will be logged.</div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setConfirmAction(null)} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button onClick={() => setConfirmAction(null)} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
               <button
                 onClick={() => { if (confirmAction.userId != null && confirmAction.nextSuspended != null) { setUserSuspended(confirmAction.userId, confirmAction.nextSuspended) } else { setConfirmAction(null) } }}
                 style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}
@@ -9073,30 +9074,30 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       )}
 
       <AdminCard title={`Users — ${filteredUsers.length}${adminUsersLoading ? '' : ' loaded'}`}>
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 10, padding: '8px 12px', minWidth: 200 }}>
-            <span style={{ color: '#9CA3AF', fontSize: 14 }}>🔍</span>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, university…" style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy }} />
+        <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: (mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#F9FAFB'), border: `1px solid ${T.border}`, borderRadius: 10, padding: '8px 12px', minWidth: 200 }}>
+            <span style={{ color: T.textMuted, fontSize: 14 }}>🔍</span>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, university…" style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text }} />
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             {['All','Active','Suspended','Premium','Free'].map(f => (
-              <button key={f} onClick={() => setUserFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: userFilter === f ? N.navy : '#F3F4F6', color: userFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{f}</button>
+              <button key={f} onClick={() => setUserFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: userFilter === f ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: userFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{f}</button>
             ))}
           </div>
         </div>
         {adminUsersLoading ? (
-          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading users…</div>
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading users…</div>
         ) : adminUsersError ? (
           <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{adminUsersError}</div>
         ) : filteredUsers.length === 0 ? (
-          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No users match this filter.</div>
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No users match this filter.</div>
         ) : (
           <AdminTable
             cols={['User', 'University', 'Plan', 'Docs', 'AI Reqs', 'Status', 'Joined']}
             rows={filteredUsers.map(u => [
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <div style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, color: N.navy, flexShrink: 0 }}>{(u.display_name || u.email).split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</div>
-                <div><div style={{ fontWeight: 600, color: N.navy }}>{u.display_name || '(no name)'}</div><div style={{ fontSize: 11, color: '#9CA3AF' }}>{u.email}</div></div>
+                <div><div style={{ fontWeight: 600, color: T.text }}>{u.display_name || '(no name)'}</div><div style={{ fontSize: 11, color: T.textMuted }}>{u.email}</div></div>
               </div>,
               u.university_name || '—',
               u.subscription_plan === 'free' ? 'Free' : u.subscription_plan,
@@ -9107,7 +9108,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             ])}
             actions={i => (
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                <button onClick={() => setSelectedUser(filteredUsers[i])} style={{ background: '#F3F4F6', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans' }}>View</button>
+                <button onClick={() => setSelectedUser(filteredUsers[i])} style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: T.text, fontFamily: 'Plus Jakarta Sans' }}>View</button>
                 <button
                   onClick={() => setConfirmAction({ type: filteredUsers[i].is_suspended ? 'Reactivate' : 'Suspend', target: filteredUsers[i].display_name || filteredUsers[i].email, userId: filteredUsers[i].id, nextSuspended: !filteredUsers[i].is_suspended })}
                   style={{ background: filteredUsers[i].is_suspended ? '#F0FDF4' : '#FEF3C7', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: filteredUsers[i].is_suspended ? '#16A34A' : '#D97706', fontFamily: 'Plus Jakarta Sans' }}
@@ -9127,11 +9128,11 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
         {/* Reject prompt */}
         {rejectPromptId != null && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setRejectPromptId(null); setRejectReason('') }}>
-            <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>Reject submission</div>
-              <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason (required, shown to the student)" rows={3} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 16, resize: 'vertical' }} />
+            <div style={{ background: T.card, borderRadius: 16, padding: 24, maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 800, fontSize: 17, color: T.text, marginBottom: 8 }}>Reject submission</div>
+              <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Reason (required, shown to the student)" rows={3} style={{ width: '100%', border: `1px solid ${T.border}`, borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 16, resize: 'vertical' }} />
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => { setRejectPromptId(null); setRejectReason('') }} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+                <button onClick={() => { setRejectPromptId(null); setRejectReason('') }} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
                 <button onClick={() => rejectLibraryItem(rejectPromptId, rejectReason.trim())} disabled={!rejectReason.trim()} style={{ flex: 1, background: rejectReason.trim() ? '#DC2626' : '#FCA5A5', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: rejectReason.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}>Reject</button>
               </div>
             </div>
@@ -9141,12 +9142,12 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
         {/* Remove (takedown) prompt */}
         {removePromptTarget != null && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setRemovePromptTarget(null); setRemoveReason('') }}>
-            <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>Remove published item</div>
-              <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 12, lineHeight: 1.5 }}>This takes the item down from the public Library. The report will be marked actioned.</div>
-              <textarea value={removeReason} onChange={e => setRemoveReason(e.target.value)} placeholder="Reason (required)" rows={3} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 16, resize: 'vertical' }} />
+            <div style={{ background: T.card, borderRadius: 16, padding: 24, maxWidth: 380, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 800, fontSize: 17, color: T.text, marginBottom: 8 }}>Remove published item</div>
+              <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12, lineHeight: 1.5 }}>This takes the item down from the public Library. The report will be marked actioned.</div>
+              <textarea value={removeReason} onChange={e => setRemoveReason(e.target.value)} placeholder="Reason (required)" rows={3} style={{ width: '100%', border: `1px solid ${T.border}`, borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 16, resize: 'vertical' }} />
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => { setRemovePromptTarget(null); setRemoveReason('') }} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+                <button onClick={() => { setRemovePromptTarget(null); setRemoveReason('') }} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
                 <button onClick={() => removePromptTarget && removeLibraryItem(removePromptTarget.publicationId, removePromptTarget.reportId, removeReason.trim())} disabled={!removeReason.trim()} style={{ flex: 1, background: removeReason.trim() ? '#DC2626' : '#FCA5A5', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: removeReason.trim() ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}>Remove</button>
               </div>
             </div>
@@ -9154,9 +9155,9 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
         )}
 
         <AdminCard title="Content Management">
-          <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6 }}>
+          <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 6 }}>
             {CONTENT_TABS.map(t => (
-              <button key={t} onClick={() => setContentTab(t)} style={{ padding: '7px 16px', borderRadius: 8, background: contentTab === t ? N.navy : '#F3F4F6', color: contentTab === t ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+              <button key={t} onClick={() => setContentTab(t)} style={{ padding: '7px 16px', borderRadius: 8, background: contentTab === t ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: contentTab === t ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
                 {t}{t === 'Pending Review' && libraryQueue.length > 0 ? ` (${libraryQueue.length})` : ''}
                 {t === 'Reported' && libraryReports.length > 0 ? ` (${libraryReports.length})` : ''}
               </button>
@@ -9167,11 +9168,11 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
           {contentTab === 'Pending Review' && (
             libraryQueueLoading ? (
-              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading queue…</div>
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading queue…</div>
             ) : libraryQueueError ? (
               <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{libraryQueueError}</div>
             ) : libraryQueue.length === 0 ? (
-              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Nothing pending review.</div>
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Nothing pending review.</div>
             ) : (
               <AdminTable
                 cols={['Title', 'Author', 'Type', 'Unit', 'Submitted', '']}
@@ -9195,11 +9196,11 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
           {contentTab === 'Reported' && (
             libraryReportsLoading ? (
-              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading reports…</div>
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading reports…</div>
             ) : libraryReportsError ? (
               <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{libraryReportsError}</div>
             ) : libraryReports.length === 0 ? (
-              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No open reports.</div>
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No open reports.</div>
             ) : (
               <AdminTable
                 cols={['Item', 'Reported By', 'Reason', 'Item Status', 'Received', '']}
@@ -9213,7 +9214,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                 ])}
                 actions={i => (
                   <div style={{ display: 'flex', gap: 5 }}>
-                    <button onClick={() => resolveLibraryReport(libraryReports[i].id, 'dismissed')} style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Dismiss</button>
+                    <button onClick={() => resolveLibraryReport(libraryReports[i].id, 'dismissed')} style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Dismiss</button>
                     {libraryReports[i].publication_status === 'approved' && (
                       <button onClick={() => setRemovePromptTarget({ publicationId: libraryReports[i].library_publication_id, reportId: libraryReports[i].id })} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
                     )}
@@ -9236,14 +9237,14 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>Period:</span>
+        <span style={{ fontSize: 12, color: T.textMuted, fontWeight: 600 }}>Period:</span>
         {[7, 30, 90].map(d => (
-          <button key={d} onClick={() => setAiUsageDays(d)} style={{ padding: '6px 14px', borderRadius: 8, background: aiUsageDays === d ? N.navy : '#F3F4F6', color: aiUsageDays === d ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{d}d</button>
+          <button key={d} onClick={() => setAiUsageDays(d)} style={{ padding: '6px 14px', borderRadius: 8, background: aiUsageDays === d ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: aiUsageDays === d ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{d}d</button>
         ))}
       </div>
 
       {aiUsageLoading ? (
-        <div style={{ padding: '24px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading AI usage…</div>
+        <div style={{ padding: '24px 0', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading AI usage…</div>
       ) : aiUsageError ? (
         <div style={{ padding: '24px 0', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{aiUsageError}</div>
       ) : aiUsage && (
@@ -9254,23 +9255,23 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <AdminKPI label="Tokens Used" value={aiUsage.total_tokens >= 1000000 ? `${(aiUsage.total_tokens / 1000000).toFixed(1)}M` : aiUsage.total_tokens.toLocaleString()} sub={`In: ${aiUsage.input_tokens.toLocaleString()} · Out: ${aiUsage.output_tokens.toLocaleString()}`} color={N.gold} />
             <AdminKPI label="Total Cost" value={`$${aiUsage.total_cost_usd.toFixed(2)}`} sub={`Last ${aiUsage.period_days} days`} color="#16A34A" />
           </div>
-          <div style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.5 }}>{aiUsage.document_pipeline_jobs.note}</div>
+          <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.5 }}>{aiUsage.document_pipeline_jobs.note}</div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <AdminCard title="AI Requests by Feature">
               <div style={{ padding: '16px 18px' }}>
                 {aiUsage.by_feature.length === 0 ? (
-                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No AI requests in this period.</div>
+                  <div style={{ fontSize: 13, color: T.textMuted }}>No AI requests in this period.</div>
                 ) : (() => {
                   const maxReq = Math.max(...aiUsage.by_feature.map(f => f.requests))
                   const colors = [N.navy, N.gold, '#7C3AED', '#4C7BC9', '#4CC97B', '#DC2626']
                   return aiUsage.by_feature.map((f, i) => (
                     <div key={f.request_type} style={{ marginBottom: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, textTransform: 'capitalize' }}>{f.request_type.replace(/_/g, ' ')}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{f.requests.toLocaleString()}</span>
+                        <span style={{ fontSize: 12, color: T.text, fontWeight: 500, textTransform: 'capitalize' }}>{f.request_type.replace(/_/g, ' ')}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{f.requests.toLocaleString()}</span>
                       </div>
-                      <div style={{ background: '#F3F4F6', borderRadius: 99, height: 6 }}>
+                      <div style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), borderRadius: 99, height: 6 }}>
                         <div style={{ background: colors[i % colors.length], borderRadius: 99, height: 6, width: `${maxReq > 0 ? (f.requests / maxReq) * 100 : 0}%`, transition: 'width 0.5s' }} />
                       </div>
                     </div>
@@ -9281,7 +9282,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <AdminCard title={`Requests — Last ${aiUsage.period_days} Days`}>
               <div style={{ padding: '16px 18px' }}>
                 {aiUsage.daily_trend.length === 0 ? (
-                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No data yet.</div>
+                  <div style={{ fontSize: 13, color: T.textMuted }}>No data yet.</div>
                 ) : (
                   <AdminBarChart data={aiUsage.daily_trend.map(d => d.requests)} labels={aiUsage.daily_trend.map(d => new Date(d.date).toLocaleDateString('default', { month: 'short', day: 'numeric' }))} height={120} color="#7C3AED" />
                 )}
@@ -9293,10 +9294,10 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
       {aiJobActionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{aiJobActionError}</div>}
       <AdminCard title="Recent AI Jobs">
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', gap: 6 }}>
             {(['all', 'failed', 'completed'] as const).map(f => (
-              <button key={f} onClick={() => setAiJobsFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: aiJobsFilter === f ? N.navy : '#F3F4F6', color: aiJobsFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
+              <button key={f} onClick={() => setAiJobsFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: aiJobsFilter === f ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: aiJobsFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
             ))}
           </div>
           {(() => {
@@ -9304,15 +9305,15 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             if (withDuration.length === 0) return null
             const avgMs = withDuration.reduce((sum, j) => sum + (new Date(j.completed_at as string).getTime() - new Date(j.started_at as string).getTime()), 0) / withDuration.length
             const avgLabel = avgMs < 1000 ? `${Math.round(avgMs)}ms` : `${(avgMs / 1000).toFixed(1)}s`
-            return <span style={{ fontSize: 11, color: '#9CA3AF' }}>Avg duration (this list, {withDuration.length} jobs): <strong style={{ color: '#374151' }}>{avgLabel}</strong></span>
+            return <span style={{ fontSize: 11, color: T.textMuted }}>Avg duration (this list, {withDuration.length} jobs): <strong style={{ color: T.text }}>{avgLabel}</strong></span>
           })()}
         </div>
         {aiJobsLoading ? (
-          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading jobs…</div>
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading jobs…</div>
         ) : aiJobsError ? (
           <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{aiJobsError}</div>
         ) : aiJobs.length === 0 ? (
-          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No jobs match this filter.</div>
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No jobs match this filter.</div>
         ) : (
           <AdminTable
             cols={['Job ID', 'Feature', 'Status', 'Retries', 'Duration', 'Error', 'Created']}
@@ -9369,19 +9370,19 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
         <AdminKPI label="Revenue (MTD)" value={`KES ${revenueMtd.toLocaleString()}`} sub={now.toLocaleString('default', { month: 'long', year: 'numeric' })} color="#16A34A" />
         <AdminKPI label="Active Subscriptions" value={totalActive.toLocaleString()} sub={Object.entries(activeByPlan).map(([plan, count]) => `${plan}: ${count}`).join(' · ') || 'None yet'} color={N.gold} />
         <AdminKPI label="Failed Payments" value={failedThisMonth.toString()} sub="This month" color="#DC2626" />
-        <AdminKPI label="Avg. Plan Value" value={`KES ${avgPlanValue.toLocaleString()}`} sub="This month, subscriptions" color={N.navy} />
+        <AdminKPI label="Avg. Plan Value" value={`KES ${avgPlanValue.toLocaleString()}`} sub="This month, subscriptions" color={T.text} />
       </div>
       <AdminCard title="Subscription Breakdown">
         <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {Object.keys(activeByPlan).length === 0 ? (
-            <div style={{ fontSize: 13, color: '#9CA3AF' }}>No active paid subscriptions yet.</div>
+            <div style={{ fontSize: 13, color: T.textMuted }}>No active paid subscriptions yet.</div>
           ) : Object.entries(activeByPlan).map(([plan, count]) => (
             <div key={plan}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: N.navy, textTransform: 'capitalize' }}>{plan}</span>
-                <span style={{ fontSize: 12, color: '#6B7280' }}>{count}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: T.text, textTransform: 'capitalize' }}>{plan}</span>
+                <span style={{ fontSize: 12, color: T.textMuted }}>{count}</span>
               </div>
-              <div style={{ background: '#F3F4F6', borderRadius: 99, height: 8 }}>
+              <div style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), borderRadius: 99, height: 8 }}>
                 <div style={{ background: N.gold, borderRadius: 99, height: 8, width: `${totalActive > 0 ? (count / totalActive) * 100 : 0}%` }} />
               </div>
             </div>
@@ -9391,11 +9392,11 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       {paymentActionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{paymentActionError}</div>}
       <AdminCard title={`Transactions${adminPaymentsLoading ? '' : ` — ${adminPayments.length}`}`}>
         {adminPaymentsLoading ? (
-          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading transactions…</div>
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading transactions…</div>
         ) : adminPaymentsError ? (
           <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{adminPaymentsError}</div>
         ) : adminPayments.length === 0 ? (
-          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No transactions yet.</div>
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No transactions yet.</div>
         ) : (
           <AdminTable
             cols={['Reference', 'Student', 'Plan / Item', 'Amount', 'Method', 'Status', 'Date']}
@@ -9431,18 +9432,18 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       {/* Warn prompt */}
       {warnPromptId != null && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setWarnPromptId(null)}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 420, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 12 }}>Issue a warning</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginBottom: 4 }}>WHAT THEY DID WRONG</div>
-            <textarea value={warnMessage} onChange={e => setWarnMessage(e.target.value)} placeholder="e.g. Your post violated our academic integrity policy." rows={2} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 10, resize: 'vertical' }} />
-            <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginBottom: 4 }}>CONSEQUENCE</div>
-            <textarea value={warnConsequence} onChange={e => setWarnConsequence(e.target.value)} placeholder="e.g. Further violations may result in suspension." rows={2} style={{ width: '100%', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 10, resize: 'vertical' }} />
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#374151', marginBottom: 16, cursor: 'pointer' }}>
+          <div style={{ background: T.card, borderRadius: 16, padding: 24, maxWidth: 420, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 17, color: T.text, marginBottom: 12 }}>Issue a warning</div>
+            <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600, marginBottom: 4 }}>WHAT THEY DID WRONG</div>
+            <textarea value={warnMessage} onChange={e => setWarnMessage(e.target.value)} placeholder="e.g. Your post violated our academic integrity policy." rows={2} style={{ width: '100%', border: `1px solid ${T.border}`, borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 10, resize: 'vertical' }} />
+            <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600, marginBottom: 4 }}>CONSEQUENCE</div>
+            <textarea value={warnConsequence} onChange={e => setWarnConsequence(e.target.value)} placeholder="e.g. Further violations may result in suspension." rows={2} style={{ width: '100%', border: `1px solid ${T.border}`, borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 10, resize: 'vertical' }} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.text, marginBottom: 16, cursor: 'pointer' }}>
               <input type="checkbox" checked={warnRemoveContent} onChange={e => setWarnRemoveContent(e.target.checked)} />
               Also remove the reported content
             </label>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setWarnPromptId(null)} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button onClick={() => setWarnPromptId(null)} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
               <button
                 onClick={() => warnFromModReport(warnPromptId, warnMessage.trim(), warnConsequence.trim(), warnRemoveContent)}
                 disabled={!warnMessage.trim() || !warnConsequence.trim()}
@@ -9457,17 +9458,17 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
         <AdminKPI label="Open Reports" value={(modSummary?.open_reports ?? '—').toString()} color="#DC2626" />
         <AdminKPI label="Resolved Today" value={(modSummary?.resolved_today ?? '—').toString()} color="#16A34A" />
         <AdminKPI label="Warnings Issued" value={(modSummary?.warnings_issued ?? '—').toString()} sub="All time" color="#D97706" />
-        <AdminKPI label="Suspended Users" value={(modSummary?.suspended_users ?? '—').toString()} color={N.navy} />
+        <AdminKPI label="Suspended Users" value={(modSummary?.suspended_users ?? '—').toString()} color={T.text} />
       </div>
 
       {modActionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{modActionError}</div>}
       <AdminCard title={`Report Queue${modReportsLoading ? '' : ` — ${modReports.length} Open`}`}>
         {modReportsLoading ? (
-          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading reports…</div>
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading reports…</div>
         ) : modReportsError ? (
           <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{modReportsError}</div>
         ) : modReports.length === 0 ? (
-          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No open reports.</div>
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No open reports.</div>
         ) : (
           <AdminTable
             cols={['#', 'Type', 'Content', 'Reported By', 'Reason', 'Priority', 'Received']}
@@ -9506,13 +9507,13 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {analyticsLoading ? (
-        <div style={{ padding: '24px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading analytics…</div>
+        <div style={{ padding: '24px 0', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading analytics…</div>
       ) : analyticsError ? (
         <div style={{ padding: '24px 0', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{analyticsError}</div>
       ) : analytics && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-            <AdminKPI label="Total Users" value={analytics.total_users.toLocaleString()} sub={`${analytics.active_today.toLocaleString()} active today`} color={N.navy} />
+            <AdminKPI label="Total Users" value={analytics.total_users.toLocaleString()} sub={`${analytics.active_today.toLocaleString()} active today`} color={T.text} />
             <AdminKPI label="Total Revenue" value={`KES ${analytics.total_revenue.toLocaleString()}`} sub={`KES ${analytics.revenue_last_30d.toLocaleString()} last 30d`} color="#16A34A" />
             <AdminKPI label="Content Items" value={analytics.total_content_items.toLocaleString()} sub={`${analytics.total_units.toLocaleString()} units`} color={N.gold} />
             <AdminKPI label="Storage Used" value={fmtBytes(analytics.storage_used_bytes)} sub="Deduplicated files" color="#4C7BC9" />
@@ -9522,13 +9523,13 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <AdminCard title="New Signups — Last 30 Days">
               <div style={{ padding: '16px 18px' }}>
                 {analytics.signups_per_day.length === 0 ? (
-                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No signups in this period.</div>
+                  <div style={{ fontSize: 13, color: T.textMuted }}>No signups in this period.</div>
                 ) : (
                   <>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: N.navy, marginBottom: 4 }}>
-                      {analytics.signups_per_day.reduce((s, d) => s + d.count, 0).toLocaleString()} <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>new users, 30 days</span>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: T.text, marginBottom: 4 }}>
+                      {analytics.signups_per_day.reduce((s, d) => s + d.count, 0).toLocaleString()} <span style={{ fontSize: 13, color: T.textMuted, fontWeight: 500 }}>new users, 30 days</span>
                     </div>
-                    <AdminLineChart data={analytics.signups_per_day.map(d => d.count)} color={N.navy} height={80} />
+                    <AdminLineChart data={analytics.signups_per_day.map(d => d.count)} color={T.text} height={80} />
                   </>
                 )}
               </div>
@@ -9536,11 +9537,11 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <AdminCard title="Revenue — Last 30 Days">
               <div style={{ padding: '16px 18px' }}>
                 {analytics.revenue_per_day.length === 0 ? (
-                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No revenue in this period.</div>
+                  <div style={{ fontSize: 13, color: T.textMuted }}>No revenue in this period.</div>
                 ) : (
                   <>
                     <div style={{ fontSize: 28, fontWeight: 800, color: '#16A34A', marginBottom: 4 }}>
-                      KES {analytics.revenue_per_day.reduce((s, d) => s + d.amount, 0).toLocaleString()} <span style={{ fontSize: 13, color: '#9CA3AF', fontWeight: 500 }}>30-day total</span>
+                      KES {analytics.revenue_per_day.reduce((s, d) => s + d.amount, 0).toLocaleString()} <span style={{ fontSize: 13, color: T.textMuted, fontWeight: 500 }}>30-day total</span>
                     </div>
                     <AdminLineChart data={analytics.revenue_per_day.map(d => d.amount)} color="#16A34A" height={80} />
                   </>
@@ -9553,17 +9554,17 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <AdminCard title="Content by Type">
               <div style={{ padding: '16px 18px' }}>
                 {Object.keys(analytics.content_by_type).length === 0 ? (
-                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No content items yet.</div>
+                  <div style={{ fontSize: 13, color: T.textMuted }}>No content items yet.</div>
                 ) : (() => {
                   const entries = Object.entries(analytics.content_by_type)
                   const max = Math.max(...entries.map(([, c]) => c))
                   return entries.map(([type, count]) => (
                     <div key={type} style={{ marginBottom: 10 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, textTransform: 'capitalize' }}>{type.replace(/_/g, ' ')}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{count}</span>
+                        <span style={{ fontSize: 12, color: T.text, fontWeight: 500, textTransform: 'capitalize' }}>{type.replace(/_/g, ' ')}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{count}</span>
                       </div>
-                      <div style={{ background: '#F3F4F6', borderRadius: 99, height: 6 }}>
+                      <div style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), borderRadius: 99, height: 6 }}>
                         <div style={{ background: N.gold, borderRadius: 99, height: 6, width: `${max > 0 ? (count / max) * 100 : 0}%` }} />
                       </div>
                     </div>
@@ -9574,7 +9575,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <AdminCard title="Payments by Status">
               <div style={{ padding: '16px 18px' }}>
                 {Object.keys(analytics.payments_by_status).length === 0 ? (
-                  <div style={{ fontSize: 13, color: '#9CA3AF' }}>No payments yet.</div>
+                  <div style={{ fontSize: 13, color: T.textMuted }}>No payments yet.</div>
                 ) : (() => {
                   const entries = Object.entries(analytics.payments_by_status)
                   const max = Math.max(...entries.map(([, c]) => c))
@@ -9582,10 +9583,10 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                   return entries.map(([status, count]) => (
                     <div key={status} style={{ marginBottom: 10 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, color: '#374151', fontWeight: 500, textTransform: 'capitalize' }}>{status}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{count}</span>
+                        <span style={{ fontSize: 12, color: T.text, fontWeight: 500, textTransform: 'capitalize' }}>{status}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{count}</span>
                       </div>
-                      <div style={{ background: '#F3F4F6', borderRadius: 99, height: 6 }}>
+                      <div style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), borderRadius: 99, height: 6 }}>
                         <div style={{ background: colorFor(status), borderRadius: 99, height: 6, width: `${max > 0 ? (count / max) * 100 : 0}%` }} />
                       </div>
                     </div>
@@ -9597,7 +9598,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
           <AdminCard title="Top Performing Content">
             {analytics.top_performing_content.length === 0 ? (
-              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No paid content purchases yet.</div>
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No paid content purchases yet.</div>
             ) : (
               <AdminTable
                 cols={['Title', 'Type', 'Purchases', 'Revenue']}
@@ -9613,11 +9614,11 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
           <AdminCard title="Top Universities by Engagement">
             {universityEngagementLoading ? (
-              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading…</div>
             ) : universityEngagementError ? (
               <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{universityEngagementError}</div>
             ) : universityEngagement.length === 0 ? (
-              <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No students with a university on file yet.</div>
+              <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No students with a university on file yet.</div>
             ) : (
               <AdminTable
                 cols={['University', 'Students', 'Documents', 'AI Requests', 'Premium Users', 'Engagement']}
@@ -9648,12 +9649,12 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     const barColor = (pct: number) => pct >= 90 ? '#DC2626' : pct >= 70 ? '#D97706' : '#16A34A'
     return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ fontSize: 12, color: '#9CA3AF', lineHeight: 1.5 }}>
+      <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5 }}>
         Tracks whether the current infrastructure can handle real usage, and what it's costing — not third-party uptime (that would need a separate monitoring integration, not built yet).
       </div>
 
       {systemCapacityLoading ? (
-        <div style={{ padding: '24px 0', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading capacity data…</div>
+        <div style={{ padding: '24px 0', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading capacity data…</div>
       ) : systemCapacityError ? (
         <div style={{ padding: '24px 0', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{systemCapacityError}</div>
       ) : systemCapacity && (() => {
@@ -9665,7 +9666,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <AdminCard title={`Supabase ${systemCapacity.tier.charAt(0).toUpperCase()}${systemCapacity.tier.slice(1)} Tier — Capacity`}>
               <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600 }}>Plan:</span>
+                  <span style={{ fontSize: 11, color: T.textMuted, fontWeight: 600 }}>Plan:</span>
                   {systemCapacity.available_tiers.map(t => (
                     <button
                       key={t}
@@ -9674,7 +9675,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                       style={{
                         padding: '6px 14px',
                         borderRadius: 8,
-                        background: t === systemCapacity.tier ? N.navy : '#F3F4F6',
+                        background: t === systemCapacity.tier ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'),
                         color: t === systemCapacity.tier ? '#fff' : '#6B7280',
                         border: 'none',
                         cursor: (tierSwitching || t === systemCapacity.tier) ? 'default' : 'pointer',
@@ -9686,7 +9687,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                       }}
                     >{t}</button>
                   ))}
-                  {tierSwitching && <span style={{ fontSize: 11, color: '#9CA3AF' }}>Switching…</span>}
+                  {tierSwitching && <span style={{ fontSize: 11, color: T.textMuted }}>Switching…</span>}
                 </div>
                 {tierSwitchError && <div style={{ color: '#DC2626', fontSize: 12 }}>{tierSwitchError}</div>}
                 {[
@@ -9696,10 +9697,10 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                 ].map(r => (
                   <div key={r.label}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{r.label}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{r.label}</span>
                       <span style={{ fontSize: 12, color: r.pct >= 90 ? '#DC2626' : '#9CA3AF', fontWeight: r.pct >= 90 ? 700 : 400 }}>{r.used} / {r.total} ({Math.round(r.pct)}%)</span>
                     </div>
-                    <div style={{ background: '#F3F4F6', borderRadius: 99, height: 8 }}>
+                    <div style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), borderRadius: 99, height: 8 }}>
                       <div style={{ background: barColor(r.pct), borderRadius: 99, height: 8, width: `${Math.min(r.pct, 100)}%`, transition: 'width 0.5s' }} />
                     </div>
                   </div>
@@ -9715,16 +9716,16 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <AdminCard title="AI (Anthropic) Spend">
               <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '12px 14px' }}>
-                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>Spent this month ({systemCapacity.days_elapsed_this_month}/{systemCapacity.days_in_month} days)</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: N.navy }}>${systemCapacity.ai_spend_mtd_usd.toFixed(2)}</div>
+                  <div style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#F9FAFB'), borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 11, color: T.textMuted }}>Spent this month ({systemCapacity.days_elapsed_this_month}/{systemCapacity.days_in_month} days)</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: T.text }}>${systemCapacity.ai_spend_mtd_usd.toFixed(2)}</div>
                   </div>
-                  <div style={{ background: '#F9FAFB', borderRadius: 10, padding: '12px 14px' }}>
-                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>Projected month-end (at current pace)</div>
+                  <div style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#F9FAFB'), borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 11, color: T.textMuted }}>Projected month-end (at current pace)</div>
                     <div style={{ fontSize: 22, fontWeight: 800, color: N.gold }}>${systemCapacity.ai_spend_projected_month_end_usd.toFixed(2)}</div>
                   </div>
                 </div>
-                <div style={{ fontSize: 11, color: '#9CA3AF' }}>No fixed budget cap set — this is a raw spend tracker so you can decide what to budget as usage grows.</div>
+                <div style={{ fontSize: 11, color: T.textMuted }}>No fixed budget cap set — this is a raw spend tracker so you can decide what to budget as usage grows.</div>
               </div>
             </AdminCard>
           </>
@@ -9734,11 +9735,11 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       {adminAccountActionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{adminAccountActionError}</div>}
       <AdminCard title="Admin Accounts">
         {adminAccountsLoading ? (
-          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading admin accounts…</div>
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading admin accounts…</div>
         ) : adminAccountsError ? (
           <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{adminAccountsError}</div>
         ) : adminAccounts.length === 0 ? (
-          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No admin accounts found.</div>
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No admin accounts found.</div>
         ) : (
           <AdminTable
             cols={['Name', 'Email', 'Joined', 'Status']}
@@ -9768,24 +9769,24 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <AdminCard title="Send Announcement">
           <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <input value={annTitle} onChange={e => setAnnTitle(e.target.value)} placeholder="Announcement title…" maxLength={200} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy }} />
-            <textarea value={annBody} onChange={e => setAnnBody(e.target.value)} placeholder="Write your message…" rows={4} maxLength={500} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, resize: 'none', lineHeight: 1.6 }} />
+            <input value={annTitle} onChange={e => setAnnTitle(e.target.value)} placeholder="Announcement title…" maxLength={200} style={{ border: `1.5px solid ${T.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text }} />
+            <textarea value={annBody} onChange={e => setAnnBody(e.target.value)} placeholder="Write your message…" rows={4} maxLength={500} style={{ border: `1.5px solid ${T.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6 }} />
 
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4 }}>Audience (leave blank for everyone)</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4 }}>Audience (leave blank for everyone)</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
-              <select value={annUniversityId ?? ''} onChange={e => setAnnUniversityId(e.target.value ? Number(e.target.value) : null)} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy, background: '#fff' }}>
+              <select value={annUniversityId ?? ''} onChange={e => setAnnUniversityId(e.target.value ? Number(e.target.value) : null)} style={{ border: `1.5px solid ${T.border}`, borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card }}>
                 <option value="">All universities</option>
                 {annUniversities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
-              <select value={annProgramId ?? ''} onChange={e => setAnnProgramId(e.target.value ? Number(e.target.value) : null)} disabled={!annUniversityId} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy, background: '#fff', opacity: annUniversityId ? 1 : 0.5 }}>
+              <select value={annProgramId ?? ''} onChange={e => setAnnProgramId(e.target.value ? Number(e.target.value) : null)} disabled={!annUniversityId} style={{ border: `1.5px solid ${T.border}`, borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card, opacity: annUniversityId ? 1 : 0.5 }}>
                 <option value="">All courses</option>
                 {annPrograms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <select value={annYear ?? ''} onChange={e => setAnnYear(e.target.value ? Number(e.target.value) : null)} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy, background: '#fff' }}>
+              <select value={annYear ?? ''} onChange={e => setAnnYear(e.target.value ? Number(e.target.value) : null)} style={{ border: `1.5px solid ${T.border}`, borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card }}>
                 <option value="">All years</option>
                 {[1,2,3,4].map(y => <option key={y} value={y}>Year {y}</option>)}
               </select>
-              <select value={annSemester ?? ''} onChange={e => setAnnSemester(e.target.value ? Number(e.target.value) : null)} style={{ border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy, background: '#fff' }}>
+              <select value={annSemester ?? ''} onChange={e => setAnnSemester(e.target.value ? Number(e.target.value) : null)} style={{ border: `1.5px solid ${T.border}`, borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card }}>
                 <option value="">All semesters</option>
                 {[1,2].map(s => <option key={s} value={s}>Semester {s}</option>)}
               </select>
@@ -9794,16 +9795,16 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <div>
               {annGroupId ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: `${N.gold}15`, border: `1px solid ${N.gold}40`, borderRadius: 10, padding: '8px 12px' }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: N.navy, flex: 1 }}>Group: {annGroupName}</span>
-                  <button onClick={() => { setAnnGroupId(null); setAnnGroupName('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 14 }}>×</button>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.text, flex: 1 }}>Group: {annGroupName}</span>
+                  <button onClick={() => { setAnnGroupId(null); setAnnGroupName('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, fontSize: 14 }}>×</button>
                 </div>
               ) : (
                 <div style={{ position: 'relative' }}>
-                  <input value={annGroupSearch} onChange={e => setAnnGroupSearch(e.target.value)} placeholder="Or search a specific group…" style={{ width: '100%', border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: N.navy, boxSizing: 'border-box' }} />
+                  <input value={annGroupSearch} onChange={e => setAnnGroupSearch(e.target.value)} placeholder="Or search a specific group…" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
                   {annGroupResults.length > 0 && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, marginTop: 4, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', zIndex: 10, maxHeight: 180, overflowY: 'auto' }}>
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, marginTop: 4, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', zIndex: 10, maxHeight: 180, overflowY: 'auto' }}>
                       {annGroupResults.map(g => (
-                        <button key={g.id} onClick={() => { setAnnGroupId(g.id); setAnnGroupName(g.name); setAnnGroupSearch(''); setAnnGroupResults([]) }} style={{ display: 'block', width: '100%', padding: '10px 12px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: N.navy }}>{g.name}</button>
+                        <button key={g.id} onClick={() => { setAnnGroupId(g.id); setAnnGroupName(g.name); setAnnGroupSearch(''); setAnnGroupResults([]) }} style={{ display: 'block', width: '100%', padding: '10px 12px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text }}>{g.name}</button>
                       ))}
                     </div>
                   )}
@@ -9818,17 +9819,17 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               <button onClick={sendAnnouncement} disabled={annSending || !annTitle.trim() || !annBody.trim()} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, border: 'none', borderRadius: 10, padding: '8px 20px', cursor: annSending ? 'wait' : 'pointer', fontWeight: 800, fontSize: 13, fontFamily: 'Plus Jakarta Sans', opacity: (!annTitle.trim() || !annBody.trim()) ? 0.5 : 1 }}>{annSending ? 'Sending…' : 'Send Now'}</button>
             </div>
           </div>
-          <div style={{ borderTop: '1px solid #F3F4F6' }}>
+          <div style={{ borderTop: `1px solid ${T.border}` }}>
             {announcementsLoading ? (
-              <div style={{ padding: '18px 20px', fontSize: 12, color: '#9CA3AF' }}>Loading…</div>
+              <div style={{ padding: '18px 20px', fontSize: 12, color: T.textMuted }}>Loading…</div>
             ) : announcements.length === 0 ? (
-              <div style={{ padding: '18px 20px', fontSize: 12, color: '#9CA3AF' }}>No announcements sent yet.</div>
+              <div style={{ padding: '18px 20px', fontSize: 12, color: T.textMuted }}>No announcements sent yet.</div>
             ) : announcements.map((a, i) => (
-              <div key={a.id} style={{ padding: '14px 20px', borderBottom: i < announcements.length - 1 ? '1px solid #F3F4F6' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+              <div key={a.id} style={{ padding: '14px 20px', borderBottom: i < announcements.length - 1 ? `1px solid ${T.border}` : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{a.title}</div>
-                  <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{a.body}</div>
-                  <div style={{ fontSize: 11, color: '#D1D5DB', marginTop: 4 }}>{a.created_at ? new Date(a.created_at).toLocaleString() : ''} · Reached {a.reach} students</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: T.text }}>{a.title}</div>
+                  <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>{a.body}</div>
+                  <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>{a.created_at ? new Date(a.created_at).toLocaleString() : ''} · Reached {a.reach} students</div>
                 </div>
                 <AdminBadge text="Sent" color="green" />
               </div>
@@ -9855,21 +9856,21 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     const s = lightSections[section]
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ background: '#fff', borderRadius: 16, padding: '24px 28px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)' }}>
+        <div style={{ background: T.card, borderRadius: 16, padding: '24px 28px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${T.border}` }}>
           <div style={{ fontSize: 40, marginBottom: 14 }}>{s.icon}</div>
-          <div style={{ fontWeight: 800, fontSize: 22, color: N.navy, marginBottom: 8 }}>{s.title}</div>
-          <div style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7, marginBottom: 20 }}>{s.desc}</div>
+          <div style={{ fontWeight: 800, fontSize: 22, color: T.text, marginBottom: 8 }}>{s.title}</div>
+          <div style={{ fontSize: 14, color: T.textMuted, lineHeight: 1.7, marginBottom: 20 }}>{s.desc}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {s.features.map((f, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#F9FAFB', borderRadius: 10, padding: '10px 14px' }}>
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: (mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#F9FAFB'), borderRadius: 10, padding: '10px 14px' }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: N.gold, flexShrink: 0 }} />
-                <span style={{ fontSize: 13, color: N.navy, fontWeight: 500 }}>{f}</span>
+                <span style={{ fontSize: 13, color: T.text, fontWeight: 500 }}>{f}</span>
               </div>
             ))}
           </div>
           <div style={{ marginTop: 20, padding: '14px 16px', background: `${N.gold}10`, border: `1px solid ${N.gold}30`, borderRadius: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: N.gold }}>Full implementation in progress</div>
-            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>This section is live and will be expanded with full CRUD interfaces in the next sprint.</div>
+            <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>This section is live and will be expanded with full CRUD interfaces in the next sprint.</div>
           </div>
         </div>
       </div>
@@ -9877,7 +9878,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: '#9CA3AF', fontSize: 14 }}>Select a section from the sidebar</div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: T.textMuted, fontSize: 14 }}>Select a section from the sidebar</div>
   )
 }
 
