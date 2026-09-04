@@ -617,8 +617,9 @@ function SkeletonDocument() {
 }
 
 function SkeletonAITutor() {
+  const { tokens: T } = useTheme()
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
           <Sk w={34} h={34} r={10} dark /><Sk w={38} h={38} r={12} dark />
@@ -630,7 +631,7 @@ function SkeletonAITutor() {
       <div style={{ flex: 1, padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', gap: 10 }}>
           <Sk w={32} h={32} r={9} />
-          <div style={{ maxWidth: '78%', background: '#fff', borderRadius: '0 14px 14px 14px', padding: 14, flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ maxWidth: '78%', background: T.card, borderRadius: '0 14px 14px 14px', padding: 14, flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <Sk h={12} /><Sk h={12} w="90%" /><Sk h={12} w="75%" />
           </div>
         </div>
@@ -641,8 +642,8 @@ function SkeletonAITutor() {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <Sk w={32} h={32} r={9} />
-          <div style={{ background: '#fff', borderRadius: '0 14px 14px 14px', padding: '12px 16px', display: 'flex', gap: 6, alignItems: 'center' }}>
-            {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, background: '#D1D5DB', borderRadius: '50%', animation: `shimmer ${0.5 + i * 0.25}s ease-in-out infinite alternate` }} />)}
+          <div style={{ background: T.card, borderRadius: '0 14px 14px 14px', padding: '12px 16px', display: 'flex', gap: 6, alignItems: 'center' }}>
+            {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, background: T.border, borderRadius: '50%', animation: `shimmer ${0.5 + i * 0.25}s ease-in-out infinite alternate` }} />)}
           </div>
         </div>
       </div>
@@ -651,8 +652,9 @@ function SkeletonAITutor() {
 }
 
 function SkeletonPodcastLibrary() {
+  const { tokens: T } = useTheme()
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}><Sk w={34} h={34} r={10} dark /><Sk w={160} h={18} dark /></div>
         <Sk w={200} h={11} dark />
@@ -660,7 +662,7 @@ function SkeletonPodcastLibrary() {
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
         <Sk w={120} h={13} style={{ marginBottom: 12 }} />
         {[1,2,3,4,5].map(i => (
-          <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'center', background: '#fff', borderRadius: 14, padding: '13px 14px', marginBottom: 8 }}>
+          <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'center', background: T.card, borderRadius: 14, padding: '13px 14px', marginBottom: 8 }}>
             <Sk w={52} h={52} r={14} />
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={13} w="65%" /><Sk h={10} w="45%" /></div>
             <Sk w={24} h={24} r={4} />
@@ -672,8 +674,9 @@ function SkeletonPodcastLibrary() {
 }
 
 function SkeletonForum() {
+  const { tokens: T } = useTheme()
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <Sk w={34} h={34} r={10} dark /><Sk w={120} h={18} dark />
@@ -687,7 +690,7 @@ function SkeletonForum() {
         </div>
         <div style={{ display: 'flex', gap: 10, overflowX: 'hidden', marginBottom: 16 }}>
           {[1,2,3].map(i => (
-            <div key={i} style={{ flexShrink: 0, background: '#fff', borderRadius: 14, padding: '12px 14px', minWidth: 130, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div key={i} style={{ flexShrink: 0, background: T.card, borderRadius: 14, padding: '12px 14px', minWidth: 130, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Sk w={38} h={38} r={10} /><Sk h={12} /><Sk h={10} w="70%" />
             </div>
           ))}
@@ -700,8 +703,9 @@ function SkeletonForum() {
 }
 
 function SkeletonOppDetail() {
+  const { tokens: T } = useTheme()
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <Sk w={34} h={34} r={10} dark /><Sk w="60%" h={16} dark /><Sk w={34} h={34} r={10} dark />
@@ -715,11 +719,11 @@ function SkeletonOppDetail() {
       </div>
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', gap: 10 }}>{[1,2,3].map(i => <Sk key={i} h={36} r={12} />)}</div>
-        <div style={{ background: '#fff', borderRadius: 16, padding: 16 }}>
+        <div style={{ background: T.card, borderRadius: 16, padding: 16 }}>
           <Sk w={180} h={14} style={{ marginBottom: 12 }} />
           {[100,90,100,85,100,70].map((w,i) => <Sk key={i} h={12} w={`${w}%`} style={{ marginBottom: 8 }} />)}
         </div>
-        <div style={{ background: '#fff', borderRadius: 16, padding: 16 }}>
+        <div style={{ background: T.card, borderRadius: 16, padding: 16 }}>
           <Sk w={120} h={14} style={{ marginBottom: 12 }} />
           {[1,2,3,4].map(i => (
             <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10 }}><Sk w={20} h={20} r={10} /><Sk h={13} /></div>
@@ -732,8 +736,9 @@ function SkeletonOppDetail() {
 }
 
 function SkeletonChats() {
+  const { tokens: T } = useTheme()
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <Sk w={60} h={20} dark /><Sk w={34} h={34} r={10} dark />
@@ -751,8 +756,9 @@ function SkeletonChats() {
 }
 
 function SkeletonChatDetail() {
+  const { tokens: T } = useTheme()
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 16px 14px' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <Sk w={34} h={34} r={10} dark />
@@ -771,7 +777,7 @@ function SkeletonChatDetail() {
         ].map(({ me, lines }, i) => (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: me ? 'flex-end' : 'flex-start', gap: 2 }}>
             {!me && <Sk w={60} h={10} />}
-            <div style={{ maxWidth: '75%', background: me ? N.navy2 : '#fff', borderRadius: me ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ maxWidth: '75%', background: me ? N.navy2 : T.card, borderRadius: me ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {lines.map((w, j) => <Sk key={j} w={w} h={12} dark={me} />)}
             </div>
           </div>
@@ -782,8 +788,9 @@ function SkeletonChatDetail() {
 }
 
 function SkeletonProfile() {
+  const { tokens: T } = useTheme()
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}><Sk w={34} h={34} r={10} dark /></div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
@@ -794,12 +801,12 @@ function SkeletonProfile() {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, padding: '14px 14px 0' }}>
         {[1,2,3,4].map(i => (
-          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '12px 8px', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+          <div key={i} style={{ background: T.card, borderRadius: 14, padding: '12px 8px', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
             <Sk w={40} h={16} /><Sk w={50} h={10} />
           </div>
         ))}
       </div>
-      <div style={{ margin: '14px 14px 0', background: '#fff', borderRadius: 16, padding: 14 }}>
+      <div style={{ margin: '14px 14px 0', background: T.card, borderRadius: 16, padding: 14 }}>
         <Sk w={120} h={14} style={{ marginBottom: 14 }} />
         <div style={{ display: 'flex', gap: 14 }}>
           {[1,2,3,4,5].map(i => (
@@ -809,7 +816,7 @@ function SkeletonProfile() {
           ))}
         </div>
       </div>
-      <div style={{ margin: '14px 14px 0', background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+      <div style={{ margin: '14px 14px 0', background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex' }}>{[1,2,3,4].map(i => <Sk key={i} h={42} r={0} style={{ borderRadius: 0 }} />)}</div>
         <div style={{ padding: 14 }}>{[1,2,3].map(i => <SkDocCard key={i} />)}</div>
       </div>
@@ -819,8 +826,9 @@ function SkeletonProfile() {
 }
 
 function SkeletonNotifications() {
+  const { tokens: T } = useTheme()
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Sk w={34} h={34} r={10} dark /><Sk w={130} h={18} dark /></div>
       </div>
