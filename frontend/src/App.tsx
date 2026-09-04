@@ -365,12 +365,6 @@ function BottomNav({ active, setScreen }: { active: Screen; setScreen: (s: Scree
 
 // ─── LOADING SYSTEM ───────────────────────────────────────────────────────────
 
-function useLoading(ms = 1200): boolean {
-  const [loading, setLoading] = useState(true)
-  useEffect(() => { const t = setTimeout(() => setLoading(false), ms); return () => clearTimeout(t) }, [])
-  return loading
-}
-
 function Sk({ w, h = 14, r = 8, dark, style: sx }: { w?: string | number; h?: number; r?: number; dark?: boolean; style?: React.CSSProperties }) {
   const base: React.CSSProperties = { width: w ?? '100%', height: h, borderRadius: r, flexShrink: 0, ...sx }
   return dark
@@ -983,9 +977,9 @@ const podcastDuration = (seconds: number | null) => seconds == null ? '—' : `$
 function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
   const { tokens: T } = useTheme()
   const [notifCount, setNotifCount] = useState(0)
-  const loading = useLoading(1200)
 
   const [displayName, setDisplayName] = useState<string | null>(null)
+  const [meLoading, setMeLoading] = useState(true)
   const [documents, setDocuments] = useState<HomeDocument[]>([])
   const [docsLoading, setDocsLoading] = useState(true)
   const [summary, setSummary] = useState<GamificationSummary | null>(null)
@@ -1017,6 +1011,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
     api<{ display_name: string | null }>('/me')
       .then(me => setDisplayName(me.display_name))
       .catch(() => {})
+      .finally(() => setMeLoading(false))
     api<{ documents: HomeDocument[] }>('/documents')
       .then(res => setDocuments(res.documents))
       .catch(() => {})
@@ -1034,7 +1029,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
   const featuredDoc = activeDocs[0]
   const restDocs = activeDocs.slice(1)
 
-  if (loading) return <SkeletonHome />
+  if (meLoading || docsLoading) return <SkeletonHome />
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       {/* Header */}
@@ -1233,11 +1228,15 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All')
   const [csrfToken2, setCsrfToken2] = useState('')
-  const loading = useLoading(1000)
+  // True until the first pass of every section that loads on mount (filter
+  // starts 'All', so groups/students/docs all fire) has resolved at least
+  // once. Locked false permanently after that so later tab switches only
+  // show their own inline "Loading…" text, not a full-page skeleton again.
+  const [initialLoading, setInitialLoading] = useState(true)
   const filters = ['All','Notes','Past Papers','AI Content','Groups','Opportunities','Forums','Students']
 
   const [groups, setGroups] = useState<GroupSummary[]>([])
-  const [loadingGroups, setLoadingGroups] = useState(false)
+  const [loadingGroups, setLoadingGroups] = useState(true)
   const [groupsError, setGroupsError] = useState('')
   const [joiningGroupId, setJoiningGroupId] = useState<number | null>(null)
   const [csrfToken, setCsrfToken] = useState('')
@@ -1267,7 +1266,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
 
   const openGroup = (id: number) => { setActiveGroupId(id); setScreen('group-detail') }
   const [students, setStudents] = useState<ExploreStudent[]>([])
-  const [loadingStudents, setLoadingStudents] = useState(false)
+  const [loadingStudents, setLoadingStudents] = useState(true)
   const [studentsError, setStudentsError] = useState('')
   const [followBusy, setFollowBusy] = useState<Record<number, boolean>>({})
 
@@ -1303,7 +1302,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
     setScreen('student-profile')
   }
   const [docs, setDocs] = useState<LibraryPublicationSummary[]>([])
-  const [loadingDocs, setLoadingDocs] = useState(false)
+  const [loadingDocs, setLoadingDocs] = useState(true)
   const [docsError, setDocsError] = useState('')
 
   useEffect(() => {
@@ -1318,6 +1317,16 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
       .finally(() => setLoadingDocs(false))
   }, [filter, query])
 
+  // Locks the full-page skeleton off permanently once the sections that
+  // load on mount (filter starts 'All') have all settled once. After
+  // that, switching tabs only re-triggers loadingGroups/loadingStudents/
+  // loadingDocs individually, which each already render their own inline
+  // "Loading…" text without wiping the whole screen.
+  useEffect(() => {
+    if (!initialLoading) return
+    if (!loadingGroups && !loadingStudents && !loadingDocs) setInitialLoading(false)
+  }, [initialLoading, loadingGroups, loadingStudents, loadingDocs])
+
   const filtered = docs
 
   const [trending, setTrending] = useState<LibraryPublicationSummary[]>([])
@@ -1327,7 +1336,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
       .then(res => setTrending(res.publications.slice(0, 6)))
       .catch(() => setTrending([]))
   }, [filter])
-  if (loading) return <SkeletonExplore />
+  if (initialLoading) return <SkeletonExplore />
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
@@ -1969,7 +1978,6 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const [showReport, setShowReport] = useState(false)
   const [renameVal, setRenameVal] = useState('')
   const [savedToLib, setSavedToLib] = useState(false)
-  const loading = useLoading(700)
   const [messages, setMessages] = useState([
     { role: 'ai', text: "I've read your document. I can explain concepts, quiz you, create flashcards, or summarise any section. What would you like to do?" },
   ])
@@ -2004,7 +2012,11 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
     return () => clearInterval(interval)
   }, [tab, activeDocumentId, heartbeatCsrf])
 
-  if (loading) return <SkeletonDocument />
+  // Only pending while there's an active document whose fetch hasn't yet
+  // resolved (success or error) - if no document is selected, this stays
+  // false so the "no document selected" state below can render immediately.
+  const docLoading = activeDocumentId != null && doc === null && !docLoadError
+  if (docLoading) return <SkeletonDocument />
 
   if (activeDocumentId == null) {
     return (
@@ -3989,9 +4001,9 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
   const [tab, setTab] = useState<'posts'|'saved'|'activity'|'materials'>('posts')
   const [showMenu, setShowMenu] = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
-  const loading = useLoading(900)
 
   const [me, setMe] = useState<ProfileMe | null>(null)
+  const [meLoading, setMeLoading] = useState(true)
   const [uniName, setUniName] = useState<string | null>(null)
   const [programName, setProgramName] = useState<string | null>(null)
   const [summary, setSummary] = useState<GamificationSummary | null>(null)
@@ -3999,7 +4011,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
   const [weeklyStudySeconds, setWeeklyStudySeconds] = useState<number | null>(null)
 
   useEffect(() => {
-    api<ProfileMe>('/me').then(setMe).catch(() => {})
+    api<ProfileMe>('/me').then(setMe).catch(() => {}).finally(() => setMeLoading(false))
     api<GamificationSummary>('/gamification/summary').then(setSummary).catch(() => {})
     api<AchievementsResponse>('/achievements').then(res => setAchievementsList(res.achievements)).catch(() => {})
     api<StudyTimeResponse>('/study-time?period=week').then(res => setWeeklyStudySeconds(res.total_seconds)).catch(() => {})
@@ -4017,7 +4029,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
     }
   }, [me?.university_id, me?.program_id])
 
-  if (loading) return <SkeletonProfile />
+  if (meLoading) return <SkeletonProfile />
   const displayName = me?.display_name || 'Student'
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
   return (
