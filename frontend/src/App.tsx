@@ -123,10 +123,11 @@ function GenerationError({ error }: { error: string }) {
 }
 
 function GenerationLoading({ label }: { label: string }) {
+  const { tokens: T } = useTheme()
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
       <div style={{ width: 40, height: 40, border: `3px solid rgba(201,168,76,0.2)`, borderTopColor: N.gold, borderRadius: '50%', animation: 'spin-slow 0.8s linear infinite', marginBottom: 16 }} />
-      <div style={{ color: '#6B7280', fontSize: 13 }}>{label}</div>
+      <div style={{ color: T.textMuted, fontSize: 13 }}>{label}</div>
     </div>
   )
 }
