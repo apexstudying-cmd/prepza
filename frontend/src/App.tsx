@@ -10478,6 +10478,7 @@ function AdminPromotionsPanel() {
 }
 
 function AdminOrganisationsPanel() {
+  const { mode, tokens: T } = useTheme()
   const [csrfToken, setCsrfToken] = useState('')
   const [statusFilter, setStatusFilter] = useState('pending')
   const [rows, setRows] = useState<AdminOrganisationRow[]>([])
@@ -10553,17 +10554,17 @@ function AdminOrganisationsPanel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <AdminCard title={`Organisations — ${rows.length}`}>
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6 }}>
+        <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 6 }}>
           {['pending', 'verified', 'rejected', 'all'].map(f => (
-            <button key={f} onClick={() => setStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: statusFilter === f ? N.navy : '#F3F4F6', color: statusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
+            <button key={f} onClick={() => setStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: statusFilter === f ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: statusFilter === f ? '#fff' : T.textMuted, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
           ))}
         </div>
         {loading ? (
-          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+          <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading…</div>
         ) : error ? (
           <div style={{ padding: 24, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{error}</div>
         ) : rows.length === 0 ? (
-          <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No organisations with this status.</div>
+          <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No organisations with this status.</div>
         ) : (
           <AdminTable
             cols={['Name', 'Contact', 'Owner', 'Active', 'Status']}
@@ -10594,11 +10595,11 @@ function AdminOrganisationsPanel() {
 
       {rejectTarget != null && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setRejectTarget(null)}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 10 }}>Reason for rejection</div>
-            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={3} placeholder="Explain why this organisation is being rejected…" style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', resize: 'none', marginBottom: 14 }} />
+          <div style={{ background: T.card, borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 10 }}>Reason for rejection</div>
+            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={3} placeholder="Explain why this organisation is being rejected…" style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', resize: 'none', marginBottom: 14 }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { setRejectTarget(null); setRejectReason('') }} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button onClick={() => { setRejectTarget(null); setRejectReason('') }} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
               <button disabled={actionBusy || !rejectReason.trim()} onClick={submitReject} style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, opacity: (actionBusy || !rejectReason.trim()) ? 0.6 : 1 }}>Confirm Reject</button>
             </div>
           </div>
