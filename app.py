@@ -114,6 +114,12 @@ class User(db.Model):
     # Private field only - never exposed on public/other-user profile
     # endpoints, not searchable. See patch_add_phone_number.py.
     email_verified = db.Column(db.Boolean, default=False)
+    profile_visibility = db.Column(db.String(10), nullable=False, default="public")
+    # public | private
+    who_can_message = db.Column(db.String(10), nullable=False, default="everyone")
+    # everyone | followers
+    who_can_follow = db.Column(db.String(20), nullable=False, default="everyone")
+    # everyone | approval_required
     verification_token = db.Column(db.String(64), nullable=True)
     reset_token = db.Column(db.String(64), nullable=True)
     reset_token_expiry = db.Column(db.DateTime, nullable=True)
@@ -1176,6 +1182,34 @@ class Follow(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (
         db.UniqueConstraint("follower_id", "followed_id", name="uq_follow_follower_followed"),
+    )
+
+
+PROFILE_VISIBILITY_VALUES = {"public", "private"}
+WHO_CAN_MESSAGE_VALUES = {"everyone", "followers"}
+WHO_CAN_FOLLOW_VALUES = {"everyone", "approval_required"}
+
+
+class FollowRequest(db.Model):
+    """
+    A pending/accepted/declined follow request, used only when the
+    target has who_can_follow='approval_required' (private-account-
+    style gating, see PATCH /profile). Unique on (requester, target)
+    so a re-request after a decline updates the same row back to
+    pending rather than creating duplicates - same reapply pattern
+    as Ambassador elsewhere in this file. Accepting a request creates
+    a real Follow row; the FollowRequest row itself is not the
+    source of truth for "is following" once accepted.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    requester_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    target_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    status = db.Column(db.String(10), nullable=False, default="pending")
+    # pending -> accepted | declined
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    responded_at = db.Column(db.DateTime, nullable=True)
+    __table_args__ = (
+        db.UniqueConstraint("requester_id", "target_id", name="uq_follow_request_requester_target"),
     )
 
 
@@ -2732,6 +2766,9 @@ def me():
         "display_name": user.display_name,
         "bio": user.bio,
         "phone_number": user.phone_number,
+        "profile_visibility": user.profile_visibility,
+        "who_can_message": user.who_can_message,
+        "who_can_follow": user.who_can_follow,
         "email_verified": user.email_verified,
         "is_admin": user.is_admin,
         "university_id": user.university_id,
@@ -2793,6 +2830,16 @@ def update_profile():
         phone_number = phone_number.strip()
         if phone_number and not PHONE_NUMBER_REGEX.match(phone_number):
             return jsonify({"error": "Phone number must be a valid number (e.g. +254712345678)"}), 400
+
+    profile_visibility = data.get("profile_visibility", None)
+    if profile_visibility is not None and profile_visibility not in PROFILE_VISIBILITY_VALUES:
+        return jsonify({"error": "profile_visibility must be one of: " + ", ".join(sorted(PROFILE_VISIBILITY_VALUES))}), 400
+    who_can_message = data.get("who_can_message", None)
+    if who_can_message is not None and who_can_message not in WHO_CAN_MESSAGE_VALUES:
+        return jsonify({"error": "who_can_message must be one of: " + ", ".join(sorted(WHO_CAN_MESSAGE_VALUES))}), 400
+    who_can_follow = data.get("who_can_follow", None)
+    if who_can_follow is not None and who_can_follow not in WHO_CAN_FOLLOW_VALUES:
+        return jsonify({"error": "who_can_follow must be one of: " + ", ".join(sorted(WHO_CAN_FOLLOW_VALUES))}), 400
     if display_name is not None:
         display_name = display_name.strip()
         if len(display_name) > 50:
@@ -2834,6 +2881,12 @@ def update_profile():
         user.bio = bio or None
     if phone_number is not None:
         user.phone_number = phone_number or None
+    if profile_visibility is not None:
+        user.profile_visibility = profile_visibility
+    if who_can_message is not None:
+        user.who_can_message = who_can_message
+    if who_can_follow is not None:
+        user.who_can_follow = who_can_follow
     if university_id is not None:
         user.university_id = university_id
     if program_id is not None:
@@ -2848,6 +2901,9 @@ def update_profile():
         "display_name": user.display_name,
         "bio": user.bio,
         "phone_number": user.phone_number,
+        "profile_visibility": user.profile_visibility,
+        "who_can_message": user.who_can_message,
+        "who_can_follow": user.who_can_follow,
         "university_id": user.university_id,
         "program_id": user.program_id,
     })
@@ -6390,6 +6446,13 @@ def _serialize_follow_user(user, viewer_user_id):
 @app.route("/users/<int:target_user_id>/follow", methods=["POST"])
 @require_csrf
 def follow_user(target_user_id):
+    """
+    Follows a user immediately, UNLESS the target has
+    who_can_follow='approval_required' - in that case this creates
+    (or reuses/reopens) a pending FollowRequest and notifies the
+    target instead of creating a Follow row directly. The frontend
+    should treat a 202 response as "requested, not yet following".
+    """
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -6402,29 +6465,156 @@ def follow_user(target_user_id):
         return jsonify({"error": "User not found"}), 404
 
     existing = Follow.query.filter_by(follower_id=user_id, followed_id=target_user_id).first()
-    if not existing:
-        db.session.add(Follow(follower_id=user_id, followed_id=target_user_id))
-        follower = db.session.get(User, user_id)
+    if existing:
+        return jsonify({
+            "message": "Already following",
+            "followers_count": Follow.query.filter_by(followed_id=target_user_id).count(),
+        }), 200
+
+    if target.who_can_follow == "approval_required":
+        pending = FollowRequest.query.filter_by(requester_id=user_id, target_id=target_user_id).first()
+        if pending and pending.status == "pending":
+            return jsonify({"message": "Follow request already sent", "status": "pending"}), 200
+        if pending:
+            pending.status = "pending"
+            pending.responded_at = None
+        else:
+            pending = FollowRequest(requester_id=user_id, target_id=target_user_id, status="pending")
+            db.session.add(pending)
+        requester = db.session.get(User, user_id)
         if should_notify(target_user_id, "community"):
             db.session.add(Notification(
                 user_id=target_user_id,
-                type="new_follower",
-                title="New follower",
-                body=f"{_display_name(follower)} started following you",
+                type="follow_request",
+                title="New follow request",
+                body=f"{_display_name(requester)} wants to follow you",
                 related_type="user",
                 related_id=user_id,
             ))
             send_push_notification(
                 target_user_id,
-                "New follower",
-                f"{_display_name(follower)} started following you",
+                "New follow request",
+                f"{_display_name(requester)} wants to follow you",
             )
         db.session.commit()
+        return jsonify({"message": "Follow request sent", "status": "pending"}), 202
+
+    db.session.add(Follow(follower_id=user_id, followed_id=target_user_id))
+    follower = db.session.get(User, user_id)
+    if should_notify(target_user_id, "community"):
+        db.session.add(Notification(
+            user_id=target_user_id,
+            type="new_follower",
+            title="New follower",
+            body=f"{_display_name(follower)} started following you",
+            related_type="user",
+            related_id=user_id,
+        ))
+        send_push_notification(
+            target_user_id,
+            "New follower",
+            f"{_display_name(follower)} started following you",
+        )
+    db.session.commit()
 
     return jsonify({
-        "message": "Already following" if existing else "Followed",
+        "message": "Followed",
         "followers_count": Follow.query.filter_by(followed_id=target_user_id).count(),
-    }), (200 if existing else 201)
+    }), 201
+
+
+@app.route("/follow-requests")
+def list_follow_requests():
+    """Pending follow requests directed AT the logged-in user."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    requests = (
+        FollowRequest.query.filter_by(target_id=user_id, status="pending")
+        .order_by(FollowRequest.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for r in requests:
+        requester = db.session.get(User, r.requester_id)
+        result.append({
+            "id": r.id,
+            "requester_id": r.requester_id,
+            "requester_display_name": _display_name(requester) if requester else "Deleted user",
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+
+    return jsonify({"requests": result})
+
+
+@app.route("/follow-requests/<int:request_id>/accept", methods=["POST"])
+@require_csrf
+def accept_follow_request(request_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    req = db.session.get(FollowRequest, request_id)
+    if not req or req.target_id != user_id:
+        return jsonify({"error": "Follow request not found"}), 404
+    if req.status != "pending":
+        return jsonify({"error": f"Request is not pending (status: {req.status})"}), 400
+
+    req.status = "accepted"
+    req.responded_at = datetime.utcnow()
+
+    existing_follow = Follow.query.filter_by(follower_id=req.requester_id, followed_id=user_id).first()
+    if not existing_follow:
+        db.session.add(Follow(follower_id=req.requester_id, followed_id=user_id))
+        target = db.session.get(User, user_id)
+        if should_notify(req.requester_id, "community"):
+            db.session.add(Notification(
+                user_id=req.requester_id,
+                type="new_follower",
+                title="Follow request accepted",
+                body=f"{_display_name(target)} accepted your follow request",
+                related_type="user",
+                related_id=user_id,
+            ))
+            send_push_notification(
+                req.requester_id,
+                "Follow request accepted",
+                f"{_display_name(target)} accepted your follow request",
+            )
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Accepted",
+        "followers_count": Follow.query.filter_by(followed_id=user_id).count(),
+    })
+
+
+@app.route("/follow-requests/<int:request_id>/decline", methods=["POST"])
+@require_csrf
+def decline_follow_request(request_id):
+    """
+    Declines a pending follow request. Deliberately does NOT notify
+    the requester - same silent-decline convention private accounts
+    elsewhere use, so declining doesn't feel like a public rejection.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    req = db.session.get(FollowRequest, request_id)
+    if not req or req.target_id != user_id:
+        return jsonify({"error": "Follow request not found"}), 404
+    if req.status != "pending":
+        return jsonify({"error": f"Request is not pending (status: {req.status})"}), 400
+
+    req.status = "declined"
+    req.responded_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({"message": "Declined"})
 
 
 @app.route("/users/<int:target_user_id>/follow", methods=["DELETE"])
@@ -6549,6 +6739,17 @@ def get_public_profile(target_user_id):
     target = db.session.get(User, target_user_id)
     if not target or target.is_suspended:
         return jsonify({"error": "User not found"}), 404
+
+    if target.profile_visibility == "private" and target.id != user_id:
+        viewer_follows_target = Follow.query.filter_by(
+            follower_id=user_id, followed_id=target_user_id
+        ).first() is not None
+        if not viewer_follows_target:
+            return jsonify({
+                "user_id": target.id,
+                "display_name": _display_name(target),
+                "is_private": True,
+            })
 
     university = db.session.get(University, target.university_id) if target.university_id else None
     program = db.session.get(Program, target.program_id) if target.program_id else None
@@ -8537,6 +8738,16 @@ def create_chat():
         if len(participant_ids) != 1:
             return jsonify({"error": "Direct chats must have exactly one other participant"}), 400
         other_id = next(iter(participant_ids))
+
+        other_user = db.session.get(User, other_id)
+        if other_user and other_user.who_can_message == "followers":
+            sender_is_follower = Follow.query.filter_by(
+                follower_id=user_id, followed_id=other_id
+            ).first() is not None
+            if not sender_is_follower:
+                return jsonify({
+                    "error": "This user only accepts messages from their followers"
+                }), 403
 
         existing = (
             db.session.query(Conversation.id)
