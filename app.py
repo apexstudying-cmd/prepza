@@ -1827,6 +1827,44 @@ def compute_new_subscription_expiry(user_id, plan):
     return base + timedelta(days=duration_days)
 
 
+def recompute_subscription_expiries(user_id):
+    """
+    Rebuilds subscription_expires_at for every remaining successful
+    subscription Payment a user has, replaying the same additive-stacking
+    logic compute_new_subscription_expiry() uses for a live purchase -
+    except here we're reconstructing history, not computing "now", so
+    each payment's own created_at (not utcnow()) is the stacking base.
+    Needed because admin_refund_payment() can refund an EARLIER payment
+    in a stack after LATER ones already had their expiry frozen assuming
+    the refunded days were real.
+
+    Call this AFTER flipping a subscription payment's status to
+    "refunded" (and before commit) so the remaining chain reflects the
+    correct history. No-op if the user has no remaining subscription
+    payments.
+    """
+    remaining = (
+        Payment.query.filter(
+            Payment.user_id == user_id,
+            Payment.payment_type == "subscription",
+            Payment.status == "success",
+        )
+        .order_by(Payment.created_at.asc())
+        .all()
+    )
+
+    running_expiry = None
+    for p in remaining:
+        duration_days = SUBSCRIPTION_PLAN_DURATIONS_DAYS.get(p.plan)
+        if not duration_days:
+            continue
+        base = p.created_at or datetime.utcnow()
+        if running_expiry and running_expiry > base:
+            base = running_expiry
+        running_expiry = base + timedelta(days=duration_days)
+        p.subscription_expires_at = running_expiry
+
+
 def sync_paystack_payment_status(reference):
     """
     Fetches the authoritative status from Paystack's verify-transaction
@@ -10411,6 +10449,9 @@ def admin_refund_payment(payment_id):
         }), 400
 
     payment.status = "refunded"
+
+    if payment.payment_type == "subscription" and payment.user_id is not None:
+        recompute_subscription_expiries(payment.user_id)
 
     referral = Referral.query.filter_by(first_payment_id=payment.id).first()
     referral_commission_voided = False
