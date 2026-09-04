@@ -9941,6 +9941,7 @@ const ADMIN_AMB_STATUS_COLOR: Record<string, string> = {
 }
 
 function AdminAmbassadorsPanel() {
+  const { mode, tokens: T } = useTheme()
   const [tab, setTab] = useState<'applications' | 'payouts'>('applications')
   const [csrfToken, setCsrfToken] = useState('')
 
@@ -10072,7 +10073,7 @@ function AdminAmbassadorsPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 6 }}>
         {(['applications', 'payouts'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 18px', borderRadius: 10, background: tab === t ? N.navy : '#F3F4F6', color: tab === t ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>
+          <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 18px', borderRadius: 10, background: tab === t ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: tab === t ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>
             {t === 'applications' ? 'Applications' : 'Payout Requests'}
           </button>
         ))}
@@ -10081,20 +10082,20 @@ function AdminAmbassadorsPanel() {
       {tab === 'applications' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {selected && (
-            <div style={{ background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.05)' }}>
+            <div style={{ background: T.card, borderRadius: 14, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${T.border}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 16, color: N.navy }}>{selected.display_name || selected.email}</div>
-                  <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{selected.email} · code {selected.referral_code}</div>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: T.text }}>{selected.display_name || selected.email}</div>
+                  <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>{selected.email} · code {selected.referral_code}</div>
                   <div style={{ marginTop: 6 }}><AdminBadge text={selected.status} color={ADMIN_AMB_STATUS_COLOR[selected.status] || 'gray'} /></div>
                 </div>
-                <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 20 }}>×</button>
+                <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, fontSize: 20 }}>×</button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
                 {[['Referred', selected.referred_count.toString()], ['Paying', selected.paying_count.toString()], ['Commission Awarded', 'KES ' + selected.total_commission_awarded_kes.toLocaleString()], ['Paid Out', 'KES ' + selected.total_paid_kes.toLocaleString()]].map(([k, v]) => (
-                  <div key={k} style={{ background: '#F9FAFB', borderRadius: 10, padding: '10px 12px' }}>
-                    <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 3 }}>{k}</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: N.navy }}>{v}</div>
+                  <div key={k} style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#F9FAFB'), borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 600, marginBottom: 3 }}>{k}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -10117,9 +10118,9 @@ function AdminAmbassadorsPanel() {
               {selected.rejection_reason && (
                 <div style={{ fontSize: 12, color: '#DC2626', marginBottom: 12 }}>Rejection reason: {selected.rejection_reason}</div>
               )}
-              <div style={{ fontWeight: 700, fontSize: 12, color: N.navy, marginBottom: 8 }}>Referrals ({selected.referrals.length})</div>
+              <div style={{ fontWeight: 700, fontSize: 12, color: T.text, marginBottom: 8 }}>Referrals ({selected.referrals.length})</div>
               {selected.referrals.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#9CA3AF' }}>No referrals yet.</div>
+                <div style={{ fontSize: 12, color: T.textMuted }}>No referrals yet.</div>
               ) : (
                 <AdminTable
                   cols={['Referred', 'Status', 'Commission', 'Voided']}
@@ -10135,17 +10136,17 @@ function AdminAmbassadorsPanel() {
           )}
 
           <AdminCard title={`Ambassador Applications — ${applications.length}`}>
-            <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6 }}>
+            <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 6 }}>
               {['pending', 'active', 'suspended', 'rejected', 'all'].map(f => (
-                <button key={f} onClick={() => setAppStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: appStatusFilter === f ? N.navy : '#F3F4F6', color: appStatusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
+                <button key={f} onClick={() => setAppStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: appStatusFilter === f ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: appStatusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
               ))}
             </div>
             {loadingApps ? (
-              <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+              <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading…</div>
             ) : appsError ? (
               <div style={{ padding: 24, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{appsError}</div>
             ) : applications.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No applications with this status.</div>
+              <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No applications with this status.</div>
             ) : (
               <AdminTable
                 cols={['Name', 'Email', 'Code', 'Applied', 'Status']}
@@ -10155,7 +10156,7 @@ function AdminAmbassadorsPanel() {
                   <AdminBadge text={a.status} color={ADMIN_AMB_STATUS_COLOR[a.status] || 'gray'} />,
                 ])}
                 actions={i => (
-                  <button onClick={() => openDetail(applications[i].id)} style={{ background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{loadingDetail ? '…' : 'Review'}</button>
+                  <button onClick={() => openDetail(applications[i].id)} style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{loadingDetail ? '…' : 'Review'}</button>
                 )}
               />
             )}
@@ -10165,17 +10166,17 @@ function AdminAmbassadorsPanel() {
 
       {tab === 'payouts' && (
         <AdminCard title={`Payout Requests — ${payouts.length}`}>
-          <div style={{ padding: '12px 18px', borderBottom: '1px solid #F3F4F6', display: 'flex', gap: 6 }}>
+          <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 6 }}>
             {['pending', 'approved', 'paid', 'rejected', 'all'].map(f => (
-              <button key={f} onClick={() => setPayoutStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: payoutStatusFilter === f ? N.navy : '#F3F4F6', color: payoutStatusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
+              <button key={f} onClick={() => setPayoutStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: payoutStatusFilter === f ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: payoutStatusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
             ))}
           </div>
           {loadingPayouts ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Loading…</div>
+            <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading…</div>
           ) : payoutsError ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{payoutsError}</div>
           ) : payouts.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No payout requests with this status.</div>
+            <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No payout requests with this status.</div>
           ) : (
             <AdminTable
               cols={['Email', 'Amount', 'Destination', 'Requested', 'Status']}
@@ -10199,11 +10200,11 @@ function AdminAmbassadorsPanel() {
 
       {rejectTarget && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setRejectTarget(null)}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: N.navy, marginBottom: 10 }}>Reason for rejection</div>
-            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={3} placeholder="Explain why this is being rejected…" style={{ width: '100%', boxSizing: 'border-box', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', resize: 'none', marginBottom: 14 }} />
+          <div style={{ background: T.card, borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 10 }}>Reason for rejection</div>
+            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={3} placeholder="Explain why this is being rejected…" style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', resize: 'none', marginBottom: 14 }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { setRejectTarget(null); setRejectReason('') }} style={{ flex: 1, background: '#F3F4F6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button onClick={() => { setRejectTarget(null); setRejectReason('') }} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
               <button disabled={actionBusy || !rejectReason.trim()} onClick={submitReject} style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, opacity: (actionBusy || !rejectReason.trim()) ? 0.6 : 1 }}>Confirm Reject</button>
             </div>
           </div>
