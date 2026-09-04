@@ -6495,6 +6495,7 @@ function formatXpDate(iso: string | null): string {
 }
 
 function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<XpProgressResponse | null>(null)
@@ -6545,21 +6546,21 @@ function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
   if (loading) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
             <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
             <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>XP & Progress</div>
           </div>
         </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#9CA3AF' }}>Loading…</div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: T.textMuted }}>Loading…</div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
             <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -6572,7 +6573,7 @@ function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -6601,16 +6602,16 @@ function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }} className="scrollbar-hide">
-        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Recent XP activity</div>
+        <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 12 }}>Recent XP activity</div>
         {history.length === 0 && (
-          <div style={{ fontSize: 13, color: '#9CA3AF', padding: '12px 0 20px' }}>No XP activity yet — study a document or complete a quiz to start earning.</div>
+          <div style={{ fontSize: 13, color: T.textMuted, padding: '12px 0 20px' }}>No XP activity yet — study a document or complete a quiz to start earning.</div>
         )}
         {history.map((h, i) => (
-          <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '12px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+          <div key={i} style={{ background: T.card, borderRadius: 14, padding: '12px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
             <div style={{ width: 38, height: 38, background: `${N.gold}15`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{h.icon}</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: N.navy }}>{h.label}</div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>{formatXpDate(h.created_at)}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{h.label}</div>
+              <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{formatXpDate(h.created_at)}</div>
             </div>
             <div style={{ fontWeight: 800, fontSize: 14, color: '#16A34A' }}>+{h.xp}</div>
           </div>
@@ -6620,11 +6621,11 @@ function XPProgressScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             {loadingMore ? 'Loading…' : 'Load more'}
           </button>
         )}
-        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, margin: '20px 0 12px' }}>How to earn XP</div>
-        <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: T.text, margin: '20px 0 12px' }}>How to earn XP</div>
+        <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
           {howToEarn.map((h, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: i < howToEarn.length - 1 ? '1px solid #F3F4F6' : 'none' }}>
-              <span style={{ fontSize: 13, color: '#374151' }}>{h.label}</span>
+              <span style={{ fontSize: 13, color: T.text }}>{h.label}</span>
               <Pill text={h.xp} color={N.gold} />
             </div>
           ))}
@@ -6649,6 +6650,7 @@ type StreakResponse = {
 }
 
 function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<StreakResponse | null>(null)
@@ -6720,21 +6722,21 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
   if (loading) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
             <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
             <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Study Streak</div>
           </div>
         </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#9CA3AF' }}>Loading…</div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: T.textMuted }}>Loading…</div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
             <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -6747,7 +6749,7 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -6767,14 +6769,14 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
-        <div style={{ background: '#fff', borderRadius: 16, padding: '16px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+        <div style={{ background: T.card, borderRadius: 16, padding: '16px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <button onClick={() => shiftMonth(-1)} disabled={atEarliest} style={{ width: 28, height: 28, border: 'none', borderRadius: 8, background: '#F3F4F6', cursor: atEarliest ? 'default' : 'pointer', opacity: atEarliest ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: N.navy }}>‹</button>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{monthLabel}</div>
-            <button onClick={() => shiftMonth(1)} disabled={atCurrent} style={{ width: 28, height: 28, border: 'none', borderRadius: 8, background: '#F3F4F6', cursor: atCurrent ? 'default' : 'pointer', opacity: atCurrent ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: N.navy }}>›</button>
+            <button onClick={() => shiftMonth(-1)} disabled={atEarliest} style={{ width: 28, height: 28, border: 'none', borderRadius: 8, background: '#F3F4F6', cursor: atEarliest ? 'default' : 'pointer', opacity: atEarliest ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: T.text }}>‹</button>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{monthLabel}</div>
+            <button onClick={() => shiftMonth(1)} disabled={atCurrent} style={{ width: 28, height: 28, border: 'none', borderRadius: 8, background: '#F3F4F6', cursor: atCurrent ? 'default' : 'pointer', opacity: atCurrent ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: T.text }}>›</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
-            {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginBottom: 4 }}>{d}</div>)}
+            {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, color: T.textMuted, fontWeight: 600, marginBottom: 4 }}>{d}</div>)}
             {Array.from({ length: startWeekday }).map((_, i) => <div key={`pad-${i}`} />)}
             {days.map((d, i) => {
               const shade = shadeForSeconds(d.study_seconds)
@@ -6786,17 +6788,17 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             })}
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 14, alignItems: 'center', justifyContent: 'flex-end' }}>
-            <span style={{ fontSize: 10, color: '#9CA3AF' }}>Less</span>
+            <span style={{ fontSize: 10, color: T.textMuted }}>Less</span>
             {SHADE_LEVELS.map((lvl, i) => (
               <div key={i} style={{ width: 12, height: 12, borderRadius: 3, background: lvl.color, border: lvl.border }} />
             ))}
-            <span style={{ fontSize: 10, color: '#9CA3AF' }}>More</span>
+            <span style={{ fontSize: 10, color: T.textMuted }}>More</span>
           </div>
         </div>
-        <div style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Streak milestones{unlockedMilestones.length > 0 ? ` (${unlockedMilestones.length})` : ''}</div>
+        <div style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 12 }}>Streak milestones{unlockedMilestones.length > 0 ? ` (${unlockedMilestones.length})` : ''}</div>
           {unlockedMilestones.length === 0 ? (
-            <div style={{ fontSize: 12, color: '#9CA3AF', padding: '4px 0 2px' }}>No milestones reached yet — keep your streak going to unlock your first one.</div>
+            <div style={{ fontSize: 12, color: T.textMuted, padding: '4px 0 2px' }}>No milestones reached yet — keep your streak going to unlock your first one.</div>
           ) : (
             <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className="scrollbar-hide">
               {unlockedMilestones.map((m, i) => (
@@ -6805,8 +6807,8 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                     <span style={{ fontSize: 16 }}>🏆</span>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: N.navy }}>{m.days}-Day Streak</div>
-                    <div style={{ fontSize: 11, color: '#9CA3AF' }}>{m.label}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: T.text }}>{m.days}-Day Streak</div>
+                    <div style={{ fontSize: 11, color: T.textMuted }}>{m.label}</div>
                   </div>
                   <Pill text={m.xp} color={N.gold} />
                 </div>
@@ -6842,6 +6844,7 @@ function formatAchievementDate(iso: string | null): string {
 }
 
 function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [sharing, setSharing] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -6863,21 +6866,21 @@ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
   if (loading) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
             <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Achievements</div>
           </div>
         </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#9CA3AF' }}>Loading…</div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: T.textMuted }}>Loading…</div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -6890,10 +6893,10 @@ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       {sharing && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div style={{ width: 390, background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 32px' }}>
+          <div style={{ width: 390, background: T.card, borderRadius: '24px 24px 0 0', padding: '24px 20px 32px' }}>
             <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
             {(() => { const a = achievementsList.find(x => x.code === sharing)!; return (
               <div>
@@ -6906,7 +6909,7 @@ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setScreen('share-sheet')} style={{ flex: 1, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Share</button>
-                  <button onClick={() => setSharing(null)} style={{ flex: 1, background: '#F3F4F6', color: '#374151', fontWeight: 700, fontSize: 14, border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Close</button>
+                  <button onClick={() => setSharing(null)} style={{ flex: 1, background: '#F3F4F6', color: T.text, fontWeight: 700, fontSize: 14, border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Close</button>
                 </div>
               </div>
             ) })()}
@@ -6921,29 +6924,29 @@ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }} className="scrollbar-hide">
-        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 12 }}>Unlocked ({unlocked.length})</div>
+        <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 12 }}>Unlocked ({unlocked.length})</div>
         {unlocked.map(a => (
-          <div key={a.code} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, border: `1.5px solid ${N.gold}30`, boxShadow: `0 4px 16px ${N.gold}10`, display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div key={a.code} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, border: `1.5px solid ${N.gold}30`, boxShadow: `0 4px 16px ${N.gold}10`, display: 'flex', gap: 12, alignItems: 'center' }}>
             <div style={{ width: 48, height: 48, background: `${N.gold}15`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{a.icon}</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: N.navy }}>{a.name}</div>
-              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{a.desc}</div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>Achieved {formatAchievementDate(a.unlocked_at)}</div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{a.name}</div>
+              <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>{a.desc}</div>
+              <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>Achieved {formatAchievementDate(a.unlocked_at)}</div>
             </div>
-            <button onClick={() => setSharing(a.code)} style={{ background: '#F3F4F6', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: 'Plus Jakarta Sans', flexShrink: 0 }}>Share</button>
+            <button onClick={() => setSharing(a.code)} style={{ background: '#F3F4F6', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: T.text, fontFamily: 'Plus Jakarta Sans', flexShrink: 0 }}>Share</button>
           </div>
         ))}
-        <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, margin: '20px 0 12px' }}>In progress ({locked.length})</div>
+        <div style={{ fontWeight: 700, fontSize: 13, color: T.text, margin: '20px 0 12px' }}>In progress ({locked.length})</div>
         {locked.map(a => (
-          <div key={a.code} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, opacity: 0.7, boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div key={a.code} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, opacity: 0.7, boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', gap: 12, alignItems: 'center' }}>
             <div style={{ width: 48, height: 48, background: '#F3F4F6', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, filter: 'grayscale(1)', opacity: 0.5 }}>{a.icon}</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: '#6B7280' }}>{a.name}</div>
-              <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{a.desc}</div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: T.textMuted }}>{a.name}</div>
+              <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>{a.desc}</div>
               <div style={{ background: '#F3F4F6', borderRadius: 99, height: 5, marginTop: 8, overflow: 'hidden' }}>
                 <div style={{ background: '#D1D5DB', height: 5, width: `${a.total > 0 ? (a.progress / a.total) * 100 : 0}%`, borderRadius: 99 }} />
               </div>
-              <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{a.progress} / {a.total}</div>
+              <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>{a.progress} / {a.total}</div>
             </div>
           </div>
         ))}
@@ -10717,6 +10720,7 @@ function fmtKes(n: number) {
 }
 
 function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [csrfToken, setCsrfToken] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -10853,7 +10857,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           </div>
         )}
         <div style={{ fontWeight: 700, fontSize: 13, color: AMB_COLORS.navy, marginBottom: 10 }}>Commission tiers</div>
-        <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', marginBottom: 20 }}>
+        <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', marginBottom: 20 }}>
           {[[1, 10, '0–4 paying referrals'], [2, 15, '5–19 paying referrals'], [3, 20, '20+ paying referrals']].map(([t, pct, range], i) => (
             <div key={t as number} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i < 2 ? '1px solid #F3F4F6' : 'none' }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: AMB_COLORS.gold + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: AMB_COLORS.gold }}>T{t}</div>
@@ -10875,7 +10879,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
       <Header title="Ambassador Program" />
       <div style={{ padding: 18 }}>
-        <div style={{ background: '#fff', borderRadius: 18, padding: 26, textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+        <div style={{ background: T.card, borderRadius: 18, padding: 26, textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>⏳</div>
           <div style={{ fontWeight: 800, fontSize: 16, color: AMB_COLORS.navy, marginBottom: 6 }}>Application under review</div>
           <div style={{ fontSize: 12, color: AMB_COLORS.gray, lineHeight: 1.6 }}>We're reviewing your application - usually within 1-2 days.</div>
@@ -10918,7 +10922,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             </div>
           </div>
         </div>
-        <div style={{ margin: '0 18px 14px', background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+        <div style={{ margin: '0 18px 14px', background: T.card, borderRadius: 16, padding: 16, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <div style={{ fontWeight: 800, fontSize: 15, color: AMB_COLORS.navy }}>Tier {dashboard.tier} · {dashboard.commission_pct}% commission</div>
@@ -10934,7 +10938,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, margin: '0 18px 14px' }}>
           {[['Pending', dashboard.earnings.pending_kes, AMB_COLORS.gray], ['Available', dashboard.earnings.available_kes, AMB_COLORS.green], ['Paid out', dashboard.earnings.paid_kes, AMB_COLORS.navy]].map(([label, val, color]) => (
-            <div key={label as string} style={{ background: '#fff', borderRadius: 14, padding: '12px 6px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div key={label as string} style={{ background: T.card, borderRadius: 14, padding: '12px 6px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
               <div style={{ fontWeight: 800, fontSize: 13, color: color as string }}>{fmtKes(val as number)}</div>
               <div style={{ fontSize: 10, color: AMB_COLORS.gray, fontWeight: 600, marginTop: 2 }}>{label as string}</div>
             </div>
@@ -10946,7 +10950,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           </button>
           <div style={{ fontSize: 10, color: '#D1D5DB', textAlign: 'center', marginTop: 8 }}>Commissions unlock {dashboard.payout_hold_days} days after the qualifying payment</div>
         </div>
-        <div style={{ margin: '0 18px', background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+        <div style={{ margin: '0 18px', background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
             {(['overview', 'referrals', 'payouts'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '11px 0', background: 'none', border: 'none', fontWeight: tab === t ? 800 : 500, fontSize: 11, color: tab === t ? AMB_COLORS.navy : AMB_COLORS.gray, cursor: 'pointer', borderBottom: tab === t ? `2px solid ${AMB_COLORS.gold}` : '2px solid transparent' }}>
@@ -10964,7 +10968,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                   </div>
                 ))}
                 <div style={{ gridColumn: '1 / -1', background: AMB_COLORS.gold + '12', borderRadius: 12, padding: 12, textAlign: 'center' }}>
-                  <span style={{ fontSize: 11, color: '#6B7280' }}>Signup → paying conversion: </span>
+                  <span style={{ fontSize: 11, color: T.textMuted }}>Signup → paying conversion: </span>
                   <span style={{ fontWeight: 800, fontSize: 12, color: AMB_COLORS.gold }}>{dashboard.funnel.conversion_rate}%</span>
                 </div>
               </div>
@@ -11014,11 +11018,11 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       </div>
       {showSheet && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }}>
-          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 36px', width: '100%' }}>
+          <div style={{ background: T.card, borderRadius: '24px 24px 0 0', padding: '24px 20px 36px', width: '100%' }}>
             <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
             <div style={{ fontWeight: 800, fontSize: 16, color: AMB_COLORS.navy, marginBottom: 4 }}>Request payout</div>
             <div style={{ fontSize: 12, color: AMB_COLORS.gray, marginBottom: 18 }}>Available balance: {fmtKes(dashboard.earnings.available_kes)}</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', marginBottom: 6 }}>M-Pesa number</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>M-Pesa number</div>
             <input value={payoutPhone} onChange={e => setPayoutPhone(e.target.value)} placeholder="+254712345678" style={{ width: '100%', boxSizing: 'border-box', background: AMB_COLORS.bg, border: '1px solid #E5E7EB', borderRadius: 12, padding: '13px 14px', fontSize: 13, color: AMB_COLORS.navy, marginBottom: 8 }} />
             {!!payoutError && <div style={{ fontSize: 11, color: AMB_COLORS.red, marginBottom: 10 }}>{payoutError}</div>}
             <button onClick={requestPayout} disabled={submittingPayout} style={{ width: '100%', padding: '14px 0', fontSize: 14, background: AMB_COLORS.gold, color: AMB_COLORS.navy, border: 'none', borderRadius: 14, fontWeight: 800, cursor: 'pointer', opacity: submittingPayout ? 0.7 : 1 }}>
@@ -11080,6 +11084,7 @@ function orgPill(text: string, color: string) {
 const ORG_OPPORTUNITY_TYPES = ['job', 'internship', 'scholarship', 'competition', 'volunteering', 'event', 'other']
 
 function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
+  const { tokens: T } = useTheme()
   const [csrfToken, setCsrfToken] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -11173,32 +11178,32 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>Register your organisation to submit jobs, internships, scholarships and events to Kenyan university students.</div>
           </div>
           {regError && <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#B91C1C', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, fontWeight: 600 }}>{regError}</div>}
-          <div style={{ background: '#fff', borderRadius: 16, padding: 18, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <div style={{ background: T.card, borderRadius: 16, padding: 18, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Organisation name *</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Organisation name *</div>
               <input value={regName} onChange={e => setRegName(e.target.value)} placeholder="e.g. Safaricom PLC" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Contact email *</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Contact email *</div>
               <input value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="careers@company.com" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Website</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Website</div>
               <input value={regWebsite} onChange={e => setRegWebsite(e.target.value)} placeholder="https://company.com" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Contact phone</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Contact phone</div>
               <input value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="+254 7XX XXX XXX" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Description</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Description</div>
               <textarea value={regDesc} onChange={e => setRegDesc(e.target.value)} rows={3} placeholder="What does your organisation do?" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy, resize: 'none', lineHeight: 1.6 }} />
             </div>
-            <button onClick={register} disabled={!regName.trim() || !regEmail.trim() || registering} style={{ width: '100%', background: (!regName.trim() || !regEmail.trim()) ? '#E5E7EB' : `linear-gradient(135deg,${ORG_COLORS.gold},${ORG_COLORS.goldLight})`, color: (!regName.trim() || !regEmail.trim()) ? '#9CA3AF' : ORG_COLORS.navy, border: 'none', borderRadius: 14, padding: '14px 0', fontWeight: 800, fontSize: 14, cursor: (!regName.trim() || !regEmail.trim()) ? 'not-allowed' : 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+            <button onClick={register} disabled={!regName.trim() || !regEmail.trim() || registering} style={{ width: '100%', background: (!regName.trim() || !regEmail.trim()) ? '#E5E7EB' : `linear-gradient(135deg,${ORG_COLORS.gold},${ORG_COLORS.goldLight})`, color: (!regName.trim() || !regEmail.trim()) ? T.textMuted : ORG_COLORS.navy, border: 'none', borderRadius: 14, padding: '14px 0', fontWeight: 800, fontSize: 14, cursor: (!regName.trim() || !regEmail.trim()) ? 'not-allowed' : 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
               {registering ? 'Registering…' : 'Register Organisation'}
             </button>
           </div>
-          <div style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>Your organisation will need to be verified by Prepza before opportunities can be published.</div>
+          <div style={{ fontSize: 11, color: T.textMuted, textAlign: 'center', marginTop: 14, lineHeight: 1.6 }}>Your organisation will need to be verified by Prepza before opportunities can be published.</div>
         </div>
       </div>
     )
