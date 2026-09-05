@@ -4043,35 +4043,36 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
 // ─── PROFILE ──────────────────────────────────────────────────────────────────
 type ProfileMe = { id: number; display_name: string | null; bio: string | null; university_id: number | null; program_id: number | null }
 
+const PROFILE_CACHE: { me?: ProfileMe; uniName?: string | null; programName?: string | null; summary?: GamificationSummary | null; achievementsList?: Achievement[]; weeklyStudySeconds?: number | null } = {}
 function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: { setScreen: (s: Screen) => void; setActiveProfileUserId?: (id: number) => void; onOpenOrgPortal?: () => void }) {
   const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'posts'|'saved'|'activity'|'materials'>('posts')
   const [showMenu, setShowMenu] = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
 
-  const [me, setMe] = useState<ProfileMe | null>(null)
-  const [meLoading, setMeLoading] = useState(true)
-  const [uniName, setUniName] = useState<string | null>(null)
-  const [programName, setProgramName] = useState<string | null>(null)
-  const [summary, setSummary] = useState<GamificationSummary | null>(null)
-  const [achievementsList, setAchievementsList] = useState<Achievement[]>([])
-  const [weeklyStudySeconds, setWeeklyStudySeconds] = useState<number | null>(null)
+  const [me, setMe] = useState<ProfileMe | null>(PROFILE_CACHE.me ?? null)
+  const [meLoading, setMeLoading] = useState(PROFILE_CACHE.me === undefined)
+  const [uniName, setUniName] = useState<string | null>(PROFILE_CACHE.uniName ?? null)
+  const [programName, setProgramName] = useState<string | null>(PROFILE_CACHE.programName ?? null)
+  const [summary, setSummary] = useState<GamificationSummary | null>(PROFILE_CACHE.summary ?? null)
+  const [achievementsList, setAchievementsList] = useState<Achievement[]>(PROFILE_CACHE.achievementsList ?? [])
+  const [weeklyStudySeconds, setWeeklyStudySeconds] = useState<number | null>(PROFILE_CACHE.weeklyStudySeconds ?? null)
 
   useEffect(() => {
-    api<ProfileMe>('/me').then(setMe).catch(() => {}).finally(() => setMeLoading(false))
-    api<GamificationSummary>('/gamification/summary').then(setSummary).catch(() => {})
-    api<AchievementsResponse>('/achievements').then(res => setAchievementsList(res.achievements)).catch(() => {})
-    api<StudyTimeResponse>('/study-time?period=week').then(res => setWeeklyStudySeconds(res.total_seconds)).catch(() => {})
+    api<ProfileMe>('/me').then(res => { setMe(res); PROFILE_CACHE.me = res }).catch(() => {}).finally(() => setMeLoading(false))
+    api<GamificationSummary>('/gamification/summary').then(res => { setSummary(res); PROFILE_CACHE.summary = res }).catch(() => {})
+    api<AchievementsResponse>('/achievements').then(res => { setAchievementsList(res.achievements); PROFILE_CACHE.achievementsList = res.achievements }).catch(() => {})
+    api<StudyTimeResponse>('/study-time?period=week').then(res => { setWeeklyStudySeconds(res.total_seconds); PROFILE_CACHE.weeklyStudySeconds = res.total_seconds }).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (me?.university_id == null) return
     api<UniversityOption[]>('/universities')
-      .then(list => setUniName(list.find(u => u.id === me.university_id)?.name ?? null))
+      .then(list => { const name = list.find(u => u.id === me.university_id)?.name ?? null; setUniName(name); PROFILE_CACHE.uniName = name })
       .catch(() => {})
     if (me.program_id != null) {
       api<ProgramOption[]>(`/universities/${me.university_id}/programs`)
-        .then(list => setProgramName(list.find(p => p.id === me.program_id)?.name ?? null))
+        .then(list => { const name = list.find(p => p.id === me.program_id)?.name ?? null; setProgramName(name); PROFILE_CACHE.programName = name })
         .catch(() => {})
     }
   }, [me?.university_id, me?.program_id])
