@@ -5143,34 +5143,35 @@ type NotificationItem = {
   is_read: boolean; created_at: string | null
 }
 
+const NOTIFS_CACHE: { notifs?: NotificationItem[] } = {}
 function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfileUserId }: { setScreen: (s: Screen) => void; setActiveForumPostId?: (id: number) => void; setActiveProfileUserId?: (id: number) => void }) {
   const { tokens: T } = useTheme()
-  const [notifs, setNotifs] = useState<NotificationItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const [notifs, setNotifs] = useState<NotificationItem[]>(NOTIFS_CACHE.notifs ?? [])
+  const [loading, setLoading] = useState(NOTIFS_CACHE.notifs === undefined)
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
 
   useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
 
   useEffect(() => {
-    setLoading(true)
+    if (NOTIFS_CACHE.notifs === undefined) setLoading(true)
     api<{ page: number; notifications: NotificationItem[] }>('/notifications?page=1')
-      .then(res => setNotifs(res.notifications))
+      .then(res => { setNotifs(res.notifications); NOTIFS_CACHE.notifs = res.notifications })
       .catch(() => setError('Could not load notifications.'))
       .finally(() => setLoading(false))
   }, [])
 
   const markRead = async (n: NotificationItem) => {
     if (n.is_read) return
-    setNotifs(list => list.map(x => x.id === n.id ? { ...x, is_read: true } : x))
+    setNotifs(list => { const next = list.map(x => x.id === n.id ? { ...x, is_read: true } : x); NOTIFS_CACHE.notifs = next; return next })
     try { await api(`/notifications/${n.id}/read`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }) } catch {}
   }
   const markAllRead = async () => {
-    setNotifs(list => list.map(x => ({ ...x, is_read: true })))
+    setNotifs(list => { const next = list.map(x => ({ ...x, is_read: true })); NOTIFS_CACHE.notifs = next; return next })
     try { await api('/notifications/read-all', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }) } catch {}
   }
   const removeNotif = async (id: number) => {
-    setNotifs(list => list.filter(x => x.id !== id))
+    setNotifs(list => { const next = list.filter(x => x.id !== id); NOTIFS_CACHE.notifs = next; return next })
     try { await api(`/notifications/${id}`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } }) } catch {}
   }
   const openNotif = (n: NotificationItem) => {
