@@ -1969,6 +1969,10 @@ function DocReadyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen
 }
 
 // ─── DOCUMENT STUDY ───────────────────────────────────────────────────────────
+// Stale-while-revalidate cache keyed by document ID: reopening a document
+// already viewed this session renders instantly while a fresh fetch runs
+// quietly in the background.
+const DOC_CACHE: Record<number, DocumentDetail> = {}
 function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'doc'|'ai'|'tools'>('doc')
@@ -1990,8 +1994,10 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
 
   useEffect(() => {
     if (activeDocumentId == null) return
+    const cached = DOC_CACHE[activeDocumentId]
+    if (cached) { setDoc(cached); setRenameVal(cached.title) }
     api<DocumentDetail>(`/documents/${activeDocumentId}`)
-      .then(d => { setDoc(d); setRenameVal(d.title) })
+      .then(d => { setDoc(d); setRenameVal(d.title); DOC_CACHE[activeDocumentId] = d })
       .catch(e => setDocLoadError(e instanceof ApiError ? e.message : 'Could not load this document.'))
   }, [activeDocumentId])
 
