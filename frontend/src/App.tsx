@@ -2203,6 +2203,10 @@ type TutorMsg = { id: number | string; role: 'user' | 'assistant'; content: stri
 
 type PickableDoc = { id: number; title: string; status: string }
 
+// Stale-while-revalidate cache keyed by document ID: reopening the AI tutor
+// for a document already visited this session renders instantly while a
+// fresh fetch runs quietly in the background.
+const AI_TUTOR_CACHE: Record<number, TutorMsg[]> = {}
 function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null; setActiveDocumentId: (id: number | null) => void }) {
   const { tokens: T } = useTheme()
   const [messages, setMessages] = useState<TutorMsg[]>([])
@@ -2230,13 +2234,14 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
 
   useEffect(() => {
     if (activeDocumentId == null) { setLoading(false); return }
-    setLoading(true)
+    const cached = AI_TUTOR_CACHE[activeDocumentId]
+    if (cached) { setMessages(cached); setLoading(false) } else { setLoading(true) }
     api<{ csrf_token: string }>('/me')
       .then(me => {
         setCsrfToken(me.csrf_token)
         return api<{ conversation_id: number | null; messages: TutorMsg[] }>(`/documents/${activeDocumentId}/tutor`)
       })
-      .then(res => setMessages(res.messages))
+      .then(res => { setMessages(res.messages); AI_TUTOR_CACHE[activeDocumentId] = res.messages })
       .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load this conversation.'))
       .finally(() => setLoading(false))
   }, [activeDocumentId])
