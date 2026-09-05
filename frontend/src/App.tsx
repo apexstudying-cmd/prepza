@@ -964,14 +964,18 @@ const PODCAST_COLORS = ['#C9A84C', '#4C7BC9', '#4CC97B', '#9B59B6', '#C94C4C', '
 const podcastColor = (id: number) => PODCAST_COLORS[id % PODCAST_COLORS.length]
 const podcastDuration = (seconds: number | null) => seconds == null ? '—' : `${Math.max(1, Math.round(seconds / 60))} min`
 
+// Stale-while-revalidate cache for the Home screen: on repeat visits within
+// the same session, render instantly from cache while a fresh fetch runs
+// quietly in the background — no skeleton flash on data you already have.
+const HOME_CACHE: { me?: { display_name: string | null }; documents?: HomeDocument[] } = {}
 function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
   const { tokens: T } = useTheme()
   const [notifCount, setNotifCount] = useState(0)
 
-  const [displayName, setDisplayName] = useState<string | null>(null)
-  const [meLoading, setMeLoading] = useState(true)
-  const [documents, setDocuments] = useState<HomeDocument[]>([])
-  const [docsLoading, setDocsLoading] = useState(true)
+  const [displayName, setDisplayName] = useState<string | null>(HOME_CACHE.me?.display_name ?? null)
+  const [meLoading, setMeLoading] = useState(HOME_CACHE.me === undefined)
+  const [documents, setDocuments] = useState<HomeDocument[]>(HOME_CACHE.documents ?? [])
+  const [docsLoading, setDocsLoading] = useState(HOME_CACHE.documents === undefined)
   const [summary, setSummary] = useState<GamificationSummary | null>(null)
 
   const [previewPosts, setPreviewPosts] = useState<ForumPostSummary[]>([])
@@ -999,11 +1003,11 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
 
   useEffect(() => {
     api<{ display_name: string | null }>('/me')
-      .then(me => setDisplayName(me.display_name))
+      .then(me => { setDisplayName(me.display_name); HOME_CACHE.me = me })
       .catch(() => {})
       .finally(() => setMeLoading(false))
     api<{ documents: HomeDocument[] }>('/documents')
-      .then(res => setDocuments(res.documents))
+      .then(res => { setDocuments(res.documents); HOME_CACHE.documents = res.documents })
       .catch(() => {})
       .finally(() => setDocsLoading(false))
     api<GamificationSummary>('/gamification/summary')
@@ -1019,8 +1023,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
   const featuredDoc = activeDocs[0]
   const restDocs = activeDocs.slice(1)
 
-  const showHomeSkeleton = useDelayedFlag(meLoading || docsLoading)
-  if (meLoading || docsLoading) return showHomeSkeleton ? <SkeletonHome /> : null
+  if (meLoading || docsLoading) return <SkeletonHome />
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       {/* Header */}
