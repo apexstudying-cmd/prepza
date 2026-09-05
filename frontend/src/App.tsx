@@ -3718,10 +3718,11 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
 }
 
 // ─── OPPORTUNITY DETAIL ───────────────────────────────────────────────────────
+const OPP_DETAIL_CACHE: Record<number, OpportunityPublic> = {}
 function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) => void; opportunityId: number | null }) {
   const { tokens: T } = useTheme()
-  const [opp, setOpp] = useState<OpportunityPublic | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [opp, setOpp] = useState<OpportunityPublic | null>(() => opportunityId != null ? (OPP_DETAIL_CACHE[opportunityId] ?? null) : null)
+  const [loading, setLoading] = useState(() => opportunityId != null && !!OPP_DETAIL_CACHE[opportunityId] ? false : true)
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
   const [saving, setSaving] = useState(false)
@@ -3731,9 +3732,11 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
 
   useEffect(() => {
     if (opportunityId == null) { setLoading(false); return }
-    setLoading(true); setError('')
+    const cached = OPP_DETAIL_CACHE[opportunityId]
+    if (cached) { setOpp(cached); setLoading(false) } else { setLoading(true) }
+    setError('')
     api<OpportunityPublic>(`/opportunities/${opportunityId}`)
-      .then(setOpp)
+      .then(res => { setOpp(res); OPP_DETAIL_CACHE[opportunityId] = res })
       .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load this opportunity.'))
       .finally(() => setLoading(false))
   }, [opportunityId])
@@ -3742,11 +3745,14 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
     if (!opp || saving) return
     setSaving(true)
     const wasSaved = opp.saved
-    setOpp({ ...opp, saved: !wasSaved })
+    const optimistic = { ...opp, saved: !wasSaved }
+    setOpp(optimistic)
+    OPP_DETAIL_CACHE[optimistic.id] = optimistic
     try {
       await api(`/opportunities/${opp.id}/save`, { method: wasSaved ? 'DELETE' : 'POST', headers: { 'X-CSRF-Token': csrfToken } })
     } catch {
       setOpp(o => o ? { ...o, saved: wasSaved } : o)
+      OPP_DETAIL_CACHE[opp.id] = { ...opp, saved: wasSaved }
     } finally {
       setSaving(false)
     }
