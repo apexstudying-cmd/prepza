@@ -2925,28 +2925,32 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 }
 
 // ─── FORUM ────────────────────────────────────────────────────────────────────
+// Stale-while-revalidate cache for Forum's unit list and group sidebar: on
+// repeat visits, render instantly from cache while a fresh fetch runs
+// quietly in the background.
+const FORUM_CACHE: { units?: UnitOption[]; myGroups?: GroupSummary[] } = {}
 function ForumScreen({ setScreen, setActiveForumPostId, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveForumPostId: (id: number) => void; setActiveGroupId: (id: number) => void }) {
   const { tokens: T } = useTheme()
-  const [units, setUnits] = useState<UnitOption[]>([])
-  const [unitId, setUnitId] = useState<number | null>(null)
+  const [units, setUnits] = useState<UnitOption[]>(FORUM_CACHE.units ?? [])
+  const [unitId, setUnitId] = useState<number | null>(FORUM_CACHE.units?.[0]?.id ?? null)
   const [posts, setPosts] = useState<ForumPostSummary[]>([])
-  const [loadingUnits, setLoadingUnits] = useState(true)
+  const [loadingUnits, setLoadingUnits] = useState(FORUM_CACHE.units === undefined)
   const [loadingPosts, setLoadingPosts] = useState(false)
   const [error, setError] = useState('')
 
-  const [myGroups, setMyGroups] = useState<GroupSummary[]>([])
-  const [loadingGroups, setLoadingGroups] = useState(true)
+  const [myGroups, setMyGroups] = useState<GroupSummary[]>(FORUM_CACHE.myGroups ?? [])
+  const [loadingGroups, setLoadingGroups] = useState(FORUM_CACHE.myGroups === undefined)
 
   useEffect(() => {
     api<UnitOption[]>('/units')
-      .then(u => { setUnits(u); if (u.length) setUnitId(u[0].id) })
+      .then(u => { setUnits(u); if (u.length) setUnitId(u[0].id); FORUM_CACHE.units = u })
       .catch(() => setError('Could not load your units.'))
       .finally(() => setLoadingUnits(false))
   }, [])
 
   useEffect(() => {
     api<{ groups: GroupSummary[] }>('/groups/mine')
-      .then(res => setMyGroups(res.groups))
+      .then(res => { setMyGroups(res.groups); FORUM_CACHE.myGroups = res.groups })
       .catch(() => {})
       .finally(() => setLoadingGroups(false))
   }, [])
