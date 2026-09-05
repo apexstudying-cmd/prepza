@@ -1482,6 +1482,7 @@ function CreateModal({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── POST COMPOSER ────────────────────────────────────────────────────────────
 function PostComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [title, setTitle] = useState('')
   const [text, setText] = useState('')
   const [units, setUnits] = useState<UnitOption[]>([])
@@ -1518,7 +1519,7 @@ function PostComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.close()}</div></button>
@@ -1530,20 +1531,20 @@ function PostComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           <Avi name={initials} size={40} />
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{displayName || 'Student'}</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{displayName || 'Student'}</div>
           </div>
         </div>
         {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>}
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 8 }}>Unit</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 8 }}>Unit</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {units.map(u => (
-              <button key={u.id} onClick={() => setUnitId(u.id)} style={{ padding: '7px 14px', borderRadius: 20, background: unitId === u.id ? N.navy : '#F3F4F6', color: unitId === u.id ? N.gold : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u.code}</button>
+              <button key={u.id} onClick={() => setUnitId(u.id)} style={{ padding: '7px 14px', borderRadius: 20, background: unitId === u.id ? N.navy : '#F3F4F6', color: unitId === u.id ? N.gold : T.textMuted, fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u.code}</button>
             ))}
           </div>
         </div>
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={200} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', outline: 'none', fontSize: 14, fontWeight: 700, color: N.navy, fontFamily: 'Plus Jakarta Sans', background: '#fff', borderRadius: 12, padding: '12px 14px', boxSizing: 'border-box' }} />
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Share a study tip, ask for help, or start a discussion..." rows={6} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', outline: 'none', fontSize: 14, color: '#374151', fontFamily: 'Plus Jakarta Sans', resize: 'none', background: '#fff', lineHeight: 1.7, borderRadius: 12, padding: 14, boxSizing: 'border-box' }} />
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={200} style={{ width: '100%', border: `1px solid ${T.border}`, outline: 'none', fontSize: 14, fontWeight: 700, color: T.text, fontFamily: 'Plus Jakarta Sans', background: T.card, borderRadius: 12, padding: '12px 14px', boxSizing: 'border-box' }} />
+        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Share a study tip, ask for help, or start a discussion..." rows={6} style={{ width: '100%', border: `1px solid ${T.border}`, outline: 'none', fontSize: 14, color: T.text, fontFamily: 'Plus Jakarta Sans', resize: 'none', background: T.card, lineHeight: 1.7, borderRadius: 12, padding: 14, boxSizing: 'border-box' }} />
       </div>
     </div>
   )
@@ -1551,6 +1552,7 @@ function PostComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── QUESTION COMPOSER ────────────────────────────────────────────────────────
 function QuestionComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [title, setTitle] = useState('')
   const [q, setQ] = useState('')
   const [units, setUnits] = useState<UnitOption[]>([])
@@ -1582,7 +1584,7 @@ function QuestionComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: N.bg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.close()}</div></button>
@@ -1593,21 +1595,21 @@ function QuestionComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
       <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }} className="scrollbar-hide">
         {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>}
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 8 }}>Unit</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 8 }}>Unit</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {units.map(u => (
-              <button key={u.id} onClick={() => setUnitId(u.id)} style={{ padding: '7px 14px', borderRadius: 20, background: unitId === u.id ? N.navy : '#F3F4F6', color: unitId === u.id ? N.gold : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u.code}</button>
+              <button key={u.id} onClick={() => setUnitId(u.id)} style={{ padding: '7px 14px', borderRadius: 20, background: unitId === u.id ? N.navy : '#F3F4F6', color: unitId === u.id ? N.gold : T.textMuted, fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u.code}</button>
             ))}
           </div>
         </div>
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={200} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', outline: 'none', fontSize: 14, fontWeight: 700, color: N.navy, fontFamily: 'Plus Jakarta Sans', background: '#fff', borderRadius: 12, padding: '12px 14px', boxSizing: 'border-box' }} />
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={200} style={{ width: '100%', border: `1px solid ${T.border}`, outline: 'none', fontSize: 14, fontWeight: 700, color: T.text, fontFamily: 'Plus Jakarta Sans', background: T.card, borderRadius: 12, padding: '12px 14px', boxSizing: 'border-box' }} />
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Your question</div>
-          <textarea value={q} onChange={e => setQ(e.target.value)} placeholder="e.g. Can someone explain the difference between annuity-immediate and annuity-due?" rows={5} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', outline: 'none', fontSize: 14, color: '#374151', fontFamily: 'Plus Jakarta Sans', resize: 'none', background: '#fff', lineHeight: 1.7, borderRadius: 14, padding: 14, boxSizing: 'border-box' }} />
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Your question</div>
+          <textarea value={q} onChange={e => setQ(e.target.value)} placeholder="e.g. Can someone explain the difference between annuity-immediate and annuity-due?" rows={5} style={{ width: '100%', border: `1px solid ${T.border}`, outline: 'none', fontSize: 14, color: T.text, fontFamily: 'Plus Jakarta Sans', resize: 'none', background: T.card, lineHeight: 1.7, borderRadius: 14, padding: 14, boxSizing: 'border-box' }} />
         </div>
         <div style={{ background: 'rgba(201,168,76,0.08)', border: `1px solid ${N.gold}30`, borderRadius: 14, padding: 14 }}>
           <div style={{ fontSize: 12, color: N.gold, fontWeight: 700, marginBottom: 4 }}>✦ Try Prepza AI first</div>
-          <div style={{ fontSize: 12, color: '#6B7280' }}>Your AI tutor might already know the answer. <span onClick={() => setScreen('ai-tutor')} style={{ color: N.gold, fontWeight: 700, cursor: 'pointer' }}>Ask AI instead →</span></div>
+          <div style={{ fontSize: 12, color: T.textMuted }}>Your AI tutor might already know the answer. <span onClick={() => setScreen('ai-tutor')} style={{ color: N.gold, fontWeight: 700, cursor: 'pointer' }}>Ask AI instead →</span></div>
         </div>
       </div>
     </div>
@@ -1616,13 +1618,14 @@ function QuestionComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── SHARE OPP FORM ───────────────────────────────────────────────────────────
 function ShareOppForm({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   const [form, setForm] = useState({ title: '', org: '', type: 'Internship', deadline: '', location: '', reward: '', desc: '', link: '' })
   const upd = (k: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
   const inp = (placeholder: string, key: string, type?: string) => (
-    <input type={type ?? 'text'} placeholder={placeholder} value={(form as any)[key]} onChange={upd(key)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: '#374151', background: '#fff', boxSizing: 'border-box' }} />
+    <input type={type ?? 'text'} placeholder={placeholder} value={(form as any)[key]} onChange={upd(key)} style={{ width: '100%', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, boxSizing: 'border-box' }} />
   )
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: N.bg }} className="scrollbar-hide">
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -1632,23 +1635,23 @@ function ShareOppForm({ setScreen }: { setScreen: (s: Screen) => void }) {
       </div>
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {[['Title', 'title'], ['Organisation', 'org'], ['Location', 'location'], ['Reward / Stipend (e.g. KES 35,000/mo)', 'reward'], ['Application Link', 'link']].map(([p, k]) => (
-          <div key={k}><div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>{p}</div>{inp(p as string, k as string)}</div>
+          <div key={k}><div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>{p}</div>{inp(p as string, k as string)}</div>
         ))}
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Category</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Category</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {['Internship','Scholarship','Competition','Job','Event'].map(c => (
-              <button key={c} onClick={() => setForm(f => ({ ...f, type: c }))} style={{ padding: '7px 14px', borderRadius: 20, background: form.type === c ? N.navy : '#F3F4F6', color: form.type === c ? N.gold : '#6B7280', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{c}</button>
+              <button key={c} onClick={() => setForm(f => ({ ...f, type: c }))} style={{ padding: '7px 14px', borderRadius: 20, background: form.type === c ? N.navy : '#F3F4F6', color: form.type === c ? N.gold : T.textMuted, fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{c}</button>
             ))}
           </div>
         </div>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Deadline</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Deadline</div>
           {inp('e.g. Sep 30, 2025', 'deadline')}
         </div>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Description</div>
-          <textarea value={form.desc} onChange={upd('desc')} placeholder="Describe the opportunity, requirements, and how to apply..." rows={4} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', resize: 'none', outline: 'none', color: '#374151', background: '#fff', lineHeight: 1.7, boxSizing: 'border-box' }} />
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Description</div>
+          <textarea value={form.desc} onChange={upd('desc')} placeholder="Describe the opportunity, requirements, and how to apply..." rows={4} style={{ width: '100%', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', resize: 'none', outline: 'none', color: T.text, background: T.card, lineHeight: 1.7, boxSizing: 'border-box' }} />
         </div>
       </div>
     </div>
