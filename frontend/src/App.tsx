@@ -3340,19 +3340,20 @@ type MessageAttachmentData = { id: number; file_type: string; original_filename:
 type ChatMessageData = { id: number; conversation_id: number; sender_id: number; body: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null; attachment: MessageAttachmentData | null }
 type ChatDetail = { id: number; is_group: boolean; name: string; created_by: number; created_by_name: string; member_count: number; participants: { user_id: number; display_name: string; role: string }[]; viewer_muted: boolean }
 
+const CHAT_DETAIL_CACHE: Record<number, { msgs: ChatMessageData[]; headerName: string; headerIsGroup: boolean; senderNames: Record<number, string> }> = {}
 function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
   const { tokens: T } = useTheme()
   const [input, setInput] = useState('')
-  const [msgs, setMsgs] = useState<ChatMessageData[]>([])
+  const [msgs, setMsgs] = useState<ChatMessageData[]>(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.msgs ?? []) : [])
   const [showAttach, setShowAttach] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => conversationId == null || !CHAT_DETAIL_CACHE[conversationId])
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [csrfToken, setCsrfToken] = useState('')
   const [meId, setMeId] = useState<number | null>(null)
-  const [headerName, setHeaderName] = useState('Conversation')
-  const [headerIsGroup, setHeaderIsGroup] = useState(false)
-  const [senderNames, setSenderNames] = useState<Record<number, string>>({})
+  const [headerName, setHeaderName] = useState(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.headerName ?? 'Conversation') : 'Conversation')
+  const [headerIsGroup, setHeaderIsGroup] = useState(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.headerIsGroup ?? false) : false)
+  const [senderNames, setSenderNames] = useState<Record<number, string>>(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.senderNames ?? {}) : {})
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -3365,7 +3366,16 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
   useEffect(() => {
     if (conversationId == null) { setLoading(false); return }
     let cancelled = false
-    setLoading(true)
+    const cached = CHAT_DETAIL_CACHE[conversationId]
+    if (cached) {
+      setMsgs(cached.msgs)
+      setHeaderName(cached.headerName)
+      setHeaderIsGroup(cached.headerIsGroup)
+      setSenderNames(cached.senderNames)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     setError(null)
 
     api<ChatDetail>(`/chats/${conversationId}`).then(detail => {
@@ -3375,10 +3385,21 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
       const names: Record<number, string> = {}
       detail.participants.forEach(p => { names[p.user_id] = p.display_name })
       setSenderNames(names)
+      const entry = CHAT_DETAIL_CACHE[conversationId] ?? { msgs: [], headerName: detail.name, headerIsGroup: detail.is_group, senderNames: names }
+      entry.headerName = detail.name
+      entry.headerIsGroup = detail.is_group
+      entry.senderNames = names
+      CHAT_DETAIL_CACHE[conversationId] = entry
     }).catch(() => {})
 
     const loadMessages = () => api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
-      .then(data => { if (!cancelled) setMsgs(data.messages) })
+      .then(data => {
+        if (cancelled) return
+        setMsgs(data.messages)
+        const entry = CHAT_DETAIL_CACHE[conversationId] ?? { msgs: data.messages, headerName: 'Conversation', headerIsGroup: false, senderNames: {} }
+        entry.msgs = data.messages
+        CHAT_DETAIL_CACHE[conversationId] = entry
+      })
       .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load messages') })
 
     loadMessages().finally(() => { if (!cancelled) setLoading(false) })
