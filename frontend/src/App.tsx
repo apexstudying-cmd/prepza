@@ -5516,15 +5516,16 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 
 // ─── PODCAST LIBRARY ──────────────────────────────────────────────────────────
+const PODCAST_LIBRARY_CACHE: { podcastList?: PodcastItem[] } = {}
 function PodcastLibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
   const { tokens: T } = useTheme()
-  const [podcastList, setPodcastList] = useState<PodcastItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const [podcastList, setPodcastList] = useState<PodcastItem[]>(PODCAST_LIBRARY_CACHE.podcastList ?? [])
+  const [loading, setLoading] = useState(PODCAST_LIBRARY_CACHE.podcastList === undefined)
   const [error, setError] = useState('')
 
   useEffect(() => {
     api<{ podcasts: PodcastItem[] }>('/podcasts')
-      .then(res => setPodcastList(res.podcasts))
+      .then(res => { setPodcastList(res.podcasts); PODCAST_LIBRARY_CACHE.podcastList = res.podcasts })
       .catch(() => setError('Could not load your podcasts.'))
       .finally(() => setLoading(false))
   }, [])
