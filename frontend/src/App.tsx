@@ -273,6 +273,18 @@ function useTheme() {
   }, [])
   return { mode: currentThemeMode, tokens: currentThemeMode === 'dark' ? DARK_THEME : LIGHT_THEME, toggleTheme: toggleThemeMode }
 }
+// Prevents skeleton-loader flicker on fast networks: only flips true if
+// `active` is still true after `delay` ms. Returns false immediately once
+// `active` goes false, so real content always shows as soon as it's ready.
+function useDelayedFlag(active: boolean, delay = 200) {
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    if (!active) { setShow(false); return }
+    const t = setTimeout(() => setShow(true), delay)
+    return () => clearTimeout(t)
+  }, [active, delay])
+  return show
+}
 
 function Pill({ text, color = N.gold, bg }: { text: string; color?: string; bg?: string }) {
   return <span style={{ background: bg ?? color + '20', color, border: `1px solid ${color}33`, borderRadius: 99, fontSize: 10, fontWeight: 700, padding: '2px 9px', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>{text}</span>
@@ -1007,7 +1019,8 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
   const featuredDoc = activeDocs[0]
   const restDocs = activeDocs.slice(1)
 
-  if (meLoading || docsLoading) return <SkeletonHome />
+  const showHomeSkeleton = useDelayedFlag(meLoading || docsLoading)
+  if (meLoading || docsLoading) return showHomeSkeleton ? <SkeletonHome /> : null
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       {/* Header */}
