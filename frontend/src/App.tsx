@@ -513,33 +513,6 @@ function SkeletonHome() {
             ))}
           </div>
         </div>
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><Sk w={150} h={14} /><Sk w={60} h={12} /></div>
-          <div style={{ display: 'flex', gap: 12, overflowX: 'hidden' }}>
-            {[1,2,3].map(i => (
-              <div key={i} style={{ flexShrink: 0, width: 140, borderRadius: 16, overflow: 'hidden' }}>
-                <Sk w={140} h={90} r={0} />
-                <div style={{ background: T.card, padding: '10px 10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <Sk h={12} /><Sk w="60%" h={10} /><Sk w={50} h={10} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><Sk w={100} h={14} /><Sk w={60} h={12} /></div>
-          {[1,2].map(i => <SkPostCard key={i} />)}
-        </div>
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><Sk w={140} h={14} /><Sk w={60} h={12} /></div>
-          {[1,2].map(i => (
-            <div key={i} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center' }}>
-              <Sk w={44} h={44} r={12} />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}><Sk h={13} w="75%" /><Sk h={10} w="50%" /></div>
-              <Sk w={60} h={20} r={99} />
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   )
@@ -557,13 +530,6 @@ function SkeletonExplore() {
       <div style={{ padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 24 }}>
         <div>
           <Sk w={220} h={14} style={{ marginBottom: 12 }} />
-          <div style={{ display: 'flex', gap: 10, overflowX: 'hidden' }}>
-            {[1,2,3].map(i => (
-              <div key={i} style={{ flexShrink: 0, background: T.card, borderRadius: 14, padding: 12, minWidth: 148, display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <Sk w={30} h={24} /><Sk h={12} /><Sk w="60%" h={10} />
-              </div>
-            ))}
-          </div>
         </div>
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><Sk w={100} h={14} /><Sk w={60} h={12} /></div>
@@ -604,13 +570,9 @@ function SkeletonDocument() {
         <Sk h={34} r={12} dark />
       </div>
       <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', gap: 8 }}>{[1,2,3].map(i => <Sk key={i} w={80} h={28} r={20} />)}</div>
-        <div style={{ background: T.card, borderRadius: 16, padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Sk h={18} w="60%" /><Sk h={11} w="40%" /><div style={{ height: 4 }} />
-          {[100,85,100,75,100,90,100,65].map((w,i) => <Sk key={i} h={12} w={`${w}%`} />)}
-          <div style={{ height: 4 }} />
-          {[100,80,100,70].map((w,i) => <Sk key={i} h={12} w={`${w}%`} />)}
-          <Sk h={64} r={12} style={{ marginTop: 6 }} />
+        <div style={{ display: 'flex', gap: 8 }}>{[1,2,3,4].map(i => <Sk key={i} w={80} h={28} r={20} />)}</div>
+        <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.06)', height: '60vh' }}>
+          <div className="shimmer" style={{ width: '100%', height: '100%' }} />
         </div>
       </div>
     </div>
@@ -809,17 +771,13 @@ function SkeletonProfile() {
       </div>
       <div style={{ margin: '14px 14px 0', background: T.card, borderRadius: 16, padding: 14 }}>
         <Sk w={120} h={14} style={{ marginBottom: 14 }} />
-        <div style={{ display: 'flex', gap: 14 }}>
-          {[1,2,3,4,5].map(i => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-              <SkCircle size={46} /><Sk w={50} h={9} />
-            </div>
-          ))}
-        </div>
       </div>
       <div style={{ margin: '14px 14px 0', background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex' }}>{[1,2,3,4].map(i => <Sk key={i} h={42} r={0} style={{ borderRadius: 0 }} />)}</div>
-        <div style={{ padding: 14 }}>{[1,2,3].map(i => <SkDocCard key={i} />)}</div>
+        <div style={{ padding: 14 }}>
+          <Sk h={12} style={{ marginBottom: 6 }} /><Sk h={12} w="80%" style={{ marginBottom: 10 }} />
+          <div style={{ display: 'flex', gap: 12 }}><Sk w={40} h={11} /><Sk w={40} h={11} /></div>
+        </div>
       </div>
       <div style={{ height: 24 }} />
     </div>
