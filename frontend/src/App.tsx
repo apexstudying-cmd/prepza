@@ -3165,26 +3165,29 @@ function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void;
 // ─── CHATS ────────────────────────────────────────────────────────────────────
 type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; unread_count: number }
 
+// Stale-while-revalidate cache for Chats: on repeat visits, render
+// instantly from cache while a fresh fetch runs quietly in the background.
+const CHATS_CACHE: { chats?: ChatSummary[]; myGroups?: GroupSummary[] } = {}
 function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void; setActiveGroupId?: (id: number) => void }) {
   const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'Chats'|'Groups'|'Requests'>('Chats')
   const [search, setSearch] = useState('')
-  const [chats, setChats] = useState<ChatSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const [chats, setChats] = useState<ChatSummary[]>(CHATS_CACHE.chats ?? [])
+  const [loading, setLoading] = useState(CHATS_CACHE.chats === undefined)
   const [error, setError] = useState<string | null>(null)
 
   // Study Groups (Chunk 7's Group model - posts/members/files) are a
   // separate concept from these Conversation-based chats, and previously
   // only surfaced via Explore. Fetched here too so the Groups tab shows
   // both: the study groups you've joined AND any ad-hoc group chats.
-  const [myGroups, setMyGroups] = useState<GroupSummary[]>([])
+  const [myGroups, setMyGroups] = useState<GroupSummary[]>(CHATS_CACHE.myGroups ?? [])
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
     api<{ chats: ChatSummary[] }>('/chats')
-      .then(data => { if (!cancelled) setChats(data.chats) })
+      .then(data => { if (!cancelled) { setChats(data.chats); CHATS_CACHE.chats = data.chats } })
       .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load chats') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -3192,7 +3195,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
 
   useEffect(() => {
     api<{ groups: GroupSummary[] }>('/groups/mine')
-      .then(res => setMyGroups(res.groups))
+      .then(res => { setMyGroups(res.groups); CHATS_CACHE.myGroups = res.groups })
       .catch(() => {})
   }, [])
 
