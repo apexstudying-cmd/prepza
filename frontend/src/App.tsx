@@ -1446,8 +1446,9 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
 
 // ─── CREATE MODAL ─────────────────────────────────────────────────────────────
 function CreateModal({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { tokens: T } = useTheme()
   return (
-    <div style={{ flex: 1, background: N.bg, overflowY: 'auto' }} className="scrollbar-hide">
+    <div style={{ flex: 1, background: T.pageBg, overflowY: 'auto' }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontWeight: 800, fontSize: 20, color: '#fff' }}>Create</div>
@@ -1465,11 +1466,11 @@ function CreateModal({ setScreen }: { setScreen: (s: Screen) => void }) {
           { icon: '👥', label: 'Create Group', sub: 'Start a course or study group', action: () => setScreen('group-create') },
           { icon: '🚀', label: 'Share Opportunity', sub: 'Jobs, internships, scholarships, events', action: () => setScreen('share-opp-form') },
         ].map((item, i) => (
-          <button key={i} onClick={item.action} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: item.gold ? `2px solid ${N.gold}44` : '1px solid rgba(0,0,0,0.05)', borderRadius: 16, padding: 16, cursor: 'pointer', textAlign: 'left', boxShadow: item.gold ? `0 4px 20px rgba(201,168,76,0.12)` : '0 2px 8px rgba(0,0,0,0.04)', fontFamily: 'Plus Jakarta Sans' }}>
+          <button key={i} onClick={item.action} style={{ display: 'flex', alignItems: 'center', gap: 14, background: T.card, border: item.gold ? `2px solid ${N.gold}44` : `1px solid ${T.border}`, borderRadius: 16, padding: 16, cursor: 'pointer', textAlign: 'left', boxShadow: item.gold ? `0 4px 20px rgba(201,168,76,0.12)` : '0 2px 8px rgba(0,0,0,0.04)', fontFamily: 'Plus Jakarta Sans' }}>
             <div style={{ width: 50, height: 50, borderRadius: 15, background: item.gold ? `linear-gradient(135deg,${N.gold},${N.goldL})` : `linear-gradient(135deg,${N.navy2},${N.navy3})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{item.icon}</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 3 }}>{item.label}</div>
-              <div style={{ fontSize: 12, color: '#6B7280' }}>{item.sub}</div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 3 }}>{item.label}</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>{item.sub}</div>
             </div>
             {item.gold && <Pill text="CORE" />}
           </button>
