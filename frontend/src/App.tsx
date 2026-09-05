@@ -6136,7 +6136,7 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     }
   }
 
-  const inputStyle = { width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' as const }
+  const inputStyle = { width: '100%', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, boxSizing: 'border-box' as const }
   const initials = (form.display_name || 'ST').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 
   if (loadingMe) {
