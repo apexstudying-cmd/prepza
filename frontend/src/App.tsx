@@ -1217,6 +1217,10 @@ function RealForumCard({ post, onOpen }: { post: ForumPostSummary; onOpen: () =>
 // ─── EXPLORE ──────────────────────────────────────────────────────────────────
 type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number; is_following: boolean }
 
+// Stale-while-revalidate cache for Explore's default ('All') view: on
+// repeat visits, render instantly from cache while a fresh fetch runs
+// quietly in the background.
+const EXPLORE_CACHE: { groups?: GroupSummary[]; students?: ExploreStudent[]; docs?: LibraryPublicationSummary[]; trending?: LibraryPublicationSummary[] } = {}
 function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   const { tokens: T } = useTheme()
   const [query, setQuery] = useState('')
@@ -1226,11 +1230,11 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
   // starts 'All', so groups/students/docs all fire) has resolved at least
   // once. Locked false permanently after that so later tab switches only
   // show their own inline "Loading…" text, not a full-page skeleton again.
-  const [initialLoading, setInitialLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(EXPLORE_CACHE.groups === undefined || EXPLORE_CACHE.students === undefined || EXPLORE_CACHE.docs === undefined)
   const filters = ['All','Notes','Past Papers','AI Content','Groups','Opportunities','Forums','Students']
 
-  const [groups, setGroups] = useState<GroupSummary[]>([])
-  const [loadingGroups, setLoadingGroups] = useState(true)
+  const [groups, setGroups] = useState<GroupSummary[]>(EXPLORE_CACHE.groups ?? [])
+  const [loadingGroups, setLoadingGroups] = useState(EXPLORE_CACHE.groups === undefined)
   const [groupsError, setGroupsError] = useState('')
   const [joiningGroupId, setJoiningGroupId] = useState<number | null>(null)
   const [csrfToken, setCsrfToken] = useState('')
@@ -1243,7 +1247,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
     const params = new URLSearchParams()
     if (query.trim()) params.set('q', query.trim())
     api<{ page: number; groups: GroupSummary[] }>(`/groups?${params.toString()}`)
-      .then(res => setGroups(res.groups))
+      .then(res => { setGroups(res.groups); if (filter === 'All') EXPLORE_CACHE.groups = res.groups })
       .catch(() => setGroupsError('Could not load groups.'))
       .finally(() => setLoadingGroups(false))
   }, [filter, query])
@@ -1259,8 +1263,8 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
   }
 
   const openGroup = (id: number) => { setActiveGroupId(id); setScreen('group-detail') }
-  const [students, setStudents] = useState<ExploreStudent[]>([])
-  const [loadingStudents, setLoadingStudents] = useState(true)
+  const [students, setStudents] = useState<ExploreStudent[]>(EXPLORE_CACHE.students ?? [])
+  const [loadingStudents, setLoadingStudents] = useState(EXPLORE_CACHE.students === undefined)
   const [studentsError, setStudentsError] = useState('')
   const [followBusy, setFollowBusy] = useState<Record<number, boolean>>({})
 
@@ -1272,7 +1276,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
     const params = new URLSearchParams()
     if (query.trim()) params.set('q', query.trim())
     api<{ page: number; students: ExploreStudent[] }>(`/students?${params.toString()}`)
-      .then(res => setStudents(res.students))
+      .then(res => { setStudents(res.students); if (filter === 'All') EXPLORE_CACHE.students = res.students })
       .catch(() => setStudentsError('Could not load students.'))
       .finally(() => setLoadingStudents(false))
   }, [filter, query])
@@ -1295,8 +1299,8 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
     setActiveProfileName?.(s.display_name)
     setScreen('student-profile')
   }
-  const [docs, setDocs] = useState<LibraryPublicationSummary[]>([])
-  const [loadingDocs, setLoadingDocs] = useState(true)
+  const [docs, setDocs] = useState<LibraryPublicationSummary[]>(EXPLORE_CACHE.docs ?? [])
+  const [loadingDocs, setLoadingDocs] = useState(EXPLORE_CACHE.docs === undefined)
   const [docsError, setDocsError] = useState('')
 
   useEffect(() => {
@@ -1306,7 +1310,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
     if (query.trim()) params.set('q', query.trim())
     if (filter === 'Past Papers') params.set('material_type', 'past_paper')
     api<{ page: number; publications: LibraryPublicationSummary[] }>(`/library?${params.toString()}`)
-      .then(res => setDocs(filter === 'Notes' ? res.publications.filter(d => d.material_type !== 'past_paper') : res.publications))
+      .then(res => { const d = filter === 'Notes' ? res.publications.filter(d => d.material_type !== 'past_paper') : res.publications; setDocs(d); if (filter === 'All') EXPLORE_CACHE.docs = d })
       .catch(() => setDocsError('Could not load documents.'))
       .finally(() => setLoadingDocs(false))
   }, [filter, query])
@@ -1323,11 +1327,11 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
 
   const filtered = docs
 
-  const [trending, setTrending] = useState<LibraryPublicationSummary[]>([])
+  const [trending, setTrending] = useState<LibraryPublicationSummary[]>(EXPLORE_CACHE.trending ?? [])
   useEffect(() => {
     if (filter !== 'All' && filter !== 'Notes' && filter !== 'Past Papers') return
     api<{ page: number; publications: LibraryPublicationSummary[] }>('/library?sort=trending')
-      .then(res => setTrending(res.publications.slice(0, 6)))
+      .then(res => { const t = res.publications.slice(0, 6); setTrending(t); if (filter === 'All') EXPLORE_CACHE.trending = t })
       .catch(() => setTrending([]))
   }, [filter])
   if (initialLoading) return <SkeletonExplore />
