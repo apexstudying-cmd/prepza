@@ -1689,7 +1689,7 @@ function EduUploadForm({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── UPLOAD ───────────────────────────────────────────────────────────────────
 function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
-  const { tokens: T } = useTheme()
+  const { mode, tokens: T } = useTheme()
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -1787,7 +1787,7 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
           onDragLeave={() => setDragging(false)}
           onDrop={e => { e.preventDefault(); setDragging(false); const file = e.dataTransfer.files?.[0]; if (file && !uploading) startUpload(file) }}
           onClick={() => !uploading && fileRef.current?.click()}
-          style={{ border: `2px dashed ${dragging ? N.gold : 'rgba(11,20,55,0.18)'}`, borderRadius: 20, padding: '40px 20px', textAlign: 'center', background: dragging ? 'rgba(201,168,76,0.04)' : '#fff', cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.7 : 1, transition: 'all 0.2s' }}
+          style={{ border: `2px dashed ${dragging ? N.gold : 'rgba(11,20,55,0.18)'}`, borderRadius: 20, padding: '40px 20px', textAlign: 'center', background: dragging ? 'rgba(201,168,76,0.04)' : T.card, cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.7 : 1, transition: 'all 0.2s' }}
         >
           <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleFileChange} disabled={uploading} />
           <div style={{ fontSize: 48, marginBottom: 12 }}>{uploading ? '⏳' : '📤'}</div>
@@ -1795,7 +1795,7 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
           {!uploading && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 16 }}>or tap to browse from your device</div>}
           {!uploading && (
             <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-              {['PDF','Word','PowerPoint','JPG','PNG'].map(t => <span key={t} style={{ background: '#F3F4F6', color: T.text, fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 20 }}>{t}</span>)}
+              {['PDF','Word','PowerPoint','JPG','PNG'].map(t => <span key={t} style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 20 }}>{t}</span>)}
             </div>
           )}
         </div>
