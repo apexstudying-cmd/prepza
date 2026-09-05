@@ -2508,6 +2508,22 @@ def reset_password_page():
     return send_from_directory(app.static_folder, "index.html")
 
 
+@app.route("/signup")
+def signup_page():
+    """
+    Serves the React app shell so an ambassador referral link
+    (BASE_URL/signup?ref=...&via=... - see ambassador_dashboard()'s
+    referral_link field) has somewhere to land. Without this route,
+    GET /signup 404'd before the React app - and therefore the
+    ?ref=... it's supposed to read - ever loaded at all. Mirrors
+    GET /reset-password and GET /verify-email above. SignupScreen
+    reads ref/via client-side and includes them in its eventual
+    POST /signup body (that's the separate, already-existing route
+    below, unaffected by this one).
+    """
+    return send_from_directory(app.static_folder, "index.html")
+
+
 @app.route("/verify-email/confirm", methods=["POST"])
 def verify_email_confirm():
     data = request.get_json(silent=True) or {}

@@ -4670,7 +4670,7 @@ type GroupFileData = {
 // group-create member picker rather than redeclaring it.
 type MyDocumentSummary = { id: number; title: string; status: string; file_type: string | null; page_count: number | null; created_at: string | null }
 
-function SignupScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function SignupScreen({ setScreen, referralCode, referralChannel }: { setScreen: (s: Screen) => void; referralCode?: string | null; referralChannel?: string | null }) {
   const { tokens: T } = useTheme()
   const steps = ['Name', 'Email', 'Password', 'University', 'Course', 'Year', 'Semester']
   const [step, setStep] = useState(0)
@@ -4769,6 +4769,8 @@ function SignupScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           program_id: payload.program_id,
           year: payload.year,
           semester: payload.semester,
+          ref: referralCode || undefined,
+          via: referralChannel || undefined,
         }),
       })
       setScreen('check-email')
@@ -11918,6 +11920,12 @@ export default function App() {
   const [activeProfileUserId, setActiveProfileUserId] = useState<number | null>(null)
   const [activeProfileName, setActiveProfileName] = useState<string | null>(null)
   const [activeOpportunityId, setActiveOpportunityId] = useState<number | null>(null)
+  // Set when the app loads at /signup?ref=CODE (an ambassador's share
+  // link - see ambassador_dashboard()'s referral_link field). Carried as
+  // a prop into SignupScreen so its final POST /signup body can include
+  // ref/via, same lift-to-App() reasoning as the activeXxx ids above.
+  const [referralCode, setReferralCode] = useState<string | null>(null)
+  const [referralChannel, setReferralChannel] = useState<string | null>(null)
 
   // Handles the round-trip back from /auth/google/callback, which appends
   // ?complete_profile=1 (new Google account, needs university/course/year/
@@ -11939,6 +11947,23 @@ export default function App() {
     if (path === '/verify-email') {
       setScreen('verify-confirm')
       return
+    }
+
+    // Ambassador referral link - see GET /signup in app.py, which serves
+    // this same app shell rather than 404ing. A visit with no ?ref= (e.g.
+    // someone bookmarked /signup directly) just falls through normally.
+    if (path === '/signup') {
+      const refCode = params.get('ref')
+      const viaChannel = params.get('via')
+      if (refCode) {
+        setReferralCode(refCode)
+        if (viaChannel) setReferralChannel(viaChannel)
+        setScreen('signup')
+      }
+      const cleanSignupUrl = new URL(window.location.href)
+      cleanSignupUrl.searchParams.delete('ref')
+      cleanSignupUrl.searchParams.delete('via')
+      window.history.replaceState({}, '', cleanSignupUrl.toString())
     }
 
     const paymentStatus = params.get('payment_status')
@@ -11985,7 +12010,7 @@ export default function App() {
       case 'splash':            return <SplashScreen setScreen={setScreen} />
       case 'login':             return <LoginScreen setScreen={setScreen} oauthError={oauthError} />
       case 'forgot-password':   return <ForgotPasswordScreen setScreen={setScreen} />
-      case 'signup':            return <SignupScreen setScreen={setScreen} />
+      case 'signup':            return <SignupScreen setScreen={setScreen} referralCode={referralCode} referralChannel={referralChannel} />
       case 'check-email':       return <CheckEmailScreen setScreen={setScreen} />
       case 'complete-profile':  return <CompleteProfileScreen setScreen={setScreen} />
       case 'reset-password':    return <ResetPasswordScreen setScreen={setScreen} />
