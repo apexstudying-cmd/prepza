@@ -9384,36 +9384,9 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
   if (section === 'organisations') return <AdminOrganisationsPanel />
 
-  // Light sections for community, universities, opportunities
-  const lightSections: Record<string, { icon: string; title: string; desc: string; features: string[] }> = {
-    universities: { icon: '🏛️', title: 'University Management', desc: 'Manage universities, faculties, departments, courses, and units.', features: ['Kenyatta University — 843 students','University of Nairobi — 621 students','Strathmore University — 412 students','JKUAT — 389 students','Mount Kenya University — 334 students'] },
-    community: { icon: '💬', title: 'Community Moderation', desc: 'Manage forum posts, comments, reports, and community health.', features: ['1,247 total posts','127 comments today','7 pending reports','0 active suspensions'] },
-    opportunities: { icon: '🚀', title: 'Opportunities Management', desc: 'Create, approve, feature, and archive opportunities for students.', features: ['48 active opportunities','12 pending approval','3 featured','5 expiring this week'] },
-  }
-  if (lightSections[section]) {
-    const s = lightSections[section]
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ background: T.card, borderRadius: 16, padding: '24px 28px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${T.border}` }}>
-          <div style={{ fontSize: 40, marginBottom: 14 }}>{s.icon}</div>
-          <div style={{ fontWeight: 800, fontSize: 22, color: T.text, marginBottom: 8 }}>{s.title}</div>
-          <div style={{ fontSize: 14, color: T.textMuted, lineHeight: 1.7, marginBottom: 20 }}>{s.desc}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {s.features.map((f, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', background: (mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#F9FAFB'), borderRadius: 10, padding: '10px 14px' }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: N.gold, flexShrink: 0 }} />
-                <span style={{ fontSize: 13, color: T.text, fontWeight: 500 }}>{f}</span>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 20, padding: '14px 16px', background: `${N.gold}10`, border: `1px solid ${N.gold}30`, borderRadius: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: N.gold }}>Full implementation in progress</div>
-            <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>This section is live and will be expanded with full CRUD interfaces in the next sprint.</div>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  if (section === 'universities') return <AdminUniversitiesPanel />
+
+  if (section === 'community') return <AdminCommunityPanel />
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: T.textMuted, fontSize: 14 }}>Select a section from the sidebar</div>
@@ -9601,6 +9574,21 @@ function AdminAmbassadorsPanel() {
     }
   }
 
+  const syncPayoutStatus = async (id: number) => {
+    setActionBusy(true)
+    try {
+      await api(`/admin/payouts/${id}/sync-status`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+      })
+      loadPayouts(payoutStatusFilter)
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not sync this payout status with Paystack.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   const submitReject = () => {
     if (!rejectTarget || !rejectReason.trim()) return
     if (rejectTarget.kind === 'ambassador') rejectAmbassador(rejectTarget.id, rejectReason.trim())
@@ -9725,12 +9713,21 @@ function AdminAmbassadorsPanel() {
                 p.requested_at ? new Date(p.requested_at).toLocaleDateString() : '—',
                 <AdminBadge text={p.status} color={ADMIN_AMB_STATUS_COLOR[p.status] || 'gray'} />,
               ])}
-              actions={i => payouts[i].status === 'pending' ? (
-                <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
-                  <button disabled={actionBusy} onClick={() => approvePayout(payouts[i].id)} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Approve</button>
-                  <button disabled={actionBusy} onClick={() => setRejectTarget({ kind: 'payout', id: payouts[i].id })} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Reject</button>
-                </div>
-              ) : null}
+              actions={i => {
+                const p = payouts[i]
+                if (p.status === 'pending') return (
+                  <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
+                    <button disabled={actionBusy} onClick={() => approvePayout(p.id)} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Approve</button>
+                    <button disabled={actionBusy} onClick={() => setRejectTarget({ kind: 'payout', id: p.id })} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Reject</button>
+                  </div>
+                )
+                if (p.status === 'approved') return (
+                  <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
+                    <button disabled={actionBusy} onClick={() => syncPayoutStatus(p.id)} style={{ background: '#DBEAFE', color: '#2563EB', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Sync Status</button>
+                  </div>
+                )
+                return null
+              }}
             />
           )}
         </AdminCard>
@@ -10139,6 +10136,384 @@ function AdminOrganisationsPanel() {
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => { setRejectTarget(null); setRejectReason('') }} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
               <button disabled={actionBusy || !rejectReason.trim()} onClick={submitReject} style={{ flex: 1, background: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, opacity: (actionBusy || !rejectReason.trim()) ? 0.6 : 1 }}>Confirm Reject</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ADMIN: UNIVERSITIES (real CRUD against /admin/universities, /admin/programs) ───
+
+type AdminUniversityRow = { id: number; name: string; short_code: string; country: string | null; is_active: boolean; created_at: string | null }
+type AdminProgramRow = { id: number; university_id: number; university_name: string | null; name: string; degree_level: string | null; discipline_category: string | null; is_active: boolean; created_at: string | null }
+
+function AdminUniversitiesPanel() {
+  const { mode, tokens: T } = useTheme()
+  const [csrfToken, setCsrfToken] = useState('')
+  const [universities, setUniversities] = useState<AdminUniversityRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [selectedUniId, setSelectedUniId] = useState<number | null>(null)
+  const [programs, setPrograms] = useState<AdminProgramRow[]>([])
+  const [programsLoading, setProgramsLoading] = useState(false)
+  const [programsError, setProgramsError] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+  const [actionError, setActionError] = useState('')
+
+  const [showCreateUni, setShowCreateUni] = useState(false)
+  const [newUniName, setNewUniName] = useState('')
+  const [newUniCode, setNewUniCode] = useState('')
+  const [newUniCountry, setNewUniCountry] = useState('Kenya')
+
+  const [showCreateProgram, setShowCreateProgram] = useState(false)
+  const [newProgramName, setNewProgramName] = useState('')
+  const [newProgramLevel, setNewProgramLevel] = useState('')
+
+  const [editUni, setEditUni] = useState<AdminUniversityRow | null>(null)
+  const [editUniName, setEditUniName] = useState('')
+  const [editUniCode, setEditUniCode] = useState('')
+  const [editUniCountry, setEditUniCountry] = useState('')
+
+  const [editProgram, setEditProgram] = useState<AdminProgramRow | null>(null)
+  const [editProgramName, setEditProgramName] = useState('')
+  const [editProgramLevel, setEditProgramLevel] = useState('')
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  const loadUniversities = () => {
+    setLoading(true); setError('')
+    api<{ universities: AdminUniversityRow[] }>('/admin/universities')
+      .then(res => {
+        setUniversities(res.universities)
+        setSelectedUniId(prev => (prev && res.universities.some(u => u.id === prev)) ? prev : (res.universities[0]?.id ?? null))
+      })
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load universities.'))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { loadUniversities() }, [])
+
+  const loadPrograms = (uniId: number) => {
+    setProgramsLoading(true); setProgramsError('')
+    api<{ programs: AdminProgramRow[] }>(`/admin/programs?university_id=${uniId}`)
+      .then(res => setPrograms(res.programs))
+      .catch(e => setProgramsError(e instanceof ApiError ? e.message : 'Could not load programs.'))
+      .finally(() => setProgramsLoading(false))
+  }
+  useEffect(() => { if (selectedUniId != null) loadPrograms(selectedUniId) }, [selectedUniId])
+
+  const createUniversity = async () => {
+    if (!newUniName.trim() || !newUniCode.trim() || actionBusy) return
+    setActionBusy(true); setActionError('')
+    try {
+      await api('/admin/universities', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ name: newUniName.trim(), short_code: newUniCode.trim(), country: newUniCountry.trim() || undefined }),
+      })
+      setNewUniName(''); setNewUniCode(''); setShowCreateUni(false)
+      loadUniversities()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not create university.')
+    } finally { setActionBusy(false) }
+  }
+
+  const toggleUniActive = async (u: AdminUniversityRow) => {
+    setActionBusy(true); setActionError('')
+    try {
+      await api(`/admin/universities/${u.id}`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ is_active: !u.is_active }),
+      })
+      loadUniversities()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not update university.')
+    } finally { setActionBusy(false) }
+  }
+
+  const openEditUni = (u: AdminUniversityRow) => {
+    setEditUni(u); setEditUniName(u.name); setEditUniCode(u.short_code); setEditUniCountry(u.country || '')
+  }
+  const saveEditUni = async () => {
+    if (!editUni || actionBusy) return
+    setActionBusy(true); setActionError('')
+    try {
+      await api(`/admin/universities/${editUni.id}`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ name: editUniName.trim(), short_code: editUniCode.trim(), country: editUniCountry.trim() || null }),
+      })
+      setEditUni(null)
+      loadUniversities()
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not save changes.')
+    } finally { setActionBusy(false) }
+  }
+
+  const createProgram = async () => {
+    if (!newProgramName.trim() || selectedUniId == null || actionBusy) return
+    setActionBusy(true); setActionError('')
+    try {
+      await api('/admin/programs', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ university_id: selectedUniId, name: newProgramName.trim(), degree_level: newProgramLevel.trim() || undefined }),
+      })
+      setNewProgramName(''); setNewProgramLevel(''); setShowCreateProgram(false)
+      loadPrograms(selectedUniId)
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not create program.')
+    } finally { setActionBusy(false) }
+  }
+
+  const toggleProgramActive = async (p: AdminProgramRow) => {
+    setActionBusy(true); setActionError('')
+    try {
+      await api(`/admin/programs/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ is_active: !p.is_active }),
+      })
+      if (selectedUniId != null) loadPrograms(selectedUniId)
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not update program.')
+    } finally { setActionBusy(false) }
+  }
+
+  const openEditProgram = (p: AdminProgramRow) => {
+    setEditProgram(p); setEditProgramName(p.name); setEditProgramLevel(p.degree_level || '')
+  }
+  const saveEditProgram = async () => {
+    if (!editProgram || actionBusy) return
+    setActionBusy(true); setActionError('')
+    try {
+      await api(`/admin/programs/${editProgram.id}`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ name: editProgramName.trim(), degree_level: editProgramLevel.trim() || null }),
+      })
+      setEditProgram(null)
+      if (selectedUniId != null) loadPrograms(selectedUniId)
+    } catch (e) {
+      setActionError(e instanceof ApiError ? e.message : 'Could not save changes.')
+    } finally { setActionBusy(false) }
+  }
+
+  const selectedUni = universities.find(u => u.id === selectedUniId) || null
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading universities…</div>
+  if (error) return <div style={{ padding: 40, textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{error}</div>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {actionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{actionError}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
+        <AdminCard title={`Universities — ${universities.length}`} action={() => setShowCreateUni(v => !v)} actionLabel={showCreateUni ? 'Cancel' : '+ Add'}>
+          {showCreateUni && (
+            <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input value={newUniName} onChange={e => setNewUniName(e.target.value)} placeholder="University name" style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', background: T.card, color: T.text }} />
+              <input value={newUniCode} onChange={e => setNewUniCode(e.target.value.toUpperCase())} placeholder="Short code (e.g. KU)" style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', background: T.card, color: T.text }} />
+              <input value={newUniCountry} onChange={e => setNewUniCountry(e.target.value)} placeholder="Country" style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', background: T.card, color: T.text }} />
+              <button onClick={createUniversity} disabled={actionBusy || !newUniName.trim() || !newUniCode.trim()} style={{ background: N.gold, color: N.navy, border: 'none', borderRadius: 8, padding: '8px 0', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Create</button>
+            </div>
+          )}
+          <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+            {universities.map(u => (
+              <div key={u.id} onClick={() => setSelectedUniId(u.id)} style={{ padding: '11px 18px', borderBottom: `1px solid ${T.border}`, cursor: 'pointer', background: selectedUniId === u.id ? (mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#F9FAFB') : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.text }} className="line-clamp-1">{u.name}</div>
+                  <div style={{ fontSize: 11, color: T.textMuted }}>{u.short_code}{u.country ? ` · ${u.country}` : ''}</div>
+                </div>
+                <AdminBadge text={u.is_active ? 'Active' : 'Inactive'} color={u.is_active ? 'green' : 'gray'} />
+              </div>
+            ))}
+            {universities.length === 0 && <div style={{ padding: '20px 18px', fontSize: 12, color: T.textMuted }}>No universities yet.</div>}
+          </div>
+        </AdminCard>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {selectedUni && (
+            <AdminCard title={selectedUni.name}>
+              <div style={{ padding: '14px 18px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => openEditUni(selectedUni)} style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Edit Details</button>
+                <button onClick={() => toggleUniActive(selectedUni)} disabled={actionBusy} style={{ background: selectedUni.is_active ? '#FEF3C7' : '#F0FDF4', color: selectedUni.is_active ? '#D97706' : '#16A34A', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{selectedUni.is_active ? 'Deactivate' : 'Activate'}</button>
+              </div>
+            </AdminCard>
+          )}
+          <AdminCard title={`Programs — ${programs.length}`} action={() => setShowCreateProgram(v => !v)} actionLabel={showCreateProgram ? 'Cancel' : '+ Add'}>
+            {showCreateProgram && (
+              <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input value={newProgramName} onChange={e => setNewProgramName(e.target.value)} placeholder="Program name" style={{ flex: 1, minWidth: 160, border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', background: T.card, color: T.text }} />
+                <input value={newProgramLevel} onChange={e => setNewProgramLevel(e.target.value)} placeholder="Degree level (optional)" style={{ flex: 1, minWidth: 120, border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', background: T.card, color: T.text }} />
+                <button onClick={createProgram} disabled={actionBusy || !newProgramName.trim() || selectedUniId == null} style={{ background: N.gold, color: N.navy, border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Create</button>
+              </div>
+            )}
+            {selectedUniId == null ? (
+              <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Select a university to see its programs.</div>
+            ) : programsLoading ? (
+              <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading…</div>
+            ) : programsError ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{programsError}</div>
+            ) : programs.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No programs yet for this university.</div>
+            ) : (
+              <AdminTable
+                cols={['Name', 'Degree Level', 'Status']}
+                rows={programs.map(p => [p.name, p.degree_level || '—', <AdminBadge text={p.is_active ? 'Active' : 'Inactive'} color={p.is_active ? 'green' : 'gray'} />])}
+                actions={i => (
+                  <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
+                    <button onClick={() => openEditProgram(programs[i])} style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Edit</button>
+                    <button onClick={() => toggleProgramActive(programs[i])} disabled={actionBusy} style={{ background: programs[i].is_active ? '#FEF3C7' : '#F0FDF4', color: programs[i].is_active ? '#D97706' : '#16A34A', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{programs[i].is_active ? 'Deactivate' : 'Activate'}</button>
+                  </div>
+                )}
+              />
+            )}
+          </AdminCard>
+        </div>
+      </div>
+
+      {editUni && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEditUni(null)}>
+          <div style={{ background: T.card, borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 14 }}>Edit University</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+              <input value={editUniName} onChange={e => setEditUniName(e.target.value)} placeholder="Name" style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', background: T.card, color: T.text }} />
+              <input value={editUniCode} onChange={e => setEditUniCode(e.target.value.toUpperCase())} placeholder="Short code" style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', background: T.card, color: T.text }} />
+              <input value={editUniCountry} onChange={e => setEditUniCountry(e.target.value)} placeholder="Country" style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', background: T.card, color: T.text }} />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setEditUni(null)} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button onClick={saveEditUni} disabled={actionBusy || !editUniName.trim() || !editUniCode.trim()} style={{ flex: 1, background: N.gold, color: N.navy, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {editProgram && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEditProgram(null)}>
+          <div style={{ background: T.card, borderRadius: 16, padding: 24, maxWidth: 380, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 14 }}>Edit Program</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+              <input value={editProgramName} onChange={e => setEditProgramName(e.target.value)} placeholder="Name" style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', background: T.card, color: T.text }} />
+              <input value={editProgramLevel} onChange={e => setEditProgramLevel(e.target.value)} placeholder="Degree level" style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', background: T.card, color: T.text }} />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setEditProgram(null)} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button onClick={saveEditProgram} disabled={actionBusy || !editProgramName.trim()} style={{ flex: 1, background: N.gold, color: N.navy, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ADMIN: COMMUNITY (forum reports, filtered from the existing /admin/content-reports queue) ───
+
+function AdminCommunityPanel() {
+  const { mode, tokens: T } = useTheme()
+  const [csrfToken, setCsrfToken] = useState('')
+  const [reports, setReports] = useState<AdminContentReport[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [warnTarget, setWarnTarget] = useState<number | null>(null)
+  const [warnMessage, setWarnMessage] = useState('')
+  const [warnConsequence, setWarnConsequence] = useState('')
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  const load = () => {
+    setLoading(true); setError('')
+    api<{ reports: AdminContentReport[] }>('/admin/content-reports?status=pending')
+      .then(res => setReports(res.reports.filter(r => r.target_type === 'forum_post' || r.target_type === 'forum_reply')))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load community reports.'))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { load() }, [])
+
+  const dismiss = async (id: number) => {
+    setActionBusy(true); setActionError('')
+    try {
+      await api(`/admin/content-reports/${id}/dismiss`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      load()
+    } catch (e) { setActionError(e instanceof ApiError ? e.message : 'Could not dismiss this report.') } finally { setActionBusy(false) }
+  }
+  const remove = async (id: number) => {
+    setActionBusy(true); setActionError('')
+    try {
+      await api(`/admin/content-reports/${id}/remove`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      load()
+    } catch (e) { setActionError(e instanceof ApiError ? e.message : 'Could not remove this content.') } finally { setActionBusy(false) }
+  }
+  const warn = async () => {
+    if (warnTarget == null || !warnMessage.trim() || !warnConsequence.trim() || actionBusy) return
+    setActionBusy(true); setActionError('')
+    try {
+      await api(`/admin/content-reports/${warnTarget}/warn`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ message: warnMessage.trim(), consequence: warnConsequence.trim() }),
+      })
+      setWarnTarget(null); setWarnMessage(''); setWarnConsequence('')
+      load()
+    } catch (e) { setActionError(e instanceof ApiError ? e.message : 'Could not send this warning.') } finally { setActionBusy(false) }
+  }
+
+  const forumPostCount = reports.filter(r => r.target_type === 'forum_post').length
+  const forumReplyCount = reports.filter(r => r.target_type === 'forum_reply').length
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12 }}>
+        <AdminKPI label="Open Forum Post Reports" value={forumPostCount.toString()} color="#DC2626" />
+        <AdminKPI label="Open Reply Reports" value={forumReplyCount.toString()} color="#D97706" />
+      </div>
+      <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.5 }}>
+        Forum posts and replies are moderated through the same report queue as the rest of the platform - see Moderation for the full cross-content queue. This view filters that queue down to forum items only.
+      </div>
+      {actionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{actionError}</div>}
+      <AdminCard title={`Forum Reports — ${reports.length} Open`}>
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading…</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{error}</div>
+        ) : reports.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No open forum reports.</div>
+        ) : (
+          <AdminTable
+            cols={['#', 'Type', 'Content', 'Reported By', 'Reason', 'Received']}
+            rows={reports.map(r => [
+              `#${r.id}`,
+              r.target_type === 'forum_post' ? 'Forum Post' : 'Forum Reply',
+              r.snippet ? `"${r.snippet.slice(0, 60)}${r.snippet.length > 60 ? '…' : ''}"` : '(content removed)',
+              r.reporter_email,
+              r.reason,
+              r.created_at ? new Date(r.created_at).toLocaleString() : '—',
+            ])}
+            actions={i => (
+              <div style={{ display: 'flex', gap: 5 }}>
+                <button onClick={() => dismiss(reports[i].id)} disabled={actionBusy} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Dismiss</button>
+                <button onClick={() => remove(reports[i].id)} disabled={actionBusy} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Remove</button>
+                <button onClick={() => setWarnTarget(reports[i].id)} disabled={actionBusy} style={{ background: '#FEF3C7', color: '#D97706', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Warn</button>
+              </div>
+            )}
+          />
+        )}
+      </AdminCard>
+      {warnTarget != null && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setWarnTarget(null)}>
+          <div style={{ background: T.card, borderRadius: 16, padding: 24, maxWidth: 400, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 12 }}>Issue a warning</div>
+            <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600, marginBottom: 4 }}>WHAT THEY DID WRONG</div>
+            <textarea value={warnMessage} onChange={e => setWarnMessage(e.target.value)} rows={2} style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.border}`, borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 10, resize: 'vertical' }} />
+            <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600, marginBottom: 4 }}>CONSEQUENCE</div>
+            <textarea value={warnConsequence} onChange={e => setWarnConsequence(e.target.value)} rows={2} style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.border}`, borderRadius: 10, padding: 10, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginBottom: 16, resize: 'vertical' }} />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setWarnTarget(null)} style={{ flex: 1, background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 13 }}>Cancel</button>
+              <button onClick={warn} disabled={!warnMessage.trim() || !warnConsequence.trim() || actionBusy} style={{ flex: 1, background: '#D97706', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13 }}>Send Warning</button>
             </div>
           </div>
         </div>
