@@ -7825,6 +7825,17 @@ type AdminModerationSummary = {
   warnings_issued: number
 }
 
+type AdminAuditLogEntry = {
+  id: number
+  actor_id: number | null
+  actor_email: string | null
+  action: string
+  target_type: string | null
+  target_id: number | null
+  details: unknown
+  created_at: string | null
+}
+
 type AdminContentMaterial = {
   id: number
   document_content_id: number
@@ -8449,6 +8460,33 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   const [adminAccountsLoading, setAdminAccountsLoading] = useState(true)
   const [adminAccountsError, setAdminAccountsError] = useState('')
   const [adminAccountActionError, setAdminAccountActionError] = useState('')
+
+  const [auditLogs, setAuditLogs] = useState<AdminAuditLogEntry[]>([])
+  const [auditLogsLoading, setAuditLogsLoading] = useState(true)
+  const [auditLogsError, setAuditLogsError] = useState('')
+  const [auditActionFilter, setAuditActionFilter] = useState('')
+  const [auditTargetTypeFilter, setAuditTargetTypeFilter] = useState('')
+  const [auditDays, setAuditDays] = useState(30)
+  const [auditPage, setAuditPage] = useState(1)
+
+  const loadAuditLogs = (page: number) => {
+    setAuditLogsLoading(true)
+    setAuditLogsError('')
+    const params = new URLSearchParams()
+    params.set('days', String(auditDays))
+    params.set('page', String(page))
+    if (auditActionFilter.trim()) params.set('action', auditActionFilter.trim())
+    if (auditTargetTypeFilter.trim()) params.set('target_type', auditTargetTypeFilter.trim())
+    api<{ page: number; logs: AdminAuditLogEntry[] }>(`/admin/audit-logs?${params.toString()}`)
+      .then(res => { setAuditLogs(res.logs); setAuditPage(res.page) })
+      .catch(e => setAuditLogsError(e instanceof ApiError ? e.message : 'Could not load audit logs.'))
+      .finally(() => setAuditLogsLoading(false))
+  }
+
+  useEffect(() => {
+    if (section !== 'system') return
+    loadAuditLogs(1)
+  }, [section, auditDays, auditActionFilter, auditTargetTypeFilter])
 
   const loadSystemCapacity = () => {
     setSystemCapacityLoading(true)
@@ -9384,6 +9422,40 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               >Revoke Admin</button>
             )}
           />
+        )}
+      </AdminCard>
+
+      <AdminCard title="Audit Log">
+        <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input value={auditActionFilter} onChange={e => setAuditActionFilter(e.target.value)} placeholder="Filter by action…" style={{ minWidth: 160, border: `1px solid ${T.border}`, borderRadius: 8, padding: '7px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card }} />
+          <input value={auditTargetTypeFilter} onChange={e => setAuditTargetTypeFilter(e.target.value)} placeholder="Target type…" style={{ minWidth: 140, border: `1px solid ${T.border}`, borderRadius: 8, padding: '7px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card }} />
+          <select value={auditDays} onChange={e => setAuditDays(Number(e.target.value))} style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: '7px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card }}>
+            {[7, 30, 90, 365].map(d => <option key={d} value={d}>Last {d}d</option>)}
+          </select>
+        </div>
+        {auditLogsLoading ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading audit log…</div>
+        ) : auditLogsError ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{auditLogsError}</div>
+        ) : auditLogs.length === 0 ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No audit log entries in this window.</div>
+        ) : (
+          <>
+            <AdminTable
+              cols={['When', 'Actor', 'Action', 'Target']}
+              rows={auditLogs.map(l => [
+                l.created_at ? new Date(l.created_at).toLocaleString() : '—',
+                l.actor_email || (l.actor_id ? `#${l.actor_id}` : 'System'),
+                l.action,
+                l.target_type ? `${l.target_type}${l.target_id != null ? ` #${l.target_id}` : ''}` : '—',
+              ])}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 18px' }}>
+              <button disabled={auditPage <= 1} onClick={() => loadAuditLogs(auditPage - 1)} style={{ background: 'none', border: 'none', color: auditPage <= 1 ? T.textMuted : N.gold, cursor: auditPage <= 1 ? 'default' : 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>← Previous</button>
+              <span style={{ fontSize: 11, color: T.textMuted }}>Page {auditPage}</span>
+              <button disabled={auditLogs.length < 50} onClick={() => loadAuditLogs(auditPage + 1)} style={{ background: 'none', border: 'none', color: auditLogs.length < 50 ? T.textMuted : N.gold, cursor: auditLogs.length < 50 ? 'default' : 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Next →</button>
+            </div>
+          </>
         )}
       </AdminCard>
     </div>
