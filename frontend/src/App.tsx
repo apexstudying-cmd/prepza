@@ -9902,6 +9902,23 @@ function AdminOpportunitiesPanel() {
     }
   }
 
+  const [sweepBusy, setSweepBusy] = useState(false)
+  const sweepExpired = async () => {
+    setSweepBusy(true)
+    try {
+      const res = await api<{ swept_count: number }>('/admin/opportunities/sweep-expired', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+      })
+      alert(res.swept_count > 0 ? `Swept ${res.swept_count} expired opportunity(ies).` : 'No expired opportunities to sweep.')
+      load(statusFilter)
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not run the expiry sweep.')
+    } finally {
+      setSweepBusy(false)
+    }
+  }
+
   const submitReason = async () => {
     if (!reasonTarget) return
     if (reasonTarget.kind === 'reject' && !reasonText.trim()) return
@@ -9927,7 +9944,7 @@ function AdminOpportunitiesPanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <AdminCard title={`Opportunities — ${rows.length}`}>
+      <AdminCard title={`Opportunities — ${rows.length}`} action={sweepExpired} actionLabel={sweepBusy ? 'Sweeping…' : 'Sweep Expired Now'}>
         <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {['pending_review', 'approved', 'published', 'rejected', 'expired', 'archived', 'removed', 'all'].map(f => (
             <button key={f} onClick={() => setStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: statusFilter === f ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: statusFilter === f ? '#fff' : '#6B7280', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f.replace('_', ' ')}</button>
