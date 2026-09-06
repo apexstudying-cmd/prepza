@@ -7825,6 +7825,19 @@ type AdminModerationSummary = {
   warnings_issued: number
 }
 
+type AdminContentMaterial = {
+  id: number
+  document_content_id: number
+  material_type: string
+  status: string
+  file_type: string | null
+  is_flagged: boolean
+  flagged_reason: string | null
+  flagged_by_email: string | null
+  flagged_at: string | null
+  created_at: string | null
+}
+
 type AdminAiUsage = {
   period_days: number
   total_requests: number
@@ -8297,10 +8310,56 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       .catch(() => {})
   }
 
+  const [flaggedMaterials, setFlaggedMaterials] = useState<AdminContentMaterial[]>([])
+  const [flaggedMaterialsLoading, setFlaggedMaterialsLoading] = useState(true)
+  const [flaggedMaterialsError, setFlaggedMaterialsError] = useState('')
+  const [materialActionError, setMaterialActionError] = useState('')
+  const [flagMaterialId, setFlagMaterialId] = useState('')
+  const [flagMaterialReason, setFlagMaterialReason] = useState('')
+  const [flagMaterialBusy, setFlagMaterialBusy] = useState(false)
+
+  const loadFlaggedMaterials = () => {
+    setFlaggedMaterialsLoading(true)
+    setFlaggedMaterialsError('')
+    api<{ materials: AdminContentMaterial[] }>('/admin/content-materials?status=flagged')
+      .then(res => setFlaggedMaterials(res.materials))
+      .catch(e => setFlaggedMaterialsError(e instanceof ApiError ? e.message : 'Could not load flagged content.'))
+      .finally(() => setFlaggedMaterialsLoading(false))
+  }
+
+  const unflagMaterial = (materialId: number) => {
+    setMaterialActionError('')
+    api(`/admin/content-materials/${materialId}/unflag`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      .then(() => loadFlaggedMaterials())
+      .catch(e => setMaterialActionError(e instanceof ApiError ? e.message : 'Could not unflag this material.'))
+  }
+
+  const submitFlagMaterial = async () => {
+    const id = parseInt(flagMaterialId, 10)
+    if (!id || !flagMaterialReason.trim() || flagMaterialBusy) return
+    setFlagMaterialBusy(true)
+    setMaterialActionError('')
+    try {
+      await api(`/admin/content-materials/${id}/flag`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ reason: flagMaterialReason.trim() }),
+      })
+      setFlagMaterialId('')
+      setFlagMaterialReason('')
+      loadFlaggedMaterials()
+    } catch (e) {
+      setMaterialActionError(e instanceof ApiError ? e.message : 'Could not flag this material.')
+    } finally {
+      setFlagMaterialBusy(false)
+    }
+  }
+
   useEffect(() => {
     if (section !== 'moderation') return
     loadModReports()
     loadModSummary()
+    loadFlaggedMaterials()
   }, [section])
 
   const dismissModReport = (reportId: number) => {
@@ -9027,6 +9086,37 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                 )}
                 <button onClick={() => setWarnPromptId(modReports[i].id)} style={{ background: '#FEF3C7', color: '#D97706', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Warn</button>
               </div>
+            )}
+          />
+        )}
+      </AdminCard>
+
+      {materialActionError && <div style={{ color: '#DC2626', fontSize: 12 }}>{materialActionError}</div>}
+      <AdminCard title={`Flagged Content${flaggedMaterialsLoading ? '' : ` — ${flaggedMaterials.length}`}`}>
+        <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input value={flagMaterialId} onChange={e => setFlagMaterialId(e.target.value.replace(/\D/g, ''))} placeholder="Material ID" style={{ width: 110, border: `1px solid ${T.border}`, borderRadius: 8, padding: '7px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card }} />
+          <input value={flagMaterialReason} onChange={e => setFlagMaterialReason(e.target.value)} placeholder="Reason for flagging…" style={{ flex: 1, minWidth: 200, border: `1px solid ${T.border}`, borderRadius: 8, padding: '7px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card }} />
+          <button disabled={flagMaterialBusy || !flagMaterialId.trim() || !flagMaterialReason.trim()} onClick={submitFlagMaterial} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'Plus Jakarta Sans', opacity: (flagMaterialBusy || !flagMaterialId.trim() || !flagMaterialReason.trim()) ? 0.6 : 1 }}>Flag</button>
+        </div>
+        {flaggedMaterialsLoading ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading flagged content…</div>
+        ) : flaggedMaterialsError ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{flaggedMaterialsError}</div>
+        ) : flaggedMaterials.length === 0 ? (
+          <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No flagged content.</div>
+        ) : (
+          <AdminTable
+            cols={['#', 'Type', 'File', 'Reason', 'Flagged By', 'Flagged At']}
+            rows={flaggedMaterials.map(m => [
+              `#${m.id}`,
+              m.material_type,
+              m.file_type || '—',
+              m.flagged_reason || '—',
+              m.flagged_by_email || '—',
+              m.flagged_at ? new Date(m.flagged_at).toLocaleString() : '—',
+            ])}
+            actions={i => (
+              <button onClick={() => unflagMaterial(flaggedMaterials[i].id)} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Unflag</button>
             )}
           />
         )}
