@@ -932,40 +932,12 @@ class UserAchievement(db.Model):
     )
 
 
-class ForumPost(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    title = db.Column(db.String(200), nullable=False)
-    body = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_removed = db.Column(db.Boolean, nullable=False, default=False)
-    # Moderation removal - same "hide body, keep row" pattern as
-    # Message.is_deleted, so thread/reply structure isn't broken.
-class AiAnswer(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
-    question_text = db.Column(db.Text, nullable=False)
-    answer_text = db.Column(db.Text, nullable=False)
-    model_used = db.Column(db.String(50), nullable=True)
-    input_tokens = db.Column(db.Integer, default=0)
-    output_tokens = db.Column(db.Integer, default=0)
-    cache_read_tokens = db.Column(db.Integer, default=0)
-    cache_creation_tokens = db.Column(db.Integer, default=0)
-    cost_usd = db.Column(db.Numeric(10, 6), default=0)
-    reuse_count = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-class ForumReply(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    post_id = db.Column(db.Integer, db.ForeignKey("forum_post.id", ondelete="CASCADE"), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    is_ai = db.Column(db.Boolean, default=False)
-    ai_answer_id = db.Column(db.Integer, db.ForeignKey("ai_answer.id"), nullable=True)
-    triggered_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    body = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    is_removed = db.Column(db.Boolean, nullable=False, default=False)
 class AiUsageLog(db.Model):
+    # forum_reply_id FK below is left in place (nullable, never populated
+    # elsewhere in this file) rather than removed - same FK-safety
+    # precedent as Unit/UnitProgram: this repo has no db.create_all()/
+    # Alembic, so dropping the column would need its own hand-written
+    # migration, and the column costs nothing sitting unused.
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     forum_reply_id = db.Column(db.Integer, db.ForeignKey("forum_reply.id"), nullable=True)
@@ -1268,7 +1240,7 @@ class Announcement(db.Model):
 # ---------- Moderation (Chunk 10) ----------
 
 CONTENT_REPORT_TARGET_TYPES = (
-    "forum_post", "forum_reply", "group_post", "group_post_comment", "user",
+    "group_post", "group_post_comment", "user",
 )
 CONTENT_REPORT_REASONS = {
     # reason -> auto-assigned priority. Deliberately a fixed mapping
@@ -2150,7 +2122,6 @@ def render_watermarked_page(pdf_bytes, page_num, watermark_text, zoom=2.0):
 # during maintenance so admins can still work and M-Pesa callbacks still
 # land.
 MAINTENANCE_BLOCKED_PREFIXES = (
-    "/units",
     "/library",
     "/payment-history",
     "/profile",
@@ -6418,10 +6389,6 @@ CONTENT_REPORT_DETAILS_MAX = 500
 def _content_report_target_exists(target_type, target_id):
     """Returns the target row if it exists (and isn't already removed
     for the content types that support removal), else None."""
-    if target_type == "forum_post":
-        return ForumPost.query.filter_by(id=target_id, is_removed=False).first()
-    if target_type == "forum_reply":
-        return ForumReply.query.filter_by(id=target_id, is_removed=False).first()
     if target_type == "group_post":
         return GroupPost.query.filter_by(id=target_id, is_removed=False).first()
     if target_type == "group_post_comment":
@@ -7218,278 +7185,15 @@ def get_key_backup():
 
 # ---------- Content routes (student-facing) ----------
 
-@app.route("/units")
-def list_units():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    user = db.session.get(User, user_id)
-    units = Unit.query.filter_by(year=user.year, semester=user.semester).all()
-
-    return jsonify([
-        {"id": u.id, "code": u.code, "name": u.name}
-        for u in units
-    ])
-
-
-@app.route("/units/<int:unit_id>/content")
-def unit_content(unit_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    unit = db.session.get(Unit, unit_id)
-    if not unit:
-        return jsonify({"error": "Unit not found"}), 404
-
-    items = ContentItem.query.filter_by(unit_id=unit_id).all()
-
-    grouped = {"past_paper": [], "notes": [], "qna": []}
-    for item in items:
-        unlocked = has_access(user_id, item)
-        grouped[item.content_type].append({
-            "id": item.id,
-            "title": item.title,
-            "paper_year": item.paper_year,
-            "price": get_price_for_type(item.content_type),
-            "unlocked": unlocked,
-            "file_url": get_signed_url(item.file_url) if (unlocked and item.is_downloadable) else None,
-        })
-
-    return jsonify({"unit": unit.code, "content": grouped})
-
-
-# ---------- Forum + Prepza AI ----------
-
-AI_MENTION_RE = re.compile(r"@prepza\s*ai", re.IGNORECASE)
-FORUM_TITLE_MAX = 200
-FORUM_BODY_MAX = 5000
-FORUM_REPLY_MAX = 3000
-
+# ---------- Shared display-name helper ----------
+# Not forum-specific despite living in this spot historically - used by
+# Groups, Follow, Chats, and Library serializers throughout this file.
 
 def _display_name(user):
     """Forum identity is username-based, not full real-name reveal.
     display_name is optional on signup, so fall back to a stable
     per-account label rather than ever exposing email."""
     return user.display_name or f"Student{user.id}"
-
-
-def _serialize_reply(reply):
-    author = None
-    if not reply.is_ai and reply.user_id:
-        author_user = db.session.get(User, reply.user_id)
-        author = _display_name(author_user) if author_user else "Deleted user"
-
-    return {
-        "id": reply.id,
-        "body": reply.body if not reply.is_removed else None,
-        "is_removed": reply.is_removed,
-        "is_ai": reply.is_ai,
-        "author": "Prepza AI" if reply.is_ai else author,
-        "ai_answer_id": reply.ai_answer_id,
-        "created_at": reply.created_at.isoformat() if reply.created_at else None,
-    }
-
-
-def _trigger_ai_reply(post, question_text, triggering_user_id):
-    """
-    Shared by both the @Prepza AI mention path and the dedicated button.
-    Returns (forum_reply_or_None, error_response_or_None). On any
-    ai_service error, the human reply/post that triggered this should
-    still have already been committed by the caller - AI failure must
-    never lose a student's own post/reply.
-    """
-    unit = db.session.get(Unit, post.unit_id) if post.unit_id else None
-
-    try:
-        result = ai_service.answer_forum_question(
-            question_text=question_text,
-            unit=unit,
-            triggering_user_id=triggering_user_id,
-        )
-    except ai_service.AIBudgetExceededError as e:
-        return None, (jsonify({"error": str(e)}), 503)
-    except ai_service.AIRateLimitExceededError as e:
-        return None, (jsonify({"error": str(e)}), 429)
-    except ai_service.AIProviderError:
-        return None, (jsonify({
-            "error": "Prepza AI is temporarily unavailable - please try again shortly."
-        }), 502)
-
-    ai_reply = ForumReply(
-        post_id=post.id,
-        user_id=None,
-        is_ai=True,
-        ai_answer_id=result["ai_answer_id"],
-        triggered_by_user_id=triggering_user_id,
-        body=result["answer_text"],
-    )
-    db.session.add(ai_reply)
-    db.session.commit()
-    return ai_reply, None
-
-
-@app.route("/units/<int:unit_id>/forum")
-def list_forum_posts(unit_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    unit = db.session.get(Unit, unit_id)
-    if not unit:
-        return jsonify({"error": "Unit not found"}), 404
-
-    try:
-        page = max(1, int(request.args.get("page", 1)))
-    except ValueError:
-        page = 1
-    per_page = 20
-
-    posts = (
-        ForumPost.query.filter_by(unit_id=unit_id, is_removed=False)
-        .order_by(ForumPost.created_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
-
-    result = []
-    for post in posts:
-        author = db.session.get(User, post.user_id)
-        reply_count = ForumReply.query.filter_by(post_id=post.id).count()
-        result.append({
-            "id": post.id,
-            "title": post.title,
-            "body": post.body,
-            "author": _display_name(author) if author else "Deleted user",
-            "reply_count": reply_count,
-            "created_at": post.created_at.isoformat() if post.created_at else None,
-        })
-
-    return jsonify({"unit": unit.code, "page": page, "posts": result})
-
-
-@app.route("/forum/posts", methods=["POST"])
-@require_csrf
-def create_forum_post():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    unit_id = data.get("unit_id")
-    title = (data.get("title") or "").strip()
-    body = (data.get("body") or "").strip()
-
-    if not unit_id or not db.session.get(Unit, unit_id):
-        return jsonify({"error": "Valid unit_id is required"}), 400
-    if not title or len(title) > FORUM_TITLE_MAX:
-        return jsonify({"error": f"Title is required and must be {FORUM_TITLE_MAX} characters or fewer"}), 400
-    if not body or len(body) > FORUM_BODY_MAX:
-        return jsonify({"error": f"Body is required and must be {FORUM_BODY_MAX} characters or fewer"}), 400
-
-    post = ForumPost(unit_id=unit_id, user_id=user_id, title=title, body=body)
-    db.session.add(post)
-    db.session.commit()
-
-    return jsonify({
-        "id": post.id,
-        "title": post.title,
-        "body": post.body,
-        "unit_id": post.unit_id,
-        "created_at": post.created_at.isoformat() if post.created_at else None,
-    }), 201
-
-
-@app.route("/forum/posts/<int:post_id>")
-def get_forum_post(post_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    post = db.session.get(ForumPost, post_id)
-    if not post:
-        return jsonify({"error": "Post not found"}), 404
-
-    author = db.session.get(User, post.user_id)
-    replies = (
-        ForumReply.query.filter_by(post_id=post_id)
-        .order_by(ForumReply.created_at.asc())
-        .all()
-    )
-
-    return jsonify({
-        "id": post.id,
-        "title": post.title,
-        "body": post.body,
-        "author": _display_name(author) if author else "Deleted user",
-        "unit_id": post.unit_id,
-        "created_at": post.created_at.isoformat() if post.created_at else None,
-        "replies": [_serialize_reply(r) for r in replies],
-    })
-
-
-@app.route("/forum/posts/<int:post_id>/replies", methods=["POST"])
-@require_csrf
-def create_forum_reply(post_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    post = db.session.get(ForumPost, post_id)
-    if not post:
-        return jsonify({"error": "Post not found"}), 404
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    body = (data.get("body") or "").strip()
-    if not body or len(body) > FORUM_REPLY_MAX:
-        return jsonify({"error": f"Body is required and must be {FORUM_REPLY_MAX} characters or fewer"}), 400
-
-    reply = ForumReply(post_id=post_id, user_id=user_id, is_ai=False, body=body)
-    db.session.add(reply)
-    db.session.commit()
-
-    response = {"reply": _serialize_reply(reply)}
-
-    if AI_MENTION_RE.search(body):
-        ai_reply, error = _trigger_ai_reply(post, question_text=body, triggering_user_id=user_id)
-        if ai_reply:
-            response["ai_reply"] = _serialize_reply(ai_reply)
-        elif error:
-            body_json, status = error
-            response["ai_error"] = body_json.get_json()["error"]
-
-    return jsonify(response), 201
-
-
-@app.route("/forum/posts/<int:post_id>/ask-ai", methods=["POST"])
-@limiter.limit(
-    "20 per hour",
-    key_func=lambda: f"ask-ai:{session.get('user_id', get_remote_address())}",
-)
-@require_csrf
-def ask_prepza_ai(post_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    post = db.session.get(ForumPost, post_id)
-    if not post:
-        return jsonify({"error": "Post not found"}), 404
-
-    question_text = f"{post.title}\n\n{post.body}"
-    ai_reply, error = _trigger_ai_reply(post, question_text=question_text, triggering_user_id=user_id)
-    if error:
-        return error
-
-    return jsonify({"reply": _serialize_reply(ai_reply)}), 201
 
 
 @app.route("/library/my-purchases")
@@ -9497,17 +9201,7 @@ def _content_report_preview(report):
     author_id = None
     snippet = None
 
-    if report.target_type == "forum_post":
-        row = db.session.get(ForumPost, report.target_id)
-        if row:
-            author_id = row.user_id
-            snippet = row.body
-    elif report.target_type == "forum_reply":
-        row = db.session.get(ForumReply, report.target_id)
-        if row:
-            author_id = row.user_id
-            snippet = row.body
-    elif report.target_type == "group_post":
+    if report.target_type == "group_post":
         row = db.session.get(GroupPost, report.target_id)
         if row:
             author_id = row.user_id
@@ -9658,8 +9352,6 @@ def admin_remove_reported_content(report_id):
         }), 400
 
     model_by_type = {
-        "forum_post": ForumPost,
-        "forum_reply": ForumReply,
         "group_post": GroupPost,
         "group_post_comment": GroupPostComment,
     }
@@ -9727,8 +9419,6 @@ def admin_warn_from_content_report(report_id):
 
         if remove_content:
             model_by_type = {
-                "forum_post": ForumPost,
-                "forum_reply": ForumReply,
                 "group_post": GroupPost,
                 "group_post_comment": GroupPostComment,
             }
@@ -9956,39 +9646,6 @@ def admin_retry_ai_job(job_id):
         return jsonify({"error": f"Retry failed: {e}"}), 502
 
     return jsonify({"message": "Retry completed", "job_id": job.id})
-
-
-@app.route("/admin/units", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_add_unit():
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    code = data.get("code")
-    name = data.get("name")
-    year = data.get("year")
-    semester = data.get("semester")
-
-    if not code or not name or year is None or semester is None:
-        return jsonify({"error": "code, name, year, and semester are all required"}), 400
-
-    unit = Unit(code=code, name=name, year=year, semester=semester)
-    db.session.add(unit)
-    db.session.commit()
-
-    return jsonify({"message": "Unit added", "unit_id": unit.id}), 201
-
-
-@app.route("/admin/units", methods=["GET"])
-@require_admin
-def admin_list_units():
-    units = Unit.query.all()
-    return jsonify([
-        {"id": u.id, "code": u.code, "name": u.name, "year": u.year, "semester": u.semester}
-        for u in units
-    ])
 
 
 @app.route("/admin/content", methods=["GET"])

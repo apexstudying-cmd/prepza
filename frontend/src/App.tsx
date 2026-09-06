@@ -181,7 +181,6 @@ type Screen =
   | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'
   | 'chat-detail' | 'upload' | 'processing' | 'doc-ready' | 'document-study'
   | 'ai-tutor' | 'flashcards' | 'quiz' | 'podcast-player' | 'podcast-library' | 'summary'
-  | 'forum' | 'comments' | 'post-composer' | 'question-composer'
   | 'opportunities' | 'opportunity-detail' | 'share-opp-form' | 'edu-upload-form'
   | 'settings' | 'student-profile' | 'share-sheet'
   | 'notifications' | 'library' | 'mind-map' | 'new-chat' | 'chat-options' | 'edit-profile'
@@ -190,7 +189,7 @@ type Screen =
   | 'followers' | 'following' | 'group-detail' | 'group-create' | 'ambassador' | 'time-studied'
 
 // ─── Kenyan Data ──────────────────────────────────────────────────────────────
-// USER mock constant removed (Chunk 14 sweep) - PostComposer and CommentsScreen now derive display name/initials from GET /me
+// USER mock constant removed (Chunk 14 sweep) - screens now derive display name/initials from GET /me
 
 type OpportunityOrg = { id: number; name: string; logo_url: string | null; website: string | null }
 type OpportunityPublic = {
@@ -341,7 +340,7 @@ function TopBar({ title, onBack, setScreen, rightEl }: { title?: string; onBack?
 }
 
 function BottomNav({ active, setScreen }: { active: Screen; setScreen: (s: Screen) => void }) {
-  const isHome  = ['home','ai-tutor','forum','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','share-sheet','comments','post-composer','question-composer','share-opp-form','edu-upload-form','notifications','library','mind-map'].includes(active)
+  const isHome  = ['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map'].includes(active)
   const isExp   = active === 'explore' || active === 'student-profile'
   const isChat  = active === 'chats' || active === 'chat-detail' || active === 'new-chat' || active === 'chat-options'
   const isProf  = active === 'profile' || active === 'settings' || active === 'edit-profile'
@@ -648,35 +647,6 @@ function SkeletonPodcastLibrary() {
   )
 }
 
-function SkeletonForum() {
-  const { tokens: T } = useTheme()
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <Sk w={34} h={34} r={10} dark /><Sk w={120} h={18} dark />
-          <Sk w={60} h={32} r={11} dark style={{ marginLeft: 'auto' }} />
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>{[1,2,3,4].map(i => <Sk key={i} w={80} h={28} r={20} dark />)}</div>
-      </div>
-      <div style={{ padding: '14px 16px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <Sk w={80} h={13} /><Sk w={50} h={12} />
-        </div>
-        <div style={{ display: 'flex', gap: 10, overflowX: 'hidden', marginBottom: 16 }}>
-          {[1,2,3].map(i => (
-            <div key={i} style={{ flexShrink: 0, background: T.card, borderRadius: 14, padding: '12px 14px', minWidth: 130, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Sk w={38} h={38} r={10} /><Sk h={12} /><Sk h={10} w="70%" />
-            </div>
-          ))}
-        </div>
-        <Sk w={100} h={13} style={{ marginBottom: 10 }} />
-      </div>
-      <div style={{ padding: '0 16px' }}>{[1,2,3,4].map(i => <SkPostCard key={i} />)}</div>
-    </div>
-  )
-}
-
 function SkeletonOppDetail() {
   const { tokens: T } = useTheme()
   return (
@@ -978,21 +948,10 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
   const [docsLoading, setDocsLoading] = useState(HOME_CACHE.documents === undefined)
   const [summary, setSummary] = useState<GamificationSummary | null>(null)
 
-  const [previewPosts, setPreviewPosts] = useState<ForumPostSummary[]>([])
   const [previewOpps, setPreviewOpps] = useState<OpportunityPublic[]>([])
   const [homePodcasts, setHomePodcasts] = useState<PodcastItem[]>([])
 
   useEffect(() => {
-    // Community preview: no cross-unit "recent posts" endpoint exists yet,
-    // so this shows the top 2 recent posts from the student's first unit
-    // (same default ForumScreen itself uses) rather than a true global feed.
-    api<UnitOption[]>('/units')
-      .then(units => {
-        if (!units.length) return
-        return api<{ posts: ForumPostSummary[] }>(`/units/${units[0].id}/forum`)
-      })
-      .then(res => res && setPreviewPosts(res.posts.slice(0, 2)))
-      .catch(() => {})
     api<{ opportunities: OpportunityPublic[] }>('/opportunities')
       .then(res => setPreviewOpps(res.opportunities.slice(0, 2)))
       .catch(() => {})
@@ -1148,17 +1107,6 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
           </section>
         )}
 
-        {/* Community */}
-        {previewPosts.length > 0 && (
-          <section style={{ padding: '0 18px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontWeight: 800, fontSize: 15, color: T.text }}>Community</span>
-              <span onClick={() => setScreen('forum')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
-            </div>
-            {previewPosts.map(p => <RealForumCard key={p.id} post={p} onOpen={() => setScreen('forum')} />)}
-          </section>
-        )}
-
         {/* Opportunities */}
         {previewOpps.length > 0 && (
           <section style={{ padding: '0 18px' }}>
@@ -1190,30 +1138,6 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
   )
 }
 
-// ─── SHARED CARDS ─────────────────────────────────────────────────────────────
-// Real, per-unit ForumPost card - used by both ForumScreen and the Home
-// screen's Community preview strip.
-function RealForumCard({ post, onOpen }: { post: ForumPostSummary; onOpen: () => void }) {
-  return (
-    <div onClick={onOpen} style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.04)', cursor: 'pointer' }}>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-        <Avi name={post.author.slice(0, 2).toUpperCase()} size={38} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: N.navy }}>{post.author}</div>
-          <div style={{ fontSize: 11, color: '#9CA3AF' }}>{post.created_at ? new Date(post.created_at).toLocaleString() : ''}</div>
-        </div>
-      </div>
-      <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 4 }}>{post.title}</div>
-      <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.65, margin: '0 0 12px' }} className="line-clamp-2">{post.body}</p>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', color: '#9CA3AF', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
-        {Ic.comment('w-4 h-4')} {post.reply_count} {post.reply_count === 1 ? 'reply' : 'replies'}
-        <span style={{ flex: 1 }} />
-        <span style={{ color: N.gold, fontWeight: 700 }}>Ask Prepza AI →</span>
-      </div>
-    </div>
-  )
-}
-
 // ─── EXPLORE ──────────────────────────────────────────────────────────────────
 type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number; is_following: boolean }
 
@@ -1231,7 +1155,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
   // once. Locked false permanently after that so later tab switches only
   // show their own inline "Loading…" text, not a full-page skeleton again.
   const [initialLoading, setInitialLoading] = useState(EXPLORE_CACHE.groups === undefined || EXPLORE_CACHE.students === undefined || EXPLORE_CACHE.docs === undefined)
-  const filters = ['All','Notes','Past Papers','AI Content','Groups','Opportunities','Forums','Students']
+  const filters = ['All','Notes','Past Papers','AI Content','Groups','Opportunities','Students']
 
   const [groups, setGroups] = useState<GroupSummary[]>(EXPLORE_CACHE.groups ?? [])
   const [loadingGroups, setLoadingGroups] = useState(EXPLORE_CACHE.groups === undefined)
@@ -1304,7 +1228,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
   const [docsError, setDocsError] = useState('')
 
   useEffect(() => {
-    if (filter === 'Students' || filter === 'Forums' || filter === 'Opportunities' || filter === 'Groups') return
+    if (filter === 'Students' || filter === 'Opportunities' || filter === 'Groups') return
     setLoadingDocs(true); setDocsError('')
     const params = new URLSearchParams()
     if (query.trim()) params.set('q', query.trim())
@@ -1403,7 +1327,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
         )}
 
         {/* Documents */}
-        {filter !== 'Students' && filter !== 'Forums' && filter !== 'Opportunities' && filter !== 'Groups' && (
+        {filter !== 'Students' && filter !== 'Opportunities' && filter !== 'Groups' && (
           <div>
             <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>📄 {filter === 'Past Papers' ? 'Past Papers' : filter === 'Notes' ? 'Lecture Notes' : 'Recent Documents'}</div>
             {loadingDocs ? (
@@ -1481,8 +1405,6 @@ function CreateModal({ setScreen }: { setScreen: (s: Screen) => void }) {
         {[
           { icon: '📤', label: 'Upload Document', sub: 'PDF, Word, PowerPoint, Images, Notes', action: () => setScreen('upload'), gold: true },
           { icon: '📖', label: 'Publish to Prepza Library', sub: 'Share educational materials · Earn XP', action: () => setScreen('publish-library') },
-          { icon: '💬', label: 'Create Group Post', sub: 'Share in a group or course community', action: () => setScreen('post-composer') },
-          { icon: '❓', label: 'Ask a Question', sub: 'Get help from the community', action: () => setScreen('question-composer') },
           { icon: '👥', label: 'Create Group', sub: 'Start a course or study group', action: () => setScreen('group-create') },
           { icon: '🚀', label: 'Share Opportunity', sub: 'Jobs, internships, scholarships, events', action: () => setScreen('share-opp-form') },
         ].map((item, i) => (
@@ -1501,142 +1423,6 @@ function CreateModal({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── POST COMPOSER ────────────────────────────────────────────────────────────
-function PostComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const { tokens: T } = useTheme()
-  const [title, setTitle] = useState('')
-  const [text, setText] = useState('')
-  const [units, setUnits] = useState<UnitOption[]>([])
-  const [unitId, setUnitId] = useState<number | null>(null)
-  const [csrfToken, setCsrfToken] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const [displayName, setDisplayName] = useState('')
-
-  useEffect(() => {
-    api<UnitOption[]>('/units').then(u => { setUnits(u); if (u.length) setUnitId(u[0].id) }).catch(() => setError('Could not load your units.'))
-    api<{ csrf_token: string; display_name: string | null }>('/me')
-      .then(me => { setCsrfToken(me.csrf_token); setDisplayName(me.display_name || 'Student') })
-      .catch(() => {})
-  }, [])
-
-  const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
-
-  const submit = async () => {
-    if (!unitId || !title.trim() || !text.trim() || submitting) return
-    setSubmitting(true); setError('')
-    try {
-      await api('/forum/posts', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ unit_id: unitId, title: title.trim(), body: text.trim() }),
-      })
-      setScreen('forum')
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not post. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.close()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>New Post</span>
-          <button onClick={submit} disabled={submitting || !unitId || !title.trim() || !text.trim()} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 12, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: (submitting || !unitId || !title.trim() || !text.trim()) ? 0.5 : 1 }}>{submitting ? 'Posting…' : 'Post'}</button>
-        </div>
-      </div>
-      <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }} className="scrollbar-hide">
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <Avi name={initials} size={40} />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{displayName || 'Student'}</div>
-          </div>
-        </div>
-        {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>}
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 8 }}>Unit</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {units.map(u => (
-              <button key={u.id} onClick={() => setUnitId(u.id)} style={{ padding: '7px 14px', borderRadius: 20, background: unitId === u.id ? N.navy : '#F3F4F6', color: unitId === u.id ? N.gold : T.textMuted, fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u.code}</button>
-            ))}
-          </div>
-        </div>
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={200} style={{ width: '100%', border: `1px solid ${T.border}`, outline: 'none', fontSize: 14, fontWeight: 700, color: T.text, fontFamily: 'Plus Jakarta Sans', background: T.card, borderRadius: 12, padding: '12px 14px', boxSizing: 'border-box' }} />
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Share a study tip, ask for help, or start a discussion..." rows={6} style={{ width: '100%', border: `1px solid ${T.border}`, outline: 'none', fontSize: 14, color: T.text, fontFamily: 'Plus Jakarta Sans', resize: 'none', background: T.card, lineHeight: 1.7, borderRadius: 12, padding: 14, boxSizing: 'border-box' }} />
-      </div>
-    </div>
-  )
-}
-
-// ─── QUESTION COMPOSER ────────────────────────────────────────────────────────
-function QuestionComposer({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const { tokens: T } = useTheme()
-  const [title, setTitle] = useState('')
-  const [q, setQ] = useState('')
-  const [units, setUnits] = useState<UnitOption[]>([])
-  const [unitId, setUnitId] = useState<number | null>(null)
-  const [csrfToken, setCsrfToken] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    api<UnitOption[]>('/units').then(u => { setUnits(u); if (u.length) setUnitId(u[0].id) }).catch(() => setError('Could not load your units.'))
-    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
-  }, [])
-
-  const submit = async () => {
-    if (!unitId || !title.trim() || !q.trim() || submitting) return
-    setSubmitting(true); setError('')
-    try {
-      await api('/forum/posts', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ unit_id: unitId, title: title.trim(), body: q.trim() }),
-      })
-      setScreen('forum')
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not post. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.close()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Ask a Question</span>
-          <button onClick={submit} disabled={submitting || !unitId || !title.trim() || !q.trim()} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 12, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: (submitting || !unitId || !title.trim() || !q.trim()) ? 0.5 : 1 }}>{submitting ? 'Posting…' : 'Post'}</button>
-        </div>
-      </div>
-      <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }} className="scrollbar-hide">
-        {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>}
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 8 }}>Unit</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {units.map(u => (
-              <button key={u.id} onClick={() => setUnitId(u.id)} style={{ padding: '7px 14px', borderRadius: 20, background: unitId === u.id ? N.navy : '#F3F4F6', color: unitId === u.id ? N.gold : T.textMuted, fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u.code}</button>
-            ))}
-          </div>
-        </div>
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={200} style={{ width: '100%', border: `1px solid ${T.border}`, outline: 'none', fontSize: 14, fontWeight: 700, color: T.text, fontFamily: 'Plus Jakarta Sans', background: T.card, borderRadius: 12, padding: '12px 14px', boxSizing: 'border-box' }} />
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Your question</div>
-          <textarea value={q} onChange={e => setQ(e.target.value)} placeholder="e.g. Can someone explain the difference between annuity-immediate and annuity-due?" rows={5} style={{ width: '100%', border: `1px solid ${T.border}`, outline: 'none', fontSize: 14, color: T.text, fontFamily: 'Plus Jakarta Sans', resize: 'none', background: T.card, lineHeight: 1.7, borderRadius: 14, padding: 14, boxSizing: 'border-box' }} />
-        </div>
-        <div style={{ background: 'rgba(201,168,76,0.08)', border: `1px solid ${N.gold}30`, borderRadius: 14, padding: 14 }}>
-          <div style={{ fontSize: 12, color: N.gold, fontWeight: 700, marginBottom: 4 }}>✦ Try Prepza AI first</div>
-          <div style={{ fontSize: 12, color: T.textMuted }}>Your AI tutor might already know the answer. <span onClick={() => setScreen('ai-tutor')} style={{ color: N.gold, fontWeight: 700, cursor: 'pointer' }}>Ask AI instead →</span></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── SHARE OPP FORM ───────────────────────────────────────────────────────────
 function ShareOppForm({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { tokens: T } = useTheme()
   const [form, setForm] = useState({ title: '', org: '', type: 'Internship', deadline: '', location: '', reward: '', desc: '', link: '' })
@@ -2920,244 +2706,6 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-// ─── FORUM ────────────────────────────────────────────────────────────────────
-// Stale-while-revalidate cache for Forum's unit list and group sidebar: on
-// repeat visits, render instantly from cache while a fresh fetch runs
-// quietly in the background.
-const FORUM_CACHE: { units?: UnitOption[]; myGroups?: GroupSummary[] } = {}
-function ForumScreen({ setScreen, setActiveForumPostId, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveForumPostId: (id: number) => void; setActiveGroupId: (id: number) => void }) {
-  const { tokens: T } = useTheme()
-  const [units, setUnits] = useState<UnitOption[]>(FORUM_CACHE.units ?? [])
-  const [unitId, setUnitId] = useState<number | null>(FORUM_CACHE.units?.[0]?.id ?? null)
-  const [posts, setPosts] = useState<ForumPostSummary[]>([])
-  const [loadingUnits, setLoadingUnits] = useState(FORUM_CACHE.units === undefined)
-  const [loadingPosts, setLoadingPosts] = useState(false)
-  const [error, setError] = useState('')
-
-  const [myGroups, setMyGroups] = useState<GroupSummary[]>(FORUM_CACHE.myGroups ?? [])
-  const [loadingGroups, setLoadingGroups] = useState(FORUM_CACHE.myGroups === undefined)
-
-  useEffect(() => {
-    api<UnitOption[]>('/units')
-      .then(u => { setUnits(u); if (u.length) setUnitId(u[0].id); FORUM_CACHE.units = u })
-      .catch(() => setError('Could not load your units.'))
-      .finally(() => setLoadingUnits(false))
-  }, [])
-
-  useEffect(() => {
-    api<{ groups: GroupSummary[] }>('/groups/mine')
-      .then(res => { setMyGroups(res.groups); FORUM_CACHE.myGroups = res.groups })
-      .catch(() => {})
-      .finally(() => setLoadingGroups(false))
-  }, [])
-
-  const openGroup = (id: number) => { setActiveGroupId(id); setScreen('group-detail') }
-
-  useEffect(() => {
-    if (unitId == null) return
-    setLoadingPosts(true)
-    api<{ unit: string; page: number; posts: ForumPostSummary[] }>(`/units/${unitId}/forum`)
-      .then(res => setPosts(res.posts))
-      .catch(() => setError('Could not load posts for this unit.'))
-      .finally(() => setLoadingPosts(false))
-  }, [unitId])
-
-  const openPost = (id: number) => { setActiveForumPostId(id); setScreen('comments') }
-
-  if (loadingUnits) return <SkeletonForum />
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>Community</span>
-          <button onClick={() => setScreen('post-composer')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 11, padding: '8px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 12, color: N.navy }}>+ Post</button>
-        </div>
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }} className="scrollbar-hide">
-          {units.map(u => (
-            <button key={u.id} onClick={() => setUnitId(u.id)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, background: unitId === u.id ? N.gold : 'rgba(255,255,255,0.1)', color: unitId === u.id ? N.navy : 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{u.code}</button>
-          ))}
-        </div>
-      </div>
-      {/* My Groups */}
-      <div style={{ padding: '14px 16px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>My Groups</div>
-          <button onClick={() => setScreen('group-create')} style={{ fontSize: 12, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ New</button>
-        </div>
-        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', marginBottom: 16 }} className="scrollbar-hide">
-          {loadingGroups ? (
-            <div style={{ fontSize: 12, color: T.textMuted, padding: '10px 0' }}>Loading groups…</div>
-          ) : (
-            <>
-              {myGroups.map(g => (
-                <button key={g.id} onClick={() => openGroup(g.id)} style={{ flexShrink: 0, background: T.card, border: 'none', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans', minWidth: 130 }}>
-                  <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: N.gold, marginBottom: 8 }}>{g.name.slice(0, 2).toUpperCase()}</div>
-                  <div style={{ fontWeight: 700, fontSize: 12, color: T.text, marginBottom: 2 }} className="line-clamp-1">{g.name}</div>
-                  <div style={{ fontSize: 10, color: T.textMuted }}>{g.member_count} member{g.member_count === 1 ? '' : 's'}</div>
-                </button>
-              ))}
-              {myGroups.length === 0 && (
-                <div style={{ fontSize: 12, color: T.textMuted, padding: '10px 0' }}>You haven't joined any groups yet.</div>
-              )}
-              <button onClick={() => setScreen('explore')} style={{ flexShrink: 0, background: '#F3F4F6', border: '1.5px dashed #D1D5DB', borderRadius: 14, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: 'none', fontFamily: 'Plus Jakarta Sans', minWidth: 130, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <div style={{ width: 38, height: 38, background: '#E5E7EB', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>+</div>
-                <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600, textAlign: 'center' }}>Find groups</div>
-              </button>
-            </>
-          )}
-        </div>
-        <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Recent Posts</div>
-        {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{error}</div>}
-        {loadingPosts ? (
-          <div style={{ fontSize: 12, color: T.textMuted, padding: '20px 0' }}>Loading posts…</div>
-        ) : posts.length === 0 ? (
-          <EmptyState icon="💬" title="No posts yet" sub="Be the first to post in this unit." action="New Post" onAction={() => setScreen('post-composer')} />
-        ) : posts.map(p => <RealForumCard key={p.id} post={p} onOpen={() => openPost(p.id)} />)}
-      </div>
-    </div>
-  )
-}
-
-// ─── COMMENTS ────────────────────────────────────────────────────────────────
-function CommentsScreen({ setScreen, postId }: { setScreen: (s: Screen) => void; postId: number | null }) {
-  const { tokens: T } = useTheme()
-  const [post, setPost] = useState<ForumPostDetail | null>(null)
-  const [input, setInput] = useState('')
-  const [csrfToken, setCsrfToken] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [sending, setSending] = useState(false)
-  const [askingAi, setAskingAi] = useState(false)
-  const [error, setError] = useState('')
-  const [myInitials, setMyInitials] = useState('ST')
-
-  const loadPost = () => {
-    if (postId == null) return
-    setLoading(true)
-    api<ForumPostDetail>(`/forum/posts/${postId}`)
-      .then(setPost)
-      .catch(() => setError('Could not load this post.'))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { loadPost() }, [postId])
-  useEffect(() => {
-    api<{ csrf_token: string; display_name: string | null }>('/me')
-      .then(me => {
-        setCsrfToken(me.csrf_token)
-        const name = me.display_name || 'Student'
-        setMyInitials(name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST')
-      })
-      .catch(() => {})
-  }, [])
-
-  const sendComment = async () => {
-    if (!input.trim() || postId == null || sending) return
-    setSending(true); setError('')
-    try {
-      await api(`/forum/posts/${postId}/replies`, {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ body: input.trim() }),
-      })
-      setInput('')
-      loadPost()
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not post your reply.')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  const askAi = async () => {
-    if (postId == null || askingAi) return
-    setAskingAi(true); setError('')
-    try {
-      await api(`/forum/posts/${postId}/ask-ai`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
-      loadPost()
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Prepza AI could not answer right now.')
-    } finally {
-      setAskingAi(false)
-    }
-  }
-
-  if (postId == null) {
-    return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-        <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-            <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Post</span>
-          </div>
-        </div>
-        <EmptyState icon="💬" title="No post selected" sub="Go back and pick a post from the forum." action="Back to Forum" onAction={() => setScreen('forum')} />
-      </div>
-    )
-  }
-
-  const replyCount = post ? post.replies.filter(r => !r.is_removed).length : 0
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Replies ({replyCount})</span>
-        </div>
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }} className="scrollbar-hide">
-        {loading ? (
-          <div style={{ fontSize: 12, color: T.textMuted, padding: '20px 0' }}>Loading…</div>
-        ) : !post ? (
-          <div style={{ fontSize: 12, color: '#C94C4C' }}>{error || 'Post not found.'}</div>
-        ) : (
-          <>
-            <div style={{ background: T.card, borderRadius: 14, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-                <Avi name={post.author.slice(0, 2).toUpperCase()} size={34} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{post.author}</div>
-                  <div style={{ fontSize: 11, color: T.textMuted }}>{post.created_at ? new Date(post.created_at).toLocaleString() : ''}</div>
-                </div>
-              </div>
-              <div style={{ fontWeight: 800, fontSize: 15, color: T.text, marginBottom: 6 }}>{post.title}</div>
-              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.65 }}>{post.body}</div>
-            </div>
-            <button onClick={askAi} disabled={askingAi} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(201,168,76,0.1)', border: `1px solid ${N.gold}40`, borderRadius: 12, padding: '10px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12, color: N.gold, opacity: askingAi ? 0.6 : 1 }}>
-              ✦ {askingAi ? 'Asking Prepza AI…' : 'Ask Prepza AI to answer'}
-            </button>
-            {error && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{error}</div>}
-            {post.replies.map(r => (
-              <div key={r.id} style={{ background: r.is_ai ? 'rgba(201,168,76,0.06)' : '#fff', borderRadius: 14, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: r.is_ai ? `1px solid ${N.gold}30` : 'none' }}>
-                <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-                  {r.is_ai
-                    ? <div style={{ width: 34, height: 34, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>✦</div>
-                    : <Avi name={(r.author || '??').slice(0, 2).toUpperCase()} size={34} />}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{r.is_ai ? 'Prepza AI' : (r.author || 'Deleted user')}</div>
-                    <div style={{ fontSize: 11, color: T.textMuted }}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</div>
-                  </div>
-                </div>
-                <div style={{ fontSize: 13, color: T.text, lineHeight: 1.65, whiteSpace: 'pre-line' }}>{r.is_removed ? '[removed]' : r.body}</div>
-              </div>
-            ))}
-          </>
-        )}
-      </div>
-      <div style={{ padding: '10px 14px 14px', background: T.card, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: T.pageBg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.07)' }}>
-          <Avi name={myInitials} size={28} />
-          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendComment()} placeholder="Add a reply… (mention @Prepza AI to ask it directly)" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: T.text, fontFamily: 'Plus Jakarta Sans' }} />
-          <button onClick={sendComment} disabled={sending} style={{ width: 30, height: 30, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: sending ? 0.6 : 1 }}>
-            <div style={{ color: T.text }}>{Ic.send('w-3 h-3')}</div>
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
@@ -4662,11 +4210,6 @@ function VerifyConfirmScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
 }
 
 // ─── SIGNUP ───────────────────────────────────────────────────────────────────
-type UnitOption = { id: number; code: string; name: string }
-type ForumReplyData = { id: number; body: string | null; is_removed: boolean; is_ai: boolean; author: string | null; ai_answer_id: number | null; created_at: string | null }
-type ForumPostSummary = { id: number; title: string; body: string; author: string; reply_count: number; created_at: string | null }
-type ForumPostDetail = { id: number; title: string; body: string; author: string; unit_id: number; created_at: string | null; replies: ForumReplyData[] }
-
 type UniversityOption = { id: number; name: string; short_code: string; country: string | null }
 type ProgramOption = { id: number; name: string; degree_level: string | null; discipline_category: string | null }
 
@@ -5176,8 +4719,7 @@ function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfile
   }
   const openNotif = (n: NotificationItem) => {
     markRead(n)
-    if (n.related_type === 'forum_post' && n.related_id && setActiveForumPostId) { setActiveForumPostId(n.related_id); setScreen('comments') }
-    else if (n.related_type === 'group' || n.related_type === 'group_post') setScreen('group-detail')
+    if (n.related_type === 'group' || n.related_type === 'group_post') setScreen('group-detail')
     else if (n.related_type === 'user' && n.related_id && setActiveProfileUserId) { setActiveProfileUserId(n.related_id); setScreen('student-profile') }
   }
   const iconFor = (type: string) => ({
@@ -5252,9 +4794,7 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [submissionsError, setSubmissionsError] = useState('')
 
   const [search, setSearch] = useState('')
-  const [unitFilter, setUnitFilter] = useState<number | null>(null)
   const [universityFilter, setUniversityFilter] = useState<number | null>(null)
-  const [filterUnits, setFilterUnits] = useState<UnitOption[]>([])
   const [filterUniversities, setFilterUniversities] = useState<UniversityOption[]>([])
 
   const [reportItem, setReportItem] = useState<LibraryPublicationSummary | null>(null)
@@ -5269,7 +4809,6 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }, [])
 
   useEffect(() => {
-    api<UnitOption[]>('/units').then(setFilterUnits).catch(() => {})
     api<UniversityOption[]>('/universities').then(setFilterUniversities).catch(() => {})
   }, [])
 
@@ -5313,7 +4852,6 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     const params = new URLSearchParams({ page: '1' })
     if (materialTypeFilter) params.set('material_type', materialTypeFilter)
     if (search.trim()) params.set('q', search.trim())
-    if (unitFilter != null) params.set('unit_id', String(unitFilter))
     if (universityFilter != null) params.set('university_id', String(universityFilter))
     api<{ page: number; publications: LibraryPublicationSummary[] }>(`/library?${params.toString()}`)
       .then(res => setBrowseItems(res.publications))
@@ -5342,7 +4880,7 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   useEffect(() => {
     const t = setTimeout(() => { loadBrowse() }, search.trim() ? 350 : 0)
     return () => clearTimeout(t)
-  }, [materialTypeFilter, unitFilter, universityFilter, search])
+  }, [materialTypeFilter, universityFilter, search])
   useEffect(() => { loadSaved() }, [])
   useEffect(() => { loadSubmissions() }, [])
 
@@ -5420,10 +4958,6 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8, overflowX: 'auto' }} className="scrollbar-hide">
-              <select value={unitFilter ?? ''} onChange={e => setUnitFilter(e.target.value ? Number(e.target.value) : null)} style={{ flexShrink: 0, background: 'rgba(255,255,255,0.08)', color: '#fff', border: 'none', borderRadius: 10, padding: '5px 10px', fontSize: 10, fontFamily: 'Plus Jakarta Sans' }}>
-                <option value="">All units</option>
-                {filterUnits.map(u => <option key={u.id} value={u.id}>{u.code}</option>)}
-              </select>
               <select value={universityFilter ?? ''} onChange={e => setUniversityFilter(e.target.value ? Number(e.target.value) : null)} style={{ flexShrink: 0, background: 'rgba(255,255,255,0.08)', color: '#fff', border: 'none', borderRadius: 10, padding: '5px 10px', fontSize: 10, fontFamily: 'Plus Jakarta Sans' }}>
                 <option value="">All universities</option>
                 {filterUniversities.map(u => <option key={u.id} value={u.id}>{u.short_code}</option>)}
@@ -6285,7 +5819,6 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 // ─── PUBLISH TO LIBRARY ───────────────────────────────────────────────────────
 
 type PublishableDoc = { id: number; title: string; file_type: string | null; page_count: number | null }
-type PublishUnit = { id: number; code: string; name: string }
 
 const LIBRARY_MATERIAL_TYPES: { value: string; label: string }[] = [
   { value: 'lecture_notes', label: 'Lecture Notes' },
@@ -6304,13 +5837,9 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
   const [docsLoading, setDocsLoading] = useState(true)
   const [docsError, setDocsError] = useState('')
 
-  const [units, setUnits] = useState<PublishUnit[]>([])
-  const [unitsLoading, setUnitsLoading] = useState(true)
-
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null)
   const [title, setTitle] = useState('')
   const [matType, setMatType] = useState(LIBRARY_MATERIAL_TYPES[0].value)
-  const [unitId, setUnitId] = useState<number | null>(null)
   const [desc, setDesc] = useState('')
   const [rightsChecked, setRightsChecked] = useState(false)
 
@@ -6324,10 +5853,6 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
       .then(res => setDocs(res.documents.filter(d => d.status === 'ready')))
       .catch(() => setDocsError('Could not load your documents - check your connection and try again.'))
       .finally(() => setDocsLoading(false))
-    api<PublishUnit[]>('/units')
-      .then(setUnits)
-      .catch(() => {})
-      .finally(() => setUnitsLoading(false))
   }, [])
 
   const canProceed1 = selectedDocId != null && title.trim().length > 0
@@ -6348,7 +5873,6 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
           title: title.trim(),
           description: desc.trim() || undefined,
           material_type: matType,
-          unit_id: unitId ?? undefined,
         }),
       })
       setSubmittedStatus(result.status)
@@ -6430,13 +5954,6 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
               {LIBRARY_MATERIAL_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Unit / Module <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
-            <select value={unitId ?? ''} onChange={e => setUnitId(e.target.value ? Number(e.target.value) : null)} disabled={unitsLoading} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none' }}>
-              <option value="">{unitsLoading ? 'Loading units…' : 'No specific unit'}</option>
-              {units.map(u => <option key={u.id} value={u.id}>{u.code} — {u.name}</option>)}
-            </select>
-          </div>
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Description <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
             <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} maxLength={1000} placeholder="What does this material cover? Who is it useful for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
@@ -6452,7 +5969,7 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
           <div style={{ background: T.card, borderRadius: 16, padding: '18px 18px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 12 }}>Publishing: {title}</div>
-            {[['Type', materialTypeLabel(matType)], ['Unit', units.find(u => u.id === unitId)?.code ?? 'Not specified']].map(([k, v]) => (
+            {[['Type', materialTypeLabel(matType)]].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F3F4F6' }}>
                 <span style={{ fontSize: 12, color: T.textMuted }}>{k}</span>
                 <span style={{ fontSize: 12, fontWeight: 600, color: T.text, maxWidth: 180, textAlign: 'right' }}>{v}</span>
@@ -7593,8 +7110,6 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
   const [universityId, setUniversityId] = useState<number | null>(null)
   const [programs, setPrograms] = useState<ProgramOption[]>([])
   const [programId, setProgramId] = useState<number | null>(null)
-  const [units, setUnits] = useState<UnitOption[]>([])
-  const [unitId, setUnitId] = useState<number | null>(null)
   const [year, setYear] = useState<number | null>(null)
 
   const [memberSearch, setMemberSearch] = useState('')
@@ -7610,7 +7125,6 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
       .then(me => { setCsrfToken(me.csrf_token); if (me.university_id) setUniversityId(me.university_id) })
       .catch(() => {})
     api<UniversityOption[]>('/universities').then(setUniversities).catch(() => {})
-    api<UnitOption[]>('/units').then(setUnits).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -7642,7 +7156,6 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
           privacy: privacyValue,
           university_id: universityId ?? undefined,
           program_id: programId ?? undefined,
-          unit_id: unitId ?? undefined,
           year: year ?? undefined,
           member_user_ids: selected.map(s => s.id),
         }),
@@ -7726,13 +7239,6 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
             <select value={programId ?? ''} onChange={e => setProgramId(e.target.value ? Number(e.target.value) : null)} disabled={!universityId} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box', opacity: universityId ? 1 : 0.6 }}>
               <option value="">Any course</option>
               {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Unit / Module <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
-            <select value={unitId ?? ''} onChange={e => setUnitId(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box' }}>
-              <option value="">Not tied to a unit</option>
-              {units.map(u => <option key={u.id} value={u.id}>{u.code} — {u.name}</option>)}
             </select>
           </div>
           <div style={{ marginBottom: 24 }}>
@@ -11928,12 +11434,10 @@ export default function App() {
   const [orgPortalMode, setOrgPortalMode] = useState(false)
   const [oauthError, setOauthError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
-  // Which ForumPost is open in CommentsScreen, and which Document is open
-  // in SummaryScreen. Screens communicate purely via the Screen string (no
-  // route params), so these - like other "currently open X" ids - have to
-  // be lifted here rather than living inside the screens themselves, which
-  // unmount on navigation.
-  const [activeForumPostId, setActiveForumPostId] = useState<number | null>(null)
+  // Which Document is open in SummaryScreen. Screens communicate purely via
+  // the Screen string (no route params), so these - like other "currently
+  // open X" ids - have to be lifted here rather than living inside the
+  // screens themselves, which unmount on navigation.
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null)
   const [activeGroupId, setActiveGroupId] = useState<number | null>(null)
@@ -12048,8 +11552,6 @@ export default function App() {
       case 'home':              return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} setActiveDocumentId={setActiveDocumentId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'create-modal':      return <CreateModal setScreen={setScreen} />
-      case 'post-composer':     return <PostComposer setScreen={setScreen} />
-      case 'question-composer': return <QuestionComposer setScreen={setScreen} />
       case 'share-opp-form':    return <ShareOppForm setScreen={setScreen} />
       case 'edu-upload-form':   return <EduUploadForm setScreen={setScreen} />
       case 'upload':            return <UploadScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
@@ -12062,8 +11564,6 @@ export default function App() {
       case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'forum':             return <ForumScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} setActiveGroupId={setActiveGroupId} />
-      case 'comments':          return <CommentsScreen setScreen={setScreen} postId={activeForumPostId} />
       case 'chats':             return <ChatsScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} setActiveGroupId={setActiveGroupId} />
       case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} />
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
@@ -12072,7 +11572,7 @@ export default function App() {
       case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} />
       case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} onOpenOrgPortal={() => setOrgPortalMode(true)} />
       case 'settings':          return <SettingsScreen setScreen={setScreen} />
-      case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveForumPostId={setActiveForumPostId} setActiveProfileUserId={setActiveProfileUserId} />
+      case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} />
       case 'library':           return <LibraryScreen setScreen={setScreen} />
       case 'mind-map':          return <MindMapScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'new-chat':          return <NewChatScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
