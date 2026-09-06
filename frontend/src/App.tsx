@@ -1947,7 +1947,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
           <div style={{ background: T.card, borderRadius: 20, padding: 24, width: '100%' }}>
             <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 16 }}>Rename Document</div>
-            <input value={renameVal} onChange={e => setRenameVal(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
+            <input value={renameVal} onChange={e => setRenameVal(e.target.value)} style={{ width: '100%', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button onClick={() => setShowRename(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: T.text }}>Cancel</button>
               <button onClick={() => setShowRename(false)} style={{ flex: 1, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: N.navy }}>Save</button>
@@ -5572,7 +5572,7 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
           <div style={{ background: T.card, borderRadius: 20, padding: 24, width: '100%' }}>
             <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 16 }}>Rename Group</div>
-            <input value={renameVal} onChange={e => setRenameVal(e.target.value)} maxLength={100} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
+            <input value={renameVal} onChange={e => setRenameVal(e.target.value)} maxLength={100} style={{ width: '100%', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
             {renameError && <div style={{ color: '#C94C4C', fontSize: 12, marginTop: 8 }}>{renameError}</div>}
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button onClick={() => setShowRename(false)} style={{ flex: 1, background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: T.text }}>Cancel</button>
@@ -5936,7 +5936,7 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
           ))}
           <div style={{ marginTop: 8, marginBottom: 20 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Publication title</div>
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. ACT 101 Lecture Notes – Semester 1" maxLength={200} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. ACT 101 Lecture Notes – Semester 1" maxLength={200} style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
             <div style={{ fontSize: 11, color: T.textMuted, marginTop: 6 }}>This will be the public title visible to other students.</div>
           </div>
           <button onClick={() => canProceed1 && setStep(2)} style={{ width: '100%', background: canProceed1 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed1 ? N.navy : T.textMuted, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed1 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>
@@ -5950,13 +5950,13 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Material Type</div>
-            <select value={matType} onChange={e => setMatType(e.target.value)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none' }}>
+            <select value={matType} onChange={e => setMatType(e.target.value)} style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none' }}>
               {LIBRARY_MATERIAL_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Description <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
-            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} maxLength={1000} placeholder="What does this material cover? Who is it useful for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} maxLength={1000} placeholder="What does this material cover? Who is it useful for?" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
           </div>
           <button onClick={() => canProceed2 && setStep(3)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
             Continue
@@ -7201,11 +7201,11 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Group name</div>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. ACT 101 — Year 1 · KU" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. ACT 101 — Year 1 · KU" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box' }} />
           </div>
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Description <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
-            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="What is this group for?" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="What is this group for?" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
           </div>
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Privacy</div>
@@ -7229,21 +7229,21 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>University <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
-            <select value={universityId ?? ''} onChange={e => { setUniversityId(e.target.value ? Number(e.target.value) : null); setProgramId(null) }} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box' }}>
+            <select value={universityId ?? ''} onChange={e => { setUniversityId(e.target.value ? Number(e.target.value) : null); setProgramId(null) }} style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box' }}>
               <option value="">Any university</option>
               {universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </div>
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Course <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
-            <select value={programId ?? ''} onChange={e => setProgramId(e.target.value ? Number(e.target.value) : null)} disabled={!universityId} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box', opacity: universityId ? 1 : 0.6 }}>
+            <select value={programId ?? ''} onChange={e => setProgramId(e.target.value ? Number(e.target.value) : null)} disabled={!universityId} style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box', opacity: universityId ? 1 : 0.6 }}>
               <option value="">Any course</option>
               {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Year of Study <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
-            <select value={year ?? ''} onChange={e => setYear(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box' }}>
+            <select value={year ?? ''} onChange={e => setYear(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, appearance: 'none', boxSizing: 'border-box' }}>
               <option value="">Mixed</option>
               {[1,2,3,4,5].map(y => <option key={y} value={y}>Year {y}</option>)}
             </select>
@@ -7522,7 +7522,7 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
               <div style={{ width: 40, height: 40, background: '#4CC97B20', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>📱</div>
               <div><div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>M-Pesa number</div><div style={{ fontSize: 11, color: T.textMuted }}>Optional - speeds up checkout on Pesapal's page</div></div>
             </div>
-            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XX XXX XXX" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 15, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box', letterSpacing: 0.5 }} />
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XX XXX XXX" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 15, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box', letterSpacing: 0.5 }} />
           </div>
           <button onClick={pay} disabled={loadingPlan || !plan} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: (loadingPlan || !plan) ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)', opacity: (loadingPlan || !plan) ? 0.6 : 1 }}>
             {plan ? `Continue to Payment — KES ${plan.price.toLocaleString()}` : 'Loading…'}
