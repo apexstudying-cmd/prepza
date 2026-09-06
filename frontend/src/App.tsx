@@ -4753,7 +4753,7 @@ function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfile
                 <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</div>
               </div>
             </button>
-            <button onClick={() => removeNotif(n.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D1D5DB', flexShrink: 0, padding: 4 }}>{Ic.close('w-4 h-4')}</button>
+            <button onClick={() => removeNotif(n.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, flexShrink: 0, padding: 4 }}>{Ic.close('w-4 h-4')}</button>
           </div>
         ))}
       </div>
@@ -5346,7 +5346,7 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
               <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{c.display_name}</div><div style={{ fontSize: 12, color: T.textMuted }}>{course}</div></div>
               {mode === 'new-chat' && <div style={{ color: N.gold }}>{Ic.chevR()}</div>}
               {mode === 'new-group' && (
-                <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${selected ? N.gold : '#D1D5DB'}`, background: selected ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: N.navy, fontWeight: 800, flexShrink: 0 }}>{selected ? '✓' : ''}</div>
+                <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${selected ? N.gold : T.textMuted}`, background: selected ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: N.navy, fontWeight: 800, flexShrink: 0 }}>{selected ? '✓' : ''}</div>
               )}
             </div>
           )
@@ -5986,7 +5986,7 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
             <div style={{ background: 'rgba(201,68,68,0.08)', border: '1px solid rgba(201,68,68,0.25)', borderRadius: 12, padding: '12px 14px', color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 16 }}>{submitError}</div>
           )}
           <div onClick={() => setRightsChecked(r => !r)} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', background: T.card, borderRadius: 14, border: `2px solid ${rightsChecked ? N.gold : 'rgba(0,0,0,0.08)'}`, cursor: 'pointer', marginBottom: 16, transition: 'border-color 0.2s' }}>
-            <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${rightsChecked ? N.gold : '#D1D5DB'}`, background: rightsChecked ? N.gold : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
+            <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${rightsChecked ? N.gold : T.textMuted}`, background: rightsChecked ? N.gold : T.card, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
               {rightsChecked && <div style={{ color: T.text }}>{Ic.check('w-3 h-3')}</div>}
             </div>
             <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6 }}>I confirm that I have the right or permission to share this material, and I agree to Prepza's <span style={{ color: N.gold, fontWeight: 700 }}>Terms of Service</span>, <span style={{ color: N.gold, fontWeight: 700 }}>Content Policy</span>, and <span style={{ color: N.gold, fontWeight: 700 }}>Copyright Policy</span>.</div>
@@ -7211,7 +7211,7 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Privacy</div>
             {(['Public', 'Private', 'Course-only'] as const).map(p => (
               <div key={p} onClick={() => setPrivacy(p)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 14px', background: T.card, borderRadius: 12, border: `1.5px solid ${privacy === p ? N.gold : 'rgba(0,0,0,0.08)'}`, marginBottom: 8, cursor: 'pointer', transition: 'border-color 0.2s' }}>
-                <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${privacy === p ? N.gold : '#D1D5DB'}`, background: privacy === p ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${privacy === p ? N.gold : T.textMuted}`, background: privacy === p ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {privacy === p && <div style={{ width: 6, height: 6, borderRadius: '50%', background: N.navy }} />}
                 </div>
                 <div>
@@ -7285,7 +7285,7 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
                     <div style={{ fontWeight: 600, fontSize: 13, color: T.text }}>{p.display_name}</div>
                     {p.year != null && <div style={{ fontSize: 11, color: T.textMuted }}>Year {p.year}{p.semester != null ? `, Sem ${p.semester}` : ''}</div>}
                   </div>
-                  <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${sel ? N.gold : '#D1D5DB'}`, background: sel ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
+                  <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${sel ? N.gold : T.textMuted}`, background: sel ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
                     {sel && <div style={{ color: T.text }}>{Ic.check('w-3 h-3')}</div>}
                   </div>
                 </div>
@@ -7415,7 +7415,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
                       </div>
                     </div>
                     {isSelectable && (
-                      <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${isSelected ? meta.color : '#D1D5DB'}`, background: isSelected ? meta.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${isSelected ? meta.color : T.textMuted}`, background: isSelected ? meta.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {isSelected && <div style={{ color: p.id === 'semester' ? N.navy : '#fff' }}>{Ic.check('w-3 h-3')}</div>}
                       </div>
                     )}
@@ -7437,7 +7437,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
           </>
         )}
         <button onClick={() => setScreen('payment-history')} style={{ width: '100%', background: 'transparent', color: T.textMuted, fontSize: 12, fontWeight: 600, border: 'none', padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View payment history</button>
-        <div style={{ textAlign: 'center', fontSize: 11, color: '#D1D5DB', lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & card, powered by Pesapal.</div>
+        <div style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & card, powered by Pesapal.</div>
       </div>
     </div>
   )
@@ -7527,7 +7527,7 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
           <button onClick={pay} disabled={loadingPlan || !plan} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: (loadingPlan || !plan) ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)', opacity: (loadingPlan || !plan) ? 0.6 : 1 }}>
             {plan ? `Continue to Payment — KES ${plan.price.toLocaleString()}` : 'Loading…'}
           </button>
-          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: '#D1D5DB' }}>🔒 Secured by Pesapal (M-Pesa & card)</div>
+          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: T.textMuted }}>🔒 Secured by Pesapal (M-Pesa & card)</div>
         </div>
       )}
     </div>
@@ -7597,7 +7597,7 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
       <button onClick={() => setScreen('home')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)' }}>
         Start Studying Premium
       </button>
-      <div style={{ fontSize: 11, color: '#D1D5DB' }}>Redirecting to home in a moment…</div>
+      <div style={{ fontSize: 11, color: T.textMuted }}>Redirecting to home in a moment…</div>
     </div>
   )
 }
@@ -7701,7 +7701,7 @@ function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void })
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: T.text }} className="line-clamp-1">{label}</div>
                 <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}{p.provider ? ` · ${p.provider.charAt(0).toUpperCase()}${p.provider.slice(1)}` : ''}</div>
-                {p.reference && <div style={{ fontSize: 10, color: '#D1D5DB', fontFamily: 'monospace', marginTop: 2 }}>{p.reference}</div>}
+                {p.reference && <div style={{ fontSize: 10, color: T.textMuted, fontFamily: 'monospace', marginTop: 2 }}>{p.reference}</div>}
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 4 }}>KES {p.amount.toLocaleString()}</div>
@@ -11327,7 +11327,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <button onClick={() => canRequestPayout && setShowSheet(true)} disabled={!canRequestPayout} style={{ width: '100%', padding: '13px 0', fontSize: 13, background: AMB_COLORS.gold, color: AMB_COLORS.navy, border: 'none', borderRadius: 14, fontWeight: 800, opacity: canRequestPayout ? 1 : 0.5, cursor: canRequestPayout ? 'pointer' : 'not-allowed' }}>
             {canRequestPayout ? `Request payout — ${fmtKes(dashboard.earnings.available_kes)}` : dashboard.status === 'suspended' ? 'Payouts disabled while suspended' : `Min. payout is ${fmtKes(dashboard.min_payout_kes)}`}
           </button>
-          <div style={{ fontSize: 10, color: '#D1D5DB', textAlign: 'center', marginTop: 8 }}>Commissions unlock {dashboard.payout_hold_days} days after the qualifying payment</div>
+          <div style={{ fontSize: 10, color: T.textMuted, textAlign: 'center', marginTop: 8 }}>Commissions unlock {dashboard.payout_hold_days} days after the qualifying payment</div>
         </div>
         <div style={{ margin: '0 18px', background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
