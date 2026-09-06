@@ -7732,6 +7732,7 @@ const adminNav = [
   { key: 'analytics', label: 'Analytics', icon: '📈' },
   { key: 'moderation', label: 'Moderation', icon: '🛡️' },
   { key: 'system', label: 'System', icon: '⚙️' },
+  { key: 'settings', label: 'Settings', icon: '🔧' },
   { key: 'ambassadors', label: 'Ambassadors', icon: '🤝' },
 ]
 
@@ -7823,6 +7824,23 @@ type AdminModerationSummary = {
   resolved_today: number
   suspended_users: number
   warnings_issued: number
+}
+
+type AdminPlatformSettings = {
+  maintenance_mode: boolean
+  maintenance_message: string
+  price_notes: number
+  price_past_paper: number
+  price_qna: number
+  price_plan_semester: number
+  price_plan_annual: number
+  ai_daily_limit_free: number | null
+  ai_daily_limit_plus: number | null
+  ai_daily_limit_premium: number | null
+  ai_daily_tutor_limit_free: number | null
+  ai_daily_tutor_limit_plus: number | null
+  ai_daily_tutor_limit_premium: number | null
+  ai_monthly_budget_usd: number
 }
 
 type AdminAuditLogEntry = {
@@ -8534,6 +8552,53 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     })
       .then(() => loadAdminAccounts())
       .catch(e => setAdminAccountActionError(e instanceof ApiError ? e.message : 'Could not update this admin account.'))
+  }
+
+  const [platformSettings, setPlatformSettings] = useState<AdminPlatformSettings | null>(null)
+  const [settingsDraft, setSettingsDraft] = useState<AdminPlatformSettings | null>(null)
+  const [settingsLoading, setSettingsLoading] = useState(true)
+  const [settingsError, setSettingsError] = useState('')
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settingsSaveError, setSettingsSaveError] = useState('')
+  const [settingsSaved, setSettingsSaved] = useState(false)
+
+  const loadPlatformSettings = () => {
+    setSettingsLoading(true)
+    setSettingsError('')
+    api<AdminPlatformSettings>('/admin/settings')
+      .then(res => { setPlatformSettings(res); setSettingsDraft(res) })
+      .catch(e => setSettingsError(e instanceof ApiError ? e.message : 'Could not load platform settings.'))
+      .finally(() => setSettingsLoading(false))
+  }
+
+  useEffect(() => {
+    if (section !== 'settings') return
+    loadPlatformSettings()
+  }, [section])
+
+  const savePlatformSettings = async () => {
+    if (!settingsDraft || !platformSettings) return
+    setSettingsSaving(true)
+    setSettingsSaveError('')
+    setSettingsSaved(false)
+    const payload: Record<string, unknown> = {}
+    ;(Object.keys(settingsDraft) as (keyof AdminPlatformSettings)[]).forEach(key => {
+      if (settingsDraft[key] !== platformSettings[key]) payload[key] = settingsDraft[key]
+    })
+    if (Object.keys(payload).length === 0) { setSettingsSaving(false); return }
+    try {
+      await api('/admin/settings', {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify(payload),
+      })
+      loadPlatformSettings()
+      setSettingsSaved(true)
+    } catch (e) {
+      setSettingsSaveError(e instanceof ApiError ? e.message : 'Could not save platform settings.')
+    } finally {
+      setSettingsSaving(false)
+    }
   }
 
   const ActivityDot = ({ color }: { color: string }) => <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, marginTop: 3 }} />
@@ -9458,6 +9523,95 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
           </>
         )}
       </AdminCard>
+    </div>
+    )
+  }
+
+  if (section === 'settings') {
+    const numField = (label: string, key: keyof AdminPlatformSettings, opts?: { allowNull?: boolean; prefix?: string }) => (
+      <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: `1px solid ${T.border}` }}>
+        <span style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{label}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {opts?.prefix && <span style={{ fontSize: 12, color: T.textMuted }}>{opts.prefix}</span>}
+          <input
+            type="text"
+            value={settingsDraft ? (settingsDraft[key] == null ? '' : String(settingsDraft[key])) : ''}
+            placeholder={opts?.allowNull ? 'Unlimited' : ''}
+            onChange={e => {
+              if (!settingsDraft) return
+              const raw = e.target.value.replace(/[^0-9.]/g, '')
+              const num = raw === '' ? (opts?.allowNull ? null : 0) : Number(raw)
+              setSettingsDraft({ ...settingsDraft, [key]: num as any })
+            }}
+            style={{ width: 100, textAlign: 'right', border: `1px solid ${T.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card }}
+          />
+        </div>
+      </div>
+    )
+    return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {settingsLoading ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading settings…</div>
+      ) : settingsError ? (
+        <div style={{ padding: '24px 0', textAlign: 'center', color: '#DC2626', fontSize: 13 }}>{settingsError}</div>
+      ) : settingsDraft && (
+        <>
+          <AdminCard title="Maintenance Mode">
+            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={settingsDraft.maintenance_mode} onChange={e => setSettingsDraft({ ...settingsDraft, maintenance_mode: e.target.checked })} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>Put the app into maintenance mode</span>
+              </label>
+              <textarea
+                value={settingsDraft.maintenance_message}
+                onChange={e => setSettingsDraft({ ...settingsDraft, maintenance_message: e.target.value })}
+                placeholder="Message shown to users while in maintenance mode…"
+                rows={3}
+                maxLength={500}
+                style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, resize: 'vertical' }}
+              />
+            </div>
+          </AdminCard>
+
+          <AdminCard title="Content Prices (KES)">
+            <div style={{ padding: '4px 18px 8px' }}>
+              {numField('Notes', 'price_notes', { prefix: 'KES' })}
+              {numField('Past Paper', 'price_past_paper', { prefix: 'KES' })}
+              {numField('Q&A', 'price_qna', { prefix: 'KES' })}
+              {numField('Semester Plan', 'price_plan_semester', { prefix: 'KES' })}
+              {numField('Annual Plan', 'price_plan_annual', { prefix: 'KES' })}
+            </div>
+          </AdminCard>
+
+          <AdminCard title="AI Daily Limits">
+            <div style={{ padding: '4px 18px 8px' }}>
+              {numField('Chat — Free tier', 'ai_daily_limit_free', { allowNull: true })}
+              {numField('Chat — Plus tier', 'ai_daily_limit_plus', { allowNull: true })}
+              {numField('Chat — Premium tier', 'ai_daily_limit_premium', { allowNull: true })}
+              {numField('Tutor — Free tier', 'ai_daily_tutor_limit_free', { allowNull: true })}
+              {numField('Tutor — Plus tier', 'ai_daily_tutor_limit_plus', { allowNull: true })}
+              {numField('Tutor — Premium tier', 'ai_daily_tutor_limit_premium', { allowNull: true })}
+            </div>
+            <div style={{ padding: '0 18px 14px', fontSize: 11, color: T.textMuted }}>Leave blank for unlimited.</div>
+          </AdminCard>
+
+          <AdminCard title="AI Monthly Budget">
+            <div style={{ padding: '4px 18px 8px' }}>
+              {numField('Budget (USD)', 'ai_monthly_budget_usd', { prefix: '$' })}
+            </div>
+          </AdminCard>
+
+          {settingsSaveError && <div style={{ color: '#DC2626', fontSize: 12 }}>{settingsSaveError}</div>}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button
+              disabled={settingsSaving}
+              onClick={savePlatformSettings}
+              style={{ background: N.navy, color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, opacity: settingsSaving ? 0.6 : 1 }}
+            >{settingsSaving ? 'Saving…' : 'Save Settings'}</button>
+            {settingsSaved && !settingsSaving && <span style={{ fontSize: 12, color: '#16A34A', fontWeight: 600 }}>Saved.</span>}
+          </div>
+        </>
+      )}
     </div>
     )
   }
@@ -10704,7 +10858,7 @@ function AdminCommunityPanel() {
 function AdminPlatform({ onExit }: { onExit: () => void }) {
   const { mode, tokens: T } = useTheme()
   const [section, setSection] = useState('dashboard')
-  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System' }
+  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System', settings: 'Settings' }
 
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', background: T.pageBg, fontFamily: 'Plus Jakarta Sans', overflow: 'hidden' }}>
