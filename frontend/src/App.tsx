@@ -1028,7 +1028,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
           {docsLoading ? (
             <div style={{ fontSize: 12, color: T.textMuted, padding: '12px 0' }}>Loading your documents...</div>
           ) : !featuredDoc ? (
-            <div onClick={() => setScreen('upload')} style={{ background: T.card, borderRadius: 14, padding: '18px 16px', textAlign: 'center', cursor: 'pointer', border: '1px dashed rgba(0,0,0,0.15)' }}>
+            <div onClick={() => setScreen('upload')} style={{ background: T.card, borderRadius: 14, padding: '18px 16px', textAlign: 'center', cursor: 'pointer', border: `1px dashed ${T.border}` }}>
               <div style={{ fontSize: 12, color: T.textMuted, fontWeight: 600 }}>No documents yet — upload one to get started 📤</div>
             </div>
           ) : (
@@ -1593,7 +1593,7 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
           onDragLeave={() => setDragging(false)}
           onDrop={e => { e.preventDefault(); setDragging(false); const file = e.dataTransfer.files?.[0]; if (file && !uploading) startUpload(file) }}
           onClick={() => !uploading && fileRef.current?.click()}
-          style={{ border: `2px dashed ${dragging ? N.gold : 'rgba(11,20,55,0.18)'}`, borderRadius: 20, padding: '40px 20px', textAlign: 'center', background: dragging ? 'rgba(201,168,76,0.04)' : T.card, cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.7 : 1, transition: 'all 0.2s' }}
+          style={{ border: `2px dashed ${dragging ? N.gold : T.border}`, borderRadius: 20, padding: '40px 20px', textAlign: 'center', background: dragging ? 'rgba(201,168,76,0.04)' : T.card, cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.7 : 1, transition: 'all 0.2s' }}
         >
           <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleFileChange} disabled={uploading} />
           <div style={{ fontSize: 48, marginBottom: 12 }}>{uploading ? '⏳' : '📤'}</div>
@@ -3109,12 +3109,12 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
         })}
         <div ref={bottomRef} />
       </div>
-      <div style={{ padding: '10px 12px 14px', background: T.card, borderTop: '1px solid rgba(0,0,0,0.06)', position: 'relative' }}>
+      <div style={{ padding: '10px 12px 14px', background: T.card, borderTop: `1px solid ${T.border}`, position: 'relative' }}>
         <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleAttachmentFileChange} disabled={uploadingAttachment} />
         {attachError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>{attachError}</div>}
         {uploadingAttachment && <div style={{ color: T.textMuted, fontSize: 12, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>Sending attachment…</div>}
         {showAttach && (
-          <div style={{ position: 'absolute', bottom: '100%', left: 12, right: 12, background: T.card, borderRadius: 16, boxShadow: '0 -4px 24px rgba(0,0,0,0.12)', padding: 16, border: '1px solid rgba(0,0,0,0.06)' }}>
+          <div style={{ position: 'absolute', bottom: '100%', left: 12, right: 12, background: T.card, borderRadius: 16, boxShadow: '0 -4px 24px rgba(0,0,0,0.12)', padding: 16, border: `1px solid ${T.border}` }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 12 }}>Send Attachment</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
               {[['📄','Document', true],['🖼️','Image', true],['📷','Camera', false],['🎵','Audio', false]].map(([icon,label,enabled],i) => (
@@ -7034,7 +7034,7 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
         {tab === 'Files' && (
           <div style={{ padding: '14px 18px' }}>
             {joined && (
-              <button onClick={openFilePicker} style={{ width: '100%', background: T.card, border: '1.5px dashed rgba(0,0,0,0.12)', borderRadius: 14, padding: '12px 16px', marginBottom: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: N.gold, fontWeight: 700, textAlign: 'center' }}>+ Share a document</button>
+              <button onClick={openFilePicker} style={{ width: '100%', background: T.card, border: `1.5px dashed ${T.border}`, borderRadius: 14, padding: '12px 16px', marginBottom: 14, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 13, color: N.gold, fontWeight: 700, textAlign: 'center' }}>+ Share a document</button>
             )}
             {filesError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{filesError}</div>}
             {loadingFiles ? (
