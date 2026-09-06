@@ -7733,6 +7733,7 @@ const adminNav = [
   { key: 'moderation', label: 'Moderation', icon: '🛡️' },
   { key: 'system', label: 'System', icon: '⚙️' },
   { key: 'settings', label: 'Settings', icon: '🔧' },
+  { key: 'groups', label: 'Groups', icon: '👨‍👩‍👧' },
   { key: 'ambassadors', label: 'Ambassadors', icon: '🤝' },
 ]
 
@@ -9616,6 +9617,8 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     )
   }
 
+  if (section === 'groups') return <AdminGroupsPanel />
+
   if (section === 'ambassadors') return <AdminAmbassadorsPanel />
 
   if (section === 'communications') {
@@ -10477,6 +10480,105 @@ function AdminOrganisationsPanel() {
   )
 }
 
+type AdminGroupRow = {
+  id: number
+  name: string
+  description: string | null
+  privacy: string
+  university_id: number | null
+  program_id: number | null
+  unit_id: number | null
+  unit_code: string | null
+  year: number | null
+  member_count: number
+  created_by: number | null
+  created_at: string | null
+  is_active: boolean
+}
+
+function AdminGroupsPanel() {
+  const { mode, tokens: T } = useTheme()
+  const [csrfToken, setCsrfToken] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [rows, setRows] = useState<AdminGroupRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+
+  useEffect(() => {
+    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+  }, [])
+
+  const load = () => {
+    setLoading(true)
+    setError('')
+    const params = new URLSearchParams()
+    if (search.trim()) params.set('search', search.trim())
+    if (statusFilter !== 'all') params.set('status', statusFilter)
+    api<{ groups: AdminGroupRow[] }>(`/admin/groups?${params.toString()}`)
+      .then(res => setRows(res.groups))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load groups.'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    const t = setTimeout(load, 300)
+    return () => clearTimeout(t)
+  }, [search, statusFilter])
+
+  const toggleActive = async (id: number, nextActive: boolean) => {
+    setActionBusy(true)
+    try {
+      await api(`/admin/groups/${id}`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ is_active: nextActive }),
+      })
+      load()
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not update this group.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <AdminCard title={`Groups — ${rows.length}`}>
+        <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name…" style={{ flex: 1, minWidth: 180, border: `1px solid ${T.border}`, borderRadius: 8, padding: '7px 10px', fontSize: 12, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card }} />
+          {['all', 'active', 'inactive'].map(f => (
+            <button key={f} onClick={() => setStatusFilter(f)} style={{ padding: '7px 14px', borderRadius: 8, background: statusFilter === f ? N.navy : (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: statusFilter === f ? '#fff' : T.textMuted, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{f}</button>
+          ))}
+        </div>
+        {loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading…</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#C94C4C', fontSize: 13 }}>{error}</div>
+        ) : rows.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No groups found.</div>
+        ) : (
+          <AdminTable
+            cols={['Name', 'Unit', 'Privacy', 'Members', 'Created', 'Status']}
+            rows={rows.map(r => [
+              r.name,
+              r.unit_code || '—',
+              r.privacy,
+              r.member_count.toString(),
+              r.created_at ? new Date(r.created_at).toLocaleDateString() : '—',
+              <AdminBadge text={r.is_active ? 'Active' : 'Inactive'} color={r.is_active ? 'green' : 'gray'} />,
+            ])}
+            actions={i => (
+              <button disabled={actionBusy} onClick={() => toggleActive(rows[i].id, !rows[i].is_active)} style={{ background: rows[i].is_active ? '#FEF3C7' : '#DBEAFE', color: rows[i].is_active ? '#D97706' : '#2563EB', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>{rows[i].is_active ? 'Deactivate' : 'Activate'}</button>
+            )}
+          />
+        )}
+      </AdminCard>
+    </div>
+  )
+}
+
 // ─── ADMIN: UNIVERSITIES (real CRUD against /admin/universities, /admin/programs) ───
 
 type AdminUniversityRow = { id: number; name: string; short_code: string; country: string | null; is_active: boolean; created_at: string | null }
@@ -10858,7 +10960,7 @@ function AdminCommunityPanel() {
 function AdminPlatform({ onExit }: { onExit: () => void }) {
   const { mode, tokens: T } = useTheme()
   const [section, setSection] = useState('dashboard')
-  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System', settings: 'Settings' }
+  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System', settings: 'Settings', groups: 'Groups' }
 
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', background: T.pageBg, fontFamily: 'Plus Jakarta Sans', overflow: 'hidden' }}>
