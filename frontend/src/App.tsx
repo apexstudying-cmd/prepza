@@ -1139,7 +1139,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
 }
 
 // ─── EXPLORE ──────────────────────────────────────────────────────────────────
-type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number; is_following: boolean }
+type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean }
 
 // Stale-while-revalidate cache for Explore's default ('All') view: on
 // repeat visits, render instantly from cache while a fresh fetch runs
@@ -1370,7 +1370,7 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
                         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><Avi name={initials} size={48} /></div>
                         <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{s.display_name}</div>
                         <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }} className="line-clamp-1">{s.program_name || 'Student'}{s.year ? ` · Y${s.year}` : ''}</div>
-                        <div style={{ fontSize: 10, color: N.gold, fontWeight: 700 }}>⭐ {s.xp_total.toLocaleString()} XP</div>
+                        <div style={{ fontSize: 10, color: N.gold, fontWeight: 700 }}>{s.xp_total != null ? `⭐ ${s.xp_total.toLocaleString()} XP` : 'Private profile'}</div>
                       </div>
                       <button onClick={() => toggleFollow(s)} disabled={followBusy[s.user_id]}
                         style={{ marginTop: 10, background: s.is_following ? 'rgba(201,168,76,0.15)' : N.navy, color: N.gold, border: s.is_following ? `1px solid ${N.gold}44` : 'none', borderRadius: 10, padding: '6px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy[s.user_id] ? 0.6 : 1 }}>
