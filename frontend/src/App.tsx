@@ -2734,6 +2734,17 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
   // both: the study groups you've joined AND any ad-hoc group chats.
   const [myGroups, setMyGroups] = useState<GroupSummary[]>(CHATS_CACHE.myGroups ?? [])
 
+  // Requests tab: follow requests + message requests (Instagram-style
+  // pending DMs from non-followers). Fetched lazily the first time the
+  // Requests tab is opened rather than on every ChatsScreen mount.
+  const [followRequests, setFollowRequests] = useState<FollowRequestItem[]>([])
+  const [messageRequests, setMessageRequests] = useState<MessageRequestItem[]>([])
+  const [requestsLoading, setRequestsLoading] = useState(false)
+  const [requestsLoaded, setRequestsLoaded] = useState(false)
+  const [requestsError, setRequestsError] = useState('')
+  const [requestBusy, setRequestBusy] = useState<Record<string, boolean>>({})
+  const [csrfToken, setCsrfToken] = useState('')
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -2750,6 +2761,51 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
       .then(res => { setMyGroups(res.groups); CHATS_CACHE.myGroups = res.groups })
       .catch(() => {})
   }, [])
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    if (tab !== 'Requests' || requestsLoaded) return
+    setRequestsLoading(true)
+    setRequestsError('')
+    Promise.all([
+      api<{ requests: FollowRequestItem[] }>('/follow-requests'),
+      api<{ requests: MessageRequestItem[] }>('/message-requests'),
+    ])
+      .then(([followRes, messageRes]) => {
+        setFollowRequests(followRes.requests)
+        setMessageRequests(messageRes.requests)
+        setRequestsLoaded(true)
+      })
+      .catch(() => setRequestsError('Could not load requests.'))
+      .finally(() => setRequestsLoading(false))
+  }, [tab, requestsLoaded])
+
+  const respondFollowRequest = async (req: FollowRequestItem, action: 'accept' | 'decline') => {
+    const key = `follow-${req.id}`
+    if (requestBusy[key]) return
+    setRequestBusy(b => ({ ...b, [key]: true }))
+    try {
+      await api(`/follow-requests/${req.id}/${action}`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      setFollowRequests(list => list.filter(r => r.id !== req.id))
+    } catch { /* leave in list on failure */ }
+    setRequestBusy(b => ({ ...b, [key]: false }))
+  }
+
+  const respondMessageRequest = async (req: MessageRequestItem, action: 'accept' | 'decline') => {
+    const key = `message-${req.conversation_id}`
+    if (requestBusy[key]) return
+    setRequestBusy(b => ({ ...b, [key]: true }))
+    try {
+      await api(`/chats/${req.conversation_id}/${action}-request`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      setMessageRequests(list => list.filter(r => r.conversation_id !== req.conversation_id))
+      if (action === 'accept') {
+        CHATS_CACHE.chats = undefined
+        openChat(req.conversation_id)
+      }
+    } catch { /* leave in list on failure */ }
+    setRequestBusy(b => ({ ...b, [key]: false }))
+  }
 
   if (loading) return <SkeletonChats />
   const displayed = chats.filter(c => {
@@ -2796,11 +2852,64 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
             <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>{error}</div>
           </div>
         ) : tab === 'Requests' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: 44, marginBottom: 12 }}>📬</div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>No requests</div>
-            <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>New chat requests will appear here</div>
-          </div>
+          requestsLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '30px 0' }}>
+              <div style={{ width: 26, height: 26, border: '2.5px solid #E5E7EB', borderTopColor: N.gold, borderRadius: '50%', animation: 'spin-slow 0.7s linear infinite' }} />
+            </div>
+          ) : requestsError ? (
+            <div style={{ textAlign: 'center', padding: '30px 0', color: T.textMuted, fontSize: 13 }}>{requestsError}</div>
+          ) : followRequests.length === 0 && messageRequests.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+              <div style={{ fontSize: 44, marginBottom: 12 }}>📬</div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>No requests</div>
+              <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>Follow and message requests will appear here</div>
+            </div>
+          ) : (
+            <>
+              {messageRequests.length > 0 && (
+                <>
+                  <div style={{ padding: '12px 16px 6px', fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Message Requests</div>
+                  {messageRequests.map(r => {
+                    const isLoading = !!requestBusy[`message-${r.conversation_id}`]
+                    return (
+                      <div key={`mr-${r.conversation_id}`} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                        <Avi name={r.requester_display_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()} size={44} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: T.text }} className="line-clamp-1">{r.requester_display_name}</div>
+                          <div style={{ fontSize: 11, color: T.textMuted }}>wants to message you</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          <button onClick={() => respondMessageRequest(r, 'decline')} disabled={isLoading} style={{ background: '#F3F4F6', color: T.text, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 12px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: isLoading ? 0.6 : 1 }}>Decline</button>
+                          <button onClick={() => respondMessageRequest(r, 'accept')} disabled={isLoading} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 12px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: isLoading ? 0.6 : 1 }}>Accept</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+              {followRequests.length > 0 && (
+                <>
+                  <div style={{ padding: '12px 16px 6px', fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Follow Requests</div>
+                  {followRequests.map(r => {
+                    const isLoading = !!requestBusy[`follow-${r.id}`]
+                    return (
+                      <div key={`fr-${r.id}`} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                        <Avi name={r.requester_display_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()} size={44} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: T.text }} className="line-clamp-1">{r.requester_display_name}</div>
+                          <div style={{ fontSize: 11, color: T.textMuted }}>wants to follow you</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          <button onClick={() => respondFollowRequest(r, 'decline')} disabled={isLoading} style={{ background: '#F3F4F6', color: T.text, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 12px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: isLoading ? 0.6 : 1 }}>Decline</button>
+                          <button onClick={() => respondFollowRequest(r, 'accept')} disabled={isLoading} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 12px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: isLoading ? 0.6 : 1 }}>Accept</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+            </>
+          )
         ) : tab === 'Groups' ? (
           <>
             {myGroups.length === 0 && displayed.length === 0 ? (
@@ -6795,6 +6904,7 @@ function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserI
 }
 
 type FollowRequestItem = { id: number; requester_id: number; requester_display_name: string; created_at: string | null }
+type MessageRequestItem = { conversation_id: number; requester_id: number; requester_display_name: string; has_message: boolean; created_at: string | null }
 
 function FollowRequestsScreen({ setScreen, setActiveProfileUserId, setActiveProfileName }: {
   setScreen: (s: Screen) => void
