@@ -8489,6 +8489,24 @@ def create_chat():
     if valid_users != len(participant_ids):
         return jsonify({"error": "One or more participants were not found"}), 404
 
+    # A conversation with exactly one OTHER participant functions like a
+    # direct message regardless of is_group, so who_can_message="followers"
+    # has to be enforced here too - otherwise it could be dodged just by
+    # setting is_group=true and giving it a name. Groups with 2+ other
+    # participants (3+ total members) are a different, legitimate case
+    # (a real study group someone was added to) and are left alone.
+    if len(participant_ids) == 1:
+        only_other_id = next(iter(participant_ids))
+        only_other_user = db.session.get(User, only_other_id)
+        if only_other_user and only_other_user.who_can_message == "followers":
+            sender_is_follower = Follow.query.filter_by(
+                follower_id=user_id, followed_id=only_other_id
+            ).first() is not None
+            if not sender_is_follower:
+                return jsonify({
+                    "error": "This user only accepts messages from their followers"
+                }), 403
+
     if is_group:
         if not name or len(name) > CHAT_GROUP_NAME_MAX:
             return jsonify({"error": f"Group name is required and must be {CHAT_GROUP_NAME_MAX} characters or fewer"}), 400
@@ -8496,16 +8514,6 @@ def create_chat():
         if len(participant_ids) != 1:
             return jsonify({"error": "Direct chats must have exactly one other participant"}), 400
         other_id = next(iter(participant_ids))
-
-        other_user = db.session.get(User, other_id)
-        if other_user and other_user.who_can_message == "followers":
-            sender_is_follower = Follow.query.filter_by(
-                follower_id=user_id, followed_id=other_id
-            ).first() is not None
-            if not sender_is_follower:
-                return jsonify({
-                    "error": "This user only accepts messages from their followers"
-                }), 403
 
         existing = (
             db.session.query(Conversation.id)
@@ -8970,8 +8978,9 @@ def browse_students():
     Browse students for the Explore > Students tab. Unlike /users/search
     (a narrow contact-picker for chat), this is a real directory: ranked
     by lifetime XP, filterable by university/program, with follow state
-    for the viewer. Excludes email and any other sensitive fields -
-    same exposure level as get_public_profile.
+    for the viewer. Excludes email and any other sensitive fields, and
+    - same rule as get_public_profile - hides program_name/year/xp_total
+    for a private-profile user the viewer doesn't follow.
     """
     user_id = session.get("user_id")
     if not user_id:
@@ -9028,14 +9037,17 @@ def browse_students():
 
     result = []
     for u, xp_total in rows:
+        is_following = u.id in followed_ids
+        is_private = u.profile_visibility == "private" and not is_following
         program = db.session.get(Program, u.program_id) if u.program_id else None
         result.append({
             "user_id": u.id,
             "display_name": _display_name(u),
-            "program_name": program.name if program else None,
-            "year": u.year,
-            "xp_total": int(xp_total),
-            "is_following": u.id in followed_ids,
+            "program_name": None if is_private else (program.name if program else None),
+            "year": None if is_private else u.year,
+            "xp_total": None if is_private else int(xp_total),
+            "is_following": is_following,
+            "is_private": is_private,
         })
 
     return jsonify({"page": page, "students": result})
