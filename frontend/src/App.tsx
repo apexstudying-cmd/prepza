@@ -6318,7 +6318,7 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -6462,7 +6462,7 @@ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: T.pageBg }}>
       {sharing && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
           <div style={{ width: 390, background: T.card, borderRadius: '24px 24px 0 0', padding: '24px 20px 32px' }}>
@@ -6519,7 +6519,7 @@ function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             </div>
           </div>
         ))}
-        <div style={{ height: 100 }} />
+        <div style={{ height: 'calc(96px + env(safe-area-inset-bottom, 0px))' }} />
       </div>
     </div>
   )
