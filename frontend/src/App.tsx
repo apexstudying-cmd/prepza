@@ -3794,6 +3794,63 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
+  const [emailPassword, setEmailPassword] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [emailChangeError, setEmailChangeError] = useState('')
+  const [emailChangeSuccess, setEmailChangeSuccess] = useState(false)
+  const [emailChangeBusy, setEmailChangeBusy] = useState(false)
+
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [passwordChangeError, setPasswordChangeError] = useState('')
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false)
+  const [passwordChangeBusy, setPasswordChangeBusy] = useState(false)
+
+  const submitChangeEmail = async () => {
+    if (!emailPassword || !newEmail.trim() || emailChangeBusy) return
+    setEmailChangeBusy(true)
+    setEmailChangeError('')
+    try {
+      await api('/change-email', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ password: emailPassword, new_email: newEmail.trim() }),
+      })
+      setEmailChangeSuccess(true)
+      setEmail(newEmail.trim())
+    } catch (e) {
+      setEmailChangeError(e instanceof ApiError ? e.message : 'Could not change your email. Please try again.')
+    } finally {
+      setEmailChangeBusy(false)
+    }
+  }
+
+  const submitChangePassword = async () => {
+    if (!currentPassword || !newPassword || passwordChangeBusy) return
+    if (newPassword !== confirmNewPassword) {
+      setPasswordChangeError('New passwords do not match.')
+      return
+    }
+    setPasswordChangeBusy(true)
+    setPasswordChangeError('')
+    try {
+      await api('/change-password', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      })
+      setPasswordChangeSuccess(true)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmNewPassword('')
+    } catch (e) {
+      setPasswordChangeError(e instanceof ApiError ? e.message : 'Could not change your password. Please try again.')
+    } finally {
+      setPasswordChangeBusy(false)
+    }
+  }
+
   useEffect(() => {
     api<{ email: string; csrf_token: string; university_id: number | null; program_id: number | null }>('/me')
       .then(me => {
@@ -3860,7 +3917,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       <div style={{ paddingTop: 12, paddingBottom: 32 }}>
         <Section title="Account">
           <Row label="Edit Profile" sub="Name, photo, bio" onPress={() => setScreen('edit-profile')} />
-          <Row label="Email" sub={email || 'Loading...'} onPress={() => setShowModal('email')} />
+          <Row label="Email" sub={email || 'Loading...'} onPress={() => { setNewEmail(''); setEmailPassword(''); setEmailChangeError(''); setEmailChangeSuccess(false); setShowModal('email') }} />
           <Row label="Phone" sub="+254 *** *** **89" onPress={() => setShowModal('phone')} />
           <Row label="University" sub={uniName || 'Not set'} onPress={() => setScreen('edit-profile')} />
           <Row label="Course" sub={programName || 'Not set'} onPress={() => setScreen('edit-profile')} />
@@ -3904,7 +3961,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </Section>
 
         <Section title="Security">
-          <Row label="Change Password" onPress={() => setShowModal('change-password')} />
+          <Row label="Change Password" onPress={() => { setCurrentPassword(''); setNewPassword(''); setConfirmNewPassword(''); setPasswordChangeError(''); setPasswordChangeSuccess(false); setShowModal('change-password') }} />
           <Row label="Login Sessions" sub="1 active session" onPress={() => setShowModal('sessions')} />
           <Row label="Two-Factor Authentication" sub="Not enabled" onPress={() => setShowModal('2fa')} />
         </Section>
@@ -3942,14 +3999,50 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>
               {showModal === 'email' ? 'Change Email' : showModal === 'phone' ? 'Change Phone' : showModal === 'university' ? 'Select University' : showModal === 'course' ? 'Select Course' : showModal === 'study-prefs' ? 'Study Preferences' : showModal === 'ai-prefs' ? 'AI Preferences' : showModal === 'language' ? 'Language' : showModal === 'appearance' ? 'Appearance' : showModal === 'change-password' ? 'Change Password' : showModal === 'sessions' ? 'Login Sessions' : showModal === '2fa' ? 'Two-Factor Authentication' : showModal === 'plan' ? 'Current Plan' : showModal === 'upgrade' ? 'Upgrade to Premium' : showModal === 'billing' ? 'Billing' : showModal === 'help' ? 'Help Centre' : showModal === 'contact' ? 'Contact Support' : showModal === 'report-problem' ? 'Report a Problem' : showModal === 'about' ? 'About Prepza' : showModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
             </div>
-            <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 24 }}>
-              {showModal === 'terms' || showModal === 'privacy-policy' ? (
-                <div style={{ maxHeight: '50vh', overflowY: 'auto', whiteSpace: 'pre-wrap' }} className="scrollbar-hide">
-                  {showModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
+            {showModal === 'email' ? (
+              emailChangeSuccess ? (
+                <>
+                  <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 24 }}>We've sent a verification link to {newEmail.trim()}. Check your inbox to confirm the change.</div>
+                  <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.5, marginBottom: 16 }}>Enter your current password and your new email address.</div>
+                  <input type="password" value={emailPassword} onChange={e => setEmailPassword(e.target.value)} placeholder="Current password" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10, boxSizing: 'border-box' }} />
+                  <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="New email address" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
+                  {emailChangeError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{emailChangeError}</div>}
+                  <button onClick={submitChangeEmail} disabled={emailChangeBusy || !emailPassword || !newEmail.trim()} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10, opacity: (emailChangeBusy || !emailPassword || !newEmail.trim()) ? 0.6 : 1 }}>{emailChangeBusy ? 'Saving…' : 'Save Email'}</button>
+                  <button onClick={() => setShowModal(null)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#374151' }}>Cancel</button>
+                </>
+              )
+            ) : showModal === 'change-password' ? (
+              passwordChangeSuccess ? (
+                <>
+                  <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 24 }}>Your password has been changed.</div>
+                  <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
+                </>
+              ) : (
+                <>
+                  <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current password" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10, boxSizing: 'border-box' }} />
+                  <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10, boxSizing: 'border-box' }} />
+                  <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} placeholder="Confirm new password" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
+                  {passwordChangeError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{passwordChangeError}</div>}
+                  <button onClick={submitChangePassword} disabled={passwordChangeBusy || !currentPassword || !newPassword} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10, opacity: (passwordChangeBusy || !currentPassword || !newPassword) ? 0.6 : 1 }}>{passwordChangeBusy ? 'Saving…' : 'Save Password'}</button>
+                  <button onClick={() => setShowModal(null)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#374151' }}>Cancel</button>
+                </>
+              )
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 24 }}>
+                  {showModal === 'terms' || showModal === 'privacy-policy' ? (
+                    <div style={{ maxHeight: '50vh', overflowY: 'auto', whiteSpace: 'pre-wrap' }} className="scrollbar-hide">
+                      {showModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
+                    </div>
+                  ) : showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? 'Prepza v1.0.0 — Kenyatta University Launch\n\nBuilt for Kenyan university students to study smarter with AI.' : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
                 </div>
-              ) : showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? 'Prepza v1.0.0 — Kenyatta University Launch\n\nBuilt for Kenyan university students to study smarter with AI.' : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
-            </div>
-            <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
+                <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
+              </>
+            )}
           </div>
         </div>
       )}
