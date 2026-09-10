@@ -970,6 +970,16 @@ class Conversation(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     # updated_at is bumped on every new message so /chats can sort by
     # most recent activity without a join + max(created_at) per row.
+    status = db.Column(db.String(20), nullable=False, default="accepted")
+    # accepted | pending. Only meaningful for 1:1 (is_group=False)
+    # conversations created against a who_can_message="followers"
+    # target by a non-follower - Instagram-style message requests.
+    # The requester (created_by) sees a pending conversation in their
+    # normal /chats list immediately; the other participant only sees
+    # it in GET /message-requests until they accept (-> "accepted",
+    # merges into their normal list) or decline (row is deleted
+    # outright, letting the requester try again with a clean slate).
+    # Groups and normal chats are always "accepted".
 
 
 class ConversationParticipant(db.Model):
@@ -8440,6 +8450,12 @@ def list_chats():
             unread_query = unread_query.filter(Message.created_at > p.last_read_at)
         unread_count = unread_query.count()
 
+        # A pending request directed AT me (I didn't create it) stays
+        # out of the normal chat list until I accept it via
+        # /message-requests - the requester still sees it in theirs.
+        if conversation.status == "pending" and conversation.created_by != user_id:
+            continue
+
         result.append({
             "id": conversation.id,
             "is_group": conversation.is_group,
@@ -8447,6 +8463,7 @@ def list_chats():
             "last_message": last_message.body if last_message else None,
             "last_message_at": last_message.created_at.isoformat() if last_message else None,
             "unread_count": unread_count,
+            "status": conversation.status,
         })
 
     result.sort(key=lambda c: c["last_message_at"] or "", reverse=True)
@@ -8489,24 +8506,6 @@ def create_chat():
     if valid_users != len(participant_ids):
         return jsonify({"error": "One or more participants were not found"}), 404
 
-    # A conversation with exactly one OTHER participant functions like a
-    # direct message regardless of is_group, so who_can_message="followers"
-    # has to be enforced here too - otherwise it could be dodged just by
-    # setting is_group=true and giving it a name. Groups with 2+ other
-    # participants (3+ total members) are a different, legitimate case
-    # (a real study group someone was added to) and are left alone.
-    if len(participant_ids) == 1:
-        only_other_id = next(iter(participant_ids))
-        only_other_user = db.session.get(User, only_other_id)
-        if only_other_user and only_other_user.who_can_message == "followers":
-            sender_is_follower = Follow.query.filter_by(
-                follower_id=user_id, followed_id=only_other_id
-            ).first() is not None
-            if not sender_is_follower:
-                return jsonify({
-                    "error": "This user only accepts messages from their followers"
-                }), 403
-
     if is_group:
         if not name or len(name) > CHAT_GROUP_NAME_MAX:
             return jsonify({"error": f"Group name is required and must be {CHAT_GROUP_NAME_MAX} characters or fewer"}), 400
@@ -8515,6 +8514,9 @@ def create_chat():
             return jsonify({"error": "Direct chats must have exactly one other participant"}), 400
         other_id = next(iter(participant_ids))
 
+        # Reused regardless of status - a second attempt by the same
+        # sender while a request is still pending just returns the
+        # same pending conversation instead of creating a duplicate.
         existing = (
             db.session.query(Conversation.id)
             .join(ConversationParticipant, ConversationParticipant.conversation_id == Conversation.id)
@@ -8527,10 +8529,32 @@ def create_chat():
         if existing:
             return jsonify({"id": existing.id, "reused": True}), 200
 
+    # A conversation with exactly one OTHER participant functions like a
+    # direct message regardless of is_group, so who_can_message="followers"
+    # has to be enforced here too - otherwise it could be dodged just by
+    # setting is_group=true and giving it a name. Groups with 2+ other
+    # participants (3+ total members) are a different, legitimate case
+    # (a real study group someone was added to) and are left alone.
+    # Instagram-style message requests: rather than hard-blocking with
+    # a 403, a non-follower's message just creates the conversation as
+    # "pending" - see the Conversation.status column and
+    # GET /message-requests / accept-request / decline-request below.
+    conversation_status = "accepted"
+    if len(participant_ids) == 1:
+        only_other_id = next(iter(participant_ids))
+        only_other_user = db.session.get(User, only_other_id)
+        if only_other_user and only_other_user.who_can_message == "followers":
+            sender_is_follower = Follow.query.filter_by(
+                follower_id=user_id, followed_id=only_other_id
+            ).first() is not None
+            if not sender_is_follower:
+                conversation_status = "pending"
+
     conversation = Conversation(
         is_group=is_group,
         name=name if is_group else None,
         created_by=user_id,
+        status=conversation_status,
     )
     db.session.add(conversation)
     db.session.flush()
@@ -8544,7 +8568,113 @@ def create_chat():
         ))
 
     db.session.commit()
-    return jsonify({"id": conversation.id, "reused": False}), 201
+    return jsonify({"id": conversation.id, "reused": False, "status": conversation_status}), 201
+
+
+@app.route("/message-requests")
+def list_message_requests():
+    """
+    Pending 1:1 conversations directed AT the logged-in user - the
+    who_can_message="followers" equivalent of /follow-requests. The
+    requester already sees these in their normal /chats list; only
+    the receiver's view is gated until they accept or decline.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    participations = (
+        ConversationParticipant.query
+        .filter_by(user_id=user_id, left_at=None)
+        .all()
+    )
+
+    result = []
+    for p in participations:
+        conversation = db.session.get(Conversation, p.conversation_id)
+        if not conversation or conversation.is_group or conversation.status != "pending":
+            continue
+        if conversation.created_by == user_id:
+            continue
+
+        requester = db.session.get(User, conversation.created_by)
+        # Message bodies are E2EE ciphertext - the server can't preview
+        # content, same reasoning as the push-notification fallback
+        # elsewhere in this file.
+        has_message = Message.query.filter_by(conversation_id=conversation.id, is_deleted=False).first() is not None
+        result.append({
+            "conversation_id": conversation.id,
+            "requester_id": conversation.created_by,
+            "requester_display_name": _display_name(requester) if requester else "Deleted user",
+            "has_message": has_message,
+            "created_at": conversation.created_at.isoformat() if conversation.created_at else None,
+        })
+
+    result.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    return jsonify({"requests": result})
+
+
+@app.route("/chats/<int:conversation_id>/accept-request", methods=["POST"])
+@require_csrf
+def accept_message_request(conversation_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    conversation = db.session.get(Conversation, conversation_id)
+    if not conversation or conversation.is_group or conversation.status != "pending" or conversation.created_by == user_id:
+        return jsonify({"error": "Message request not found"}), 404
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Message request not found"}), 404
+
+    conversation.status = "accepted"
+    db.session.commit()
+
+    requester_id = conversation.created_by
+    accepter = db.session.get(User, user_id)
+    if should_notify(requester_id, "community"):
+        db.session.add(Notification(
+            user_id=requester_id,
+            type="message_request_accepted",
+            title="Message request accepted",
+            body=f"{_display_name(accepter)} accepted your message request",
+            related_type="conversation",
+            related_id=conversation.id,
+        ))
+        db.session.commit()
+        send_push_notification(
+            requester_id,
+            "Message request accepted",
+            f"{_display_name(accepter)} accepted your message request",
+        )
+
+    return jsonify({"message": "Accepted", "id": conversation.id})
+
+
+@app.route("/chats/<int:conversation_id>/decline-request", methods=["POST"])
+@require_csrf
+def decline_message_request(conversation_id):
+    """
+    Declining deletes the pending conversation outright (cascades to
+    its participants/messages) rather than leaving a "declined"
+    marker - same silent-dismiss convention as follow-request
+    declines, and lets the same sender try again later with a clean
+    conversation instead of being permanently blocked.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    conversation = db.session.get(Conversation, conversation_id)
+    if not conversation or conversation.is_group or conversation.status != "pending" or conversation.created_by == user_id:
+        return jsonify({"error": "Message request not found"}), 404
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Message request not found"}), 404
+
+    db.session.delete(conversation)
+    db.session.commit()
+
+    return jsonify({"message": "Declined"})
 
 
 @app.route("/chats/<int:conversation_id>")
@@ -8660,6 +8790,10 @@ def send_message(conversation_id):
 
     if not _active_participant(conversation_id, user_id):
         return jsonify({"error": "Conversation not found"}), 404
+
+    pending_check = db.session.get(Conversation, conversation_id)
+    if pending_check and pending_check.status == "pending" and pending_check.created_by != user_id:
+        return jsonify({"error": "Accept this message request before replying"}), 403
 
     data = request.get_json(silent=True)
     if not data:
