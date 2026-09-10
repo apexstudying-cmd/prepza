@@ -186,7 +186,7 @@ type Screen =
   | 'notifications' | 'library' | 'mind-map' | 'new-chat' | 'chat-options' | 'edit-profile'
   | 'subscription' | 'payment' | 'payment-success' | 'payment-failure' | 'payment-history'
   | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements'
-  | 'followers' | 'following' | 'group-detail' | 'group-create' | 'ambassador' | 'time-studied'
+  | 'followers' | 'following' | 'follow-requests' | 'group-detail' | 'group-create' | 'ambassador' | 'time-studied'
 
 // ─── Kenyan Data ──────────────────────────────────────────────────────────────
 // USER mock constant removed (Chunk 14 sweep) - screens now derive display name/initials from GET /me
@@ -920,8 +920,8 @@ type GamificationSummary = { xp_total: number; level: number; level_title: strin
 // VIEWING (not your own) - display_name is still carried along from wherever
 // navigation originated (a follow list row, a notification body, etc) as a
 // fallback while this loads, same as before.
-type FollowSummary = { user_id: number; followers_count: number; following_count: number; is_following: boolean; is_followed_by: boolean }
-type FollowListUser = { user_id: number; display_name: string; is_following: boolean }
+type FollowSummary = { user_id: number; followers_count: number; following_count: number; is_following: boolean; is_followed_by: boolean; is_pending?: boolean }
+type FollowListUser = { user_id: number; display_name: string; is_following: boolean; is_pending?: boolean }
 type PublicProfile = {
   user_id: number; display_name: string; bio: string | null; year: number | null
   university_name: string | null; program_name: string | null
@@ -1139,7 +1139,7 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
 }
 
 // ─── EXPLORE ──────────────────────────────────────────────────────────────────
-type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean }
+type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean; is_pending?: boolean }
 
 // Stale-while-revalidate cache for Explore's default ('All') view: on
 // repeat visits, render instantly from cache while a fresh fetch runs
@@ -1210,10 +1210,14 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
     setFollowBusy(b => ({ ...b, [s.user_id]: true }))
     const wasFollowing = s.is_following
     try {
-      wasFollowing
-        ? await api(`/users/${s.user_id}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken2 } })
-        : await api(`/users/${s.user_id}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken2 } })
-      setStudents(list => list.map(x => x.user_id === s.user_id ? { ...x, is_following: !wasFollowing } : x))
+      if (wasFollowing) {
+        await api(`/users/${s.user_id}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken2 } })
+        setStudents(list => list.map(x => x.user_id === s.user_id ? { ...x, is_following: false, is_pending: false } : x))
+      } else {
+        const res = await api<{ status?: string }>(`/users/${s.user_id}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken2 } })
+        const nowPending = res.status === 'pending'
+        setStudents(list => list.map(x => x.user_id === s.user_id ? { ...x, is_following: !nowPending, is_pending: nowPending } : x))
+      }
     } catch { /* leave state as-is on failure */ }
     setFollowBusy(b => ({ ...b, [s.user_id]: false }))
   }
@@ -1372,9 +1376,9 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
                         <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }} className="line-clamp-1">{s.program_name || 'Student'}{s.year ? ` · Y${s.year}` : ''}</div>
                         <div style={{ fontSize: 10, color: N.gold, fontWeight: 700 }}>{s.xp_total != null ? `⭐ ${s.xp_total.toLocaleString()} XP` : 'Private profile'}</div>
                       </div>
-                      <button onClick={() => toggleFollow(s)} disabled={followBusy[s.user_id]}
-                        style={{ marginTop: 10, background: s.is_following ? 'rgba(201,168,76,0.15)' : N.navy, color: N.gold, border: s.is_following ? `1px solid ${N.gold}44` : 'none', borderRadius: 10, padding: '6px 16px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy[s.user_id] ? 0.6 : 1 }}>
-                        {followBusy[s.user_id] ? '…' : s.is_following ? 'Following ✓' : 'Follow'}
+                      <button onClick={() => toggleFollow(s)} disabled={followBusy[s.user_id] || s.is_pending}
+                        style={{ marginTop: 10, background: (s.is_following || s.is_pending) ? 'rgba(201,168,76,0.15)' : N.navy, color: N.gold, border: (s.is_following || s.is_pending) ? `1px solid ${N.gold}44` : 'none', borderRadius: 10, padding: '6px 16px', fontSize: 11, fontWeight: 700, cursor: s.is_pending ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy[s.user_id] ? 0.6 : 1 }}>
+                        {followBusy[s.user_id] ? '…' : s.is_pending ? 'Requested' : s.is_following ? 'Following ✓' : 'Follow'}
                       </button>
                     </div>
                   )
@@ -3501,10 +3505,14 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
     setFollowBusy(true)
     const wasFollowing = summary.is_following
     try {
-      const res = wasFollowing
-        ? await api<{ followers_count: number }>(`/users/${targetUserId}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
-        : await api<{ followers_count: number }>(`/users/${targetUserId}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
-      setSummary(s => s ? { ...s, is_following: !wasFollowing, followers_count: res.followers_count } : s)
+      if (wasFollowing) {
+        const res = await api<{ followers_count: number }>(`/users/${targetUserId}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
+        setSummary(s => s ? { ...s, is_following: false, is_pending: false, followers_count: res.followers_count } : s)
+      } else {
+        const res = await api<{ followers_count?: number; status?: string }>(`/users/${targetUserId}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+        const nowPending = res.status === 'pending'
+        setSummary(s => s ? { ...s, is_following: !nowPending, is_pending: nowPending, followers_count: res.followers_count ?? s.followers_count } : s)
+      }
     } catch { /* leave state as-is on failure */ }
     setFollowBusy(false)
   }
@@ -3556,7 +3564,7 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
             {profile?.bio && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 8, maxWidth: 260, lineHeight: 1.5 }}>{profile.bio}</div>}
             <div style={{ marginBottom: 14 }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={toggleFollow} disabled={followBusy} style={{ background: summary?.is_following ? 'rgba(201,168,76,0.2)' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: summary?.is_following ? N.gold : N.navy, fontWeight: 800, fontSize: 13, border: summary?.is_following ? `1px solid ${N.gold}44` : 'none', borderRadius: 12, padding: '10px 24px', cursor: followBusy ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy ? 0.7 : 1 }}>{summary?.is_following ? 'Following ✓' : 'Follow'}</button>
+              <button onClick={toggleFollow} disabled={followBusy || summary?.is_pending} style={{ background: (summary?.is_following || summary?.is_pending) ? 'rgba(201,168,76,0.2)' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: (summary?.is_following || summary?.is_pending) ? N.gold : N.navy, fontWeight: 800, fontSize: 13, border: (summary?.is_following || summary?.is_pending) ? `1px solid ${N.gold}44` : 'none', borderRadius: 12, padding: '10px 24px', cursor: summary?.is_pending ? 'default' : followBusy ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy ? 0.7 : 1 }}>{summary?.is_pending ? 'Requested' : summary?.is_following ? 'Following ✓' : 'Follow'}</button>
               <button onClick={startMessage} disabled={messageBusy} style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 700, fontSize: 13, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '10px 20px', cursor: messageBusy ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: messageBusy ? 0.7 : 1 }}>{messageBusy ? 'Opening…' : 'Message'}</button>
             </div>
           </div>
@@ -3605,12 +3613,14 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
   const [summary, setSummary] = useState<GamificationSummary | null>(PROFILE_CACHE.summary ?? null)
   const [achievementsList, setAchievementsList] = useState<Achievement[]>(PROFILE_CACHE.achievementsList ?? [])
   const [weeklyStudySeconds, setWeeklyStudySeconds] = useState<number | null>(PROFILE_CACHE.weeklyStudySeconds ?? null)
+  const [pendingRequestCount, setPendingRequestCount] = useState(0)
 
   useEffect(() => {
     api<ProfileMe>('/me').then(res => { setMe(res); PROFILE_CACHE.me = res }).catch(() => {}).finally(() => setMeLoading(false))
     api<GamificationSummary>('/gamification/summary').then(res => { setSummary(res); PROFILE_CACHE.summary = res }).catch(() => {})
     api<AchievementsResponse>('/achievements').then(res => { setAchievementsList(res.achievements); PROFILE_CACHE.achievementsList = res.achievements }).catch(() => {})
     api<StudyTimeResponse>('/study-time?period=week').then(res => { setWeeklyStudySeconds(res.total_seconds); PROFILE_CACHE.weeklyStudySeconds = res.total_seconds }).catch(() => {})
+    api<{ requests: unknown[] }>('/follow-requests').then(res => setPendingRequestCount(res.requests.length)).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -3661,6 +3671,13 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
         </div>
       </div>
 
+      {pendingRequestCount > 0 && (
+        <button onClick={() => setScreen('follow-requests')} style={{ margin: '14px 14px 0', width: 'calc(100% - 28px)', background: T.card, borderRadius: 14, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+          <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(201,168,76,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>👥</div>
+          <div style={{ flex: 1, textAlign: 'left', fontSize: 13, fontWeight: 700, color: T.text }}>Follow requests</div>
+          <Pill text={pendingRequestCount.toString()} color={N.gold} />
+        </button>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8, padding: '14px 14px 0' }}>
         {[
           { label: 'Streak', value: summary ? `${summary.current_streak}🔥` : '—', color: N.gold, dest: 'study-streak' as Screen },
@@ -6714,10 +6731,14 @@ function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserI
     setBusy(b => ({ ...b, [person.user_id]: true }))
     const wasFollowing = person.is_following
     try {
-      wasFollowing
-        ? await api(`/users/${person.user_id}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
-        : await api(`/users/${person.user_id}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
-      setPeople(list => list.map(p => p.user_id === person.user_id ? { ...p, is_following: !wasFollowing } : p))
+      if (wasFollowing) {
+        await api(`/users/${person.user_id}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
+        setPeople(list => list.map(p => p.user_id === person.user_id ? { ...p, is_following: false, is_pending: false } : p))
+      } else {
+        const res = await api<{ status?: string }>(`/users/${person.user_id}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+        const nowPending = res.status === 'pending'
+        setPeople(list => list.map(p => p.user_id === person.user_id ? { ...p, is_following: !nowPending, is_pending: nowPending } : p))
+      }
     } catch { /* leave state as-is on failure */ }
     setBusy(b => ({ ...b, [person.user_id]: false }))
   }
@@ -6760,10 +6781,94 @@ function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserI
               <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => openProfile(p)}>
                 <div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{p.display_name}</div>
               </div>
-              <button onClick={() => toggle(p)} disabled={isLoading} style={{ background: p.is_following ? '#F3F4F6' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: p.is_following ? T.text : N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', flexShrink: 0, opacity: isLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s' }}>
+              <button onClick={() => toggle(p)} disabled={isLoading || p.is_pending} style={{ background: (p.is_following || p.is_pending) ? '#F3F4F6' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: (p.is_following || p.is_pending) ? T.text : N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 14px', cursor: p.is_pending ? 'default' : isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', flexShrink: 0, opacity: isLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s' }}>
                 {isLoading ? <div style={{ width: 10, height: 10, border: '1.5px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin-slow 0.6s linear infinite' }} /> : null}
-                {p.is_following ? 'Following' : 'Follow'}
+                {p.is_pending ? 'Requested' : p.is_following ? 'Following' : 'Follow'}
               </button>
+            </div>
+          )
+        })}
+        <div style={{ height: 16 }} />
+      </div>
+    </div>
+  )
+}
+
+type FollowRequestItem = { id: number; requester_id: number; requester_display_name: string; created_at: string | null }
+
+function FollowRequestsScreen({ setScreen, setActiveProfileUserId, setActiveProfileName }: {
+  setScreen: (s: Screen) => void
+  setActiveProfileUserId?: (id: number) => void
+  setActiveProfileName?: (name: string) => void
+}) {
+  const { tokens: T } = useTheme()
+  const [requests, setRequests] = useState<FollowRequestItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState<Record<number, boolean>>({})
+  const [csrfToken, setCsrfToken] = useState('')
+
+  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    setLoading(true)
+    setError('')
+    api<{ requests: FollowRequestItem[] }>('/follow-requests')
+      .then(res => setRequests(res.requests))
+      .catch(() => setError('Could not load follow requests.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const respond = async (req: FollowRequestItem, action: 'accept' | 'decline') => {
+    if (busy[req.id]) return
+    setBusy(b => ({ ...b, [req.id]: true }))
+    try {
+      await api(`/follow-requests/${req.id}/${action}`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      setRequests(list => list.filter(r => r.id !== req.id))
+    } catch {
+      setBusy(b => ({ ...b, [req.id]: false }))
+    }
+  }
+
+  const openProfile = (req: FollowRequestItem) => {
+    setActiveProfileUserId?.(req.requester_id)
+    setActiveProfileName?.(req.requester_display_name)
+    setScreen('student-profile')
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
+      <div style={{ background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Follow Requests</div>
+          <div style={{ marginLeft: 'auto' }}><Pill text={requests.length.toString()} color={N.gold} /></div>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px' }} className="scrollbar-hide">
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '30px 0' }}>
+            <div style={{ width: 26, height: 26, border: '2.5px solid #E5E7EB', borderTopColor: N.gold, borderRadius: '50%', animation: 'spin-slow 0.7s linear infinite' }} />
+          </div>
+        ) : error ? (
+          <div style={{ textAlign: 'center', padding: '30px 0', color: T.textMuted, fontSize: 13 }}>{error}</div>
+        ) : requests.length === 0 ? (
+          <EmptyState icon="👥" title="No pending requests" sub="When someone asks to follow you, they'll show up here." action="Explore Students" onAction={() => setScreen('explore')} />
+        ) : requests.map(r => {
+          const isLoading = !!busy[r.id]
+          return (
+            <div key={r.id} style={{ background: T.card, borderRadius: 14, padding: '14px 16px', marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+              <div onClick={() => openProfile(r)} style={{ width: 44, height: 44, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: N.navy, flexShrink: 0, cursor: 'pointer' }}>
+                {r.requester_display_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+              </div>
+              <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => openProfile(r)}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{r.requester_display_name}</div>
+                <div style={{ fontSize: 11, color: T.textMuted }}>wants to follow you</div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button onClick={() => respond(r, 'decline')} disabled={isLoading} style={{ background: '#F3F4F6', color: T.text, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 12px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: isLoading ? 0.6 : 1 }}>Decline</button>
+                <button onClick={() => respond(r, 'accept')} disabled={isLoading} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 700, fontSize: 12, border: 'none', borderRadius: 10, padding: '8px 12px', cursor: isLoading ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: isLoading ? 0.6 : 1 }}>Accept</button>
+              </div>
             </div>
           )
         })}
@@ -12493,6 +12598,7 @@ export default function App() {
       case 'time-studied':      return <TimeStudiedScreen setScreen={setScreen} />
       case 'followers':         return <FollowListScreen mode="followers" setScreen={setScreen} targetUserId={activeProfileUserId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'following':         return <FollowListScreen mode="following" setScreen={setScreen} targetUserId={activeProfileUserId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
+      case 'follow-requests':  return <FollowRequestsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'group-detail':      return <GroupDetailScreen setScreen={setScreen} groupId={activeGroupId} />
       case 'group-create':      return <GroupCreateScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} />
       default:                  return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
