@@ -1,6 +1,10 @@
 name: AI generation architecture
 
 on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
   push:
     branches:
       - audit/ai-generation-architecture
