@@ -30,6 +30,8 @@ def claim_or_get_generation(
     parameters: dict[str, Any] | None,
     prompt_version: str,
     schema_version: str,
+    scope: str = "shared",
+    owner_user_id: int | None = None,
 ) -> GenerationLookup:
     """Atomically claim a missing/failed fingerprint or observe its state.
 
@@ -37,9 +39,21 @@ def claim_or_get_generation(
     request inserts the row and becomes the owner. A simultaneous request
     observes the existing GENERATING row and attaches to it instead of making
     another provider request. FAILED rows may be claimed again.
+
+    Scope/owner are persisted as well as encoded into the fingerprint. This
+    gives the database a second invariant against accidentally exposing a
+    private artifact through a shared generation path.
     """
     from sqlalchemy import text
     from app import db
+
+    normalized_scope = str(scope).strip().lower()
+    if normalized_scope not in {"shared", "private"}:
+        raise ValueError("scope must be 'shared' or 'private'")
+    if normalized_scope == "private" and owner_user_id is None:
+        raise ValueError("private artifacts require owner_user_id")
+    if normalized_scope == "shared" and owner_user_id is not None:
+        raise ValueError("shared artifacts must not include owner_user_id")
 
     parameters_json = json.dumps(parameters or {}, sort_keys=True, separators=(",", ":"))
 
@@ -48,10 +62,10 @@ def claim_or_get_generation(
             """
             INSERT INTO ai_generation_artifact
                 (fingerprint, content_hash, feature, parameters,
-                 prompt_version, schema_version, status)
+                 prompt_version, schema_version, scope, owner_user_id, status)
             VALUES
                 (:fingerprint, :content_hash, :feature, CAST(:parameters AS jsonb),
-                 :prompt_version, :schema_version, 'generating')
+                 :prompt_version, :schema_version, :scope, :owner_user_id, 'generating')
             ON CONFLICT (fingerprint) DO NOTHING
             RETURNING id, status, payload
             """
@@ -63,6 +77,8 @@ def claim_or_get_generation(
             "parameters": parameters_json,
             "prompt_version": prompt_version,
             "schema_version": schema_version,
+            "scope": normalized_scope,
+            "owner_user_id": owner_user_id,
         },
     ).mappings().first()
 
@@ -78,7 +94,7 @@ def claim_or_get_generation(
     existing = db.session.execute(
         text(
             """
-            SELECT id, status, payload
+            SELECT id, status, payload, scope, owner_user_id
             FROM ai_generation_artifact
             WHERE fingerprint = :fingerprint
             """
@@ -96,7 +112,14 @@ def claim_or_get_generation(
             parameters=parameters,
             prompt_version=prompt_version,
             schema_version=schema_version,
+            scope=normalized_scope,
+            owner_user_id=owner_user_id,
         )
+
+    # A fingerprint collision should be impossible because scope/owner are
+    # part of the fingerprint. Refuse to attach if persisted identity disagrees.
+    if existing["scope"] != normalized_scope or existing["owner_user_id"] != owner_user_id:
+        raise RuntimeError("AI artifact fingerprint ownership mismatch")
 
     if existing["status"] == "failed":
         reclaimed = db.session.execute(
