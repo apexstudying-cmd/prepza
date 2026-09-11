@@ -1802,6 +1802,20 @@ def get_user_subscription_status(user_id):
     }
 
 
+def get_ai_plan_tier(user_id):
+    """
+    Maps a user's subscription status to the plan_tier kwarg ai_service's
+    generate_* functions expect ("free" or "premium"), so daily AI limits
+    actually reflect what the user is paying for instead of every call
+    silently running at the free-tier cap. Only "free"/"premium" are real
+    products today - the "plus" tier already present in
+    DAILY_FRESH_GENERATION_LIMITS / DAILY_FRESH_TUTOR_LIMITS is dormant
+    scaffolding for a tier that hasn't shipped, so it's never returned here.
+    """
+    status = get_user_subscription_status(user_id)
+    return "premium" if status["is_active"] else "free"
+
+
 def compute_new_subscription_expiry(user_id, plan):
     """Stacks on top of an unexpired plan rather than resetting it."""
     duration_days = SUBSCRIPTION_PLAN_DURATIONS_DAYS.get(plan)
@@ -3536,6 +3550,7 @@ def summarize_document(document_id):
         result = ai_service.generate_document_summary(
             document_content_id=content.id,
             triggering_user_id=user_id,
+            plan_tier=get_ai_plan_tier(user_id),
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
@@ -3586,6 +3601,7 @@ def quiz_document(document_id):
         result = ai_service.generate_document_quiz(
             document_content_id=content.id,
             triggering_user_id=user_id,
+            plan_tier=get_ai_plan_tier(user_id),
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
@@ -3697,6 +3713,7 @@ def flashcards_document(document_id):
         result = ai_service.generate_document_flashcards(
             document_content_id=content.id,
             triggering_user_id=user_id,
+            plan_tier=get_ai_plan_tier(user_id),
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
@@ -3805,6 +3822,7 @@ def podcast_script_document(document_id):
         result = ai_service.generate_document_podcast_script(
             document_content_id=content.id,
             triggering_user_id=user_id,
+            plan_tier=get_ai_plan_tier(user_id),
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
@@ -3993,6 +4011,7 @@ def mindmap_document(document_id):
         result = ai_service.generate_document_mindmap(
             document_content_id=content.id,
             triggering_user_id=user_id,
+            plan_tier=get_ai_plan_tier(user_id),
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
@@ -4132,6 +4151,7 @@ def send_tutor_message(document_id):
             conversation_id=conversation.id,
             user_message_text=body,
             triggering_user_id=user_id,
+            plan_tier=get_ai_plan_tier(user_id),
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
