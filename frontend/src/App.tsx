@@ -1772,6 +1772,9 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const [showRename, setShowRename] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  const [reportBusy, setReportBusy] = useState(false)
+  const [reportError, setReportError] = useState('')
+  const [reportSubmitted, setReportSubmitted] = useState(false)
   const [renameVal, setRenameVal] = useState('')
   const [savedToLib, setSavedToLib] = useState(false)
   const [messages, setMessages] = useState([
@@ -1809,6 +1812,32 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
     const interval = setInterval(ping, 20000)
     return () => clearInterval(interval)
   }, [tab, activeDocumentId, heartbeatCsrf])
+
+  const REPORT_REASONS: { label: string; value: string }[] = [
+    { label: 'Inaccurate content', value: 'inaccurate_content' },
+    { label: 'Plagiarised material', value: 'plagiarised_material' },
+    { label: 'Inappropriate content', value: 'inappropriate_content' },
+    { label: 'Copyright violation', value: 'copyright_violation' },
+    { label: 'Other', value: 'other' },
+  ]
+
+  const submitReport = async (reason: string) => {
+    if (activeDocumentId == null || reportBusy) return
+    setReportBusy(true)
+    setReportError('')
+    try {
+      await api(`/documents/${activeDocumentId}/report`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': heartbeatCsrf },
+        body: JSON.stringify({ reason }),
+      })
+      setReportSubmitted(true)
+    } catch (e) {
+      setReportError(e instanceof ApiError ? e.message : 'Could not submit your report. Please try again.')
+    } finally {
+      setReportBusy(false)
+    }
+  }
 
   // Only pending while there's an active document whose fetch hasn't yet
   // resolved (success or error) - if no document is selected, this stays
@@ -1859,7 +1888,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
                 <button onClick={() => { setShowDots(false); setScreen('share-sheet') }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Share</button>
                 <button onClick={() => { setShowDots(false); setSavedToLib(true); setTimeout(() => setSavedToLib(false), 2000) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Save to Library</button>
                 <button onClick={() => { setShowDots(false); setShowDelete(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: '#C94C4C', cursor: 'pointer' }}>Delete</button>
-                <button onClick={() => { setShowDots(false); setShowReport(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: '#C94C4C', cursor: 'pointer' }}>Report</button>
+                <button onClick={() => { setShowDots(false); setReportSubmitted(false); setReportError(''); setShowReport(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: '#C94C4C', cursor: 'pointer' }}>Report</button>
               </div>
             )}
           </div>
@@ -1976,11 +2005,22 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
       {showReport && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 50 }}>
           <div style={{ background: T.card, borderRadius: 20, padding: 24, width: '100%' }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 14 }}>Report Document</div>
-            {['Inaccurate content','Plagiarised material','Inappropriate content','Copyright violation','Other'].map((r, i) => (
-              <button key={i} onClick={() => setShowReport(false)} style={{ display: 'block', width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 10, padding: '11px 14px', marginBottom: 8, textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>{r}</button>
-            ))}
-            <button onClick={() => setShowReport(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', marginTop: 4, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: T.text }}>Cancel</button>
+            {reportSubmitted ? (
+              <>
+                <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 8 }}>Report submitted</div>
+                <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 20 }}>Thanks - we've received your report and will take a look.</div>
+                <button onClick={() => setShowReport(false)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: N.navy }}>Done</button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 14 }}>Report Document</div>
+                {REPORT_REASONS.map((r) => (
+                  <button key={r.value} onClick={() => submitReport(r.value)} disabled={reportBusy} style={{ display: 'block', width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 10, padding: '11px 14px', marginBottom: 8, textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: reportBusy ? 'wait' : 'pointer', opacity: reportBusy ? 0.6 : 1 }}>{r.label}</button>
+                ))}
+                {reportError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{reportError}</div>}
+                <button onClick={() => setShowReport(false)} disabled={reportBusy} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', marginTop: 4, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: T.text }}>Cancel</button>
+              </>
+            )}
           </div>
         </div>
       )}
