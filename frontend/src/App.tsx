@@ -2040,6 +2040,20 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [messages, sending])
 
+  useEffect(() => {
+    if (activeDocumentId == null || loading || error || !csrfToken) return
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return
+      api('/study-time/heartbeat', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ feature: 'tutor_chat' }),
+      }).catch(() => {})
+    }
+    const interval = setInterval(ping, 20000)
+    return () => clearInterval(interval)
+  }, [activeDocumentId, loading, error, csrfToken])
+
   const send = async () => {
     if (!input.trim() || sending || activeDocumentId == null) return
     const body = input; setInput(''); setSendError('')
@@ -4109,10 +4123,10 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <Row label="Privacy Policy" onPress={() => setShowModal('privacy-policy')} />
         </Section>
 
-        <div style={{ margin: '8px 16px 0', background: '#fff', borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ margin: '8px 16px 0', background: T.card, borderRadius: 16, overflow: 'hidden' }}>
           <Row label="Log Out" danger onPress={() => setShowLogout(true)} right={<div style={{ color: '#C94C4C' }}>{Ic.logout()}</div>} />
         </div>
-        <div style={{ margin: '10px 16px 0', background: '#fff', borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ margin: '10px 16px 0', background: T.card, borderRadius: 16, overflow: 'hidden' }}>
           <Row label="Delete Account" sub="Permanently delete your account and data" danger onPress={() => setShowDeleteConfirm(true)} />
         </div>
       </div>
@@ -4120,46 +4134,46 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       {/* Generic settings modal */}
       {showModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }}>
-          <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%' }}>
-            <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
+          <div style={{ background: T.card, borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%' }}>
+            <div style={{ width: 40, height: 4, background: T.border, borderRadius: 99, margin: '0 auto 20px' }} />
             <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>
               {showModal === 'email' ? 'Change Email' : showModal === 'phone' ? 'Change Phone' : showModal === 'university' ? 'Select University' : showModal === 'course' ? 'Select Course' : showModal === 'study-prefs' ? 'Study Preferences' : showModal === 'ai-prefs' ? 'AI Preferences' : showModal === 'language' ? 'Language' : showModal === 'appearance' ? 'Appearance' : showModal === 'change-password' ? 'Change Password' : showModal === 'sessions' ? 'Login Sessions' : showModal === '2fa' ? 'Two-Factor Authentication' : showModal === 'plan' ? 'Current Plan' : showModal === 'upgrade' ? 'Upgrade to Premium' : showModal === 'billing' ? 'Billing' : showModal === 'help' ? 'Help Centre' : showModal === 'contact' ? 'Contact Support' : showModal === 'report-problem' ? 'Report a Problem' : showModal === 'about' ? 'About Prepza' : showModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
             </div>
             {showModal === 'email' ? (
               emailChangeSuccess ? (
                 <>
-                  <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 24 }}>We've sent a verification link to {newEmail.trim()}. Check your inbox to confirm the change.</div>
+                  <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65, marginBottom: 24 }}>We've sent a verification link to {newEmail.trim()}. Check your inbox to confirm the change.</div>
                   <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.5, marginBottom: 16 }}>Enter your current password and your new email address.</div>
-                  <input type="password" value={emailPassword} onChange={e => setEmailPassword(e.target.value)} placeholder="Current password" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10, boxSizing: 'border-box' }} />
-                  <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="New email address" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
+                  <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginBottom: 16 }}>Enter your current password and your new email address.</div>
+                  <input type="password" value={emailPassword} onChange={e => setEmailPassword(e.target.value)} placeholder="Current password" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10, boxSizing: 'border-box', background: T.card, color: T.text }} />
+                  <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="New email address" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 12, boxSizing: 'border-box', background: T.card, color: T.text }} />
                   {emailChangeError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{emailChangeError}</div>}
                   <button onClick={submitChangeEmail} disabled={emailChangeBusy || !emailPassword || !newEmail.trim()} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10, opacity: (emailChangeBusy || !emailPassword || !newEmail.trim()) ? 0.6 : 1 }}>{emailChangeBusy ? 'Saving…' : 'Save Email'}</button>
-                  <button onClick={() => setShowModal(null)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#374151' }}>Cancel</button>
+                  <button onClick={() => setShowModal(null)} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
                 </>
               )
             ) : showModal === 'change-password' ? (
               passwordChangeSuccess ? (
                 <>
-                  <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 24 }}>Your password has been changed.</div>
+                  <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65, marginBottom: 24 }}>Your password has been changed.</div>
                   <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
                 </>
               ) : (
                 <>
-                  <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current password" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10, boxSizing: 'border-box' }} />
-                  <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10, boxSizing: 'border-box' }} />
-                  <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} placeholder="Confirm new password" style={{ width: '100%', border: '1.5px solid rgba(0,0,0,0.12)', borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
+                  <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current password" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10, boxSizing: 'border-box', background: T.card, color: T.text }} />
+                  <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10, boxSizing: 'border-box', background: T.card, color: T.text }} />
+                  <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} placeholder="Confirm new password" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 12, boxSizing: 'border-box', background: T.card, color: T.text }} />
                   {passwordChangeError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{passwordChangeError}</div>}
                   <button onClick={submitChangePassword} disabled={passwordChangeBusy || !currentPassword || !newPassword} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10, opacity: (passwordChangeBusy || !currentPassword || !newPassword) ? 0.6 : 1 }}>{passwordChangeBusy ? 'Saving…' : 'Save Password'}</button>
-                  <button onClick={() => setShowModal(null)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#374151' }}>Cancel</button>
+                  <button onClick={() => setShowModal(null)} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
                 </>
               )
             ) : (
               <>
-                <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 24 }}>
+                <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65, marginBottom: 24 }}>
                   {showModal === 'terms' || showModal === 'privacy-policy' ? (
                     <div style={{ maxHeight: '50vh', overflowY: 'auto', whiteSpace: 'pre-wrap' }} className="scrollbar-hide">
                       {showModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
@@ -4176,12 +4190,12 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       {/* Logout confirmation */}
       {showLogout && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 99 }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
+          <div style={{ background: T.card, borderRadius: 20, padding: 24, width: '100%' }}>
             <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>👋</div>
             <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 8 }}>Log out of Prepza?</div>
-            <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 24 }}>You'll need to sign in again to access your study materials.</div>
+            <div style={{ fontSize: 13, color: T.textMuted, textAlign: 'center', marginBottom: 24 }}>You'll need to sign in again to access your study materials.</div>
             <button onClick={() => { api('/logout', { method: 'POST' }).catch(() => {}).finally(() => setScreen('login')) }} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
-            <button onClick={() => setShowLogout(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#374151' }}>Cancel</button>
+            <button onClick={() => setShowLogout(false)} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
           </div>
         </div>
       )}
@@ -4189,13 +4203,13 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       {/* Delete account confirmation */}
       {showDeleteConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 99 }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%' }}>
+          <div style={{ background: T.card, borderRadius: 20, padding: 24, width: '100%' }}>
             <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>⚠️</div>
             <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 8 }}>Delete your account?</div>
-            <div style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 16 }}>This permanently deletes your account and cannot be undone. Your uploaded documents and study history will be lost.</div>
+            <div style={{ fontSize: 13, color: T.textMuted, textAlign: 'center', marginBottom: 16 }}>This permanently deletes your account and cannot be undone. Your uploaded documents and study history will be lost.</div>
             {deleteError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, textAlign: 'center', marginBottom: 12 }}>{deleteError}</div>}
             <button onClick={handleDeleteAccount} disabled={deleting} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: deleting ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10, opacity: deleting ? 0.7 : 1 }}>{deleting ? 'Deleting...' : 'Yes, Delete My Account'}</button>
-            <button onClick={() => { setShowDeleteConfirm(false); setDeleteError('') }} disabled={deleting} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#374151' }}>Cancel</button>
+            <button onClick={() => { setShowDeleteConfirm(false); setDeleteError('') }} disabled={deleting} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
           </div>
         </div>
       )}
@@ -5330,14 +5344,18 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
   const [raw, setRaw] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
 
   useEffect(() => {
     if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
     api<{ csrf_token: string }>('/me')
-      .then(me => api<{ material_id: number; reused: boolean; mindmap: any }>(`/documents/${activeDocumentId}/mindmap`, {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': me.csrf_token },
-      }))
+      .then(me => {
+        setHeartbeatCsrf(me.csrf_token)
+        return api<{ material_id: number; reused: boolean; mindmap: any }>(`/documents/${activeDocumentId}/mindmap`, {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': me.csrf_token },
+        })
+      })
       .then(res => setRaw(res.mindmap))
       .catch(e => {
         if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
@@ -5346,6 +5364,23 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
       })
       .finally(() => setLoading(false))
   }, [activeDocumentId])
+
+  // Heartbeat while the generated mind map is on screen - mirrors the
+  // reading/flashcards/quiz/tutor pattern. 'mindmap' was just added to
+  // STUDY_TIME_FEATURES on the backend alongside this.
+  useEffect(() => {
+    if (loading || error || !raw || !heartbeatCsrf) return
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return
+      api('/study-time/heartbeat', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': heartbeatCsrf },
+        body: JSON.stringify({ feature: 'mindmap' }),
+      }).catch(() => {})
+    }
+    const interval = setInterval(ping, 20000)
+    return () => clearInterval(interval)
+  }, [loading, error, raw, heartbeatCsrf])
 
   // Builds a simple radial layout from whatever ai_service.py returned:
   // tries {center, branches:[...]} or {nodes:[...], edges:[...]} shapes.
