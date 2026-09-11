@@ -66,11 +66,9 @@ def patch_ai_routes() -> None:
         next_route = source.find("\n@app.route(", start + 1)
         end = next_route if next_route >= 0 else len(source)
         block = source[start:end]
-        old_call = (
-            '            document_content_id=content.id,\n'
-            '            triggering_user_id=user_id,\n'
-            '            plan_tier=get_ai_plan_tier(user_id),\n'
-        )
+        old_call = ('            document_content_id=content.id,\n'
+                    '            triggering_user_id=user_id,\n'
+                    '            plan_tier=get_ai_plan_tier(user_id),\n')
         new_call = old_call + '            parameters=request.get_json(silent=True) or {},\n'
         if old_call not in block:
             raise RuntimeError(f"AI call block missing for {material_type}")
@@ -84,22 +82,15 @@ def patch_user_material_lookup() -> None:
     path = ROOT / "app.py"
     source = path.read_text(encoding="utf-8")
     anchor = '\n\nclass AiJob(db.Model):'
-    helper = '''\n\ndef get_generated_material_for_user(document_content_id, material_type, user_id):\n    """Return the material visible to this user under the canonical/private boundary."""\n    public = (\n        db.session.query(LibraryPublication.id)\n        .join(Document, LibraryPublication.document_id == Document.id)\n        .filter(\n            Document.document_content_id == document_content_id,\n            LibraryPublication.status == "approved",\n        )\n        .first()\n    )\n    query = GeneratedMaterial.query.filter_by(\n        document_content_id=document_content_id, material_type=material_type, status="ready"\n    )\n    if public:\n        return query.filter(GeneratedMaterial.scope == "shared").first()\n    return query.filter(\n        GeneratedMaterial.scope == "private", GeneratedMaterial.owner_user_id == user_id\n    ).first()\n'''
+    helper = '''\n\ndef get_generated_material_for_user(document_content_id, material_type, user_id):\n    """Return the material visible to this user under the canonical/private boundary."""\n    public = (\n        db.session.query(LibraryPublication.id)\n        .join(Document, LibraryPublication.document_id == Document.id)\n        .filter(Document.document_content_id == document_content_id, LibraryPublication.status == "approved")\n        .first()\n    )\n    query = GeneratedMaterial.query.filter_by(document_content_id=document_content_id, material_type=material_type, status="ready")\n    if public:\n        return query.filter(GeneratedMaterial.scope == "shared").first()\n    return query.filter((GeneratedMaterial.scope == "private") & (GeneratedMaterial.owner_user_id == user_id)).first()\n'''
     if anchor not in source:
         raise RuntimeError("AiJob model anchor not found")
     source = source.replace(anchor, helper + anchor, 1)
-
-    replacements = [
-        ('GeneratedMaterial.query.filter_by(\n        document_content_id=document.document_content_id, material_type="podcast"\n    ).first()', 'get_generated_material_for_user(document.document_content_id, "podcast", user_id)'),
-        ('GeneratedMaterial.query.filter_by(\n        document_content_id=document.document_content_id, material_type="podcast"\n    ).first()', 'get_generated_material_for_user(document.document_content_id, "podcast", user_id)'),
-    ]
-    for old, new in replacements:
-        source = source.replace(old, new)
-
-    # Podcast library uses a content join; constrain the material to either a
-    # public shared artifact or the requesting owner's private artifact.
+    old = 'GeneratedMaterial.query.filter_by(\n        document_content_id=document.document_content_id, material_type="podcast"\n    ).first()'
+    new = 'get_generated_material_for_user(document.document_content_id, "podcast", user_id)'
+    source = source.replace(old, new)
     old_join = '            GeneratedMaterial.material_type == "podcast",\n            GeneratedMaterial.status == "ready",\n'
-    new_join = '''            GeneratedMaterial.material_type == "podcast",\n            GeneratedMaterial.status == "ready",\n            db.or_(\n                GeneratedMaterial.scope == "shared",\n                db.and_(GeneratedMaterial.scope == "private", GeneratedMaterial.owner_user_id == user_id),\n            ),\n'''
+    new_join = '''            GeneratedMaterial.material_type == "podcast",\n            GeneratedMaterial.status == "ready",\n            ((GeneratedMaterial.scope == "shared") | ((GeneratedMaterial.scope == "private") & (GeneratedMaterial.owner_user_id == user_id))),\n'''
     if old_join in source:
         source = source.replace(old_join, new_join, 1)
     path.write_text(source, encoding="utf-8")
