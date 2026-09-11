@@ -861,7 +861,7 @@ class StudyActivityLog(db.Model):
     )
 
 
-STUDY_TIME_FEATURES = {"reading", "podcast", "quiz", "flashcards", "tutor_chat"}
+STUDY_TIME_FEATURES = {"reading", "podcast", "quiz", "flashcards", "tutor_chat", "mindmap"}
 
 
 class StudyTimeLog(db.Model):
