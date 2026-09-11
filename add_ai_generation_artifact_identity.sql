@@ -39,6 +39,30 @@ ALTER TABLE ai_generation_artifact
 ALTER TABLE ai_generation_artifact
     ADD COLUMN IF NOT EXISTS owner_user_id BIGINT;
 
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_ai_generation_artifact_scope'
+          AND conrelid = 'ai_generation_artifact'::regclass
+    ) THEN
+        ALTER TABLE ai_generation_artifact
+            ADD CONSTRAINT ck_ai_generation_artifact_scope
+            CHECK (scope IN ('shared', 'private'));
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_ai_generation_artifact_private_owner'
+          AND conrelid = 'ai_generation_artifact'::regclass
+    ) THEN
+        ALTER TABLE ai_generation_artifact
+            ADD CONSTRAINT ck_ai_generation_artifact_private_owner
+            CHECK ((scope = 'shared' AND owner_user_id IS NULL)
+                OR (scope = 'private' AND owner_user_id IS NOT NULL));
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS ix_ai_generation_artifact_content_feature
     ON ai_generation_artifact (content_hash, feature);
 
