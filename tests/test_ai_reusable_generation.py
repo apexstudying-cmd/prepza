@@ -3,6 +3,7 @@ import pytest
 from ai_reusable_generation import normalize_parameters
 
 
+# These tests intentionally stay provider-free: normalization is part of the artifact identity contract.
 def test_normalize_parameters_is_deterministic_and_whitespace_safe():
     assert normalize_parameters(
         "podcast",
