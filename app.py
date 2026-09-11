@@ -1057,6 +1057,13 @@ class MessageAttachment(db.Model):
     status = db.Column(db.String(20), nullable=False, default="uploading")
     # uploading -> ready | failed
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    cached_view_url = db.Column(db.String(1000), nullable=True)
+    cached_view_url_expires_at = db.Column(db.DateTime, nullable=True)
+    # Chat redesign Phase 1a: see get_cached_chat_attachment_url() below.
+    # Populated lazily on first serialization, refreshed only once
+    # close to actual expiry - keeps the URL returned to the client
+    # STABLE across repeated polls, so the browser can actually cache
+    # the image instead of re-downloading it every ~4s poll cycle.
 
 
 class Group(db.Model):
@@ -2041,6 +2048,52 @@ def get_signed_url(bucket_path, expires_in=60, bucket="content"):
     except Exception as e:
         print(f"ERROR generating signed URL for {bucket_path}: {e}")
         return None
+
+
+CHAT_ATTACHMENT_URL_TTL_SECONDS = 3600
+CHAT_ATTACHMENT_URL_REFRESH_BUFFER_SECONDS = 300
+
+
+def get_cached_chat_attachment_url(attachment):
+    """
+    Chat redesign Phase 1a. Returns a signed URL for a chat
+    MessageAttachment, reusing the cached one on the row if it is
+    still valid (with a 5-minute safety buffer), otherwise
+    generating a fresh one and caching it.
+
+    This is the actual fix for the confirmed root cause of chat
+    images feeling slow: without caching, every poll of
+    GET /chats/<id>/messages regenerated a brand-new signed URL
+    (new token) for every attachment, so the browser could never
+    cache the image - a new URL is always a cache miss. Returning
+    the SAME URL across polls lets normal HTTP image caching work.
+
+    Does not raise - mirrors get_signed_url()'s own "return None
+    rather than crash the request" posture, since a missing/failed
+    attachment URL shouldn't break the whole message list.
+    """
+    if not attachment or not attachment.storage_path:
+        return None
+
+    now = datetime.utcnow()
+    if (
+        attachment.cached_view_url
+        and attachment.cached_view_url_expires_at
+        and attachment.cached_view_url_expires_at - timedelta(seconds=CHAT_ATTACHMENT_URL_REFRESH_BUFFER_SECONDS) > now
+    ):
+        return attachment.cached_view_url
+
+    fresh_url = get_signed_url(
+        attachment.storage_path, expires_in=CHAT_ATTACHMENT_URL_TTL_SECONDS, bucket="documents"
+    )
+    if not fresh_url:
+        return None
+
+    attachment.cached_view_url = fresh_url
+    attachment.cached_view_url_expires_at = now + timedelta(seconds=CHAT_ATTACHMENT_URL_TTL_SECONDS)
+    db.session.commit()
+
+    return fresh_url
 
 
 def fetch_private_file_bytes(bucket_path, bucket="content"):
@@ -8367,7 +8420,7 @@ def _serialize_message(message, attachment=None):
             "file_type": attachment.file_type,
             "original_filename": attachment.original_filename,
             "file_size_bytes": attachment.file_size_bytes,
-            "view_url": get_signed_url(attachment.storage_path, bucket="documents"),
+            "view_url": get_cached_chat_attachment_url(attachment),
         }
     return {
         "id": message.id,
@@ -9004,7 +9057,7 @@ def list_chat_attachments(conversation_id):
             "file_type": attachment.file_type,
             "original_filename": attachment.original_filename,
             "file_size_bytes": attachment.file_size_bytes,
-            "view_url": get_signed_url(attachment.storage_path, bucket="documents"),
+            "view_url": get_cached_chat_attachment_url(attachment),
             "uploaded_by_user_id": attachment.uploaded_by_user_id,
             "uploaded_by_name": _display_name(uploader) if uploader else "Deleted user",
             "created_at": attachment.created_at.isoformat() if attachment.created_at else None,
