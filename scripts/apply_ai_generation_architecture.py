@@ -48,6 +48,11 @@ def patch_legacy_generators() -> None:
     source = path.read_text(encoding="utf-8")
 
     for material_type, public_name in MATERIALS.items():
+        # A previous successful run already installed the public wrapper.
+        # Do not rename or mutate it on subsequent CI runs.
+        if f"def {public_name}(" in source and "return generate_document_material(" in source[source.find(f"def {public_name}("):source.find(f"def {public_name}(") + 700]:
+            continue
+
         legacy_name = f"_legacy_{public_name}"
         source, count = re.subn(
             rf"(?m)^def {re.escape(public_name)}\(",
@@ -55,12 +60,9 @@ def patch_legacy_generators() -> None:
             source,
             count=1,
         )
-        if count == 0 and f"def {legacy_name}(" not in source:
+        if count == 0:
             raise RuntimeError(f"Could not rename {public_name}")
 
-        # The legacy functions all use the same content/type cache pattern.
-        # Restrict it to the artifact's scope and owner so private material
-        # can never be returned through an old GeneratedMaterial lookup.
         cache_pattern = (
             rf"existing = GeneratedMaterial\.query\.filter_by\(\n"
             rf"\s*document_content_id=document_content_id, material_type={re.escape(repr(material_type))}\n"
@@ -163,6 +165,8 @@ def main() -> None:
     patch_ai_routes()
     patch_legacy_generators()
     for public_name, replacement in WRAPPERS.items():
+        # Replacing a wrapper with itself is harmless and keeps this step
+        # deterministic if a previous run partially completed.
         replace_top_level_function(ROOT / "ai_service.py", public_name, replacement)
     print("AI generation architecture patch applied")
 
