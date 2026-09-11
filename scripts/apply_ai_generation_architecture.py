@@ -23,24 +23,11 @@ def _top_level_function(source: str, name: str):
     )
 
 
-def _replace_node(source: str, node: ast.AST, replacement: str) -> str:
-    lines = source.splitlines(keepends=True)
-    start = sum(len(line) for line in lines[: node.lineno - 1])
-    end = sum(len(line) for line in lines[: node.end_lineno])
-    updated = source[:start] + replacement.rstrip() + "\n" + source[end:]
-    ast.parse(updated)
-    return updated
-
-
 def _install_wrapper(source: str, material_type: str, public_name: str) -> str:
-    wrapper_prefix = f"def {public_name}("
-    if wrapper_prefix in source:
+    if f"def {public_name}(" in source:
         return source
 
     legacy_name = f"_legacy_{public_name}"
-    if f"def {legacy_name}(" not in source:
-        raise RuntimeError(f"Could not find legacy generator {public_name}")
-
     node = _top_level_function(source, legacy_name)
     if node is None:
         raise RuntimeError(f"Could not locate top-level legacy generator {legacy_name}")
@@ -69,7 +56,6 @@ def patch_legacy_generators() -> None:
 
     for material_type, public_name in MATERIALS.items():
         if f"def {public_name}(" in source:
-            # Already wrapped. Never mutate the generated wrapper on a later run.
             continue
         legacy_name = f"_legacy_{public_name}"
         if f"def {legacy_name}(" not in source:
@@ -80,8 +66,6 @@ def patch_legacy_generators() -> None:
             start = sum(len(line) for line in lines[: node.lineno - 1])
             end = sum(len(line) for line in lines[: node.end_lineno])
             original = source[start:end]
-            # Rename only the function identifier; preserve its original signature
-            # and body so this patch cannot corrupt multiline signatures.
             renamed = original.replace(f"def {public_name}", f"def {legacy_name}", 1)
             source = source[:start] + renamed + source[end:]
             ast.parse(source)
@@ -148,6 +132,15 @@ def patch_user_material_lookup() -> None:
         if anchor not in source:
             raise RuntimeError("AiJob model anchor not found")
         source = source.replace(anchor, helper + anchor, 1)
+
+    # Podcast playback/audio routes must use the same scope gate as generation.
+    old_lookup = '''    material = GeneratedMaterial.query.filter_by(
+        document_content_id=document.document_content_id, material_type="podcast"
+    ).first()'''
+    new_lookup = '''    material = get_generated_material_for_user(
+        document.document_content_id, "podcast", session.get("user_id")
+    )'''
+    source = source.replace(old_lookup, new_lookup)
     path.write_text(source, encoding="utf-8")
 
 
