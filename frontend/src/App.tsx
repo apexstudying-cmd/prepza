@@ -6518,6 +6518,11 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<StreakResponse | null>(null)
   const [viewMonth, setViewMonth] = useState<string | null>(null)
+  // Selected day for the tap-to-reveal detail line below the calendar -
+  // the `title` attribute on each tile only fires on desktop mouse hover
+  // and does nothing on touch devices, so this is the actual mechanism
+  // mobile users have for seeing a day's study duration.
+  const [selectedDay, setSelectedDay] = useState<StreakCalendarDay | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -6555,6 +6560,7 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     if (!calendarMonth) return
     const [y, m] = calendarMonth.split('-').map(Number)
     const d = new Date(y, m - 1 + dir, 1)
+    setSelectedDay(null)
     setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
 
@@ -6645,11 +6651,23 @@ function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
               const shade = shadeForSeconds(d.study_seconds)
               const dateLabel = new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
               const tooltip = `${dateLabel} — ${d.is_future ? 'Upcoming' : formatStudyDuration(d.study_seconds)}`
+              const isSelected = selectedDay?.date === d.date
               return (
-                <div key={i} style={{ aspectRatio: '1', borderRadius: 6, background: shade.color, border: shade.border, opacity: d.is_future ? 0.35 : 1, transition: 'background 0.2s' }} title={tooltip} />
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setSelectedDay(isSelected ? null : d)}
+                  title={tooltip}
+                  style={{ aspectRatio: '1', borderRadius: 6, background: shade.color, border: isSelected ? `2px solid ${N.navy}` : shade.border, opacity: d.is_future ? 0.35 : 1, transition: 'background 0.2s, border 0.15s', padding: 0, margin: 0, appearance: 'none', font: 'inherit', cursor: 'pointer' }}
+                />
               )
             })}
           </div>
+          {selectedDay && (
+            <div style={{ marginTop: 10, padding: '8px 12px', background: `${N.gold}15`, borderRadius: 10, fontSize: 12, fontWeight: 600, color: T.text, textAlign: 'center' }}>
+              {new Date(selectedDay.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} — {selectedDay.is_future ? 'Upcoming' : formatStudyDuration(selectedDay.study_seconds)}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 6, marginTop: 14, alignItems: 'center', justifyContent: 'flex-end' }}>
             <span style={{ fontSize: 10, color: T.textMuted }}>Less</span>
             {SHADE_LEVELS.map((lvl, i) => (
