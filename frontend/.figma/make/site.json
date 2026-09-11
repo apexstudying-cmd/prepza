@@ -1,7 +1,8 @@
 {
+  "title": "Prepza — Study Smarter Together",
   "description": "Connect with peers and enhance your learning experience through AI-powered study tools, personalized feeds, and collaborative features designed for university students.",
   "robots": {
-    "index": false
+    "index": true
   },
   "accessibility": {
     "addBypassLinks": false,
