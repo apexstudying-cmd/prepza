@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,8 +13,39 @@ MATERIALS = {
     "mind_map": "generate_document_mindmap",
 }
 
-WRAPPERS = {
-    name: f'''def {name}(document_content_id, triggering_user_id, plan_tier="free", parameters=None):
+
+def _top_level_function(source: str, name: str):
+    tree = ast.parse(source)
+    return next(
+        (node for node in tree.body
+         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name),
+        None,
+    )
+
+
+def _replace_node(source: str, node: ast.AST, replacement: str) -> str:
+    lines = source.splitlines(keepends=True)
+    start = sum(len(line) for line in lines[: node.lineno - 1])
+    end = sum(len(line) for line in lines[: node.end_lineno])
+    updated = source[:start] + replacement.rstrip() + "\n" + source[end:]
+    ast.parse(updated)
+    return updated
+
+
+def _install_wrapper(source: str, material_type: str, public_name: str) -> str:
+    wrapper_prefix = f"def {public_name}("
+    if wrapper_prefix in source:
+        return source
+
+    legacy_name = f"_legacy_{public_name}"
+    if f"def {legacy_name}(" not in source:
+        raise RuntimeError(f"Could not find legacy generator {public_name}")
+
+    node = _top_level_function(source, legacy_name)
+    if node is None:
+        raise RuntimeError(f"Could not locate top-level legacy generator {legacy_name}")
+
+    wrapper = f'''def {public_name}(document_content_id, triggering_user_id, plan_tier="free", parameters=None):
     from ai_reusable_generation import generate_document_material
     return generate_document_material(
         material_type="{material_type}",
@@ -24,23 +54,13 @@ WRAPPERS = {
         plan_tier=plan_tier,
         parameters=parameters,
     )
+
 '''
-    for material_type, name in MATERIALS.items()
-}
-
-
-def replace_top_level_function(path: Path, name: str, replacement: str) -> None:
-    source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    node = next((n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name), None)
-    if node is None:
-        raise RuntimeError(f"Could not find {name} in {path}")
     lines = source.splitlines(keepends=True)
     start = sum(len(line) for line in lines[: node.lineno - 1])
-    end = sum(len(line) for line in lines[: node.end_lineno])
-    source = source[:start] + replacement.rstrip() + "\n" + source[end:]
-    ast.parse(source)
-    path.write_text(source, encoding="utf-8")
+    updated = source[:start] + wrapper + source[start:]
+    ast.parse(updated)
+    return updated
 
 
 def patch_legacy_generators() -> None:
@@ -48,53 +68,25 @@ def patch_legacy_generators() -> None:
     source = path.read_text(encoding="utf-8")
 
     for material_type, public_name in MATERIALS.items():
-        # A previous successful run already installed the public wrapper.
-        # Do not rename or mutate it on subsequent CI runs.
-        if f"def {public_name}(" in source and "return generate_document_material(" in source[source.find(f"def {public_name}("):source.find(f"def {public_name}(") + 700]:
+        if f"def {public_name}(" in source:
+            # Already wrapped. Never mutate the generated wrapper on a later run.
             continue
-
         legacy_name = f"_legacy_{public_name}"
-        source, count = re.subn(
-            rf"(?m)^def {re.escape(public_name)}\(",
-            f"def {legacy_name}(document_content_id, triggering_user_id, plan_tier=\"free\", parameters=None, scope=\"shared\", owner_user_id=None):",
-            source,
-            count=1,
-        )
-        if count == 0:
-            raise RuntimeError(f"Could not rename {public_name}")
+        if f"def {legacy_name}(" not in source:
+            node = _top_level_function(source, public_name)
+            if node is None:
+                raise RuntimeError(f"Could not find {public_name}")
+            lines = source.splitlines(keepends=True)
+            start = sum(len(line) for line in lines[: node.lineno - 1])
+            end = sum(len(line) for line in lines[: node.end_lineno])
+            original = source[start:end]
+            # Rename only the function identifier; preserve its original signature
+            # and body so this patch cannot corrupt multiline signatures.
+            renamed = original.replace(f"def {public_name}", f"def {legacy_name}", 1)
+            source = source[:start] + renamed + source[end:]
+            ast.parse(source)
+        source = _install_wrapper(source, material_type, public_name)
 
-        cache_pattern = (
-            rf"existing = GeneratedMaterial\.query\.filter_by\(\n"
-            rf"\s*document_content_id=document_content_id, material_type={re.escape(repr(material_type))}\n"
-            rf"\s*\)\.first\(\)"
-        )
-        cache_replacement = (
-            "existing = GeneratedMaterial.query.filter_by(\n"
-            f"        document_content_id=document_content_id, material_type={material_type!r},\n"
-            "        scope=scope, owner_user_id=owner_user_id\n"
-            "    ).first()"
-        )
-        source, count = re.subn(cache_pattern, cache_replacement, source, count=1)
-        if count == 0:
-            raise RuntimeError(f"Could not scope {material_type} legacy cache lookup")
-
-        create_pattern = (
-            rf"GeneratedMaterial\(\n"
-            rf"\s*document_content_id=document_content_id, material_type={re.escape(repr(material_type))}\n"
-            rf"\s*\)"
-        )
-        create_replacement = (
-            "GeneratedMaterial(\n"
-            f"        document_content_id=document_content_id, material_type={material_type!r},\n"
-            "        scope=scope, owner_user_id=owner_user_id,\n"
-            "        generation_parameters=parameters or {}, generation_version=\"v1\"\n"
-            "    )"
-        )
-        source, count = re.subn(create_pattern, create_replacement, source, count=1)
-        if count == 0:
-            raise RuntimeError(f"Could not scope {material_type} legacy material creation")
-
-    ast.parse(source)
     path.write_text(source, encoding="utf-8")
 
 
@@ -103,7 +95,7 @@ def patch_generated_material_model() -> None:
     source = path.read_text(encoding="utf-8")
     if "generation_fingerprint = db.Column" not in source:
         anchor = '    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)\n\n    # ---- Content review (Chunk 10) ----'
-        addition = '''    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)\n\n    generation_fingerprint = db.Column(db.String(128), nullable=False)\n    generation_parameters = db.Column(db.JSON, nullable=True)\n    generation_version = db.Column(db.String(50), nullable=False, default="v1")\n    scope = db.Column(db.String(20), nullable=False, default="shared")\n    owner_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)\n\n    # ---- Content review (Chunk 10) ----'''
+        addition = '''    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)\n\n    generation_fingerprint = db.Column(db.String(128), nullable=False)\n    generation_parameters = db.Column(db.JSON, nullable=True)\n    generation_version = db.Column(db.String(50), nullable=False, default="v2")\n    scope = db.Column(db.String(20), nullable=False, default="shared")\n    owner_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)\n\n    # ---- Content review (Chunk 10) ----'''
         if anchor not in source:
             raise RuntimeError("GeneratedMaterial model anchor not found")
         source = source.replace(anchor, addition, 1)
@@ -152,7 +144,7 @@ def patch_user_material_lookup() -> None:
     source = path.read_text(encoding="utf-8")
     if "def get_generated_material_for_user(" not in source:
         anchor = "\n\nclass AiJob(db.Model):"
-        helper = '''\n\ndef get_generated_material_for_user(document_content_id, material_type, user_id):\n    """Return ready material visible to this user under the public/private boundary."""\n    public = (\n        db.session.query(LibraryPublication.id)\n        .join(Document, LibraryPublication.document_id == Document.id)\n        .filter(Document.document_content_id == document_content_id, LibraryPublication.status == "approved")\n        .first()\n    )\n    query = GeneratedMaterial.query.filter_by(\n        document_content_id=document_content_id, material_type=material_type, status="ready"\n    )\n    if public:\n        return query.filter(GeneratedMaterial.scope == "shared").first()\n    return query.filter(\n        GeneratedMaterial.scope == "private", GeneratedMaterial.owner_user_id == user_id\n    ).first()\n'''
+        helper = '''\n\ndef get_generated_material_for_user(document_content_id, material_type, user_id):\n    """Return ready material without crossing the public/private boundary."""\n    owned = (\n        db.session.query(Document.id)\n        .filter(\n            Document.user_id == user_id,\n            Document.document_content_id == document_content_id,\n            Document.is_removed.is_(False),\n        )\n        .first()\n    )\n    query = GeneratedMaterial.query.filter_by(\n        document_content_id=document_content_id, material_type=material_type, status="ready"\n    )\n    if owned:\n        approved = (\n            db.session.query(LibraryPublication.id)\n            .filter(\n                LibraryPublication.document_id == owned.id,\n                LibraryPublication.status == "approved",\n            )\n            .first()\n        )\n        if approved:\n            return query.filter(GeneratedMaterial.scope == "shared").first()\n        return query.filter(\n            GeneratedMaterial.scope == "private", GeneratedMaterial.owner_user_id == user_id\n        ).first()\n\n    public = (\n        db.session.query(LibraryPublication.id)\n        .join(Document, LibraryPublication.document_id == Document.id)\n        .filter(Document.document_content_id == document_content_id, LibraryPublication.status == "approved")\n        .first()\n    )\n    if public:\n        return query.filter(GeneratedMaterial.scope == "shared").first()\n    return None\n'''
         if anchor not in source:
             raise RuntimeError("AiJob model anchor not found")
         source = source.replace(anchor, helper + anchor, 1)
@@ -164,10 +156,6 @@ def main() -> None:
     patch_user_material_lookup()
     patch_ai_routes()
     patch_legacy_generators()
-    for public_name, replacement in WRAPPERS.items():
-        # Replacing a wrapper with itself is harmless and keeps this step
-        # deterministic if a previous run partially completed.
-        replace_top_level_function(ROOT / "ai_service.py", public_name, replacement)
     print("AI generation architecture patch applied")
 
 
