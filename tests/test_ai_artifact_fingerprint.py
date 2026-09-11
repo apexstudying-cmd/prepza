@@ -49,10 +49,10 @@ def test_parameters_change_identity():
 def test_prompt_and_schema_versions_change_identity():
     base = build_generation_fingerprint(content_hash="abc", material_type="summary")
     prompt = build_generation_fingerprint(
-        content_hash="abc", material_type="summary", prompt_version="v2"
+        content_hash="abc", material_type="summary", prompt_version="v3"
     )
     schema = build_generation_fingerprint(
-        content_hash="abc", material_type="summary", schema_version="v2"
+        content_hash="abc", material_type="summary", schema_version="v3"
     )
     assert base != prompt
     assert base != schema
