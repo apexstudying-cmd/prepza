@@ -300,6 +300,12 @@ class GeneratedMaterial(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    generation_fingerprint = db.Column(db.String(128), nullable=False)
+    generation_parameters = db.Column(db.JSON, nullable=True)
+    generation_version = db.Column(db.String(50), nullable=False, default="v2")
+    scope = db.Column(db.String(20), nullable=False, default="shared")
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+
     # ---- Content review (Chunk 10) ----
     # Flagging a material does NOT block a student from generating/
     # studying it privately - it only keeps it out of the public Library
@@ -312,8 +318,48 @@ class GeneratedMaterial(db.Model):
     flagged_at = db.Column(db.DateTime, nullable=True)
 
     __table_args__ = (
-        db.UniqueConstraint("document_content_id", "material_type", name="uq_material_content_type"),
+        db.Index("uq_generated_material_fingerprint", "generation_fingerprint", unique=True),
     )
+
+
+def get_generated_material_for_user(document_content_id, material_type, user_id):
+    """Return ready material without crossing the public/private boundary."""
+    owned = (
+        db.session.query(Document.id)
+        .filter(
+            Document.user_id == user_id,
+            Document.document_content_id == document_content_id,
+            Document.is_removed.is_(False),
+        )
+        .first()
+    )
+    query = GeneratedMaterial.query.filter_by(
+        document_content_id=document_content_id, material_type=material_type, status="ready"
+    )
+    if owned:
+        approved = (
+            db.session.query(LibraryPublication.id)
+            .filter(
+                LibraryPublication.document_id == owned.id,
+                LibraryPublication.status == "approved",
+            )
+            .first()
+        )
+        if approved:
+            return query.filter(GeneratedMaterial.scope == "shared").first()
+        return query.filter(
+            GeneratedMaterial.scope == "private", GeneratedMaterial.owner_user_id == user_id
+        ).first()
+
+    public = (
+        db.session.query(LibraryPublication.id)
+        .join(Document, LibraryPublication.document_id == Document.id)
+        .filter(Document.document_content_id == document_content_id, LibraryPublication.status == "approved")
+        .first()
+    )
+    if public:
+        return query.filter(GeneratedMaterial.scope == "shared").first()
+    return None
 
 
 class AiJob(db.Model):
@@ -3551,6 +3597,7 @@ def summarize_document(document_id):
             document_content_id=content.id,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
+            parameters=request.get_json(silent=True) or {},
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
@@ -3564,7 +3611,7 @@ def summarize_document(document_id):
 
     return jsonify({
         "material_id": result["material_id"],
-        "reused": result["reused"],
+        "reused": False,
         "summary": result["payload"],
     }), 200
 
@@ -3602,6 +3649,7 @@ def quiz_document(document_id):
             document_content_id=content.id,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
+            parameters=request.get_json(silent=True) or {},
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
@@ -3615,7 +3663,7 @@ def quiz_document(document_id):
 
     return jsonify({
         "material_id": result["material_id"],
-        "reused": result["reused"],
+        "reused": False,
         "quiz": result["payload"],
     }), 200
 
@@ -3714,6 +3762,7 @@ def flashcards_document(document_id):
             document_content_id=content.id,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
+            parameters=request.get_json(silent=True) or {},
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
@@ -3727,7 +3776,7 @@ def flashcards_document(document_id):
 
     return jsonify({
         "material_id": result["material_id"],
-        "reused": result["reused"],
+        "reused": False,
         "flashcards": result["payload"],
     }), 200
 
@@ -3823,6 +3872,7 @@ def podcast_script_document(document_id):
             document_content_id=content.id,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
+            parameters=request.get_json(silent=True) or {},
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
@@ -3836,7 +3886,7 @@ def podcast_script_document(document_id):
 
     return jsonify({
         "material_id": result["material_id"],
-        "reused": result["reused"],
+        "reused": False,
         "podcast": result["payload"],
     }), 200
 
@@ -3867,9 +3917,9 @@ def trigger_podcast_audio(document_id):
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate a podcast from"}), 400
 
-    material = GeneratedMaterial.query.filter_by(
-        document_content_id=document.document_content_id, material_type="podcast"
-    ).first()
+    material = get_generated_material_for_user(
+        document.document_content_id, "podcast", session.get("user_id")
+    )
     if not material or material.status != "ready" or not material.payload:
         return jsonify({"error": "Generate the podcast script first"}), 400
 
@@ -3909,9 +3959,9 @@ def get_podcast_audio(document_id):
     if not document.document_content_id:
         return jsonify({"error": "Document has no podcast"}), 404
 
-    material = GeneratedMaterial.query.filter_by(
-        document_content_id=document.document_content_id, material_type="podcast"
-    ).first()
+    material = get_generated_material_for_user(
+        document.document_content_id, "podcast", session.get("user_id")
+    )
     if not material or not material.payload:
         return jsonify({"error": "No podcast generated for this document yet"}), 404
 
@@ -4012,6 +4062,7 @@ def mindmap_document(document_id):
             document_content_id=content.id,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
+            parameters=request.get_json(silent=True) or {},
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
@@ -4025,7 +4076,7 @@ def mindmap_document(document_id):
 
     return jsonify({
         "material_id": result["material_id"],
-        "reused": result["reused"],
+        "reused": False,
         "mindmap": result["payload"],
     }), 200
 
