@@ -13,7 +13,7 @@ from ai_generation_store import (
 )
 
 PROMPT_VERSIONS = {key: f"{key}-v2" for key in ("summary", "quiz", "flashcards", "podcast", "mind_map")}
-SCHEMA_VERSIONS = {key: f"schema-v2" for key in PROMPT_VERSIONS}
+SCHEMA_VERSIONS = {key: "schema-v2" for key in PROMPT_VERSIONS}
 PARAMETER_KEYS = {
     "summary": {"max_pages", "style", "language"},
     "quiz": {"question_count", "difficulty", "language"},
@@ -27,6 +27,8 @@ def normalize_parameters(material_type: str, parameters: dict | None) -> dict:
     params = parameters or {}
     if not isinstance(params, dict):
         raise ValueError("AI generation parameters must be an object")
+    if material_type not in PARAMETER_KEYS:
+        raise ValueError(f"Unsupported AI material type: {material_type}")
     unknown = set(params) - PARAMETER_KEYS[material_type]
     if unknown:
         raise ValueError(f"Unsupported {material_type} parameter(s): {', '.join(sorted(unknown))}")
@@ -238,11 +240,19 @@ def generate_document_material(*, material_type, document_content_id, triggering
         constraint = _parameter_instruction(params)
         if constraint:
             user_message = constraint + "\n\n" + user_message
-        ai_response = ai_service._call_with_continuation(
+
+        # Use the existing provider-agnostic routing layer. This preserves
+        # Prepza's configured primary/fallback model behavior and its exact
+        # AIResponse/usage shape; the reusable layer owns only identity,
+        # concurrency, entitlement, and persistence.
+        task_config = ai_service.AI_TASKS[task]
+        ai_request = ai_service.AIRequest(
             task=task,
             system_prompt=system_prompt,
             user_message=user_message,
+            max_tokens=task_config["max_tokens"],
         )
+        ai_response = ai_service.route_and_generate(ai_request)
         parsed = parser(ai_response.text)
         payload = _podcast_payload(parsed) if material_type == "podcast" else parsed
         ai_service.log_usage(
