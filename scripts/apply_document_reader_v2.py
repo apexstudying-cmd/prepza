@@ -15,16 +15,23 @@ if old_script_access in s:
 elif new_script_access not in s:
     raise SystemExit('podcast script access block not found')
 
-old_script_material = '''    try:\n        result = ai_service.generate_document_podcast_script(\n'''
-new_script_material = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()\n        if not material or not material.payload:\n            return jsonify({"error": "Podcast has not been published yet"}), 404\n        record_document_studied(user_id, content.id)\n        db.session.commit()\n        return jsonify({\n            "material_id": material.id,\n            "reused": True,\n            "podcast": json.loads(material.payload),\n        }), 200\n\n    try:\n        result = ai_service.generate_document_podcast_script(\n'''
-if new_script_material not in s:
-    if old_script_material in s:
-        s = s.replace(old_script_material, new_script_material, 1)
+published_script_block = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()\n        if not material or not material.payload:\n            return jsonify({"error": "Podcast has not been published yet"}), 404\n        record_document_studied(user_id, content.id)\n        db.session.commit()\n        return jsonify({\n            "material_id": material.id,\n            "reused": True,\n            "podcast": json.loads(material.payload),\n        }), 200\n\n'''
+shared_script_block = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()\n        if not material or not material.payload:\n            return jsonify({"error": "Podcast has not been published yet"}), 404\n        record_document_studied(user_id, content.id)\n        db.session.commit()\n        return jsonify({\n            "material_id": material.id,\n            "reused": True,\n            "podcast": json.loads(material.payload),\n        }), 200\n\n'''
+if shared_script_block not in s:
+    if published_script_block in s:
+        s = s.replace(published_script_block, shared_script_block, 1)
     else:
-        raise SystemExit('podcast script material anchor not found')
+        raise SystemExit('published podcast script block not found')
+
+# Older runs of this patch could append the same shared-material branch more
+# than once. Collapse identical copies now, while keeping the patch itself
+# repeat-safe for future runs.
+while s.count(shared_script_block) > 1:
+    first = s.find(shared_script_block)
+    s = s[:first + len(shared_script_block)] + s[first + len(shared_script_block):].replace(shared_script_block, '', 1)
 
 old_audio_material = '''    material = get_generated_material_for_user(\n        document.document_content_id, "podcast", session.get("user_id")\n    )\n'''
-new_audio_material = '''    if document.user_id == user_id:\n        material = get_generated_material_for_user(\n            document.document_content_id, "podcast", session.get("user_id")\n        )\n    else:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()\n'''
+new_audio_material = '''    if document.user_id == user_id:\n        material = get_generated_material_for_user(\n            document.document_content_id, "podcast", session.get("user_id")\n        )\n    else:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()\n'''
 if new_audio_material not in s:
     if old_audio_material in s:
         s = s.replace(old_audio_material, new_audio_material, 1)
