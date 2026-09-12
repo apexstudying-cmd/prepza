@@ -87,8 +87,9 @@ def main() -> None:
         "frontend/src/crypto/e2eeFetchBridge.ts",
         "encryptGroupBytes",
         "decryptGroupBytes",
-        "Missing encrypted attachment metadata",
-        "localGroupSearch",
+        "ENCRYPTED_ATTACHMENT_MARKER",
+        "localSearchGroupMessages",
+        "Encrypted attachment download failed",
     )
 
     # The server route must not contain an API field/helper that accepts a
