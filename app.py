@@ -3863,7 +3863,9 @@ def complete_quiz(document_id, material_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not _can_study_document(user_id, document):
+        return jsonify({"error": "Document not found"}), 404
+    if not document or not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
     if not document.document_content_id:
         return jsonify({"error": "Document has no content"}), 400
@@ -3875,6 +3877,8 @@ def complete_quiz(document_id, material_id):
         or material.material_type != "quiz"
         or material.status != "ready"
     ):
+        return jsonify({"error": "Quiz material not found"}), 404
+    if document.user_id != user_id and (material.scope != "shared" or material.owner_user_id is not None):
         return jsonify({"error": "Quiz material not found"}), 404
 
     data = request.get_json(silent=True) or {}
@@ -3923,7 +3927,7 @@ def flashcards_document(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not document or not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
     if not document.document_content_id:
@@ -3987,7 +3991,7 @@ def complete_flashcards(document_id, material_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not document or not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
     if not document.document_content_id:
         return jsonify({"error": "Document has no content"}), 400
@@ -4000,6 +4004,8 @@ def complete_flashcards(document_id, material_id):
         or material.status != "ready"
     ):
         return jsonify({"error": "Flashcard material not found"}), 404
+    if document.user_id != user_id and (material.scope != "shared" or material.owner_user_id is not None):
+        return jsonify({"error": "Flashcards material not found"}), 404
 
     data = request.get_json(silent=True) or {}
     cards_reviewed = data.get("cards_reviewed")
@@ -4189,6 +4195,8 @@ def get_podcast_audio(document_id):
             document_content_id=document.document_content_id,
             material_type="podcast",
             status="ready",
+            scope="shared",
+            owner_user_id=None,
         ).first()
     if not material or not material.payload:
         return jsonify({"error": "No podcast generated for this document yet"}), 404
@@ -4283,7 +4291,7 @@ def mindmap_document(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not document or not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
     if not document.document_content_id:
@@ -4369,7 +4377,7 @@ def get_tutor_conversation(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
     if not document.document_content_id:
