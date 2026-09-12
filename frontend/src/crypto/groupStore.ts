@@ -1,8 +1,10 @@
 // Local-only storage for decrypted group conversation keys.
 // The server never receives these CryptoKey objects.
+// Uses a separate IndexedDB database so the existing identity-key DB
+// version remains untouched and older clients can upgrade safely.
 
-const DB_NAME = 'prepza-e2ee'
-const DB_VERSION = 2
+const DB_NAME = 'prepza-e2ee-groups'
+const DB_VERSION = 1
 const STORE_NAME = 'group-keys'
 
 function openDb(): Promise<IDBDatabase> {
