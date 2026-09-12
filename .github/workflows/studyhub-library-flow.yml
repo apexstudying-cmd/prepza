@@ -5,15 +5,11 @@ on:
     paths:
       - 'app.py'
       - 'frontend/**'
-      - 'scripts/apply_*studyhub*'
-      - 'scripts/apply_public_document_watermark.py'
+      - 'scripts/apply_*.py'
       - 'scripts/verify_*document_watermark.py'
       - 'scripts/verify_*studyhub*'
       - 'scripts/verify_*upload_share*'
       - '.github/workflows/studyhub-library-flow.yml'
-  push:
-    branches:
-      - 'fix/public-document-watermark'
 
 permissions:
   contents: write
@@ -24,7 +20,7 @@ concurrency:
 
 jobs:
   apply-runtime-patches:
-    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'fix/public-document-watermark'
+    if: github.event.pull_request.head.ref == 'fix/public-document-watermark'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
