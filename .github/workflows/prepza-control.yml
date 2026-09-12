@@ -1,0 +1,62 @@
+name: Prepza control API
+
+on:
+  push:
+    branches: [feat/prepza-control-mcp]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply control API patch
+        run: python3 scripts/apply_prepza_control.py
+
+      - name: Compile backend
+        run: python3 -m py_compile app.py prepza_control.py
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify patch is deterministic
+        run: |
+          cp app.py /tmp/app.after
+          cp frontend/src/App.tsx /tmp/App.after
+          python3 scripts/apply_prepza_control.py
+          cmp app.py /tmp/app.after
+          cmp frontend/src/App.tsx /tmp/App.after
+
+      - name: Verify control API security anchors
+        run: |
+          grep -q 'PREPZA_CONTROL_TOKEN' prepza_control.py
+          grep -q 'prepza_control_enabled' prepza_control.py
+          grep -q 'hmac.compare_digest' prepza_control.py
+          grep -q 'control_api_disabled' app.py
+          grep -q 'Disable Control Access' frontend/src/App.tsx
+          grep -q 'Enable Control Access' frontend/src/App.tsx
+
+      - name: Commit generated application changes
+        run: |
+          if git diff --quiet; then
+            echo 'No generated changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py frontend/src/App.tsx
+          git commit -m 'feat: wire Prepza control API and admin kill switch'
+          git push
