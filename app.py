@@ -334,7 +334,7 @@ def get_generated_material_for_user(document_content_id, material_type, user_id)
         .first()
     )
     query = GeneratedMaterial.query.filter_by(
-        document_content_id=document_content_id, material_type=material_type, status="ready"
+        document_content_id=document_content_id, material_type=material_type, status="ready", generation_version="v2"
     )
     if owned:
         approved = (
