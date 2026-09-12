@@ -5,6 +5,7 @@ to this MCP server; the MCP server talks to Prepza's narrow internal control
 API. No database credentials live here and no write tools are exposed.
 """
 
+import hmac
 import os
 from typing import Any
 
@@ -90,13 +91,18 @@ async def prepza_document_materials(document_id: int) -> dict[str, Any]:
     return await _prepza_get(f"/internal/control/v1/documents/{document_id}/materials")
 
 
+@mcp.custom_route("/health", methods=["GET"])
+async def health(_: Request) -> Response:
+    return JSONResponse({"status": "ok", "service": "prepza-control-mcp"})
+
+
 class MCPBearerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.url.path == "/health":
             return await call_next(request)
         authorization = request.headers.get("authorization", "")
         scheme, _, supplied = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not supplied or supplied != MCP_ACCESS_TOKEN:
+        if scheme.lower() != "bearer" or not supplied or not hmac.compare_digest(supplied, MCP_ACCESS_TOKEN):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
         return await call_next(request)
 
@@ -111,8 +117,3 @@ app = mcp.streamable_http_app(
     stateless_http=True,
 )
 app.add_middleware(MCPBearerMiddleware)
-
-
-@mcp.custom_route("/health", methods=["GET"])
-async def health(_: Request) -> Response:
-    return JSONResponse({"status": "ok", "service": "prepza-control-mcp"})
