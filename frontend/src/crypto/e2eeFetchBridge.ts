@@ -1,20 +1,22 @@
 import { openGroupSession, encryptGroupText, decryptGroupText, uploadGroupKeyEnvelopes, fetchUserPublicKey } from './e2eeChatApi'
 import { provisionInitialGroupKey } from './groupProvisioning'
+import { getOrCreateIdentityKeyPair, exportPublicKeyBase64Url } from './keys'
 
 const GROUP_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
 const GROUP_CREATE_PATH = '/chats'
 const GROUP_ENABLE_SUFFIX = '/enable-e2ee'
-const GROUP_DETAIL_RE = /^\/chats\/(\d+)$/
 const GROUP_LEAVE_RE = /^\/chats\/(\d+)\/leave$/
 
 let installed = false
 const groupReadyPromises = new Map<number, Promise<void>>()
 const groupModeCache = new Map<number, boolean>()
+let identityRegistrationPromise: Promise<void> | null = null
 
 function pathOnly(input: RequestInfo | URL): string {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.pathname + input.search : input.url
   try {
-    return new URL(raw, window.location.origin).pathname + new URL(raw, window.location.origin).search
+    const url = new URL(raw, window.location.origin)
+    return url.pathname + url.search
   } catch {
     return raw
   }
@@ -36,11 +38,42 @@ async function fetchGroupDetail(conversationId: number): Promise<any> {
   return response.json()
 }
 
+async function ensureIdentityKeyRegistered(csrfToken: string): Promise<void> {
+  if (identityRegistrationPromise) return identityRegistrationPromise
+
+  identityRegistrationPromise = (async () => {
+    const { keyPair } = await getOrCreateIdentityKeyPair()
+    const publicKey = await exportPublicKeyBase64Url(keyPair.publicKey)
+    const response = await window.fetch('/keys/register', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      },
+      body: JSON.stringify({ public_key: publicKey }),
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error((body && body.error) || 'Could not register secure chat key')
+    }
+  })()
+
+  try {
+    await identityRegistrationPromise
+  } catch (error) {
+    identityRegistrationPromise = null
+    throw error
+  }
+}
+
 async function ensureGroupProvisioned(conversationId: number, csrfToken: string): Promise<void> {
   const existing = groupReadyPromises.get(conversationId)
   if (existing) return existing
 
   const promise = (async () => {
+    await ensureIdentityKeyRegistered(csrfToken)
+
     const enable = await window.fetch(`/chats/${conversationId}${GROUP_ENABLE_SUFFIX}`, {
       method: 'POST',
       credentials: 'include',
@@ -166,6 +199,19 @@ export function installE2EEFetchBridge(): void {
     const path = pathOnly(input)
     const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase()
 
+    // Register the device identity key on authenticated /me calls. This is
+    // intentionally lazy so anonymous visitors do not generate chat keys.
+    if (path === '/me' && method === 'GET') {
+      const response = await nativeFetch(input, init)
+      if (response.ok) {
+        const me = await response.clone().json().catch(() => null)
+        if (me?.id && me?.csrf_token) {
+          void ensureIdentityKeyRegistered(me.csrf_token).catch(() => {})
+        }
+      }
+      return response
+    }
+
     // After a newly-created group comes back, bootstrap E2EE before the UI
     // can send the first message. Existing/reused groups are intentionally
     // not retrofitted here.
@@ -178,8 +224,6 @@ export function installE2EEFetchBridge(): void {
         if (created?.id && created.reused === false) {
           const csrfToken = csrfFrom(init.headers)
           void ensureGroupProvisioned(Number(created.id), csrfToken).catch(() => {
-            // The group remains usable as a legacy group if provisioning
-            // fails; plaintext history is never relabeled as E2EE.
             groupModeCache.delete(Number(created.id))
           })
         }
@@ -213,9 +257,6 @@ export function installE2EEFetchBridge(): void {
       return transformGroupMessages(response, conversationId)
     }
 
-    // Membership changes must never expose plaintext or keys through this
-    // bridge. A later membership-management layer will rotate the epoch and
-    // provision a fresh key to the remaining members.
     if (GROUP_LEAVE_RE.test(path) && method === 'POST') {
       return nativeFetch(input, init)
     }
