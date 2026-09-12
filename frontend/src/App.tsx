@@ -524,7 +524,7 @@ function DocumentStudyHubScreen({
 }
 
 function BottomNav({ active, setScreen }: { active: Screen; setScreen: (s: Screen) => void }) {
-  const isHome  = ['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map'].includes(active)
+  const isHome  = ['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map','document-reader'].includes(active)
   const isExp   = active === 'explore' || active === 'student-profile'
   const isChat  = active === 'chats' || active === 'chat-detail' || active === 'new-chat' || active === 'chat-options'
   const isProf  = active === 'profile' || active === 'settings' || active === 'edit-profile'
