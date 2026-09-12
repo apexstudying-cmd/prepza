@@ -16,5 +16,15 @@ if old_view in s:
 elif new_view not in s:
     raise SystemExit('document view URL block not found')
 
+# Do not apply the document-only signed-URL restriction to group-shared files.
+# Group access is already authorized by the group-file route; preserve its
+# existing signed URL so existing group attachments keep working.
+group_marker = 'def _serialize_group_file(group_file):'
+if group_marker in s:
+    prefix, group_tail = s.split(group_marker, 1)
+    if new_view in group_tail:
+        group_tail = group_tail.replace(new_view, old_view, 1)
+        s = prefix + group_marker + group_tail
+
 p.write_text(s)
-print('student study access security patch applied')
+print('student study access patch applied')
