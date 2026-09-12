@@ -56,8 +56,8 @@ def replace_function_guard_in_route(text, route_anchor, new_guard, label):
     return text[:route_pos] + segment + text[next_route:]
 
 
-PUBLISHED_REPLAY_HELPER = '''def _published_ready_material_for_viewer(user_id, document, material_type, parameters):
-    """Return an approved document's READY shared artifact without generation."""
+PUBLISHED_REPLAY_HELPER = """def _published_ready_material_for_viewer(user_id, document, material_type, parameters):
+    '''Return an approved document's READY shared artifact without generation.'''
     if not document or document.user_id == user_id:
         return None
     if not _can_study_document(user_id, document):
@@ -106,7 +106,9 @@ PUBLISHED_REPLAY_HELPER = '''def _published_ready_material_for_viewer(user_id, d
     return content, material
 
 
-PUBLISHED_REPLAY_RESPONSE = '''def _published_material_response(user_id, content, material):
+"""
+
+PUBLISHED_REPLAY_RESPONSE = """def _published_material_response(user_id, content, material):
     record_document_studied(user_id, content.id)
     db.session.commit()
     return {
@@ -116,7 +118,7 @@ PUBLISHED_REPLAY_RESPONSE = '''def _published_material_response(user_id, content
     }
 
 
-'''
+"""
 
 
 def _remove_function_definitions(source, marker):
@@ -126,9 +128,6 @@ def _remove_function_definitions(source, marker):
 
 
 def install_published_replay_helpers(s):
-    # Remove every stale copy of both helpers. Keeping exactly one canonical
-    # copy is important because earlier patch versions could leave duplicate
-    # definitions after repeated repair runs.
     s = _remove_function_definitions(s, "_published_ready_material_for_viewer")
     s = _remove_function_definitions(s, "_published_material_response")
 
@@ -170,14 +169,13 @@ def main():
         "mindmap": "mind_map",
     }
 
-    owner_guard = '''    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n'''
     shared_guard = '''    if not document or not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n'''
 
     for route_name, marker in markers.items():
         route_anchor = route_anchors[route_name]
         material_type = material_types[route_name]
         if route_name in ("flashcards", "mindmap"):
-            s = replace_in_route(s, route_anchor, owner_guard, shared_guard, f"{route_name} study access guard")
+            s = replace_function_guard_in_route(s, route_anchor, shared_guard, f"{route_name} study access guard")
         replay = f'''    if document.user_id != user_id:\n        shared = _published_ready_material_for_viewer(\n            user_id, document, "{material_type}", _ai_generation_parameters_from_request()\n        )\n        if not shared:\n            return jsonify({{"error": "Published {route_name.replace('_', ' ')} has not been generated yet"}}), 404\n        content, material = shared\n        result = _published_material_response(user_id, content, material)\n        return jsonify({{\n            "material_id": result["material_id"],\n            "reused": True,\n            "{route_name}": result["payload"],\n        }}), 200\n\n'''
         s = replace_in_route(s, route_anchor, marker, marker + replay, f"{route_name} published replay")
 
@@ -191,9 +189,10 @@ def main():
         material_lookup = '''    material = db.session.get(GeneratedMaterial, material_id)\n'''
         if material_lookup not in segment:
             raise SystemExit(f"complete_{route_name}: material lookup not found")
-        shared_material_guard = f'''    if document.user_id != user_id and (material.scope != "shared" or material.owner_user_id is not None):\n        return jsonify({{"error": "{route_name.capitalize()} material not found"}}), 404\n'''
-        anchor = '''        or material.status != "ready"\n    ):\n        return jsonify({"error": "''' + ("Quiz" if route_name == "quiz" else "Flashcard") + ''' material not found"}), 404\n'''
+        material_label = "Quiz" if route_name == "quiz" else "Flashcard"
+        shared_material_guard = f'''    if document.user_id != user_id and (material.scope != "shared" or material.owner_user_id is not None):\n        return jsonify({{"error": "{material_label} material not found"}}), 404\n'''
         if shared_material_guard not in segment:
+            anchor = f'''        or material.status != "ready"\n    ):\n        return jsonify({{"error": "{material_label} material not found"}}), 404\n'''
             if anchor not in segment:
                 raise SystemExit(f"complete_{route_name}: material validation anchor not found")
             segment = segment.replace(anchor, anchor + shared_material_guard, 1)
