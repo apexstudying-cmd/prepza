@@ -60,6 +60,11 @@ def patch_frontend():
 
 
 if __name__ == "__main__":
-    patch_app()
-    patch_frontend()
-    print("Prepza control API and admin kill switch applied.")
+    app_text = APP.read_text()
+    frontend_text = FRONTEND.read_text()
+    if "register_control_routes(" in app_text and "Disable Control Access" in frontend_text:
+        print("Prepza control API patch already applied; nothing to do.")
+    else:
+        patch_app()
+        patch_frontend()
+        print("Prepza control API and admin kill switch applied.")
