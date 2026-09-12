@@ -14,6 +14,12 @@ from dataclasses import dataclass
 from typing import Any
 
 
+# A crashed worker must not leave an artifact permanently stuck in GENERATING.
+# Normal provider calls should finish well inside this window; a later caller
+# may safely reclaim an abandoned lease and become the sole owner.
+GENERATION_LEASE_SECONDS = 15 * 60
+
+
 @dataclass(frozen=True)
 class GenerationLookup:
     artifact_id: int
@@ -33,12 +39,13 @@ def claim_or_get_generation(
     scope: str = "shared",
     owner_user_id: int | None = None,
 ) -> GenerationLookup:
-    """Atomically claim a missing/failed fingerprint or observe its state.
+    """Atomically claim a missing/failed/stale fingerprint or observe its state.
 
     The database UNIQUE constraint is the concurrency primitive. The first
     request inserts the row and becomes the owner. A simultaneous request
     observes the existing GENERATING row and attaches to it instead of making
-    another provider request. FAILED rows may be claimed again.
+    another provider request. FAILED rows and abandoned GENERATING rows may
+    be reclaimed by exactly one concurrent request.
 
     Scope/owner are persisted as well as encoded into the fingerprint. This
     gives the database a second invariant against accidentally exposing a
@@ -94,7 +101,7 @@ def claim_or_get_generation(
     existing = db.session.execute(
         text(
             """
-            SELECT id, status, payload, scope, owner_user_id
+            SELECT id, status, payload, scope, owner_user_id, updated_at
             FROM ai_generation_artifact
             WHERE fingerprint = :fingerprint
             """
@@ -146,6 +153,33 @@ def claim_or_get_generation(
                 payload=None,
                 owner=True,
             )
+
+    if existing["status"] == "generating":
+        reclaimed = db.session.execute(
+            text(
+                """
+                UPDATE ai_generation_artifact
+                SET updated_at = CURRENT_TIMESTAMP,
+                    error_message = NULL,
+                    payload = NULL,
+                    completed_at = NULL
+                WHERE fingerprint = :fingerprint
+                  AND status = 'generating'
+                  AND updated_at < CURRENT_TIMESTAMP - (:lease_seconds * INTERVAL '1 second')
+                RETURNING id, status, payload
+                """
+            ),
+            {"fingerprint": fingerprint, "lease_seconds": GENERATION_LEASE_SECONDS},
+        ).mappings().first()
+        if reclaimed is not None:
+            db.session.commit()
+            return GenerationLookup(
+                artifact_id=int(reclaimed["id"]),
+                status="generating",
+                payload=None,
+                owner=True,
+            )
+        db.session.rollback()
 
     return GenerationLookup(
         artifact_id=int(existing["id"]),
