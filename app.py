@@ -3472,7 +3472,10 @@ def get_document(document_id):
     effective_status = content.status if (content and document.status != "uploading") else document.status
 
     view_url = None
-    if content and content.status == "ready":
+    # Published readers use the native page renderer instead of receiving a
+    # signed URL to the original private file. Owners retain the existing
+    # signed view URL for backwards-compatible document access.
+    if content and content.status == "ready" and document.user_id == user_id:
         view_url = get_signed_url(content.storage_path, bucket="documents")
 
     materials = []
@@ -6520,7 +6523,10 @@ def _serialize_group_file(group_file):
     )
     sharer = db.session.get(User, group_file.shared_by_user_id)
     view_url = None
-    if content and content.status == "ready":
+    # Published readers use the native page renderer instead of receiving a
+    # signed URL to the original private file. Owners retain the existing
+    # signed view URL for backwards-compatible document access.
+    if content and content.status == "ready" and document.user_id == user_id:
         view_url = get_signed_url(content.storage_path, bucket="documents")
     return {
         "id": group_file.id,
