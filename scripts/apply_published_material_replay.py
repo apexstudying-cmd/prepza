@@ -18,7 +18,7 @@ def main():
 
     helper_anchor = '@app.route("/documents/<int:document_id>/summarize", methods=["POST"])\n'
     helper = '''def _published_ready_material_for_viewer(user_id, document, material_type, parameters):
-    """Return an approved document's READY artifact without allowing generation."""
+    """Return an approved document's READY shared artifact without generation."""
     if not document or document.user_id == user_id:
         return None
     if not _can_study_document(user_id, document):
@@ -39,12 +39,13 @@ def main():
             document_content_id=content.id,
             material_type=material_type,
             status="ready",
+            scope="shared",
         )
         .order_by(GeneratedMaterial.updated_at.desc())
         .all()
     )
     for material in candidates:
-        if (material.generation_parameters or {}) == normalized and material.payload:
+        if material.owner_user_id is None and (material.generation_parameters or {}) == normalized and material.payload:
             return content, material
     return None
 
@@ -62,6 +63,25 @@ def _published_material_response(user_id, content, material):
 '''
     s = replace_once(s, helper_anchor, helper + helper_anchor, "published replay helper")
 
+    private_materials_block = '''    materials = []
+    if content:
+        materials = [
+            {"type": m.material_type, "status": m.status}
+            for m in GeneratedMaterial.query.filter_by(document_content_id=content.id).all()
+        ]
+'''
+    shared_materials_block = '''    materials = []
+    if content:
+        material_query = GeneratedMaterial.query.filter_by(document_content_id=content.id)
+        if document.user_id != user_id:
+            material_query = material_query.filter_by(status="ready", scope="shared", owner_user_id=None)
+        materials = [
+            {"type": m.material_type, "status": m.status}
+            for m in material_query.all()
+        ]
+'''
+    s = replace_once(s, private_materials_block, shared_materials_block, "published material visibility")
+
     markers = {
         "summary": '    if not document.document_content_id:\n        return jsonify({"error": "Document has no content to summarize"}), 400\n\n',
         "quiz": '    if not document.document_content_id:\n        return jsonify({"error": "Document has no content to quiz"}), 400\n\n',
@@ -77,7 +97,6 @@ def _published_material_response(user_id, content, material):
 
     for route_name, marker in markers.items():
         material_type = material_types[route_name]
-        response_key = route_name
         replay = f'''    if document.user_id != user_id:
         shared = _published_ready_material_for_viewer(
             user_id, document, "{material_type}", _ai_generation_parameters_from_request()
@@ -89,7 +108,7 @@ def _published_material_response(user_id, content, material):
         return jsonify({{
             "material_id": result["material_id"],
             "reused": True,
-            "{response_key}": result["payload"],
+            "{route_name}": result["payload"],
         }}), 200
 
 '''
