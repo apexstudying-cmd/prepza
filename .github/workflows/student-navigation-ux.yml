@@ -77,6 +77,30 @@ jobs:
           assert s.count(guard) == 1, f'expected one podcast synthesis guard, found {s.count(guard)}'
           assert s.count('Podcast has not been published yet') == 1, 'expected one published podcast error'
           assert 'scope="shared"' in s, 'expected shared-scope protection for published artifacts'
+
+          rename_marker = '@app.route("/documents/<int:document_id>", methods=["PATCH"])'
+          rename_start = s.find(rename_marker)
+          assert rename_start >= 0, 'document rename route missing'
+          rename_end = s.find('@app.route(', rename_start + len(rename_marker))
+          rename_segment = s[rename_start:rename_end if rename_end >= 0 else len(s)]
+          assert 'document.user_id != user_id' in rename_segment, 'document rename must remain owner-only'
+          assert '_can_study_document(user_id, document)' not in rename_segment, 'document rename must not use shared study access'
+
+          detail_marker = '@app.route("/documents/<int:document_id>")'
+          detail_start = s.find(detail_marker)
+          assert detail_start >= 0, 'document detail route missing'
+          detail_end = s.find('@app.route(', detail_start + len(detail_marker))
+          detail_segment = s[detail_start:detail_end if detail_end >= 0 else len(s)]
+          assert 'document.user_id == user_id' in detail_segment, 'document detail must condition signed URL on ownership'
+
+          page_marker = '@app.route("/documents/<int:document_id>/reading/page/<int:page_num>")'
+          page_start = s.find(page_marker)
+          assert page_start >= 0, 'native reader page route missing'
+          page_end = s.find('@app.route(', page_start + len(page_marker))
+          page_segment = s[page_start:page_end if page_end >= 0 else len(s)]
+          assert '_get_studyable_document(user_id, document_id)' in page_segment, 'reader page must enforce study access'
+          assert 'bucket="documents"' in page_segment, 'reader page must load from private documents bucket'
+          assert 'mimetype="image/png"' in page_segment, 'reader page must return rendered image, not source file'
           PY
           grep -F 'const [readingPage, setReadingPage] = useState(0)' frontend/src/App.tsx
           grep -F '/documents/${activeDocumentId}/reading' frontend/src/App.tsx
@@ -107,7 +131,7 @@ jobs:
           PY
 
       - name: Compile backend
-        run: python3 -m py_compile app.py document_pipeline.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_document_reader_v2.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py
+        run: python3 -m py_compile app.py document_pipeline.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py
 
       - name: Commit generated frontend and backend change
         run: |
