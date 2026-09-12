@@ -6,6 +6,7 @@ is called after the application's Conversation/User models are defined.
 """
 
 from functools import wraps
+import re
 
 from flask import jsonify, request, session
 from sqlalchemy import text
@@ -68,6 +69,32 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
                 return jsonify({"error": "You are not a member of this conversation"}), 403
             return view(conversation, user_id, *args, **kwargs)
         return wrapped
+
+    # Defense in depth: the browser bridge encrypts group messages before the
+    # normal chat endpoint is called, but the server must also reject a direct
+    # plaintext write to a group_v1 conversation. This prevents an alternate
+    # client, stale bundle, or accidental frontend path from silently falling
+    # back to plaintext storage.
+    if not getattr(app, "_prepza_e2ee_plaintext_guard", False):
+        @app.before_request
+        def _reject_plaintext_group_message_write():
+            match = re.match(r"^/chats/(\d+)/messages$", request.path)
+            if request.method != "POST" or not match:
+                return None
+            conversation_id = int(match.group(1))
+            mode, _ = e2ee_state(conversation_id)
+            if mode != "group_v1":
+                return None
+            payload = request.get_json(silent=True)
+            if not isinstance(payload, dict):
+                return jsonify({"error": "Encrypted group messages require a JSON payload"}), 400
+            has_body = isinstance(payload.get("body"), str) and bool(payload.get("body").strip())
+            has_attachment = payload.get("attachment_id") is not None
+            if (has_body or has_attachment) and not isinstance(payload.get("nonce"), str):
+                return jsonify({"error": "Plaintext group messages are disabled; encrypt on the client first"}), 409
+            return None
+
+        app._prepza_e2ee_plaintext_guard = True
 
     @app.post("/chats/<int:conversation_id>/enable-e2ee")
     @require_member
