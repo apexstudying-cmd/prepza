@@ -75,6 +75,10 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s = Path('app.py').read_text()
+          assert s.count('def _published_ready_material_for_viewer(') == 1, 'published replay helper must exist exactly once'
+          assert s.count('def _published_material_response(') == 1, 'published replay response helper must exist exactly once'
+          assert s.count('def _ai_generation_parameters_from_request():') == 1, 'AI parameter helper must exist exactly once'
+
           shared = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()'''
           assert s.count(shared) == 1, f'expected one published podcast script lookup, found {s.count(shared)}'
           guard = '''    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n'''
