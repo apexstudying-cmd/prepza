@@ -3,12 +3,15 @@ from pathlib import Path
 p = Path("frontend/src/App.tsx")
 s = p.read_text()
 
+# Keep the screen union member exactly once even if this patch is re-run.
+screen_member = "  | 'upload-share-choice'\n"
+while s.count(screen_member) > 1:
+    s = s.replace(screen_member, "", 1)
 old_type = "  | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'\n"
-new_type = old_type + "  | 'upload-share-choice'\n"
-if "| 'upload-share-choice'" not in s:
+if screen_member not in s:
     if old_type not in s:
         raise SystemExit("Screen type anchor not found")
-    s = s.replace(old_type, new_type, 1)
+    s = s.replace(old_type, old_type + screen_member, 1)
 
 old_upload = """      setActiveDocumentId(created.document_id)\n      setScreen('processing')\n"""
 new_upload = """      setActiveDocumentId(created.document_id)\n      setScreen('upload-share-choice')\n"""
@@ -66,17 +69,22 @@ function UploadShareChoiceScreen({ setScreen, activeDocumentId }: { setScreen: (
 }
 
 '''
+# If a previous run left a component behind, normalize it to one copy.
+while s.count(component) > 1:
+    s = s.replace(component, "", 1)
 if component not in s:
     if marker not in s:
         raise SystemExit("Processing component marker not found")
     s = s.replace(marker, component + marker, 1)
 
-old_case = "      case 'upload':            return <UploadScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />\n"
-new_case = old_case + "      case 'upload-share-choice': return <UploadShareChoiceScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n"
-if "case 'upload-share-choice':" not in s:
+case_line = "      case 'upload-share-choice': return <UploadShareChoiceScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n"
+while s.count(case_line) > 1:
+    s = s.replace(case_line, "", 1)
+if case_line not in s:
+    old_case = "      case 'upload':            return <UploadScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />\n"
     if old_case not in s:
         raise SystemExit("upload render case anchor not found")
-    s = s.replace(old_case, new_case, 1)
+    s = s.replace(old_case, old_case + case_line, 1)
 
 old_no_nav = "  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','payment','payment-success','payment-failure']\n"
 new_no_nav = "  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','upload-share-choice','payment','payment-success','payment-failure']\n"
