@@ -58,11 +58,30 @@ def normalize_podcast_audio_get(s):
     raise SystemExit("podcast audio GET access guard shape not recognized")
 
 
+def normalize_podcast_audio_get_shared_lookup(s):
+    marker = '@app.route("/documents/<int:document_id>/podcast-audio")\n'
+    start = s.find(marker)
+    if start < 0:
+        raise SystemExit("podcast audio GET route not found")
+    end = s.find('\n@app.route(', start + len(marker))
+    if end < 0:
+        end = len(s)
+    segment = s[start:end]
+    old = '''        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()'''
+    new = '''        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()'''
+    if new in segment:
+        return s
+    if old not in segment:
+        raise SystemExit("podcast audio GET shared lookup shape not found")
+    return s[:start] + segment.replace(old, new, 1) + s[end:]
+
+
 def main():
     s = APP.read_text()
     s = normalize_podcast_script_route(s)
     s = normalize_podcast_audio_post(s)
     s = normalize_podcast_audio_get(s)
+    s = normalize_podcast_audio_get_shared_lookup(s)
     APP.write_text(s)
     print("study-flow access blocks normalized")
 
