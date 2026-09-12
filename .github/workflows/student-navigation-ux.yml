@@ -59,10 +59,20 @@ jobs:
           grep -F 'return jsonify({"error": "Podcast audio is not ready yet"}), 409' app.py
           grep -F 'view_url = get_signed_url(content.storage_path, bucket="documents")' app.py
           grep -F 'def _published_ready_material_for_viewer(' app.py
+          grep -F 'scope="shared"' app.py
+          grep -F 'owner_user_id=None' app.py
           grep -F 'Published summary has not been generated yet' app.py
           grep -F 'Published quiz has not been generated yet' app.py
           grep -F 'Published flashcards has not been generated yet' app.py
           grep -F 'Published mindmap has not been generated yet' app.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('app.py').read_text()
+          block = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()'''
+          assert s.count(block) == 2, f'expected exactly 2 shared podcast lookup blocks, found {s.count(block)}'
+          assert s.count('Published podcast has not been generated yet') == 0
+          assert s.count('Podcast has not been published yet') == 1
+          PY
           grep -F 'const [readingPage, setReadingPage] = useState(0)' frontend/src/App.tsx
           grep -F '/documents/${activeDocumentId}/reading' frontend/src/App.tsx
           grep -F "setScreen('podcast-library')" frontend/src/App.tsx
