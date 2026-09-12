@@ -95,10 +95,10 @@ def save_library_item(publication_id):
     if not publication or publication.status != "approved":
         return jsonify({"error": "Library item not found"}), 404
 
-    if _document_content_has_flagged_material(
-        db.session.get(Document, publication.document_id).document_content_id
-        if db.session.get(Document, publication.document_id) else None
-    ):
+    source = db.session.get(Document, publication.document_id)
+    if not source or source.is_removed or not source.document_content_id:
+        return jsonify({"error": "Library document is not ready"}), 409
+    if _document_content_has_flagged_material(source.document_content_id):
         return jsonify({"error": "Library item is currently unavailable"}), 404
 
     studyhub_document = _ensure_studyhub_document_for_publication(user_id, publication)
@@ -109,8 +109,6 @@ def save_library_item(publication_id):
         user_id=user_id, library_publication_id=publication_id
     ).first()
     if existing:
-        if studyhub_document not in db.session:
-            db.session.add(studyhub_document)
         db.session.commit()
         return jsonify({
             "message": "Already saved",
@@ -132,6 +130,7 @@ def save_library_item(publication_id):
         "in_studyhub": True,
         "save_count": publication.save_count,
     }), 201
+
 '''
 
 if old not in s:
