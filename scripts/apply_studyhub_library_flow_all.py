@@ -9,6 +9,7 @@ for name in (
     "apply_studyhub_existing_save_repair.py",
     "apply_upload_share_choice_ux.py",
     "apply_upload_publish_binding.py",
+    "apply_upload_publish_binding_repair.py",
     "apply_library_publish_ownership_guard.py",
     "cleanup_studyhub_library_flow.py",
 ):
