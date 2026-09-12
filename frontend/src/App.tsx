@@ -398,6 +398,7 @@ function DocumentStudyHubScreen({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [readingPage, setReadingPage] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -408,8 +409,15 @@ function DocumentStudyHubScreen({
     }
     setLoading(true)
     setError('')
-    api<DocumentDetail>(`/documents/${activeDocumentId}`)
-      .then(data => { if (!cancelled) setDocument(data) })
+    Promise.all([
+      api<DocumentDetail>(`/documents/${activeDocumentId}`),
+      api<{ page_num: number }>(`/documents/${activeDocumentId}/reading`),
+    ])
+      .then(([data, progress]) => {
+        if (cancelled) return
+        setDocument(data)
+        setReadingPage(Math.max(0, progress.page_num || 0))
+      })
       .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Could not open this document.') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -452,6 +460,17 @@ function DocumentStudyHubScreen({
         <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 6 }}>
           {document.page_count ? `${document.page_count} pages` : 'Document'}{document.file_type ? ` · ${document.file_type.toUpperCase()}` : ''}
         </div>
+        {document.page_count ? (() => {
+          const studiedPercent = Math.min(100, Math.round((Math.min(readingPage + 1, document.page_count) / document.page_count) * 100))
+          return <div style={{ marginTop: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.62)', fontSize: 10, marginBottom: 5 }}>
+              <span>Study progress</span><span>{studiedPercent}%</span>
+            </div>
+            <div style={{ height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${studiedPercent}%`, background: N.gold, borderRadius: 999 }} />
+            </div>
+          </div>
+        })() : null}
       </div>
     </div>
 
