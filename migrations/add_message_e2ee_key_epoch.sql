@@ -1,13 +1,8 @@
 -- Store the E2EE epoch used for each chat message.
-ALTER TABLE message
-    ADD COLUMN IF NOT EXISTS e2ee_key_epoch INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE message ADD COLUMN IF NOT EXISTS e2ee_key_epoch INTEGER NOT NULL DEFAULT 0;
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'ck_message_e2ee_key_epoch_nonnegative'
-          AND conrelid = 'message'::regclass
-    ) THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_message_e2ee_key_epoch_nonnegative' AND conrelid = 'message'::regclass) THEN
         ALTER TABLE message ADD CONSTRAINT ck_message_e2ee_key_epoch_nonnegative CHECK (e2ee_key_epoch >= 0);
     END IF;
 END $$;
