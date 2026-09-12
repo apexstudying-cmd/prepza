@@ -106,32 +106,46 @@ PUBLISHED_REPLAY_HELPER = '''def _published_ready_material_for_viewer(user_id, d
     return content, material
 
 
+PUBLISHED_REPLAY_RESPONSE = '''def _published_material_response(user_id, content, material):
+    record_document_studied(user_id, content.id)
+    db.session.commit()
+    return {
+        "material_id": material.id,
+        "reused": True,
+        "payload": json.loads(material.payload),
+    }
+
+
 '''
 
 
-def install_published_replay_helper(s):
-    # Remove every previous copy of the replay helper. This deliberately
-    # leaves _published_material_response and _ai_generation_parameters... 
-    # untouched, because those are separate helpers with independent jobs.
-    pattern = r"(?ms)^def _published_ready_material_for_viewer\(.*?(?=^def )"
-    cleaned, count = re.subn(pattern, "", s)
-    if count == 0:
-        cleaned = s
+def _remove_function_definitions(source, marker):
+    """Remove every top-level function with the exact marker."""
+    pattern = rf"(?ms)^def {re.escape(marker)}\(.*?(?=^def )"
+    return re.sub(pattern, "", source)
 
-    response_marker = "def _published_material_response(user_id, content, material):"
-    response_pos = cleaned.find(response_marker)
-    if response_pos < 0:
-        route_anchor = '@app.route("/documents/<int:document_id>/summarize", methods=["POST"])\n'
-        if route_anchor not in cleaned:
-            raise SystemExit("published replay insertion anchor not found")
-        return cleaned.replace(route_anchor, PUBLISHED_REPLAY_HELPER + route_anchor, 1)
 
-    return cleaned[:response_pos] + PUBLISHED_REPLAY_HELPER + cleaned[response_pos:]
+def install_published_replay_helpers(s):
+    # Remove every stale copy of both helpers. Keeping exactly one canonical
+    # copy is important because earlier patch versions could leave duplicate
+    # definitions after repeated repair runs.
+    s = _remove_function_definitions(s, "_published_ready_material_for_viewer")
+    s = _remove_function_definitions(s, "_published_material_response")
+
+    route_anchor = '@app.route("/documents/<int:document_id>/summarize", methods=["POST"])\n'
+    if route_anchor not in s:
+        raise SystemExit("published replay insertion anchor not found")
+
+    return s.replace(
+        route_anchor,
+        PUBLISHED_REPLAY_HELPER + PUBLISHED_REPLAY_RESPONSE + route_anchor,
+        1,
+    )
 
 
 def main():
     s = APP.read_text()
-    s = install_published_replay_helper(s)
+    s = install_published_replay_helpers(s)
 
     private_materials_block = '''    materials = []\n    if content:\n        materials = [\n            {"type": m.material_type, "status": m.status}\n            for m in GeneratedMaterial.query.filter_by(document_content_id=content.id).all()\n        ]\n'''
     shared_materials_block = '''    materials = []\n    if content:\n        material_query = GeneratedMaterial.query.filter_by(document_content_id=content.id)\n        if document.user_id != user_id:\n            material_query = material_query.filter_by(status="ready", scope="shared", owner_user_id=None)\n        materials = [\n            {"type": m.material_type, "status": m.status}\n            for m in material_query.all()\n        ]\n'''
