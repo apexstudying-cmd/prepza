@@ -3,6 +3,8 @@ name: Prepza control API
 on:
   push:
     branches: [feat/prepza-control-mcp]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
@@ -50,6 +52,7 @@ jobs:
           grep -q 'Enable Control Access' frontend/src/App.tsx
 
       - name: Commit generated application changes
+        if: github.event_name == 'push'
         run: |
           if git diff --quiet; then
             echo 'No generated changes to commit.'
