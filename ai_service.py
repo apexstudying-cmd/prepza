@@ -1032,7 +1032,17 @@ def _parse_summary_json(raw_text):
     return data
 
 
-def generate_document_summary(document_content_id, triggering_user_id, plan_tier="free"):
+def generate_document_summary(document_content_id, triggering_user_id, plan_tier="free", parameters=None):
+    from ai_reusable_generation import generate_document_material
+    return generate_document_material(
+        material_type="summary",
+        document_content_id=document_content_id,
+        triggering_user_id=triggering_user_id,
+        plan_tier=plan_tier,
+        parameters=parameters,
+    )
+
+def _legacy_generate_document_summary(document_content_id, triggering_user_id, plan_tier="free"):
     """
     Full pipeline for generating (or reusing) a document's AI summary:
       1. Cache check - an existing ready GeneratedMaterial(material_type=
@@ -1201,7 +1211,17 @@ def _parse_quiz_json(raw_text):
     return data
 
 
-def generate_document_quiz(document_content_id, triggering_user_id, plan_tier="free"):
+def generate_document_quiz(document_content_id, triggering_user_id, plan_tier="free", parameters=None):
+    from ai_reusable_generation import generate_document_material
+    return generate_document_material(
+        material_type="quiz",
+        document_content_id=document_content_id,
+        triggering_user_id=triggering_user_id,
+        plan_tier=plan_tier,
+        parameters=parameters,
+    )
+
+def _legacy_generate_document_quiz(document_content_id, triggering_user_id, plan_tier="free"):
     """
     Full pipeline for generating (or reusing) a document's AI practice
     quiz. Identical shape to generate_document_summary() - see that
@@ -1364,7 +1384,17 @@ def _parse_flashcards_json(raw_text):
     return data
 
 
-def generate_document_flashcards(document_content_id, triggering_user_id, plan_tier="free"):
+def generate_document_flashcards(document_content_id, triggering_user_id, plan_tier="free", parameters=None):
+    from ai_reusable_generation import generate_document_material
+    return generate_document_material(
+        material_type="flashcards",
+        document_content_id=document_content_id,
+        triggering_user_id=triggering_user_id,
+        plan_tier=plan_tier,
+        parameters=parameters,
+    )
+
+def _legacy_generate_document_flashcards(document_content_id, triggering_user_id, plan_tier="free"):
     """
     Full pipeline for generating (or reusing) a document's AI
     flashcard set. Identical shape to generate_document_quiz() - see
@@ -1565,7 +1595,17 @@ def _parse_podcast_script_json(raw_text):
     return data
 
 
-def generate_document_podcast_script(document_content_id, triggering_user_id, plan_tier="free"):
+def generate_document_podcast_script(document_content_id, triggering_user_id, plan_tier="free", parameters=None):
+    from ai_reusable_generation import generate_document_material
+    return generate_document_material(
+        material_type="podcast",
+        document_content_id=document_content_id,
+        triggering_user_id=triggering_user_id,
+        plan_tier=plan_tier,
+        parameters=parameters,
+    )
+
+def _legacy_generate_document_podcast_script(document_content_id, triggering_user_id, plan_tier="free"):
     """
     Full pipeline for generating (or reusing) a document's AI podcast
     SCRIPT (Phase 1 - text only, no audio). Same caching/limits/error
@@ -2243,7 +2283,17 @@ def _parse_mindmap_json(raw_text):
     return data
 
 
-def generate_document_mindmap(document_content_id, triggering_user_id, plan_tier="free"):
+def generate_document_mindmap(document_content_id, triggering_user_id, plan_tier="free", parameters=None):
+    from ai_reusable_generation import generate_document_material
+    return generate_document_material(
+        material_type="mind_map",
+        document_content_id=document_content_id,
+        triggering_user_id=triggering_user_id,
+        plan_tier=plan_tier,
+        parameters=parameters,
+    )
+
+def _legacy_generate_document_mindmap(document_content_id, triggering_user_id, plan_tier="free"):
     """
     Full pipeline for generating (or reusing) a document's AI mind map.
     Identical shape to generate_document_flashcards() - see that
