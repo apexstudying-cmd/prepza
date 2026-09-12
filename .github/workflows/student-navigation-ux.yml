@@ -23,6 +23,8 @@ jobs:
           python3 scripts/apply_student_navigation_ux_v4.py
           python3 scripts/apply_student_navigation_ux_v5.py
           python3 scripts/apply_document_reader.py
+          python3 scripts/apply_student_study_access.py
+          python3 scripts/apply_published_material_entry.py
           python3 scripts/apply_document_reader_v2.py
 
       - name: Install frontend dependencies
@@ -39,11 +41,13 @@ jobs:
           python3 scripts/apply_student_navigation_ux_v4.py
           python3 scripts/apply_student_navigation_ux_v5.py
           python3 scripts/apply_document_reader.py
+          python3 scripts/apply_student_study_access.py
+          python3 scripts/apply_published_material_entry.py
           python3 scripts/apply_document_reader_v2.py
           cmp frontend/src/App.tsx /tmp/App.after
 
       - name: Compile backend
-        run: python3 -m py_compile app.py document_pipeline.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py
+        run: python3 -m py_compile app.py document_pipeline.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py
 
       - name: Commit generated frontend and backend change
         run: |
@@ -53,6 +57,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/src/App.tsx app.py scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py
-          git commit -m 'feat: add native document reader'
+          git add frontend/src/App.tsx app.py scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py scripts/apply_document_reader.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_document_reader_v2.py
+          git commit -m 'feat: complete student study navigation'
           git push origin HEAD:ux/student-navigation-study-flow
