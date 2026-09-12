@@ -98,24 +98,60 @@ def _published_material_response(user_id, content, material):
         "mindmap": "mind_map",
     }
 
+    # These two routes still had legacy owner-only guards ahead of the
+    # replay branch. Normalize those guards so published viewers can reach
+    # the existing no-generation replay path while private documents remain
+    # owner-only through _can_study_document().
+    owner_guard_variants = {
+        'flashcards': '''    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n''',
+        'mindmap': '''    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n''',
+    }
+    shared_guard = '''    if not document or not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n'''
+
     for route_name, marker in markers.items():
         material_type = material_types[route_name]
-        replay = f'''    if document.user_id != user_id:
-        shared = _published_ready_material_for_viewer(
-            user_id, document, "{material_type}", _ai_generation_parameters_from_request()
-        )
-        if not shared:
-            return jsonify({{"error": "Published {route_name.replace('_', ' ')} has not been generated yet"}}), 404
-        content, material = shared
-        result = _published_material_response(user_id, content, material)
-        return jsonify({{
-            "material_id": result["material_id"],
-            "reused": True,
-            "{route_name}": result["payload"],
-        }}), 200
-
-'''
+        if route_name in owner_guard_variants:
+            s = replace_once(
+                s,
+                owner_guard_variants[route_name],
+                shared_guard,
+                f"{route_name} study access guard",
+            )
+        replay = f'''    if document.user_id != user_id:\n        shared = _published_ready_material_for_viewer(\n            user_id, document, "{material_type}", _ai_generation_parameters_from_request()\n        )\n        if not shared:\n            return jsonify({{"error": "Published {route_name.replace('_', ' ')} has not been generated yet"}}), 404\n        content, material = shared\n        result = _published_material_response(user_id, content, material)\n        return jsonify({{\n            "material_id": result["material_id"],\n            "reused": True,\n            "{route_name}": result["payload"],\n        }}), 200\n\n'''
         s = replace_once(s, marker, marker + replay, f"{route_name} published replay")
+
+    completion_guards = {
+        "quiz": '''    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n''',
+        "flashcards": '''    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n''',
+    }
+    completion_shared = '''    if not document or not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n'''
+    for route_name, old_guard in completion_guards.items():
+        route_anchor = f'def complete_{route_name}(document_id, material_id):'
+        route_pos = s.find(route_anchor)
+        if route_pos < 0:
+            raise SystemExit(f"complete_{route_name}: route not found")
+        guard_pos = s.find(old_guard, route_pos)
+        if guard_pos < 0:
+            if completion_shared not in s[route_pos:s.find('@app.route(', route_pos + 1) if s.find('@app.route(', route_pos + 1) >= 0 else len(s)]:
+                raise SystemExit(f"complete_{route_name}: access guard not found")
+        else:
+            s = s[:guard_pos] + completion_shared + s[guard_pos + len(old_guard):]
+        next_route = s.find('@app.route(', route_pos + len(route_anchor))
+        if next_route < 0:
+            next_route = len(s)
+        segment = s[route_pos:next_route]
+        material_lookup = '''    material = db.session.get(GeneratedMaterial, material_id)\n'''
+        if material_lookup not in segment:
+            raise SystemExit(f"complete_{route_name}: material lookup not found")
+        # Non-owners may complete only the READY shared artifact exposed by
+        # the published replay path. Owners retain the existing behavior.
+        shared_material_guard = f'''    if document.user_id != user_id and (material.scope != "shared" or material.owner_user_id is not None):\n        return jsonify({{"error": "{route_name.capitalize()} material not found"}}), 404\n'''
+        anchor = '''        or material.status != "ready"\n    ):\n        return jsonify({"error": "''' + ("Quiz" if route_name == "quiz" else "Flashcard") + ''' material not found"}), 404\n'''
+        if shared_material_guard not in segment:
+            if anchor not in segment:
+                raise SystemExit(f"complete_{route_name}: material validation anchor not found")
+            segment = segment.replace(anchor, anchor + shared_material_guard, 1)
+            s = s[:route_pos] + segment + s[next_route:]
 
     APP.write_text(s)
 
