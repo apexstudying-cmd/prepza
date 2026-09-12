@@ -2,7 +2,9 @@ name: E2EE Chat Validation
 
 on:
   push:
-    branches: [feat/e2ee-study-chats]
+    branches:
+      - main
+      - feat/e2ee-study-chats
     paths:
       - 'app.py'
       - 'e2ee_chat_*.py'
