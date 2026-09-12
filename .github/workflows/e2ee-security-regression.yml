@@ -12,6 +12,7 @@ on:
       - 'prepza_control.py'
       - 'frontend/src/crypto/**'
       - 'frontend/src/App.tsx'
+      - 'frontend/src/main.tsx'
       - 'migrations/*e2ee*'
       - 'scripts/validate_e2ee_security.py'
       - 'scripts/validate_e2ee_lifecycle.py'
