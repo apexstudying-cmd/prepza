@@ -133,7 +133,7 @@ async function ensureGroupProvisioned(conversationId: number, csrfToken: string)
         .filter((p: any) => p && Number.isInteger(Number(p.user_id)))
         .map(async (p: any) => ({
           userId: Number(p.user_id),
-          publicKey: Number(p.user_id) === creatorUserId ? '' : await fetchUserPublicKey(Number(p.user_id)),
+          publicKey: await fetchUserPublicKey(Number(p.user_id)),
         })),
     )
     await provisionInitialGroupKey(
@@ -171,7 +171,7 @@ async function provisionCurrentEpochIfElected(conversationId: number): Promise<v
     await ensureIdentityKeyRegistered(currentCsrfToken)
     const members = await Promise.all(activeMembers.map(async (userId: number) => ({
       userId,
-      publicKey: userId === currentUserId ? '' : await fetchUserPublicKey(userId),
+      publicKey: await fetchUserPublicKey(userId),
     })))
     await provisionRotatedGroupKey(
       conversationId,
