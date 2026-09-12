@@ -1,4 +1,5 @@
-import { AdaStudyContext, toAdaRequestBody } from './studyAdaContext'
+import { toAdaRequestBody } from './studyAdaContext'
+import type { AdaStudyContext } from './studyAdaContext'
 
 export type AdaStudyResponse = {
   answer: string
