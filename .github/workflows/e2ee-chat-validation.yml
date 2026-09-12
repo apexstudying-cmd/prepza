@@ -8,13 +8,11 @@ on:
       - 'e2ee_chat_*.py'
       - 'e2ee_ada_routes.py'
       - 'prepza_control.py'
-      - 'scripts/apply_group_chat_e2ee_backend.py'
       - 'migrations/add_group_chat_e2ee.sql'
       - 'migrations/add_message_e2ee_key_epoch.sql'
       - 'frontend/src/crypto/**'
       - 'frontend/src/main.tsx'
       - 'frontend/src/App.tsx'
-      - 'frontend/src/**'
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
       - '.github/workflows/e2ee-chat-validation.yml'
@@ -24,13 +22,11 @@ on:
       - 'e2ee_chat_*.py'
       - 'e2ee_ada_routes.py'
       - 'prepza_control.py'
-      - 'scripts/apply_group_chat_e2ee_backend.py'
       - 'migrations/add_group_chat_e2ee.sql'
       - 'migrations/add_message_e2ee_key_epoch.sql'
       - 'frontend/src/crypto/**'
       - 'frontend/src/main.tsx'
       - 'frontend/src/App.tsx'
-      - 'frontend/src/**'
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
       - '.github/workflows/e2ee-chat-validation.yml'
@@ -43,11 +39,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate and simulate app.py E2EE patch
+      - name: Compile E2EE backend modules and app
         run: |
-          python -m py_compile e2ee_chat_models.py e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py scripts/apply_group_chat_e2ee_backend.py
-          python scripts/apply_group_chat_e2ee_backend.py
-          python -m py_compile app.py
+          python -m py_compile app.py e2ee_chat_models.py e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py
       - uses: actions/setup-node@v4
         with:
           node-version: 20
