@@ -7,10 +7,13 @@ read-only; write actions must be added as explicit, audited operations later.
 
 import hashlib
 import hmac
+import json
 import os
+import re
 from datetime import datetime
 
 from flask import jsonify, request
+from sqlalchemy import event, inspect, text
 
 
 CONTROL_SETTING_KEY = "prepza_control_enabled"
@@ -208,7 +211,7 @@ def register_control_routes(
     # register the E2EE chat routes without modifying the large app.py file.
     from e2ee_chat_models import create_e2ee_models
     from e2ee_chat_routes import register_e2ee_chat_routes
-    from app import Conversation, ConversationParticipant
+    from app import Conversation, ConversationParticipant, Message
 
     ConversationKeyEnvelope = create_e2ee_models(db)
     register_e2ee_chat_routes(
@@ -219,3 +222,80 @@ def register_control_routes(
         User,
         ConversationKeyEnvelope,
     )
+
+    # Membership changes are soft state transitions (left_at), so a mapper
+    # hook is safer than duplicating the leave endpoint. A group_v1 epoch is
+    # advanced exactly once when an active participant leaves. Existing
+    # envelopes remain stored for history, but the key-envelope API exposes
+    # only the new current epoch to active members.
+    if not getattr(ConversationParticipant, "_prepza_e2ee_membership_listener", False):
+        @event.listens_for(ConversationParticipant, "before_update")
+        def _rotate_group_epoch_on_leave(mapper, connection, target):
+            history = inspect(target).attrs.left_at.history
+            if not history.has_changes() or not history.added:
+                return
+            conversation_id = target.conversation_id
+            connection.execute(
+                text(
+                    "UPDATE conversation "
+                    "SET key_epoch = key_epoch + 1 "
+                    "WHERE id = :conversation_id AND e2ee_mode = 'group_v1'"
+                ),
+                {"conversation_id": conversation_id},
+            )
+
+        ConversationParticipant._prepza_e2ee_membership_listener = True
+
+    # Stamp every new message with the group epoch that existed at insert
+    # time. The Message ORM model predates this column, so this uses the
+    # mapped connection rather than changing the 525k-line app.py model.
+    if not getattr(Message, "_prepza_e2ee_epoch_listener", False):
+        @event.listens_for(Message, "after_insert")
+        def _stamp_message_e2ee_epoch(mapper, connection, target):
+            connection.execute(
+                text(
+                    "UPDATE message SET e2ee_key_epoch = COALESCE((" 
+                    "SELECT key_epoch FROM conversation WHERE id = message.conversation_id "
+                    "AND e2ee_mode = 'group_v1'" 
+                    "), 0) WHERE id = :message_id"
+                ),
+                {"message_id": target.id},
+            )
+
+        Message._prepza_e2ee_epoch_listener = True
+
+    # E2EE messages need their epoch in the client response so the browser
+    # can use the correct historical local key after a membership rotation.
+    if not getattr(app, "_prepza_e2ee_message_epoch_response_hook", False):
+        @app.after_request
+        def _add_e2ee_epoch_to_chat_messages(response):
+            if not re.match(r"^/chats/\d+/messages(?:/search)?$", request.path):
+                return response
+            if not response.is_json:
+                return response
+            try:
+                payload = response.get_json(silent=True)
+                if not payload or not isinstance(payload.get("messages"), list):
+                    return response
+                ids = [int(m["id"]) for m in payload["messages"] if isinstance(m, dict) and str(m.get("id", "")).isdigit()]
+                if not ids:
+                    return response
+                rows = db.session.execute(
+                    text("SELECT id, e2ee_key_epoch FROM message WHERE id = ANY(:ids)"),
+                    {"ids": ids},
+                ).all()
+                epochs = {int(row[0]): int(row[1] or 0) for row in rows}
+                for message in payload["messages"]:
+                    if isinstance(message, dict) and message.get("id") in epochs:
+                        message["key_epoch"] = epochs[message["id"]]
+                response.set_data(json.dumps(payload, separators=(",", ":")))
+                response.headers["Content-Type"] = "application/json"
+                return response
+            except Exception:
+                # Never break normal chat delivery because the auxiliary
+                # epoch field cannot be attached; legacy/direct chat remains
+                # fully functional.
+                db.session.rollback()
+                return response
+
+        app._prepza_e2ee_message_epoch_response_hook = True
