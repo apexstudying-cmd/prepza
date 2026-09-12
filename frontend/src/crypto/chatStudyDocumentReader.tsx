@@ -52,12 +52,15 @@ export function installChatStudyDocumentObserver(): void {
       response.clone().json().then((body: any) => {
         const messages = Array.isArray(body?.messages) ? body.messages : []
         const seen = new Set<number>()
-        const documents = messages.map(message => attachmentFromMessage(conversationId, message)).filter(Boolean).filter(document => {
-          const id = (document as SharedDocument).attachmentId
-          if (seen.has(id)) return false
-          seen.add(id)
-          return true
-        }) as SharedDocument[]
+        const documents = messages
+          .map((message: any) => attachmentFromMessage(conversationId, message))
+          .filter((document): document is SharedDocument => document !== null)
+          .filter((document: SharedDocument) => {
+            const id = document.attachmentId
+            if (seen.has(id)) return false
+            seen.add(id)
+            return true
+          })
         emit(documents)
       }).catch(() => {})
     }
