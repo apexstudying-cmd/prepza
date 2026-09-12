@@ -8,26 +8,35 @@ new = '''    viewer = db.session.get(User, user_id)\n    watermark = (viewer.ema
 if old in s: s = s.replace(old, new, 1)
 elif new not in s: raise SystemExit('reader rendering block not found')
 
-old_audio_post = '''    user_id = session.get("user_id")\n    if not user_id:\n        return jsonify({"error": "Not logged in"}), 401\n\n    document = db.session.get(Document, document_id)\n    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n    if not document.document_content_id:\n        return jsonify({"error": "Document has no content to generate a podcast from"}), 400\n\n    material = get_generated_material_for_user(\n        document.document_content_id, "podcast", session.get("user_id")\n    )\n'''
-new_audio_post = '''    user_id = session.get("user_id")\n    if not user_id:\n        return jsonify({"error": "Not logged in"}), 401\n\n    document = db.session.get(Document, document_id)\n    if not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n    if not document.document_content_id:\n        return jsonify({"error": "Document has no content to generate a podcast from"}), 400\n\n    material = get_generated_material_for_user(\n        document.document_content_id, "podcast", session.get("user_id")\n    )\n'''
-if old_audio_post in s:
-    s = s.replace(old_audio_post, new_audio_post, 1)
-elif new_audio_post not in s:
-    raise SystemExit('podcast audio POST access block not found')
+old_script_access = '''    document = db.session.get(Document, document_id)\n    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n\n    if not document.document_content_id:\n        return jsonify({"error": "Document has no content to generate a podcast from"}), 400\n'''
+new_script_access = '''    document = db.session.get(Document, document_id)\n    if not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n\n    if not document.document_content_id:\n        return jsonify({"error": "Document has no content to generate a podcast from"}), 400\n'''
+if old_script_access in s:
+    s = s.replace(old_script_access, new_script_access, 1)
+elif new_script_access not in s:
+    raise SystemExit('podcast script access block not found')
 
-old_audio_guard = '''    if audio_status == "processing":\n        return jsonify({"audio_status": "processing", "material_id": material.id}), 202\n\n    podcast_audio.start_podcast_audio_processing(material.id, app)\n'''
-new_audio_guard = '''    if audio_status == "processing":\n        return jsonify({"audio_status": "processing", "material_id": material.id}), 202\n\n    # Published readers may replay an existing audio artifact, but they must\n    # never be able to trigger a new paid synthesis job themselves.\n    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n    podcast_audio.start_podcast_audio_processing(material.id, app)\n'''
-if old_audio_guard in s:
-    s = s.replace(old_audio_guard, new_audio_guard, 1)
-elif new_audio_guard not in s:
+old_script_material = '''    try:\n        result = ai_service.generate_document_podcast_script(\n'''
+new_script_material = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()\n        if not material or not material.payload:\n            return jsonify({"error": "Podcast has not been published yet"}), 404\n        record_document_studied(user_id, content.id)\n        db.session.commit()\n        return jsonify({\n            "material_id": material.id,\n            "reused": True,\n            "podcast": json.loads(material.payload),\n        }), 200\n\n    try:\n        result = ai_service.generate_document_podcast_script(\n'''
+if old_script_material in s:
+    s = s.replace(old_script_material, new_script_material, 1)
+elif new_script_material not in s:
+    raise SystemExit('podcast script material branch not found')
+
+old_audio_post = '''    document = db.session.get(Document, document_id)\n    if not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n    if not document.document_content_id:\n'''
+new_audio_post = '''    document = db.session.get(Document, document_id)\n    if not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n    if not document.document_content_id:\n'''
+if old_audio_post not in s:
+    raise SystemExit('podcast audio access block not found')
+
+old_audio_material = '''    material = get_generated_material_for_user(\n        document.document_content_id, "podcast", session.get("user_id")\n    )\n'''
+new_audio_material = '''    if document.user_id == user_id:\n        material = get_generated_material_for_user(\n            document.document_content_id, "podcast", session.get("user_id")\n        )\n    else:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()\n'''
+if old_audio_material in s:
+    s = s.replace(old_audio_material, new_audio_material, 1)
+elif new_audio_material not in s:
+    raise SystemExit('podcast audio material lookup not found')
+
+old_audio_guard = '''    if audio_status == "processing":\n        return jsonify({"audio_status": "processing", "material_id": material.id}), 202\n\n    # Published readers may replay an existing audio artifact, but they must\n    # never be able to trigger a new paid synthesis job themselves.\n    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n    podcast_audio.start_podcast_audio_processing(material.id, app)\n'''
+if old_audio_guard not in s:
     raise SystemExit('podcast audio generation guard not found')
 
-old_audio_get = '''    user_id = session.get("user_id")\n    if not user_id:\n        return jsonify({"error": "Not logged in"}), 401\n\n    document = db.session.get(Document, document_id)\n    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n\n    if not document.document_content_id:\n'''
-new_audio_get = '''    user_id = session.get("user_id")\n    if not user_id:\n        return jsonify({"error": "Not logged in"}), 401\n\n    document = db.session.get(Document, document_id)\n    if not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n\n    if not document.document_content_id:\n'''
-if old_audio_get in s:
-    s = s.replace(old_audio_get, new_audio_get, 1)
-elif new_audio_get not in s:
-    raise SystemExit('podcast audio GET access block not found')
-
 p.write_text(s)
-print('reader and published podcast security patch applied')
+print('reader and published podcast shared-artifact patch applied')
