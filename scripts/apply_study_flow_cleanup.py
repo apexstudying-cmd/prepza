@@ -14,21 +14,31 @@ def replace_between(text, start, end, replacement, label):
 
 
 def normalize_podcast_script_route(s):
+    route = 'def podcast_script_document(document_id):'
+    route_pos = s.find(route)
+    if route_pos < 0:
+        raise SystemExit("podcast script route not found")
     start = '    if document.user_id != user_id:\n'
+    start_pos = s.find(start, route_pos)
     end = '    try:\n        result = ai_service.generate_document_podcast_script(\n'
+    end_pos = s.find(end, start_pos)
+    if start_pos < 0 or end_pos < 0:
+        raise SystemExit("podcast script published branch boundaries not found")
     canonical = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()\n        if not material or not material.payload:\n            return jsonify({"error": "Podcast has not been published yet"}), 404\n        record_document_studied(user_id, content.id)\n        db.session.commit()\n        return jsonify({\n            "material_id": material.id,\n            "reused": True,\n            "podcast": json.loads(material.payload),\n        }), 200\n\n'''
-    return replace_between(s, start, end, canonical + end, "podcast script published branch")
+    return s[:start_pos] + canonical + s[end_pos:]
 
 
 def normalize_podcast_audio_post(s):
+    route_pos = s.find('def trigger_podcast_audio(document_id):')
+    if route_pos < 0:
+        raise SystemExit("podcast audio POST route not found")
     start = '    document = db.session.get(Document, document_id)\n'
     marker = '@app.route("/documents/<int:document_id>/podcast-audio", methods=["GET"])\n'
-    first = s.find(start, s.find('def trigger_podcast_audio(document_id):'))
+    first = s.find(start, route_pos)
     stop = s.find(marker, first)
     if first < 0 or stop < 0:
         raise SystemExit("podcast audio POST boundaries not found")
     segment = s[first:stop]
-    # Keep the existing endpoint body but collapse repeated viewer guards.
     guard = '''    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n'''
     if guard not in segment:
         raise SystemExit("podcast audio synthesis guard not found")
@@ -45,8 +55,6 @@ def normalize_podcast_audio_get(s):
     body_start = s.find('    document = db.session.get(Document, document_id)\n', start)
     if body_start < 0:
         raise SystemExit("podcast audio GET document lookup not found")
-    # Find the first stable lookup marker after the document guard and
-    # normalize only the access decision, leaving response semantics intact.
     lookup = '    if document.user_id == user_id:\n'
     lookup_pos = s.find(lookup, body_start)
     if lookup_pos < 0:
