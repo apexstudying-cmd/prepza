@@ -76,6 +76,7 @@ def register_e2ee_ada_route(
         if not state or state["e2ee_mode"] != "group_v1":
             return jsonify({"error": "Scoped Ada requires group E2EE"}), 409
 
+        current_key_epoch = int(state["key_epoch"] or 0)
         data = request.get_json(silent=True) or {}
         if data.get("context_scope") != "selected_document_pages":
             return jsonify({"error": "Ada accepts only selected document-page context"}), 400
@@ -96,8 +97,11 @@ def register_e2ee_ada_route(
             return jsonify({"error": "Invalid document or page range"}), 400
         if page_end - page_start + 1 > MAX_PAGE_SPAN:
             return jsonify({"error": "Selected page range is too large"}), 400
-        if key_epoch < 0:
-            return jsonify({"error": "Invalid E2EE key epoch"}), 400
+        if key_epoch != current_key_epoch:
+            return jsonify({
+                "error": "E2EE key epoch is stale; reopen the group and retry",
+                "key_epoch": current_key_epoch,
+            }), 409
 
         # Until encrypted shared-document ACLs exist, only a document owned
         # by the requesting student may be used as Ada context. This prevents
@@ -163,7 +167,7 @@ def register_e2ee_ada_route(
         return jsonify({
             "answer": response.text,
             "model_used": response.model_used,
-            "key_epoch": key_epoch,
+            "key_epoch": current_key_epoch,
             "context_scope": "selected_document_pages",
         }), 200
 
