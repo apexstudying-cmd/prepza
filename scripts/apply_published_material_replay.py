@@ -55,10 +55,7 @@ def replace_function_guard_in_route(text, route_anchor, new_guard, label):
     return text[:route_pos] + segment + text[next_route:]
 
 
-def main():
-    s = APP.read_text()
-
-    helper_anchor = '@app.route("/documents/<int:document_id>/summarize", methods=["POST"])\n'
+def install_published_replay_helper(s):
     helper = '''def _published_ready_material_for_viewer(user_id, document, material_type, parameters):
     """Return an approved document's READY shared artifact without generation."""
     if not document or document.user_id == user_id:
@@ -72,27 +69,41 @@ def main():
     if not content or content.status != "ready":
         return None
 
-    from ai_reusable_generation import normalize_parameters
+    from ai_artifact_fingerprint import (
+        GENERATION_VERSION,
+        build_generation_fingerprint,
+    )
+    from ai_reusable_generation import (
+        PROMPT_VERSIONS,
+        SCHEMA_VERSIONS,
+        normalize_parameters,
+    )
     try:
         normalized = normalize_parameters(material_type, parameters)
-    except ValueError:
+        fingerprint = build_generation_fingerprint(
+            content_hash=content.content_hash,
+            material_type=material_type,
+            parameters=normalized,
+            prompt_version=PROMPT_VERSIONS[material_type],
+            schema_version=SCHEMA_VERSIONS[material_type],
+            scope="shared",
+            owner_user_id=None,
+        )
+    except (KeyError, ValueError):
         return None
 
-    candidates = (
-        GeneratedMaterial.query
-        .filter_by(
-            document_content_id=content.id,
-            material_type=material_type,
-            status="ready",
-            scope="shared",
-        )
-        .order_by(GeneratedMaterial.updated_at.desc())
-        .all()
-    )
-    for material in candidates:
-        if material.owner_user_id is None and (material.generation_parameters or {}) == normalized and material.payload:
-            return content, material
-    return None
+    material = GeneratedMaterial.query.filter_by(
+        generation_fingerprint=fingerprint,
+        document_content_id=content.id,
+        material_type=material_type,
+        status="ready",
+        scope="shared",
+        owner_user_id=None,
+        generation_version=GENERATION_VERSION,
+    ).first()
+    if not material or not material.payload:
+        return None
+    return content, material
 
 
 def _published_material_response(user_id, content, material):
@@ -106,25 +117,27 @@ def _published_material_response(user_id, content, material):
 
 
 '''
-    s = replace_once(s, helper_anchor, helper + helper_anchor, "published replay helper")
+    start_marker = 'def _published_ready_material_for_viewer('
+    end_marker = 'def _published_material_response('
+    start = s.find(start_marker)
+    if start >= 0:
+        end = s.find(end_marker, start)
+        if end < 0:
+            raise SystemExit("published replay response helper not found after replay helper")
+        return s[:start] + helper + s[end:]
 
-    private_materials_block = '''    materials = []
-    if content:
-        materials = [
-            {"type": m.material_type, "status": m.status}
-            for m in GeneratedMaterial.query.filter_by(document_content_id=content.id).all()
-        ]
-'''
-    shared_materials_block = '''    materials = []
-    if content:
-        material_query = GeneratedMaterial.query.filter_by(document_content_id=content.id)
-        if document.user_id != user_id:
-            material_query = material_query.filter_by(status="ready", scope="shared", owner_user_id=None)
-        materials = [
-            {"type": m.material_type, "status": m.status}
-            for m in material_query.all()
-        ]
-'''
+    route_anchor = '@app.route("/documents/<int:document_id>/summarize", methods=["POST"])\n'
+    if route_anchor not in s:
+        raise SystemExit("published replay helper route anchor not found")
+    return s.replace(route_anchor, helper + route_anchor, 1)
+
+
+def main():
+    s = APP.read_text()
+    s = install_published_replay_helper(s)
+
+    private_materials_block = '''    materials = []\n    if content:\n        materials = [\n            {"type": m.material_type, "status": m.status}\n            for m in GeneratedMaterial.query.filter_by(document_content_id=content.id).all()\n        ]\n'''
+    shared_materials_block = '''    materials = []\n    if content:\n        material_query = GeneratedMaterial.query.filter_by(document_content_id=content.id)\n        if document.user_id != user_id:\n            material_query = material_query.filter_by(status="ready", scope="shared", owner_user_id=None)\n        materials = [\n            {"type": m.material_type, "status": m.status}\n            for m in material_query.all()\n        ]\n'''
     s = replace_once(s, private_materials_block, shared_materials_block, "published material visibility")
 
     route_anchors = {
