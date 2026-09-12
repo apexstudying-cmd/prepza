@@ -3,19 +3,8 @@ from pathlib import Path
 APP = Path("app.py")
 
 
-def replace_between(text, start, end, replacement, label):
-    first = text.find(start)
-    if first < 0:
-        raise SystemExit(f"{label}: start anchor not found")
-    stop = text.find(end, first + len(start))
-    if stop < 0:
-        raise SystemExit(f"{label}: end anchor not found")
-    return text[:first] + replacement + text[stop:]
-
-
 def normalize_podcast_script_route(s):
-    route = 'def podcast_script_document(document_id):'
-    route_pos = s.find(route)
+    route_pos = s.find('def podcast_script_document(document_id):')
     if route_pos < 0:
         raise SystemExit("podcast script route not found")
     start = '    if document.user_id != user_id:\n'
@@ -33,7 +22,7 @@ def normalize_podcast_audio_post(s):
     if route_pos < 0:
         raise SystemExit("podcast audio POST route not found")
     start = '    document = db.session.get(Document, document_id)\n'
-    marker = '@app.route("/documents/<int:document_id>/podcast-audio", methods=["GET"])\n'
+    marker = '@app.route("/documents/<int:document_id>/podcast-audio")\n'
     first = s.find(start, route_pos)
     stop = s.find(marker, first)
     if first < 0 or stop < 0:
@@ -48,7 +37,7 @@ def normalize_podcast_audio_post(s):
 
 
 def normalize_podcast_audio_get(s):
-    marker = '@app.route("/documents/<int:document_id>/podcast-audio", methods=["GET"])\n'
+    marker = '@app.route("/documents/<int:document_id>/podcast-audio")\n'
     start = s.find(marker)
     if start < 0:
         raise SystemExit("podcast audio GET route not found")
