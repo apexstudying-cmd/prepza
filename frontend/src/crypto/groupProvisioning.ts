@@ -12,6 +12,23 @@ export type GroupEnvelopeUploader = (
   envelopes: GroupKeyEnvelope[],
 ) => Promise<void>
 
+function validateMemberTargets(members: GroupMemberKeyTarget[]): void {
+  if (!Array.isArray(members) || members.length === 0 || members.length > 100) {
+    throw new Error('The active group member key list is invalid.')
+  }
+
+  const seen = new Set<number>()
+  for (const member of members) {
+    if (!Number.isInteger(member.userId) || member.userId <= 0 || seen.has(member.userId)) {
+      throw new Error('The active group member key list contains an invalid or duplicate user.')
+    }
+    if (typeof member.publicKey !== 'string' || !member.publicKey.trim()) {
+      throw new Error(`Missing public key for member ${member.userId}.`)
+    }
+    seen.add(member.userId)
+  }
+}
+
 /**
  * Creates the initial group key on the creator's device, wraps it separately
  * for every active member, uploads only the encrypted envelopes, and stores
@@ -25,7 +42,9 @@ export async function provisionInitialGroupKey(
   upload: GroupEnvelopeUploader,
 ): Promise<CryptoKey> {
   if (!Number.isInteger(conversationId) || conversationId <= 0) throw new Error('Invalid conversation id.')
-  if (!Number.isInteger(keyEpoch) || keyEpoch < 0) throw new Error('Invalid group key epoch.')
+  if (!Number.isInteger(keyEpoch) || keyEpoch < 1) throw new Error('Invalid group key epoch.')
+  if (!Number.isInteger(creatorUserId) || creatorUserId <= 0) throw new Error('Invalid group creator.')
+  validateMemberTargets(members)
 
   const creator = members.find(member => member.userId === creatorUserId)
   if (!creator) throw new Error('The creator must be included in the active member key list.')
@@ -36,7 +55,6 @@ export async function provisionInitialGroupKey(
 
   for (const member of members) {
     if (member.userId === creatorUserId) continue
-    if (!member.publicKey) throw new Error(`Missing public key for member ${member.userId}.`)
 
     const recipientPublicKey = await importPeerPublicKey(member.publicKey)
     envelopes.push(await wrapGroupKeyForMember(
@@ -69,7 +87,9 @@ export async function provisionRotatedGroupKey(
   upload: GroupEnvelopeUploader,
 ): Promise<CryptoKey> {
   if (!Number.isInteger(conversationId) || conversationId <= 0) throw new Error('Invalid conversation id.')
-  if (!Number.isInteger(keyEpoch) || keyEpoch < 1) throw new Error('Invalid group key epoch.')
+  if (!Number.isInteger(keyEpoch) || keyEpoch < 2) throw new Error('Invalid rotated group key epoch.')
+  if (!Number.isInteger(senderUserId) || senderUserId <= 0) throw new Error('Invalid key provisioner.')
+  validateMemberTargets(members)
 
   const sender = members.find(member => member.userId === senderUserId)
   if (!sender) throw new Error('The rotating member must still be active.')
@@ -80,7 +100,6 @@ export async function provisionRotatedGroupKey(
 
   for (const member of members) {
     if (member.userId === senderUserId) continue
-    if (!member.publicKey) throw new Error(`Missing public key for member ${member.userId}.`)
 
     const recipientPublicKey = await importPeerPublicKey(member.publicKey)
     envelopes.push(await wrapGroupKeyForMember(
