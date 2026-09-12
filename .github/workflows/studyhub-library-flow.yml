@@ -1,0 +1,40 @@
+name: StudyHub Library Flow
+
+on:
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'frontend/**'
+      - 'scripts/apply_*studyhub*'
+      - 'scripts/apply_public_document_watermark.py'
+      - 'scripts/verify_*document_watermark.py'
+      - 'scripts/verify_*studyhub*'
+      - 'scripts/verify_*upload_share*'
+      - '.github/workflows/studyhub-library-flow.yml'
+  push:
+    branches:
+      - 'fix/public-document-watermark'
+
+jobs:
+  validate-patches:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply and verify runtime patches in a disposable workspace
+        run: |
+          python scripts/apply_studyhub_library_flow_all.py
+          python scripts/verify_public_document_watermark.py
+          python scripts/verify_studyhub_library_flow.py
+          python scripts/verify_upload_share_choice_ux.py
+
+      - name: Compile Python
+        run: python -m py_compile app.py scripts/*.py
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
