@@ -15,7 +15,6 @@ def main():
     if route_pos < 0:
         raise SystemExit("summary route decorator not found")
 
-    # Correct state: the helper is above the route decorator block.
     if helper_start < route_pos:
         print("AI generation parameter helper already correctly placed")
         return
@@ -25,10 +24,6 @@ def main():
         raise SystemExit("summary function not found after AI parameter helper")
 
     helper_block = s[helper_start:helper_end + 2]
-
-    # The helper was accidentally inserted between the summary route's
-    # decorators and its function definition. Move it above the decorator
-    # block so Flask registers summarize_document itself.
     s = s[:helper_start] + s[helper_end + 2:]
     route_pos = s.find(route_marker)
     s = s[:route_pos] + helper_block + "\n\n" + s[route_pos:]
