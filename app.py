@@ -4009,6 +4009,14 @@ def list_podcasts():
             Document.is_removed.is_(False),
             GeneratedMaterial.material_type == "podcast",
             GeneratedMaterial.status == "ready",
+            GeneratedMaterial.generation_version == "v2",
+            db.or_(
+                GeneratedMaterial.scope == "shared",
+                db.and_(
+                    GeneratedMaterial.scope == "private",
+                    GeneratedMaterial.owner_user_id == user_id,
+                ),
+            ),
         )
         .order_by(GeneratedMaterial.updated_at.desc())
         .all()
