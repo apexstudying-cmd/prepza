@@ -68,10 +68,11 @@ jobs:
           from pathlib import Path
           s = Path('app.py').read_text()
           block = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()'''
-          assert s.count(block) == 2, f'expected exactly 2 shared podcast lookup blocks, found {s.count(block)}'
+          assert s.count(block) == 1, f'expected exactly 1 published podcast shared lookup block, found {s.count(block)}'
           assert s.count('Podcast has not been published yet') == 1
           guard = '    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n'
           assert s.count(guard) == 1, f'expected exactly 1 podcast synthesis guard, found {s.count(guard)}'
+          assert s.count('scope="shared"') >= 4, 'expected shared scope checks for published artifacts'
           PY
           grep -F 'const [readingPage, setReadingPage] = useState(0)' frontend/src/App.tsx
           grep -F '/documents/${activeDocumentId}/reading' frontend/src/App.tsx
