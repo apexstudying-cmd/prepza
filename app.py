@@ -3697,14 +3697,6 @@ def _published_material_response(user_id, content, material):
     }
 
 
-@app.route("/documents/<int:document_id>/summarize", methods=["POST"])
-@limiter.limit(
-    "20 per hour",
-    key_func=lambda: f"summarize:{session.get('user_id', get_remote_address())}",
-)
-@require_csrf
-
-
 def _ai_generation_parameters_from_request():
     """Return an AI generation parameter object without coercing invalid JSON shapes."""
     data = request.get_json(silent=True)
@@ -3713,6 +3705,62 @@ def _ai_generation_parameters_from_request():
     if not isinstance(data, dict):
         raise ValueError("AI generation parameters must be an object")
     return data
+
+
+
+def _published_ready_material_for_viewer(user_id, document, material_type, parameters):
+    """Return an approved document's READY shared artifact without generation."""
+    if not document or document.user_id == user_id:
+        return None
+    if not _can_study_document(user_id, document):
+        return None
+    if not document.document_content_id:
+        return None
+
+    content = db.session.get(DocumentContent, document.document_content_id)
+    if not content or content.status != "ready":
+        return None
+
+    from ai_reusable_generation import normalize_parameters
+    try:
+        normalized = normalize_parameters(material_type, parameters)
+    except ValueError:
+        return None
+
+    candidates = (
+        GeneratedMaterial.query
+        .filter_by(
+            document_content_id=content.id,
+            material_type=material_type,
+            status="ready",
+            scope="shared",
+        )
+        .order_by(GeneratedMaterial.updated_at.desc())
+        .all()
+    )
+    for material in candidates:
+        if material.owner_user_id is None and (material.generation_parameters or {}) == normalized and material.payload:
+            return content, material
+    return None
+
+
+def _published_material_response(user_id, content, material):
+    record_document_studied(user_id, content.id)
+    db.session.commit()
+    return {
+        "material_id": material.id,
+        "reused": True,
+        "payload": json.loads(material.payload),
+    }
+
+
+@app.route("/documents/<int:document_id>/summarize", methods=["POST"])
+@limiter.limit(
+    "20 per hour",
+    key_func=lambda: f"summarize:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+
 
 def summarize_document(document_id):
     """
