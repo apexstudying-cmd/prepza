@@ -1,0 +1,48 @@
+name: Student navigation UX
+
+on:
+  push:
+    branches: [ux/student-navigation-study-flow]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply navigation UX patch
+        run: python3 scripts/apply_student_navigation_ux_v2.py
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify patch is deterministic
+        run: |
+          cp frontend/src/App.tsx /tmp/App.after
+          python3 scripts/apply_student_navigation_ux_v2.py
+          cmp frontend/src/App.tsx /tmp/App.after
+
+      - name: Commit generated frontend change
+        run: |
+          if git diff --quiet; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/App.tsx scripts/apply_student_navigation_ux_v2.py
+          git commit -m 'feat: streamline student navigation and study materials'
+          git push origin HEAD:ux/student-navigation-study-flow
