@@ -3,10 +3,7 @@ from pathlib import Path
 p = Path("app.py")
 s = p.read_text()
 
-old_helper = '''def _document_reader_watermark(user_id, document):
-    """Resolve a reader watermark without leaking a student's email publicly.
-'''
-new_helper = '''def _can_publish_document(user_id, document):
+helper = '''def _can_publish_document(user_id, document):
     """Publishing is an ownership action, not merely a study permission."""
     return bool(
         document
@@ -14,14 +11,16 @@ new_helper = '''def _can_publish_document(user_id, document):
         and document.user_id == user_id
     )
 
-
-def _document_reader_watermark(user_id, document):
-    """Resolve a reader watermark without leaking a student's email publicly.
 '''
-if old_helper in s:
-    s = s.replace(old_helper, new_helper, 1)
-elif new_helper not in s:
+
+# Remove every existing copy first so repeated workflow runs converge to one helper.
+while helper in s:
+    s = s.replace(helper, "", 1)
+
+anchor = 'def _document_reader_watermark(user_id, document):\n'
+if anchor not in s:
     raise SystemExit("watermark helper anchor not found")
+s = s.replace(anchor, helper + anchor, 1)
 
 old_publish_check = '''    document = db.session.get(Document, document_id)
     if not _can_study_document(user_id, document):
@@ -39,4 +38,4 @@ elif new_publish_check not in s:
     raise SystemExit("publish ownership check anchor not found")
 
 p.write_text(s)
-print("Library publish ownership guard applied")
+print("Library publish ownership guard normalized")
