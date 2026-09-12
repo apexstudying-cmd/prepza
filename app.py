@@ -11213,6 +11213,7 @@ def admin_get_settings():
     return jsonify({
         "maintenance_mode": settings.get("maintenance_mode", "false") == "true",
         "maintenance_message": settings.get("maintenance_message", ""),
+        "prepza_control_enabled": settings.get("prepza_control_enabled", "false") == "true",
         "price_notes": price("price_notes"),
         "price_past_paper": price("price_past_paper"),
         "price_qna": price("price_qna"),
@@ -11257,6 +11258,22 @@ def admin_update_settings():
             setting = SystemSetting(key="maintenance_message", value="")
             db.session.add(setting)
         setting.value = message
+
+    if "prepza_control_enabled" in data:
+        value = data["prepza_control_enabled"]
+        if not isinstance(value, bool):
+            return jsonify({"error": "prepza_control_enabled must be true or false"}), 400
+        setting = SystemSetting.query.filter_by(key="prepza_control_enabled").first()
+        if not setting:
+            setting = SystemSetting(key="prepza_control_enabled", value="false")
+            db.session.add(setting)
+        setting.value = "true" if value else "false"
+        log_admin_action(
+            session.get("user_id"),
+            "control_api_enabled" if value else "control_api_disabled",
+            target_type="control_api",
+            details={"enabled": value},
+        )
 
     for price_key in ("price_notes", "price_past_paper", "price_qna", "price_plan_semester", "price_plan_annual"):
         if price_key in data:
@@ -11304,9 +11321,11 @@ def admin_update_settings():
 
     mode_setting = SystemSetting.query.filter_by(key="maintenance_mode").first()
     message_setting = SystemSetting.query.filter_by(key="maintenance_message").first()
+    control_setting = SystemSetting.query.filter_by(key="prepza_control_enabled").first()
     return jsonify({
         "maintenance_mode": bool(mode_setting and mode_setting.value == "true"),
         "maintenance_message": message_setting.value if message_setting else "",
+        "prepza_control_enabled": bool(control_setting and control_setting.value == "true"),
     })
 
 
@@ -13142,6 +13161,20 @@ def admin_list_audit_logs():
     return jsonify({"page": page, "logs": result})
 
 
+
+from prepza_control import register_control_routes
+
+register_control_routes(
+    app,
+    db,
+    SystemSetting,
+    User,
+    Document,
+    DocumentContent,
+    GeneratedMaterial,
+    log_admin_action,
+    limiter,
+)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

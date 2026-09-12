@@ -8463,6 +8463,7 @@ type AdminModerationSummary = {
 type AdminPlatformSettings = {
   maintenance_mode: boolean
   maintenance_message: string
+  prepza_control_enabled: boolean
   price_notes: number
   price_past_paper: number
   price_qna: number
@@ -9209,6 +9210,26 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     if (section !== 'settings') return
     loadPlatformSettings()
   }, [section])
+
+  const setPrepzaControlEnabled = async (enabled: boolean) => {
+    if (!settingsDraft || settingsSaving) return
+    if (!enabled && !window.confirm('Disable ChatGPT/Prepza control access now? This immediately blocks all control API requests.')) return
+    setSettingsSaving(true)
+    setSettingsSaveError('')
+    try {
+      await api('/admin/settings', {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ prepza_control_enabled: enabled }),
+      })
+      await loadPlatformSettings()
+      setSettingsSaved(true)
+    } catch (e) {
+      setSettingsSaveError(e instanceof ApiError ? e.message : 'Could not change control access.')
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
 
   const savePlatformSettings = async () => {
     if (!settingsDraft || !platformSettings) return
@@ -10204,6 +10225,30 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                 maxLength={500}
                 style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, resize: 'vertical' }}
               />
+            </div>
+          </AdminCard>
+
+          <AdminCard title="Prepza Control Access">
+            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.55 }}>
+                Controls the private developer API used by trusted Prepza tooling. It is disabled by default and still requires a separate server-side token.
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{settingsDraft.prepza_control_enabled ? 'Control access is ON' : 'Control access is OFF'}</div>
+                  <div style={{ fontSize: 11, color: T.textMuted, marginTop: 3 }}>
+                    {settingsDraft.prepza_control_enabled ? 'The API can be reached only with the server-side bearer token.' : 'All control API requests are rejected immediately.'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPrepzaControlEnabled(!settingsDraft.prepza_control_enabled)}
+                  disabled={settingsSaving}
+                  style={{ background: settingsDraft.prepza_control_enabled ? '#DC2626' : '#16A34A', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: settingsSaving ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 12, opacity: settingsSaving ? 0.6 : 1 }}
+                >{settingsSaving ? 'Updating…' : (settingsDraft.prepza_control_enabled ? 'Disable Control Access' : 'Enable Control Access')}</button>
+              </div>
+              <div style={{ fontSize: 11, color: '#92400E', background: '#FEF3C7', borderRadius: 8, padding: '8px 10px' }}>
+                Keep this OFF unless you are actively using the trusted control connection.
+              </div>
             </div>
           </AdminCard>
 
