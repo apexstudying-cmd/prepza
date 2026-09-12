@@ -3,7 +3,8 @@
 These checks intentionally do not claim to prove cryptographic correctness.
 They guard server-side invariants that are easy to accidentally weaken when
 chat routes are edited: plaintext rejection, deterministic key provisioning,
-current-epoch enforcement, and explicitly scoped Ada context.
+current-epoch enforcement, explicitly scoped Ada context, and fail-closed
+attachment handling.
 """
 
 from pathlib import Path
@@ -45,14 +46,16 @@ def main() -> None:
         "document_id = int(data.get(\"document_id\"))",
         "selected_text = clean_text(data.get(\"selected_text\")",
         "prompt = clean_text(data.get(\"prompt\")",
+        "document.user_id != current_user_id",
+        "if document.removed_at is not None:",
     )
 
     require(
         "frontend/src/crypto/group.ts",
         "async function deriveWrapKey(",
-        'name: \'AES-GCM\'',
-        'name: \'ECDH\'',
-        'name: \'HKDF\'',
+        "name: 'AES-GCM'",
+        "name: 'ECDH'",
+        "name: 'HKDF'",
         "export async function encryptGroupMessage(",
         "export async function decryptGroupMessage(",
     )
@@ -61,6 +64,14 @@ def main() -> None:
         "frontend/src/crypto/groupSession.ts",
         "import { getOrCreateIdentityKeyPair, importPeerPublicKey }",
         "export async function openGroupE2EESession(",
+    )
+
+    require(
+        "frontend/src/crypto/e2eeFetchBridge.ts",
+        "encryptGroupBytes",
+        "decryptGroupBytes",
+        "Missing encrypted attachment metadata",
+        "localGroupSearch",
     )
 
     # The server route must not contain an API field/helper that accepts a
