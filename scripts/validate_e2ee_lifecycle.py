@@ -22,7 +22,7 @@ def main() -> None:
         "prepza_control.py",
         "ConversationParticipant",
         "left_at",
-        "conversation.key_epoch",
+        "SET key_epoch = key_epoch + 1",
         "Message",
         "e2ee_key_epoch",
         "after_insert",
@@ -65,8 +65,8 @@ def main() -> None:
     require(
         "e2ee_ada_routes.py",
         "key_epoch != current_key_epoch",
-        'context_scope") != "selected_document_pages"',
-        'explicit_user_context") is not True',
+        'data.get("context_scope") != "selected_document_pages"',
+        'data.get("explicit_user_context") is not True',
         "document.user_id != user_id",
     )
 
