@@ -1,6 +1,6 @@
 import sys
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 
 import pytest
@@ -62,7 +62,7 @@ class _FakeResponse:
     text: str = '{"title":"Reusable"}'
     model_used: str = "fake-model"
     provider: str = "fake-provider"
-    usage: _FakeUsage = _FakeUsage()
+    usage: _FakeUsage = field(default_factory=_FakeUsage)
 
 
 class _FakeSession:
@@ -73,7 +73,7 @@ class _FakeSession:
         self.added = []
 
     def get(self, model, object_id):
-        return self.content if object_id == 7 else None
+        return self.content if object_id == 7 or object_id == 8 else None
 
     def add(self, value):
         self.added.append(value)
