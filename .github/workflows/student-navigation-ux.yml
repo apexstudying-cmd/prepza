@@ -52,6 +52,8 @@ jobs:
         run: |
           grep -F 'if not _can_study_document(user_id, document):' app.py
           grep -F 'document.user_id == user_id:' app.py
+          grep -F 'if document.user_id != user_id:' app.py
+          grep -F 'return jsonify({"error": "Podcast audio is not ready yet"}), 409' app.py
           grep -F 'view_url = get_signed_url(content.storage_path, bucket="documents")' app.py
           grep -F 'const [readingPage, setReadingPage] = useState(0)' frontend/src/App.tsx
           grep -F '/documents/${activeDocumentId}/reading' frontend/src/App.tsx
