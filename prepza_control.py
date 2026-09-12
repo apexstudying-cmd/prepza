@@ -1,12 +1,8 @@
 """Narrow, read-only control surface for trusted Prepza developer tooling.
 
-This module intentionally does not expose a general-purpose database API.
-Every request requires both:
-  1. the admin-controlled SystemSetting switch, and
-  2. the PREPZA_CONTROL_TOKEN bearer secret.
-
-The first release is read-only. Mutating operations should be added only as
-small, explicit endpoints with their own confirmation/audit requirements.
+Every request requires both the admin-controlled database switch and a
+separate Render-managed bearer secret. The first release is intentionally
+read-only; write actions must be added as explicit, audited operations later.
 """
 
 import hashlib
@@ -21,7 +17,17 @@ CONTROL_SETTING_KEY = "prepza_control_enabled"
 CONTROL_TOKEN_ENV = "PREPZA_CONTROL_TOKEN"
 
 
-def register_control_routes(app, db, User, Document, DocumentContent, GeneratedMaterial, AuditLog, log_admin_action, limiter):
+def register_control_routes(
+    app,
+    db,
+    SystemSetting,
+    User,
+    Document,
+    DocumentContent,
+    GeneratedMaterial,
+    log_admin_action,
+    limiter,
+):
     """Register the protected control API on the existing Flask app."""
 
     def _enabled():
@@ -52,7 +58,6 @@ def register_control_routes(app, db, User, Document, DocumentContent, GeneratedM
                 None,
                 f"control_api_{action}",
                 target_type="control_api",
-                target_id=None,
                 details={"token_fingerprint": digest, **(details or {})},
             )
             db.session.commit()
@@ -62,9 +67,7 @@ def register_control_routes(app, db, User, Document, DocumentContent, GeneratedM
 
     def _guard():
         ok, response = _authorized()
-        if not ok:
-            return response
-        return None
+        return None if ok else response
 
     @app.route("/internal/control/v1/health", methods=["GET"])
     @limiter.limit("30 per minute")
@@ -73,7 +76,11 @@ def register_control_routes(app, db, User, Document, DocumentContent, GeneratedM
         if denied:
             return denied
         _audit("health_checked")
-        return jsonify({"status": "ok", "service": "prepza-control", "timestamp": datetime.utcnow().isoformat() + "Z"})
+        return jsonify({
+            "status": "ok",
+            "service": "prepza-control",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        })
 
     @app.route("/internal/control/v1/status", methods=["GET"])
     @limiter.limit("30 per minute")
@@ -86,7 +93,14 @@ def register_control_routes(app, db, User, Document, DocumentContent, GeneratedM
             "enabled": True,
             "configured": True,
             "mode": "read_only",
-            "capabilities": ["health", "status", "system_overview", "user_summary", "document_summary", "document_materials"],
+            "capabilities": [
+                "health",
+                "status",
+                "system_overview",
+                "user_summary",
+                "document_summary",
+                "document_materials",
+            ],
         })
 
     @app.route("/internal/control/v1/system/overview", methods=["GET"])
@@ -166,7 +180,12 @@ def register_control_routes(app, db, User, Document, DocumentContent, GeneratedM
         document = db.session.get(Document, document_id)
         if not document or not document.document_content_id:
             return jsonify({"error": "Document not found"}), 404
-        materials = GeneratedMaterial.query.filter_by(document_content_id=document.document_content_id).order_by(GeneratedMaterial.created_at.desc()).all()
+        materials = (
+            GeneratedMaterial.query
+            .filter_by(document_content_id=document.document_content_id)
+            .order_by(GeneratedMaterial.created_at.desc())
+            .all()
+        )
         _audit("document_materials_read", {"document_id": document_id})
         return jsonify({
             "document_id": document_id,
@@ -183,16 +202,3 @@ def register_control_routes(app, db, User, Document, DocumentContent, GeneratedM
                 "error_message": material.error_message,
             } for material in materials],
         })
-
-
-# Imported lazily at registration time so this module stays independent of
-# app.py's model declaration order.
-def _system_setting_model():
-    from app import SystemSetting
-    return SystemSetting
-
-
-# The closure above resolves SystemSetting through this proxy after app.py has
-# finished defining its models. It keeps the control module from importing app
-# during Flask startup and avoids a circular import.
-SystemSetting = None
