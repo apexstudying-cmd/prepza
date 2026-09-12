@@ -3582,7 +3582,7 @@ def rename_document(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not _can_study_document(user_id, document):
+    if not document or document.user_id != user_id or document.is_removed:
         return jsonify({"error": "Document not found"}), 404
 
     data = request.get_json(silent=True)
@@ -4591,7 +4591,7 @@ def publish_document():
         return jsonify({"error": "document_id is required"}), 400
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
     if document.status != "ready":
         return jsonify({"error": f"Document is not ready to publish (status: {document.status})"}), 400
