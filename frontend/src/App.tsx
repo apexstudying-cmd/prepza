@@ -5260,7 +5260,7 @@ type MySubmission = {
   view_count: number; save_count: number; created_at: string | null; updated_at: string | null
 }
 
-function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
   const { tokens: T } = useTheme()
   const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')
   const [materialTypeFilter, setMaterialTypeFilter] = useState<string | null>(null)
@@ -5503,7 +5503,7 @@ function LibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             ) : submissions.length === 0 ? (
               <EmptyState icon="📖" title="Nothing published yet" sub="Share your notes and materials with students across Kenya. Earn XP for approved contributions." action="Publish Material" onAction={() => setScreen('publish-library')} />
             ) : submissions.map(p => (
-              <div key={p.id} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1.5px solid ${p.status === 'approved' ? 'rgba(76,201,123,0.2)' : 'rgba(0,0,0,0.06)'}` }}>
+              <div key={p.id} onClick={p.status === 'approved' && p.document_id ? () => { setActiveDocumentId(p.document_id); setScreen('document-study') } : undefined} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1.5px solid ${p.status === 'approved' ? 'rgba(76,201,123,0.2)' : 'rgba(0,0,0,0.06)'}`, cursor: p.status === 'approved' && p.document_id ? 'pointer' : 'default' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 3 }} className="line-clamp-1">{p.title}</div>
@@ -12998,7 +12998,7 @@ export default function App() {
       case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} onOpenOrgPortal={() => setOrgPortalMode(true)} />
       case 'settings':          return <SettingsScreen setScreen={setScreen} />
       case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} />
-      case 'library':           return <LibraryScreen setScreen={setScreen} />
+      case 'library':           return <LibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'study-materials':   return <StudyMaterialsScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'mind-map':          return <MindMapScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'new-chat':          return <NewChatScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
