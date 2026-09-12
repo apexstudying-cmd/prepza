@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 p = Path("app.py")
 s = p.read_text()
@@ -159,11 +160,25 @@ def save_library_item(publication_id):
 
 '''
 
-if old not in s:
-    if new not in s:
-        raise SystemExit("library save route anchor not found")
-else:
+if old in s:
     s = s.replace(old, new, 1)
+elif new in s:
+    print("StudyHub/Library save patch already applied")
+elif "def _ensure_studyhub_document_for_publication(user_id, publication):" in s:
+    # Upgrade the previously-applied version in place. This keeps the patch
+    # runner idempotent across the runtime-commit workflow's repeated runs.
+    pattern = re.compile(
+        r'@app\.route\("/library/<int:publication_id>/save", methods=\["POST"\]\)\n'
+        r'@require_csrf\n'
+        r'def save_library_item\(publication_id\):.*?\n'
+        r'(?=@app\.route\("/library/<int:publication_id>/save", methods=\["DELETE"\]\))',
+        re.DOTALL,
+    )
+    s, count = pattern.subn(new.split('@app.route("/library/<int:publication_id>/save", methods=["POST"])', 1)[1].join(['@app.route("/library/<int:publication_id>/save", methods=["POST"])', '']), s, count=1)
+    if count != 1:
+        raise SystemExit("previous StudyHub Library save route could not be upgraded")
+else:
+    raise SystemExit("library save route anchor not found")
 
 p.write_text(s)
 print("StudyHub/Library save patch applied")
