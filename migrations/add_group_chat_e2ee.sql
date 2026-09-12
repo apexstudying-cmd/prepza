@@ -1,8 +1,7 @@
 -- Prepza group-chat E2EE foundation
 --
 -- The server stores only encrypted key envelopes. It never stores a
--- plaintext group conversation key. A future membership-change migration
--- will advance key_epoch and require a fresh key for the remaining members.
+-- plaintext group conversation key.
 
 ALTER TABLE conversation
     ADD COLUMN IF NOT EXISTS e2ee_mode VARCHAR(20) NOT NULL DEFAULT 'legacy';
@@ -40,3 +39,26 @@ CREATE INDEX IF NOT EXISTS ix_conversation_key_envelope_recipient
 UPDATE conversation
 SET e2ee_mode = CASE WHEN is_group = TRUE THEN 'legacy' ELSE 'direct_v1' END
 WHERE e2ee_mode = 'legacy';
+
+-- From this point forward, every NEW group conversation starts in the
+-- E2EE state. This closes the plaintext race at group creation: if the
+-- client cannot provision the key, sending is blocked rather than falling
+-- back to plaintext. Existing groups are untouched and remain legacy.
+CREATE OR REPLACE FUNCTION prepza_default_new_group_e2ee()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.is_group = TRUE THEN
+        NEW.e2ee_mode := 'group_v1';
+        NEW.key_epoch := 1;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_prepza_default_new_group_e2ee ON conversation;
+CREATE TRIGGER trg_prepza_default_new_group_e2ee
+BEFORE INSERT ON conversation
+FOR EACH ROW
+EXECUTE FUNCTION prepza_default_new_group_e2ee();
