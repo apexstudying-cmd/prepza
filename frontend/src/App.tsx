@@ -179,6 +179,7 @@ const Ic = {
 type Screen =
   | 'splash' | 'login' | 'forgot-password' | 'signup' | 'check-email' | 'complete-profile' | 'reset-password' | 'verify-confirm'
   | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'
+  | 'upload-share-choice'
   | 'chat-detail' | 'upload' | 'processing' | 'doc-ready' | 'document-study'
   | 'ai-tutor' | 'flashcards' | 'quiz' | 'podcast-player' | 'podcast-library' | 'summary'
   | 'opportunities' | 'opportunity-detail' | 'share-opp-form' | 'edu-upload-form'
@@ -1750,7 +1751,7 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
       }
 
       setActiveDocumentId(created.document_id)
-      setScreen('processing')
+      setScreen('upload-share-choice')
     } catch (e) {
       setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Upload failed - please check your connection and try again.')
     } finally {
@@ -1791,6 +1792,53 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
               {['PDF','Word','PowerPoint','JPG','PNG'].map(t => <span key={t} style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6'), color: T.text, fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 20 }}>{t}</span>)}
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── POST-UPLOAD STUDYHUB / LIBRARY CHOICE ────────────────────────────────────
+function UploadShareChoiceScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const { tokens: T } = useTheme()
+  const [doc, setDoc] = useState<DocumentDetail | null>(null)
+
+  useEffect(() => {
+    if (activeDocumentId == null) return
+    api<DocumentDetail>(`/documents/${activeDocumentId}`)
+      .then(setDoc)
+      .catch(() => {})
+  }, [activeDocumentId])
+
+  const openStudyHub = () => setScreen('processing')
+  const publish = () => setScreen('publish-library')
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
+      <div style={{ background: N.navy, padding: '0 18px 24px' }}>
+        <TopBar title="Document added to StudyHub" onBack={openStudyHub} />
+      </div>
+      <div style={{ padding: '24px 18px 40px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+        <div style={{ width: 72, height: 72, borderRadius: 22, background: `${N.gold}18`, border: `1px solid ${N.gold}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, fontSize: 34 }}>✓</div>
+        <div style={{ fontWeight: 850, fontSize: 21, color: T.text, marginBottom: 8 }}>Your document is in StudyHub</div>
+        <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65, maxWidth: 360, marginBottom: 8 }}>
+          {doc?.title ? <><strong style={{ color: T.text }}>{doc.title}</strong> is safely in your personal StudyHub.</> : 'Your document is safely in your personal StudyHub.'}
+        </div>
+        <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.6, maxWidth: 360, marginBottom: 26 }}>
+          It is private by default. Sharing to Library is optional and requires your explicit choice.
+        </div>
+
+        <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button onClick={publish} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, border: 'none', borderRadius: 16, padding: '15px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 850, fontSize: 14, boxShadow: `0 6px 22px ${N.gold}35` }}>
+            Share to Prepza Library
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 600, opacity: 0.7, marginTop: 3 }}>Help other students · Earn XP on approval</span>
+          </button>
+          <button onClick={openStudyHub} style={{ width: '100%', background: T.card, color: T.text, border: `1px solid ${T.border}`, borderRadius: 16, padding: '14px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 750, fontSize: 14 }}>
+            Study my document
+          </button>
+          <button onClick={openStudyHub} style={{ background: 'none', border: 'none', color: T.textMuted, padding: '10px 8px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 650, fontSize: 12 }}>
+            Maybe later
+          </button>
         </div>
       </div>
     </div>
@@ -13023,7 +13071,7 @@ export default function App() {
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
   if (orgPortalMode) return <OrganisationPortalScreen onExit={() => setOrgPortalMode(false)} />
 
-  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','payment','payment-success','payment-failure']
+  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','upload-share-choice','payment','payment-success','payment-failure']
   const darkHomeIndicator: Screen[] = ['processing','splash','login']
 
   const renderScreen = () => {
@@ -13043,6 +13091,7 @@ export default function App() {
       case 'share-opp-form':    return <ShareOppForm setScreen={setScreen} />
       case 'edu-upload-form':   return <EduUploadForm setScreen={setScreen} />
       case 'upload':            return <UploadScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
+      case 'upload-share-choice': return <UploadShareChoiceScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'processing':        return <ProcessingScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'document-study': return <DocumentStudyHubScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
