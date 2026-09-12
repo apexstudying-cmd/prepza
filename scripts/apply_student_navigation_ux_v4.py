@@ -11,7 +11,13 @@ def replace_once(text, old, new, label):
 
 def main():
     text = APP.read_text()
-    text = replace_once(text, "  | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements'\n", "  | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements' | 'study-materials'\n", 'Screen union')
+    screen_old = "  | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements'\n"
+    screen_new = "  | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements' | 'study-materials'\n"
+    screen_after_v5 = "  | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements' | 'study-materials' | 'document-reader'\n"
+    if screen_after_v5 in text:
+        pass
+    else:
+        text = replace_once(text, screen_old, screen_new, 'Screen union')
     quick_old = """              { icon: '📤', label: 'Upload', action: () => setScreen('upload') },
               { icon: '✦', label: 'Ada', action: () => setScreen('ai-tutor') },
               { icon: '🃏', label: 'Flashcards', action: () => setScreen('flashcards') },
