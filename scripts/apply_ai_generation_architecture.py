@@ -26,9 +26,7 @@ def _top_level_function(source: str, name: str):
 def _install_wrapper(source: str, material_type: str, public_name: str) -> str:
     legacy_name = f"_legacy_{public_name}"
     # The legacy implementation and reusable wrapper are both top-level
-    # functions. This is the reliable idempotency check: searching for a
-    # material_type string is unsafe because the legacy function's comments
-    # can contain the same text.
+    # functions. This is the reliable idempotency check.
     if _top_level_function(source, legacy_name) is not None and _top_level_function(source, public_name) is not None:
         return source
 
@@ -130,10 +128,20 @@ def patch_user_material_lookup() -> None:
     source = path.read_text(encoding="utf-8")
     if "def get_generated_material_for_user(" not in source:
         anchor = "\n\nclass AiJob(db.Model):"
-        helper = '''\n\ndef get_generated_material_for_user(document_content_id, material_type, user_id):\n    """Return ready material without crossing the public/private boundary."""\n    owned = (\n        db.session.query(Document.id)\n        .filter(\n            Document.user_id == user_id,\n            Document.document_content_id == document_content_id,\n            Document.is_removed.is_(False),\n        )\n        .first()\n    )\n    query = GeneratedMaterial.query.filter_by(\n        document_content_id=document_content_id, material_type=material_type, status="ready"\n    )\n    if owned:\n        approved = (\n            db.session.query(LibraryPublication.id)\n            .filter(\n                LibraryPublication.document_id == owned.id,\n                LibraryPublication.status == "approved",\n            )\n            .first()\n        )\n        if approved:\n            return query.filter(GeneratedMaterial.scope == "shared").first()\n        return query.filter(\n            GeneratedMaterial.scope == "private", GeneratedMaterial.owner_user_id == user_id\n        ).first()\n\n    public = (\n        db.session.query(LibraryPublication.id)\n        .join(Document, LibraryPublication.document_id == Document.id)\n        .filter(Document.document_content_id == document_content_id, LibraryPublication.status == "approved")\n        .first()\n    )\n    if public:\n        return query.filter(GeneratedMaterial.scope == "shared").first()\n    return None\n'''
+        helper = '''\n\ndef get_generated_material_for_user(document_content_id, material_type, user_id):\n    """Return ready material without crossing the public/private boundary."""\n    owned = (\n        db.session.query(Document.id)\n        .filter(\n            Document.user_id == user_id,\n            Document.document_content_id == document_content_id,\n            Document.is_removed.is_(False),\n        )\n        .first()\n    )\n    query = GeneratedMaterial.query.filter_by(\n        document_content_id=document_content_id, material_type=material_type, status="ready", generation_version="v2"\n    )\n    if owned:\n        approved = (\n            db.session.query(LibraryPublication.id)\n            .filter(\n                LibraryPublication.document_id == owned.id,\n                LibraryPublication.status == "approved",\n            )\n            .first()\n        )\n        if approved:\n            return query.filter(GeneratedMaterial.scope == "shared").first()\n        return query.filter(\n            GeneratedMaterial.scope == "private", GeneratedMaterial.owner_user_id == user_id\n        ).first()\n\n    public = (\n        db.session.query(LibraryPublication.id)\n        .join(Document, LibraryPublication.document_id == Document.id)\n        .filter(Document.document_content_id == document_content_id, LibraryPublication.status == "approved")\n        .first()\n    )\n    if public:\n        return query.filter(GeneratedMaterial.scope == "shared").first()\n    return None\n'''
         if anchor not in source:
             raise RuntimeError("AiJob model anchor not found")
         source = source.replace(anchor, helper + anchor, 1)
+    else:
+        # Never expose pre-architecture GeneratedMaterial rows as canonical
+        # reusable artifacts. The migration marks legacy rows as v1.
+        old_query = '''    query = GeneratedMaterial.query.filter_by(
+        document_content_id=document_content_id, material_type=material_type, status="ready"
+    )'''
+        new_query = '''    query = GeneratedMaterial.query.filter_by(
+        document_content_id=document_content_id, material_type=material_type, status="ready", generation_version="v2"
+    )'''
+        source = source.replace(old_query, new_query, 1)
 
     old_lookup = '''    material = GeneratedMaterial.query.filter_by(
         document_content_id=document.document_content_id, material_type="podcast"
