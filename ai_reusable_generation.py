@@ -5,12 +5,7 @@ import json
 from datetime import datetime
 
 from ai_artifact_fingerprint import GENERATION_VERSION, build_generation_fingerprint
-from ai_generation_store import (
-    claim_or_get_generation,
-    mark_generation_failed,
-    mark_generation_ready,
-    wait_for_generation,
-)
+from ai_generation_store import claim_or_get_generation, mark_generation_failed, mark_generation_ready, wait_for_generation
 
 PROMPT_VERSIONS = {key: f"{key}-v2" for key in ("summary", "quiz", "flashcards", "podcast", "mind_map")}
 SCHEMA_VERSIONS = {key: "schema-v2" for key in PROMPT_VERSIONS}
@@ -24,11 +19,6 @@ PARAMETER_KEYS = {
 
 
 def normalize_parameters(material_type: str, parameters: dict | None) -> dict:
-    """Validate and canonicalize caller-supplied generation parameters.
-
-    ``None`` means no parameters. Other values must actually be mappings;
-    falsy non-mappings such as ``[]`` or ``""`` must not silently become ``{}``.
-    """
     if parameters is None:
         params = {}
     elif isinstance(parameters, dict):
@@ -55,40 +45,26 @@ def normalize_parameters(material_type: str, parameters: dict | None) -> dict:
 
 
 def _content_scope(document_content_id: int, triggering_user_id: int) -> tuple[str, int | None]:
-    """Resolve scope from the actual document relationship, not content bytes alone."""
     from app import db, Document, LibraryPublication
-
-    owned = (
-        db.session.query(Document.id)
-        .filter(
-            Document.user_id == triggering_user_id,
-            Document.document_content_id == document_content_id,
-            Document.is_removed.is_(False),
-        )
-        .first()
-    )
+    owned = db.session.query(Document.id).filter(
+        Document.user_id == triggering_user_id,
+        Document.document_content_id == document_content_id,
+        Document.is_removed.is_(False),
+    ).first()
     if owned:
-        approved = (
-            db.session.query(LibraryPublication.id)
-            .filter(
-                LibraryPublication.document_id == owned.id,
-                LibraryPublication.status == "approved",
-            )
-            .first()
-        )
+        approved = db.session.query(LibraryPublication.id).filter(
+            LibraryPublication.document_id == owned.id,
+            LibraryPublication.status == "approved",
+        ).first()
         if approved:
             return "shared", None
         return "private", int(triggering_user_id)
-
-    public = (
-        db.session.query(LibraryPublication.id)
-        .join(Document, LibraryPublication.document_id == Document.id)
-        .filter(
-            Document.document_content_id == document_content_id,
-            LibraryPublication.status == "approved",
-        )
-        .first()
-    )
+    public = db.session.query(LibraryPublication.id).join(
+        Document, LibraryPublication.document_id == Document.id
+    ).filter(
+        Document.document_content_id == document_content_id,
+        LibraryPublication.status == "approved",
+    ).first()
     if public:
         return "shared", None
     raise PermissionError("You do not have access to this document")
@@ -98,14 +74,10 @@ def _parameter_instruction(params: dict) -> str:
     if not params:
         return ""
     labels = {
-        "max_pages": "summary target length",
-        "question_count": "number of quiz questions",
-        "card_count": "number of flashcards",
-        "duration_minutes": "target podcast duration in minutes",
-        "node_count": "number of mind-map nodes/branches",
-        "difficulty": "difficulty",
-        "style": "style",
-        "language": "language",
+        "max_pages": "summary target length", "question_count": "number of quiz questions",
+        "card_count": "number of flashcards", "duration_minutes": "target podcast duration in minutes",
+        "node_count": "number of mind-map nodes/branches", "difficulty": "difficulty",
+        "style": "style", "language": "language",
     }
     return "Generation constraints (follow these exactly):\n" + "\n".join(
         f"- {labels.get(k, k)}: {params[k]}" for k in sorted(params)
@@ -127,20 +99,14 @@ def _generator(material_type):
 def _material_from_payload(*, document_content_id, material_type, fingerprint, payload, scope, owner_user_id, parameters):
     from app import db, GeneratedMaterial
     from sqlalchemy.exc import IntegrityError
-
     material = GeneratedMaterial.query.filter_by(generation_fingerprint=fingerprint).first()
     if material:
         return material
     material = GeneratedMaterial(
-        document_content_id=document_content_id,
-        material_type=material_type,
-        status="ready",
-        payload=json.dumps(payload, ensure_ascii=False),
-        generation_fingerprint=fingerprint,
-        generation_parameters=parameters,
-        generation_version=GENERATION_VERSION,
-        scope=scope,
-        owner_user_id=owner_user_id,
+        document_content_id=document_content_id, material_type=material_type, status="ready",
+        payload=json.dumps(payload, ensure_ascii=False), generation_fingerprint=fingerprint,
+        generation_parameters=parameters, generation_version=GENERATION_VERSION,
+        scope=scope, owner_user_id=owner_user_id,
     )
     db.session.add(material)
     try:
@@ -160,7 +126,6 @@ def _podcast_payload(parsed):
 def generate_document_material(*, material_type, document_content_id, triggering_user_id, plan_tier="free", parameters=None):
     import ai_service
     from app import db, DocumentContent, AiJob
-
     if material_type not in PROMPT_VERSIONS:
         raise ValueError(f"Unsupported AI material type: {material_type}")
     params = normalize_parameters(material_type, parameters)
@@ -169,53 +134,31 @@ def generate_document_material(*, material_type, document_content_id, triggering
         raise ValueError(f"DocumentContent {document_content_id} not found")
     if not content.extracted_text:
         raise ai_service.AIProviderError("This document's text hasn't finished processing yet - try again shortly.")
-
     scope, owner_user_id = _content_scope(document_content_id, triggering_user_id)
     prompt_version = PROMPT_VERSIONS[material_type]
     schema_version = SCHEMA_VERSIONS[material_type]
     fingerprint = build_generation_fingerprint(
-        content_hash=content.content_hash,
-        material_type=material_type,
-        parameters=params,
-        prompt_version=prompt_version,
-        schema_version=schema_version,
-        scope=scope,
-        owner_user_id=owner_user_id,
+        content_hash=content.content_hash, material_type=material_type, parameters=params,
+        prompt_version=prompt_version, schema_version=schema_version,
+        scope=scope, owner_user_id=owner_user_id,
     )
-
     lookup = claim_or_get_generation(
-        fingerprint=fingerprint,
-        content_hash=content.content_hash,
-        feature=material_type,
-        parameters=params,
-        prompt_version=prompt_version,
-        schema_version=schema_version,
-        scope=scope,
-        owner_user_id=owner_user_id,
+        fingerprint=fingerprint, content_hash=content.content_hash, feature=material_type,
+        parameters=params, prompt_version=prompt_version, schema_version=schema_version,
+        scope=scope, owner_user_id=owner_user_id,
     )
     if lookup.status == "ready" and lookup.payload:
         material = _material_from_payload(
-            document_content_id=document_content_id,
-            material_type=material_type,
-            fingerprint=fingerprint,
-            payload=lookup.payload,
-            scope=scope,
-            owner_user_id=owner_user_id,
-            parameters=params,
+            document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
+            payload=lookup.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
         )
         return {"payload": lookup.payload, "material_id": material.id, "reused": True, "model_used": None}
-
     if not lookup.owner:
         waited = wait_for_generation(fingerprint)
         if waited.status == "ready" and waited.payload:
             material = _material_from_payload(
-                document_content_id=document_content_id,
-                material_type=material_type,
-                fingerprint=fingerprint,
-                payload=waited.payload,
-                scope=scope,
-                owner_user_id=owner_user_id,
-                parameters=params,
+                document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
+                payload=waited.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
             )
             return {"payload": waited.payload, "material_id": material.id, "reused": True, "model_used": None}
         if waited.status == "failed":
@@ -231,61 +174,30 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         allowed, used, limit = ai_service.check_daily_limit(triggering_user_id, plan_tier=plan_tier)
         if not allowed:
-            raise ai_service.AIRateLimitExceededError(
-                f"You've used {used}/{limit} AI generations today - try again tomorrow."
-            )
-
-        job = AiJob(
-            document_content_id=document_content_id,
-            feature=material_type,
-            status="processing",
-            started_at=datetime.utcnow(),
-        )
+            raise ai_service.AIRateLimitExceededError(f"You've used {used}/{limit} AI generations today - try again tomorrow.")
+        job = AiJob(document_content_id=document_content_id, feature=material_type, status="processing", started_at=datetime.utcnow())
         db.session.add(job)
         db.session.commit()
-
         system_prompt, parser, task = _generator(material_type)
         user_message = f"Document text ({content.page_count or '?'} pages):\n\n{content.extracted_text}"
         constraint = _parameter_instruction(params)
         if constraint:
             user_message = constraint + "\n\n" + user_message
-
-        # Use the existing provider-agnostic routing layer. This preserves
-        # Prepza's configured primary/fallback model behavior and its exact
-        # AIResponse/usage shape; the reusable layer owns only identity,
-        # concurrency, entitlement, and persistence.
         task_config = ai_service.AI_TASKS[task]
-        ai_request = ai_service.AIRequest(
-            task=task,
-            system_prompt=system_prompt,
-            user_message=user_message,
-            max_tokens=task_config["max_tokens"],
-        )
+        ai_request = ai_service.AIRequest(task=task, system_prompt=system_prompt, user_message=user_message, max_tokens=task_config["max_tokens"])
         ai_response = ai_service.route_and_generate(ai_request)
         parsed = parser(ai_response.text)
         payload = _podcast_payload(parsed) if material_type == "podcast" else parsed
-
-        # Publish the canonical artifact immediately after successful provider
-        # generation and parsing. Usage/job bookkeeping must never turn a valid
-        # paid provider result back into FAILED, which would permit a duplicate
-        # provider call on the next request.
-        mark_generation_ready(lookup.artifact_id, payload)
+        mark_generation_ready(lookup.artifact_id, payload, lookup.lease_token)
         artifact_ready = True
-
-        ai_service.log_usage(
-            triggering_user_id,
-            request_type=material_type,
-            model=ai_response.model_used,
-            provider=ai_response.provider,
-            usage=ai_response.usage,
-        )
+        ai_service.log_usage(triggering_user_id, request_type=material_type, model=ai_response.model_used, provider=ai_response.provider, usage=ai_response.usage)
         job.status, job.completed_at = "completed", datetime.utcnow()
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
         if not artifact_ready:
             try:
-                mark_generation_failed(lookup.artifact_id, str(exc))
+                mark_generation_failed(lookup.artifact_id, str(exc), lookup.lease_token)
             except Exception:
                 db.session.rollback()
         if job is not None:
@@ -299,12 +211,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
         raise ai_service.AIProviderError(f"{material_type} generation failed: {exc}")
 
     material = _material_from_payload(
-        document_content_id=document_content_id,
-        material_type=material_type,
-        fingerprint=fingerprint,
-        payload=payload,
-        scope=scope,
-        owner_user_id=owner_user_id,
-        parameters=params,
+        document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
+        payload=payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
     )
     return {"payload": payload, "material_id": material.id, "reused": False, "model_used": ai_response.model_used}
