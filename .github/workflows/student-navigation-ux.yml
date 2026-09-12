@@ -43,6 +43,7 @@ jobs:
       - name: Verify patches are deterministic
         run: |
           cp frontend/src/App.tsx /tmp/App.after
+          cp app.py /tmp/app.after
           python3 scripts/apply_student_navigation_ux_v4.py
           python3 scripts/apply_student_navigation_ux_v5.py
           python3 scripts/apply_navigation_screen_cleanup.py
@@ -55,6 +56,7 @@ jobs:
           python3 scripts/apply_study_flow_cleanup.py
           python3 scripts/apply_ai_route_decorator_fix.py
           cmp frontend/src/App.tsx /tmp/App.after
+          cmp app.py /tmp/app.after
 
       - name: Verify study-flow security and navigation anchors
         run: |
@@ -104,8 +106,6 @@ jobs:
           assert 'bucket="documents"' in page_segment, 'reader page must load from private documents bucket'
           assert 'mimetype="image/png"' in page_segment, 'reader page must return rendered image, not source file'
 
-          # The AI parameter helper must sit before the summary route's
-          # decorators; otherwise Flask would decorate the helper instead.
           helper_pos = s.find('def _ai_generation_parameters_from_request():')
           summary_pos = s.find('@app.route("/documents/<int:document_id>/summarize", methods=["POST"])')
           assert helper_pos >= 0 and summary_pos >= 0 and helper_pos < summary_pos, 'AI parameter helper must precede summary decorators'
