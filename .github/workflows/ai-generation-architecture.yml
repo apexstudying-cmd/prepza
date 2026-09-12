@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify-and-apply:
@@ -52,6 +52,15 @@ jobs:
       - name: Apply deterministic source patch
         run: python scripts/apply_ai_generation_architecture.py
 
+      - name: Verify deterministic patch is already committed
+        run: |
+          if ! git diff --quiet -- app.py ai_service.py; then
+            echo 'ERROR: deterministic patch would modify app.py or ai_service.py.'
+            echo 'The audit branch must contain the patched application files before validation.'
+            git diff -- app.py ai_service.py
+            exit 1
+          fi
+
       - name: Compile changed Python files
         run: python -m py_compile app.py ai_service.py ai_reusable_generation.py ai_generation_store.py ai_artifact_fingerprint.py
 
@@ -76,16 +85,3 @@ jobs:
           name: ai-generation-test-diagnostics
           path: pytest-output.txt
           if-no-files-found: warn
-
-      - name: Commit patched application files
-        if: success()
-        run: |
-          if git diff --quiet -- app.py ai_service.py; then
-            echo 'No application patch was produced; validation-only run.'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app.py ai_service.py
-          git commit -m 'Wire reusable AI generation into document materials'
-          git push origin audit/ai-generation-architecture
