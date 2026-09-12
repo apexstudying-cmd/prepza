@@ -51,6 +51,19 @@ def main() -> None:
     )
 
     require(
+        "frontend/src/crypto/studyAdaFetchGuard.ts",
+        "STUDY_ADA_RE",
+        "context_scope !== 'selected_document_pages'",
+        "explicit_user_context !== true",
+        "MAX_SELECTED_TEXT = 20_000",
+        "MAX_PROMPT = 4_000",
+        "MAX_PAGE_SPAN = 50",
+        "const safePayload = {",
+        "selected_text: payload.selected_text",
+        "prompt: payload.prompt",
+    )
+
+    require(
         "migrations/harden_group_chat_e2ee_state.sql",
         "ck_conversation_e2ee_mode_supported",
         "e2ee_mode IN ('legacy', 'direct_v1', 'group_v1')",
