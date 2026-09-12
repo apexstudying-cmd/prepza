@@ -18,6 +18,12 @@ function unb64(value: string): Uint8Array {
   return bytes
 }
 
+function asArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(copy).set(bytes)
+  return copy
+}
+
 function assertAttachmentSize(size: number) {
   if (!Number.isInteger(size) || size < 0 || size > MAX_ATTACHMENT_BYTES) {
     throw new Error('Attachment is too large for encrypted group sharing.')
@@ -59,15 +65,15 @@ export async function encryptGroupAttachment(
   assertAttachmentSize(input.size)
   if (!attachmentId || attachmentId.length > 128) throw new Error('Invalid attachment id.')
 
-  const plaintext = new Uint8Array(await input.arrayBuffer())
+  const plaintext = await input.arrayBuffer()
   const fileKeyBytes = crypto.getRandomValues(new Uint8Array(KEY_BYTES))
   const fileKey = await crypto.subtle.importKey(
-    'raw', fileKeyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'],
+    'raw', asArrayBuffer(fileKeyBytes), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'],
   )
 
   const nonce = crypto.getRandomValues(new Uint8Array(IV_BYTES))
   const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonce, additionalData: aad(conversationId, keyEpoch, attachmentId) },
+    { name: 'AES-GCM', iv: asArrayBuffer(nonce), additionalData: asArrayBuffer(aad(conversationId, keyEpoch, attachmentId)) },
     fileKey,
     plaintext,
   )
@@ -101,16 +107,16 @@ export async function decryptGroupAttachment(
   if (fileKeyBytes.byteLength !== KEY_BYTES) throw new Error('Invalid encrypted attachment key.')
 
   const fileKey = await crypto.subtle.importKey(
-    'raw', fileKeyBytes, { name: 'AES-GCM' }, false, ['decrypt'],
+    'raw', asArrayBuffer(fileKeyBytes), { name: 'AES-GCM' }, false, ['decrypt'],
   )
   const plaintext = await crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
-      iv: unb64(encrypted.nonce),
-      additionalData: aad(encrypted.conversationId, encrypted.keyEpoch, encrypted.attachmentId),
+      iv: asArrayBuffer(unb64(encrypted.nonce)),
+      additionalData: asArrayBuffer(aad(encrypted.conversationId, encrypted.keyEpoch, encrypted.attachmentId)),
     },
     fileKey,
-    unb64(encrypted.ciphertext),
+    asArrayBuffer(unb64(encrypted.ciphertext)),
   )
 
   if (plaintext.byteLength !== encrypted.size) throw new Error('Encrypted attachment size mismatch.')
@@ -119,9 +125,9 @@ export async function decryptGroupAttachment(
 
 async function decryptWrappedKey(groupKey: CryptoKey, body: string, nonce: string): Promise<string> {
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: unb64(nonce) },
+    { name: 'AES-GCM', iv: asArrayBuffer(unb64(nonce)) },
     groupKey,
-    unb64(body),
+    asArrayBuffer(unb64(body)),
   )
   return new TextDecoder().decode(plaintext)
 }
