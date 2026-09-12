@@ -8,6 +8,7 @@ is called after the application's Conversation/User models are defined.
 from functools import wraps
 
 from flask import jsonify, request, session
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 
@@ -24,7 +25,7 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
 
     def e2ee_state(conversation_id):
         row = db.session.execute(
-            db.text(
+            text(
                 "SELECT e2ee_mode, key_epoch "
                 "FROM conversation WHERE id = :conversation_id"
             ),
@@ -58,30 +59,19 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
 
         mode, epoch = e2ee_state(conversation.id)
         if mode == "group_v1":
-            return jsonify({
-                "ok": True,
-                "e2ee_mode": mode,
-                "key_epoch": epoch,
-                "already_enabled": True,
-            })
+            return jsonify({"ok": True, "e2ee_mode": mode, "key_epoch": epoch, "already_enabled": True})
         if mode != "legacy":
             return jsonify({"error": "Unsupported conversation encryption mode"}), 409
 
-        # Never retrofit E2EE onto a group that already has message history.
         message_count = db.session.execute(
-            db.text("SELECT COUNT(*) FROM message WHERE conversation_id = :conversation_id"),
+            text("SELECT COUNT(*) FROM message WHERE conversation_id = :conversation_id"),
             {"conversation_id": conversation.id},
         ).scalar_one()
         if message_count:
-            return jsonify({
-                "error": "E2EE can only be enabled before the group has any messages"
-            }), 409
+            return jsonify({"error": "E2EE can only be enabled before the group has any messages"}), 409
 
-        # Every active member must have a registered device public key before
-        # the group can enter group_v1. This avoids creating an E2EE group
-        # that cannot actually distribute its first epoch key to someone.
         missing_key_rows = db.session.execute(
-            db.text(
+            text(
                 "SELECT cp.user_id "
                 "FROM conversation_participant cp "
                 "LEFT JOIN user_key uk ON uk.user_id = cp.user_id "
@@ -99,7 +89,7 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             }), 409
 
         db.session.execute(
-            db.text(
+            text(
                 "UPDATE conversation "
                 "SET e2ee_mode = 'group_v1', key_epoch = 1 "
                 "WHERE id = :conversation_id AND e2ee_mode = 'legacy'"
@@ -107,12 +97,7 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             {"conversation_id": conversation.id},
         )
         db.session.commit()
-        return jsonify({
-            "ok": True,
-            "e2ee_mode": "group_v1",
-            "key_epoch": 1,
-            "already_enabled": False,
-        })
+        return jsonify({"ok": True, "e2ee_mode": "group_v1", "key_epoch": 1, "already_enabled": False})
 
     @app.post("/chats/<int:conversation_id>/rotate-e2ee-key")
     @require_member
@@ -129,16 +114,12 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
 
         new_epoch = epoch + 1
         db.session.execute(
-            db.text(
+            text(
                 "UPDATE conversation "
                 "SET key_epoch = :new_epoch "
                 "WHERE id = :conversation_id AND e2ee_mode = 'group_v1' AND key_epoch = :old_epoch"
             ),
-            {
-                "conversation_id": conversation.id,
-                "old_epoch": epoch,
-                "new_epoch": new_epoch,
-            },
+            {"conversation_id": conversation.id, "old_epoch": epoch, "new_epoch": new_epoch},
         )
         db.session.commit()
         return jsonify({"ok": True, "e2ee_mode": mode, "key_epoch": new_epoch})
@@ -227,8 +208,6 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
                 "ciphertext": ciphertext,
             })
 
-        # Re-check the epoch before committing so a concurrent rotation
-        # cannot cause an envelope for an old epoch to be accepted.
         locked_mode, locked_epoch = e2ee_state(conversation.id)
         if locked_mode != "group_v1" or locked_epoch != expected_epoch:
             db.session.rollback()
