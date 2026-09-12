@@ -48,6 +48,19 @@ def main() -> None:
     )
 
     require(
+        "frontend/src/crypto/newGroupE2EECreationGuard.ts",
+        "created.reused !== false",
+        "state?.e2ee_mode !== 'group_v1'",
+        "state.envelopes.length === 0",
+        "Secure group setup is incomplete",
+    )
+
+    require(
+        "frontend/src/main.tsx",
+        "installNewGroupE2EECreationGuard()",
+    )
+
+    require(
         "frontend/src/crypto/groupProvisioning.ts",
         "provisionInitialGroupKey",
         "provisionRotatedGroupKey",
