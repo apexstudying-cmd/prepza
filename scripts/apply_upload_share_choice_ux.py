@@ -4,11 +4,11 @@ p = Path("frontend/src/App.tsx")
 s = p.read_text()
 
 old_type = "  | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'\n"
-new_type = "  | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'\n  | 'upload-share-choice'\n"
-if old_type in s:
+new_type = old_type + "  | 'upload-share-choice'\n"
+if "| 'upload-share-choice'" not in s:
+    if old_type not in s:
+        raise SystemExit("Screen type anchor not found")
     s = s.replace(old_type, new_type, 1)
-elif new_type not in s:
-    raise SystemExit("Screen type anchor not found")
 
 old_upload = """      setActiveDocumentId(created.document_id)\n      setScreen('processing')\n"""
 new_upload = """      setActiveDocumentId(created.document_id)\n      setScreen('upload-share-choice')\n"""
@@ -73,10 +73,10 @@ if component not in s:
 
 old_case = "      case 'upload':            return <UploadScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />\n"
 new_case = old_case + "      case 'upload-share-choice': return <UploadShareChoiceScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n"
-if old_case in s and "case 'upload-share-choice':" not in s:
+if "case 'upload-share-choice':" not in s:
+    if old_case not in s:
+        raise SystemExit("upload render case anchor not found")
     s = s.replace(old_case, new_case, 1)
-elif "case 'upload-share-choice':" not in s:
-    raise SystemExit("upload render case anchor not found")
 
 old_no_nav = "  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','payment','payment-success','payment-failure']\n"
 new_no_nav = "  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','upload-share-choice','payment','payment-success','payment-failure']\n"
