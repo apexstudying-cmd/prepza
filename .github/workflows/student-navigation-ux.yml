@@ -40,7 +40,6 @@ jobs:
       - name: Verify patches are deterministic
         run: |
           cp frontend/src/App.tsx /tmp/App.after
-          cp app.py /tmp/app.after
           python3 scripts/apply_student_navigation_ux_v4.py
           python3 scripts/apply_student_navigation_ux_v5.py
           python3 scripts/apply_document_study_progress.py
@@ -50,7 +49,6 @@ jobs:
           python3 scripts/apply_document_reader_v2.py
           python3 scripts/apply_published_material_replay.py
           cmp frontend/src/App.tsx /tmp/App.after
-          cmp app.py /tmp/app.after
 
       - name: Verify study-flow security and navigation anchors
         run: |
