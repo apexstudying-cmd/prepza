@@ -4854,10 +4854,10 @@ def save_library_item(publication_id):
     if not publication or publication.status != "approved":
         return jsonify({"error": "Library item not found"}), 404
 
-    if _document_content_has_flagged_material(
-        db.session.get(Document, publication.document_id).document_content_id
-        if db.session.get(Document, publication.document_id) else None
-    ):
+    source = db.session.get(Document, publication.document_id)
+    if not source or source.is_removed or not source.document_content_id:
+        return jsonify({"error": "Library document is not ready"}), 409
+    if _document_content_has_flagged_material(source.document_content_id):
         return jsonify({"error": "Library item is currently unavailable"}), 404
 
     studyhub_document = _ensure_studyhub_document_for_publication(user_id, publication)
@@ -4868,8 +4868,6 @@ def save_library_item(publication_id):
         user_id=user_id, library_publication_id=publication_id
     ).first()
     if existing:
-        if studyhub_document not in db.session:
-            db.session.add(studyhub_document)
         db.session.commit()
         return jsonify({
             "message": "Already saved",
@@ -4883,7 +4881,33 @@ def save_library_item(publication_id):
     saved = SavedLibraryMaterial(user_id=user_id, library_publication_id=publication_id)
     db.session.add(saved)
     publication.save_count = (publication.save_count or 0) + 1
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # A concurrent request may have won the SavedLibraryMaterial unique
+        # constraint after both requests observed no existing save. Roll back
+        # the losing transaction, then return the already-created StudyHub
+        # document instead of surfacing a 500 or creating a second save count.
+        db.session.rollback()
+        saved_existing = SavedLibraryMaterial.query.filter_by(
+            user_id=user_id, library_publication_id=publication_id
+        ).first()
+        if not saved_existing:
+            raise
+        winner_document = Document.query.filter_by(
+            user_id=user_id,
+            document_content_id=source.document_content_id,
+            is_removed=False,
+        ).order_by(Document.id.asc()).first()
+        if not winner_document:
+            return jsonify({"error": "Library save could not be completed"}), 409
+        publication = db.session.get(LibraryPublication, publication_id)
+        return jsonify({
+            "message": "Already saved",
+            "document_id": winner_document.id,
+            "in_studyhub": True,
+            "save_count": publication.save_count if publication else None,
+        }), 200
 
     return jsonify({
         "message": "Saved",
@@ -4891,7 +4915,6 @@ def save_library_item(publication_id):
         "in_studyhub": True,
         "save_count": publication.save_count,
     }), 201
-
 
 @app.route("/library/<int:publication_id>/save", methods=["DELETE"])
 @require_csrf
