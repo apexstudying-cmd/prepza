@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 import threading
-from contextlib import contextmanager
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -133,6 +132,28 @@ def test_failed_fingerprint_can_be_reclaimed(postgres_db):
     retry = _claim("b" * 64)
     assert retry.owner is True
     assert retry.status == "generating"
+    proxy.close()
+
+
+def test_stale_generating_fingerprint_can_be_reclaimed(postgres_db):
+    _engine, proxy = postgres_db
+    first = _claim("f" * 64)
+    assert first.owner is True
+    proxy.session.execute(
+        text(
+            "UPDATE ai_generation_artifact "
+            "SET updated_at = CURRENT_TIMESTAMP - INTERVAL '1 hour' "
+            "WHERE id = :artifact_id"
+        ),
+        {"artifact_id": first.artifact_id},
+    )
+    proxy.session.commit()
+    proxy.close()
+
+    retry = _claim("f" * 64)
+    assert retry.owner is True
+    assert retry.status == "generating"
+    assert retry.artifact_id == first.artifact_id
     proxy.close()
 
 
