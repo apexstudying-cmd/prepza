@@ -31,8 +31,12 @@ function validateMemberTargets(members: GroupMemberKeyTarget[]): void {
 
 /**
  * Creates the initial group key on the creator's device, wraps it separately
- * for every active member, uploads only the encrypted envelopes, and stores
- * the creator's plaintext key locally.
+ * for every active member (including the creator), uploads only the encrypted
+ * envelopes, and stores the creator's plaintext key locally.
+ *
+ * The self-envelope is intentionally stored too: the server enforces exact
+ * one-envelope-per-active-member coverage for every current epoch. The local
+ * plaintext key remains the authoritative fast path for the provisioner.
  */
 export async function provisionInitialGroupKey(
   conversationId: number,
@@ -54,8 +58,6 @@ export async function provisionInitialGroupKey(
   const envelopes: GroupKeyEnvelope[] = []
 
   for (const member of members) {
-    if (member.userId === creatorUserId) continue
-
     const recipientPublicKey = await importPeerPublicKey(member.publicKey)
     envelopes.push(await wrapGroupKeyForMember(
       groupKey,
@@ -68,7 +70,7 @@ export async function provisionInitialGroupKey(
     ))
   }
 
-  if (envelopes.length > 0) await upload(conversationId, envelopes)
+  await upload(conversationId, envelopes)
   await storeGroupConversationKey(conversationId, keyEpoch, groupKey)
   return groupKey
 }
@@ -76,8 +78,8 @@ export async function provisionInitialGroupKey(
 /**
  * Rotates a group key after a membership change. The server chooses the
  * epoch; the current member elected by the client creates a fresh symmetric
- * key locally, wraps it to every OTHER active member using their public key,
- * and keeps the plaintext key locally. The server sees only envelopes.
+ * key locally, wraps it to every active member (including itself), and keeps
+ * the plaintext key locally. The server sees only envelopes.
  */
 export async function provisionRotatedGroupKey(
   conversationId: number,
@@ -99,8 +101,6 @@ export async function provisionRotatedGroupKey(
   const envelopes: GroupKeyEnvelope[] = []
 
   for (const member of members) {
-    if (member.userId === senderUserId) continue
-
     const recipientPublicKey = await importPeerPublicKey(member.publicKey)
     envelopes.push(await wrapGroupKeyForMember(
       groupKey,
@@ -113,7 +113,7 @@ export async function provisionRotatedGroupKey(
     ))
   }
 
-  if (envelopes.length > 0) await upload(conversationId, envelopes)
+  await upload(conversationId, envelopes)
   await storeGroupConversationKey(conversationId, keyEpoch, groupKey)
   return groupKey
 }
