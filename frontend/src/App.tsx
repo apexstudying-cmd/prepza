@@ -6392,7 +6392,7 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
 // ─── PUBLISH TO LIBRARY ───────────────────────────────────────────────────────
 
-type PublishableDoc = { id: number; title: string; file_type: string | null; page_count: number | null }
+type PublishableDoc = { id: number; title: string; status: string; file_type: string | null; page_count: number | null }
 
 const LIBRARY_MATERIAL_TYPES: { value: string; label: string }[] = [
   { value: 'lecture_notes', label: 'Lecture Notes' },
@@ -6402,7 +6402,7 @@ const LIBRARY_MATERIAL_TYPES: { value: string; label: string }[] = [
 ]
 const materialTypeLabel = (v: string) => LIBRARY_MATERIAL_TYPES.find(t => t.value === v)?.label ?? v
 
-function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function PublishLibraryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   const { tokens: T } = useTheme()
   const [step, setStep] = useState(1)
 
@@ -6424,12 +6424,21 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
     api<{ documents: { id: number; title: string; status: string; file_type: string | null; page_count: number | null }[] }>('/documents')
-      .then(res => setDocs(res.documents.filter(d => d.status === 'ready')))
+      .then(res => {
+        const available = res.documents.filter(d => d.status === 'ready' || d.id === activeDocumentId)
+        setDocs(available)
+        const uploaded = activeDocumentId == null ? null : available.find(d => d.id === activeDocumentId)
+        if (uploaded) {
+          setSelectedDocId(uploaded.id)
+          setTitle(uploaded.title)
+        }
+      })
       .catch(() => setDocsError('Could not load your documents - check your connection and try again.'))
       .finally(() => setDocsLoading(false))
-  }, [])
+  }, [activeDocumentId])
 
-  const canProceed1 = selectedDocId != null && title.trim().length > 0
+  const selectedDoc = selectedDocId == null ? null : docs.find(d => d.id === selectedDocId) || null
+  const canProceed1 = selectedDocId != null && title.trim().length > 0 && selectedDoc?.status === 'ready'
   const canProceed2 = true
   const canProceed3 = rightsChecked
 
@@ -6503,7 +6512,9 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
-                <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{(d.file_type || '').toUpperCase()}{d.page_count != null ? ` · ${d.page_count} pages` : ''}</div>
+                <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
+                  {(d.file_type || '').toUpperCase()}{d.page_count != null ? ` · ${d.page_count} pages` : ''}{d.status !== 'ready' ? ` · ${d.status === 'processing' ? 'Preparing…' : d.status}` : ''}
+                </div>
               </div>
               {selectedDocId === d.id && <div style={{ color: N.gold, flexShrink: 0 }}>{Ic.check('w-5 h-5')}</div>}
             </div>
@@ -6514,7 +6525,7 @@ function PublishLibraryScreen({ setScreen }: { setScreen: (s: Screen) => void })
             <div style={{ fontSize: 11, color: T.textMuted, marginTop: 6 }}>This will be the public title visible to other students.</div>
           </div>
           <button onClick={() => canProceed1 && setStep(2)} style={{ width: '100%', background: canProceed1 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed1 ? N.navy : T.textMuted, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed1 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans' }}>
-            Continue
+            {selectedDoc?.status === 'ready' ? 'Continue' : 'Document still preparing…'}
           </button>
         </div>
       )}
@@ -13122,7 +13133,7 @@ export default function App() {
       case 'payment-success':   return <PaymentSuccessScreen setScreen={setScreen} />
       case 'payment-failure':   return <PaymentFailureScreen setScreen={setScreen} />
       case 'payment-history':   return <PaymentHistoryScreen setScreen={setScreen} />
-      case 'publish-library':   return <PublishLibraryScreen setScreen={setScreen} />
+      case 'publish-library':   return <PublishLibraryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'xp-progress':       return <XPProgressScreen setScreen={setScreen} />
       case 'study-streak':      return <StudyStreakScreen setScreen={setScreen} />
       case 'achievements':      return <AchievementsScreen setScreen={setScreen} />
