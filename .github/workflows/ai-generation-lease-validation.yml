@@ -1,0 +1,56 @@
+name: AI generation lease validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ai_generation_store.py
+      - ai_reusable_generation.py
+      - migrations/add_ai_generation_lease_fencing.sql
+      - tests/test_ai_generation_store.py
+      - tests/test_ai_generation_store_integration.py
+      - .github/workflows/ai-generation-lease-validation.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - ai_generation_store.py
+      - ai_reusable_generation.py
+      - migrations/add_ai_generation_lease_fencing.sql
+      - tests/test_ai_generation_store.py
+      - tests/test_ai_generation_store_integration.py
+      - .github/workflows/ai-generation-lease-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: prepza
+          POSTGRES_PASSWORD: prepza
+          POSTGRES_DB: prepza_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prepza -d prepza_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install pytest sqlalchemy psycopg2-binary
+      - name: Compile generation modules
+        run: python -m py_compile ai_generation_store.py ai_reusable_generation.py tests/test_ai_generation_store.py tests/test_ai_generation_store_integration.py
+      - name: Run lease and concurrency tests
+        env:
+          PYTHONPATH: .
+        run: pytest -q tests/test_ai_generation_store.py tests/test_ai_generation_store_integration.py
