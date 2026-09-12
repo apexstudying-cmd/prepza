@@ -28,8 +28,7 @@ export function installChatStudyDocumentObserver(): void {
     if (stateMatch) {
       const conversationId = Number(stateMatch[1])
       response.clone().json().then((body: any) => {
-        if (body?.e2ee_mode === 'group_v1') epochByConversation.set(conversationId, Number(body.key_epoch) || 0)
-        else if (body?.e2ee_mode === 'direct_v1') epochByConversation.set(conversationId, Number(body.key_epoch) || 0)
+        if (body?.e2ee_mode === 'group_v1' || body?.e2ee_mode === 'direct_v1') epochByConversation.set(conversationId, Number(body.key_epoch) || 0)
       }).catch(() => {})
     }
     const messageMatch = path.match(/^\/chats\/(\d+)\/messages$/)
@@ -38,8 +37,7 @@ export function installChatStudyDocumentObserver(): void {
       response.clone().json().then((body: any) => {
         const messages = Array.isArray(body?.messages) ? body.messages : []
         const docs = messages.map(message => attachmentFromMessage(conversationId, message)).filter(Boolean) as SharedDocument[]
-        const latest = docs[docs.length - 1]
-        if (latest) emit(latest)
+        emit(docs[docs.length - 1] || null)
       }).catch(() => {})
     }
     return response
@@ -56,7 +54,7 @@ export default function ChatStudyDocumentReader() {
   const [error, setError] = useState('')
   const [answer, setAnswer] = useState<AdaStudyResponse | null>(null)
 
-  useEffect(() => { const listener = (next: SharedDocument | null) => setDocument(next); listeners.add(listener); return () => { listeners.delete(listener) } }, [])
+  useEffect(() => { const listener = (next: SharedDocument | null) => { setDocument(next); if (!next) setOpen(false) }; listeners.add(listener); return () => { listeners.delete(listener) } }, [])
   useEffect(() => { if (!open) return; const selection = window.getSelection()?.toString().trim(); if (selection) setSelectedText(selection) }, [open, page])
   if (!document) return null
 
