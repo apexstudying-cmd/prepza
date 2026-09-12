@@ -46,8 +46,8 @@ def main() -> None:
         "document_id = int(data.get(\"document_id\"))",
         "selected_text = clean_text(data.get(\"selected_text\")",
         "prompt = clean_text(data.get(\"prompt\")",
-        "document.user_id != current_user_id",
-        "if document.removed_at is not None:",
+        "document.user_id != user_id",
+        'getattr(document, "is_removed", False)',
     )
 
     require(
