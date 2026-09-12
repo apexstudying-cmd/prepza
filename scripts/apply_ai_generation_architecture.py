@@ -24,10 +24,12 @@ def _top_level_function(source: str, name: str):
 
 
 def _install_wrapper(source: str, material_type: str, public_name: str) -> str:
-    if f"def {public_name}(" in source:
+    legacy_name = f"_legacy_{public_name}"
+    # Idempotency must detect the reusable wrapper, not merely the public
+    # function name, because the unpatched legacy implementation has that name.
+    if f"def {legacy_name}(" in source and f'material_type="{material_type}"' in source:
         return source
 
-    legacy_name = f"_legacy_{public_name}"
     node = _top_level_function(source, legacy_name)
     if node is None:
         raise RuntimeError(f"Could not locate top-level legacy generator {legacy_name}")
@@ -55,8 +57,6 @@ def patch_legacy_generators() -> None:
     source = path.read_text(encoding="utf-8")
 
     for material_type, public_name in MATERIALS.items():
-        if f"def {public_name}(" in source:
-            continue
         legacy_name = f"_legacy_{public_name}"
         if f"def {legacy_name}(" not in source:
             node = _top_level_function(source, public_name)
@@ -133,7 +133,6 @@ def patch_user_material_lookup() -> None:
             raise RuntimeError("AiJob model anchor not found")
         source = source.replace(anchor, helper + anchor, 1)
 
-    # Podcast playback/audio routes must use the same scope gate as generation.
     old_lookup = '''    material = GeneratedMaterial.query.filter_by(
         document_content_id=document.document_content_id, material_type="podcast"
     ).first()'''
