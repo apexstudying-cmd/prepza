@@ -1,0 +1,28 @@
+name: E2EE envelope validation
+
+on:
+  push:
+    paths:
+      - "e2ee_chat_routes.py"
+      - "scripts/validate_e2ee_envelope_completeness.py"
+      - ".github/workflows/e2ee-envelope-validation.yml"
+  pull_request:
+    paths:
+      - "e2ee_chat_routes.py"
+      - "scripts/validate_e2ee_envelope_completeness.py"
+      - ".github/workflows/e2ee-envelope-validation.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile E2EE route
+        run: python -m py_compile e2ee_chat_routes.py
+      - name: Validate envelope completeness
+        run: python scripts/validate_e2ee_envelope_completeness.py
