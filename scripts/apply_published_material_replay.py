@@ -31,7 +31,10 @@ def main():
         return None
 
     from ai_reusable_generation import normalize_parameters
-    normalized = normalize_parameters(material_type, parameters)
+    try:
+        normalized = normalize_parameters(material_type, parameters)
+    except ValueError:
+        return None
 
     candidates = (
         GeneratedMaterial.query
