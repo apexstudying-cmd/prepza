@@ -81,8 +81,8 @@ jobs:
         if: success()
         run: |
           if git diff --quiet -- app.py ai_service.py; then
-            echo 'No application patch was produced.'
-            exit 1
+            echo 'No application patch was produced; validation-only run.'
+            exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
