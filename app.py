@@ -3480,9 +3480,12 @@ def get_document(document_id):
 
     materials = []
     if content:
+        material_query = GeneratedMaterial.query.filter_by(document_content_id=content.id)
+        if document.user_id != user_id:
+            material_query = material_query.filter_by(status="ready", scope="shared", owner_user_id=None)
         materials = [
             {"type": m.material_type, "status": m.status}
-            for m in GeneratedMaterial.query.filter_by(document_content_id=content.id).all()
+            for m in material_query.all()
         ]
 
     return jsonify({
@@ -3579,7 +3582,7 @@ def rename_document(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
     data = request.get_json(silent=True)
@@ -3629,7 +3632,7 @@ def report_document(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
     data = request.get_json(silent=True) or {}
@@ -3646,6 +3649,52 @@ def report_document(document_id):
     db.session.commit()
 
     return jsonify({"message": "Report submitted"})
+
+
+def _published_ready_material_for_viewer(user_id, document, material_type, parameters):
+    """Return an approved document's READY shared artifact without generation."""
+    if not document or document.user_id == user_id:
+        return None
+    if not _can_study_document(user_id, document):
+        return None
+    if not document.document_content_id:
+        return None
+
+    content = db.session.get(DocumentContent, document.document_content_id)
+    if not content or content.status != "ready":
+        return None
+
+    from ai_reusable_generation import normalize_parameters
+    try:
+        normalized = normalize_parameters(material_type, parameters)
+    except ValueError:
+        return None
+
+    candidates = (
+        GeneratedMaterial.query
+        .filter_by(
+            document_content_id=content.id,
+            material_type=material_type,
+            status="ready",
+            scope="shared",
+        )
+        .order_by(GeneratedMaterial.updated_at.desc())
+        .all()
+    )
+    for material in candidates:
+        if material.owner_user_id is None and (material.generation_parameters or {}) == normalized and material.payload:
+            return content, material
+    return None
+
+
+def _published_material_response(user_id, content, material):
+    record_document_studied(user_id, content.id)
+    db.session.commit()
+    return {
+        "material_id": material.id,
+        "reused": True,
+        "payload": json.loads(material.payload),
+    }
 
 
 @app.route("/documents/<int:document_id>/summarize", methods=["POST"])
@@ -3682,6 +3731,20 @@ def summarize_document(document_id):
 
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to summarize"}), 400
+
+    if document.user_id != user_id:
+        shared = _published_ready_material_for_viewer(
+            user_id, document, "summary", _ai_generation_parameters_from_request()
+        )
+        if not shared:
+            return jsonify({"error": "Published summary has not been generated yet"}), 404
+        content, material = shared
+        result = _published_material_response(user_id, content, material)
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": True,
+            "summary": result["payload"],
+        }), 200
 
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
@@ -3736,6 +3799,20 @@ def quiz_document(document_id):
 
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to quiz"}), 400
+
+    if document.user_id != user_id:
+        shared = _published_ready_material_for_viewer(
+            user_id, document, "quiz", _ai_generation_parameters_from_request()
+        )
+        if not shared:
+            return jsonify({"error": "Published quiz has not been generated yet"}), 404
+        content, material = shared
+        result = _published_material_response(user_id, content, material)
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": True,
+            "quiz": result["payload"],
+        }), 200
 
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
@@ -3851,6 +3928,20 @@ def flashcards_document(document_id):
 
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate flashcards from"}), 400
+
+    if document.user_id != user_id:
+        shared = _published_ready_material_for_viewer(
+            user_id, document, "flashcards", _ai_generation_parameters_from_request()
+        )
+        if not shared:
+            return jsonify({"error": "Published flashcards has not been generated yet"}), 404
+        content, material = shared
+        result = _published_material_response(user_id, content, material)
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": True,
+            "flashcards": result["payload"],
+        }), 200
 
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
@@ -3973,86 +4064,8 @@ def podcast_script_document(document_id):
             document_content_id=document.document_content_id,
             material_type="podcast",
             status="ready",
-        ).first()
-        if not material or not material.payload:
-            return jsonify({"error": "Podcast has not been published yet"}), 404
-        record_document_studied(user_id, content.id)
-        db.session.commit()
-        return jsonify({
-            "material_id": material.id,
-            "reused": True,
-            "podcast": json.loads(material.payload),
-        }), 200
-
-    if document.user_id != user_id:
-        material = GeneratedMaterial.query.filter_by(
-            document_content_id=document.document_content_id,
-            material_type="podcast",
-            status="ready",
-        ).first()
-        if not material or not material.payload:
-            return jsonify({"error": "Podcast has not been published yet"}), 404
-        record_document_studied(user_id, content.id)
-        db.session.commit()
-        return jsonify({
-            "material_id": material.id,
-            "reused": True,
-            "podcast": json.loads(material.payload),
-        }), 200
-
-    if document.user_id != user_id:
-        material = GeneratedMaterial.query.filter_by(
-            document_content_id=document.document_content_id,
-            material_type="podcast",
-            status="ready",
-        ).first()
-        if not material or not material.payload:
-            return jsonify({"error": "Podcast has not been published yet"}), 404
-        record_document_studied(user_id, content.id)
-        db.session.commit()
-        return jsonify({
-            "material_id": material.id,
-            "reused": True,
-            "podcast": json.loads(material.payload),
-        }), 200
-
-    if document.user_id != user_id:
-        material = GeneratedMaterial.query.filter_by(
-            document_content_id=document.document_content_id,
-            material_type="podcast",
-            status="ready",
-        ).first()
-        if not material or not material.payload:
-            return jsonify({"error": "Podcast has not been published yet"}), 404
-        record_document_studied(user_id, content.id)
-        db.session.commit()
-        return jsonify({
-            "material_id": material.id,
-            "reused": True,
-            "podcast": json.loads(material.payload),
-        }), 200
-
-    if document.user_id != user_id:
-        material = GeneratedMaterial.query.filter_by(
-            document_content_id=document.document_content_id,
-            material_type="podcast",
-            status="ready",
-        ).first()
-        if not material or not material.payload:
-            return jsonify({"error": "Podcast has not been published yet"}), 404
-        record_document_studied(user_id, content.id)
-        db.session.commit()
-        return jsonify({
-            "material_id": material.id,
-            "reused": True,
-            "podcast": json.loads(material.payload),
-        }), 200
-
-    if document.user_id != user_id:
-        material = GeneratedMaterial.query.filter_by(
-            document_content_id=document.document_content_id,
-            material_type="podcast",
-            status="ready",
+            scope="shared",
+            owner_user_id=None,
         ).first()
         if not material or not material.payload:
             return jsonify({"error": "Podcast has not been published yet"}), 404
@@ -4125,6 +4138,8 @@ def trigger_podcast_audio(document_id):
             document_content_id=document.document_content_id,
             material_type="podcast",
             status="ready",
+            scope="shared",
+            owner_user_id=None,
         ).first()
     if not material or material.status != "ready" or not material.payload:
         return jsonify({"error": "Generate the podcast script first"}), 400
@@ -4136,21 +4151,6 @@ def trigger_podcast_audio(document_id):
         return jsonify({"audio_status": "ready", "material_id": material.id}), 200
     if audio_status == "processing":
         return jsonify({"audio_status": "processing", "material_id": material.id}), 202
-
-    if document.user_id != user_id:
-        return jsonify({"error": "Podcast audio is not ready yet"}), 409
-
-    if document.user_id != user_id:
-        return jsonify({"error": "Podcast audio is not ready yet"}), 409
-
-    if document.user_id != user_id:
-        return jsonify({"error": "Podcast audio is not ready yet"}), 409
-
-    if document.user_id != user_id:
-        return jsonify({"error": "Podcast audio is not ready yet"}), 409
-
-    if document.user_id != user_id:
-        return jsonify({"error": "Podcast audio is not ready yet"}), 409
 
     if document.user_id != user_id:
         return jsonify({"error": "Podcast audio is not ready yet"}), 409
@@ -4291,6 +4291,20 @@ def mindmap_document(document_id):
 
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate a mind map from"}), 400
+
+    if document.user_id != user_id:
+        shared = _published_ready_material_for_viewer(
+            user_id, document, "mind_map", _ai_generation_parameters_from_request()
+        )
+        if not shared:
+            return jsonify({"error": "Published mindmap has not been generated yet"}), 404
+        content, material = shared
+        result = _published_material_response(user_id, content, material)
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": True,
+            "mindmap": result["payload"],
+        }), 200
 
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
