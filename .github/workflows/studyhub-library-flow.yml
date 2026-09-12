@@ -53,6 +53,7 @@ jobs:
           git push origin HEAD:fix/public-document-watermark
 
   validate-patches:
+    if: github.event.pull_request.head.ref == 'fix/public-document-watermark'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

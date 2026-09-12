@@ -1,0 +1,28 @@
+name: E2EE Security Regression
+
+on:
+  push:
+    branches:
+      - feat/e2ee-study-chats
+  pull_request:
+    paths:
+      - 'e2ee_chat_routes.py'
+      - 'e2ee_ada_routes.py'
+      - 'prepza_control.py'
+      - 'frontend/src/crypto/**'
+      - 'migrations/*e2ee*'
+      - 'scripts/validate_e2ee_security.py'
+      - '.github/workflows/e2ee-security-regression.yml'
+
+jobs:
+  security-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate E2EE security invariants
+        run: python scripts/validate_e2ee_security.py
+      - name: Compile E2EE backend modules
+        run: python -m py_compile e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py
