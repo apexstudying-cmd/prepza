@@ -185,7 +185,7 @@ type Screen =
   | 'settings' | 'student-profile' | 'share-sheet'
   | 'notifications' | 'library' | 'mind-map' | 'new-chat' | 'chat-options' | 'edit-profile'
   | 'subscription' | 'payment' | 'payment-success' | 'payment-failure' | 'payment-history'
-  | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements' | 'study-materials'
+  | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements' | 'study-materials' | 'document-reader'
   | 'followers' | 'following' | 'follow-requests' | 'group-detail' | 'group-create' | 'ambassador' | 'time-studied'
 
 // ─── Kenyan Data ──────────────────────────────────────────────────────────────
@@ -378,6 +378,129 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       {loading ? <GenerationLoading label="Loading your study library…"/> : error ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Ada about it, or create study materials.</div>{documents.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:documents.map(d=><button key={d.id} onClick={()=>openDocument(d.id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>▣</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{d.page_count?`${d.page_count} pages`:'Document'}{d.created_at?` · ${new Date(d.created_at).toLocaleDateString()}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:18}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
       <div style={{height:'calc(90px + env(safe-area-inset-bottom, 0px))'}}/>
     </div>
+  </div>
+}
+
+
+// ─── DOCUMENT STUDY HUB ─────────────────────────────────────────────────────
+// A document is the student's study home: read it, ask Ada about it, replay
+// existing materials, or create a new material. Generation remains owned by
+// the existing material screens/reusable-generation backend.
+function DocumentStudyHubScreen({
+  setScreen,
+  activeDocumentId,
+}: {
+  setScreen: (s: Screen) => void
+  activeDocumentId: number | null
+}) {
+  const { tokens: T } = useTheme()
+  const [document, setDocument] = useState<DocumentDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    if (activeDocumentId == null) {
+      setLoading(false)
+      setError('No document selected.')
+      return
+    }
+    setLoading(true)
+    setError('')
+    api<DocumentDetail>(`/documents/${activeDocumentId}`)
+      .then(data => { if (!cancelled) setDocument(data) })
+      .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Could not open this document.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [activeDocumentId])
+
+  if (loading) return <GenerationLoading label="Opening your document…" />
+  if (error || !document) return <GenerationError error={error || 'Document unavailable.'} />
+
+  const readyMaterials = (document.materials || []).filter(m => m.status === 'ready')
+  const materialMeta: Record<string, { label: string; icon: string; screen: Screen }> = {
+    summary: { label: 'Summary', icon: '▤', screen: 'summary' },
+    flashcards: { label: 'Flashcards', icon: '▦', screen: 'flashcards' },
+    quiz: { label: 'Practice Questions', icon: '?', screen: 'quiz' },
+    practice_questions: { label: 'Practice Questions', icon: '?', screen: 'quiz' },
+    mind_map: { label: 'Mind Map', icon: '⌘', screen: 'mind-map' },
+    mindmap: { label: 'Mind Map', icon: '⌘', screen: 'mind-map' },
+    podcast: { label: 'Podcast', icon: '◉', screen: 'podcast-player' },
+  }
+
+  const openMaterial = (type: string) => {
+    const key = type.toLowerCase().replace(/-/g, '_')
+    setScreen(materialMeta[key]?.screen || 'document-reader')
+  }
+
+  const createOptions: Array<{ type: string; label: string; description: string; icon: string; screen: Screen }> = [
+    { type: 'summary', label: 'Summary', description: 'Condense the key ideas and explanations.', icon: '▤', screen: 'summary' },
+    { type: 'flashcards', label: 'Flashcards', description: 'Turn important concepts into active recall cards.', icon: '▦', screen: 'flashcards' },
+    { type: 'practice_questions', label: 'Practice Questions', description: 'Generate questions to test your understanding.', icon: '?', screen: 'quiz' },
+    { type: 'mind_map', label: 'Mind Map', description: 'See the concepts and how they connect.', icon: '⌘', screen: 'mind-map' },
+    { type: 'podcast', label: 'Podcast', description: 'Listen to an explanation based on this document.', icon: '◉', screen: 'podcast-player' },
+  ]
+
+  return <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
+    <div style={{ background: N.navy, padding: '12px 18px 22px', flexShrink: 0 }}>
+      <button onClick={() => setScreen('study-materials')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Plus Jakarta Sans', fontSize: 11, fontWeight: 700 }}>
+        {Ic.back()} My Study
+      </button>
+      <div style={{ marginTop: 18 }}>
+        <div style={{ color: '#fff', fontSize: 20, fontWeight: 850, lineHeight: 1.25 }} className="line-clamp-2">{document.title}</div>
+        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 6 }}>
+          {document.page_count ? `${document.page_count} pages` : 'Document'}{document.file_type ? ` · ${document.file_type.toUpperCase()}` : ''}
+        </div>
+      </div>
+    </div>
+
+    <div style={{ flex: 1, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
+      <button onClick={() => setScreen('document-reader')} style={{ width: '100%', background: `linear-gradient(135deg, ${N.navy}, ${N.navy3})`, border: 'none', borderRadius: 17, padding: '17px 16px', color: '#fff', textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 13, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>▤</div>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 850, fontSize: 14 }}>Continue Reading</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 3 }}>Read this document in Prepza</div></div>
+          <span style={{ fontSize: 20 }}>›</span>
+        </div>
+      </button>
+
+      <section style={{ marginBottom: 22 }}>
+        <div style={{ fontWeight: 850, fontSize: 14, color: T.text, marginBottom: 10 }}>Study with Ada</div>
+        <button onClick={() => setScreen('ai-tutor')} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: `${N.gold}18`, color: N.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, fontWeight: 900 }}>✦</div>
+          <div style={{ flex: 1 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13 }}>Ask anything about these notes</div><div style={{ color: T.textMuted, fontSize: 11, marginTop: 3 }}>Use Ada while this document is your study context.</div></div>
+          <span style={{ color: T.textMuted }}>›</span>
+        </button>
+      </section>
+
+      <section>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontWeight: 850, fontSize: 14, color: T.text }}>Your Study Materials</div>
+          <button onClick={() => setShowCreate(true)} style={{ background: 'none', border: 'none', color: N.gold, fontWeight: 800, fontSize: 11, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Create</button>
+        </div>
+        {readyMaterials.length === 0 ? (
+          <div style={{ background: T.card, border: `1px dashed ${T.border}`, borderRadius: 15, padding: 18, textAlign: 'center' }}>
+            <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5 }}>Nothing has been created from this document yet.</div>
+            <button onClick={() => setShowCreate(true)} style={{ marginTop: 11, background: N.gold, color: N.navy, border: 'none', borderRadius: 10, padding: '8px 13px', fontWeight: 850, fontSize: 11, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Create Study Material</button>
+          </div>
+        ) : readyMaterials.map((m, i) => {
+          const meta = materialMeta[m.type.toLowerCase().replace(/-/g, '_')] || { label: m.type.replace(/_/g, ' '), icon: '•', screen: 'document-reader' as Screen }
+          return <button key={`${m.type}-${i}`} onClick={() => openMaterial(m.type)} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, marginBottom: 9, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: `${N.navy}0D`, color: N.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900 }}>{meta.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13, textTransform: 'capitalize' }}>{meta.label}</div><div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>Ready to replay</div></div>
+            <span style={{ color: T.textMuted }}>›</span>
+          </button>
+        })}
+      </section>
+      <div style={{ height: 'calc(90px + env(safe-area-inset-bottom, 0px))' }} />
+    </div>
+
+    {showCreate && <div onClick={() => setShowCreate(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.48)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 520, maxHeight: '82vh', overflowY: 'auto', background: T.card, borderRadius: '22px 22px 0 0', padding: '18px 16px calc(22px + env(safe-area-inset-bottom, 0px))' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><div><div style={{ color: T.text, fontWeight: 850, fontSize: 16 }}>Create Study Material</div><div style={{ color: T.textMuted, fontSize: 11, marginTop: 3 }}>Choose what you want to make from this document.</div></div><button onClick={() => setShowCreate(false)} style={{ background: T.pageBg, border: 'none', borderRadius: 10, width: 34, height: 34, cursor: 'pointer', color: T.text }}>{Ic.close()}</button></div>
+        {createOptions.map(option => <button key={option.type} onClick={() => { setShowCreate(false); setScreen(option.screen) }} style={{ width: '100%', background: T.pageBg, border: `1px solid ${T.border}`, borderRadius: 14, padding: 13, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}><div style={{ width: 40, height: 40, borderRadius: 11, background: `${N.gold}18`, color: N.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>{option.icon}</div><div><div style={{ color: T.text, fontWeight: 800, fontSize: 12 }}>{option.label}</div><div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>{option.description}</div></div></button>)}
+      </div>
+    </div>}
   </div>
 }
 
@@ -12809,7 +12932,8 @@ export default function App() {
       case 'upload':            return <UploadScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'processing':        return <ProcessingScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'document-study':    return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
+      case 'document-study': return <DocumentStudyHubScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
+      case 'document-reader': return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} activeDocumentId={activeDocumentId} setActiveDocumentId={setActiveDocumentId} />
       case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'quiz':              return <QuizScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
