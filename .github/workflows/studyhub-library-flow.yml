@@ -1,0 +1,76 @@
+name: StudyHub Library Flow
+
+on:
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'frontend/**'
+      - 'scripts/apply_*.py'
+      - 'scripts/verify_*document_watermark.py'
+      - 'scripts/verify_*studyhub*'
+      - 'scripts/verify_*upload_share*'
+      - '.github/workflows/studyhub-library-flow.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: studyhub-library-flow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apply-runtime-patches:
+    if: github.event.pull_request.head.ref == 'fix/public-document-watermark'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/public-document-watermark
+          fetch-depth: 0
+
+      - name: Apply runtime patches
+        run: python scripts/apply_studyhub_library_flow_all.py
+
+      - name: Verify runtime patches
+        run: |
+          python scripts/verify_public_document_watermark.py
+          python scripts/verify_studyhub_library_flow.py
+          python scripts/verify_upload_share_choice_ux.py
+          python -m py_compile app.py scripts/*.py
+
+      - name: Commit runtime changes
+        run: |
+          if git diff --quiet -- app.py frontend/src/App.tsx; then
+            echo "Runtime files already contain the requested changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py frontend/src/App.tsx
+          git commit -m "feat: apply StudyHub Library document flow"
+          git fetch origin fix/public-document-watermark
+          git rebase origin/fix/public-document-watermark
+          git push origin HEAD:fix/public-document-watermark
+
+  validate-patches:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply and verify runtime patches in a disposable workspace
+        run: |
+          python scripts/apply_studyhub_library_flow_all.py
+          python scripts/verify_public_document_watermark.py
+          python scripts/verify_studyhub_library_flow.py
+          python scripts/verify_upload_share_choice_ux.py
+
+      - name: Compile Python
+        run: python -m py_compile app.py scripts/*.py
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
