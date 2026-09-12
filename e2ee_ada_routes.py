@@ -100,13 +100,13 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
 
         current_key_epoch = int(state["key_epoch"] or 0)
         data = request.get_json(silent=True) or {}
-        if data.get("context_scope") != "selected_document_pages":
-            return jsonify({"error": "Ada accepts only selected document-page context"}), 400
+        context_scope = data.get("context_scope")
+        if context_scope not in {"selected_document_pages", "selected_chat_document"}:
+            return jsonify({"error": "Ada accepts only explicitly selected study context"}), 400
         if data.get("explicit_user_context") is not True:
             return jsonify({"error": "Ada context must be explicitly selected by the user"}), 400
 
         try:
-            document_id = int(data.get("document_id"))
             page_start = int(data.get("page_start"))
             page_end = int(data.get("page_end"))
             key_epoch = int(data.get("key_epoch"))
@@ -115,19 +115,42 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid scoped Ada context"}), 400
 
-        if document_id < 1 or page_start < 1 or page_end < page_start:
-            return jsonify({"error": "Invalid document or page range"}), 400
+        if page_start < 1 or page_end < page_start:
+            return jsonify({"error": "Invalid document page range"}), 400
         if page_end - page_start + 1 > MAX_PAGE_SPAN:
             return jsonify({"error": "Selected page range is too large"}), 400
         if key_epoch != current_key_epoch:
-            return jsonify({
-                "error": "E2EE key epoch is stale; reopen the chat and retry",
-                "key_epoch": current_key_epoch,
-            }), 409
+            return jsonify({"error": "E2EE key epoch is stale; reopen the chat and retry", "key_epoch": current_key_epoch}), 409
 
-        document = db.session.get(Document, document_id)
-        if not document or document.user_id != user_id or getattr(document, "is_removed", False):
-            return jsonify({"error": "Study document not available"}), 404
+        if context_scope == "selected_document_pages":
+            try:
+                document_id = int(data.get("document_id"))
+            except (TypeError, ValueError):
+                return jsonify({"error": "Invalid study document"}), 400
+            if document_id < 1:
+                return jsonify({"error": "Invalid study document"}), 400
+            document = db.session.get(Document, document_id)
+            if not document or document.user_id != user_id or getattr(document, "is_removed", False):
+                return jsonify({"error": "Study document not available"}), 404
+        else:
+            try:
+                attachment_id = int(data.get("attachment_id"))
+            except (TypeError, ValueError):
+                return jsonify({"error": "Invalid shared chat document"}), 400
+            if attachment_id < 1:
+                return jsonify({"error": "Invalid shared chat document"}), 400
+            shared = db.session.execute(
+                text(
+                    "SELECT id FROM message_attachment "
+                    "WHERE id = :attachment_id "
+                    "AND conversation_id = :conversation_id "
+                    "AND message_id IS NOT NULL "
+                    "AND status = 'ready'"
+                ),
+                {"attachment_id": attachment_id, "conversation_id": conversation_id},
+            ).first()
+            if not shared:
+                return jsonify({"error": "Shared chat document not available"}), 404
 
         allowed, used, limit = check_daily_tutor_limit(user_id, plan_tier="free")
         if not allowed:
@@ -148,11 +171,7 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
             "what is missing. Teach clearly, step by step when useful, and do not "
             "invent facts."
         )
-        user_message = (
-            f"Selected study context (pages {page_start}-{page_end}):\n\n"
-            f"{selected_text}\n\n"
-            f"Student question:\n{prompt}"
-        )
+        user_message = f"Selected study context (pages {page_start}-{page_end}):\n\n{selected_text}\n\nStudent question:\n{prompt}"
 
         try:
             response = route_and_generate(AIRequest(
@@ -172,7 +191,7 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
             "answer": response.text,
             "model_used": response.model_used,
             "key_epoch": current_key_epoch,
-            "context_scope": "selected_document_pages",
+            "context_scope": context_scope,
         }), 200
 
     app._prepza_e2ee_ada_route_registered = True
