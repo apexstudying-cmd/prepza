@@ -127,7 +127,6 @@ export default function ChatStudyDocumentReader() {
   }
 
   return <>
-    <button type="button" onClick={() => setOpen(true)} aria-label="Study a shared document" style={{ position: 'fixed', right: 20, bottom: 44, zIndex: 1190, border: '1px solid rgba(255,255,255,.14)', borderRadius: 999, background: '#f7f2e8', color: '#111827', padding: '9px 14px', boxShadow: '0 10px 30px rgba(0,0,0,.2)', cursor: 'pointer', fontWeight: 800 }}>Study document{documents.length > 1 ? `s (${documents.length})` : ''}</button>
     {open && document && <div style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(0,0,0,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <section style={{ width: 'min(1100px, 100%)', height: 'min(88vh, 900px)', background: '#0d1420', color: '#f7f2e8', borderRadius: 18, overflow: 'hidden', display: 'grid', gridTemplateRows: 'auto 1fr auto', boxShadow: '0 30px 80px rgba(0,0,0,.4)' }}>
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,.1)' }}>
