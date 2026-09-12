@@ -40,6 +40,7 @@ jobs:
       - name: Verify patches are deterministic
         run: |
           cp frontend/src/App.tsx /tmp/App.after
+          cp app.py /tmp/app.after
           python3 scripts/apply_student_navigation_ux_v4.py
           python3 scripts/apply_student_navigation_ux_v5.py
           python3 scripts/apply_document_study_progress.py
@@ -49,7 +50,7 @@ jobs:
           python3 scripts/apply_document_reader_v2.py
           python3 scripts/apply_published_material_replay.py
           cmp frontend/src/App.tsx /tmp/App.after
-          git diff --exit-code -- app.py
+          cmp app.py /tmp/app.after
 
       - name: Verify study-flow security and navigation anchors
         run: |
@@ -70,8 +71,9 @@ jobs:
           s = Path('app.py').read_text()
           block = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()'''
           assert s.count(block) == 2, f'expected exactly 2 shared podcast lookup blocks, found {s.count(block)}'
-          assert s.count('Published podcast has not been generated yet') == 0
           assert s.count('Podcast has not been published yet') == 1
+          guard = '    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n'
+          assert s.count(guard) == 1, f'expected exactly 1 podcast synthesis guard, found {s.count(guard)}'
           PY
           grep -F 'const [readingPage, setReadingPage] = useState(0)' frontend/src/App.tsx
           grep -F '/documents/${activeDocumentId}/reading' frontend/src/App.tsx
