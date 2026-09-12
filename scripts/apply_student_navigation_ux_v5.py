@@ -26,61 +26,139 @@ def main():
 // ─── DOCUMENT STUDY HUB ─────────────────────────────────────────────────────
 // A document is the student's study home: read it, ask Ada about it, replay
 // existing materials, or create a new material. Generation remains owned by
-// the existing backend generation routes.
-function DocumentStudyHubScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+// the existing material screens/reusable-generation backend.
+function DocumentStudyHubScreen({
+  setScreen,
+  activeDocumentId,
+}: {
+  setScreen: (s: Screen) => void
+  activeDocumentId: number | null
+}) {
   const { tokens: T } = useTheme()
-  const [doc, setDoc] = useState<DocumentDetail | null>(null)
+  const [document, setDocument] = useState<DocumentDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
 
   useEffect(() => {
-    if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
+    let cancelled = false
+    if (activeDocumentId == null) {
+      setLoading(false)
+      setError('No document selected.')
+      return
+    }
     setLoading(true)
+    setError('')
     api<DocumentDetail>(`/documents/${activeDocumentId}`)
-      .then(setDoc)
-      .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load this document.'))
-      .finally(() => setLoading(false))
+      .then(data => { if (!cancelled) setDocument(data) })
+      .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Could not open this document.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [activeDocumentId])
 
-  if (loading) return <GenerationLoading label="Opening your study hub…" />
-  if (error) return <GenerationError error={error} />
-  if (!doc || activeDocumentId == null) return <GenerationError error="Document unavailable." />
+  if (loading) return <GenerationLoading label="Opening your document…" />
+  if (error || !document) return <GenerationError error={error || 'Document unavailable.'} />
 
-  const readyMaterials = (doc.materials || []).filter((m: any) => m.status === 'ready')
-  const openMaterial = (type: string) => {
-    if (type === 'summary') setScreen('summary')
-    else if (type === 'flashcards') setScreen('flashcards')
-    else if (type === 'quiz' || type === 'practice_questions') setScreen('quiz')
-    else if (type === 'mind_map' || type === 'mindmap') setScreen('mind-map')
-    else if (type === 'podcast') setScreen('podcast-library')
+  const readyMaterials = (document.materials || []).filter(m => m.status === 'ready')
+  const materialMeta: Record<string, { label: string; icon: string; screen: Screen }> = {
+    summary: { label: 'Summary', icon: '▤', screen: 'summary' },
+    flashcards: { label: 'Flashcards', icon: '▦', screen: 'flashcards' },
+    quiz: { label: 'Practice Questions', icon: '?', screen: 'quiz' },
+    practice_questions: { label: 'Practice Questions', icon: '?', screen: 'quiz' },
+    mind_map: { label: 'Mind Map', icon: '⌘', screen: 'mind-map' },
+    mindmap: { label: 'Mind Map', icon: '⌘', screen: 'mind-map' },
+    podcast: { label: 'Podcast', icon: '◉', screen: 'podcast-player' },
   }
 
-  return <div style={{ flex:1, overflowY:'auto', background:T.bg }}>
-    <div style={{ padding:'18px 16px 24px', maxWidth:760, margin:'0 auto' }}>
-      <button onClick={() => setScreen('study-materials')} style={{ border:'none', background:'none', padding:0, color:T.muted, fontSize:12, fontWeight:700, cursor:'pointer' }}>← My Study</button>
-      <div style={{ marginTop:16, display:'flex', alignItems:'flex-start', gap:12 }}>
-        <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:22, fontWeight:900, color:T.text }}>{doc.title}</div><div style={{ marginTop:5, color:T.muted, fontSize:12 }}>{doc.page_count || 1} pages · {doc.file_type?.toUpperCase() || 'DOCUMENT'}</div></div>
+  const openMaterial = (type: string) => {
+    const key = type.toLowerCase().replace(/-/g, '_')
+    setScreen(materialMeta[key]?.screen || 'document-reader')
+  }
+
+  const createOptions: Array<{ type: string; label: string; description: string; icon: string; screen: Screen }> = [
+    { type: 'summary', label: 'Summary', description: 'Condense the key ideas and explanations.', icon: '▤', screen: 'summary' },
+    { type: 'flashcards', label: 'Flashcards', description: 'Turn important concepts into active recall cards.', icon: '▦', screen: 'flashcards' },
+    { type: 'practice_questions', label: 'Practice Questions', description: 'Generate questions to test your understanding.', icon: '?', screen: 'quiz' },
+    { type: 'mind_map', label: 'Mind Map', description: 'See the concepts and how they connect.', icon: '⌘', screen: 'mind-map' },
+    { type: 'podcast', label: 'Podcast', description: 'Listen to an explanation based on this document.', icon: '◉', screen: 'podcast-player' },
+  ]
+
+  return <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
+    <div style={{ background: N.navy, padding: '12px 18px 22px', flexShrink: 0 }}>
+      <button onClick={() => setScreen('study-materials')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Plus Jakarta Sans', fontSize: 11, fontWeight: 700 }}>
+        {Ic.back()} My Study
+      </button>
+      <div style={{ marginTop: 18 }}>
+        <div style={{ color: '#fff', fontSize: 20, fontWeight: 850, lineHeight: 1.25 }} className="line-clamp-2">{document.title}</div>
+        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 6 }}>
+          {document.page_count ? `${document.page_count} pages` : 'Document'}{document.file_type ? ` · ${document.file_type.toUpperCase()}` : ''}
+        </div>
       </div>
-      <button onClick={() => setScreen('document-reader')} style={{ width:'100%', marginTop:18, padding:'14px 16px', border:'none', borderRadius:14, background:N.navy, color:'#fff', fontWeight:800, cursor:'pointer' }}>Continue Reading</button>
-      <div style={{ marginTop:22, fontSize:14, fontWeight:900, color:T.text }}>Study with Ada</div>
-      <button onClick={() => setScreen('ai-tutor')} style={{ width:'100%', marginTop:10, padding:'14px 16px', border:`1px solid ${T.border}`, borderRadius:14, background:T.card, color:T.text, fontWeight:800, textAlign:'left', cursor:'pointer' }}>Ask anything about this document</button>
-      <div style={{ marginTop:24, fontSize:14, fontWeight:900, color:T.text }}>Your Study Materials</div>
-      <div style={{ marginTop:10, display:'grid', gap:8 }}>
-        {readyMaterials.map((m: any) => <button key={`${m.material_type}-${m.id || m.created_at}`} onClick={() => openMaterial(m.material_type)} style={{ border:`1px solid ${T.border}`, background:T.card, borderRadius:14, padding:'13px 14px', textAlign:'left', cursor:'pointer' }}><div style={{ fontWeight:800, color:T.text }}>{m.material_type === 'practice_questions' ? 'Practice Questions' : m.material_type.replace(/_/g,' ').replace(/\b\w/g, (c:string)=>c.toUpperCase())}</div><div style={{ marginTop:3, fontSize:11, color:T.muted }}>From {doc.title}</div></button>)}
-        {!readyMaterials.length && <div style={{ padding:16, border:`1px dashed ${T.border}`, borderRadius:14, color:T.muted, fontSize:12 }}>No study materials yet.</div>}
-      </div>
-      <button onClick={() => setShowCreate(true)} style={{ width:'100%', marginTop:14, padding:'14px 16px', border:`1px solid ${N.gold}`, borderRadius:14, background:'transparent', color:N.gold, fontWeight:900, cursor:'pointer' }}>+ Create Study Material</button>
     </div>
-    {showCreate && <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', display:'flex', alignItems:'flex-end', zIndex:50 }} onClick={() => setShowCreate(false)}><div style={{ width:'100%', maxWidth:760, margin:'0 auto', background:T.card, borderRadius:'22px 22px 0 0', padding:20 }} onClick={e=>e.stopPropagation()}><div style={{ fontSize:18, fontWeight:900, color:T.text }}>Create Study Material</div>{['summary','flashcards','quiz','mind_map','podcast'].map(type => <button key={type} onClick={() => { setShowCreate(false); openMaterial(type) }} style={{ width:'100%', marginTop:8, padding:13, border:`1px solid ${T.border}`, borderRadius:12, background:T.bg, color:T.text, textAlign:'left', fontWeight:700, cursor:'pointer' }}>{type === 'quiz' ? 'Practice Questions' : type === 'mind_map' ? 'Mind Map' : type.charAt(0).toUpperCase()+type.slice(1)}</button>)}</div></div>}
+
+    <div style={{ flex: 1, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
+      <button onClick={() => setScreen('document-reader')} style={{ width: '100%', background: `linear-gradient(135deg, ${N.navy}, ${N.navy3})`, border: 'none', borderRadius: 17, padding: '17px 16px', color: '#fff', textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 13, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>▤</div>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 850, fontSize: 14 }}>Continue Reading</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 3 }}>Read this document in Prepza</div></div>
+          <span style={{ fontSize: 20 }}>›</span>
+        </div>
+      </button>
+
+      <section style={{ marginBottom: 22 }}>
+        <div style={{ fontWeight: 850, fontSize: 14, color: T.text, marginBottom: 10 }}>Study with Ada</div>
+        <button onClick={() => setScreen('ai-tutor')} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: `${N.gold}18`, color: N.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, fontWeight: 900 }}>✦</div>
+          <div style={{ flex: 1 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13 }}>Ask anything about these notes</div><div style={{ color: T.textMuted, fontSize: 11, marginTop: 3 }}>Use Ada while this document is your study context.</div></div>
+          <span style={{ color: T.textMuted }}>›</span>
+        </button>
+      </section>
+
+      <section>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontWeight: 850, fontSize: 14, color: T.text }}>Your Study Materials</div>
+          <button onClick={() => setShowCreate(true)} style={{ background: 'none', border: 'none', color: N.gold, fontWeight: 800, fontSize: 11, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Create</button>
+        </div>
+        {readyMaterials.length === 0 ? (
+          <div style={{ background: T.card, border: `1px dashed ${T.border}`, borderRadius: 15, padding: 18, textAlign: 'center' }}>
+            <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5 }}>Nothing has been created from this document yet.</div>
+            <button onClick={() => setShowCreate(true)} style={{ marginTop: 11, background: N.gold, color: N.navy, border: 'none', borderRadius: 10, padding: '8px 13px', fontWeight: 850, fontSize: 11, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Create Study Material</button>
+          </div>
+        ) : readyMaterials.map((m, i) => {
+          const meta = materialMeta[m.type.toLowerCase().replace(/-/g, '_')] || { label: m.type.replace(/_/g, ' '), icon: '•', screen: 'document-reader' as Screen }
+          return <button key={`${m.type}-${i}`} onClick={() => openMaterial(m.type)} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, marginBottom: 9, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: `${N.navy}0D`, color: N.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900 }}>{meta.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13, textTransform: 'capitalize' }}>{meta.label}</div><div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>Ready to replay</div></div>
+            <span style={{ color: T.textMuted }}>›</span>
+          </button>
+        })}
+      </section>
+      <div style={{ height: 'calc(90px + env(safe-area-inset-bottom, 0px))' }} />
+    </div>
+
+    {showCreate && <div onClick={() => setShowCreate(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.48)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 520, maxHeight: '82vh', overflowY: 'auto', background: T.card, borderRadius: '22px 22px 0 0', padding: '18px 16px calc(22px + env(safe-area-inset-bottom, 0px))' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><div><div style={{ color: T.text, fontWeight: 850, fontSize: 16 }}>Create Study Material</div><div style={{ color: T.textMuted, fontSize: 11, marginTop: 3 }}>Choose what you want to make from this document.</div></div><button onClick={() => setShowCreate(false)} style={{ background: T.pageBg, border: 'none', borderRadius: 10, width: 34, height: 34, cursor: 'pointer', color: T.text }}>{Ic.close()}</button></div>
+        {createOptions.map(option => <button key={option.type} onClick={() => { setShowCreate(false); setScreen(option.screen) }} style={{ width: '100%', background: T.pageBg, border: `1px solid ${T.border}`, borderRadius: 14, padding: 13, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}><div style={{ width: 40, height: 40, borderRadius: 11, background: `${N.gold}18`, color: N.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>{option.icon}</div><div><div style={{ color: T.text, fontWeight: 800, fontSize: 12 }}>{option.label}</div><div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>{option.description}</div></div></button>)}
+      </div>
+    </div>}
   </div>
 }
 
 '''
-        text = replace_once(text, marker, component + marker, 'document study hub')
+        if marker not in text:
+            raise SystemExit('BottomNav marker not found')
+        text = text.replace(marker, component + marker, 1)
 
-    text = replace_once(text, "      case 'document-study': return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", "      case 'document-study': return <DocumentStudyHubScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", 'document study route')
-    text = replace_once(text, "      case 'document-reader': return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", "      case 'document-reader': return <DocumentReaderScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", 'document reader route')
+    route_pattern = r"case 'document-study':\s*return <DocumentStudyScreen[^\n]*\n"
+    replacement = "case 'document-study': return <DocumentStudyHubScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n      case 'document-reader': return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n"
+    text2, count = re.subn(route_pattern, replacement, text, count=1)
+    if count == 0:
+        if "case 'document-study': return <DocumentStudyHubScreen" not in text:
+            raise SystemExit('document-study route case not found')
+    else:
+        text = text2
+
     APP.write_text(text)
 
 
