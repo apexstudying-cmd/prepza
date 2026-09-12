@@ -3652,39 +3652,43 @@ def report_document(document_id):
 
 
 def _published_ready_material_for_viewer(user_id, document, material_type, parameters):
-    """Return an approved document's READY shared artifact without generation."""
+    '''Return an approved document's READY shared artifact without generation.'''
     if not document or document.user_id == user_id:
         return None
     if not _can_study_document(user_id, document):
         return None
     if not document.document_content_id:
         return None
-
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return None
-
-    from ai_reusable_generation import normalize_parameters
+    from ai_artifact_fingerprint import GENERATION_VERSION, build_generation_fingerprint
+    from ai_reusable_generation import PROMPT_VERSIONS, SCHEMA_VERSIONS, normalize_parameters
     try:
         normalized = normalize_parameters(material_type, parameters)
-    except ValueError:
-        return None
-
-    candidates = (
-        GeneratedMaterial.query
-        .filter_by(
-            document_content_id=content.id,
+        fingerprint = build_generation_fingerprint(
+            content_hash=content.content_hash,
             material_type=material_type,
-            status="ready",
+            parameters=normalized,
+            prompt_version=PROMPT_VERSIONS[material_type],
+            schema_version=SCHEMA_VERSIONS[material_type],
             scope="shared",
+            owner_user_id=None,
         )
-        .order_by(GeneratedMaterial.updated_at.desc())
-        .all()
-    )
-    for material in candidates:
-        if material.owner_user_id is None and (material.generation_parameters or {}) == normalized and material.payload:
-            return content, material
-    return None
+    except (KeyError, ValueError):
+        return None
+    material = GeneratedMaterial.query.filter_by(
+        generation_fingerprint=fingerprint,
+        document_content_id=content.id,
+        material_type=material_type,
+        status="ready",
+        scope="shared",
+        owner_user_id=None,
+        generation_version=GENERATION_VERSION,
+    ).first()
+    if not material or not material.payload:
+        return None
+    return content, material
 
 
 def _published_material_response(user_id, content, material):
@@ -3705,54 +3709,6 @@ def _ai_generation_parameters_from_request():
     if not isinstance(data, dict):
         raise ValueError("AI generation parameters must be an object")
     return data
-
-
-
-def _published_ready_material_for_viewer(user_id, document, material_type, parameters):
-    """Return an approved document's READY shared artifact without generation."""
-    if not document or document.user_id == user_id:
-        return None
-    if not _can_study_document(user_id, document):
-        return None
-    if not document.document_content_id:
-        return None
-
-    content = db.session.get(DocumentContent, document.document_content_id)
-    if not content or content.status != "ready":
-        return None
-
-    from ai_reusable_generation import normalize_parameters
-    try:
-        normalized = normalize_parameters(material_type, parameters)
-    except ValueError:
-        return None
-
-    candidates = (
-        GeneratedMaterial.query
-        .filter_by(
-            document_content_id=content.id,
-            material_type=material_type,
-            status="ready",
-            scope="shared",
-        )
-        .order_by(GeneratedMaterial.updated_at.desc())
-        .all()
-    )
-    for material in candidates:
-        if material.owner_user_id is None and (material.generation_parameters or {}) == normalized and material.payload:
-            return content, material
-    return None
-
-
-def _published_material_response(user_id, content, material):
-    record_document_studied(user_id, content.id)
-    db.session.commit()
-    return {
-        "material_id": material.id,
-        "reused": True,
-        "payload": json.loads(material.payload),
-    }
-
 
 @app.route("/documents/<int:document_id>/summarize", methods=["POST"])
 @limiter.limit(
@@ -4053,7 +4009,7 @@ def complete_flashcards(document_id, material_id):
     ):
         return jsonify({"error": "Flashcard material not found"}), 404
     if document.user_id != user_id and (material.scope != "shared" or material.owner_user_id is not None):
-        return jsonify({"error": "Flashcards material not found"}), 404
+        return jsonify({"error": "Flashcard material not found"}), 404
 
     data = request.get_json(silent=True) or {}
     cards_reviewed = data.get("cards_reviewed")
