@@ -1,22 +1,14 @@
-"""Persistence primitives for fingerprinted AI artifact generation.
-
-This module deliberately contains no provider calls and no student-facing UX.
-It owns the concurrency boundary used by generation features: a unique
-fingerprint means concurrent requests for the same artifact can share one
-in-flight generation instead of issuing duplicate provider calls.
-"""
+"""Persistence primitives for fingerprinted AI artifact generation."""
 
 from __future__ import annotations
 
 import json
+import secrets
 import time
 from dataclasses import dataclass
 from typing import Any
 
 
-# A crashed worker must not leave an artifact permanently stuck in GENERATING.
-# Normal provider calls should finish well inside this window; a later caller
-# may safely reclaim an abandoned lease and become the sole owner.
 GENERATION_LEASE_SECONDS = 15 * 60
 
 
@@ -26,6 +18,11 @@ class GenerationLookup:
     status: str
     payload: dict[str, Any] | None
     owner: bool
+    lease_token: str | None = None
+
+
+def _new_lease_token() -> str:
+    return secrets.token_hex(32)
 
 
 def claim_or_get_generation(
@@ -39,18 +36,7 @@ def claim_or_get_generation(
     scope: str = "shared",
     owner_user_id: int | None = None,
 ) -> GenerationLookup:
-    """Atomically claim a missing/failed/stale fingerprint or observe its state.
-
-    The database UNIQUE constraint is the concurrency primitive. The first
-    request inserts the row and becomes the owner. A simultaneous request
-    observes the existing GENERATING row and attaches to it instead of making
-    another provider request. FAILED rows and abandoned GENERATING rows may
-    be reclaimed by exactly one concurrent request.
-
-    Scope/owner are persisted as well as encoded into the fingerprint. This
-    gives the database a second invariant against accidentally exposing a
-    private artifact through a shared generation path.
-    """
+    """Atomically claim a fingerprint, with a fenced lease for its owner."""
     from sqlalchemy import text
     from app import db
 
@@ -63,18 +49,21 @@ def claim_or_get_generation(
         raise ValueError("shared artifacts must not include owner_user_id")
 
     parameters_json = json.dumps(parameters or {}, sort_keys=True, separators=(",", ":"))
+    lease_token = _new_lease_token()
 
     inserted = db.session.execute(
         text(
             """
             INSERT INTO ai_generation_artifact
                 (fingerprint, content_hash, feature, parameters,
-                 prompt_version, schema_version, scope, owner_user_id, status)
+                 prompt_version, schema_version, scope, owner_user_id,
+                 status, lease_token)
             VALUES
                 (:fingerprint, :content_hash, :feature, CAST(:parameters AS jsonb),
-                 :prompt_version, :schema_version, :scope, :owner_user_id, 'generating')
+                 :prompt_version, :schema_version, :scope, :owner_user_id,
+                 'generating', :lease_token)
             ON CONFLICT (fingerprint) DO NOTHING
-            RETURNING id, status, payload
+            RETURNING id, status, payload, lease_token
             """
         ),
         {
@@ -86,22 +75,18 @@ def claim_or_get_generation(
             "schema_version": schema_version,
             "scope": normalized_scope,
             "owner_user_id": owner_user_id,
+            "lease_token": lease_token,
         },
     ).mappings().first()
 
     if inserted is not None:
         db.session.commit()
-        return GenerationLookup(
-            artifact_id=int(inserted["id"]),
-            status=inserted["status"],
-            payload=inserted["payload"],
-            owner=True,
-        )
+        return GenerationLookup(int(inserted["id"]), inserted["status"], inserted["payload"], True, inserted["lease_token"])
 
     existing = db.session.execute(
         text(
             """
-            SELECT id, status, payload, scope, owner_user_id, updated_at
+            SELECT id, status, payload, scope, owner_user_id, updated_at, lease_token
             FROM ai_generation_artifact
             WHERE fingerprint = :fingerprint
             """
@@ -110,21 +95,14 @@ def claim_or_get_generation(
     ).mappings().first()
 
     if existing is None:
-        # Defensive retry for an unusual concurrent delete/rollback window.
         db.session.rollback()
         return claim_or_get_generation(
-            fingerprint=fingerprint,
-            content_hash=content_hash,
-            feature=feature,
-            parameters=parameters,
-            prompt_version=prompt_version,
-            schema_version=schema_version,
-            scope=normalized_scope,
+            fingerprint=fingerprint, content_hash=content_hash, feature=feature,
+            parameters=parameters, prompt_version=prompt_version,
+            schema_version=schema_version, scope=normalized_scope,
             owner_user_id=owner_user_id,
         )
 
-    # A fingerprint collision should be impossible because scope/owner are
-    # part of the fingerprint. Refuse to attach if persisted identity disagrees.
     if existing["scope"] != normalized_scope or existing["owner_user_id"] != owner_user_id:
         raise RuntimeError("AI artifact fingerprint ownership mismatch")
 
@@ -133,149 +111,103 @@ def claim_or_get_generation(
             text(
                 """
                 UPDATE ai_generation_artifact
-                SET status = 'generating',
-                    error_message = NULL,
-                    payload = NULL,
-                    updated_at = CURRENT_TIMESTAMP,
-                    completed_at = NULL
-                WHERE fingerprint = :fingerprint
-                  AND status = 'failed'
-                RETURNING id, status, payload
+                SET status = 'generating', error_message = NULL, payload = NULL,
+                    updated_at = CURRENT_TIMESTAMP, completed_at = NULL,
+                    lease_token = :lease_token
+                WHERE fingerprint = :fingerprint AND status = 'failed'
+                RETURNING id, status, payload, lease_token
                 """
             ),
-            {"fingerprint": fingerprint},
+            {"fingerprint": fingerprint, "lease_token": lease_token},
         ).mappings().first()
         db.session.commit()
         if reclaimed is not None:
-            return GenerationLookup(
-                artifact_id=int(reclaimed["id"]),
-                status="generating",
-                payload=None,
-                owner=True,
-            )
+            return GenerationLookup(int(reclaimed["id"]), "generating", None, True, reclaimed["lease_token"])
 
     if existing["status"] == "generating":
         reclaimed = db.session.execute(
             text(
                 """
                 UPDATE ai_generation_artifact
-                SET updated_at = CURRENT_TIMESTAMP,
-                    error_message = NULL,
-                    payload = NULL,
-                    completed_at = NULL
+                SET updated_at = CURRENT_TIMESTAMP, error_message = NULL,
+                    payload = NULL, completed_at = NULL, lease_token = :lease_token
                 WHERE fingerprint = :fingerprint
                   AND status = 'generating'
                   AND updated_at < CURRENT_TIMESTAMP - (:lease_seconds * INTERVAL '1 second')
-                RETURNING id, status, payload
+                RETURNING id, status, payload, lease_token
                 """
             ),
-            {"fingerprint": fingerprint, "lease_seconds": GENERATION_LEASE_SECONDS},
+            {"fingerprint": fingerprint, "lease_seconds": GENERATION_LEASE_SECONDS, "lease_token": lease_token},
         ).mappings().first()
         if reclaimed is not None:
             db.session.commit()
-            return GenerationLookup(
-                artifact_id=int(reclaimed["id"]),
-                status="generating",
-                payload=None,
-                owner=True,
-            )
+            return GenerationLookup(int(reclaimed["id"]), "generating", None, True, reclaimed["lease_token"])
         db.session.rollback()
 
-    return GenerationLookup(
-        artifact_id=int(existing["id"]),
-        status=existing["status"],
-        payload=existing["payload"],
-        owner=False,
-    )
+    return GenerationLookup(int(existing["id"]), existing["status"], existing["payload"], False, None)
 
 
-def wait_for_generation(
-    fingerprint: str,
-    *,
-    timeout_seconds: float = 30.0,
-    poll_interval_seconds: float = 0.25,
-) -> GenerationLookup:
-    """Wait for an already-running generation without starting another one."""
+def wait_for_generation(fingerprint: str, *, timeout_seconds: float = 30.0, poll_interval_seconds: float = 0.25) -> GenerationLookup:
     from sqlalchemy import text
     from app import db
 
     deadline = time.monotonic() + timeout_seconds
     while True:
         row = db.session.execute(
-            text(
-                """
-                SELECT id, status, payload
-                FROM ai_generation_artifact
-                WHERE fingerprint = :fingerprint
-                """
-            ),
+            text("SELECT id, status, payload FROM ai_generation_artifact WHERE fingerprint = :fingerprint"),
             {"fingerprint": fingerprint},
         ).mappings().first()
-
         if row is None:
             raise RuntimeError("AI generation artifact disappeared while waiting")
-
         if row["status"] != "generating":
-            return GenerationLookup(
-                artifact_id=int(row["id"]),
-                status=row["status"],
-                payload=row["payload"],
-                owner=False,
-            )
-
+            return GenerationLookup(int(row["id"]), row["status"], row["payload"], False, None)
         if time.monotonic() >= deadline:
-            return GenerationLookup(
-                artifact_id=int(row["id"]),
-                status="generating",
-                payload=None,
-                owner=False,
-            )
-
+            return GenerationLookup(int(row["id"]), "generating", None, False, None)
         db.session.expire_all()
         time.sleep(poll_interval_seconds)
 
 
-def mark_generation_ready(artifact_id: int, payload: dict[str, Any]) -> None:
-    """Publish the completed artifact after the provider call succeeds."""
+def mark_generation_ready(artifact_id: int, payload: dict[str, Any], lease_token: str | None = None) -> None:
     from sqlalchemy import text
     from app import db
-
-    db.session.execute(
+    if not lease_token:
+        raise ValueError("lease_token is required to publish an AI generation")
+    result = db.session.execute(
         text(
             """
             UPDATE ai_generation_artifact
-            SET status = 'ready',
-                payload = CAST(:payload AS jsonb),
-                error_message = NULL,
-                updated_at = CURRENT_TIMESTAMP,
-                completed_at = CURRENT_TIMESTAMP
-            WHERE id = :artifact_id
+            SET status = 'ready', payload = CAST(:payload AS jsonb), error_message = NULL,
+                updated_at = CURRENT_TIMESTAMP, completed_at = CURRENT_TIMESTAMP,
+                lease_token = NULL
+            WHERE id = :artifact_id AND status = 'generating' AND lease_token = :lease_token
             """
         ),
-        {
-            "artifact_id": artifact_id,
-            "payload": json.dumps(payload, ensure_ascii=False),
-        },
+        {"artifact_id": artifact_id, "payload": json.dumps(payload, ensure_ascii=False), "lease_token": lease_token},
     )
+    if result.rowcount != 1:
+        db.session.rollback()
+        raise RuntimeError("AI generation lease was lost before publishing the result")
     db.session.commit()
 
 
-def mark_generation_failed(artifact_id: int, error_message: str) -> None:
-    """Release an in-flight fingerprint after a provider/generation failure."""
+def mark_generation_failed(artifact_id: int, error_message: str, lease_token: str | None = None) -> None:
     from sqlalchemy import text
     from app import db
-
-    db.session.execute(
+    if not lease_token:
+        raise ValueError("lease_token is required to release an AI generation")
+    result = db.session.execute(
         text(
             """
             UPDATE ai_generation_artifact
-            SET status = 'failed',
-                error_message = :error_message,
-                updated_at = CURRENT_TIMESTAMP,
-                completed_at = CURRENT_TIMESTAMP
-            WHERE id = :artifact_id
+            SET status = 'failed', error_message = :error_message,
+                updated_at = CURRENT_TIMESTAMP, completed_at = CURRENT_TIMESTAMP,
+                lease_token = NULL
+            WHERE id = :artifact_id AND status = 'generating' AND lease_token = :lease_token
             """
         ),
-        {"artifact_id": artifact_id, "error_message": error_message[:4000]},
+        {"artifact_id": artifact_id, "error_message": error_message[:4000], "lease_token": lease_token},
     )
+    if result.rowcount != 1:
+        db.session.rollback()
+        raise RuntimeError("AI generation lease was lost before releasing the result")
     db.session.commit()
