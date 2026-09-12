@@ -14,61 +14,64 @@ Prepza Chats should feel like a familiar WhatsApp-style messenger, but with stud
 
 ## Current foundation
 
-The repository already has the 1:1 client-side AES-GCM/ECDH foundation. This branch adds the group-key protocol primitives:
+This branch now has the end-to-end transport foundation for group study chats:
 
 1. A random AES-256-GCM conversation key is generated on a student's device.
-2. That key is wrapped separately for every group member using the existing P-256 identity ECDH keys.
-3. The server stores only encrypted envelopes.
-4. The recipient fetches only their own envelope and unwraps it locally.
-5. Group messages continue using the existing `body + nonce` message contract.
-6. Server-side plaintext/ciphertext search is disabled for E2EE conversations; search must happen after local decryption.
-7. `key_epoch` is present so membership changes can force a new group key.
+2. That key is wrapped separately for each active group member using the existing P-256 identity ECDH keys.
+3. The server stores only encrypted key envelopes.
+4. A member can fetch only their own current-epoch envelope and unwrap it locally.
+5. Group messages keep the existing `body + nonce` API contract while plaintext never needs to reach the server.
+6. Encrypted group search is handled locally after decryption; the server does not search message plaintext.
+7. Group attachments are encrypted client-side before upload and decrypted into local blob URLs on download.
+8. Group membership leaves advance the E2EE epoch; the elected active member can provision the next epoch key.
+9. `key_epoch` is stamped onto group messages so historical local keys can be selected after rotation.
+10. `@Ada` now has an explicit scoped endpoint/client helper. Only user-selected document text, page range and prompt are sent to the AI boundary.
+11. The existing `prepza_control` bootstrap registers the E2EE chat and scoped-Ada routes after the app models are defined, so `app.py` itself does not need another competing route-registration path.
 
 ## Important production boundary
 
 This is **not yet the final production E2EE implementation**. In particular:
 
-- group membership changes must re-key the group before removed members can be prevented from reading future messages;
-- chat document attachments still need client-side file encryption before they can honestly be called E2EE;
-- `@Ada` needs an explicit user-visible AI handoff path because Ada must receive the selected context in plaintext to answer it;
+- membership re-keying needs end-to-end tests for add/remove/leave races and removed-member access;
+- shared-document study-reader UX is not yet wired into the chat UI, even though attachment bytes are encrypted in transit/storage;
+- the current Ada document authorization is owner-only until an explicit encrypted shared-document ACL exists;
 - multi-device identity/key recovery needs to be completed and tested;
-- client-side encrypted search/indexing needs to be designed rather than leaking plaintext into the server.
+- client-side encrypted search currently scans a bounded recent message window rather than maintaining a durable local index;
+- device verification/key fingerprints and replay/tamper test coverage are still outstanding.
 
-Do not market the group chat as fully E2EE until those boundaries are wired and tested.
+Do not market the group chat as "fully E2EE" until these lifecycle and test boundaries are verified.
 
-## Recommended implementation order
+## Current implementation order
 
 ### Phase 1 — text chat
 
-- apply the SQL migration;
-- apply the backend patch;
-- wire group key generation/envelope upload into group creation;
-- fetch/unwrap the recipient envelope on group open;
-- encrypt/decrypt group messages locally;
-- add an `Encrypted` indicator in chat options.
+- SQL migration: done on this branch
+- group envelope model/routes: done
+- client key generation/provisioning: done
+- local message encryption/decryption: done
+- epoch-aware membership handling: foundation done; tests still required
 
 ### Phase 2 — study documents
 
-- encrypt document bytes client-side with a random file key;
-- wrap that file key for each chat member;
-- store ciphertext in private storage;
-- share page/document metadata as encrypted message payloads;
-- open the document reader from the message while preserving chat context.
+- client-side encrypted attachment bytes: done
+- encrypted attachment metadata: done
+- in-chat study document reader and page/selection UX: next
+- explicit encrypted-document sharing/ACL model: next
 
 ### Phase 3 — collaborative Ada
 
-Use an explicit `@Ada` action:
+The safe boundary is:
 
-`student message -> selected encrypted context -> local decrypt -> AI request -> Ada response -> encrypt response back into chat`
+`student selects document/pages -> local plaintext selection -> explicit Ada request -> scoped AI response`
 
-The product must clearly distinguish normal E2EE messages from an AI request, because server-side AI processing necessarily requires plaintext context at the AI boundary.
+The server receives only that explicitly selected context. It does not receive the conversation history, local group key, or arbitrary private document contents.
 
 ### Phase 4 — membership and device lifecycle
 
-- group re-key on add/remove/leave;
+- automated re-key integration tests;
+- add/remove/leave concurrency tests;
 - device verification/key fingerprints;
 - multi-device key provisioning;
 - recovery/backup UX;
-- audit tests for removed-member access;
 - replay/tamper tests;
 - large-group envelope performance tests.
