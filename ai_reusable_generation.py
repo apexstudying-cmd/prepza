@@ -24,8 +24,16 @@ PARAMETER_KEYS = {
 
 
 def normalize_parameters(material_type: str, parameters: dict | None) -> dict:
-    params = parameters or {}
-    if not isinstance(params, dict):
+    """Validate and canonicalize caller-supplied generation parameters.
+
+    ``None`` means no parameters. Other values must actually be mappings;
+    falsy non-mappings such as ``[]`` or ``""`` must not silently become ``{}``.
+    """
+    if parameters is None:
+        params = {}
+    elif isinstance(parameters, dict):
+        params = parameters
+    else:
         raise ValueError("AI generation parameters must be an object")
     if material_type not in PARAMETER_KEYS:
         raise ValueError(f"Unsupported AI material type: {material_type}")
