@@ -1,19 +1,34 @@
 import { fetchGroupKeyEnvelopes, openGroupSession, encryptGroupText, decryptGroupText, uploadGroupKeyEnvelopes, fetchUserPublicKey } from './e2eeChatApi'
+import { encryptGroupBytes, decryptGroupBytes } from './group'
 import { provisionInitialGroupKey, provisionRotatedGroupKey } from './groupProvisioning'
 import { getOrCreateIdentityKeyPair, exportPublicKeyBase64Url } from './keys'
 import { loadGroupConversationKey } from './groupStore'
 
 const GROUP_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
 const GROUP_SEARCH_RE = /^\/chats\/(\d+)\/messages\/search(?:\?.*)?$/
+const CHAT_ATTACHMENT_CREATE_RE = /^\/chats\/(\d+)\/attachments$/
 const GROUP_CREATE_PATH = '/chats'
 const GROUP_ENABLE_SUFFIX = '/enable-e2ee'
 const GROUP_LEAVE_RE = /^\/chats\/(\d+)\/leave$/
 const LOCAL_SEARCH_PAGE_LIMIT = 10
+const ENCRYPTED_ATTACHMENT_MARKER = '__prepza_e2ee_attachment_v1'
+
+type PendingUpload = {
+  conversationId: number
+  attachmentId: number
+  key: CryptoKey
+  keyEpoch: number
+  mimeType: string
+}
+
+type EncryptedAttachmentMeta = PendingUpload & { fileNonce: string }
 
 let installed = false
 const groupReadyPromises = new Map<number, Promise<void>>()
 const groupRotationPromises = new Map<string, Promise<void>>()
 const groupModeCache = new Map<number, boolean>()
+const pendingUploads = new Map<string, PendingUpload>()
+const pendingAttachmentMeta = new Map<number, EncryptedAttachmentMeta>()
 let identityRegistrationPromise: Promise<void> | null = null
 let currentUserId: number | null = null
 let currentCsrfToken = ''
@@ -28,10 +43,27 @@ function pathOnly(input: RequestInfo | URL): string {
   }
 }
 
+function absoluteUrl(input: RequestInfo | URL): string {
+  const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  try { return new URL(raw, window.location.origin).href } catch { return raw }
+}
+
 function csrfFrom(headers: HeadersInit | undefined): string {
   if (!headers) return ''
   const h = new Headers(headers)
   return h.get('X-CSRF-Token') || ''
+}
+
+function mimeTypeFor(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  const map: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+    pdf: 'application/pdf', doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  }
+  return map[ext] || 'application/octet-stream'
 }
 
 async function jsonClone(response: Response): Promise<any> {
@@ -155,11 +187,7 @@ async function provisionCurrentEpochIfElected(conversationId: number): Promise<v
   })()
 
   groupRotationPromises.set(rotationKey, promise)
-  try {
-    await promise
-  } finally {
-    groupRotationPromises.delete(rotationKey)
-  }
+  try { await promise } finally { groupRotationPromises.delete(rotationKey) }
 }
 
 async function openCurrentGroupSession(conversationId: number) {
@@ -186,9 +214,7 @@ async function decryptMessageWithEpoch(conversationId: number, message: any, cur
   if (!message || !message.body || !message.nonce || message.is_deleted) return message
   const epoch = Number.isInteger(Number(message.key_epoch)) ? Number(message.key_epoch) : currentState.keyEpoch
   try {
-    const key = epoch === currentState.keyEpoch
-      ? currentState.key
-      : await loadGroupConversationKey(conversationId, epoch)
+    const key = epoch === currentState.keyEpoch ? currentState.key : await loadGroupConversationKey(conversationId, epoch)
     if (!key) throw new Error('Historical group key is unavailable on this device')
     return { ...message, body: await decryptGroupText(key, message.body, message.nonce) }
   } catch {
@@ -196,21 +222,46 @@ async function decryptMessageWithEpoch(conversationId: number, message: any, cur
   }
 }
 
+async function hydrateEncryptedAttachment(conversationId: number, message: any, currentState: { key: CryptoKey; keyEpoch: number }): Promise<any> {
+  if (!message?.attachment || !message?.body || message.is_deleted) return message
+  let metadata: any
+  try { metadata = JSON.parse(message.body) } catch { return message }
+  if (metadata?.marker !== ENCRYPTED_ATTACHMENT_MARKER) return message
+
+  const attachmentEpoch = Number(metadata.key_epoch)
+  const fileKey = attachmentEpoch === currentState.keyEpoch
+    ? currentState.key
+    : await loadGroupConversationKey(conversationId, attachmentEpoch)
+  if (!fileKey || !metadata.file_nonce || !message.attachment.view_url) {
+    return { ...message, body: null, attachment: { ...message.attachment, view_url: null } }
+  }
+
+  try {
+    const encryptedResponse = await window.fetch(message.attachment.view_url, { credentials: 'include' })
+    if (!encryptedResponse.ok) throw new Error('Encrypted attachment download failed')
+    const encryptedBytes = await encryptedResponse.arrayBuffer()
+    const plaintext = await decryptGroupBytes(fileKey, encryptedBytes, metadata.file_nonce)
+    const blobUrl = URL.createObjectURL(new Blob([plaintext], { type: metadata.mime_type || 'application/octet-stream' }))
+    return { ...message, body: null, attachment: { ...message.attachment, view_url: blobUrl } }
+  } catch {
+    return { ...message, body: null, attachment: { ...message.attachment, view_url: null } }
+  }
+}
+
 async function transformGroupMessages(response: Response, conversationId: number): Promise<Response> {
   const body = await response.clone().json()
   if (!body || !Array.isArray(body.messages)) return response
   let state
-  try {
-    state = await openCurrentGroupSession(conversationId)
-  } catch {
+  try { state = await openCurrentGroupSession(conversationId) } catch {
     const headers = new Headers(response.headers)
     headers.set('Content-Type', 'application/json')
     return new Response(JSON.stringify({ ...body, messages: body.messages.map((m: any) => ({ ...m, body: m.body ? '[Encrypted message — key unavailable on this device]' : m.body })) }), { status: response.status, statusText: response.statusText, headers })
   }
-  const messages = await Promise.all(body.messages.map((message: any) => decryptMessageWithEpoch(conversationId, message, state)))
+  const decrypted = await Promise.all(body.messages.map((message: any) => decryptMessageWithEpoch(conversationId, message, state)))
+  const hydrated = await Promise.all(decrypted.map((message: any) => hydrateEncryptedAttachment(conversationId, message, state)))
   const headers = new Headers(response.headers)
   headers.set('Content-Type', 'application/json')
-  return new Response(JSON.stringify({ ...body, messages }), { status: response.status, statusText: response.statusText, headers })
+  return new Response(JSON.stringify({ ...body, messages: hydrated }), { status: response.status, statusText: response.statusText, headers })
 }
 
 async function transformGroupMessageResponse(response: Response, conversationId: number): Promise<Response> {
@@ -218,10 +269,11 @@ async function transformGroupMessageResponse(response: Response, conversationId:
   if (!body || !body.body || !body.nonce || body.is_deleted) return response
   try {
     const state = await openCurrentGroupSession(conversationId)
-    const message = await decryptMessageWithEpoch(conversationId, body, state)
+    const decrypted = await decryptMessageWithEpoch(conversationId, body, state)
+    const hydrated = await hydrateEncryptedAttachment(conversationId, decrypted, state)
     const headers = new Headers(response.headers)
     headers.set('Content-Type', 'application/json')
-    return new Response(JSON.stringify(message), { status: response.status, statusText: response.statusText, headers })
+    return new Response(JSON.stringify(hydrated), { status: response.status, statusText: response.statusText, headers })
   } catch {
     return response
   }
@@ -230,13 +282,10 @@ async function transformGroupMessageResponse(response: Response, conversationId:
 async function localSearchGroupMessages(conversationId: number, query: string): Promise<Response> {
   const needle = query.trim().toLowerCase()
   if (!needle) return new Response(JSON.stringify({ messages: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-
   const collected: any[] = []
   let beforeId: number | null = null
   for (let page = 0; page < LOCAL_SEARCH_PAGE_LIMIT; page += 1) {
-    const url = beforeId == null
-      ? `/chats/${conversationId}/messages`
-      : `/chats/${conversationId}/messages?before_id=${beforeId}`
+    const url = beforeId == null ? `/chats/${conversationId}/messages` : `/chats/${conversationId}/messages?before_id=${beforeId}`
     const response = await window.fetch(url, { credentials: 'include' })
     if (!response.ok) return response
     const body = await response.json()
@@ -247,7 +296,6 @@ async function localSearchGroupMessages(conversationId: number, query: string): 
     if (!Number.isInteger(firstId) || firstId <= 0) break
     beforeId = firstId
   }
-
   const messages = collected.filter(message => typeof message?.body === 'string' && message.body.toLowerCase().includes(needle))
   return new Response(JSON.stringify({ messages: messages.slice(0, 50) }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
@@ -270,6 +318,53 @@ export function installE2EEFetchBridge(): void {
         if (me?.id && me?.csrf_token) void ensureIdentityKeyRegistered(me.csrf_token).catch(() => {})
       }
       return response
+    }
+
+    const attachmentCreateMatch = path.match(CHAT_ATTACHMENT_CREATE_RE)
+    if (attachmentCreateMatch && method === 'POST' && init?.body) {
+      const conversationId = Number(attachmentCreateMatch[1])
+      const payload = (() => { try { return JSON.parse(String(init.body)) } catch { return null } })()
+      const response = await nativeFetch(input, init)
+      if (response.ok && payload?.original_filename) {
+        const enabled = await groupIsE2EE(conversationId).catch(() => false)
+        if (enabled) {
+          try {
+            const initBody = await response.clone().json()
+            const attachmentId = Number(initBody?.attachment_id)
+            const uploadUrl = String(initBody?.upload_url || '')
+            if (Number.isInteger(attachmentId) && attachmentId > 0 && uploadUrl) {
+              const state = await openCurrentGroupSession(conversationId)
+              pendingUploads.set(uploadUrl, {
+                conversationId,
+                attachmentId,
+                key: state.key,
+                keyEpoch: state.keyEpoch,
+                mimeType: mimeTypeFor(String(payload.original_filename)),
+              })
+            }
+          } catch {
+            // Leave the response untouched; the upload path remains safe to retry.
+          }
+        }
+      }
+      return response
+    }
+
+    const uploadUrl = absoluteUrl(input)
+    const pendingUpload = pendingUploads.get(uploadUrl)
+    if (pendingUpload && method === 'PUT' && init?.body) {
+      try {
+        const plaintext = await new Response(init.body).arrayBuffer()
+        const encrypted = await encryptGroupBytes(pendingUpload.key, plaintext)
+        pendingAttachmentMeta.set(pendingUpload.attachmentId, {
+          ...pendingUpload,
+          fileNonce: encrypted.nonce,
+        })
+        pendingUploads.delete(uploadUrl)
+        return nativeFetch(input, { ...init, body: encrypted.ciphertext })
+      } catch {
+        return nativeFetch(input, init)
+      }
     }
 
     if (path === GROUP_CREATE_PATH && method === 'POST' && init?.body) {
@@ -309,9 +404,26 @@ export function installE2EEFetchBridge(): void {
         if (typeof payload?.body === 'string' && payload.body.trim()) {
           const state = await openCurrentGroupSession(conversationId)
           const encrypted = await encryptGroupText(state.key, payload.body)
-          payload.body = encrypted.ciphertext
+          payload.body = encrypted.body
           payload.nonce = encrypted.nonce
           init = { ...init, body: JSON.stringify(payload) }
+        } else if (payload?.attachment_id != null) {
+          const attachmentId = Number(payload.attachment_id)
+          const meta = pendingAttachmentMeta.get(attachmentId)
+          if (meta) {
+            const state = await openCurrentGroupSession(conversationId)
+            const metadata = JSON.stringify({
+              marker: ENCRYPTED_ATTACHMENT_MARKER,
+              key_epoch: meta.keyEpoch,
+              file_nonce: meta.fileNonce,
+              mime_type: meta.mimeType,
+            })
+            const encrypted = await encryptGroupText(state.key, metadata)
+            payload.body = encrypted.body
+            payload.nonce = encrypted.nonce
+            pendingAttachmentMeta.delete(attachmentId)
+            init = { ...init, body: JSON.stringify(payload) }
+          }
         }
         const response = await nativeFetch(input, init)
         return transformGroupMessageResponse(response, conversationId)
