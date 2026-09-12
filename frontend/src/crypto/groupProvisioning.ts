@@ -57,8 +57,9 @@ export async function provisionInitialGroupKey(
       conversationId,
       creatorUserId,
       member.userId,
+      keyEpoch,
     )
-    envelopes.push({ ...envelope, key_epoch: keyEpoch } as GroupKeyEnvelope & { key_epoch: number })
+    envelopes.push(envelope)
   }
 
   if (envelopes.length > 0) {
