@@ -24,9 +24,15 @@ def patch_app():
     new = '''    if "prepza_control_enabled" in data:\n        value = data["prepza_control_enabled"]\n        if not isinstance(value, bool):\n            return jsonify({"error": "prepza_control_enabled must be true or false"}), 400\n        setting = SystemSetting.query.filter_by(key="prepza_control_enabled").first()\n        if not setting:\n            setting = SystemSetting(key="prepza_control_enabled", value="false")\n            db.session.add(setting)\n        setting.value = "true" if value else "false"\n        log_admin_action(\n            session.get("user_id"),\n            "control_api_enabled" if value else "control_api_disabled",\n            target_type="control_api",\n            details={"enabled": value},\n        )\n\n    for price_key in ("price_notes", "price_past_paper", "price_qna", "price_plan_semester", "price_plan_annual"):\n'''
     text = replace_once(text, old, new, "admin settings update insertion")
 
-    old = '''    return jsonify({\n        "maintenance_mode": bool(mode_setting and mode_setting.value == "true"),\n        "maintenance_message": message_setting.value if message_setting else "",\n    })'''
-    new = '''    control_setting = SystemSetting.query.filter_by(key="prepza_control_enabled").first()\n    return jsonify({\n        "maintenance_mode": bool(mode_setting and mode_setting.value == "true"),\n        "maintenance_message": message_setting.value if message_setting else "",\n        "prepza_control_enabled": bool(control_setting and control_setting.value == "true"),\n    })'''
+    old = '''"maintenance_mode": bool(mode_setting and mode_setting.value == "true"),\n        "maintenance_message": message_setting.value if message_setting else "",'''
+    new = '''"maintenance_mode": bool(mode_setting and mode_setting.value == "true"),\n        "maintenance_message": message_setting.value if message_setting else "",\n        "prepza_control_enabled": bool(control_setting and control_setting.value == "true"),'''
     text = replace_once(text, old, new, "admin settings update response")
+    text = replace_once(
+        text,
+        '''    mode_setting = SystemSetting.query.filter_by(key="maintenance_mode").first()\n    message_setting = SystemSetting.query.filter_by(key="maintenance_message").first()''',
+        '''    mode_setting = SystemSetting.query.filter_by(key="maintenance_mode").first()\n    message_setting = SystemSetting.query.filter_by(key="maintenance_message").first()\n    control_setting = SystemSetting.query.filter_by(key="prepza_control_enabled").first()''',
+        "control settings lookup",
+    )
 
     old = '''\n\nif __name__ == "__main__":\n    app.run(host="0.0.0.0", port=5000)\n'''
     new = '''\n\nfrom prepza_control import register_control_routes\n\nregister_control_routes(\n    app,\n    db,\n    SystemSetting,\n    User,\n    Document,\n    DocumentContent,\n    GeneratedMaterial,\n    log_admin_action,\n    limiter,\n)\n\nif __name__ == "__main__":\n    app.run(host="0.0.0.0", port=5000)\n'''
