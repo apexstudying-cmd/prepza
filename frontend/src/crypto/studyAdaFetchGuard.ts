@@ -6,20 +6,12 @@ const MAX_PAGE_SPAN = 50
 let installed = false
 
 function failedResponse(message: string, status = 400): Response {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return new Response(JSON.stringify({ error: message }), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
 function pathOnly(input: RequestInfo | URL): string {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.pathname + input.search : input.url
-  try {
-    const url = new URL(raw, window.location.origin)
-    return url.pathname
-  } catch {
-    return raw.split('?')[0]
-  }
+  try { return new URL(raw, window.location.origin).pathname } catch { return raw.split('?')[0] }
 }
 
 export function installStudyAdaFetchGuard(): void {
@@ -31,25 +23,28 @@ export function installStudyAdaFetchGuard(): void {
     const path = pathOnly(input)
     const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase()
     const match = path.match(STUDY_ADA_RE)
-
     if (!match || method !== 'POST') return nativeFetch(input, init)
     if (!init?.body) return failedResponse('Ada study context is required')
 
     let payload: any
     try { payload = JSON.parse(String(init.body)) } catch { return failedResponse('Ada study context must be valid JSON') }
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return failedResponse('Ada study context must be an object')
-    if (payload.context_scope !== 'selected_document_pages' || payload.explicit_user_context !== true) {
-      return failedResponse('Ada requires explicit selected-document context')
+
+    const scope = payload.context_scope
+    if (!['selected_document_pages', 'selected_chat_document'].includes(scope) || payload.explicit_user_context !== true) {
+      return failedResponse('Ada requires explicit selected study context')
     }
 
     const conversationId = Number(match[1])
-    const documentId = Number(payload.document_id)
+    const documentId = payload.document_id == null ? null : Number(payload.document_id)
+    const attachmentId = payload.attachment_id == null ? null : Number(payload.attachment_id)
     const keyEpoch = Number(payload.key_epoch)
     const pageStart = Number(payload.page_start)
     const pageEnd = Number(payload.page_end)
 
     if (!Number.isInteger(conversationId) || conversationId <= 0) return failedResponse('Invalid conversation')
-    if (!Number.isInteger(documentId) || documentId <= 0) return failedResponse('Invalid study document')
+    if (scope === 'selected_document_pages' && (!Number.isInteger(documentId) || documentId! <= 0)) return failedResponse('Invalid study document')
+    if (scope === 'selected_chat_document' && (!Number.isInteger(attachmentId) || attachmentId! <= 0)) return failedResponse('Invalid shared chat document')
     if (!Number.isInteger(keyEpoch) || keyEpoch < 0) return failedResponse('Invalid E2EE key epoch')
     if (!Number.isInteger(pageStart) || pageStart < 1 || !Number.isInteger(pageEnd) || pageEnd < pageStart) return failedResponse('Invalid document page range')
     if (pageEnd - pageStart + 1 > MAX_PAGE_SPAN) return failedResponse('Selected page range is too large')
@@ -57,9 +52,10 @@ export function installStudyAdaFetchGuard(): void {
     if (typeof payload.prompt !== 'string' || !payload.prompt.trim() || payload.prompt.length > MAX_PROMPT) return failedResponse('Ada prompt is invalid')
 
     const safePayload = {
-      context_scope: 'selected_document_pages',
+      context_scope: scope,
       explicit_user_context: true,
-      document_id: documentId,
+      ...(documentId ? { document_id: documentId } : {}),
+      ...(attachmentId ? { attachment_id: attachmentId } : {}),
       page_start: pageStart,
       page_end: pageEnd,
       key_epoch: keyEpoch,
