@@ -122,7 +122,33 @@ def save_library_item(publication_id):
     saved = SavedLibraryMaterial(user_id=user_id, library_publication_id=publication_id)
     db.session.add(saved)
     publication.save_count = (publication.save_count or 0) + 1
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # A concurrent request may have won the SavedLibraryMaterial unique
+        # constraint after both requests observed no existing save. Roll back
+        # the losing transaction, then return the already-created StudyHub
+        # document instead of surfacing a 500 or creating a second save count.
+        db.session.rollback()
+        saved_existing = SavedLibraryMaterial.query.filter_by(
+            user_id=user_id, library_publication_id=publication_id
+        ).first()
+        if not saved_existing:
+            raise
+        winner_document = Document.query.filter_by(
+            user_id=user_id,
+            document_content_id=source.document_content_id,
+            is_removed=False,
+        ).order_by(Document.id.asc()).first()
+        if not winner_document:
+            return jsonify({"error": "Library save could not be completed"}), 409
+        publication = db.session.get(LibraryPublication, publication_id)
+        return jsonify({
+            "message": "Already saved",
+            "document_id": winner_document.id,
+            "in_studyhub": True,
+            "save_count": publication.save_count if publication else None,
+        }), 200
 
     return jsonify({
         "message": "Saved",
