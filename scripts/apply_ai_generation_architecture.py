@@ -25,8 +25,6 @@ def _top_level_function(source: str, name: str):
 
 def _install_wrapper(source: str, material_type: str, public_name: str) -> str:
     legacy_name = f"_legacy_{public_name}"
-    # The legacy implementation and reusable wrapper are both top-level
-    # functions. This is the reliable idempotency check.
     if _top_level_function(source, legacy_name) is not None and _top_level_function(source, public_name) is not None:
         return source
 
@@ -133,8 +131,6 @@ def patch_user_material_lookup() -> None:
             raise RuntimeError("AiJob model anchor not found")
         source = source.replace(anchor, helper + anchor, 1)
     else:
-        # Never expose pre-architecture GeneratedMaterial rows as canonical
-        # reusable artifacts. The migration marks legacy rows as v1.
         old_query = '''    query = GeneratedMaterial.query.filter_by(
         document_content_id=document_content_id, material_type=material_type, status="ready"
     )'''
@@ -153,11 +149,41 @@ def patch_user_material_lookup() -> None:
     path.write_text(source, encoding="utf-8")
 
 
+def patch_podcast_list_privacy() -> None:
+    """Prevent /podcasts from joining a user's document to another user's private artifact."""
+    path = ROOT / "app.py"
+    source = path.read_text(encoding="utf-8")
+    old = '''        .filter(
+            Document.user_id == user_id,
+            Document.is_removed.is_(False),
+            GeneratedMaterial.material_type == "podcast",
+            GeneratedMaterial.status == "ready",
+        )'''
+    new = '''        .filter(
+            Document.user_id == user_id,
+            Document.is_removed.is_(False),
+            GeneratedMaterial.material_type == "podcast",
+            GeneratedMaterial.status == "ready",
+            GeneratedMaterial.generation_version == "v2",
+            db.or_(
+                GeneratedMaterial.scope == "shared",
+                db.and_(
+                    GeneratedMaterial.scope == "private",
+                    GeneratedMaterial.owner_user_id == user_id,
+                ),
+            ),
+        )'''
+    if old in source:
+        source = source.replace(old, new, 1)
+    path.write_text(source, encoding="utf-8")
+
+
 def main() -> None:
     patch_generated_material_model()
     patch_user_material_lookup()
     patch_ai_routes()
     patch_legacy_generators()
+    patch_podcast_list_privacy()
     print("AI generation architecture patch applied")
 
 
