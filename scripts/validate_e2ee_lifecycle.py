@@ -1,4 +1,4 @@
-"""Static lifecycle checks for Prepza group-chat E2EE.
+"""Static lifecycle checks for Prepza group/direct-chat E2EE.
 
 These checks complement validate_e2ee_security.py. They do not prove the
 cryptography or replace multi-browser integration tests; they protect the
@@ -81,9 +81,13 @@ def main() -> None:
     require(
         "e2ee_ada_routes.py",
         "key_epoch != current_key_epoch",
-        'data.get("context_scope") != "selected_document_pages"',
+        'context_scope not in {"selected_document_pages", "selected_chat_document"}',
         'data.get("explicit_user_context") is not True',
         "document.user_id != user_id",
+        "attachment_id",
+        "message_attachment",
+        "conversation_id",
+        "status = 'ready'",
     )
 
     # The student-facing chat must use the normal message/attachment routes;
