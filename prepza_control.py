@@ -202,3 +202,20 @@ def register_control_routes(
                 "error_message": material.error_message,
             } for material in materials],
         })
+
+    # The control API is imported by app.py only after all application
+    # models/routes have been defined. Reuse that safe bootstrap point to
+    # register the E2EE chat routes without modifying the large app.py file.
+    from e2ee_chat_models import create_e2ee_models
+    from e2ee_chat_routes import register_e2ee_chat_routes
+    from app import Conversation, ConversationParticipant
+
+    ConversationKeyEnvelope = create_e2ee_models(db)
+    register_e2ee_chat_routes(
+        app,
+        db,
+        Conversation,
+        ConversationParticipant,
+        User,
+        ConversationKeyEnvelope,
+    )
