@@ -15,7 +15,41 @@ on:
     branches:
       - 'fix/public-document-watermark'
 
+permissions:
+  contents: write
+
 jobs:
+  apply-runtime-patches:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'fix/public-document-watermark'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/public-document-watermark
+          fetch-depth: 0
+
+      - name: Apply runtime patches
+        run: python scripts/apply_studyhub_library_flow_all.py
+
+      - name: Verify runtime patches
+        run: |
+          python scripts/verify_public_document_watermark.py
+          python scripts/verify_studyhub_library_flow.py
+          python scripts/verify_upload_share_choice_ux.py
+          python -m py_compile app.py scripts/*.py
+
+      - name: Commit runtime changes
+        run: |
+          if git diff --quiet -- app.py frontend/src/App.tsx; then
+            echo "Runtime files already contain the requested changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py frontend/src/App.tsx
+          git commit -m "feat: apply StudyHub Library document flow"
+          git push origin HEAD:fix/public-document-watermark
+
   validate-patches:
     runs-on: ubuntu-latest
     steps:
