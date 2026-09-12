@@ -4000,6 +4000,38 @@ def podcast_script_document(document_id):
             "podcast": json.loads(material.payload),
         }), 200
 
+    if document.user_id != user_id:
+        material = GeneratedMaterial.query.filter_by(
+            document_content_id=document.document_content_id,
+            material_type="podcast",
+            status="ready",
+        ).first()
+        if not material or not material.payload:
+            return jsonify({"error": "Podcast has not been published yet"}), 404
+        record_document_studied(user_id, content.id)
+        db.session.commit()
+        return jsonify({
+            "material_id": material.id,
+            "reused": True,
+            "podcast": json.loads(material.payload),
+        }), 200
+
+    if document.user_id != user_id:
+        material = GeneratedMaterial.query.filter_by(
+            document_content_id=document.document_content_id,
+            material_type="podcast",
+            status="ready",
+        ).first()
+        if not material or not material.payload:
+            return jsonify({"error": "Podcast has not been published yet"}), 404
+        record_document_studied(user_id, content.id)
+        db.session.commit()
+        return jsonify({
+            "material_id": material.id,
+            "reused": True,
+            "podcast": json.loads(material.payload),
+        }), 200
+
     try:
         result = ai_service.generate_document_podcast_script(
             document_content_id=content.id,
@@ -4072,6 +4104,12 @@ def trigger_podcast_audio(document_id):
         return jsonify({"audio_status": "ready", "material_id": material.id}), 200
     if audio_status == "processing":
         return jsonify({"audio_status": "processing", "material_id": material.id}), 202
+
+    if document.user_id != user_id:
+        return jsonify({"error": "Podcast audio is not ready yet"}), 409
+
+    if document.user_id != user_id:
+        return jsonify({"error": "Podcast audio is not ready yet"}), 409
 
     if document.user_id != user_id:
         return jsonify({"error": "Podcast audio is not ready yet"}), 409
