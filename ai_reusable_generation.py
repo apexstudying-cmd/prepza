@@ -215,6 +215,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
         raise ai_service.AIProviderError("This material is still being prepared - please try again shortly.")
 
     job = None
+    artifact_ready = False
     try:
         if ai_service.is_spend_cap_reached():
             raise ai_service.AIBudgetExceededError(
@@ -255,6 +256,14 @@ def generate_document_material(*, material_type, document_content_id, triggering
         ai_response = ai_service.route_and_generate(ai_request)
         parsed = parser(ai_response.text)
         payload = _podcast_payload(parsed) if material_type == "podcast" else parsed
+
+        # Publish the canonical artifact immediately after successful provider
+        # generation and parsing. Usage/job bookkeeping must never turn a valid
+        # paid provider result back into FAILED, which would permit a duplicate
+        # provider call on the next request.
+        mark_generation_ready(lookup.artifact_id, payload)
+        artifact_ready = True
+
         ai_service.log_usage(
             triggering_user_id,
             request_type=material_type,
@@ -262,15 +271,15 @@ def generate_document_material(*, material_type, document_content_id, triggering
             provider=ai_response.provider,
             usage=ai_response.usage,
         )
-        mark_generation_ready(lookup.artifact_id, payload)
         job.status, job.completed_at = "completed", datetime.utcnow()
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        try:
-            mark_generation_failed(lookup.artifact_id, str(exc))
-        except Exception:
-            db.session.rollback()
+        if not artifact_ready:
+            try:
+                mark_generation_failed(lookup.artifact_id, str(exc))
+            except Exception:
+                db.session.rollback()
         if job is not None:
             try:
                 job.status, job.error_message, job.completed_at = "failed", str(exc)[:500], datetime.utcnow()
