@@ -84,6 +84,28 @@ jobs:
           grep -F "p.status === 'approved' && p.document_id" frontend/src/App.tsx
           grep -F "'document-reader'" frontend/src/App.tsx
 
+      - name: Verify reading progress migration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('migrations/add_document_reading_progress.sql').read_text()
+          required = [
+              'CREATE TABLE IF NOT EXISTS document_reading_progress',
+              'REFERENCES "user"(id)',
+              'REFERENCES document(id)',
+              'CONSTRAINT uq_document_reading_progress_user_document UNIQUE (user_id, document_id)',
+              'CONSTRAINT ck_document_reading_progress_page_nonnegative CHECK (page_num >= 0)',
+              'CREATE INDEX IF NOT EXISTS ix_document_reading_progress_user_id',
+              'CREATE INDEX IF NOT EXISTS ix_document_reading_progress_document_id',
+          ]
+          for anchor in required:
+              assert anchor in s, f'missing migration anchor: {anchor}'
+          assert 'DROP TABLE' not in s.upper(), 'reading progress migration must not drop data'
+          assert s.count('CREATE TABLE IF NOT EXISTS document_reading_progress') == 1
+          assert s.count('CREATE INDEX IF NOT EXISTS') == 2
+          print('reading progress migration structure verified')
+          PY
+
       - name: Compile backend
         run: python3 -m py_compile app.py document_pipeline.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py
 
@@ -95,6 +117,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/src/App.tsx app.py scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_document_reader_v2.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py .github/workflows/student-navigation-ux.yml
+          git add frontend/src/App.tsx app.py migrations/add_document_reading_progress.sql scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_document_reader_v2.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py .github/workflows/student-navigation-ux.yml
           git commit -m 'feat: complete student study navigation'
           git push origin HEAD:ux/student-navigation-study-flow
