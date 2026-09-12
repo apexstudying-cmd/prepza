@@ -4868,6 +4868,12 @@ def save_library_item(publication_id):
         user_id=user_id, library_publication_id=publication_id
     ).first()
     if existing:
+        # A legacy SavedLibraryMaterial row may predate the StudyHub-document
+        # guarantee. In that case _ensure_studyhub_document_for_publication
+        # returns a new, transient Document that must be persisted here.
+        if studyhub_document.id is None:
+            db.session.add(studyhub_document)
+            db.session.flush()
         db.session.commit()
         return jsonify({
             "message": "Already saved",
