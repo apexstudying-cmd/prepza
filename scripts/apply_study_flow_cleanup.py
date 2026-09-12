@@ -3,40 +3,69 @@ from pathlib import Path
 APP = Path("app.py")
 
 
-def remove_duplicate_unscoped_podcast_blocks(text):
-    block = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()\n        if not material or not material.payload:\n            return jsonify({"error": "Podcast has not been published yet"}), 404\n        record_document_studied(user_id, content.id)\n        db.session.commit()\n        return jsonify({\n            "material_id": material.id,\n            "reused": True,\n            "podcast": json.loads(material.payload),\n        }), 200\n\n'''
-    if block in text:
-        text = text.replace(block, "")
-    return text
+def replace_between(text, start, end, replacement, label):
+    first = text.find(start)
+    if first < 0:
+        raise SystemExit(f"{label}: start anchor not found")
+    stop = text.find(end, first + len(start))
+    if stop < 0:
+        raise SystemExit(f"{label}: end anchor not found")
+    return text[:first] + replacement + text[stop:]
 
 
-def collapse_after_first(text, block, label):
-    count = text.count(block)
-    if count == 0:
-        raise SystemExit(f"{label}: expected block not found")
-    if count == 1:
-        return text
-    first = text.find(block)
-    head = text[: first + len(block)]
-    tail = text[first + len(block):]
-    return head + tail.replace(block, "")
+def normalize_podcast_script_route(s):
+    start = '    if document.user_id != user_id:\n'
+    end = '    try:\n        result = ai_service.generate_document_podcast_script(\n'
+    canonical = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()\n        if not material or not material.payload:\n            return jsonify({"error": "Podcast has not been published yet"}), 404\n        record_document_studied(user_id, content.id)\n        db.session.commit()\n        return jsonify({\n            "material_id": material.id,\n            "reused": True,\n            "podcast": json.loads(material.payload),\n        }), 200\n\n'''
+    return replace_between(s, start, end, canonical + end, "podcast script published branch")
+
+
+def normalize_podcast_audio_post(s):
+    start = '    document = db.session.get(Document, document_id)\n'
+    marker = '@app.route("/documents/<int:document_id>/podcast-audio", methods=["GET"])\n'
+    first = s.find(start, s.find('def trigger_podcast_audio(document_id):'))
+    stop = s.find(marker, first)
+    if first < 0 or stop < 0:
+        raise SystemExit("podcast audio POST boundaries not found")
+    segment = s[first:stop]
+    # Keep the existing endpoint body but collapse repeated viewer guards.
+    guard = '''    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n'''
+    if guard not in segment:
+        raise SystemExit("podcast audio synthesis guard not found")
+    first_guard = segment.find(guard)
+    segment = segment[:first_guard + len(guard)] + segment[first_guard + len(guard):].replace(guard, "")
+    return s[:first] + segment + s[stop:]
+
+
+def normalize_podcast_audio_get(s):
+    marker = '@app.route("/documents/<int:document_id>/podcast-audio", methods=["GET"])\n'
+    start = s.find(marker)
+    if start < 0:
+        raise SystemExit("podcast audio GET route not found")
+    body_start = s.find('    document = db.session.get(Document, document_id)\n', start)
+    if body_start < 0:
+        raise SystemExit("podcast audio GET document lookup not found")
+    # Find the first stable lookup marker after the document guard and
+    # normalize only the access decision, leaving response semantics intact.
+    lookup = '    if document.user_id == user_id:\n'
+    lookup_pos = s.find(lookup, body_start)
+    if lookup_pos < 0:
+        raise SystemExit("podcast audio GET material lookup not found")
+    old_guard = s[body_start:lookup_pos]
+    old_owner = '''    document = db.session.get(Document, document_id)\n    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n\n'''
+    new_guard = '''    document = db.session.get(Document, document_id)\n    if not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n\n'''
+    if old_owner in old_guard:
+        return s[:body_start] + new_guard + s[lookup_pos:]
+    if new_guard in old_guard:
+        return s
+    raise SystemExit("podcast audio GET access guard shape not recognized")
 
 
 def main():
     s = APP.read_text()
-
-    # Older patch runs could leave an unscoped published-podcast branch
-    # alongside the current shared-artifact branch. Remove the legacy
-    # branch as a whole; never delete only its return statement, which can
-    # leave a syntactically empty `if` block.
-    s = remove_duplicate_unscoped_podcast_blocks(s)
-
-    podcast_shared = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()'''
-    s = collapse_after_first(s, podcast_shared, "published podcast shared lookup")
-
-    audio_guard = '''    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n'''
-    s = collapse_after_first(s, audio_guard, "podcast audio owner-only synthesis guard")
-
+    s = normalize_podcast_script_route(s)
+    s = normalize_podcast_audio_post(s)
+    s = normalize_podcast_audio_get(s)
     APP.write_text(s)
     print("study-flow access blocks normalized")
 
