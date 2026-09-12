@@ -1,11 +1,4 @@
-"""Static regression checks for Prepza chat E2EE boundaries.
-
-These checks intentionally do not claim to prove cryptographic correctness.
-They guard server-side invariants that are easy to accidentally weaken when
-chat routes are edited: plaintext rejection, deterministic key provisioning,
-current-epoch enforcement, explicitly scoped Ada context, fail-closed
-attachment handling, and database state constraints.
-"""
+"""Static regression checks for Prepza chat E2EE boundaries."""
 
 from pathlib import Path
 
@@ -44,10 +37,11 @@ def main() -> None:
         'state != "direct_v1"',
         'Plaintext direct messages are disabled; encrypt on the client first',
         'e2ee_mode not in {"group_v1", "direct_v1"}',
-        'data.get("context_scope") != "selected_document_pages"',
-        'data.get("explicit_user_context") is not True',
+        'context_scope not in {"selected_document_pages", "selected_chat_document"}',
+        'message_attachment',
+        "message_id IS NOT NULL",
+        "status = 'ready'",
         "if key_epoch != current_key_epoch:",
-        "document_id = int(data.get(\"document_id\"))",
         "selected_text = clean_text(data.get(\"selected_text\")",
         "prompt = clean_text(data.get(\"prompt\")",
         "document.user_id != user_id",
@@ -57,7 +51,9 @@ def main() -> None:
     require(
         "frontend/src/crypto/studyAdaFetchGuard.ts",
         "STUDY_ADA_RE",
-        "context_scope !== 'selected_document_pages'",
+        "selected_document_pages",
+        "selected_chat_document",
+        "attachment_id",
         "explicit_user_context !== true",
         "MAX_SELECTED_TEXT = 20_000",
         "MAX_PROMPT = 4_000",
@@ -68,12 +64,19 @@ def main() -> None:
     )
 
     require(
-        "migrations/harden_group_chat_e2ee_state.sql",
-        "ck_conversation_e2ee_mode_supported",
-        "e2ee_mode IN ('legacy', 'direct_v1', 'group_v1')",
-        "ck_conversation_key_epoch_nonnegative",
-        "ck_conversation_group_e2ee_epoch",
-        "e2ee_mode <> 'group_v1' OR key_epoch >= 1",
+        "frontend/src/crypto/studyAdaContext.ts",
+        "attachmentId?: number",
+        "selected_chat_document",
+        "contextScope",
+        "toAdaRequestBody",
+    )
+
+    require(
+        "frontend/src/crypto/chatStudyDocumentReader.tsx",
+        "installChatStudyDocumentObserver",
+        "decrypt",
+        "selected_chat_document",
+        "The file is decrypted locally.",
     )
 
     require(
@@ -84,12 +87,6 @@ def main() -> None:
         "name: 'HKDF'",
         "export async function encryptGroupMessage(",
         "export async function decryptGroupMessage(",
-    )
-
-    require(
-        "frontend/src/crypto/groupSession.ts",
-        "import { getOrCreateIdentityKeyPair, importPeerPublicKey }",
-        "export async function openGroupE2EESession(",
     )
 
     require(

@@ -92,7 +92,7 @@ export default function DirectInChatAdaEnhancer() {
     if (!documentId || !selectedText.trim() || !prompt.trim()) return
     setAsking(true); setError('')
     try {
-      const context = createAdaStudyContext({ conversationId: chat.conversationId, keyEpoch: chat.keyEpoch, documentId, pageStart, pageEnd, selectedText, prompt })
+      const context = createAdaStudyContext({ conversationId: chat.conversationId, keyEpoch: chat.keyEpoch, documentId, pageStart, pageEnd, selectedText, userPrompt: prompt })
       setAnswer(await askAdaAboutSelectedStudyContext(context))
     } catch (errorValue) {
       setError(errorValue instanceof Error ? errorValue.message : 'Ada could not answer right now')
