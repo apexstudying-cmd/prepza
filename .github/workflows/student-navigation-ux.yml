@@ -22,6 +22,7 @@ jobs:
         run: |
           python3 scripts/apply_student_navigation_ux_v4.py
           python3 scripts/apply_student_navigation_ux_v5.py
+          python3 scripts/apply_document_reader.py
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -36,9 +37,13 @@ jobs:
           cp frontend/src/App.tsx /tmp/App.after
           python3 scripts/apply_student_navigation_ux_v4.py
           python3 scripts/apply_student_navigation_ux_v5.py
+          python3 scripts/apply_document_reader.py
           cmp frontend/src/App.tsx /tmp/App.after
 
-      - name: Commit generated frontend change
+      - name: Compile backend
+        run: python3 -m py_compile app.py document_pipeline.py
+
+      - name: Commit generated frontend and backend change
         run: |
           if git diff --quiet; then
             echo 'No changes to commit.'
@@ -46,6 +51,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/src/App.tsx scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py
-          git commit -m 'feat: add document study hub'
+          git add frontend/src/App.tsx app.py scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py scripts/apply_document_reader.py
+          git commit -m 'feat: add native document reader'
           git push origin HEAD:ux/student-navigation-study-flow
