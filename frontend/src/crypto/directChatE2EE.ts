@@ -77,7 +77,7 @@ function peerUserId(detail: any): number {
   if (participants.length !== 2 || !currentUserId || !participants.includes(currentUserId)) {
     throw new Error('Direct conversation participants are invalid')
   }
-  const peer = participants.find(id => id !== currentUserId)
+  const peer = participants.find((id: number) => id !== currentUserId)
   if (!peer) throw new Error('Secure chat peer is missing')
   return peer
 }
