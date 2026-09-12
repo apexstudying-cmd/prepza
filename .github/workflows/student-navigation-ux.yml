@@ -17,32 +17,24 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Apply navigation UX patch
-        run: python3 scripts/apply_student_navigation_ux_v3.py
-
+        run: python3 scripts/apply_student_navigation_ux_v4.py
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-
       - name: Build frontend
         working-directory: frontend
         run: npm run build
-
       - name: Verify patch is deterministic
         run: |
           cp frontend/src/App.tsx /tmp/App.after
-          python3 scripts/apply_student_navigation_ux_v3.py
+          python3 scripts/apply_student_navigation_ux_v4.py
           cmp frontend/src/App.tsx /tmp/App.after
-
       - name: Commit generated frontend change
         run: |
-          if git diff --quiet; then
-            echo 'No changes to commit.'
-            exit 0
-          fi
+          if git diff --quiet; then exit 0; fi
           git config user.name 'github-actions[bot]'
-          git config user.email '41898282+apexstudying-cmd@users.noreply.github.com'
-          git add frontend/src/App.tsx scripts/apply_student_navigation_ux_v3.py
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/App.tsx
           git commit -m 'feat: streamline student navigation and study materials'
           git push origin HEAD:ux/student-navigation-study-flow
