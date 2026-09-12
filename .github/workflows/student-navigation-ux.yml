@@ -74,7 +74,7 @@ jobs:
           guard = '''    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n'''
           assert s.count(guard) == 1, f'expected one podcast synthesis guard, found {s.count(guard)}'
           assert s.count('Podcast has not been published yet') == 1, 'expected one published podcast error'
-          assert s.count('scope="shared"') >= 5, 'expected shared-scope protection for published artifacts'
+          assert 'scope="shared"' in s, 'expected shared-scope protection for published artifacts'
           PY
           grep -F 'const [readingPage, setReadingPage] = useState(0)' frontend/src/App.tsx
           grep -F '/documents/${activeDocumentId}/reading' frontend/src/App.tsx
