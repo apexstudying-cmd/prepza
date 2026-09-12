@@ -70,11 +70,6 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             return view(conversation, user_id, *args, **kwargs)
         return wrapped
 
-    # Defense in depth: the browser bridge encrypts group messages before the
-    # normal chat endpoint is called, but the server must also reject a direct
-    # plaintext write to a group_v1 conversation. This prevents an alternate
-    # client, stale bundle, or accidental frontend path from silently falling
-    # back to plaintext storage.
     if not getattr(app, "_prepza_e2ee_plaintext_guard", False):
         @app.before_request
         def _reject_plaintext_group_message_write():
@@ -228,12 +223,29 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
                 "key_epoch": expected_epoch,
             }), 403
 
+        active_member_rows = db.session.execute(
+            text(
+                "SELECT user_id FROM conversation_participant "
+                "WHERE conversation_id = :conversation_id AND left_at IS NULL"
+            ),
+            {"conversation_id": conversation.id},
+        ).all()
+        active_member_ids = {int(row[0]) for row in active_member_rows if row[0] is not None}
+        if not active_member_ids:
+            return jsonify({"error": "The group has no active members"}), 409
+
         payload = request.get_json(silent=True) or {}
         envelopes = payload.get("envelopes")
         if not isinstance(envelopes, list) or not envelopes or len(envelopes) > 100:
             return jsonify({"error": "envelopes must contain 1-100 encrypted envelopes"}), 400
+        if len(envelopes) != len(active_member_ids):
+            return jsonify({
+                "error": "A complete current-epoch key envelope is required for every active group member",
+                "expected_member_count": len(active_member_ids),
+            }), 409
 
         accepted = []
+        seen_recipient_ids = set()
         for item in envelopes:
             if not isinstance(item, dict):
                 return jsonify({"error": "Each envelope must be an object"}), 400
@@ -247,9 +259,12 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             except (KeyError, TypeError, ValueError):
                 return jsonify({"error": "Invalid encrypted envelope"}), 400
 
+            if recipient_id in seen_recipient_ids:
+                return jsonify({"error": "Duplicate envelope recipient"}), 400
+            seen_recipient_ids.add(recipient_id)
             if sender_id != user_id or epoch != expected_epoch:
                 return jsonify({"error": "Envelope sender or key epoch is invalid"}), 403
-            if not participant_for(conversation.id, recipient_id):
+            if recipient_id not in active_member_ids or not participant_for(conversation.id, recipient_id):
                 return jsonify({"error": "Envelope recipient is not an active member"}), 403
             if version != 1 or not nonce or not ciphertext:
                 return jsonify({"error": "Unsupported or incomplete envelope"}), 400
@@ -265,6 +280,9 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
                 "nonce": nonce,
                 "ciphertext": ciphertext,
             })
+
+        if seen_recipient_ids != active_member_ids:
+            return jsonify({"error": "Current-epoch envelopes do not cover exactly the active group membership"}), 409
 
         locked_mode, locked_epoch = e2ee_state(conversation.id)
         if locked_mode != "group_v1" or locked_epoch != expected_epoch:
