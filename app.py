@@ -3570,6 +3570,17 @@ def report_document(document_id):
     key_func=lambda: f"summarize:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
+
+
+def _ai_generation_parameters_from_request():
+    """Return an AI generation parameter object without coercing invalid JSON shapes."""
+    data = request.get_json(silent=True)
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ValueError("AI generation parameters must be an object")
+    return data
+
 def summarize_document(document_id):
     """
     Generates (or returns the cached) AI summary for a student's
@@ -3597,8 +3608,10 @@ def summarize_document(document_id):
             document_content_id=content.id,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
-            parameters=request.get_json(silent=True) or {},
+            parameters=_ai_generation_parameters_from_request(),
         )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
     except ai_service.AIRateLimitExceededError as e:
@@ -3611,7 +3624,7 @@ def summarize_document(document_id):
 
     return jsonify({
         "material_id": result["material_id"],
-        "reused": False,
+        "reused": result["reused"],
         "summary": result["payload"],
     }), 200
 
@@ -3649,8 +3662,10 @@ def quiz_document(document_id):
             document_content_id=content.id,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
-            parameters=request.get_json(silent=True) or {},
+            parameters=_ai_generation_parameters_from_request(),
         )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
     except ai_service.AIRateLimitExceededError as e:
@@ -3663,7 +3678,7 @@ def quiz_document(document_id):
 
     return jsonify({
         "material_id": result["material_id"],
-        "reused": False,
+        "reused": result["reused"],
         "quiz": result["payload"],
     }), 200
 
@@ -3762,8 +3777,10 @@ def flashcards_document(document_id):
             document_content_id=content.id,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
-            parameters=request.get_json(silent=True) or {},
+            parameters=_ai_generation_parameters_from_request(),
         )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
     except ai_service.AIRateLimitExceededError as e:
@@ -3776,7 +3793,7 @@ def flashcards_document(document_id):
 
     return jsonify({
         "material_id": result["material_id"],
-        "reused": False,
+        "reused": result["reused"],
         "flashcards": result["payload"],
     }), 200
 
@@ -3872,8 +3889,10 @@ def podcast_script_document(document_id):
             document_content_id=content.id,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
-            parameters=request.get_json(silent=True) or {},
+            parameters=_ai_generation_parameters_from_request(),
         )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
     except ai_service.AIRateLimitExceededError as e:
@@ -3886,7 +3905,7 @@ def podcast_script_document(document_id):
 
     return jsonify({
         "material_id": result["material_id"],
-        "reused": False,
+        "reused": result["reused"],
         "podcast": result["payload"],
     }), 200
 
@@ -4070,8 +4089,10 @@ def mindmap_document(document_id):
             document_content_id=content.id,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
-            parameters=request.get_json(silent=True) or {},
+            parameters=_ai_generation_parameters_from_request(),
         )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
     except ai_service.AIRateLimitExceededError as e:
@@ -4084,7 +4105,7 @@ def mindmap_document(document_id):
 
     return jsonify({
         "material_id": result["material_id"],
-        "reused": False,
+        "reused": result["reused"],
         "mindmap": result["payload"],
     }), 200
 
