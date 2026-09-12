@@ -4,9 +4,11 @@ import { getOrCreateIdentityKeyPair, exportPublicKeyBase64Url } from './keys'
 import { loadGroupConversationKey } from './groupStore'
 
 const GROUP_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
+const GROUP_SEARCH_RE = /^\/chats\/(\d+)\/messages\/search(?:\?.*)?$/
 const GROUP_CREATE_PATH = '/chats'
 const GROUP_ENABLE_SUFFIX = '/enable-e2ee'
 const GROUP_LEAVE_RE = /^\/chats\/(\d+)\/leave$/
+const LOCAL_SEARCH_PAGE_LIMIT = 10
 
 let installed = false
 const groupReadyPromises = new Map<number, Promise<void>>()
@@ -119,7 +121,6 @@ async function ensureGroupProvisioned(conversationId: number, csrfToken: string)
 
 async function provisionCurrentEpochIfElected(conversationId: number): Promise<void> {
   if (!currentUserId || !currentCsrfToken) throw new Error('Secure chat session is not ready')
-
   const envelopeState = await fetchGroupKeyEnvelopes(conversationId)
   if (envelopeState.e2ee_mode !== 'group_v1') throw new Error('Group E2EE is not enabled')
   if (envelopeState.envelopes.length > 0) return
@@ -130,9 +131,6 @@ async function provisionCurrentEpochIfElected(conversationId: number): Promise<v
     .filter((id: number) => Number.isInteger(id) && id > 0)
     .sort((a: number, b: number) => a - b)
   if (!activeMembers.length || !activeMembers.includes(currentUserId)) throw new Error('Current member is not active')
-
-  // Deterministic election prevents multiple members from generating
-  // different keys for the same epoch after a leave event.
   if (activeMembers[0] !== currentUserId) throw new Error('Waiting for the elected group key provisioner')
 
   const rotationKey = `${conversationId}:${envelopeState.key_epoch}`
@@ -167,9 +165,7 @@ async function provisionCurrentEpochIfElected(conversationId: number): Promise<v
 async function openCurrentGroupSession(conversationId: number) {
   try {
     return await openGroupSession(conversationId)
-  } catch (error) {
-    // A membership leave advances the server epoch. If this device is the
-    // deterministic elected provisioner, create and distribute the new key.
+  } catch {
     await provisionCurrentEpochIfElected(conversationId)
     return openGroupSession(conversationId)
   }
@@ -231,6 +227,31 @@ async function transformGroupMessageResponse(response: Response, conversationId:
   }
 }
 
+async function localSearchGroupMessages(conversationId: number, query: string): Promise<Response> {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return new Response(JSON.stringify({ messages: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+
+  const collected: any[] = []
+  let beforeId: number | null = null
+  for (let page = 0; page < LOCAL_SEARCH_PAGE_LIMIT; page += 1) {
+    const url = beforeId == null
+      ? `/chats/${conversationId}/messages`
+      : `/chats/${conversationId}/messages?before_id=${beforeId}`
+    const response = await window.fetch(url, { credentials: 'include' })
+    if (!response.ok) return response
+    const body = await response.json()
+    const pageMessages = Array.isArray(body?.messages) ? body.messages : []
+    collected.push(...pageMessages)
+    if (pageMessages.length === 0 || pageMessages.length < 50) break
+    const firstId = Number(pageMessages[0]?.id)
+    if (!Number.isInteger(firstId) || firstId <= 0) break
+    beforeId = firstId
+  }
+
+  const messages = collected.filter(message => typeof message?.body === 'string' && message.body.toLowerCase().includes(needle))
+  return new Response(JSON.stringify({ messages: messages.slice(0, 50) }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+}
+
 export function installE2EEFetchBridge(): void {
   if (installed || typeof window === 'undefined' || !window.fetch) return
   installed = true
@@ -259,22 +280,26 @@ export function installE2EEFetchBridge(): void {
         const created = await jsonClone(response).catch(() => null)
         if (created?.id && created.reused === false) {
           const csrfToken = csrfFrom(init.headers) || currentCsrfToken
-          try {
-            await ensureGroupProvisioned(Number(created.id), csrfToken)
-          } catch {
-            // Fail closed. The server has not accepted plaintext as E2EE,
-            // and the send path will refuse to send until a local key exists.
-          }
+          try { await ensureGroupProvisioned(Number(created.id), csrfToken) } catch { /* fail closed */ }
         }
       }
       return response
+    }
+
+    const searchMatch = path.match(GROUP_SEARCH_RE)
+    if (searchMatch && method === 'GET') {
+      const conversationId = Number(searchMatch[1])
+      if (!Number.isInteger(conversationId) || conversationId <= 0) return nativeFetch(input, init)
+      const enabled = await groupIsE2EE(conversationId).catch(() => false)
+      if (!enabled) return nativeFetch(input, init)
+      const query = new URL(path, window.location.origin).searchParams.get('q') || ''
+      return localSearchGroupMessages(conversationId, query)
     }
 
     const messageMatch = path.match(GROUP_MESSAGES_RE)
     if (messageMatch) {
       const conversationId = Number(messageMatch[1])
       if (!Number.isInteger(conversationId) || conversationId <= 0) return nativeFetch(input, init)
-
       const enabled = await groupIsE2EE(conversationId).catch(() => false)
       if (!enabled) return nativeFetch(input, init)
 
