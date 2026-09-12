@@ -1,6 +1,7 @@
-import { openGroupSession, encryptGroupText, decryptGroupText, uploadGroupKeyEnvelopes, fetchUserPublicKey } from './e2eeChatApi'
-import { provisionInitialGroupKey } from './groupProvisioning'
+import { fetchGroupKeyEnvelopes, openGroupSession, encryptGroupText, decryptGroupText, uploadGroupKeyEnvelopes, fetchUserPublicKey } from './e2eeChatApi'
+import { provisionInitialGroupKey, provisionRotatedGroupKey } from './groupProvisioning'
 import { getOrCreateIdentityKeyPair, exportPublicKeyBase64Url } from './keys'
+import { loadGroupConversationKey } from './groupStore'
 
 const GROUP_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
 const GROUP_CREATE_PATH = '/chats'
@@ -9,8 +10,11 @@ const GROUP_LEAVE_RE = /^\/chats\/(\d+)\/leave$/
 
 let installed = false
 const groupReadyPromises = new Map<number, Promise<void>>()
+const groupRotationPromises = new Map<string, Promise<void>>()
 const groupModeCache = new Map<number, boolean>()
 let identityRegistrationPromise: Promise<void> | null = null
+let currentUserId: number | null = null
+let currentCsrfToken = ''
 
 function pathOnly(input: RequestInfo | URL): string {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.pathname + input.search : input.url
@@ -40,7 +44,6 @@ async function fetchGroupDetail(conversationId: number): Promise<any> {
 
 async function ensureIdentityKeyRegistered(csrfToken: string): Promise<void> {
   if (identityRegistrationPromise) return identityRegistrationPromise
-
   identityRegistrationPromise = (async () => {
     const { keyPair } = await getOrCreateIdentityKeyPair()
     const publicKey = await exportPublicKeyBase64Url(keyPair.publicKey)
@@ -56,7 +59,6 @@ async function ensureIdentityKeyRegistered(csrfToken: string): Promise<void> {
     const body = await response.json().catch(() => null)
     if (!response.ok) throw new Error((body && body.error) || 'Could not register secure chat key')
   })()
-
   try {
     await identityRegistrationPromise
   } catch (error) {
@@ -68,10 +70,8 @@ async function ensureIdentityKeyRegistered(csrfToken: string): Promise<void> {
 async function ensureGroupProvisioned(conversationId: number, csrfToken: string): Promise<void> {
   const existing = groupReadyPromises.get(conversationId)
   if (existing) return existing
-
   const promise = (async () => {
     await ensureIdentityKeyRegistered(csrfToken)
-
     const enable = await window.fetch(`/chats/${conversationId}${GROUP_ENABLE_SUFFIX}`, {
       method: 'POST',
       credentials: 'include',
@@ -86,10 +86,8 @@ async function ensureGroupProvisioned(conversationId: number, csrfToken: string)
 
     const detail = await fetchGroupDetail(conversationId)
     if (!detail?.is_group || !Array.isArray(detail.participants)) throw new Error('Conversation is not a valid group')
-
     const creatorUserId = Number(detail.created_by)
     if (!Number.isInteger(creatorUserId) || creatorUserId <= 0) throw new Error('Group creator is missing')
-
     const keyEpoch = Number(enableBody?.key_epoch)
     if (!Number.isInteger(keyEpoch) || keyEpoch < 1) throw new Error('Group E2EE key epoch is invalid')
 
@@ -101,7 +99,6 @@ async function ensureGroupProvisioned(conversationId: number, csrfToken: string)
           publicKey: Number(p.user_id) === creatorUserId ? '' : await fetchUserPublicKey(Number(p.user_id)),
         })),
     )
-
     await provisionInitialGroupKey(
       conversationId,
       keyEpoch,
@@ -111,13 +108,70 @@ async function ensureGroupProvisioned(conversationId: number, csrfToken: string)
     )
     groupModeCache.set(conversationId, true)
   })()
-
   groupReadyPromises.set(conversationId, promise)
   try {
     await promise
   } catch (error) {
     groupReadyPromises.delete(conversationId)
     throw error
+  }
+}
+
+async function provisionCurrentEpochIfElected(conversationId: number): Promise<void> {
+  if (!currentUserId || !currentCsrfToken) throw new Error('Secure chat session is not ready')
+
+  const envelopeState = await fetchGroupKeyEnvelopes(conversationId)
+  if (envelopeState.e2ee_mode !== 'group_v1') throw new Error('Group E2EE is not enabled')
+  if (envelopeState.envelopes.length > 0) return
+
+  const detail = await fetchGroupDetail(conversationId)
+  const activeMembers = (detail?.participants || [])
+    .map((p: any) => Number(p.user_id))
+    .filter((id: number) => Number.isInteger(id) && id > 0)
+    .sort((a: number, b: number) => a - b)
+  if (!activeMembers.length || !activeMembers.includes(currentUserId)) throw new Error('Current member is not active')
+
+  // Deterministic election prevents multiple members from generating
+  // different keys for the same epoch after a leave event.
+  if (activeMembers[0] !== currentUserId) throw new Error('Waiting for the elected group key provisioner')
+
+  const rotationKey = `${conversationId}:${envelopeState.key_epoch}`
+  const existing = groupRotationPromises.get(rotationKey)
+  if (existing) return existing
+
+  const promise = (async () => {
+    await ensureIdentityKeyRegistered(currentCsrfToken)
+    const members = await Promise.all(
+      activeMembers.map(async (userId: number) => ({
+        userId,
+        publicKey: userId === currentUserId ? '' : await fetchUserPublicKey(userId),
+      })),
+    )
+    await provisionRotatedGroupKey(
+      conversationId,
+      envelopeState.key_epoch,
+      currentUserId!,
+      members,
+      async (id, envelopes) => uploadGroupKeyEnvelopes(id, currentCsrfToken, envelopes),
+    )
+  })()
+
+  groupRotationPromises.set(rotationKey, promise)
+  try {
+    await promise
+  } finally {
+    groupRotationPromises.delete(rotationKey)
+  }
+}
+
+async function openCurrentGroupSession(conversationId: number) {
+  try {
+    return await openGroupSession(conversationId)
+  } catch (error) {
+    // A membership leave advances the server epoch. If this device is the
+    // deterministic elected provisioner, create and distribute the new key.
+    await provisionCurrentEpochIfElected(conversationId)
+    return openGroupSession(conversationId)
   }
 }
 
@@ -132,18 +186,32 @@ async function groupIsE2EE(conversationId: number): Promise<boolean> {
   return enabled
 }
 
+async function decryptMessageWithEpoch(conversationId: number, message: any, currentState: { key: CryptoKey; keyEpoch: number }): Promise<any> {
+  if (!message || !message.body || !message.nonce || message.is_deleted) return message
+  const epoch = Number.isInteger(Number(message.key_epoch)) ? Number(message.key_epoch) : currentState.keyEpoch
+  try {
+    const key = epoch === currentState.keyEpoch
+      ? currentState.key
+      : await loadGroupConversationKey(conversationId, epoch)
+    if (!key) throw new Error('Historical group key is unavailable on this device')
+    return { ...message, body: await decryptGroupText(key, message.body, message.nonce) }
+  } catch {
+    return { ...message, body: '[Encrypted message — key unavailable on this device]' }
+  }
+}
+
 async function transformGroupMessages(response: Response, conversationId: number): Promise<Response> {
   const body = await response.clone().json()
   if (!body || !Array.isArray(body.messages)) return response
-  const state = await openGroupSession(conversationId)
-  const messages = await Promise.all(body.messages.map(async (message: any) => {
-    if (!message || !message.body || !message.nonce || message.is_deleted) return message
-    try {
-      return { ...message, body: await decryptGroupText(state.key, message.body, message.nonce) }
-    } catch {
-      return { ...message, body: '[Encrypted message — key unavailable on this device]' }
-    }
-  }))
+  let state
+  try {
+    state = await openCurrentGroupSession(conversationId)
+  } catch {
+    const headers = new Headers(response.headers)
+    headers.set('Content-Type', 'application/json')
+    return new Response(JSON.stringify({ ...body, messages: body.messages.map((m: any) => ({ ...m, body: m.body ? '[Encrypted message — key unavailable on this device]' : m.body })) }), { status: response.status, statusText: response.statusText, headers })
+  }
+  const messages = await Promise.all(body.messages.map((message: any) => decryptMessageWithEpoch(conversationId, message, state)))
   const headers = new Headers(response.headers)
   headers.set('Content-Type', 'application/json')
   return new Response(JSON.stringify({ ...body, messages }), { status: response.status, statusText: response.statusText, headers })
@@ -152,11 +220,15 @@ async function transformGroupMessages(response: Response, conversationId: number
 async function transformGroupMessageResponse(response: Response, conversationId: number): Promise<Response> {
   const body = await response.clone().json()
   if (!body || !body.body || !body.nonce || body.is_deleted) return response
-  const state = await openGroupSession(conversationId)
-  const decrypted = await decryptGroupText(state.key, body.body, body.nonce)
-  const headers = new Headers(response.headers)
-  headers.set('Content-Type', 'application/json')
-  return new Response(JSON.stringify({ ...body, body: decrypted }), { status: response.status, statusText: response.statusText, headers })
+  try {
+    const state = await openCurrentGroupSession(conversationId)
+    const message = await decryptMessageWithEpoch(conversationId, body, state)
+    const headers = new Headers(response.headers)
+    headers.set('Content-Type', 'application/json')
+    return new Response(JSON.stringify(message), { status: response.status, statusText: response.statusText, headers })
+  } catch {
+    return response
+  }
 }
 
 export function installE2EEFetchBridge(): void {
@@ -172,6 +244,8 @@ export function installE2EEFetchBridge(): void {
       const response = await nativeFetch(input, init)
       if (response.ok) {
         const me = await response.clone().json().catch(() => null)
+        if (me?.id) currentUserId = Number(me.id)
+        if (me?.csrf_token) currentCsrfToken = me.csrf_token
         if (me?.id && me?.csrf_token) void ensureIdentityKeyRegistered(me.csrf_token).catch(() => {})
       }
       return response
@@ -184,16 +258,12 @@ export function installE2EEFetchBridge(): void {
       if (payload?.is_group === true && response.ok) {
         const created = await jsonClone(response).catch(() => null)
         if (created?.id && created.reused === false) {
-          const csrfToken = csrfFrom(init.headers)
-          // Do not return the create response until the initial E2EE key is
-          // provisioned. This closes the race where the UI could send its
-          // first group message before the group had entered group_v1.
+          const csrfToken = csrfFrom(init.headers) || currentCsrfToken
           try {
             await ensureGroupProvisioned(Number(created.id), csrfToken)
           } catch {
-            // Fail closed: the group may now be marked group_v1, but no
-            // plaintext message is permitted because the send path below
-            // requires a local group key. The user can retry provisioning.
+            // Fail closed. The server has not accepted plaintext as E2EE,
+            // and the send path will refuse to send until a local key exists.
           }
         }
       }
@@ -212,7 +282,7 @@ export function installE2EEFetchBridge(): void {
         let payload: any
         try { payload = JSON.parse(String(init.body)) } catch { return nativeFetch(input, init) }
         if (typeof payload?.body === 'string' && payload.body.trim()) {
-          const state = await openGroupSession(conversationId)
+          const state = await openCurrentGroupSession(conversationId)
           const encrypted = await encryptGroupText(state.key, payload.body)
           payload.body = encrypted.ciphertext
           payload.nonce = encrypted.nonce
