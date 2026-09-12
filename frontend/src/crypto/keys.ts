@@ -86,6 +86,28 @@ export async function exportPublicKeyBase64Url(publicKey: CryptoKey): Promise<st
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
+/** Imports a base64url-encoded raw P-256 public key published by another device. */
+export async function importPeerPublicKey(value: string): Promise<CryptoKey> {
+  if (typeof value !== 'string' || !value.trim()) throw new Error('Peer public key is missing.')
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
+  let binary: string
+  try {
+    binary = atob(padded)
+  } catch {
+    throw new Error('Peer public key is not valid base64url.')
+  }
+  const bytes = Uint8Array.from(binary, char => char.charCodeAt(0))
+  if (bytes.length !== 65 || bytes[0] !== 0x04) throw new Error('Peer public key is not a P-256 uncompressed key.')
+  return window.crypto.subtle.importKey(
+    'raw',
+    bytes,
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    [],
+  )
+}
+
 /** Persists the current device's identity keypair to IndexedDB. */
 export async function storeIdentityKeyPair(keyPair: CryptoKeyPair): Promise<void> {
   await idbSet(STORE_NAME, RECORD_KEY, keyPair)
@@ -102,10 +124,10 @@ export async function loadIdentityKeyPair(): Promise<CryptoKeyPair | null> {
 
 /**
  * Returns this device's identity keypair, generating and persisting a
- * new one on first call if none exists yet. `isNew` tells the caller
- * (a later chunk) whether it needs to call POST /keys/register - this
- * function deliberately does not make that call itself, keeping this
- * module network-free per Chunk 1's scope.
+ * new one on first call if none exists yet on this device/browser. `isNew`
+ * tells the caller (a later chunk) whether it needs to call
+ * POST /keys/register - this function deliberately does not make that call
+ * itself, keeping this module network-free per Chunk 1's scope.
  */
 export async function getOrCreateIdentityKeyPair(): Promise<{
   keyPair: CryptoKeyPair
