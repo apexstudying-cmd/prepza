@@ -39,9 +39,9 @@ def main() -> None:
 
     require(
         "e2ee_ada_routes.py",
-        'context_scope == "selected_document_pages"',
-        'explicit_user_context is not True',
-        "key_epoch != server_epoch",
+        'data.get("context_scope") != "selected_document_pages"',
+        'data.get("explicit_user_context") is not True',
+        "key_epoch != current_key_epoch",
         "document_id",
         "selected_text",
         "prompt",
