@@ -1,13 +1,12 @@
 """Safely apply the app.py pieces owned by the group-chat E2EE foundation.
 
-Route handlers live in e2ee_chat_routes.py and are registered separately by
-apply_e2ee_route_registration.py. Keeping route ownership in one module avoids
-duplicate Flask URL rules and makes the integration idempotent.
+Route handlers live in e2ee_chat_routes.py and are registered by the existing
+prepza_control bootstrap. Keeping route ownership in one module avoids
+ duplicate Flask URL rules and makes the integration idempotent.
 
 Run from the repository root after migrations/add_group_chat_e2ee.sql has
 been applied to the database:
     python scripts/apply_group_chat_e2ee_backend.py
-    python scripts/apply_e2ee_route_registration.py
 """
 
 from pathlib import Path
@@ -38,10 +37,11 @@ replace_once(
 # 2. Envelope model is owned by e2ee_chat_models.py. The standalone route
 # module receives that model at registration time; do not duplicate it here.
 
-# 3. New group chats opt into group_v1 immediately; direct chats keep direct_v1.
+# 3. New groups start at epoch 1 so the first client-generated key can be
+# provisioned immediately. Direct chats keep the existing direct_v1 mode.
 replace_once(
     '''    conversation = Conversation(\n        is_group=is_group,\n        name=name if is_group else None,\n        created_by=user_id,\n        status=conversation_status,\n    )\n''',
-    '''    conversation = Conversation(\n        is_group=is_group,\n        name=name if is_group else None,\n        created_by=user_id,\n        status=conversation_status,\n        e2ee_mode="group_v1" if is_group else "direct_v1",\n        key_epoch=0,\n    )\n''',
+    '''    conversation = Conversation(\n        is_group=is_group,\n        name=name if is_group else None,\n        created_by=user_id,\n        status=conversation_status,\n        e2ee_mode="group_v1" if is_group else "direct_v1",\n        key_epoch=1 if is_group else 0,\n    )\n''',
     "group create e2ee mode",
 )
 
