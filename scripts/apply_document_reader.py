@@ -59,6 +59,9 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
   if (doc.file_type !== 'pdf') return <GenerationError error="Native reading currently supports PDF documents only." />
   const count = Math.max(1, doc.page_count || 1), current = Math.min(Math.max(page,0), count-1), progress = ((current+1)/count)*100
   const pageUrl = `/documents/${activeDocumentId}/reading/page/${current}`
+  const atEnd = current >= count - 1
+  const nextBackground = atEnd ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg,${N.gold},${N.goldL})`
+  const nextColor = atEnd ? 'rgba(255,255,255,0.25)' : N.navy
   return <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',background:'#111827'}}>
     <div style={{background:N.navy,padding:'10px 14px 12px',flexShrink:0}}><div style={{display:'flex',alignItems:'center',gap:10}}>
       <button onClick={()=>setScreen('document-study')} style={{width:34,height:34,background:'rgba(255,255,255,0.1)',border:'none',borderRadius:10,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#fff'}}>{Ic.back()}</div></button>
@@ -68,7 +71,7 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
     <div style={{background:N.navy,padding:'10px 14px calc(10px + env(safe-area-inset-bottom))',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
       <button disabled={current===0} onClick={()=>setPage(p=>Math.max(0,p-1))} style={{flex:1,border:'none',borderRadius:12,padding:'11px 0',background:current===0?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.1)',color:current===0?'rgba(255,255,255,0.25)':'#fff',fontWeight:800,fontFamily:'Plus Jakarta Sans'}}>Previous</button>
       <div style={{color:'rgba(255,255,255,0.55)',fontSize:11,fontWeight:700,minWidth:62,textAlign:'center'}}>{Math.round(progress)}%</div>
-      <button disabled={current>=count-1} onClick={()=>setPage(p=>Math.min(count-1,p+1))} style={{flex:1,border:'none',borderRadius:12,padding:'11px 0',background:current>=count-1?'rgba(255,255,255,0.06'):`linear-gradient(135deg,${N.gold},${N.goldL})`,color:current>=count-1?'rgba(255,255,255,0.25)':N.navy,fontWeight:800,fontFamily:'Plus Jakarta Sans'}}>Next</button>
+      <button disabled={atEnd} onClick={()=>setPage(p=>Math.min(count-1,p+1))} style={{flex:1,border:'none',borderRadius:12,padding:'11px 0',background:nextBackground,color:nextColor,fontWeight:800,fontFamily:'Plus Jakarta Sans'}}>Next</button>
     </div></div>
 }
 
