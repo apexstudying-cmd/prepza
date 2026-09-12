@@ -8,6 +8,7 @@ for name in (
     "apply_studyhub_library_flow.py",
     "apply_studyhub_existing_save_repair.py",
     "apply_upload_share_choice_ux.py",
+    "apply_upload_publish_binding.py",
     "cleanup_studyhub_library_flow.py",
 ):
     print(f"==> applying {name}")
