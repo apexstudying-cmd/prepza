@@ -3530,6 +3530,15 @@ def _can_publish_document(user_id, document):
     )
 
 
+def _can_publish_document(user_id, document):
+    """Publishing is an ownership action, not merely a study permission."""
+    return bool(
+        document
+        and not document.is_removed
+        and document.user_id == user_id
+    )
+
+
 def _document_reader_watermark(user_id, document):
     """Resolve a reader watermark without leaking a student's email publicly.
 
