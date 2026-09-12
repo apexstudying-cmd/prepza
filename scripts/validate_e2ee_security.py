@@ -3,8 +3,8 @@
 These checks intentionally do not claim to prove cryptographic correctness.
 They guard server-side invariants that are easy to accidentally weaken when
 chat routes are edited: plaintext rejection, deterministic key provisioning,
-current-epoch enforcement, explicitly scoped Ada context, and fail-closed
-attachment handling.
+current-epoch enforcement, explicitly scoped Ada context, fail-closed
+attachment handling, and database state constraints.
 """
 
 from pathlib import Path
@@ -48,6 +48,15 @@ def main() -> None:
         "prompt = clean_text(data.get(\"prompt\")",
         "document.user_id != current_user_id",
         "if document.removed_at is not None:",
+    )
+
+    require(
+        "migrations/harden_group_chat_e2ee_state.sql",
+        "ck_conversation_e2ee_mode_supported",
+        "e2ee_mode IN ('legacy', 'direct_v1', 'group_v1')",
+        "ck_conversation_key_epoch_nonnegative",
+        "ck_conversation_group_e2ee_epoch",
+        "e2ee_mode <> 'group_v1' OR key_epoch >= 1",
     )
 
     require(
