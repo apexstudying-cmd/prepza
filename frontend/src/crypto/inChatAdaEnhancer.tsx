@@ -18,8 +18,8 @@ type StudyDocument = {
 }
 
 let installed = false
-let nativeFetch: typeof window.fetch | null = null
 let activeChat: ChatState | null = null
+let lastChatTrafficAt = 0
 const listeners = new Set<(state: ChatState | null) => void>()
 
 function emit(state: ChatState | null) {
@@ -35,26 +35,41 @@ function pathOf(input: RequestInfo | URL): string {
 export function installInChatAdaObserver(): void {
   if (installed || typeof window === 'undefined' || !window.fetch) return
   installed = true
-  nativeFetch = window.fetch.bind(window)
-  const original = nativeFetch
+  const original = window.fetch.bind(window)
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const response = await original(input, init)
     const path = pathOf(input)
-
     const detailMatch = path.match(/^\/chats\/(\d+)$/)
     const messagesMatch = path.match(/^\/chats\/(\d+)\/messages$/)
+
     if (detailMatch || messagesMatch) {
       const conversationId = Number((detailMatch || messagesMatch)![1])
+      lastChatTrafficAt = Date.now()
       response.clone().json().then((body: any) => {
         if (detailMatch && body && typeof body === 'object') {
-          emit({
-            conversationId,
-            isGroup: body.is_group === true,
-            e2eeMode: typeof body.e2ee_mode === 'string' ? body.e2ee_mode : 'unknown',
-            keyEpoch: Number(body.key_epoch) || 0,
-          })
-        } else if (messagesMatch && activeChat?.conversationId !== conversationId) {
+          const isGroup = body.is_group === true
+          if (!isGroup) {
+            emit({ conversationId, isGroup: false, e2eeMode: 'legacy', keyEpoch: 0 })
+            return
+          }
+
+          // The normal chat detail response predates the E2EE state fields.
+          // Resolve the authoritative mode/epoch through the protected
+          // key-envelope endpoint instead of guessing from UI state.
+          original(`/chats/${conversationId}/key-envelopes`, { credentials: 'include' })
+            .then(stateResponse => stateResponse.json().catch(() => null).then(state => ({ stateResponse, state })))
+            .then(({ stateResponse, state }) => {
+              if (!stateResponse.ok || !state) return
+              emit({
+                conversationId,
+                isGroup: true,
+                e2eeMode: typeof state.e2ee_mode === 'string' ? state.e2ee_mode : 'unknown',
+                keyEpoch: Number(state.key_epoch) || 0,
+              })
+            })
+            .catch(() => {})
+        } else if (messagesMatch && (!activeChat || activeChat.conversationId !== conversationId)) {
           emit({ conversationId, isGroup: false, e2eeMode: 'unknown', keyEpoch: 0 })
         }
       }).catch(() => {})
@@ -69,7 +84,15 @@ function useActiveChat(): ChatState | null {
   useEffect(() => {
     const listener = (next: ChatState | null) => setState(next)
     listeners.add(listener)
-    return () => { listeners.delete(listener) }
+    const timer = window.setInterval(() => {
+      if (activeChat && Date.now() - lastChatTrafficAt > 9000) {
+        emit(null)
+      }
+    }, 3000)
+    return () => {
+      listeners.delete(listener)
+      window.clearInterval(timer)
+    }
   }, [])
   return state
 }
@@ -106,7 +129,7 @@ export default function InChatAdaEnhancer() {
         setDocs(ready)
         if (documentId == null && ready[0]) {
           setDocumentId(ready[0].id)
-          setPageEnd(Math.max(1, Math.min(ready[0].page_count || 1, 1)))
+          setPageEnd(1)
         }
       })
       .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load your documents.') })
@@ -144,9 +167,7 @@ export default function InChatAdaEnhancer() {
       if (stateBody?.e2ee_mode !== 'group_v1' || currentEpoch < 1) {
         throw new Error('This group is not using secure study chat yet.')
       }
-      if (currentEpoch !== chat.keyEpoch) {
-        emit({ ...chat, keyEpoch: currentEpoch })
-      }
+      if (currentEpoch !== chat.keyEpoch) emit({ ...chat, keyEpoch: currentEpoch })
 
       const context = createAdaStudyContext({
         conversationId: chat.conversationId,
@@ -174,14 +195,7 @@ export default function InChatAdaEnhancer() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Study with Ada"
-        style={{
-          position: 'fixed', right: 18, bottom: 82, zIndex: 70,
-          border: '1px solid rgba(201,168,76,0.35)', borderRadius: 999,
-          padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans',
-          fontWeight: 800, fontSize: 12, color: '#0B1437',
-          background: 'linear-gradient(135deg,#C9A84C,#E4C96A)',
-          boxShadow: '0 8px 28px rgba(11,20,55,0.22)',
-        }}
+        style={{ position: 'fixed', right: 18, bottom: 82, zIndex: 70, border: '1px solid rgba(201,168,76,0.35)', borderRadius: 999, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 12, color: '#0B1437', background: 'linear-gradient(135deg,#C9A84C,#E4C96A)', boxShadow: '0 8px 28px rgba(11,20,55,0.22)' }}
       >
         Study with Ada
       </button>
