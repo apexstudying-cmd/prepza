@@ -5,9 +5,8 @@ and asks Ada about it. It never loads conversation history, decrypts group
 messages, or accepts a local E2EE key from the client.
 """
 
-from functools import wraps
-
 from flask import jsonify, request, session
+from sqlalchemy import text
 
 from ai_service import (
     AIRequest,
@@ -70,7 +69,11 @@ def register_e2ee_ada_route(
         if not conversation or not conversation.is_group:
             return jsonify({"error": "Scoped Ada is currently available only in group study chats"}), 400
 
-        if getattr(conversation, "e2ee_mode", "legacy") != "group_v1":
+        state = db.session.execute(
+            text("SELECT e2ee_mode, key_epoch FROM conversation WHERE id = :conversation_id"),
+            {"conversation_id": conversation_id},
+        ).mappings().first()
+        if not state or state["e2ee_mode"] != "group_v1":
             return jsonify({"error": "Scoped Ada requires group E2EE"}), 409
 
         data = request.get_json(silent=True) or {}
@@ -80,14 +83,10 @@ def register_e2ee_ada_route(
             return jsonify({"error": "Ada context must be explicitly selected by the user"}), 400
 
         try:
-            document_id = data.get("document_id")
-            page_start = data.get("page_start")
-            page_end = data.get("page_end")
-            key_epoch = data.get("key_epoch")
-            document_id = int(document_id)
-            page_start = int(page_start)
-            page_end = int(page_end)
-            key_epoch = int(key_epoch)
+            document_id = int(data.get("document_id"))
+            page_start = int(data.get("page_start"))
+            page_end = int(data.get("page_end"))
+            key_epoch = int(data.get("key_epoch"))
             selected_text = clean_text(data.get("selected_text"), MAX_SELECTED_TEXT, "selected_text")
             prompt = clean_text(data.get("prompt"), MAX_PROMPT, "prompt")
         except (TypeError, ValueError):
