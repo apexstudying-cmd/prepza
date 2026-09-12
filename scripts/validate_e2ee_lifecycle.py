@@ -43,7 +43,7 @@ def main() -> None:
         "activeMembers[0] !== currentUserId",
         "provisionRotatedGroupKey",
         "GROUP_LEAVE_RE",
-        "Encrypted attachment encryption is not ready on this device",
+        "Secure attachment encryption is not ready on this device",
         "Secure attachment encryption metadata is unavailable",
     )
 
