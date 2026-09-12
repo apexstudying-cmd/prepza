@@ -13,19 +13,19 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1)
 
 
-def replace_in_function(text, function_anchor, old, new, label):
-    function_pos = text.find(function_anchor)
-    if function_pos < 0:
-        raise SystemExit(f"{label}: function not found")
-    next_function = text.find("\ndef ", function_pos + len(function_anchor))
-    if next_function < 0:
-        next_function = len(text)
-    segment = text[function_pos:next_function]
+def replace_in_route(text, route_anchor, old, new, label):
+    route_pos = text.find(route_anchor)
+    if route_pos < 0:
+        raise SystemExit(f"{label}: route not found")
+    next_route = text.find("@app.route(", route_pos + len(route_anchor))
+    if next_route < 0:
+        next_route = len(text)
+    segment = text[route_pos:next_route]
     if new in segment:
         return text
     if old not in segment:
-        raise SystemExit(f"{label}: expected anchor not found in function")
-    return text[:function_pos] + segment.replace(old, new, 1) + text[next_function:]
+        raise SystemExit(f"{label}: expected anchor not found in route")
+    return text[:route_pos] + segment.replace(old, new, 1) + text[next_route:]
 
 
 def main():
@@ -100,6 +100,12 @@ def _published_material_response(user_id, content, material):
 '''
     s = replace_once(s, private_materials_block, shared_materials_block, "published material visibility")
 
+    route_anchors = {
+        "summary": '@app.route("/documents/<int:document_id>/summarize", methods=["POST"])',
+        "quiz": '@app.route("/documents/<int:document_id>/quiz", methods=["POST"])',
+        "flashcards": '@app.route("/documents/<int:document_id>/flashcards", methods=["POST"])',
+        "mindmap": '@app.route("/documents/<int:document_id>/mindmap", methods=["POST"])',
+    }
     markers = {
         "summary": '    if not document.document_content_id:\n        return jsonify({"error": "Document has no content to summarize"}), 400\n\n',
         "quiz": '    if not document.document_content_id:\n        return jsonify({"error": "Document has no content to quiz"}), 400\n\n',
@@ -116,39 +122,43 @@ def _published_material_response(user_id, content, material):
     owner_guard = '''    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n'''
     shared_guard = '''    if not document or not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n'''
 
-    function_names = {
-        "summary": "summarize_document(document_id):",
-        "quiz": "quiz_document(document_id):",
-        "flashcards": "flashcards_document(document_id):",
-        "mindmap": "mindmap_document(document_id):",
-    }
     for route_name, marker in markers.items():
+        route_anchor = route_anchors[route_name]
         material_type = material_types[route_name]
         if route_name in ("flashcards", "mindmap"):
-            s = replace_in_function(
+            s = replace_in_route(
                 s,
-                f'def {function_names[route_name]}',
+                route_anchor,
                 owner_guard,
                 shared_guard,
                 f"{route_name} study access guard",
             )
         replay = f'''    if document.user_id != user_id:\n        shared = _published_ready_material_for_viewer(\n            user_id, document, "{material_type}", _ai_generation_parameters_from_request()\n        )\n        if not shared:\n            return jsonify({{"error": "Published {route_name.replace('_', ' ')} has not been generated yet"}}), 404\n        content, material = shared\n        result = _published_material_response(user_id, content, material)\n        return jsonify({{\n            "material_id": result["material_id"],\n            "reused": True,\n            "{route_name}": result["payload"],\n        }}), 200\n\n'''
-        s = replace_in_function(s, f'def {function_names[route_name]}', marker, marker + replay, f"{route_name} published replay")
-
-    for route_name in ("quiz", "flashcards"):
-        function_anchor = f'def complete_{route_name}(document_id, material_id):'
-        s = replace_in_function(
+        s = replace_in_route(
             s,
-            function_anchor,
+            route_anchor,
+            marker,
+            marker + replay,
+            f"{route_name} published replay",
+        )
+
+    completion_routes = {
+        "quiz": '@app.route("/documents/<int:document_id>/quiz/<int:material_id>/complete", methods=["POST"])',
+        "flashcards": '@app.route("/documents/<int:document_id>/flashcards/<int:material_id>/complete", methods=["POST"])',
+    }
+    for route_name, route_anchor in completion_routes.items():
+        s = replace_in_route(
+            s,
+            route_anchor,
             owner_guard,
             shared_guard,
             f"complete_{route_name} study access guard",
         )
-        route_pos = s.find(function_anchor)
-        next_function = s.find("\ndef ", route_pos + len(function_anchor))
-        if next_function < 0:
-            next_function = len(s)
-        segment = s[route_pos:next_function]
+        route_pos = s.find(route_anchor)
+        next_route = s.find("@app.route(", route_pos + len(route_anchor))
+        if next_route < 0:
+            next_route = len(s)
+        segment = s[route_pos:next_route]
         material_lookup = '''    material = db.session.get(GeneratedMaterial, material_id)\n'''
         if material_lookup not in segment:
             raise SystemExit(f"complete_{route_name}: material lookup not found")
@@ -158,7 +168,7 @@ def _published_material_response(user_id, content, material):
             if anchor not in segment:
                 raise SystemExit(f"complete_{route_name}: material validation anchor not found")
             segment = segment.replace(anchor, anchor + shared_material_guard, 1)
-            s = s[:route_pos] + segment + s[next_function:]
+            s = s[:route_pos] + segment + s[next_route:]
 
     APP.write_text(s)
 
