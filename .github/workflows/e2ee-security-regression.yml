@@ -3,6 +3,7 @@ name: E2EE Security Regression
 on:
   push:
     branches:
+      - main
       - feat/e2ee-study-chats
       - feat/e2ee-study-chat-completion
   pull_request:
