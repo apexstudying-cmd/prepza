@@ -30,6 +30,7 @@ jobs:
           python3 scripts/apply_document_reader_v2.py
           python3 scripts/apply_published_material_replay.py
           python3 scripts/apply_study_flow_cleanup.py
+          python3 scripts/apply_ai_route_decorator_fix.py
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -52,6 +53,7 @@ jobs:
           python3 scripts/apply_document_reader_v2.py
           python3 scripts/apply_published_material_replay.py
           python3 scripts/apply_study_flow_cleanup.py
+          python3 scripts/apply_ai_route_decorator_fix.py
           cmp frontend/src/App.tsx /tmp/App.after
 
       - name: Verify study-flow security and navigation anchors
@@ -101,6 +103,17 @@ jobs:
           assert '_get_studyable_document(user_id, document_id)' in page_segment, 'reader page must enforce study access'
           assert 'bucket="documents"' in page_segment, 'reader page must load from private documents bucket'
           assert 'mimetype="image/png"' in page_segment, 'reader page must return rendered image, not source file'
+
+          # The AI parameter helper must sit before the summary route's
+          # decorators; otherwise Flask would decorate the helper instead.
+          helper_pos = s.find('def _ai_generation_parameters_from_request():')
+          summary_pos = s.find('@app.route("/documents/<int:document_id>/summarize", methods=["POST"])')
+          assert helper_pos >= 0 and summary_pos >= 0 and helper_pos < summary_pos, 'AI parameter helper must precede summary decorators'
+          helper_end = s.find('def summarize_document(document_id):', helper_pos)
+          assert helper_end > helper_pos, 'summary function missing after helper'
+          between = s[summary_pos:helper_end]
+          assert '@limiter.limit(' in between and '@require_csrf' in between, 'summary decorators must remain attached to summarize_document'
+          assert between.rfind('@require_csrf') < helper_end, 'CSRF decorator must immediately precede summary function'
           PY
           grep -F 'const [readingPage, setReadingPage] = useState(0)' frontend/src/App.tsx
           grep -F '/documents/${activeDocumentId}/reading' frontend/src/App.tsx
@@ -131,7 +144,7 @@ jobs:
           PY
 
       - name: Compile backend
-        run: python3 -m py_compile app.py document_pipeline.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py
+        run: python3 -m py_compile app.py document_pipeline.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py scripts/apply_ai_route_decorator_fix.py
 
       - name: Commit generated frontend and backend change
         run: |
@@ -141,6 +154,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/src/App.tsx app.py migrations/add_document_reading_progress.sql scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_document_reader_v2.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py .github/workflows/student-navigation-ux.yml
+          git add frontend/src/App.tsx app.py migrations/add_document_reading_progress.sql scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_document_reader_v2.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py scripts/apply_ai_route_decorator_fix.py .github/workflows/student-navigation-ux.yml
           git commit -m 'feat: complete student study navigation'
           git push origin HEAD:ux/student-navigation-study-flow
