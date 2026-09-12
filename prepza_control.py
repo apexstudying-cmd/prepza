@@ -232,11 +232,12 @@ def register_control_routes(
         User,
     )
 
-    # Membership changes are soft state transitions (left_at), so a mapper
-    # hook is safer than duplicating the leave endpoint. A group_v1 epoch is
-    # advanced exactly once when an active participant leaves. Existing
-    # envelopes remain stored for history, but the key-envelope API exposes
-    # only the new current epoch to active members.
+    # Membership changes are soft state transitions (left_at), so mapper
+    # hooks are safer than duplicating membership endpoints. A group_v1 epoch
+    # advances when an active participant leaves. It also advances when a new
+    # participant joins an already-populated E2EE group. That second rotation
+    # is critical: otherwise a newly added member could receive the existing
+    # current epoch and decrypt messages created before they joined.
     if not getattr(ConversationParticipant, "_prepza_e2ee_membership_listener", False):
         @event.listens_for(ConversationParticipant, "before_update")
         def _rotate_group_epoch_on_leave(mapper, connection, target):
@@ -252,6 +253,37 @@ def register_control_routes(
                 ),
                 {"conversation_id": conversation_id},
             )
+
+        @event.listens_for(ConversationParticipant, "before_insert")
+        def _rotate_group_epoch_on_join(mapper, connection, target):
+            if target.left_at is not None:
+                return
+            conversation_id = target.conversation_id
+            mode = connection.execute(
+                text(
+                    "SELECT e2ee_mode FROM conversation WHERE id = :conversation_id"
+                ),
+                {"conversation_id": conversation_id},
+            ).scalar_one_or_none()
+            if mode != "group_v1":
+                return
+            existing_member = connection.execute(
+                text(
+                    "SELECT 1 FROM conversation_participant "
+                    "WHERE conversation_id = :conversation_id "
+                    "AND left_at IS NULL LIMIT 1"
+                ),
+                {"conversation_id": conversation_id},
+            ).first()
+            if existing_member:
+                connection.execute(
+                    text(
+                        "UPDATE conversation "
+                        "SET key_epoch = key_epoch + 1 "
+                        "WHERE id = :conversation_id AND e2ee_mode = 'group_v1'"
+                    ),
+                    {"conversation_id": conversation_id},
+                )
 
         ConversationParticipant._prepza_e2ee_membership_listener = True
 
