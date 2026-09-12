@@ -13,19 +13,37 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1)
 
 
-def replace_in_route(text, route_anchor, old, new, label):
+def route_segment(text, route_anchor):
     route_pos = text.find(route_anchor)
     if route_pos < 0:
-        raise SystemExit(f"{label}: route not found")
+        raise SystemExit(f"route not found: {route_anchor}")
     next_route = text.find("@app.route(", route_pos + len(route_anchor))
     if next_route < 0:
         next_route = len(text)
-    segment = text[route_pos:next_route]
+    return route_pos, next_route, text[route_pos:next_route]
+
+
+def replace_in_route(text, route_anchor, old, new, label):
+    route_pos, next_route, segment = route_segment(text, route_anchor)
     if new in segment:
         return text
     if old not in segment:
         raise SystemExit(f"{label}: expected anchor not found in route")
     return text[:route_pos] + segment.replace(old, new, 1) + text[next_route:]
+
+
+def replace_function_guard_in_route(text, route_anchor, new_guard, label):
+    route_pos, next_route, segment = route_segment(text, route_anchor)
+    if new_guard in segment:
+        return text
+    guard_start = segment.find("    if not document")
+    if guard_start < 0:
+        raise SystemExit(f"{label}: document guard not found")
+    guard_end = segment.find("    if not document.document_content_id:", guard_start)
+    if guard_end < 0:
+        raise SystemExit(f"{label}: document content guard not found")
+    segment = segment[:guard_start] + new_guard + segment[guard_end:]
+    return text[:route_pos] + segment + text[next_route:]
 
 
 def main():
@@ -134,31 +152,20 @@ def _published_material_response(user_id, content, material):
                 f"{route_name} study access guard",
             )
         replay = f'''    if document.user_id != user_id:\n        shared = _published_ready_material_for_viewer(\n            user_id, document, "{material_type}", _ai_generation_parameters_from_request()\n        )\n        if not shared:\n            return jsonify({{"error": "Published {route_name.replace('_', ' ')} has not been generated yet"}}), 404\n        content, material = shared\n        result = _published_material_response(user_id, content, material)\n        return jsonify({{\n            "material_id": result["material_id"],\n            "reused": True,\n            "{route_name}": result["payload"],\n        }}), 200\n\n'''
-        s = replace_in_route(
-            s,
-            route_anchor,
-            marker,
-            marker + replay,
-            f"{route_name} published replay",
-        )
+        s = replace_in_route(s, route_anchor, marker, marker + replay, f"{route_name} published replay")
 
     completion_routes = {
         "quiz": '@app.route("/documents/<int:document_id>/quiz/<int:material_id>/complete", methods=["POST"])',
         "flashcards": '@app.route("/documents/<int:document_id>/flashcards/<int:material_id>/complete", methods=["POST"])',
     }
     for route_name, route_anchor in completion_routes.items():
-        s = replace_in_route(
+        s = replace_function_guard_in_route(
             s,
             route_anchor,
-            owner_guard,
             shared_guard,
             f"complete_{route_name} study access guard",
         )
-        route_pos = s.find(route_anchor)
-        next_route = s.find("@app.route(", route_pos + len(route_anchor))
-        if next_route < 0:
-            next_route = len(s)
-        segment = s[route_pos:next_route]
+        route_pos, next_route, segment = route_segment(s, route_anchor)
         material_lookup = '''    material = db.session.get(GeneratedMaterial, material_id)\n'''
         if material_lookup not in segment:
             raise SystemExit(f"complete_{route_name}: material lookup not found")
