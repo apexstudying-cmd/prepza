@@ -122,7 +122,6 @@ PUBLISHED_REPLAY_RESPONSE = """def _published_material_response(user_id, content
 
 
 def _remove_function_definitions(source, marker):
-    """Remove every top-level function with the exact marker."""
     pattern = rf"(?ms)^def {re.escape(marker)}\(.*?(?=^def )"
     return re.sub(pattern, "", source)
 
@@ -131,15 +130,15 @@ def install_published_replay_helpers(s):
     s = _remove_function_definitions(s, "_published_ready_material_for_viewer")
     s = _remove_function_definitions(s, "_published_material_response")
 
-    route_anchor = '@app.route("/documents/<int:document_id>/summarize", methods=["POST"])\n'
-    if route_anchor not in s:
-        raise SystemExit("published replay insertion anchor not found")
+    function_marker = "def summarize_document(document_id):"
+    function_pos = s.find(function_marker)
+    if function_pos < 0:
+        raise SystemExit("summary function insertion anchor not found")
+    route_pos = s.rfind("@app.route(", 0, function_pos)
+    if route_pos < 0:
+        raise SystemExit("summary route decorator insertion anchor not found")
 
-    return s.replace(
-        route_anchor,
-        PUBLISHED_REPLAY_HELPER + PUBLISHED_REPLAY_RESPONSE + route_anchor,
-        1,
-    )
+    return s[:route_pos] + PUBLISHED_REPLAY_HELPER + PUBLISHED_REPLAY_RESPONSE + s[route_pos:]
 
 
 def main():
