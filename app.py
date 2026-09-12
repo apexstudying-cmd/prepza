@@ -3726,7 +3726,7 @@ def summarize_document(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
     if not document.document_content_id:
@@ -3794,7 +3794,7 @@ def quiz_document(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
     if not document.document_content_id:
@@ -4177,11 +4177,8 @@ def get_podcast_audio(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
-
-    if not document.document_content_id:
-        return jsonify({"error": "Document has no podcast"}), 404
 
     if document.user_id == user_id:
         material = get_generated_material_for_user(
