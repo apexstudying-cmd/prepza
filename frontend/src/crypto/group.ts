@@ -58,6 +58,7 @@ export interface GroupKeyEnvelope {
   conversationId: number
   recipientUserId: number
   senderUserId: number
+  key_epoch?: number
   nonce: string
   ciphertext: string
   version: 1
@@ -78,6 +79,7 @@ export async function wrapGroupKeyForMember(
   conversationId: number,
   senderUserId: number,
   recipientUserId: number,
+  keyEpoch?: number,
 ): Promise<GroupKeyEnvelope> {
   const wrapKey = await deriveWrapKey(
     myPrivateKey,
@@ -97,6 +99,7 @@ export async function wrapGroupKeyForMember(
     conversationId,
     recipientUserId,
     senderUserId,
+    key_epoch: keyEpoch,
     nonce: b64(nonce),
     ciphertext: b64(ciphertext),
     version: 1,
