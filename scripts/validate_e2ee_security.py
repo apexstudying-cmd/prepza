@@ -74,7 +74,9 @@ def main() -> None:
     require(
         "frontend/src/crypto/chatStudyDocumentReader.tsx",
         "installChatStudyDocumentObserver",
-        "decrypt",
+        "activeDocuments",
+        "const seen = new Set<number>()",
+        "documents.length > 1",
         "selected_chat_document",
         "The file is decrypted locally.",
     )
