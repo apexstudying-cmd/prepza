@@ -2192,6 +2192,55 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   )
 }
 
+// ─── NATIVE DOCUMENT READER ──────────────────────────────────────────────────
+function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  const [doc, setDoc] = useState<DocumentDetail | null>(null)
+  const [page, setPage] = useState(0)
+  const [savedPage, setSavedPage] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
+  useEffect(() => {
+    if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
+    let cancelled = false
+    Promise.all([api<DocumentDetail>(`/documents/${activeDocumentId}`), api<{page_num:number}>(`/documents/${activeDocumentId}/reading`), api<{csrf_token:string}>('/me')])
+      .then(([detail, progress, me]) => { if (cancelled) return; setDoc(detail); setPage(progress.page_num || 0); setSavedPage(progress.page_num || 0); setCsrfToken(me.csrf_token) })
+      .catch(e => { if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not open this document.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [activeDocumentId])
+  useEffect(() => {
+    if (activeDocumentId == null || !csrfToken) return
+    const ping = () => { if (document.visibilityState === 'visible') api('/study-time/heartbeat', { method:'POST', headers:{'X-CSRF-Token':csrfToken}, body:JSON.stringify({feature:'reading', document_id:activeDocumentId}) }).catch(()=>{}) }
+    ping(); const interval = setInterval(ping, 20000); return () => clearInterval(interval)
+  }, [activeDocumentId, csrfToken])
+  useEffect(() => {
+    if (activeDocumentId == null || !csrfToken || page === savedPage) return
+    const timer = setTimeout(() => api(`/documents/${activeDocumentId}/reading`, {method:'POST', headers:{'X-CSRF-Token':csrfToken}, body:JSON.stringify({page_num:page})}).then(()=>setSavedPage(page)).catch(()=>{}), 250)
+    return () => clearTimeout(timer)
+  }, [activeDocumentId, csrfToken, page, savedPage])
+  if (loading) return <GenerationLoading label="Opening your document…" />
+  if (error) return <GenerationError error={error} />
+  if (!doc || activeDocumentId == null) return <GenerationError error="Document unavailable." />
+  if (doc.file_type !== 'pdf') return <GenerationError error="Native reading currently supports PDF documents only." />
+  const count = Math.max(1, doc.page_count || 1), current = Math.min(Math.max(page,0), count-1), progress = ((current+1)/count)*100
+  const pageUrl = `/documents/${activeDocumentId}/reading/page/${current}`
+  const atEnd = current >= count - 1
+  const nextBackground = atEnd ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg,${N.gold},${N.goldL})`
+  const nextColor = atEnd ? 'rgba(255,255,255,0.25)' : N.navy
+  return <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',background:'#111827'}}>
+    <div style={{background:N.navy,padding:'10px 14px 12px',flexShrink:0}}><div style={{display:'flex',alignItems:'center',gap:10}}>
+      <button onClick={()=>setScreen('document-study')} style={{width:34,height:34,background:'rgba(255,255,255,0.1)',border:'none',borderRadius:10,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#fff'}}>{Ic.back()}</div></button>
+      <div style={{flex:1,minWidth:0}}><div style={{color:'#fff',fontWeight:800,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{doc.title}</div><div style={{color:'rgba(255,255,255,0.5)',fontSize:10}}>Page {current+1} of {count}</div></div>
+    </div><div style={{marginTop:10,height:3,background:'rgba(255,255,255,0.12)',borderRadius:99,overflow:'hidden'}}><div style={{width:`${progress}%`,height:'100%',background:N.gold}}/></div></div>
+    <div style={{flex:1,minHeight:0,overflow:'auto',padding:'14px 10px',display:'flex',justifyContent:'center'}}><img key={pageUrl} src={pageUrl} alt={`Page ${current+1} of ${doc.title}`} style={{display:'block',width:'min(100%,900px)',height:'auto',background:'#fff',boxShadow:'0 4px 24px rgba(0,0,0,0.35)'}} /></div>
+    <div style={{background:N.navy,padding:'10px 14px calc(10px + env(safe-area-inset-bottom))',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+      <button disabled={current===0} onClick={()=>setPage(p=>Math.max(0,p-1))} style={{flex:1,border:'none',borderRadius:12,padding:'11px 0',background:current===0?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.1)',color:current===0?'rgba(255,255,255,0.25)':'#fff',fontWeight:800,fontFamily:'Plus Jakarta Sans'}}>Previous</button>
+      <div style={{color:'rgba(255,255,255,0.55)',fontSize:11,fontWeight:700,minWidth:62,textAlign:'center'}}>{Math.round(progress)}%</div>
+      <button disabled={atEnd} onClick={()=>setPage(p=>Math.min(count-1,p+1))} style={{flex:1,border:'none',borderRadius:12,padding:'11px 0',background:nextBackground,color:nextColor,fontWeight:800,fontFamily:'Plus Jakarta Sans'}}>Next</button>
+    </div></div>
+}
+
 // ─── AI TUTOR ─────────────────────────────────────────────────────────────────
 type TutorMsg = { id: number | string; role: 'user' | 'assistant'; content: string }
 
@@ -12933,7 +12982,7 @@ export default function App() {
       case 'processing':        return <ProcessingScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'document-study': return <DocumentStudyHubScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'document-reader': return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
+      case 'document-reader': return <DocumentReaderScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} activeDocumentId={activeDocumentId} setActiveDocumentId={setActiveDocumentId} />
       case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'quiz':              return <QuizScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />

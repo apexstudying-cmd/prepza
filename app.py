@@ -282,6 +282,16 @@ class Document(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class DocumentReadingProgress(db.Model):
+    """Durable per-student page position for the native document reader."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    document_id = db.Column(db.Integer, db.ForeignKey("document.id"), nullable=False)
+    page_num = db.Column(db.Integer, nullable=False, default=0)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("user_id", "document_id", name="uq_document_reading_progress_user_document"),)
+
+
 class GeneratedMaterial(db.Model):
     """
     AI-generated study material tied to DocumentContent (not to any one
@@ -3487,6 +3497,77 @@ def get_document(document_id):
     })
 
 
+def _can_study_document(user_id, document):
+    if not document or document.is_removed: return False
+    if document.user_id == user_id: return True
+    pub = LibraryPublication.query.filter_by(document_id=document.id, status="approved").first()
+    return bool(pub)
+
+
+def _get_studyable_document(user_id, document_id):
+    document = db.session.get(Document, document_id)
+    if not _can_study_document(user_id, document): return None
+    content = db.session.get(DocumentContent, document.document_content_id) if document.document_content_id else None
+    if not content or content.status != "ready": return None
+    return document, content
+
+
+@app.route("/documents/<int:document_id>/reading", methods=["GET"])
+def get_document_reading(document_id):
+    user_id = session.get("user_id")
+    if not user_id: return jsonify({"error": "Not logged in"}), 401
+    pair = _get_studyable_document(user_id, document_id)
+    if not pair: return jsonify({"error": "Document not found"}), 404
+    document, content = pair
+    progress = DocumentReadingProgress.query.filter_by(user_id=user_id, document_id=document.id).first()
+    page_num = progress.page_num if progress else 0
+    max_page = max(0, (content.page_count or 1) - 1)
+    return jsonify({"document_id": document.id, "page_num": min(max(0, page_num), max_page), "page_count": content.page_count})
+
+
+@app.route("/documents/<int:document_id>/reading", methods=["POST"])
+@require_csrf
+def save_document_reading(document_id):
+    user_id = session.get("user_id")
+    if not user_id: return jsonify({"error": "Not logged in"}), 401
+    pair = _get_studyable_document(user_id, document_id)
+    if not pair: return jsonify({"error": "Document not found"}), 404
+    document, content = pair
+    data = request.get_json(silent=True) or {}
+    page_num = data.get("page_num")
+    if not isinstance(page_num, int) or isinstance(page_num, bool) or page_num < 0: return jsonify({"error": "page_num must be a non-negative integer"}), 400
+    max_page = max(0, (content.page_count or 1) - 1)
+    if page_num > max_page: return jsonify({"error": "page_num is outside the document"}), 400
+    progress = DocumentReadingProgress.query.filter_by(user_id=user_id, document_id=document.id).first()
+    if not progress: db.session.add(DocumentReadingProgress(user_id=user_id, document_id=document.id, page_num=page_num))
+    else: progress.page_num = page_num
+    db.session.commit()
+    return jsonify({"ok": True, "page_num": page_num})
+
+
+@app.route("/documents/<int:document_id>/reading/page/<int:page_num>")
+def render_document_reading_page(document_id, page_num):
+    user_id = session.get("user_id")
+    if not user_id: return jsonify({"error": "Not logged in"}), 401
+    pair = _get_studyable_document(user_id, document_id)
+    if not pair: return jsonify({"error": "Document not found"}), 404
+    document, content = pair
+    if content.file_type != "pdf": return jsonify({"error": "Native reading currently supports PDF documents only"}), 415
+    if page_num < 0 or content.page_count is None or page_num >= content.page_count: return jsonify({"error": "Page not found"}), 404
+    file_bytes = fetch_private_file_bytes(content.storage_path, bucket="documents")
+    if not file_bytes: return jsonify({"error": "Document file could not be loaded"}), 502
+    viewer = db.session.get(User, user_id)
+    watermark = (viewer.email if viewer and viewer.email else "Prepza")
+    try:
+        image_bytes, _ = render_watermarked_page(file_bytes, page_num, watermark, zoom=1.6)
+    except Exception:
+        return jsonify({"error": "Document page could not be rendered"}), 500
+    response = Response(image_bytes, mimetype="image/png")
+    response.headers["Cache-Control"] = "private, no-store, max-age=0"
+    response.headers["Content-Disposition"] = "inline"
+    return response
+
+
 @app.route("/documents/<int:document_id>", methods=["PATCH"])
 @require_csrf
 def rename_document(document_id):
@@ -5543,8 +5624,16 @@ def study_time_heartbeat():
     if feature not in STUDY_TIME_FEATURES:
         return jsonify({"error": f"feature must be one of {sorted(STUDY_TIME_FEATURES)}"}), 400
 
+    document_content_id = None
+    document_id = data.get("document_id")
+    if document_id is not None:
+        if not isinstance(document_id, int) or isinstance(document_id, bool): return jsonify({"error": "document_id must be an integer"}), 400
+        pair = _get_studyable_document(user_id, document_id)
+        if not pair: return jsonify({"error": "Document not found"}), 404
+        document_content_id = pair[1].id
+
     seconds_today = record_study_time_heartbeat(user_id, feature=feature)
-    record_study_activity(user_id)
+    record_study_activity(user_id, document_content_id=document_content_id)
     db.session.commit()
 
     return jsonify({"study_time_seconds_today": seconds_today})
