@@ -141,18 +141,20 @@ export async function decryptGroupMessage(groupKey: CryptoKey, body: string, non
 
 export async function encryptGroupBytes(groupKey: CryptoKey, bytes: ArrayBuffer | Uint8Array) {
   const nonce = window.crypto.getRandomValues(new Uint8Array(GCM_IV_BYTES))
+  const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
   const ciphertext = await window.crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: nonce as BufferSource },
     groupKey,
-    bytes instanceof Uint8Array ? bytes as BufferSource : bytes,
+    input as BufferSource,
   )
   return { ciphertext, nonce: b64(nonce) }
 }
 
 export async function decryptGroupBytes(groupKey: CryptoKey, ciphertext: ArrayBuffer | Uint8Array, nonce: string) {
+  const input = ciphertext instanceof Uint8Array ? ciphertext : new Uint8Array(ciphertext)
   return window.crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: unb64(nonce) as BufferSource },
     groupKey,
-    ciphertext instanceof Uint8Array ? ciphertext as BufferSource : ciphertext,
+    input as BufferSource,
   )
 }
