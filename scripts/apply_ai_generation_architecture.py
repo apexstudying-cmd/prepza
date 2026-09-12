@@ -25,9 +25,11 @@ def _top_level_function(source: str, name: str):
 
 def _install_wrapper(source: str, material_type: str, public_name: str) -> str:
     legacy_name = f"_legacy_{public_name}"
-    # Idempotency must detect the reusable wrapper, not merely the public
-    # function name, because the unpatched legacy implementation has that name.
-    if f"def {legacy_name}(" in source and f'material_type="{material_type}"' in source:
+    # The legacy implementation and reusable wrapper are both top-level
+    # functions. This is the reliable idempotency check: searching for a
+    # material_type string is unsafe because the legacy function's comments
+    # can contain the same text.
+    if _top_level_function(source, legacy_name) is not None and _top_level_function(source, public_name) is not None:
         return source
 
     node = _top_level_function(source, legacy_name)
@@ -58,7 +60,7 @@ def patch_legacy_generators() -> None:
 
     for material_type, public_name in MATERIALS.items():
         legacy_name = f"_legacy_{public_name}"
-        if f"def {legacy_name}(" not in source:
+        if _top_level_function(source, legacy_name) is None:
             node = _top_level_function(source, public_name)
             if node is None:
                 raise RuntimeError(f"Could not find {public_name}")
