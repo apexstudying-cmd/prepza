@@ -17,34 +17,47 @@ elif new_script_access not in s:
 
 published_script_block = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()\n        if not material or not material.payload:\n            return jsonify({"error": "Podcast has not been published yet"}), 404\n        record_document_studied(user_id, content.id)\n        db.session.commit()\n        return jsonify({\n            "material_id": material.id,\n            "reused": True,\n            "podcast": json.loads(material.payload),\n        }), 200\n\n'''
 shared_script_block = '''    if document.user_id != user_id:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()\n        if not material or not material.payload:\n            return jsonify({"error": "Podcast has not been published yet"}), 404\n        record_document_studied(user_id, content.id)\n        db.session.commit()\n        return jsonify({\n            "material_id": material.id,\n            "reused": True,\n            "podcast": json.loads(material.payload),\n        }), 200\n\n'''
-if shared_script_block not in s:
-    if published_script_block in s:
-        s = s.replace(published_script_block, shared_script_block, 1)
-    else:
-        raise SystemExit('published podcast script block not found')
-
-# Older runs of this patch could append the same shared-material branch more
-# than once. Collapse identical copies now, while keeping the patch itself
-# repeat-safe for future runs.
+if published_script_block in s:
+    s = s.replace(published_script_block, shared_script_block, 1)
+elif shared_script_block not in s:
+    raise SystemExit('published podcast script block not found')
 while s.count(shared_script_block) > 1:
     first = s.find(shared_script_block)
     s = s[:first + len(shared_script_block)] + s[first + len(shared_script_block):].replace(shared_script_block, '', 1)
 
 old_audio_material = '''    material = get_generated_material_for_user(\n        document.document_content_id, "podcast", session.get("user_id")\n    )\n'''
 new_audio_material = '''    if document.user_id == user_id:\n        material = get_generated_material_for_user(\n            document.document_content_id, "podcast", session.get("user_id")\n        )\n    else:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()\n'''
+legacy_audio_material = '''    if document.user_id == user_id:\n        material = get_generated_material_for_user(\n            document.document_content_id, "podcast", session.get("user_id")\n        )\n    else:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()\n'''
 if new_audio_material not in s:
-    if old_audio_material in s:
+    if legacy_audio_material in s:
+        s = s.replace(legacy_audio_material, new_audio_material, 1)
+    elif old_audio_material in s:
         s = s.replace(old_audio_material, new_audio_material, 1)
     else:
         raise SystemExit('podcast audio material lookup anchor not found')
 
-old_start = '    podcast_audio.start_podcast_audio_processing(material.id, app)\n'
-new_start = '''    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n    podcast_audio.start_podcast_audio_processing(material.id, app)\n'''
-if new_start not in s:
-    if old_start in s:
-        s = s.replace(old_start, new_start, 1)
+# Collapse duplicate audio-synthesis guards left by older patch runs.
+guard = '''    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n'''
+if guard not in s:
+    raise SystemExit('podcast audio synthesis guard not found')
+first = s.find(guard)
+second_part = s[first + len(guard):]
+s = s[:first + len(guard)] + second_part.replace(guard, '')
+
+# The polling endpoint must also allow approved published viewers, but only
+# against a shared READY artifact. It never generates or exposes private files.
+old_poll_access = '''    document = db.session.get(Document, document_id)\n    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n'''
+new_poll_access = '''    document = db.session.get(Document, document_id)\n    if not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n'''
+if old_poll_access in s:
+    s = s.replace(old_poll_access, new_poll_access, 1)
+
+old_poll_lookup = '''    if document.user_id == user_id:\n        material = get_generated_material_for_user(\n            document.document_content_id, "podcast", session.get("user_id")\n        )\n    else:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()\n'''
+new_poll_lookup = '''    if document.user_id == user_id:\n        material = get_generated_material_for_user(\n            document.document_content_id, "podcast", session.get("user_id")\n        )\n    else:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n            scope="shared",\n            owner_user_id=None,\n        ).first()\n'''
+if new_poll_lookup not in s:
+    if old_poll_lookup in s:
+        s = s.replace(old_poll_lookup, new_poll_lookup, 1)
     else:
-        raise SystemExit('podcast audio synthesis anchor not found')
+        raise SystemExit('podcast polling lookup anchor not found')
 
 p.write_text(s)
 print('reader and published podcast shared-artifact patch applied')
