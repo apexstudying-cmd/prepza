@@ -3,16 +3,22 @@ import {
   deriveConversationKey,
   encryptMessageBody,
 } from './conversation'
+import { decryptGroupBytes, encryptGroupBytes } from './group'
 import { getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'
 import { fetchUserPublicKey } from './e2eeChatApi'
 
 const DIRECT_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
 const DIRECT_SEARCH_RE = /^\/chats\/(\d+)\/messages\/search(?:\?.*)?$/
+const DIRECT_ATTACHMENT_CREATE_RE = /^\/chats\/(\d+)\/attachments$/
+const ENCRYPTED_ATTACHMENT_MARKER = '__prepza_e2ee_attachment_v1'
 
 let installed = false
 let currentUserId: number | null = null
 const keyPromises = new Map<number, Promise<CryptoKey>>()
 const detailPromises = new Map<number, Promise<any>>()
+const pendingUploads = new Map<string, { conversationId: number; attachmentId: number; key: CryptoKey; mimeType: string }>()
+const pendingAttachmentMeta = new Map<number, { conversationId: number; key: CryptoKey; mimeType: string; fileNonce: string }>()
+const blockedUploadUrls = new Set<string>()
 
 function pathOnly(input: RequestInfo | URL): string {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.pathname + input.search : input.url
@@ -22,6 +28,23 @@ function pathOnly(input: RequestInfo | URL): string {
   } catch {
     return raw
   }
+}
+
+function absoluteUrl(input: RequestInfo | URL): string {
+  const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  try { return new URL(raw, window.location.origin).href } catch { return raw }
+}
+
+function mimeTypeFor(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  const map: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+    pdf: 'application/pdf', doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  }
+  return map[ext] || 'application/octet-stream'
 }
 
 async function fetchConversationDetail(
@@ -96,6 +119,29 @@ function jsonResponse(response: Response, body: any): Response {
   })
 }
 
+async function decryptDirectAttachment(
+  nativeFetch: typeof window.fetch,
+  conversationId: number,
+  message: any,
+  key: CryptoKey,
+): Promise<any> {
+  if (!message?.attachment?.view_url || !message.body) return message
+  let metadata: any
+  try { metadata = JSON.parse(message.body) } catch { return message }
+  if (metadata?.marker !== ENCRYPTED_ATTACHMENT_MARKER || !metadata.file_nonce) return message
+
+  try {
+    const encryptedResponse = await nativeFetch(message.attachment.view_url, { credentials: 'include' })
+    if (!encryptedResponse.ok) throw new Error('Encrypted attachment download failed')
+    const encryptedBytes = await encryptedResponse.arrayBuffer()
+    const plaintext = await decryptGroupBytes(key, encryptedBytes, metadata.file_nonce)
+    const blobUrl = URL.createObjectURL(new Blob([plaintext], { type: metadata.mime_type || 'application/octet-stream' }))
+    return { ...message, body: null, attachment: { ...message.attachment, view_url: blobUrl } }
+  } catch {
+    return { ...message, body: null, attachment: { ...message.attachment, view_url: null } }
+  }
+}
+
 async function decryptDirectMessage(
   nativeFetch: typeof window.fetch,
   conversationId: number,
@@ -107,10 +153,11 @@ async function decryptDirectMessage(
   }
   try {
     const key = await directConversationKey(nativeFetch, conversationId)
-    return {
+    const decrypted = {
       ...message,
       body: await decryptMessageBody(key, message.body, message.nonce),
     }
+    return decryptDirectAttachment(nativeFetch, conversationId, decrypted, key)
   } catch {
     return { ...message, body: '[Encrypted message — key unavailable on this device]' }
   }
@@ -181,6 +228,64 @@ export function installDirectChatE2EE(): void {
       return response
     }
 
+    const attachmentCreateMatch = path.match(DIRECT_ATTACHMENT_CREATE_RE)
+    if (attachmentCreateMatch && method === 'POST' && init?.body) {
+      const conversationId = Number(attachmentCreateMatch[1])
+      const detail = await fetchConversationDetail(nativeFetch, conversationId).catch(() => null)
+      if (!detail || detail.is_group === true) return nativeFetch(input, init)
+      const payload = (() => { try { return JSON.parse(String(init.body)) } catch { return null } })()
+      const response = await nativeFetch(input, init)
+      if (response.ok && payload?.original_filename) {
+        const body = await response.clone().json().catch(() => null)
+        const attachmentId = Number(body?.attachment_id)
+        const uploadUrl = String(body?.upload_url || '')
+        if (Number.isInteger(attachmentId) && attachmentId > 0 && uploadUrl) {
+          try {
+            pendingUploads.set(uploadUrl, {
+              conversationId,
+              attachmentId,
+              key: await directConversationKey(nativeFetch, conversationId),
+              mimeType: mimeTypeFor(String(payload.original_filename)),
+            })
+          } catch {
+            blockedUploadUrls.add(uploadUrl)
+          }
+        }
+      }
+      return response
+    }
+
+    const uploadUrl = absoluteUrl(input)
+    if (blockedUploadUrls.has(uploadUrl) && method === 'PUT') {
+      return new Response(JSON.stringify({ error: 'Secure attachment encryption is not ready on this device' }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    const pendingUpload = pendingUploads.get(uploadUrl)
+    if (pendingUpload && method === 'PUT' && init?.body) {
+      try {
+        const plaintext = await new Response(init.body).arrayBuffer()
+        const encrypted = await encryptGroupBytes(pendingUpload.key, plaintext)
+        pendingAttachmentMeta.set(pendingUpload.attachmentId, {
+          conversationId: pendingUpload.conversationId,
+          key: pendingUpload.key,
+          mimeType: pendingUpload.mimeType,
+          fileNonce: encrypted.nonce,
+        })
+        pendingUploads.delete(uploadUrl)
+        return nativeFetch(input, { ...init, body: encrypted.ciphertext })
+      } catch {
+        pendingUploads.delete(uploadUrl)
+        blockedUploadUrls.add(uploadUrl)
+        return new Response(JSON.stringify({ error: 'Secure attachment encryption failed' }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
     const searchMatch = path.match(DIRECT_SEARCH_RE)
     if (searchMatch && method === 'GET') {
       const conversationId = Number(searchMatch[1])
@@ -209,9 +314,29 @@ export function installDirectChatE2EE(): void {
         const encrypted = await encryptMessageBody(key, payload.body)
         payload.body = encrypted.body
         payload.nonce = encrypted.nonce
-        init = { ...init, body: JSON.stringify(payload) }
+      } else if (payload?.attachment_id != null) {
+        const attachmentId = Number(payload.attachment_id)
+        const meta = pendingAttachmentMeta.get(attachmentId)
+        if (!meta || meta.conversationId !== conversationId) {
+          return new Response(JSON.stringify({ error: 'Secure attachment encryption metadata is unavailable' }), {
+            status: 409,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        const key = await directConversationKey(nativeFetch, conversationId)
+        const metadata = JSON.stringify({
+          marker: ENCRYPTED_ATTACHMENT_MARKER,
+          key_epoch: 1,
+          file_nonce: meta.fileNonce,
+          mime_type: meta.mimeType,
+        })
+        const encrypted = await encryptMessageBody(key, metadata)
+        payload.body = encrypted.body
+        payload.nonce = encrypted.nonce
+        pendingAttachmentMeta.delete(attachmentId)
       }
 
+      init = { ...init, body: JSON.stringify(payload) }
       const response = await nativeFetch(input, init)
       return transformDirectMessageResponse(nativeFetch, response, conversationId)
     }
