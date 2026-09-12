@@ -211,6 +211,7 @@ def register_control_routes(
     # register the E2EE chat routes without modifying the large app.py file.
     from e2ee_chat_models import create_e2ee_models
     from e2ee_chat_routes import register_e2ee_chat_routes
+    from e2ee_ada_routes import register_e2ee_ada_route
     from app import Conversation, ConversationParticipant, Message
 
     ConversationKeyEnvelope = create_e2ee_models(db)
@@ -221,6 +222,14 @@ def register_control_routes(
         ConversationParticipant,
         User,
         ConversationKeyEnvelope,
+    )
+    register_e2ee_ada_route(
+        app,
+        db,
+        Conversation,
+        ConversationParticipant,
+        Document,
+        User,
     )
 
     # Membership changes are soft state transitions (left_at), so a mapper
@@ -248,15 +257,15 @@ def register_control_routes(
 
     # Stamp every new message with the group epoch that existed at insert
     # time. The Message ORM model predates this column, so this uses the
-    # mapped connection rather than changing the 525k-line app.py model.
+    # mapped connection rather than changing the app.py model.
     if not getattr(Message, "_prepza_e2ee_epoch_listener", False):
         @event.listens_for(Message, "after_insert")
         def _stamp_message_e2ee_epoch(mapper, connection, target):
             connection.execute(
                 text(
-                    "UPDATE message SET e2ee_key_epoch = COALESCE((" 
+                    "UPDATE message SET e2ee_key_epoch = COALESCE(("
                     "SELECT key_epoch FROM conversation WHERE id = message.conversation_id "
-                    "AND e2ee_mode = 'group_v1'" 
+                    "AND e2ee_mode = 'group_v1'"
                     "), 0) WHERE id = :message_id"
                 ),
                 {"message_id": target.id},
