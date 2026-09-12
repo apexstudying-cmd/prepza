@@ -181,6 +181,7 @@ type Screen =
   | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'
   | 'upload-share-choice'
   | 'upload-share-choice'
+  | 'upload-share-choice'
   | 'chat-detail' | 'upload' | 'processing' | 'doc-ready' | 'document-study'
   | 'ai-tutor' | 'flashcards' | 'quiz' | 'podcast-player' | 'podcast-library' | 'summary'
   | 'opportunities' | 'opportunity-detail' | 'share-opp-form' | 'edu-upload-form'
