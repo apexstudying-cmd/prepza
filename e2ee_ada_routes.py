@@ -1,7 +1,7 @@
 """Scoped Ada route for E2EE study chats.
 
 The server receives plaintext only when a user explicitly selects study text
-and asks Ada about it. It never loads conversation history, decrypts group
+and asks Ada about it. It never loads conversation history, decrypts chat
 messages, or accepts a local E2EE key from the client.
 """
 
@@ -66,15 +66,24 @@ def register_e2ee_ada_route(
             return jsonify({"error": "Conversation not found"}), 404
 
         conversation = db.session.get(Conversation, conversation_id)
-        if not conversation or not conversation.is_group:
-            return jsonify({"error": "Scoped Ada is currently available only in group study chats"}), 400
+        if not conversation:
+            return jsonify({"error": "Conversation not found"}), 404
 
         state = db.session.execute(
             text("SELECT e2ee_mode, key_epoch FROM conversation WHERE id = :conversation_id"),
             {"conversation_id": conversation_id},
         ).mappings().first()
-        if not state or state["e2ee_mode"] != "group_v1":
-            return jsonify({"error": "Scoped Ada requires group E2EE"}), 409
+        if not state:
+            return jsonify({"error": "Conversation encryption state is unavailable"}), 409
+
+        e2ee_mode = state["e2ee_mode"] or "legacy"
+        if e2ee_mode not in {"group_v1", "direct_v1"}:
+            return jsonify({"error": "Scoped Ada requires an E2EE conversation"}), 409
+
+        if e2ee_mode == "group_v1" and not conversation.is_group:
+            return jsonify({"error": "Group E2EE state is inconsistent"}), 409
+        if e2ee_mode == "direct_v1" and conversation.is_group:
+            return jsonify({"error": "Direct E2EE state is inconsistent"}), 409
 
         current_key_epoch = int(state["key_epoch"] or 0)
         data = request.get_json(silent=True) or {}
@@ -97,17 +106,16 @@ def register_e2ee_ada_route(
             return jsonify({"error": "Invalid document or page range"}), 400
         if page_end - page_start + 1 > MAX_PAGE_SPAN:
             return jsonify({"error": "Selected page range is too large"}), 400
-        if key_epoch != current_key_epoch:
+        expected_epoch = current_key_epoch if e2ee_mode == "group_v1" else 1
+        if key_epoch != expected_epoch:
             return jsonify({
-                "error": "E2EE key epoch is stale; reopen the group and retry",
-                "key_epoch": current_key_epoch,
+                "error": "E2EE key epoch is stale; reopen the chat and retry",
+                "key_epoch": expected_epoch,
             }), 409
 
-        # Until encrypted shared-document ACLs exist, only a document owned
-        # by the requesting student may be used as Ada context. This prevents
-        # a guessed document ID from turning the endpoint into a document
-        # oracle. Shared encrypted documents should add an explicit ACL check
-        # here rather than weakening this owner-only fallback.
+        # The document is deliberately owner-scoped. A shared encrypted chat
+        # document can later add an explicit ACL, but this endpoint must not
+        # become a document-ID oracle in the meantime.
         document = db.session.get(Document, document_id)
         if not document or document.user_id != user_id or getattr(document, "is_removed", False):
             return jsonify({"error": "Study document not available"}), 404
@@ -167,7 +175,7 @@ def register_e2ee_ada_route(
         return jsonify({
             "answer": response.text,
             "model_used": response.model_used,
-            "key_epoch": current_key_epoch,
+            "key_epoch": expected_epoch,
             "context_scope": "selected_document_pages",
         }), 200
 
