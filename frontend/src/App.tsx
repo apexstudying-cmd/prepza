@@ -6544,7 +6544,7 @@ function PublishLibraryScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
             <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} maxLength={1000} placeholder="What does this material cover? Who is it useful for?" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
           </div>
           <button onClick={() => canProceed2 && setStep(3)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-            Continue
+            {selectedDoc?.status === 'ready' ? 'Continue' : 'Document still preparing…'}
           </button>
         </div>
       )}
