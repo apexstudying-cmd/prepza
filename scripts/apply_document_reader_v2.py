@@ -22,21 +22,12 @@ if old_script_material in s:
 elif new_script_material not in s:
     raise SystemExit('podcast script material branch not found')
 
-old_audio_post = '''    document = db.session.get(Document, document_id)\n    if not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n    if not document.document_content_id:\n'''
-new_audio_post = '''    document = db.session.get(Document, document_id)\n    if not _can_study_document(user_id, document):\n        return jsonify({"error": "Document not found"}), 404\n    if not document.document_content_id:\n'''
-if old_audio_post not in s:
-    raise SystemExit('podcast audio access block not found')
-
 old_audio_material = '''    material = get_generated_material_for_user(\n        document.document_content_id, "podcast", session.get("user_id")\n    )\n'''
 new_audio_material = '''    if document.user_id == user_id:\n        material = get_generated_material_for_user(\n            document.document_content_id, "podcast", session.get("user_id")\n        )\n    else:\n        material = GeneratedMaterial.query.filter_by(\n            document_content_id=document.document_content_id,\n            material_type="podcast",\n            status="ready",\n        ).first()\n'''
 if old_audio_material in s:
     s = s.replace(old_audio_material, new_audio_material, 1)
 elif new_audio_material not in s:
     raise SystemExit('podcast audio material lookup not found')
-
-old_audio_guard = '''    if audio_status == "processing":\n        return jsonify({"audio_status": "processing", "material_id": material.id}), 202\n\n    # Published readers may replay an existing audio artifact, but they must\n    # never be able to trigger a new paid synthesis job themselves.\n    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n    podcast_audio.start_podcast_audio_processing(material.id, app)\n'''
-if old_audio_guard not in s:
-    raise SystemExit('podcast audio generation guard not found')
 
 p.write_text(s)
 print('reader and published podcast shared-artifact patch applied')
