@@ -29,5 +29,12 @@ if old_audio_material in s:
 elif new_audio_material not in s:
     raise SystemExit('podcast audio material lookup not found')
 
+old_start = '    podcast_audio.start_podcast_audio_processing(material.id, app)\n'
+new_start = '''    if document.user_id != user_id:\n        return jsonify({"error": "Podcast audio is not ready yet"}), 409\n\n    podcast_audio.start_podcast_audio_processing(material.id, app)\n'''
+if old_start in s:
+    s = s.replace(old_start, new_start, 1)
+elif new_start not in s:
+    raise SystemExit('podcast audio synthesis guard not found')
+
 p.write_text(s)
 print('reader and published podcast shared-artifact patch applied')
