@@ -5,6 +5,8 @@ and asks Ada about it. It never loads conversation history, decrypts chat
 messages, or accepts a local E2EE key from the client.
 """
 
+import re
+
 from flask import jsonify, request, session
 from sqlalchemy import text
 
@@ -35,9 +37,36 @@ def register_e2ee_ada_route(
     Document,
     User,
 ):
-    """Register the only server endpoint that can receive scoped Ada context."""
+    """Register scoped Ada and the direct-chat plaintext guard."""
     if getattr(app, "_prepza_e2ee_ada_route_registered", False):
         return
+
+    if not getattr(app, "_prepza_e2ee_direct_plaintext_guard", False):
+        @app.before_request
+        def _reject_plaintext_direct_message_write():
+            match = re.match(r"^/chats/(\d+)/messages$", request.path)
+            if request.method != "POST" or not match:
+                return None
+
+            conversation_id = int(match.group(1))
+            state = db.session.execute(
+                text("SELECT e2ee_mode FROM conversation WHERE id = :conversation_id"),
+                {"conversation_id": conversation_id},
+            ).scalar()
+            if state != "direct_v1":
+                return None
+
+            payload = request.get_json(silent=True)
+            if not isinstance(payload, dict):
+                return jsonify({"error": "Encrypted direct messages require a JSON payload"}), 400
+
+            has_body = isinstance(payload.get("body"), str) and bool(payload.get("body").strip())
+            has_attachment = payload.get("attachment_id") is not None
+            if (has_body or has_attachment) and not isinstance(payload.get("nonce"), str):
+                return jsonify({"error": "Plaintext direct messages are disabled; encrypt on the client first"}), 409
+            return None
+
+        app._prepza_e2ee_direct_plaintext_guard = True
 
     def active_member(conversation_id, user_id):
         return ConversationParticipant.query.filter_by(
