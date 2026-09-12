@@ -76,6 +76,14 @@ def main() -> None:
     )
 
     require(
+        "frontend/src/crypto/groupProvisioning.ts",
+        "function validateMemberTargets(",
+        "keyEpoch < 1",
+        "keyEpoch < 2",
+        "Missing public key for member",
+    )
+
+    require(
         "frontend/src/crypto/e2eeFetchBridge.ts",
         "encryptGroupBytes",
         "decryptGroupBytes",
