@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 APP = Path("app.py")
 
@@ -55,8 +56,7 @@ def replace_function_guard_in_route(text, route_anchor, new_guard, label):
     return text[:route_pos] + segment + text[next_route:]
 
 
-def install_published_replay_helper(s):
-    helper = '''def _published_ready_material_for_viewer(user_id, document, material_type, parameters):
+PUBLISHED_REPLAY_HELPER = '''def _published_ready_material_for_viewer(user_id, document, material_type, parameters):
     """Return an approved document's READY shared artifact without generation."""
     if not document or document.user_id == user_id:
         return None
@@ -106,30 +106,27 @@ def install_published_replay_helper(s):
     return content, material
 
 
-def _published_material_response(user_id, content, material):
-    record_document_studied(user_id, content.id)
-    db.session.commit()
-    return {
-        "material_id": material.id,
-        "reused": True,
-        "payload": json.loads(material.payload),
-    }
-
-
 '''
-    start_marker = 'def _published_ready_material_for_viewer('
-    end_marker = 'def _published_material_response('
-    start = s.find(start_marker)
-    if start >= 0:
-        end = s.find(end_marker, start)
-        if end < 0:
-            raise SystemExit("published replay response helper not found after replay helper")
-        return s[:start] + helper + s[end:]
 
-    route_anchor = '@app.route("/documents/<int:document_id>/summarize", methods=["POST"])\n'
-    if route_anchor not in s:
-        raise SystemExit("published replay helper route anchor not found")
-    return s.replace(route_anchor, helper + route_anchor, 1)
+
+def install_published_replay_helper(s):
+    # Remove every previous copy of the replay helper. This deliberately
+    # leaves _published_material_response and _ai_generation_parameters... 
+    # untouched, because those are separate helpers with independent jobs.
+    pattern = r"(?ms)^def _published_ready_material_for_viewer\(.*?(?=^def )"
+    cleaned, count = re.subn(pattern, "", s)
+    if count == 0:
+        cleaned = s
+
+    response_marker = "def _published_material_response(user_id, content, material):"
+    response_pos = cleaned.find(response_marker)
+    if response_pos < 0:
+        route_anchor = '@app.route("/documents/<int:document_id>/summarize", methods=["POST"])\n'
+        if route_anchor not in cleaned:
+            raise SystemExit("published replay insertion anchor not found")
+        return cleaned.replace(route_anchor, PUBLISHED_REPLAY_HELPER + route_anchor, 1)
+
+    return cleaned[:response_pos] + PUBLISHED_REPLAY_HELPER + cleaned[response_pos:]
 
 
 def main():
