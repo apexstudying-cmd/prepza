@@ -161,6 +161,9 @@ function DocumentStudyHubScreen({
 
     APP.write_text(text)
 
+    from apply_document_study_progress import main as apply_document_study_progress
+    apply_document_study_progress()
+
 
 if __name__ == '__main__':
     main()
