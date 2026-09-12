@@ -107,7 +107,7 @@ jobs:
           PY
 
       - name: Compile backend
-        run: python3 -m py_compile app.py document_pipeline.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py
+        run: python3 -m py_compile app.py document_pipeline.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_document_reader_v2.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py
 
       - name: Commit generated frontend and backend change
         run: |
