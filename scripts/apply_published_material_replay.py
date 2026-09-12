@@ -15,14 +15,12 @@ def _route_pattern(route_anchor):
 def route_segment(text, route_anchor):
     exact = text.find(route_anchor)
     if exact >= 0:
-        route_pos = exact
-        route_end = exact + len(route_anchor)
+        route_pos, route_end = exact, exact + len(route_anchor)
     else:
         match = _route_pattern(route_anchor).search(text)
         if not match:
             raise SystemExit(f"route not found: {route_anchor}")
-        route_pos = match.start()
-        route_end = match.end()
+        route_pos, route_end = match.start(), match.end()
     next_route = text.find("@app.route(", route_end)
     if next_route < 0:
         next_route = len(text)
@@ -121,7 +119,6 @@ PUBLISHED_REPLAY_RESPONSE = """def _published_material_response(user_id, content
 
 
 def _remove_function_definitions(source, marker):
-    # Stop before a decorator so Flask route decorators are never swallowed.
     pattern = rf"(?ms)^def {re.escape(marker)}\(.*?(?=^@|^def )"
     return re.sub(pattern, "", source)
 
@@ -135,7 +132,7 @@ def install_published_replay_helpers(s):
     route_pos = s.rfind("@app.route(", 0, function_pos)
     if route_pos < 0:
         raise SystemExit("summary route decorator insertion anchor not found")
-    return s[:route_pos] + PUBLISHED_REPLAY_HELPER + PUBLISHED_REPLAY_RESPONSE + s[route_pos:]
+    return s[:route_pos] + PUBLISHED_REPLAY_HELPER.rstrip() + "\n\n" + PUBLISHED_REPLAY_RESPONSE.rstrip() + "\n\n" + s[route_pos:]
 
 
 def main():
