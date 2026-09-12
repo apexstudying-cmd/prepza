@@ -34,6 +34,15 @@ def replace_in_route(text, route_anchor, old, new, label):
 
 def replace_function_guard_in_route(text, route_anchor, new_guard, label):
     route_pos, next_route, segment = route_segment(text, route_anchor)
+    owner_guard = '''    if not document or document.user_id != user_id or document.is_removed:\n        return jsonify({"error": "Document not found"}), 404\n'''
+    duplicate_a = new_guard + owner_guard
+    duplicate_b = owner_guard + new_guard
+    if duplicate_a in segment:
+        segment = segment.replace(duplicate_a, new_guard, 1)
+        return text[:route_pos] + segment + text[next_route:]
+    if duplicate_b in segment:
+        segment = segment.replace(duplicate_b, new_guard, 1)
+        return text[:route_pos] + segment + text[next_route:]
     if new_guard in segment:
         return text
     guard_start = segment.find("    if not document")
@@ -144,13 +153,7 @@ def _published_material_response(user_id, content, material):
         route_anchor = route_anchors[route_name]
         material_type = material_types[route_name]
         if route_name in ("flashcards", "mindmap"):
-            s = replace_in_route(
-                s,
-                route_anchor,
-                owner_guard,
-                shared_guard,
-                f"{route_name} study access guard",
-            )
+            s = replace_in_route(s, route_anchor, owner_guard, shared_guard, f"{route_name} study access guard")
         replay = f'''    if document.user_id != user_id:\n        shared = _published_ready_material_for_viewer(\n            user_id, document, "{material_type}", _ai_generation_parameters_from_request()\n        )\n        if not shared:\n            return jsonify({{"error": "Published {route_name.replace('_', ' ')} has not been generated yet"}}), 404\n        content, material = shared\n        result = _published_material_response(user_id, content, material)\n        return jsonify({{\n            "material_id": result["material_id"],\n            "reused": True,\n            "{route_name}": result["payload"],\n        }}), 200\n\n'''
         s = replace_in_route(s, route_anchor, marker, marker + replay, f"{route_name} published replay")
 
@@ -159,12 +162,7 @@ def _published_material_response(user_id, content, material):
         "flashcards": '@app.route("/documents/<int:document_id>/flashcards/<int:material_id>/complete", methods=["POST"])',
     }
     for route_name, route_anchor in completion_routes.items():
-        s = replace_function_guard_in_route(
-            s,
-            route_anchor,
-            shared_guard,
-            f"complete_{route_name} study access guard",
-        )
+        s = replace_function_guard_in_route(s, route_anchor, shared_guard, f"complete_{route_name} study access guard")
         route_pos, next_route, segment = route_segment(s, route_anchor)
         material_lookup = '''    material = db.session.get(GeneratedMaterial, material_id)\n'''
         if material_lookup not in segment:
