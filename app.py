@@ -3690,7 +3690,6 @@ def _published_ready_material_for_viewer(user_id, document, material_type, param
         return None
     return content, material
 
-
 def _published_material_response(user_id, content, material):
     record_document_studied(user_id, content.id)
     db.session.commit()
@@ -3699,7 +3698,6 @@ def _published_material_response(user_id, content, material):
         "reused": True,
         "payload": json.loads(material.payload),
     }
-
 
 def _ai_generation_parameters_from_request():
     """Return an AI generation parameter object without coercing invalid JSON shapes."""
