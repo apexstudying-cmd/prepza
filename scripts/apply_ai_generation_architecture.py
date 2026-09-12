@@ -100,6 +100,14 @@ def patch_ai_routes() -> None:
         "podcast": "def podcast_script_document(document_id):",
         "mind_map": "def mindmap_document(document_id):",
     }
+
+    helper = '''\n\ndef _ai_generation_parameters_from_request():\n    """Return an AI generation parameter object without coercing invalid JSON shapes."""\n    data = request.get_json(silent=True)\n    if data is None:\n        return {}\n    if not isinstance(data, dict):\n        raise ValueError("AI generation parameters must be an object")\n    return data\n'''
+    if "def _ai_generation_parameters_from_request():" not in source:
+        first_marker = source.find(routes["summary"])
+        if first_marker < 0:
+            raise RuntimeError("Route marker missing for summary")
+        source = source[:first_marker] + helper + "\n" + source[first_marker:]
+
     for material_type, marker in routes.items():
         start = source.find(marker)
         if start < 0:
@@ -112,11 +120,25 @@ def patch_ai_routes() -> None:
             "            triggering_user_id=user_id,\n"
             "            plan_tier=get_ai_plan_tier(user_id),\n"
         )
-        if "parameters=request.get_json(silent=True) or {}" not in block:
+        block = block.replace(
+            "parameters=request.get_json(silent=True) or {},",
+            "parameters=_ai_generation_parameters_from_request(),",
+            1,
+        )
+        if "parameters=_ai_generation_parameters_from_request()" not in block:
             if old_call not in block:
                 raise RuntimeError(f"AI call block missing for {material_type}")
-            block = block.replace(old_call, old_call + "            parameters=request.get_json(silent=True) or {},\n", 1)
-        block = block.replace('        "reused": result["reused"],\n', '        "reused": False,\n', 1)
+            block = block.replace(old_call, old_call + "            parameters=_ai_generation_parameters_from_request(),\n", 1)
+        if 'except ValueError as e:' not in block:
+            anchor = '    except ai_service.AIBudgetExceededError as e:\n'
+            if anchor not in block:
+                raise RuntimeError(f"Exception block missing for {material_type}")
+            block = block.replace(
+                anchor,
+                '    except ValueError as e:\n        return jsonify({"error": str(e)}), 400\n' + anchor,
+                1,
+            )
+        block = block.replace('        "reused": False,\n', '        "reused": result["reused"],\n', 1)
         source = source[:start] + block + source[end:]
     path.write_text(source, encoding="utf-8")
 
@@ -131,20 +153,12 @@ def patch_user_material_lookup() -> None:
             raise RuntimeError("AiJob model anchor not found")
         source = source.replace(anchor, helper + anchor, 1)
     else:
-        old_query = '''    query = GeneratedMaterial.query.filter_by(
-        document_content_id=document_content_id, material_type=material_type, status="ready"
-    )'''
-        new_query = '''    query = GeneratedMaterial.query.filter_by(
-        document_content_id=document_content_id, material_type=material_type, status="ready", generation_version="v2"
-    )'''
+        old_query = '''    query = GeneratedMaterial.query.filter_by(\n        document_content_id=document_content_id, material_type=material_type, status="ready"\n    )'''
+        new_query = '''    query = GeneratedMaterial.query.filter_by(\n        document_content_id=document_content_id, material_type=material_type, status="ready", generation_version="v2"\n    )'''
         source = source.replace(old_query, new_query, 1)
 
-    old_lookup = '''    material = GeneratedMaterial.query.filter_by(
-        document_content_id=document.document_content_id, material_type="podcast"
-    ).first()'''
-    new_lookup = '''    material = get_generated_material_for_user(
-        document.document_content_id, "podcast", session.get("user_id")
-    )'''
+    old_lookup = '''    material = GeneratedMaterial.query.filter_by(\n        document_content_id=document.document_content_id, material_type="podcast"\n    ).first()'''
+    new_lookup = '''    material = get_generated_material_for_user(\n        document.document_content_id, "podcast", session.get("user_id")\n    )'''
     source = source.replace(old_lookup, new_lookup)
     path.write_text(source, encoding="utf-8")
 
@@ -153,26 +167,8 @@ def patch_podcast_list_privacy() -> None:
     """Prevent /podcasts from joining a user's document to another user's private artifact."""
     path = ROOT / "app.py"
     source = path.read_text(encoding="utf-8")
-    old = '''        .filter(
-            Document.user_id == user_id,
-            Document.is_removed.is_(False),
-            GeneratedMaterial.material_type == "podcast",
-            GeneratedMaterial.status == "ready",
-        )'''
-    new = '''        .filter(
-            Document.user_id == user_id,
-            Document.is_removed.is_(False),
-            GeneratedMaterial.material_type == "podcast",
-            GeneratedMaterial.status == "ready",
-            GeneratedMaterial.generation_version == "v2",
-            db.or_(
-                GeneratedMaterial.scope == "shared",
-                db.and_(
-                    GeneratedMaterial.scope == "private",
-                    GeneratedMaterial.owner_user_id == user_id,
-                ),
-            ),
-        )'''
+    old = '''        .filter(\n            Document.user_id == user_id,\n            Document.is_removed.is_(False),\n            GeneratedMaterial.material_type == "podcast",\n            GeneratedMaterial.status == "ready",\n        )'''
+    new = '''        .filter(\n            Document.user_id == user_id,\n            Document.is_removed.is_(False),\n            GeneratedMaterial.material_type == "podcast",\n            GeneratedMaterial.status == "ready",\n            GeneratedMaterial.generation_version == "v2",\n            db.or_(\n                GeneratedMaterial.scope == "shared",\n                db.and_(\n                    GeneratedMaterial.scope == "private",\n                    GeneratedMaterial.owner_user_id == user_id,\n                ),\n            ),\n        )'''
     if old in source:
         source = source.replace(old, new, 1)
     path.write_text(source, encoding="utf-8")
