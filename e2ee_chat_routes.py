@@ -35,6 +35,30 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             return "legacy", 0
         return row["e2ee_mode"] or "legacy", int(row["key_epoch"] or 0)
 
+    def active_provisioner(conversation_id):
+        """Return the deterministic member allowed to publish a new epoch key.
+
+        Epoch 1 is always provisioned by the group creator. Later epochs use
+        the lowest active user id so a membership-triggered rotation has a
+        deterministic failover without granting arbitrary members rotation
+        authority.
+        """
+        row = db.session.execute(
+            text(
+                "SELECT c.created_by, cp.user_id "
+                "FROM conversation c "
+                "JOIN conversation_participant cp ON cp.conversation_id = c.id "
+                "WHERE c.id = :conversation_id AND cp.left_at IS NULL "
+                "ORDER BY cp.user_id ASC"
+            ),
+            {"conversation_id": conversation_id},
+        ).all()
+        if not row:
+            return None
+        creator_id = int(row[0][0]) if row[0][0] is not None else None
+        active_ids = [int(item[1]) for item in row if item[1] is not None]
+        return creator_id if creator_id in active_ids else (active_ids[0] if active_ids else None)
+
     def require_member(view):
         @wraps(view)
         def wrapped(conversation_id, *args, **kwargs):
@@ -113,7 +137,7 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             return jsonify({"error": "Group E2EE is not enabled for this conversation"}), 409
 
         new_epoch = epoch + 1
-        db.session.execute(
+        result = db.session.execute(
             text(
                 "UPDATE conversation "
                 "SET key_epoch = :new_epoch "
@@ -121,6 +145,9 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             ),
             {"conversation_id": conversation.id, "old_epoch": epoch, "new_epoch": new_epoch},
         )
+        if result.rowcount != 1:
+            db.session.rollback()
+            return jsonify({"error": "Key epoch changed; retry with the current epoch"}), 409
         db.session.commit()
         return jsonify({"ok": True, "e2ee_mode": mode, "key_epoch": new_epoch})
 
@@ -169,6 +196,14 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
         mode, expected_epoch = e2ee_state(conversation.id)
         if mode != "group_v1":
             return jsonify({"error": "Group E2EE is not enabled for this conversation"}), 409
+
+        provisioner = active_provisioner(conversation.id)
+        if provisioner is None or user_id != provisioner:
+            return jsonify({
+                "error": "Only the elected group key provisioner may publish the current epoch key",
+                "provisioner_user_id": provisioner,
+                "key_epoch": expected_epoch,
+            }), 403
 
         payload = request.get_json(silent=True) or {}
         envelopes = payload.get("envelopes")
