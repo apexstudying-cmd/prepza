@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parent.parent
 for name in (
     "apply_public_document_watermark.py",
     "apply_studyhub_library_flow.py",
+    "apply_studyhub_existing_save_repair.py",
     "apply_upload_share_choice_ux.py",
     "cleanup_studyhub_library_flow.py",
 ):
