@@ -81,13 +81,7 @@ export async function wrapGroupKeyForMember(
   recipientUserId: number,
   keyEpoch?: number,
 ): Promise<GroupKeyEnvelope> {
-  const wrapKey = await deriveWrapKey(
-    myPrivateKey,
-    recipientPublicKey,
-    conversationId,
-    senderUserId,
-    recipientUserId,
-  )
+  const wrapKey = await deriveWrapKey(myPrivateKey, recipientPublicKey, conversationId, senderUserId, recipientUserId)
   const rawGroupKey = await window.crypto.subtle.exportKey('raw', groupKey)
   const nonce = window.crypto.getRandomValues(new Uint8Array(GCM_IV_BYTES))
   const ciphertext = await window.crypto.subtle.encrypt(
@@ -123,9 +117,7 @@ export async function unwrapGroupKey(
     wrapKey,
     unb64(envelope.ciphertext) as BufferSource,
   )
-  return window.crypto.subtle.importKey(
-    'raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'],
-  )
+  return window.crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
 }
 
 export async function encryptGroupMessage(groupKey: CryptoKey, plaintext: string) {
@@ -145,4 +137,22 @@ export async function decryptGroupMessage(groupKey: CryptoKey, body: string, non
     unb64(body) as BufferSource,
   )
   return new TextDecoder().decode(plaintext)
+}
+
+export async function encryptGroupBytes(groupKey: CryptoKey, bytes: ArrayBuffer | Uint8Array) {
+  const nonce = window.crypto.getRandomValues(new Uint8Array(GCM_IV_BYTES))
+  const ciphertext = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: nonce as BufferSource },
+    groupKey,
+    bytes instanceof Uint8Array ? bytes as BufferSource : bytes,
+  )
+  return { ciphertext, nonce: b64(nonce) }
+}
+
+export async function decryptGroupBytes(groupKey: CryptoKey, ciphertext: ArrayBuffer | Uint8Array, nonce: string) {
+  return window.crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: unb64(nonce) as BufferSource },
+    groupKey,
+    ciphertext instanceof Uint8Array ? ciphertext as BufferSource : ciphertext,
+  )
 }
