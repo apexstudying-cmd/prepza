@@ -34,9 +34,9 @@ CREATE INDEX IF NOT EXISTS ix_conversation_key_envelope_conversation
 CREATE INDEX IF NOT EXISTS ix_conversation_key_envelope_recipient
     ON conversation_key_envelope (recipient_user_id, conversation_id, key_epoch);
 
--- Existing 1:1 encrypted chats are already using client-side AES-GCM.
--- New group conversations should opt into the explicit group-key envelope
--- protocol once the frontend wiring lands.
+-- Existing 1:1 encrypted chats can be classified as direct_v1.
+-- Existing groups MUST remain legacy until their members receive a fresh
+-- client-generated group key and the frontend/backend wiring is live.
 UPDATE conversation
-SET e2ee_mode = CASE WHEN is_group = TRUE THEN 'group_v1' ELSE 'direct_v1' END
+SET e2ee_mode = CASE WHEN is_group = TRUE THEN 'legacy' ELSE 'direct_v1' END
 WHERE e2ee_mode = 'legacy';
