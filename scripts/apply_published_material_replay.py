@@ -121,7 +121,9 @@ PUBLISHED_REPLAY_RESPONSE = """def _published_material_response(user_id, content
 
 
 def _remove_function_definitions(source, marker):
-    return re.sub(rf"(?ms)^def {re.escape(marker)}\(.*?(?=^def )", "", source)
+    # Stop before a decorator so Flask route decorators are never swallowed.
+    pattern = rf"(?ms)^def {re.escape(marker)}\(.*?(?=^@|^def )"
+    return re.sub(pattern, "", source)
 
 
 def install_published_replay_helpers(s):
