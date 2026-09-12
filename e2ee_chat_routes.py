@@ -35,14 +35,8 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             return "legacy", 0
         return row["e2ee_mode"] or "legacy", int(row["key_epoch"] or 0)
 
-    def active_provisioner(conversation_id):
-        """Return the deterministic member allowed to publish a new epoch key.
-
-        Epoch 1 is always provisioned by the group creator. Later epochs use
-        the lowest active user id so a membership-triggered rotation has a
-        deterministic failover without granting arbitrary members rotation
-        authority.
-        """
+    def active_provisioner(conversation_id, epoch):
+        """Return the only member allowed to publish a new epoch key."""
         row = db.session.execute(
             text(
                 "SELECT c.created_by, cp.user_id "
@@ -57,7 +51,9 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             return None
         creator_id = int(row[0][0]) if row[0][0] is not None else None
         active_ids = [int(item[1]) for item in row if item[1] is not None]
-        return creator_id if creator_id in active_ids else (active_ids[0] if active_ids else None)
+        if epoch == 1 and creator_id in active_ids:
+            return creator_id
+        return active_ids[0] if active_ids else None
 
     def require_member(view):
         @wraps(view)
@@ -197,7 +193,7 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
         if mode != "group_v1":
             return jsonify({"error": "Group E2EE is not enabled for this conversation"}), 409
 
-        provisioner = active_provisioner(conversation.id)
+        provisioner = active_provisioner(conversation.id, expected_epoch)
         if provisioner is None or user_id != provisioner:
             return jsonify({
                 "error": "Only the elected group key provisioner may publish the current epoch key",
