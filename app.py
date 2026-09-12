@@ -3958,7 +3958,7 @@ def podcast_script_document(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
     if not document.document_content_id:
@@ -3967,6 +3967,38 @@ def podcast_script_document(document_id):
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
+
+    if document.user_id != user_id:
+        material = GeneratedMaterial.query.filter_by(
+            document_content_id=document.document_content_id,
+            material_type="podcast",
+            status="ready",
+        ).first()
+        if not material or not material.payload:
+            return jsonify({"error": "Podcast has not been published yet"}), 404
+        record_document_studied(user_id, content.id)
+        db.session.commit()
+        return jsonify({
+            "material_id": material.id,
+            "reused": True,
+            "podcast": json.loads(material.payload),
+        }), 200
+
+    if document.user_id != user_id:
+        material = GeneratedMaterial.query.filter_by(
+            document_content_id=document.document_content_id,
+            material_type="podcast",
+            status="ready",
+        ).first()
+        if not material or not material.payload:
+            return jsonify({"error": "Podcast has not been published yet"}), 404
+        record_document_studied(user_id, content.id)
+        db.session.commit()
+        return jsonify({
+            "material_id": material.id,
+            "reused": True,
+            "podcast": json.loads(material.payload),
+        }), 200
 
     try:
         result = ai_service.generate_document_podcast_script(
@@ -4014,15 +4046,22 @@ def trigger_podcast_audio(document_id):
         return jsonify({"error": "Not logged in"}), 401
 
     document = db.session.get(Document, document_id)
-    if not document or document.user_id != user_id or document.is_removed:
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate a podcast from"}), 400
 
-    material = get_generated_material_for_user(
-        document.document_content_id, "podcast", session.get("user_id")
-    )
+    if document.user_id == user_id:
+        material = get_generated_material_for_user(
+            document.document_content_id, "podcast", session.get("user_id")
+        )
+    else:
+        material = GeneratedMaterial.query.filter_by(
+            document_content_id=document.document_content_id,
+            material_type="podcast",
+            status="ready",
+        ).first()
     if not material or material.status != "ready" or not material.payload:
         return jsonify({"error": "Generate the podcast script first"}), 400
 
@@ -4033,6 +4072,12 @@ def trigger_podcast_audio(document_id):
         return jsonify({"audio_status": "ready", "material_id": material.id}), 200
     if audio_status == "processing":
         return jsonify({"audio_status": "processing", "material_id": material.id}), 202
+
+    if document.user_id != user_id:
+        return jsonify({"error": "Podcast audio is not ready yet"}), 409
+
+    if document.user_id != user_id:
+        return jsonify({"error": "Podcast audio is not ready yet"}), 409
 
     podcast_audio.start_podcast_audio_processing(material.id, app)
 
@@ -4062,9 +4107,16 @@ def get_podcast_audio(document_id):
     if not document.document_content_id:
         return jsonify({"error": "Document has no podcast"}), 404
 
-    material = get_generated_material_for_user(
-        document.document_content_id, "podcast", session.get("user_id")
-    )
+    if document.user_id == user_id:
+        material = get_generated_material_for_user(
+            document.document_content_id, "podcast", session.get("user_id")
+        )
+    else:
+        material = GeneratedMaterial.query.filter_by(
+            document_content_id=document.document_content_id,
+            material_type="podcast",
+            status="ready",
+        ).first()
     if not material or not material.payload:
         return jsonify({"error": "No podcast generated for this document yet"}), 404
 
