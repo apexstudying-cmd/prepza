@@ -4,14 +4,17 @@ on:
   push:
     branches:
       - feat/e2ee-study-chats
+      - feat/e2ee-study-chat-completion
   pull_request:
     paths:
       - 'e2ee_chat_routes.py'
       - 'e2ee_ada_routes.py'
       - 'prepza_control.py'
       - 'frontend/src/crypto/**'
+      - 'frontend/src/App.tsx'
       - 'migrations/*e2ee*'
       - 'scripts/validate_e2ee_security.py'
+      - 'scripts/validate_e2ee_lifecycle.py'
       - '.github/workflows/e2ee-security-regression.yml'
 
 jobs:
@@ -24,5 +27,7 @@ jobs:
           python-version: '3.12'
       - name: Validate E2EE security invariants
         run: python scripts/validate_e2ee_security.py
+      - name: Validate E2EE lifecycle invariants
+        run: python scripts/validate_e2ee_lifecycle.py
       - name: Compile E2EE backend modules
         run: python -m py_compile e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py
