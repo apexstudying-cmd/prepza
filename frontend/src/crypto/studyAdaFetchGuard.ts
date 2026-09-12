@@ -22,13 +22,6 @@ function pathOnly(input: RequestInfo | URL): string {
   }
 }
 
-/**
- * Browser-side defense-in-depth for the explicit Ada study contract.
- *
- * The backend remains authoritative. This guard makes it impossible for a
- * normal Prepza client call to accidentally attach conversation history,
- * arbitrary document data, or unbounded text to the scoped Ada endpoint.
- */
 export function installStudyAdaFetchGuard(): void {
   if (installed || typeof window === 'undefined' || !window.fetch) return
   installed = true
@@ -43,15 +36,8 @@ export function installStudyAdaFetchGuard(): void {
     if (!init?.body) return failedResponse('Ada study context is required')
 
     let payload: any
-    try {
-      payload = JSON.parse(String(init.body))
-    } catch {
-      return failedResponse('Ada study context must be valid JSON')
-    }
-
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      return failedResponse('Ada study context must be an object')
-    }
+    try { payload = JSON.parse(String(init.body)) } catch { return failedResponse('Ada study context must be valid JSON') }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return failedResponse('Ada study context must be an object')
     if (payload.context_scope !== 'selected_document_pages' || payload.explicit_user_context !== true) {
       return failedResponse('Ada requires explicit selected-document context')
     }
@@ -64,21 +50,12 @@ export function installStudyAdaFetchGuard(): void {
 
     if (!Number.isInteger(conversationId) || conversationId <= 0) return failedResponse('Invalid conversation')
     if (!Number.isInteger(documentId) || documentId <= 0) return failedResponse('Invalid study document')
-    if (!Number.isInteger(keyEpoch) || keyEpoch < 1) return failedResponse('Invalid E2EE key epoch')
-    if (!Number.isInteger(pageStart) || pageStart < 1 || !Number.isInteger(pageEnd) || pageEnd < pageStart) {
-      return failedResponse('Invalid document page range')
-    }
+    if (!Number.isInteger(keyEpoch) || keyEpoch < 0) return failedResponse('Invalid E2EE key epoch')
+    if (!Number.isInteger(pageStart) || pageStart < 1 || !Number.isInteger(pageEnd) || pageEnd < pageStart) return failedResponse('Invalid document page range')
     if (pageEnd - pageStart + 1 > MAX_PAGE_SPAN) return failedResponse('Selected page range is too large')
-    if (typeof payload.selected_text !== 'string' || payload.selected_text.length > MAX_SELECTED_TEXT) {
-      return failedResponse('Selected study text is too large')
-    }
-    if (typeof payload.prompt !== 'string' || !payload.prompt.trim() || payload.prompt.length > MAX_PROMPT) {
-      return failedResponse('Ada prompt is invalid')
-    }
+    if (typeof payload.selected_text !== 'string' || payload.selected_text.length > MAX_SELECTED_TEXT) return failedResponse('Selected study text is too large')
+    if (typeof payload.prompt !== 'string' || !payload.prompt.trim() || payload.prompt.length > MAX_PROMPT) return failedResponse('Ada prompt is invalid')
 
-    // Rebuild the payload from the allowlist rather than forwarding arbitrary
-    // caller-supplied fields such as conversation history, group keys, or raw
-    // document contents.
     const safePayload = {
       context_scope: 'selected_document_pages',
       explicit_user_context: true,

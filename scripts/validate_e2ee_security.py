@@ -1,4 +1,4 @@
-"""Static regression checks for Prepza group-chat E2EE boundaries.
+"""Static regression checks for Prepza chat E2EE boundaries.
 
 These checks intentionally do not claim to prove cryptographic correctness.
 They guard server-side invariants that are easy to accidentally weaken when
@@ -40,6 +40,10 @@ def main() -> None:
 
     require(
         "e2ee_ada_routes.py",
+        "_reject_plaintext_direct_message_write",
+        'state != "direct_v1"',
+        'Plaintext direct messages are disabled; encrypt on the client first',
+        'e2ee_mode not in {"group_v1", "direct_v1"}',
         'data.get("context_scope") != "selected_document_pages"',
         'data.get("explicit_user_context") is not True',
         "if key_epoch != current_key_epoch:",
@@ -105,8 +109,25 @@ def main() -> None:
         "Encrypted attachment download failed",
     )
 
-    # The server route must not contain an API field/helper that accepts a
-    # plaintext group key. Hyphenated prose such as "group-key" is harmless.
+    require(
+        "frontend/src/crypto/directChatE2EE.ts",
+        "deriveConversationKey",
+        "encryptMessageBody",
+        "decryptMessageBody",
+        "localSearchDirectMessages",
+        "encryptGroupBytes",
+        "decryptGroupBytes",
+        "ENCRYPTED_ATTACHMENT_MARKER",
+    )
+
+    require(
+        "frontend/src/crypto/directInChatAdaEnhancer.tsx",
+        "installDirectInChatAdaObserver",
+        "createAdaStudyContext",
+        "askAdaAboutSelectedStudyContext",
+        "Only the study context you choose is sent to Ada.",
+    )
+
     forbid(
         "e2ee_chat_routes.py",
         '"group_key"',
