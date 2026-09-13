@@ -10,7 +10,11 @@ def _session_client(user_id=None):
     if user_id is not None:
         with flask_client.session_transaction() as session:
             session["user_id"] = user_id
-    return socketio.test_client(app, flask_test_client=flask_client)
+    client = socketio.test_client(app, flask_test_client=flask_client)
+    # Connection emits a readiness event; drain it so each test asserts only
+    # events caused by the operation under test.
+    client.get_received()
+    return client
 
 
 def _event_named(events, name):
