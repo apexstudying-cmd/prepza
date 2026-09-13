@@ -1,5 +1,8 @@
 import { decryptGroupMessage, encryptGroupMessage, type GroupKeyEnvelope } from './group'
 import { openGroupE2EESession, type GroupE2EEState } from './groupSession'
+import { exportPublicKeyBase64Url, getOrCreateIdentityKeyPair } from './keys'
+
+let identityReadyPromise: Promise<void> | null = null
 
 async function jsonFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -59,10 +62,49 @@ export async function registerUserPublicKey(publicKey: string): Promise<void> {
   })
 }
 
+/**
+ * Device bootstrap is deliberately silent. The private key never leaves the
+ * browser; only the public half is registered with the server.
+ */
+export async function ensureE2EEIdentityReady(): Promise<void> {
+  if (identityReadyPromise) return identityReadyPromise
+
+  identityReadyPromise = (async () => {
+    const me = await jsonFetch<{ id: number }>('/me')
+    if (!me?.id) throw new Error('Authentication required')
+
+    const { keyPair } = await getOrCreateIdentityKeyPair()
+    const publicKey = await exportPublicKeyBase64Url(keyPair.publicKey)
+    await registerUserPublicKey(publicKey)
+  })()
+
+  try {
+    await identityReadyPromise
+  } catch (error) {
+    identityReadyPromise = null
+    throw error
+  }
+}
+
 export async function fetchUserPublicKey(userId: number): Promise<string> {
-  const result = await jsonFetch<{ public_key: string }>(`/keys/${userId}`)
-  if (!result.public_key) throw new Error('Secure chat is still being set up for this student.')
-  return result.public_key
+  const attempts = 4
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const result = await jsonFetch<{ public_key: string }>(`/keys/${userId}`)
+      if (result.public_key) return result.public_key
+      lastError = new Error('Peer encryption key is not available yet')
+    } catch (error) {
+      lastError = error
+    }
+
+    if (attempt < attempts - 1) {
+      await new Promise(resolve => window.setTimeout(resolve, 400 * (attempt + 1)))
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Secure conversation is temporarily unavailable')
 }
 
 export async function openGroupSession(conversationId: number): Promise<GroupE2EEState> {
