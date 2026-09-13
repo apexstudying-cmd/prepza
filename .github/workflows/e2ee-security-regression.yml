@@ -6,8 +6,11 @@ on:
       - main
       - feat/e2ee-study-chats
       - feat/e2ee-study-chat-completion
+      - feat/realtime-study-chat
   pull_request:
     paths:
+      - 'app.py'
+      - 'e2ee_chat_models.py'
       - 'e2ee_chat_routes.py'
       - 'e2ee_ada_routes.py'
       - 'prepza_control.py'
@@ -22,6 +25,13 @@ on:
       - 'scripts/test_realtime_runtime.py'
       - '.github/workflows/e2ee-security-regression.yml'
 
+permissions:
+  contents: read
+
+env:
+  DATABASE_URL: sqlite:///:memory:
+  SECRET_KEY: realtime-test-secret
+
 jobs:
   security-regression:
     runs-on: ubuntu-latest
@@ -29,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
       - name: Validate E2EE security invariants
         run: python scripts/validate_e2ee_security.py
       - name: Validate E2EE lifecycle invariants
@@ -37,7 +47,7 @@ jobs:
       - name: Validate realtime security invariants
         run: python scripts/validate_realtime_security.py
       - name: Compile E2EE and realtime backend modules
-        run: python -m py_compile e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py realtime_server.py
+        run: python -m py_compile app.py e2ee_chat_models.py e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py realtime_server.py
       - name: Install realtime regression test dependencies
         run: python -m pip install -r requirements.txt pytest
       - name: Run realtime runtime regression tests
