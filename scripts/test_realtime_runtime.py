@@ -49,6 +49,58 @@ def test_member_can_join_and_receive_presence():
     client.disconnect()
 
 
+def test_disconnect_broadcasts_offline_presence():
+    observer = _session_client(8)
+    subject = _session_client(7)
+    assert observer.is_connected() and subject.is_connected()
+
+    with patch("realtime_server.is_active_participant", return_value=True):
+        assert observer.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
+        assert subject.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
+        observer.get_received()
+        subject.get_received()
+
+        subject.disconnect()
+        offline_events = _event_named(observer.get_received(), "chat:presence")
+        assert offline_events
+        assert offline_events[-1]["args"][0] == {
+            "conversation_id": 12,
+            "user_id": 7,
+            "online": False,
+        }
+
+    observer.disconnect()
+
+
+def test_multiple_tabs_do_not_emit_offline_until_last_socket_disconnects():
+    observer = _session_client(8)
+    first_tab = _session_client(7)
+    second_tab = _session_client(7)
+    assert observer.is_connected() and first_tab.is_connected() and second_tab.is_connected()
+
+    with patch("realtime_server.is_active_participant", return_value=True):
+        assert observer.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
+        assert first_tab.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
+        assert second_tab.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
+        observer.get_received()
+        first_tab.get_received()
+        second_tab.get_received()
+
+        first_tab.disconnect()
+        assert not _event_named(observer.get_received(), "chat:presence")
+
+        second_tab.disconnect()
+        offline_events = _event_named(observer.get_received(), "chat:presence")
+        assert offline_events
+        assert offline_events[-1]["args"][0] == {
+            "conversation_id": 12,
+            "user_id": 7,
+            "online": False,
+        }
+
+    observer.disconnect()
+
+
 def test_two_members_receive_typing_read_and_persisted_message_events():
     sender = _session_client(7)
     receiver = _session_client(8)
