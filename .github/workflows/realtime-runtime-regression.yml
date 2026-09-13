@@ -1,0 +1,25 @@
+name: Realtime Runtime Regression
+
+on:
+  push:
+    branches:
+      - feat/realtime-study-chat
+  pull_request:
+    paths:
+      - 'realtime_server.py'
+      - 'scripts/test_realtime_runtime.py'
+      - 'requirements.txt'
+      - '.github/workflows/realtime-runtime-regression.yml'
+
+jobs:
+  realtime-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+      - name: Run realtime runtime regression tests
+        run: python -m unittest scripts.test_realtime_runtime -v
