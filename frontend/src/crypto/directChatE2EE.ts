@@ -5,7 +5,7 @@ import {
 } from './conversation'
 import { decryptGroupBytes, encryptGroupBytes } from './group'
 import { exportPublicKeyBase64Url, getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'
-import { fetchUserPublicKey, registerUserPublicKey } from './e2eeChatApi'
+import { ensureE2EEIdentityReady, fetchUserPublicKey } from './e2eeChatApi'
 
 const DIRECT_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
 const DIRECT_SEARCH_RE = /^\/chats\/(\d+)\/messages\/search(?:\?.*)?$/
@@ -14,7 +14,6 @@ const ENCRYPTED_ATTACHMENT_MARKER = '__prepza_e2ee_attachment_v1'
 
 let installed = false
 let currentUserId: number | null = null
-let identityRegistrationPromise: Promise<void> | null = null
 const keyPromises = new Map<number, Promise<CryptoKey>>()
 const detailPromises = new Map<number, Promise<any>>()
 const pendingUploads = new Map<string, { conversationId: number; attachmentId: number; key: CryptoKey; mimeType: string }>()
@@ -46,21 +45,6 @@ function mimeTypeFor(filename: string): string {
     pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   }
   return map[ext] || 'application/octet-stream'
-}
-
-async function ensureIdentityKeyRegistered(): Promise<void> {
-  if (identityRegistrationPromise) return identityRegistrationPromise
-  identityRegistrationPromise = (async () => {
-    const { keyPair } = await getOrCreateIdentityKeyPair()
-    const publicKey = await exportPublicKeyBase64Url(keyPair.publicKey)
-    await registerUserPublicKey(publicKey)
-  })()
-  try {
-    await identityRegistrationPromise
-  } catch (error) {
-    identityRegistrationPromise = null
-    throw error
-  }
 }
 
 async function fetchConversationDetail(
@@ -106,6 +90,8 @@ async function directConversationKey(
   if (existing) return existing
 
   const promise = (async () => {
+    await ensureE2EEIdentityReady()
+
     const detail = await fetchConversationDetail(nativeFetch, conversationId)
     const peerId = peerUserId(detail)
     const peerPublicKey = await fetchUserPublicKey(peerId)
@@ -165,7 +151,7 @@ async function decryptDirectMessage(
 ): Promise<any> {
   if (!message || message.is_deleted || !message.body) return message
   if (!message.nonce) {
-    return { ...message, body: '[Encrypted message — this device cannot decrypt it]' }
+    return { ...message, body: '[Encrypted message — unavailable on this device]' }
   }
   try {
     const key = await directConversationKey(nativeFetch, conversationId)
@@ -175,7 +161,7 @@ async function decryptDirectMessage(
     }
     return decryptDirectAttachment(nativeFetch, conversationId, decrypted, key)
   } catch {
-    return { ...message, body: '[Encrypted message — key unavailable on this device]' }
+    return { ...message, body: '[Encrypted message — temporarily unavailable]' }
   }
 }
 
@@ -241,7 +227,7 @@ export function installDirectChatE2EE(): void {
         const me = await response.clone().json().catch(() => null)
         if (me?.id) {
           currentUserId = Number(me.id)
-          void ensureIdentityKeyRegistered().catch(() => undefined)
+          void ensureE2EEIdentityReady().catch(() => undefined)
         }
       }
       return response
