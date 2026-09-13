@@ -8,30 +8,18 @@ let activeDocuments: SharedDocument[] = []
 const epochByConversation = new Map<number, number>()
 const listeners = new Set<(documents: SharedDocument[]) => void>()
 
-function emit(documents: SharedDocument[]) {
-  activeDocuments = documents
-  listeners.forEach(listener => listener(documents))
-}
-
+function emit(documents: SharedDocument[]) { activeDocuments = documents; listeners.forEach(listener => listener(documents)) }
 function pathOf(input: RequestInfo | URL): string {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.pathname + input.search : input.url
   try { return new URL(raw, window.location.origin).pathname } catch { return raw.split('?')[0] }
 }
-
 function attachmentFromMessage(conversationId: number, message: any): SharedDocument | null {
   const attachment = message?.attachment
   const attachmentId = Number(attachment?.id ?? attachment?.attachment_id)
   const viewUrl = typeof attachment?.view_url === 'string' ? attachment.view_url : ''
   if (!Number.isInteger(attachmentId) || attachmentId < 1 || !viewUrl) return null
-  return {
-    conversationId,
-    attachmentId,
-    filename: String(attachment?.original_filename || attachment?.filename || 'Study document'),
-    viewUrl,
-    mimeType: String(attachment?.mime_type || attachment?.file_type || 'application/octet-stream'),
-  }
+  return { conversationId, attachmentId, filename: String(attachment?.original_filename || attachment?.filename || 'Study document'), viewUrl, mimeType: String(attachment?.mime_type || attachment?.file_type || 'application/octet-stream') }
 }
-
 export function installChatStudyDocumentObserver(): void {
   if (installed || typeof window === 'undefined' || !window.fetch) return
   installed = true
@@ -42,9 +30,7 @@ export function installChatStudyDocumentObserver(): void {
     const stateMatch = path.match(/^\/chats\/(\d+)\/key-envelopes$/)
     if (stateMatch) {
       const conversationId = Number(stateMatch[1])
-      response.clone().json().then((body: any) => {
-        if (body?.e2ee_mode === 'group_v1' || body?.e2ee_mode === 'direct_v1') epochByConversation.set(conversationId, Number(body.key_epoch) || 0)
-      }).catch(() => {})
+      response.clone().json().then((body: any) => { if (body?.e2ee_mode === 'group_v1' || body?.e2ee_mode === 'direct_v1') epochByConversation.set(conversationId, Number(body.key_epoch) || 0) }).catch(() => {})
     }
     const messageMatch = path.match(/^\/chats\/(\d+)\/messages$/)
     if (messageMatch) {
@@ -52,15 +38,7 @@ export function installChatStudyDocumentObserver(): void {
       response.clone().json().then((body: any) => {
         const messages = Array.isArray(body?.messages) ? body.messages : []
         const seen = new Set<number>()
-        const documents = messages
-          .map((message: any) => attachmentFromMessage(conversationId, message))
-          .filter((document: SharedDocument | null): document is SharedDocument => document !== null)
-          .filter((document: SharedDocument) => {
-            const id = document.attachmentId
-            if (seen.has(id)) return false
-            seen.add(id)
-            return true
-          })
+        const documents = messages.map((message: any) => attachmentFromMessage(conversationId, message)).filter((document: SharedDocument | null): document is SharedDocument => document !== null).filter((document: SharedDocument) => { const id = document.attachmentId; if (seen.has(id)) return false; seen.add(id); return true })
         emit(documents)
       }).catch(() => {})
     }
@@ -80,93 +58,47 @@ export default function ChatStudyDocumentReader() {
   const [answer, setAnswer] = useState<AdaStudyResponse | null>(null)
 
   useEffect(() => {
-    const listener = (next: SharedDocument[]) => {
-      setDocuments(next)
-      setDocument(current => current && next.some(item => item.attachmentId === current.attachmentId) ? current : (next[0] || null))
-      if (!next.length) setOpen(false)
-    }
+    const listener = (next: SharedDocument[]) => { setDocuments(next); setDocument(current => current && next.some(item => item.attachmentId === current.attachmentId) ? current : (next[0] || null)); if (!next.length) setOpen(false) }
     listeners.add(listener)
     return () => { listeners.delete(listener) }
   }, [])
-
   useEffect(() => {
     const openListener = (event: Event) => {
       const detail = (event as CustomEvent<{ attachmentId?: number }>).detail
       const requestedId = Number(detail?.attachmentId)
-      const next = Number.isInteger(requestedId) && requestedId > 0
-        ? documents.find(item => item.attachmentId === requestedId) || null
-        : documents[0] || null
-      if (next) {
-        setDocument(next)
-        setOpen(true)
-      }
+      const next = Number.isInteger(requestedId) && requestedId > 0 ? documents.find(item => item.attachmentId === requestedId) || null : documents[0] || null
+      if (next) { setDocument(next); setOpen(true) }
     }
     window.addEventListener('prepza-open-study-document', openListener)
     return () => window.removeEventListener('prepza-open-study-document', openListener)
   }, [documents])
-
-  useEffect(() => {
-    setPage(1)
-    setSelectedText('')
-    setPrompt('')
-    setAnswer(null)
-    setError('')
-  }, [document?.attachmentId])
-
+  useEffect(() => { setPage(1); setSelectedText(''); setPrompt(''); setAnswer(null); setError('') }, [document?.attachmentId])
   if (!documents.length) return null
-
   const isPdf = document?.mimeType.includes('pdf') || document?.filename.toLowerCase().endsWith('.pdf')
   const isImage = document?.mimeType.startsWith('image/')
   const readerUrl = document ? (isPdf ? `${document.viewUrl}#page=${page}` : document.viewUrl) : ''
-
   const askAda = async () => {
     if (!document || !selectedText.trim() || !prompt.trim()) return
-    setAsking(true)
-    setError('')
+    setAsking(true); setError('')
     try {
-      const context = createAdaStudyContext({
-        conversationId: document.conversationId,
-        keyEpoch: epochByConversation.get(document.conversationId) ?? 0,
-        attachmentId: document.attachmentId,
-        pageStart: page,
-        pageEnd: page,
-        selectedText,
-        userPrompt: prompt,
-        contextScope: 'selected_chat_document',
-      })
+      const context = createAdaStudyContext({ conversationId: document.conversationId, keyEpoch: epochByConversation.get(document.conversationId) ?? 0, attachmentId: document.attachmentId, pageStart: page, pageEnd: page, selectedText, userPrompt: prompt, contextScope: 'selected_chat_document' })
       setAnswer(await askAdaAboutSelectedStudyContext(context))
-    } catch (value) {
-      setError(value instanceof Error ? value.message : 'Ada could not answer right now')
-    } finally {
-      setAsking(false)
-    }
+    } catch (value) { setError(value instanceof Error ? value.message : 'Ada could not answer right now') }
+    finally { setAsking(false) }
   }
-
   return <>
     {open && document && <div style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(0,0,0,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <section style={{ width: 'min(1100px, 100%)', height: 'min(88vh, 900px)', background: '#0d1420', color: '#f7f2e8', borderRadius: 18, overflow: 'hidden', display: 'grid', gridTemplateRows: 'auto 1fr auto', boxShadow: '0 30px 80px rgba(0,0,0,.4)' }}>
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,.1)' }}>
-          <div style={{ minWidth: 0 }}><div style={{ fontWeight: 800 }}>Shared study documents</div><div style={{ opacity: .65, fontSize: 12 }}>{documents.length} document{documents.length === 1 ? '' : 's'} available</div></div>
-          <button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}>Close</button>
-        </header>
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,.1)' }}><div style={{ minWidth: 0 }}><div style={{ fontWeight: 800 }}>Shared study documents</div><div style={{ opacity: .65, fontSize: 12 }}>{documents.length} document{documents.length === 1 ? '' : 's'} available</div></div><button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}>Close</button></header>
         <div style={{ minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 34%)' }}>
           <div style={{ minWidth: 0, minHeight: 0, display: 'grid', gridTemplateRows: documents.length > 1 ? 'auto 1fr' : '1fr', background: '#20242b' }}>
-            {documents.length > 1 && <div style={{ display: 'flex', gap: 7, overflowX: 'auto', padding: '8px 10px', background: '#111722', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
-              {documents.map(item => <button key={item.attachmentId} type="button" onClick={() => setDocument(item)} title={item.filename} style={{ flex: '0 0 auto', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '7px 10px', borderRadius: 9, border: item.attachmentId === document.attachmentId ? '1px solid #e8c36a' : '1px solid rgba(255,255,255,.1)', background: item.attachmentId === document.attachmentId ? 'rgba(232,195,106,.12)' : 'transparent', color: 'inherit', cursor: 'pointer' }}>{item.filename}</button>)}
-            </div>}
+            {documents.length > 1 && <div style={{ display: 'flex', gap: 7, overflowX: 'auto', padding: '8px 10px', background: '#111722', borderBottom: '1px solid rgba(255,255,255,.08)' }}>{documents.map(item => <button key={item.attachmentId} type="button" onClick={() => setDocument(item)} title={item.filename} style={{ flex: '0 0 auto', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '7px 10px', borderRadius: 9, border: item.attachmentId === document.attachmentId ? '1px solid #e8c36a' : '1px solid rgba(255,255,255,.1)', background: item.attachmentId === document.attachmentId ? 'rgba(232,195,106,.12)' : 'transparent', color: 'inherit', cursor: 'pointer' }}>{item.filename}</button>)}</div>}
             <div style={{ minWidth: 0, minHeight: 0 }}>{isPdf || isImage ? <iframe title={document.filename} src={readerUrl} style={{ width: '100%', height: '100%', border: 0 }} /> : <div style={{ padding: 24 }}>This file can be opened from the chat on a device that supports its format.</div>}</div>
           </div>
-          <aside style={{ minWidth: 0, overflowY: 'auto', padding: 16, borderLeft: '1px solid rgba(255,255,255,.1)' }}>
-            <div style={{ fontWeight: 800, marginBottom: 4 }}>Study this document</div><div style={{ fontSize: 12, opacity: .6, marginBottom: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{document.filename}</div>
-            <label style={{ fontSize: 12, opacity: .7 }}>Page<input type="number" min={1} value={page} onChange={event => setPage(Math.max(1, Number(event.target.value) || 1))} style={{ display: 'block', width: '100%', marginTop: 5, padding: 9, borderRadius: 9 }} /></label>
-            <label style={{ display: 'block', marginTop: 12, fontSize: 12, opacity: .7 }}>Selected text<textarea value={selectedText} onChange={event => setSelectedText(event.target.value)} placeholder="Copy the passage you want Ada to use…" rows={7} style={{ display: 'block', width: '100%', marginTop: 5, padding: 9, borderRadius: 9, resize: 'vertical' }} /></label>
-            <label style={{ display: 'block', marginTop: 12, fontSize: 12, opacity: .7 }}>Ask Ada<textarea value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Explain this page, quiz us, or solve the question…" rows={4} style={{ display: 'block', width: '100%', marginTop: 5, padding: 9, borderRadius: 9, resize: 'vertical' }} /></label>
-            {error && <div style={{ color: '#ffb4ab', fontSize: 12, marginTop: 10 }}>{error}</div>}
-            <button type="button" onClick={askAda} disabled={asking || !selectedText.trim() || !prompt.trim()} style={{ width: '100%', marginTop: 10, padding: 10, borderRadius: 9, border: 0, background: '#e8c36a', color: '#111', fontWeight: 800 }}>{asking ? 'Ada is thinking…' : 'Ask Ada'}</button>
-            {answer && <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,.1)', whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: 14 }}>{answer.answer}</div>}
-          </aside>
+          <aside style={{ minWidth: 0, overflowY: 'auto', padding: 16, borderLeft: '1px solid rgba(255,255,255,.1)' }}><div style={{ fontWeight: 800, marginBottom: 4 }}>Study this document</div><div style={{ fontSize: 12, opacity: .6, marginBottom: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{document.filename}</div><label style={{ fontSize: 12, opacity: .7 }}>Page<input type="number" min={1} value={page} onChange={event => setPage(Math.max(1, Number(event.target.value) || 1))} style={{ display: 'block', width: '100%', marginTop: 5, padding: 9, borderRadius: 9 }} /></label><label style={{ display: 'block', marginTop: 12, fontSize: 12, opacity: .7 }}>Selected text<textarea value={selectedText} onChange={event => setSelectedText(event.target.value)} placeholder="Copy the passage you want Ada to use…" rows={7} style={{ display: 'block', width: '100%', marginTop: 5, padding: 9, borderRadius: 9, resize: 'vertical' }} /></label><label style={{ display: 'block', marginTop: 12, fontSize: 12, opacity: .7 }}>Ask Ada<textarea value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Explain this page, quiz us, or solve the question…" rows={4} style={{ display: 'block', width: '100%', marginTop: 5, padding: 9, borderRadius: 9, resize: 'vertical' }} /></label>{error && <div style={{ color: '#ffb4ab', fontSize: 12, marginTop: 10 }}>{error}</div>}<button type="button" onClick={askAda} disabled={asking || !selectedText.trim() || !prompt.trim()} style={{ width: '100%', marginTop: 10, padding: 10, borderRadius: 9, border: 0, background: '#e8c36a', color: '#111', fontWeight: 800 }}>{asking ? 'Ada is thinking…' : 'Ask Ada'}</button>{answer && <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,.1)', whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: 14 }}>{answer.answer}</div>}</aside>
         </div>
         <footer style={{ padding: '9px 16px', borderTop: '1px solid rgba(255,255,255,.1)', fontSize: 12, opacity: .65 }}>Your shared study file stays encrypted in transit and is opened on your device.</footer>
       </section>
     </div>}
   </>
+}
