@@ -29,7 +29,7 @@ permissions:
   contents: read
 
 env:
-  SQLALCHEMY_DATABASE_URI: sqlite:///:memory:
+  DATABASE_URL: 'sqlite:///:memory:'
   SECRET_KEY: realtime-test-secret
 
 jobs:
