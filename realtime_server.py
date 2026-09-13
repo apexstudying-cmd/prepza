@@ -1,6 +1,7 @@
 """Socket.IO entrypoint for Prepza realtime study chat."""
 import re
 from datetime import datetime, timezone
+from threading import Lock
 from flask import request, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from sqlalchemy import text
@@ -9,6 +10,8 @@ from app import app, db
 # Socket.IO is the realtime transport; HTTP/database remains the source of truth.
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins=[], logger=False, engineio_logger=False)
 MESSAGE_PATH_RE = re.compile(r"^/chats/(\d+)/messages$")
+_socket_rooms = {}
+_socket_rooms_lock = Lock()
 
 
 def room_for(conversation_id):
@@ -52,11 +55,33 @@ def safe_message_payload(response_json):
     return message
 
 
+def track_socket_room(conversation_id):
+    with _socket_rooms_lock:
+        _socket_rooms.setdefault(request.sid, set()).add(conversation_id)
+
+
+def untrack_socket_room(conversation_id):
+    with _socket_rooms_lock:
+        rooms = _socket_rooms.get(request.sid)
+        if not rooms:
+            return
+        rooms.discard(conversation_id)
+        if not rooms:
+            _socket_rooms.pop(request.sid, None)
+
+
+def socket_rooms_for_disconnect():
+    with _socket_rooms_lock:
+        return _socket_rooms.pop(request.sid, set())
+
+
 @socketio.on("connect")
 def handle_connect(auth=None):
     user_id = authenticated_user_id()
     if user_id is None:
         return False
+    with _socket_rooms_lock:
+        _socket_rooms.setdefault(request.sid, set())
     emit("realtime:ready", {"user_id": user_id})
 
 
@@ -73,6 +98,7 @@ def handle_join_chat(data):
         return {"ok": False, "error": "Conversation unavailable"}
     room = room_for(conversation_id)
     join_room(room)
+    track_socket_room(conversation_id)
     emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": True}, to=room)
     return {"ok": True, "conversation_id": conversation_id}
 
@@ -90,6 +116,7 @@ def handle_leave_chat(data):
         return {"ok": False}
     room = room_for(conversation_id)
     leave_room(room)
+    untrack_socket_room(conversation_id)
     emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room)
     return {"ok": True, "conversation_id": conversation_id}
 
@@ -123,6 +150,16 @@ def handle_read(data):
     if not isinstance(read_at, str) or not read_at.strip():
         read_at = datetime.now(timezone.utc).isoformat()
     emit("chat:read", {"conversation_id": conversation_id, "user_id": user_id, "read_at": read_at}, to=room_for(conversation_id), include_self=False)
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    user_id = authenticated_user_id()
+    if user_id is None:
+        socket_rooms_for_disconnect()
+        return
+    for conversation_id in socket_rooms_for_disconnect():
+        emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room_for(conversation_id))
 
 
 @app.after_request
