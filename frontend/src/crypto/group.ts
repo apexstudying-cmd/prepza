@@ -28,7 +28,7 @@ function assertId(value: number, label: string): void {
 }
 
 function assertEpoch(value: number | undefined): asserts value is number {
-  if (!Number.isInteger(value) || value < 1) throw new Error('Invalid group key epoch.')
+  if (value === undefined || !Number.isInteger(value) || value < 1) throw new Error('Invalid group key epoch.')
 }
 
 function envelopeAad(conversationId: number, senderUserId: number, recipientUserId: number, keyEpoch: number): Uint8Array {
