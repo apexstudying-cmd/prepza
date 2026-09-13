@@ -132,8 +132,8 @@ def main():
     require_exactly_once(patched_app, "register_e2ee_chat_routes(\n", "new chat registration")
     require_exactly_once(patched_app, "register_e2ee_ada_route(\n", "new Ada registration")
     require_exactly_once(patched_chat_routes, "# app.py already owns the authenticated UserKey implementation", "duplicate-key replacement")
-    if "/keys/register" in patched_chat_routes or "/keys/<int:user_id>" in patched_chat_routes:
-        raise SystemExit("ABORT: duplicate /keys route text remains in e2ee_chat_routes.py. No files were written.")
+    if '    @app.post("/keys/register")\n' in patched_chat_routes or '    @app.get("/keys/<int:user_id>")\n' in patched_chat_routes:
+        raise SystemExit("ABORT: duplicate /keys route decorator remains in e2ee_chat_routes.py. No files were written.")
 
     write_preserving_newlines(APP_PATH, patched_app, app_newline)
     write_preserving_newlines(CHAT_ROUTES_PATH, patched_chat_routes, chat_newline)
