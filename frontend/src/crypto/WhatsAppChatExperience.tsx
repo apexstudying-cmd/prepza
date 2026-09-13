@@ -8,6 +8,8 @@ type Detail = { id: number; is_group: boolean; name: string; created_by: number;
 let observedConversationId: number | null = null
 let observedAt = 0
 let observerInstalled = false
+let dismissedConversationId: number | null = null
+let dismissedAt = 0
 
 function pathOf(input: RequestInfo | URL): string {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.pathname + input.search : input.url
@@ -23,11 +25,24 @@ function installConversationObserver() {
     const match = path.match(/^\/chats\/(\d+)\/(?:messages|read)$/)
     const detail = path.match(/^\/chats\/(\d+)$/)
     if (match || detail) {
-      observedConversationId = Number((match || detail)![1])
-      observedAt = Date.now()
+      const id = Number((match || detail)![1])
+      const recentlyDismissed = dismissedConversationId === id && Date.now() - dismissedAt < 1500
+      if (!recentlyDismissed) {
+        observedConversationId = id
+        observedAt = Date.now()
+      }
     }
     return original(input, init)
   }
+}
+
+function friendlyError(value: unknown, fallback: string) {
+  const message = value instanceof Error ? value.message : ''
+  if (!message) return fallback
+  if (/peer encryption key|secure conversation|public key|nonce|e2ee|encrypted/i.test(message)) return 'Secure messaging is temporarily unavailable. Please try again.'
+  if (/authentication|required|unauthorized|forbidden|401|403/i.test(message)) return 'Your session has expired. Please sign in again.'
+  if (/network|failed to fetch|request failed/i.test(message)) return 'Connection problem. Please try again.'
+  return message.length > 140 ? fallback : message
 }
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -66,7 +81,8 @@ export default function WhatsAppChatExperience() {
       const composer = document.querySelector('input[placeholder="Message…"]')
       const id = observedConversationId
       const isFresh = Date.now() - observedAt < 10000
-      const nextActive = Boolean(composer && id && isFresh)
+      const suppressed = dismissedConversationId === id && Date.now() - dismissedAt < 1500
+      const nextActive = Boolean(composer && id && isFresh && !suppressed)
       if (!nextActive) {
         if (!cancelled) setActive(false)
         return
@@ -92,7 +108,7 @@ export default function WhatsAppChatExperience() {
     ]).then(([nextDetail, nextMessages, me]) => {
       if (cancelled) return
       setDetail(nextDetail); setMessages(nextMessages.messages || []); setMeId(me.id)
-    }).catch(errorValue => { if (!cancelled) setError(errorValue instanceof Error ? errorValue.message : 'Could not load chat') })
+    }).catch(errorValue => { if (!cancelled) setError(friendlyError(errorValue, 'Could not load this chat.')) })
       .finally(() => { if (!cancelled) setLoading(false) })
 
     const interval = window.setInterval(async () => {
@@ -114,7 +130,7 @@ export default function WhatsAppChatExperience() {
       const message = await api<Message>(`/chats/${conversationId}/messages`, { method: 'POST', body: JSON.stringify({ body }) })
       setMessages(current => [...current.filter(m => m.id !== message.id), message])
       setInput('')
-    } catch (errorValue) { setError(errorValue instanceof Error ? errorValue.message : 'Could not send message') }
+    } catch (errorValue) { setError(friendlyError(errorValue, 'Could not send this message.')) }
     finally { setSending(false) }
   }
 
@@ -129,11 +145,19 @@ export default function WhatsAppChatExperience() {
       await api(`/chats/${conversationId}/attachments/${init.attachment_id}/uploaded`, { method: 'POST' })
       const message = await api<Message>(`/chats/${conversationId}/messages`, { method: 'POST', body: JSON.stringify({ attachment_id: init.attachment_id }) })
       setMessages(current => [...current.filter(m => m.id !== message.id), message])
-    } catch (errorValue) { setError(errorValue instanceof Error ? errorValue.message : 'Could not send attachment') }
+    } catch (errorValue) { setError(friendlyError(errorValue, 'Could not send this attachment.')) }
     finally { setUploading(false) }
   }
 
   const openAda = () => window.dispatchEvent(new CustomEvent('prepza-open-ada', { detail: { conversationId } }))
+  const closeChat = () => {
+    if (conversationId != null) {
+      dismissedConversationId = conversationId
+      dismissedAt = Date.now()
+    }
+    setActive(false)
+    document.querySelector('input[placeholder="Message…"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  }
 
   if (!active) return null
 
@@ -145,7 +169,7 @@ export default function WhatsAppChatExperience() {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', flexDirection: 'column', background: '#F4F5F7', fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
       <header style={{ height: 66, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 11, padding: '0 14px', background: '#0B1437', color: '#fff', boxShadow: '0 1px 8px rgba(0,0,0,.12)' }}>
-        <button type="button" aria-label="Back" onClick={() => { setActive(false); document.querySelector('input[placeholder="Message…"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) }} style={{ width: 38, height: 38, border: 0, borderRadius: 12, background: 'rgba(255,255,255,.09)', color: '#fff', cursor: 'pointer', fontSize: 22 }}>‹</button>
+        <button type="button" aria-label="Back" onClick={closeChat} style={{ width: 38, height: 38, border: 0, borderRadius: 12, background: 'rgba(255,255,255,.09)', color: '#fff', cursor: 'pointer', fontSize: 22 }}>‹</button>
         <div style={{ width: 40, height: 40, borderRadius: 14, background: 'linear-gradient(135deg,#C9A84C,#E4C96A)', color: '#0B1437', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>{initials(header)}</div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 850, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{header}</div>
