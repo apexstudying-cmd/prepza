@@ -31,6 +31,13 @@ def is_active_participant(user_id, conversation_id):
     return row is not None
 
 
+def is_e2ee_conversation(conversation_id):
+    row = db.session.execute(text(
+        "SELECT e2ee_mode FROM conversation WHERE id = :conversation_id LIMIT 1"
+    ), {"conversation_id": conversation_id}).first()
+    return bool(row and row[0] in {"direct_v1", "group_v1"})
+
+
 def safe_message_payload(response_json):
     if not isinstance(response_json, dict):
         return None
@@ -46,9 +53,10 @@ def safe_message_payload(response_json):
 
 @socketio.on("connect")
 def handle_connect(auth=None):
-    if authenticated_user_id() is None:
+    user_id = authenticated_user_id()
+    if user_id is None:
         return False
-    emit("realtime:ready", {"user_id": authenticated_user_id()})
+    emit("realtime:ready", {"user_id": user_id})
 
 
 @socketio.on("join_chat")
@@ -117,15 +125,19 @@ def handle_read(data):
 
 @app.after_request
 def broadcast_message_response(response):
-    """Broadcast persisted message JSON; E2EE ciphertext is never decrypted here."""
+    """Broadcast only the persisted encrypted representation for E2EE chats."""
     match = MESSAGE_PATH_RE.match(request.path)
     if match and request.method == "POST" and 200 <= response.status_code < 300:
         try:
-            payload = safe_message_payload(response.get_json(silent=True))
             conversation_id = int(match.group(1))
+            if not is_e2ee_conversation(conversation_id):
+                return response
+            payload = safe_message_payload(response.get_json(silent=True))
             if payload and payload.get("conversation_id") == conversation_id:
                 socketio.emit("chat:message", payload, to=room_for(conversation_id))
         except Exception:
+            # Realtime delivery must never turn a successful message request
+            # into a failed request. HTTP history remains the source of truth.
             app.logger.exception("Realtime message broadcast failed")
     return response
 
