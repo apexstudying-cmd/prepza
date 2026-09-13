@@ -26,8 +26,15 @@ jobs:
       DATABASE_URL: 'sqlite:///:memory:'
       SECRET_KEY: realtime-test-secret
     steps:
-      - name: Check out repository
+      - name: Check out exact event commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Assert exact commit under test
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
