@@ -73,24 +73,24 @@ function findScrollSurface(row: HTMLElement): HTMLElement | null {
   let node: HTMLElement | null = row.parentElement
   while (node && node !== document.body) {
     const style = getComputedStyle(node)
-    if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && node.clientHeight <= node.scrollHeight) {
-      return node
-    }
+    if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && node.clientHeight <= node.scrollHeight) return node
     node = node.parentElement
   }
   return null
 }
 
-function applyBubbleTheme(row: HTMLElement) {
+function surfaceIsDark(surface: HTMLElement): boolean {
+  const background = getComputedStyle(surface).backgroundImage
+  const rgb = background.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+  if (rgb) return 0.299 * Number(rgb[1]) + 0.587 * Number(rgb[2]) + 0.114 * Number(rgb[3]) < 150
+  const color = getComputedStyle(surface).backgroundColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+  return color ? 0.299 * Number(color[1]) + 0.587 * Number(color[2]) + 0.114 * Number(color[3]) < 150 : false
+}
+
+function applyBubbleTheme(row: HTMLElement, darkMode: boolean) {
   const bubble = Array.from(row.children).find(child => child instanceof HTMLElement && child.querySelector('button[title="Reply"]')) as HTMLElement | undefined
   if (!bubble) return
-
-  const computed = getComputedStyle(bubble)
-  const rgb = computed.backgroundColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
-  const luminance = rgb ? 0.299 * Number(rgb[1]) + 0.587 * Number(rgb[2]) + 0.114 * Number(rgb[3]) : 255
-  const darkMode = luminance < 155
   const mine = row.style.alignItems === 'flex-end'
-
   row.dataset.prepzaMine = mine ? '1' : '0'
   row.dataset.prepzaDark = darkMode ? '1' : '0'
 
@@ -145,7 +145,8 @@ function scan() {
   surface.style.overscrollBehaviorY = 'contain'
   surface.style.overscrollBehavior = 'contain'
   surface.style.touchAction = 'pan-y'
-  rows.forEach(applyBubbleTheme)
+  const darkMode = surfaceIsDark(surface)
+  rows.forEach(row => applyBubbleTheme(row, darkMode))
   renderDateSeparators(surface, rows)
 }
 
