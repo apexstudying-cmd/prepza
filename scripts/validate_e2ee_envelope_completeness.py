@@ -17,7 +17,7 @@ def main() -> None:
         "active_member_ids = {int(row[0]) for row in active_member_rows if row[0] is not None}",
         "if len(envelopes) != len(active_member_ids):",
         "seen_recipient_ids = set()",
-        "if recipient_id in seen_recipient_ids:",
+        "recipient_id in seen_recipient_ids",
         "if seen_recipient_ids != active_member_ids:",
     )
     missing = [anchor for anchor in required if anchor not in source]
