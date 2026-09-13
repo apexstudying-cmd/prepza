@@ -41,9 +41,17 @@ require(
 )
 require(
     "frontend/src/crypto/e2eeFetchBridge.ts",
-    "decryptGroupBytes(fileKey, encryptedBytes, metadata.file_nonce)",
+    "decryptGroupBytes(fileKey, encryptedBytes, metadata.file_nonce, conversationId, attachmentEpoch)",
+    "encryptGroupBytes(pendingUpload.key, plaintext, pendingUpload.conversationId, pendingUpload.keyEpoch)",
+    "conversation_id: conversationId",
     "URL.createObjectURL",
     "hydrateEncryptedAttachment",
+)
+require(
+    "frontend/src/crypto/group.ts",
+    "messageAad(conversationId, keyEpoch, 'attachment')",
+    "messageAad(conversationId, keyEpoch, 'message')",
+    "Conversation and epoch are required together.",
 )
 require(
     "e2ee_ada_routes.py",
