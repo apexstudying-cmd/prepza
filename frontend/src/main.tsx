@@ -8,6 +8,7 @@ import { installStudyAdaFetchGuard } from './crypto/studyAdaFetchGuard'
 import { installInChatAdaObserver, default as InChatAdaEnhancer } from './crypto/inChatAdaEnhancer'
 import { installDirectInChatAdaObserver, default as DirectInChatAdaEnhancer } from './crypto/directInChatAdaEnhancer'
 import { installChatStudyDocumentObserver, default as ChatStudyDocumentReader } from './crypto/chatStudyDocumentReader'
+import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import App from './App'
 import './index.css'
 
@@ -26,6 +27,7 @@ void ensureE2EEIdentityReady().catch(() => undefined)
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
+    <WhatsAppChatExperience />
     <InChatAdaEnhancer />
     <DirectInChatAdaEnhancer />
     <ChatStudyDocumentReader />
