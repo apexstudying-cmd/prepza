@@ -49,6 +49,24 @@ def test_member_can_join_and_receive_presence():
     client.disconnect()
 
 
+def test_repeated_join_does_not_duplicate_online_presence():
+    observer = _session_client(8)
+    subject = _session_client(7)
+    assert observer.is_connected() and subject.is_connected()
+
+    with patch("realtime_server.is_active_participant", return_value=True):
+        observer.emit("join_chat", {"conversation_id": 12}, callback=True)
+        subject.emit("join_chat", {"conversation_id": 12}, callback=True)
+        observer.get_received()
+        subject.get_received()
+
+        subject.emit("join_chat", {"conversation_id": 12}, callback=True)
+        assert not _event_named(observer.get_received(), "chat:presence")
+
+    subject.disconnect()
+    observer.disconnect()
+
+
 def test_disconnect_broadcasts_offline_presence():
     observer = _session_client(8)
     subject = _session_client(7)
@@ -98,6 +116,36 @@ def test_multiple_tabs_do_not_emit_offline_until_last_socket_disconnects():
             "online": False,
         }
 
+    observer.disconnect()
+
+
+def test_explicit_leave_does_not_emit_offline_until_last_socket_leaves():
+    observer = _session_client(8)
+    first_tab = _session_client(7)
+    second_tab = _session_client(7)
+    assert observer.is_connected() and first_tab.is_connected() and second_tab.is_connected()
+
+    with patch("realtime_server.is_active_participant", return_value=True):
+        for client in (observer, first_tab, second_tab):
+            assert client.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
+        observer.get_received()
+        first_tab.get_received()
+        second_tab.get_received()
+
+        assert first_tab.emit("leave_chat", {"conversation_id": 12}, callback=True)["ok"] is True
+        assert not _event_named(observer.get_received(), "chat:presence")
+
+        assert second_tab.emit("leave_chat", {"conversation_id": 12}, callback=True)["ok"] is True
+        offline_events = _event_named(observer.get_received(), "chat:presence")
+        assert offline_events
+        assert offline_events[-1]["args"][0] == {
+            "conversation_id": 12,
+            "user_id": 7,
+            "online": False,
+        }
+
+    first_tab.disconnect()
+    second_tab.disconnect()
     observer.disconnect()
 
 
