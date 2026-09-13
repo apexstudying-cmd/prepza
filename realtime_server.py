@@ -199,5 +199,46 @@ def broadcast_message_response(response):
     return response
 
 
+@app.after_request
+def normalize_chat_timestamps(response):
+    """Expose database UTC timestamps with an explicit UTC offset.
+
+    ChatMessage.created_at is stored as a naive UTC datetime for compatibility
+    with the existing schema. Sending that value as a naive ISO string makes
+    browsers interpret it as local time, which shifts the displayed chat time.
+    Only chat-message payloads are normalized here; the stored value is not
+    changed and the existing database schema remains untouched.
+    """
+    if request.method != "GET" or not re.match(r"^/chats/\d+/messages(?:/search)?$", request.path):
+        return response
+    if not response.is_json:
+        return response
+    try:
+        payload = response.get_json(silent=True)
+        if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list):
+            return response
+        changed = False
+        for message in payload["messages"]:
+            if not isinstance(message, dict):
+                continue
+            for field in ("created_at", "edited_at"):
+                value = message.get(field)
+                if not isinstance(value, str) or not value:
+                    continue
+                try:
+                    parsed = datetime.fromisoformat(value)
+                except ValueError:
+                    continue
+                if parsed.tzinfo is None:
+                    message[field] = parsed.replace(tzinfo=timezone.utc).isoformat()
+                    changed = True
+        if changed:
+            response.set_data(__import__("json").dumps(payload, separators=(",", ":")))
+            response.headers["Content-Type"] = "application/json"
+    except Exception:
+        app.logger.exception("Chat timestamp normalization failed")
+    return response
+
+
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5000)
