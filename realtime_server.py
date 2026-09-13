@@ -85,11 +85,12 @@ def handle_leave_chat(data):
         conversation_id = int(data.get("conversation_id"))
     except (TypeError, ValueError):
         return {"ok": False}
-    if conversation_id > 0:
-        room = room_for(conversation_id)
-        leave_room(room)
-        emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room)
-    return {"ok": True}
+    if conversation_id <= 0 or not is_active_participant(user_id, conversation_id):
+        return {"ok": False}
+    room = room_for(conversation_id)
+    leave_room(room)
+    emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room)
+    return {"ok": True, "conversation_id": conversation_id}
 
 
 @socketio.on("chat:typing")
