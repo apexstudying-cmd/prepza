@@ -8,6 +8,7 @@ import { installStudyAdaFetchGuard } from './crypto/studyAdaFetchGuard'
 import { installInChatAdaObserver, default as InChatAdaEnhancer } from './crypto/inChatAdaEnhancer'
 import { installDirectInChatAdaObserver, default as DirectInChatAdaEnhancer } from './crypto/directInChatAdaEnhancer'
 import { installChatStudyDocumentObserver, default as ChatStudyDocumentReader } from './crypto/chatStudyDocumentReader'
+import { installChatRealtime } from './crypto/chatRealtime'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import App from './App'
 import './index.css'
@@ -19,6 +20,7 @@ installNewGroupE2EECreationGuard()
 installInChatAdaObserver()
 installDirectInChatAdaObserver()
 installChatStudyDocumentObserver()
+installChatRealtime()
 
 // E2EE is automatic: establish this device's identity in the background.
 // The private key stays local; only the public key is registered server-side.
