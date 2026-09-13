@@ -33,6 +33,13 @@ require(
     "The file is decrypted locally.",
 )
 require(
+    "frontend/src/crypto/inChatAdaEnhancer.tsx",
+    "selected_chat_document",
+    "attachmentId",
+    "Shared document",
+    "Share a study document in this group first",
+)
+require(
     "frontend/src/crypto/e2eeFetchBridge.ts",
     "decryptGroupBytes(fileKey, encryptedBytes, metadata.file_nonce)",
     "URL.createObjectURL",
