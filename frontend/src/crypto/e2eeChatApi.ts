@@ -1,5 +1,5 @@
 import { decryptGroupMessage, encryptGroupMessage, type GroupKeyEnvelope } from './group'
-import { openGroupE2EESession, type GroupE2EEState } from './groupSession'
+import { openGroupE2EESession, type GroupE2EESessionState } from './groupSession'
 
 async function jsonFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -52,13 +52,20 @@ export async function uploadGroupKeyEnvelopes(
   })
 }
 
+export async function registerUserPublicKey(publicKey: string): Promise<void> {
+  await jsonFetch('/keys/register', {
+    method: 'POST',
+    body: JSON.stringify({ public_key: publicKey }),
+  })
+}
+
 export async function fetchUserPublicKey(userId: number): Promise<string> {
   const result = await jsonFetch<{ public_key: string }>(`/keys/${userId}`)
   if (!result.public_key) throw new Error('Secure chat is still being set up for this student.')
   return result.public_key
 }
 
-export async function openGroupSession(conversationId: number): Promise<GroupE2EEState> {
+export async function openGroupSession(conversationId: number): Promise<GroupE2EESessionState> {
   return openGroupE2EESession(conversationId, fetchGroupKeyEnvelopes, fetchUserPublicKey)
 }
 
