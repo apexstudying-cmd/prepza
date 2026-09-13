@@ -6,6 +6,7 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 from sqlalchemy import text
 from app import app, db
 
+# Socket.IO is the realtime transport; HTTP/database remains the source of truth.
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins=[], logger=False, engineio_logger=False)
 MESSAGE_PATH_RE = re.compile(r"^/chats/(\d+)/messages$")
 
