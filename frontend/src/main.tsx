@@ -10,6 +10,7 @@ import { installDirectInChatAdaObserver, default as DirectInChatAdaEnhancer } fr
 import { installChatStudyDocumentObserver, default as ChatStudyDocumentReader } from './crypto/chatStudyDocumentReader'
 import { installChatRealtime } from './crypto/chatRealtime'
 import { installChatSwipeReply } from './crypto/chatSwipeReply'
+import { installChatUiPolish } from './crypto/chatUiPolish'
 import App from './App'
 import './index.css'
 
@@ -22,6 +23,7 @@ installDirectInChatAdaObserver()
 installChatStudyDocumentObserver()
 installChatRealtime()
 installChatSwipeReply()
+installChatUiPolish()
 
 // E2EE is automatic: establish this device's identity in the background.
 // The private key stays local; only the public key is registered server-side.
