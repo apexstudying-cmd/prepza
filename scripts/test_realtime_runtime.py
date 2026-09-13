@@ -13,6 +13,10 @@ def _session_client(user_id=None):
     return socketio.test_client(app, flask_test_client=flask_client)
 
 
+def _event_named(events, name):
+    return [event for event in events if event["name"] == name]
+
+
 def test_unauthenticated_socket_is_rejected():
     client = _session_client()
     assert not client.is_connected()
@@ -43,6 +47,58 @@ def test_member_can_join_and_receive_presence():
         events = client.get_received()
         assert any(event["name"] == "chat:presence" for event in events)
     client.disconnect()
+
+
+def test_two_members_receive_typing_read_and_persisted_message_events():
+    sender = _session_client(7)
+    receiver = _session_client(8)
+    assert sender.is_connected() and receiver.is_connected()
+
+    with patch("realtime_server.is_active_participant", return_value=True):
+        assert sender.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
+        assert receiver.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
+        sender.get_received()
+        receiver.get_received()
+
+        sender.emit("chat:typing", {"conversation_id": 12, "typing": True})
+        typing_events = _event_named(receiver.get_received(), "chat:typing")
+        assert typing_events
+        assert typing_events[-1]["args"][0] == {
+            "conversation_id": 12,
+            "user_id": 7,
+            "typing": True,
+        }
+        assert not _event_named(sender.get_received(), "chat:typing")
+
+        sender.emit("chat:read", {"conversation_id": 12, "read_at": "2026-09-13T10:00:00+00:00"})
+        read_events = _event_named(receiver.get_received(), "chat:read")
+        assert read_events
+        assert read_events[-1]["args"][0]["user_id"] == 7
+        assert read_events[-1]["args"][0]["conversation_id"] == 12
+
+        payload = {
+            "message": {
+                "id": 44,
+                "conversation_id": 12,
+                "body": "ciphertext-only",
+                "sender_id": 7,
+            }
+        }
+        response = app.response_class(
+            response=json.dumps(payload), status=201, mimetype="application/json"
+        )
+        with app.test_request_context("/chats/12/messages", method="POST"):
+            with patch("realtime_server.is_e2ee_conversation", return_value=True):
+                returned = broadcast_message_response(response)
+        assert returned is response
+
+        message_events = _event_named(receiver.get_received(), "chat:message")
+        assert message_events
+        assert message_events[-1]["args"][0] == payload["message"]
+        assert not _event_named(sender.get_received(), "chat:message")
+
+    sender.disconnect()
+    receiver.disconnect()
 
 
 def test_leave_requires_membership():
