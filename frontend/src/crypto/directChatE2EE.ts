@@ -4,21 +4,23 @@ import {
   encryptMessageBody,
 } from './conversation'
 import { decryptGroupBytes, encryptGroupBytes } from './group'
-import { exportPublicKeyBase64Url, getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'
+import { getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'
 import { ensureE2EEIdentityReady, fetchUserPublicKey } from './e2eeChatApi'
 
 const DIRECT_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
 const DIRECT_SEARCH_RE = /^\/chats\/(\d+)\/messages\/search(?:\?.*)?$/
 const DIRECT_ATTACHMENT_CREATE_RE = /^\/chats\/(\d+)\/attachments$/
 const ENCRYPTED_ATTACHMENT_MARKER = '__prepza_e2ee_attachment_v1'
+const DIRECT_ATTACHMENT_KEY_EPOCH = 1
+const PENDING_ATTACHMENT_TTL_MS = 10 * 60 * 1000
 
 let installed = false
 let currentUserId: number | null = null
 const keyPromises = new Map<number, Promise<CryptoKey>>()
 const detailPromises = new Map<number, Promise<any>>()
 const pendingUploads = new Map<string, { conversationId: number; attachmentId: number; key: CryptoKey; mimeType: string }>()
-const pendingAttachmentMeta = new Map<number, { conversationId: number; key: CryptoKey; mimeType: string; fileNonce: string }>()
-const blockedUploadUrls = new Set<string>()
+const pendingAttachmentMeta = new Map<number, { conversationId: number; key: CryptoKey; mimeType: string; fileNonce: string; expiresAt: number }>()
+const blockedUploadUrls = new Map<string, number>()
 
 function pathOnly(input: RequestInfo | URL): string {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.pathname + input.search : input.url
@@ -45,6 +47,16 @@ function mimeTypeFor(filename: string): string {
     pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   }
   return map[ext] || 'application/octet-stream'
+}
+
+function pruneAttachmentState(): void {
+  const now = Date.now()
+  for (const [attachmentId, meta] of pendingAttachmentMeta) {
+    if (meta.expiresAt <= now) pendingAttachmentMeta.delete(attachmentId)
+  }
+  for (const [url, expiresAt] of blockedUploadUrls) {
+    if (expiresAt <= now) blockedUploadUrls.delete(url)
+  }
 }
 
 async function fetchConversationDetail(
@@ -131,12 +143,15 @@ async function decryptDirectAttachment(
   let metadata: any
   try { metadata = JSON.parse(message.body) } catch { return message }
   if (metadata?.marker !== ENCRYPTED_ATTACHMENT_MARKER || !metadata.file_nonce) return message
+  if (Number(metadata.conversation_id) !== conversationId || Number(metadata.key_epoch) !== DIRECT_ATTACHMENT_KEY_EPOCH) {
+    return { ...message, body: null, attachment: { ...message.attachment, view_url: null } }
+  }
 
   try {
     const encryptedResponse = await nativeFetch(message.attachment.view_url, { credentials: 'include' })
     if (!encryptedResponse.ok) throw new Error('Encrypted attachment download failed')
     const encryptedBytes = await encryptedResponse.arrayBuffer()
-    const plaintext = await decryptGroupBytes(key, encryptedBytes, metadata.file_nonce)
+    const plaintext = await decryptGroupBytes(key, encryptedBytes, metadata.file_nonce, conversationId, DIRECT_ATTACHMENT_KEY_EPOCH)
     const blobUrl = URL.createObjectURL(new Blob([plaintext], { type: metadata.mime_type || 'application/octet-stream' }))
     return { ...message, body: null, attachment: { ...message.attachment, view_url: blobUrl } }
   } catch {
@@ -218,6 +233,7 @@ export function installDirectChatE2EE(): void {
   const nativeFetch = window.fetch.bind(window)
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    pruneAttachmentState()
     const path = pathOnly(input)
     const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase()
 
@@ -253,7 +269,7 @@ export function installDirectChatE2EE(): void {
               mimeType: mimeTypeFor(String(payload.original_filename)),
             })
           } catch {
-            blockedUploadUrls.add(uploadUrl)
+            blockedUploadUrls.set(uploadUrl, Date.now() + PENDING_ATTACHMENT_TTL_MS)
           }
         }
       }
@@ -272,18 +288,19 @@ export function installDirectChatE2EE(): void {
     if (pendingUpload && method === 'PUT' && init?.body) {
       try {
         const plaintext = await new Response(init.body).arrayBuffer()
-        const encrypted = await encryptGroupBytes(pendingUpload.key, plaintext)
+        const encrypted = await encryptGroupBytes(pendingUpload.key, plaintext, pendingUpload.conversationId, DIRECT_ATTACHMENT_KEY_EPOCH)
         pendingAttachmentMeta.set(pendingUpload.attachmentId, {
           conversationId: pendingUpload.conversationId,
           key: pendingUpload.key,
           mimeType: pendingUpload.mimeType,
           fileNonce: encrypted.nonce,
+          expiresAt: Date.now() + PENDING_ATTACHMENT_TTL_MS,
         })
         pendingUploads.delete(uploadUrl)
         return nativeFetch(input, { ...init, body: encrypted.ciphertext })
       } catch {
         pendingUploads.delete(uploadUrl)
-        blockedUploadUrls.add(uploadUrl)
+        blockedUploadUrls.set(uploadUrl, Date.now() + PENDING_ATTACHMENT_TTL_MS)
         return new Response(JSON.stringify({ error: 'Secure attachment encryption failed' }), {
           status: 409,
           headers: { 'Content-Type': 'application/json' },
@@ -322,7 +339,8 @@ export function installDirectChatE2EE(): void {
       } else if (payload?.attachment_id != null) {
         const attachmentId = Number(payload.attachment_id)
         const meta = pendingAttachmentMeta.get(attachmentId)
-        if (!meta || meta.conversationId !== conversationId) {
+        if (!meta || meta.conversationId !== conversationId || meta.expiresAt <= Date.now()) {
+          pendingAttachmentMeta.delete(attachmentId)
           return new Response(JSON.stringify({ error: 'Secure attachment encryption metadata is unavailable' }), {
             status: 409,
             headers: { 'Content-Type': 'application/json' },
@@ -331,7 +349,8 @@ export function installDirectChatE2EE(): void {
         const key = await directConversationKey(nativeFetch, conversationId)
         const metadata = JSON.stringify({
           marker: ENCRYPTED_ATTACHMENT_MARKER,
-          key_epoch: 0,
+          conversation_id: conversationId,
+          key_epoch: DIRECT_ATTACHMENT_KEY_EPOCH,
           file_nonce: meta.fileNonce,
           mime_type: meta.mimeType,
         })

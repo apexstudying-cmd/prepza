@@ -1,5 +1,6 @@
 const MAX_CONTEXT_CHARS = 20_000
 const MAX_PROMPT_CHARS = 4_000
+const MAX_PAGE_SPAN = 50
 
 export type AdaStudyContext = {
   conversationId: number
@@ -22,6 +23,10 @@ function cleanText(value: unknown, max: number, label: string): string {
   return normalized
 }
 
+function assertPositiveId(value: unknown, label: string): asserts value is number {
+  if (!Number.isInteger(value) || Number(value) < 1) throw new Error(`Invalid ${label}.`)
+}
+
 export function createAdaStudyContext(input: {
   conversationId: number
   keyEpoch: number
@@ -33,18 +38,23 @@ export function createAdaStudyContext(input: {
   userPrompt: string
   contextScope?: 'selected_document_pages' | 'selected_chat_document'
 }): AdaStudyContext {
-  if (!Number.isInteger(input.conversationId) || input.conversationId < 1) throw new Error('Invalid conversation id.')
-  if (!Number.isInteger(input.keyEpoch) || input.keyEpoch < 0) throw new Error('Invalid conversation key epoch.')
-  const contextScope = input.contextScope || 'selected_document_pages'
+  assertPositiveId(input.conversationId, 'conversation id')
+  if (!Number.isInteger(input.keyEpoch) || input.keyEpoch < 1) throw new Error('A current E2EE key epoch is required.')
 
+  const contextScope = input.contextScope || 'selected_document_pages'
   if (contextScope === 'selected_document_pages') {
-    if (!Number.isInteger(input.documentId) || input.documentId! < 1) throw new Error('Invalid study document id.')
-  } else if (!Number.isInteger(input.attachmentId) || input.attachmentId! < 1) {
-    throw new Error('Invalid shared chat document.')
+    assertPositiveId(input.documentId, 'study document id')
+    if (input.attachmentId !== undefined) throw new Error('Document and chat attachment context cannot be combined.')
+  } else if (contextScope === 'selected_chat_document') {
+    assertPositiveId(input.attachmentId, 'shared chat document')
+    if (input.documentId !== undefined) throw new Error('Document and chat attachment context cannot be combined.')
+  } else {
+    throw new Error('Invalid study context scope.')
   }
 
   if (!Number.isInteger(input.pageStart) || input.pageStart < 1) throw new Error('Invalid starting page.')
   if (!Number.isInteger(input.pageEnd) || input.pageEnd < input.pageStart) throw new Error('Invalid ending page.')
+  if (input.pageEnd - input.pageStart + 1 > MAX_PAGE_SPAN) throw new Error('Selected page range is too large.')
 
   return {
     conversationId: input.conversationId,
@@ -64,8 +74,8 @@ export function toAdaRequestBody(context: AdaStudyContext) {
   return {
     conversation_id: context.conversationId,
     key_epoch: context.keyEpoch,
-    ...(context.documentId ? { document_id: context.documentId } : {}),
-    ...(context.attachmentId ? { attachment_id: context.attachmentId } : {}),
+    ...(context.documentId !== undefined ? { document_id: context.documentId } : {}),
+    ...(context.attachmentId !== undefined ? { attachment_id: context.attachmentId } : {}),
     page_start: context.pageStart,
     page_end: context.pageEnd,
     selected_text: context.selectedText,

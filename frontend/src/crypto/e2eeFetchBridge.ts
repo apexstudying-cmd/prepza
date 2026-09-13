@@ -210,7 +210,7 @@ async function decryptMessageWithEpoch(conversationId: number, message: any, cur
   try {
     const key = epoch === currentState.keyEpoch ? currentState.key : await loadGroupConversationKey(conversationId, epoch)
     if (!key) throw new Error('Historical group key is unavailable on this device')
-    return { ...message, body: await decryptGroupText(key, message.body, message.nonce) }
+    return { ...message, body: await decryptGroupText(key, message.body, message.nonce, conversationId, epoch) }
   } catch {
     return { ...message, body: '[Encrypted message — key unavailable on this device]' }
   }
@@ -222,7 +222,11 @@ async function hydrateEncryptedAttachment(conversationId: number, message: any, 
   try { metadata = JSON.parse(message.body) } catch { return message }
   if (metadata?.marker !== ENCRYPTED_ATTACHMENT_MARKER) return message
 
+  const attachmentConversationId = Number(metadata.conversation_id)
   const attachmentEpoch = Number(metadata.key_epoch)
+  if (attachmentConversationId !== conversationId || !Number.isInteger(attachmentEpoch) || attachmentEpoch < 1) {
+    return { ...message, body: null, attachment: { ...message.attachment, view_url: null } }
+  }
   const fileKey = attachmentEpoch === currentState.keyEpoch ? currentState.key : await loadGroupConversationKey(conversationId, attachmentEpoch)
   if (!fileKey || !metadata.file_nonce || !message.attachment.view_url) {
     return { ...message, body: null, attachment: { ...message.attachment, view_url: null } }
@@ -231,7 +235,7 @@ async function hydrateEncryptedAttachment(conversationId: number, message: any, 
     const encryptedResponse = await window.fetch(message.attachment.view_url, { credentials: 'include' })
     if (!encryptedResponse.ok) throw new Error('Encrypted attachment download failed')
     const encryptedBytes = await encryptedResponse.arrayBuffer()
-    const plaintext = await decryptGroupBytes(fileKey, encryptedBytes, metadata.file_nonce)
+    const plaintext = await decryptGroupBytes(fileKey, encryptedBytes, metadata.file_nonce, conversationId, attachmentEpoch)
     const blobUrl = URL.createObjectURL(new Blob([plaintext], { type: metadata.mime_type || 'application/octet-stream' }))
     return { ...message, body: null, attachment: { ...message.attachment, view_url: blobUrl } }
   } catch {
@@ -349,7 +353,7 @@ export function installE2EEFetchBridge(): void {
     if (pendingUpload && method === 'PUT' && init?.body) {
       try {
         const plaintext = await new Response(init.body).arrayBuffer()
-        const encrypted = await encryptGroupBytes(pendingUpload.key, plaintext)
+        const encrypted = await encryptGroupBytes(pendingUpload.key, plaintext, pendingUpload.conversationId, pendingUpload.keyEpoch)
         pendingAttachmentMeta.set(pendingUpload.attachmentId, { ...pendingUpload, fileNonce: encrypted.nonce })
         pendingUploads.delete(uploadUrl)
         return nativeFetch(input, { ...init, body: encrypted.ciphertext })
@@ -396,22 +400,24 @@ export function installE2EEFetchBridge(): void {
         try { payload = JSON.parse(String(init.body)) } catch { return nativeFetch(input, init) }
         if (typeof payload?.body === 'string' && payload.body.trim()) {
           const state = await openCurrentGroupSession(conversationId)
-          const encrypted = await encryptGroupText(state.key, payload.body)
+          const encrypted = await encryptGroupText(state.key, payload.body, conversationId, state.keyEpoch)
           payload.body = encrypted.body
           payload.nonce = encrypted.nonce
           init = { ...init, body: JSON.stringify(payload) }
         } else if (payload?.attachment_id != null) {
           const attachmentId = Number(payload.attachment_id)
           const meta = pendingAttachmentMeta.get(attachmentId)
-          if (!meta) return failedResponse('Secure attachment encryption metadata is unavailable')
+          if (!meta || meta.conversationId !== conversationId) return failedResponse('Secure attachment encryption metadata is unavailable')
           const state = await openCurrentGroupSession(conversationId)
+          if (state.keyEpoch !== meta.keyEpoch) return failedResponse('Secure attachment key epoch is stale; please upload again')
           const metadata = JSON.stringify({
             marker: ENCRYPTED_ATTACHMENT_MARKER,
+            conversation_id: conversationId,
             key_epoch: meta.keyEpoch,
             file_nonce: meta.fileNonce,
             mime_type: meta.mimeType,
           })
-          const encrypted = await encryptGroupText(state.key, metadata)
+          const encrypted = await encryptGroupText(state.key, metadata, conversationId, state.keyEpoch)
           payload.body = encrypted.body
           payload.nonce = encrypted.nonce
           pendingAttachmentMeta.delete(attachmentId)

@@ -27,8 +27,12 @@ def main() -> None:
         'Plaintext group messages are disabled; encrypt on the client first',
         "provisioner = active_provisioner(conversation.id, expected_epoch)",
         "Only the elected group key provisioner may publish the current epoch key",
-        "epoch != expected_epoch",
+        "locked_epoch != expected_epoch",
         "Envelope recipient is not an active member",
+        "conversation_id = int(item[\"conversation_id\"])",
+        "decode_base64(nonce, \"nonce\", 12)",
+        "len(nonce_bytes) != 12",
+        "IDENTITY_KEY_REPLACEMENT_REQUIRED",
     )
 
     require(
@@ -50,90 +54,51 @@ def main() -> None:
 
     require(
         "frontend/src/crypto/studyAdaFetchGuard.ts",
-        "STUDY_ADA_RE",
-        "selected_document_pages",
-        "selected_chat_document",
-        "attachment_id",
-        "explicit_user_context !== true",
-        "MAX_SELECTED_TEXT = 20_000",
-        "MAX_PROMPT = 4_000",
-        "MAX_PAGE_SPAN = 50",
-        "const safePayload = {",
-        "selected_text: payload.selected_text",
-        "prompt: payload.prompt",
-    )
-
-    require(
-        "frontend/src/crypto/studyAdaContext.ts",
-        "attachmentId?: number",
-        "selected_chat_document",
-        "contextScope",
-        "toAdaRequestBody",
-    )
-
-    require(
-        "frontend/src/crypto/chatStudyDocumentReader.tsx",
-        "installChatStudyDocumentObserver",
-        "activeDocuments",
-        "const seen = new Set<number>()",
-        "documents.length > 1",
-        "selected_chat_document",
-        "The file is decrypted locally.",
+        "STUDY_ADA_RE", "selected_document_pages", "selected_chat_document", "attachment_id",
+        "explicit_user_context !== true", "MAX_SELECTED_TEXT = 20_000", "MAX_PROMPT = 4_000",
+        "MAX_PAGE_SPAN = 50", "const safePayload = {", "selected_text: payload.selected_text", "prompt: payload.prompt",
     )
 
     require(
         "frontend/src/crypto/group.ts",
-        "async function deriveWrapKey(",
-        "name: 'AES-GCM'",
-        "name: 'ECDH'",
-        "name: 'HKDF'",
-        "export async function encryptGroupMessage(",
-        "export async function decryptGroupMessage(",
+        "async function deriveWrapKey(", "name: 'AES-GCM'", "name: 'ECDH'", "name: 'HKDF'",
+        "envelopeAad(", "messageAad(", "additionalData", "GROUP_KEY_BYTES", "Invalid base64 value.",
+        "export async function encryptGroupMessage(", "export async function decryptGroupMessage(",
+    )
+
+    require(
+        "frontend/src/crypto/groupAttachments.ts",
+        "validateMetadata(", "MAX_ATTACHMENT_BYTES", "MAX_FILENAME", "Invalid attachment MIME type.",
+        "Invalid encrypted attachment nonce.", "Encrypted attachment ciphertext is truncated.",
+        "Encrypted attachment size mismatch.",
     )
 
     require(
         "frontend/src/crypto/groupProvisioning.ts",
-        "function validateMemberTargets(",
-        "keyEpoch < 1",
-        "keyEpoch < 2",
-        "Missing public key for member",
+        "function validateMemberTargets(", "keyEpoch < 1", "keyEpoch < 2", "Missing public key for member",
     )
 
     require(
         "frontend/src/crypto/e2eeFetchBridge.ts",
-        "encryptGroupBytes",
-        "decryptGroupBytes",
-        "ENCRYPTED_ATTACHMENT_MARKER",
-        "localSearchGroupMessages",
-        "Encrypted attachment download failed",
+        "encryptGroupBytes", "decryptGroupBytes", "ENCRYPTED_ATTACHMENT_MARKER", "localSearchGroupMessages",
+        "provisionCurrentEpochIfElected", "activeMembers[0] !== currentUserId", "provisionRotatedGroupKey",
+        "GROUP_LEAVE_RE", "Secure attachment encryption is not ready on this device",
+        "Secure attachment encryption metadata is unavailable",
     )
 
     require(
         "frontend/src/crypto/directChatE2EE.ts",
-        "deriveConversationKey",
-        "encryptMessageBody",
-        "decryptMessageBody",
-        "localSearchDirectMessages",
-        "encryptGroupBytes",
-        "decryptGroupBytes",
-        "ENCRYPTED_ATTACHMENT_MARKER",
+        "deriveConversationKey", "encryptMessageBody", "decryptMessageBody", "localSearchDirectMessages",
+        "encryptGroupBytes", "decryptGroupBytes", "ENCRYPTED_ATTACHMENT_MARKER",
     )
 
     require(
         "frontend/src/crypto/directInChatAdaEnhancer.tsx",
-        "installDirectInChatAdaObserver",
-        "createAdaStudyContext",
-        "askAdaAboutSelectedStudyContext",
+        "installDirectInChatAdaObserver", "createAdaStudyContext", "askAdaAboutSelectedStudyContext",
         "Only the study context you choose is sent to Ada.",
     )
 
-    forbid(
-        "e2ee_chat_routes.py",
-        '"group_key"',
-        "payload.get(\"group_key\")",
-        "data.get(\"group_key\")",
-    )
-
+    forbid("e2ee_chat_routes.py", '"group_key"', "payload.get(\"group_key\")", "data.get(\"group_key\")")
     print("E2EE security regression checks passed.")
 
 
