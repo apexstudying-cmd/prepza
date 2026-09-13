@@ -1,3 +1,4 @@
+# Runtime Socket.IO security checks for the realtime study-chat boundary.
 name: Realtime Runtime Regression
 
 on:
