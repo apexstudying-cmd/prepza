@@ -45,6 +45,10 @@ on:
 permissions:
   contents: write
 
+env:
+  DATABASE_URL: sqlite:///:memory:
+  SECRET_KEY: realtime-test-secret
+
 jobs:
   validate:
     runs-on: ubuntu-latest
