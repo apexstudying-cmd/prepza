@@ -54,9 +54,6 @@ export function installInChatAdaObserver(): void {
             return
           }
 
-          // The normal chat detail response predates the E2EE state fields.
-          // Resolve the authoritative mode/epoch through the protected
-          // key-envelope endpoint instead of guessing from UI state.
           original(`/chats/${conversationId}/key-envelopes`, { credentials: 'include' })
             .then(stateResponse => stateResponse.json().catch(() => null).then(state => ({ stateResponse, state })))
             .then(({ stateResponse, state }) => {
@@ -85,9 +82,7 @@ function useActiveChat(): ChatState | null {
     const listener = (next: ChatState | null) => setState(next)
     listeners.add(listener)
     const timer = window.setInterval(() => {
-      if (activeChat && Date.now() - lastChatTrafficAt > 9000) {
-        emit(null)
-      }
+      if (activeChat && Date.now() - lastChatTrafficAt > 9000) emit(null)
     }, 3000)
     return () => {
       listeners.delete(listener)
@@ -113,6 +108,17 @@ export default function InChatAdaEnhancer() {
 
   const activeGroup = Boolean(chat?.isGroup && chat.e2eeMode === 'group_v1' && chat.keyEpoch > 0)
   const selectedDoc = useMemo(() => docs.find(doc => doc.id === documentId) || null, [docs, documentId])
+
+  useEffect(() => {
+    const onOpenAda = (event: Event) => {
+      const detail = (event as CustomEvent<{ conversationId?: number }>).detail
+      if (detail?.conversationId == null) return
+      if (chat?.conversationId !== Number(detail.conversationId)) return
+      setOpen(true)
+    }
+    window.addEventListener('prepza-open-ada', onOpenAda)
+    return () => window.removeEventListener('prepza-open-ada', onOpenAda)
+  }, [chat?.conversationId])
 
   useEffect(() => {
     if (!open || !activeGroup) return
@@ -162,10 +168,10 @@ export default function InChatAdaEnhancer() {
     try {
       const stateRes = await fetch(`/chats/${chat.conversationId}/key-envelopes`, { credentials: 'include' })
       const stateBody = await stateRes.json().catch(() => null)
-      if (!stateRes.ok) throw new Error(stateBody?.error || 'Could not verify secure chat state.')
+      if (!stateRes.ok) throw new Error('Could not verify the study chat right now.')
       const currentEpoch = Number(stateBody?.key_epoch) || 0
       if (stateBody?.e2ee_mode !== 'group_v1' || currentEpoch < 1) {
-        throw new Error('This group is not using secure study chat yet.')
+        throw new Error('Study mode is temporarily unavailable for this group.')
       }
       if (currentEpoch !== chat.keyEpoch) emit({ ...chat, keyEpoch: currentEpoch })
 
@@ -191,15 +197,6 @@ export default function InChatAdaEnhancer() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Study with Ada"
-        style={{ position: 'fixed', right: 18, bottom: 82, zIndex: 70, border: '1px solid rgba(201,168,76,0.35)', borderRadius: 999, padding: '10px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 12, color: '#0B1437', background: 'linear-gradient(135deg,#C9A84C,#E4C96A)', boxShadow: '0 8px 28px rgba(11,20,55,0.22)' }}
-      >
-        Study with Ada
-      </button>
-
       {open && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(5,10,25,0.58)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 14 }}>
           <div style={{ width: 'min(620px,100%)', maxHeight: '90vh', overflowY: 'auto', background: '#fff', borderRadius: 22, boxShadow: '0 24px 70px rgba(0,0,0,0.3)', padding: 18, fontFamily: 'Plus Jakarta Sans' }}>
@@ -236,7 +233,7 @@ export default function InChatAdaEnhancer() {
                 <textarea value={prompt} onChange={e => setPrompt(e.target.value)} maxLength={4000} rows={3} placeholder="Explain this concept, quiz me, compare these ideas…" style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', border: '1px solid #E5E7EB', borderRadius: 12, padding: 11, fontFamily: 'Plus Jakarta Sans', fontSize: 13, lineHeight: 1.55, outline: 'none' }} />
 
                 {error && <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: '#FEF2F2', color: '#B91C1C', fontSize: 12, fontWeight: 700 }}>{error}</div>}
-                {answer && <div style={{ marginTop: 12, padding: 13, borderRadius: 14, background: '#F8F9FC', border: '1px solid #E5E7EB' }}><div style={{ fontSize: 11, fontWeight: 900, color: '#0B1437', marginBottom: 6 }}>ADA</div><div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.65, color: '#111827' }}>{answer.answer}</div><div style={{ marginTop: 8, fontSize: 10, color: '#6B7280' }}>Context: pages {pageStart}–{pageEnd} · secure chat epoch {answer.key_epoch}</div></div>}
+                {answer && <div style={{ marginTop: 12, padding: 13, borderRadius: 14, background: '#F8F9FC', border: '1px solid #E5E7EB' }}><div style={{ fontSize: 11, fontWeight: 900, color: '#0B1437', marginBottom: 6 }}>ADA</div><div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.65, color: '#111827' }}>{answer.answer}</div><div style={{ marginTop: 8, fontSize: 10, color: '#6B7280' }}>Context: pages {pageStart}–{pageEnd}</div></div>}
 
                 <button type="button" disabled={asking || !documentId || !selectedText.trim() || !prompt.trim()} onClick={ask} style={{ width: '100%', marginTop: 12, border: 'none', borderRadius: 13, padding: '12px 14px', cursor: asking ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 850, fontSize: 13, color: '#0B1437', background: asking || !documentId || !selectedText.trim() || !prompt.trim() ? '#E5E7EB' : 'linear-gradient(135deg,#C9A84C,#E4C96A)' }}>{asking ? 'Ada is thinking…' : 'Ask Ada about this selection'}</button>
               </>
