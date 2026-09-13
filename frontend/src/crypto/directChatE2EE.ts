@@ -331,7 +331,7 @@ export function installDirectChatE2EE(): void {
         const key = await directConversationKey(nativeFetch, conversationId)
         const metadata = JSON.stringify({
           marker: ENCRYPTED_ATTACHMENT_MARKER,
-          key_epoch: 1,
+          key_epoch: 0,
           file_nonce: meta.fileNonce,
           mime_type: meta.mimeType,
         })
