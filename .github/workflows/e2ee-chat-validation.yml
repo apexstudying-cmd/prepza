@@ -22,7 +22,10 @@ on:
       - 'frontend/package-lock.json'
       - '.github/workflows/e2ee-chat-validation.yml'
       - 'scripts/test_realtime_runtime.py'
+      - 'scripts/validate_e2ee_security.py'
+      - 'scripts/validate_e2ee_lifecycle.py'
       - 'scripts/validate_realtime_security.py'
+      - 'scripts/validate_shared_study_context.py'
       - 'wire_e2ee_chat_ada_patch.py'
   pull_request:
     paths:
@@ -41,7 +44,10 @@ on:
       - 'frontend/package-lock.json'
       - '.github/workflows/e2ee-chat-validation.yml'
       - 'scripts/test_realtime_runtime.py'
+      - 'scripts/validate_e2ee_security.py'
+      - 'scripts/validate_e2ee_lifecycle.py'
       - 'scripts/validate_realtime_security.py'
+      - 'scripts/validate_shared_study_context.py'
       - 'wire_e2ee_chat_ada_patch.py'
 
 permissions:
@@ -76,6 +82,7 @@ jobs:
           python scripts/validate_e2ee_security.py
           python scripts/validate_e2ee_lifecycle.py
           python scripts/validate_realtime_security.py
+          python scripts/validate_shared_study_context.py
       - name: Install realtime regression dependencies
         run: python -m pip install -r requirements.txt pytest
       - name: Run realtime runtime regression
