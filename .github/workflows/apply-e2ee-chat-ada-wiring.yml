@@ -17,6 +17,10 @@ on:
 permissions:
   contents: write
 
+env:
+  DATABASE_URL: sqlite:///:memory:
+  SECRET_KEY: realtime-test-secret
+
 jobs:
   patch-and-verify:
     runs-on: ubuntu-latest
@@ -47,11 +51,14 @@ jobs:
           test "$(grep -c 'register_e2ee_ada_route(' app.py)" -eq 1
           ! grep -q '@app.post("/keys/register")' e2ee_chat_routes.py
           ! grep -q '@app.get("/keys/<int:user_id>")' e2ee_chat_routes.py
-      - name: Commit verified wiring and remove temporary workflow
+      - name: Commit verified wiring
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app.py e2ee_chat_routes.py
-          git rm .github/workflows/apply-e2ee-chat-ada-wiring.yml
+          if git diff --cached --quiet; then
+            echo 'No verified wiring changes to persist.'
+            exit 0
+          fi
           git commit -m 'fix: wire e2ee chat and scoped ada routes'
           git push origin HEAD:feat/realtime-study-chat
