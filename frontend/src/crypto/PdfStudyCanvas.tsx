@@ -1,127 +1,45 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument } from './pdfStudyReaderEngine'
-
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'
 type Props = { src: string; title: string; onPageChange?: (page: number) => void }
-
-const MIN_ZOOM = 0.5
-const MAX_ZOOM = 3
-const ZOOM_STEP = 0.15
-
+type Tool = 'select' | 'highlight' | 'underline' | 'strike' | 'pen' | 'eraser' | 'note' | 'rect' | 'arrow'
+type Annotation = { id: string; page: number; tool: Exclude<Tool, 'select'>; x: number; y: number; w: number; h: number; text?: string; points?: Array<[number, number]> }
+const MIN_ZOOM = 0.5, MAX_ZOOM = 3, ZOOM_STEP = 0.15
+const STORE = 'prepza-study-annotations-v1'
+function loadAnnotations(key: string): Annotation[] { try { const value = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(value) ? value : [] } catch { return [] } }
+function saveAnnotations(key: string, value: Annotation[]) { try { localStorage.setItem(key, JSON.stringify(value)) } catch {} }
+function textStyle(item: PdfTextItem, pageHeight: number) { const fontSize = Math.max(6, Math.hypot(item.transform[2], item.transform[3]) || item.height); const x = item.transform[4]; const y = pageHeight - item.transform[5] - fontSize; return { left: x, top: y, width: Math.max(item.width, 1), height: Math.max(item.height, fontSize), fontSize } }
 export default function PdfStudyCanvas({ src, title, onPageChange }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const stageRef = useRef<HTMLDivElement | null>(null)
-  const documentRef = useRef<PdfDocument | null>(null)
-  const renderTokenRef = useRef(0)
-  const [page, setPage] = useState(1)
-  const [pages, setPages] = useState(0)
-  const [zoom, setZoom] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  const render = useCallback(async (nextPage: number, nextZoom: number) => {
-    const document = documentRef.current
-    const canvas = canvasRef.current
-    if (!document || !canvas) return
-    const token = ++renderTokenRef.current
-    setLoading(true)
-    setError('')
-    try {
-      await renderPdfPage(document, nextPage, nextZoom, canvas)
-      if (token !== renderTokenRef.current) return
-      setPage(nextPage)
-      onPageChange?.(nextPage)
-    } catch (value) {
-      if (token === renderTokenRef.current) setError(value instanceof Error ? value.message : 'Could not render this page.')
-    } finally {
-      if (token === renderTokenRef.current) setLoading(false)
-    }
-  }, [onPageChange])
-
-  useEffect(() => {
-    let cancelled = false
-    documentRef.current = null
-    setPage(1)
-    setPages(0)
-    setZoom(1)
-    setLoading(true)
-    setError('')
-    ;(async () => {
-      try {
-        const response = await window.fetch(src, { credentials: 'include' })
-        if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`)
-        const bytes = new Uint8Array(await response.arrayBuffer())
-        const document = await openPdf(bytes)
-        if (cancelled) return
-        documentRef.current = document
-        setPages(document.numPages)
-        await renderPdfPage(document, 1, 1, canvasRef.current!)
-        if (!cancelled) onPageChange?.(1)
-      } catch (value) {
-        if (!cancelled) setError(value instanceof Error ? value.message : 'Could not open this PDF.')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-      renderTokenRef.current += 1
-      documentRef.current = null
-    }
-  }, [src, onPageChange])
-
-  const fitWidth = async () => {
-    const document = documentRef.current
-    const stage = stageRef.current
-    if (!document || !stage) return
-    const size = await getPdfPageSize(document, page)
-    const available = Math.max(240, stage.clientWidth - 32)
-    const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, available / size.width))
-    setZoom(nextZoom)
-    await render(page, nextZoom)
-  }
-
-  const fitPage = async () => {
-    const document = documentRef.current
-    const stage = stageRef.current
-    if (!document || !stage) return
-    const size = await getPdfPageSize(document, page)
-    const availableWidth = Math.max(240, stage.clientWidth - 32)
-    const availableHeight = Math.max(240, stage.clientHeight - 32)
-    const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(availableWidth / size.width, availableHeight / size.height)))
-    setZoom(nextZoom)
-    await render(page, nextZoom)
-  }
-
-  const changeZoom = async (delta: number) => {
-    const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((zoom + delta).toFixed(2))))
-    setZoom(nextZoom)
-    await render(page, nextZoom)
-  }
-
-  const changePage = async (nextPage: number) => {
-    if (nextPage < 1 || nextPage > pages) return
-    await render(nextPage, zoom)
-  }
-
-  return <section style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateRows: 'auto 1fr', background: '#171b22' }} aria-label={`PDF reader for ${title}`}>
-    <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,.1)', background: '#0f141c' }}>
-      <button type="button" disabled={page <= 1 || loading} onClick={() => void changePage(page - 1)}>Previous</button>
-      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-        <span style={{ fontSize: 12, opacity: .65 }}>Page</span>
-        <input aria-label="PDF page" type="number" min={1} max={pages || 1} value={page} onChange={event => void changePage(Math.max(1, Number(event.target.value) || 1))} style={{ width: 64 }} />
-        <span style={{ fontSize: 12, opacity: .65 }}>/ {pages || '—'}</span>
-      </label>
-      <button type="button" disabled={page >= pages || loading} onClick={() => void changePage(page + 1)}>Next</button>
-      <button type="button" disabled={loading} onClick={() => void changeZoom(-ZOOM_STEP)} aria-label="Zoom out">−</button>
-      <span style={{ minWidth: 52, textAlign: 'center', fontSize: 12 }}>{Math.round(zoom * 100)}%</span>
-      <button type="button" disabled={loading} onClick={() => void changeZoom(ZOOM_STEP)} aria-label="Zoom in">+</button>
-      <button type="button" disabled={loading} onClick={() => void fitWidth()}>Fit width</button>
-      <button type="button" disabled={loading} onClick={() => void fitPage()}>Fit page</button>
+  const canvasRef = useRef<HTMLCanvasElement | null>(null), stageRef = useRef<HTMLDivElement | null>(null), overlayRef = useRef<HTMLDivElement | null>(null), documentRef = useRef<PdfDocument | null>(null), tokenRef = useRef(0), undoRef = useRef<Annotation[][]>([])
+  const [page, setPage] = useState(1), [pages, setPages] = useState(0), [zoom, setZoom] = useState(1), [loading, setLoading] = useState(true), [error, setError] = useState(''), [text, setText] = useState<PdfTextItem[]>([]), [tool, setTool] = useState<Tool>('select'), [annotations, setAnnotations] = useState<Annotation[]>([]), [search, setSearch] = useState(''), [searchMatches, setSearchMatches] = useState<number[]>([]), [note, setNote] = useState('')
+  const annotationKey = `${STORE}:${src}`
+  useEffect(() => { setAnnotations(loadAnnotations(annotationKey)); undoRef.current = [] }, [annotationKey])
+  const commitAnnotations = (next: Annotation[]) => { undoRef.current.push(annotations); if (undoRef.current.length > 30) undoRef.current.shift(); setAnnotations(next); saveAnnotations(annotationKey, next) }
+  const render = useCallback(async (nextPage: number, nextZoom: number) => { const document = documentRef.current, canvas = canvasRef.current; if (!document || !canvas) return; const token = ++tokenRef.current; setLoading(true); setError(''); try { const result = await renderPdfPage(document, nextPage, nextZoom, canvas); if (token !== tokenRef.current) return; setText(result.text); setPage(nextPage); onPageChange?.(nextPage) } catch (value) { if (token === tokenRef.current) setError(value instanceof Error ? value.message : 'Could not render this page.') } finally { if (token === tokenRef.current) setLoading(false) } }, [onPageChange])
+  useEffect(() => { let cancelled = false; documentRef.current = null; setPage(1); setPages(0); setZoom(1); setLoading(true); setError(''); ;(async () => { try { const response = await window.fetch(src, { credentials: 'include' }); if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`); const document = await openPdf(new Uint8Array(await response.arrayBuffer())); if (cancelled) return; documentRef.current = document; setPages(document.numPages); const result = await renderPdfPage(document, 1, 1, canvasRef.current!); if (!cancelled) { setText(result.text); onPageChange?.(1) } } catch (value) { if (!cancelled) setError(value instanceof Error ? value.message : 'Could not open this PDF.') } finally { if (!cancelled) setLoading(false) } })(); return () => { cancelled = true; tokenRef.current += 1; documentRef.current = null } }, [src, onPageChange])
+  useEffect(() => { const query = search.trim().toLowerCase(); setSearchMatches(query ? text.map((item, i) => item.str.toLowerCase().includes(query) ? i : -1).filter(i => i >= 0) : []) }, [search, text])
+  const fit = async (mode: 'width' | 'page') => { const document = documentRef.current, stage = stageRef.current; if (!document || !stage) return; const size = await getPdfPageSize(document, page); const w = Math.max(240, stage.clientWidth - 32), h = Math.max(240, stage.clientHeight - 100); const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, mode === 'width' ? w / size.width : Math.min(w / size.width, h / size.height))); setZoom(next); await render(page, next) }
+  const changePage = async (next: number) => { if (next >= 1 && next <= pages) await render(next, zoom) }
+  const pointer = (event: ReactPointerEvent) => { if (tool === 'select' || !overlayRef.current) return; const rect = overlayRef.current.getBoundingClientRect(), start: [number, number] = [Math.max(0, event.clientX - rect.left), Math.max(0, event.clientY - rect.top)]; let points: Array<[number, number]> = [start]; const move = (e: PointerEvent) => points.push([Math.max(0, e.clientX - rect.left), Math.max(0, e.clientY - rect.top)]); const up = (e: PointerEvent) => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); const ex = Math.max(0, e.clientX - rect.left), ey = Math.max(0, e.clientY - rect.top), w = Math.max(3, Math.abs(ex - start[0])), h = Math.max(3, Math.abs(ey - start[1])); if (tool === 'eraser') { const hit = [...annotations].reverse().find(a => a.page === page && start[0] >= a.x && start[0] <= a.x + a.w && start[1] >= a.y && start[1] <= a.y + a.h); if (hit) commitAnnotations(annotations.filter(a => a.id !== hit.id)); return } if (tool === 'note') { const value = window.prompt('Study note', note || ''); if (!value) return; setNote(value); commitAnnotations([...annotations, { id: crypto.randomUUID(), page, tool, x: start[0], y: start[1], w: 180, h: 70, text: value }]); return } commitAnnotations([...annotations, { id: crypto.randomUUID(), page, tool, x: Math.min(start[0], ex), y: Math.min(start[1], ey), w, h, points: tool === 'pen' ? points : undefined }]) }; window.addEventListener('pointermove', move); window.addEventListener('pointerup', up) }
+  const undo = () => { const previous = undoRef.current.pop(); if (previous) { setAnnotations(previous); saveAnnotations(annotationKey, previous) } }
+  const ann = annotations.filter(a => a.page === page)
+  return <section style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateRows: 'auto 1fr', background: '#171b22' }} aria-label={`PDF study reader for ${title}`}>
+    <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: 8, borderBottom: '1px solid rgba(255,255,255,.1)', background: '#0f141c', color: '#fff' }}>
+      <button type="button" disabled={page <= 1 || loading} onClick={() => void changePage(page - 1)}>‹</button><input aria-label="PDF page" type="number" min={1} max={pages || 1} value={page} onChange={e => void changePage(Number(e.target.value) || 1)} style={{ width: 55 }} /><span style={{ fontSize: 12 }}>/ {pages || '—'}</span><button type="button" disabled={page >= pages || loading} onClick={() => void changePage(page + 1)}>›</button>
+      <button type="button" onClick={() => void fit('width')}>Fit width</button><button type="button" onClick={() => void fit('page')}>Fit page</button><button type="button" disabled={loading} onClick={() => void render(page, Math.max(MIN_ZOOM, zoom - ZOOM_STEP))}>−</button><span>{Math.round(zoom * 100)}%</span><button type="button" disabled={loading} onClick={() => void render(page, Math.min(MAX_ZOOM, zoom + ZOOM_STEP))}>+</button>
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search document…" aria-label="Search document" style={{ minWidth: 130, flex: 1 }} />{search && <span style={{ fontSize: 11, opacity: .7 }}>{searchMatches.length} matches</span>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>{(['select','highlight','underline','strike','pen','eraser','note','rect','arrow'] as Tool[]).map(value => <button key={value} type="button" aria-pressed={tool === value} onClick={() => setTool(value)}>{value === 'select' ? 'Select' : value === 'highlight' ? 'Highlight' : value === 'underline' ? 'Underline' : value === 'strike' ? 'Strike' : value === 'pen' ? 'Pen' : value === 'eraser' ? 'Erase' : value === 'note' ? 'Note' : value === 'rect' ? 'Shape' : 'Arrow'}</button>)}</div>
+      <button type="button" onClick={undo} disabled={!undoRef.current.length}>Undo</button><button type="button" onClick={() => commitAnnotations(annotations.filter(a => a.page !== page))}>Clear page</button>
     </header>
     <div ref={stageRef} style={{ minHeight: 0, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: 16, position: 'relative' }}>
-      <canvas ref={canvasRef} aria-label={`Page ${page} of ${pages || 'PDF'}`} style={{ display: error ? 'none' : 'block', background: '#fff', boxShadow: '0 10px 35px rgba(0,0,0,.35)', userSelect: 'text' }} />
-      {loading && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(23,27,34,.72)' }}>Rendering page…</div>}
-      {error && <div role="alert" style={{ maxWidth: 520, padding: 20, margin: 'auto', color: '#ffb4ab', textAlign: 'center' }}>{error}</div>}
+      <div style={{ position: 'relative', width: canvasRef.current?.style.width || 'auto', height: canvasRef.current?.style.height || 'auto', flex: '0 0 auto' }}>
+        <canvas ref={canvasRef} aria-label={`Page ${page} of ${pages || 'PDF'}`} style={{ display: error ? 'none' : 'block', background: '#fff', boxShadow: '0 10px 35px rgba(0,0,0,.35)' }} />
+        <div ref={overlayRef} onPointerDown={pointer} style={{ position: 'absolute', inset: 0, pointerEvents: tool === 'select' ? 'none' : 'auto', userSelect: tool === 'select' ? 'text' : 'none' }}>
+          {tool === 'select' && text.map((item, i) => <span key={i} data-search-match={searchMatches.includes(i) || undefined} style={{ position: 'absolute', ...textStyle(item, canvasRef.current?.clientHeight || 0), color: 'transparent', background: searchMatches.includes(i) ? 'rgba(232,195,106,.35)' : 'transparent', cursor: 'text' }}>{item.str}</span>)}
+          <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}>{ann.map(a => a.tool === 'pen' && a.points ? <polyline key={a.id} points={a.points.map(p => p.join(',')).join(' ')} fill="none" stroke="#d6b35a" strokeWidth="3" /> : a.tool === 'arrow' ? <line key={a.id} x1={a.x} y1={a.y} x2={a.x + a.w} y2={a.y + a.h} stroke="#b88a35" strokeWidth="3" markerEnd="url(#arrow)" /> : <rect key={a.id} x={a.x} y={a.y} width={a.w} height={a.h} fill={a.tool === 'highlight' ? 'rgba(255,220,70,.35)' : 'transparent'} stroke={a.tool === 'underline' ? '#b88a35' : a.tool === 'strike' ? '#b84a4a' : '#b88a35'} strokeWidth={a.tool === 'highlight' ? 0 : 2} strokeDasharray={a.tool === 'rect' ? '5 3' : undefined} />)}<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#b88a35" /></marker></defs></svg>
+          {ann.filter(a => a.tool === 'note').map(a => <div key={a.id} style={{ position: 'absolute', left: a.x, top: a.y, width: a.w, minHeight: a.h, padding: 8, background: 'rgba(255,235,160,.92)', color: '#171717', border: '1px solid #b88a35', borderRadius: 6, whiteSpace: 'pre-wrap', fontSize: 12, pointerEvents: 'none' }}>{a.text}</div>)}
+        </div>
+      </div>
+      {loading && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(23,27,34,.72)', color: '#fff' }}>Rendering page…</div>}{error && <div role="alert" style={{ maxWidth: 520, padding: 20, margin: 'auto', color: '#ffb4ab', textAlign: 'center' }}>{error}</div>}
     </div>
   </section>
 }
