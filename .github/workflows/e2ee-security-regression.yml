@@ -11,12 +11,14 @@ on:
       - 'e2ee_chat_routes.py'
       - 'e2ee_ada_routes.py'
       - 'prepza_control.py'
+      - 'realtime_server.py'
       - 'frontend/src/crypto/**'
       - 'frontend/src/App.tsx'
       - 'frontend/src/main.tsx'
       - 'migrations/*e2ee*'
       - 'scripts/validate_e2ee_security.py'
       - 'scripts/validate_e2ee_lifecycle.py'
+      - 'scripts/validate_realtime_security.py'
       - '.github/workflows/e2ee-security-regression.yml'
 
 jobs:
@@ -31,5 +33,7 @@ jobs:
         run: python scripts/validate_e2ee_security.py
       - name: Validate E2EE lifecycle invariants
         run: python scripts/validate_e2ee_lifecycle.py
-      - name: Compile E2EE backend modules
-        run: python -m py_compile e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py
+      - name: Validate realtime security invariants
+        run: python scripts/validate_realtime_security.py
+      - name: Compile E2EE and realtime backend modules
+        run: python -m py_compile e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py realtime_server.py
