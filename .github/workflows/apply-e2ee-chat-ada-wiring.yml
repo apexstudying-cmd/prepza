@@ -31,7 +31,12 @@ jobs:
         with:
           python-version: '3.13'
       - name: Apply guarded wiring patch
-        run: python3 wire_e2ee_chat_ada_patch.py
+        run: |
+          if grep -q 'ConversationKeyEnvelope = create_e2ee_models(db)' app.py; then
+            echo 'E2EE chat/Ada wiring is already applied.'
+          else
+            python3 wire_e2ee_chat_ada_patch.py
+          fi
       - name: Compile patched backend
         run: python3 -m py_compile app.py e2ee_chat_routes.py e2ee_ada_routes.py e2ee_chat_models.py realtime_server.py
       - name: Validate security invariants
