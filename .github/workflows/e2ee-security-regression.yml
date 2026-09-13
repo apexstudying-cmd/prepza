@@ -53,4 +53,4 @@ jobs:
       - name: Run realtime runtime regression tests
         run: python -m pytest scripts/test_realtime_runtime.py -q
 
-# Chunk 1 CI synchronization marker: runtime regression must use isolated SQLite.
+# Chunk 1 CI synchronization marker.
