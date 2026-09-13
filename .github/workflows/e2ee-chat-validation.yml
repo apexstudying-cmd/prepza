@@ -23,6 +23,7 @@ on:
       - '.github/workflows/e2ee-chat-validation.yml'
       - 'scripts/test_realtime_runtime.py'
       - 'scripts/validate_realtime_security.py'
+      - 'wire_e2ee_chat_ada_patch.py'
   pull_request:
     paths:
       - 'app.py'
@@ -41,6 +42,7 @@ on:
       - '.github/workflows/e2ee-chat-validation.yml'
       - 'scripts/test_realtime_runtime.py'
       - 'scripts/validate_realtime_security.py'
+      - 'wire_e2ee_chat_ada_patch.py'
 
 permissions:
   contents: write
