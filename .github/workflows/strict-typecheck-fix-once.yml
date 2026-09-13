@@ -1,0 +1,41 @@
+name: One-time strict typecheck fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/strict-typecheck-fix-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor == 'apexstudying-cmd'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply known strict inference fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('frontend/src/crypto/e2eeFetchBridge.ts')
+          text = path.read_text()
+          replacements = {
+              '    const url = beforeId == null ?': '    const url: string = beforeId == null ?',
+              '    const response = await window.fetch(url, { credentials: \'include\' })': '    const response: Response = await window.fetch(url, { credentials: \'include\' })',
+              '    const body = await response.json()': '    const body: any = await response.json()',
+              '    const pageMessages = Array.isArray(body?.messages) ? body.messages : []': '    const pageMessages: any[] = Array.isArray(body?.messages) ? body.messages : []',
+              '    const firstId = Number(pageMessages[0]?.id)': '    const firstId: number = Number(pageMessages[0]?.id)',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'missing expected text: {old}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          git config user.name 'Prepza CI'
+          git config user.email 'prepza-ci@users.noreply.github.com'
+          git add frontend/src/crypto/e2eeFetchBridge.ts
+          git diff --cached --quiet || git commit -m 'fix: restore strict E2EE bridge typing'
+          git push
