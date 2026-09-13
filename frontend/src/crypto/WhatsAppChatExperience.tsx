@@ -82,12 +82,24 @@ export default function WhatsAppChatExperience() {
   const typingTimer = useRef<number | null>(null)
   const typingTimeouts = useRef<Map<number, number>>(new Map())
   const meIdRef = useRef<number | null>(null)
+  const csrfTokenRef = useRef('')
   useEffect(() => { meIdRef.current = meId }, [meId])
+  useEffect(() => { csrfTokenRef.current = csrfToken }, [csrfToken])
+
+  const getCsrfToken = async (): Promise<string> => {
+    if (csrfTokenRef.current) return csrfTokenRef.current
+    const me = await api<{ id: number; csrf_token: string }>('/me')
+    if (!me?.csrf_token) throw new Error('CSRF token is unavailable; please refresh the session')
+    csrfTokenRef.current = me.csrf_token
+    setMeId(me.id)
+    setCsrfToken(me.csrf_token)
+    return me.csrf_token
+  }
   useEffect(() => { const onStatus = (event: Event) => setRealtimeConnected(Boolean((event as CustomEvent<{ connected?: boolean }>).detail?.connected)); window.addEventListener('prepza-realtime-status', onStatus); return () => window.removeEventListener('prepza-realtime-status', onStatus) }, [])
   useEffect(() => { const timer = window.setInterval(() => { if (Date.now() - observedAt > 10000 || Date.now() < suppressObserverUntil) return; if (observedMode === 'detail' && observedConversationId && selectedId !== observedConversationId) { setSelectedId(observedConversationId); setView('detail'); setVisible(true) } else if (observedMode === 'list' && !visible) { setView('list'); setSelectedId(null); setVisible(true) } }, 150); return () => window.clearInterval(timer) }, [selectedId, visible])
 
   const loadList = async () => { setListError(''); try { const result = await api<{ chats: ChatSummary[] }>('/chats'); setChats(Array.isArray(result.chats) ? result.chats : []) } catch (value) { setListError(friendlyError(value, 'Could not load your conversations.')) } }
-  useEffect(() => { if (!visible) return; void loadList(); api<{ id: number; csrf_token: string }>('/me').then(me => { setMeId(me.id); setCsrfToken(me.csrf_token) }).catch(() => {}) }, [visible])
+  useEffect(() => { if (!visible) return; void loadList(); void getCsrfToken().catch(() => {}) }, [visible])
 
   useEffect(() => {
     if (!visible || view !== 'detail' || selectedId == null) return
@@ -127,21 +139,21 @@ export default function WhatsAppChatExperience() {
     const text = input.trim(); if (!text || sending || selectedId == null) return
     setSending(true); setError(''); sendTypingRealtime(selectedId, false)
     const envelope: ChatEnvelope = { v: 1, type: 'text', text, ...(replyingTo ? { reply_to: replyingTo.id } : {}) }
-    try { await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) }); setInput(''); setReplyingTo(null); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this message.')) } finally { setSending(false) }
+    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) }); setInput(''); setReplyingTo(null); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this message.')) } finally { setSending(false) }
   }
   const react = async (message: Message, emoji: string) => {
     if (selectedId == null || sending) return
     const current = reactionState[message.id]?.[emoji]?.has(meId || -1) || false
     setReactionPicker(null); setSending(true); setError('')
     const envelope: ChatEnvelope = { v: 1, type: 'reaction', target_id: message.id, emoji, action: current ? 'remove' : 'add' }
-    try { await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'reaction' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not update reaction.')) } finally { setSending(false) }
+    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'reaction' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not update reaction.')) } finally { setSending(false) }
   }
   const sendAttachment = async (file: File) => {
     if (selectedId == null || uploading) return
     if (!/\.(pdf|doc|docx|ppt|pptx|jpg|jpeg|png)$/i.test(file.name)) { setError('Unsupported file type.'); return }
     if (file.size > 20 * 1024 * 1024) { setError('That file is too large. The limit is 20 MB.'); return }
     setUploading(true); setError(''); setAttachOpen(false)
-    try { const init = await api<{ attachment_id: number; upload_url: string }>(`/chats/${selectedId}/attachments`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }) }); const upload = await fetch(init.upload_url, { method: 'PUT', body: file }); if (!upload.ok) throw new Error('Upload failed'); await api(`/chats/${selectedId}/attachments/${init.attachment_id}/uploaded`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ attachment_id: init.attachment_id, kind: 'text' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this attachment.')) } finally { setUploading(false) }
+    try { const token = await getCsrfToken(); const init = await api<{ attachment_id: number; upload_url: string }>(`/chats/${selectedId}/attachments`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }) }); const upload = await fetch(init.upload_url, { method: 'PUT', body: file }); if (!upload.ok) throw new Error('Upload failed'); await api(`/chats/${selectedId}/attachments/${init.attachment_id}/uploaded`, { method: 'POST', headers: { 'X-CSRF-Token': token } }); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ attachment_id: init.attachment_id, kind: 'text' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this attachment.')) } finally { setUploading(false) }
   }
   const loadEarlier = async () => { if (selectedId == null || loadingEarlier || messages.length === 0) return; const firstId = messages[0].id; setLoadingEarlier(true); try { const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages?before_id=${firstId}`); const earlier = result.messages || []; setMessages(current => [...earlier, ...current.filter(message => !earlier.some(old => old.id === message.id))]) } catch (value) { setError(friendlyError(value, 'Could not load earlier messages.')) } finally { setLoadingEarlier(false) } }
   const runMessageSearch = async () => { if (selectedId == null) return; const q = messageSearch.trim(); if (!q) { setMessageSearchResults([]); return }; try { const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages/search?q=${encodeURIComponent(q)}`); setMessageSearchResults(result.messages || []) } catch (value) { setError(friendlyError(value, 'Could not search this chat.')) } }
