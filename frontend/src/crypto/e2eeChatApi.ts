@@ -54,7 +54,7 @@ export async function uploadGroupKeyEnvelopes(
 
 export async function fetchUserPublicKey(userId: number): Promise<string> {
   const result = await jsonFetch<{ public_key: string }>(`/keys/${userId}`)
-  if (!result.public_key) throw new Error('This student has not registered an encryption key on this device.')
+  if (!result.public_key) throw new Error('Secure chat is still being set up for this student.')
   return result.public_key
 }
 
