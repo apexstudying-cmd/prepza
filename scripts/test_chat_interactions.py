@@ -13,8 +13,10 @@ from chat_interactions import _chat_metadata_after_request, ensure_chat_metadata
 @pytest.fixture(autouse=True)
 def application_context():
     with app.app_context():
+        db.create_all()
+        ensure_chat_metadata_schema()
         yield
-    db.session.remove()
+        db.session.remove()
 
 
 def _make_chat():
@@ -47,7 +49,6 @@ def _cleanup(one, two, chat):
 
 
 def test_reaction_metadata_is_recorded_without_plaintext_emoji():
-    ensure_chat_metadata_schema()
     one, two, chat = _make_chat()
     try:
         message = Message(conversation_id=chat.id, sender_id=one.id, body='opaque-ciphertext', nonce='opaque-nonce')
@@ -68,7 +69,6 @@ def test_reaction_metadata_is_recorded_without_plaintext_emoji():
 
 
 def test_message_list_gets_read_receipt_counts_and_kind():
-    ensure_chat_metadata_schema()
     one, two, chat = _make_chat()
     try:
         created = datetime.utcnow() - timedelta(seconds=2)
@@ -78,8 +78,10 @@ def test_message_list_gets_read_receipt_counts_and_kind():
         ConversationParticipant.query.filter_by(conversation_id=chat.id, user_id=two.id).update({'last_read_at': datetime.utcnow()})
         db.session.execute(text('INSERT INTO chat_message_meta (message_id, conversation_id, kind) VALUES (:m, :c, :k)'), {'m': message.id, 'c': chat.id, 'k': 'text'})
         db.session.commit()
-        payload = {'messages': [{'id': message.id, 'conversation_id': chat.id, 'sender_id': one.id, 'body': 'opaque-ciphertext', 'created_at': created.isoformat()}]}
-        response = app.response_class(response=json.dumps(payload), status=200, mimetype='application/json')
+        response = app.response_class(response=json.dumps({'messages': [{
+            'id': message.id, 'conversation_id': chat.id, 'sender_id': one.id,
+            'body': 'opaque-ciphertext', 'created_at': created.isoformat(),
+        }]}), status=200, mimetype='application/json')
         with app.test_request_context(f'/chats/{chat.id}/messages', method='GET'):
             session['user_id'] = one.id
             returned = _chat_metadata_after_request(response)
@@ -92,7 +94,6 @@ def test_message_list_gets_read_receipt_counts_and_kind():
 
 
 def test_reaction_events_do_not_create_unread_badges():
-    ensure_chat_metadata_schema()
     one, two, chat = _make_chat()
     try:
         message = Message(conversation_id=chat.id, sender_id=two.id, body='opaque-reaction-ciphertext', nonce='opaque-nonce')
