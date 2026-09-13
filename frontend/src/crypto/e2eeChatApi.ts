@@ -1,5 +1,5 @@
 import { decryptGroupMessage, encryptGroupMessage, type GroupKeyEnvelope } from './group'
-import { openGroupE2EESession, type GroupE2EESessionState } from './groupSession'
+import { openGroupE2EESession, type GroupE2EEState } from './groupSession'
 
 async function jsonFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -65,7 +65,7 @@ export async function fetchUserPublicKey(userId: number): Promise<string> {
   return result.public_key
 }
 
-export async function openGroupSession(conversationId: number): Promise<GroupE2EESessionState> {
+export async function openGroupSession(conversationId: number): Promise<GroupE2EEState> {
   return openGroupE2EESession(conversationId, fetchGroupKeyEnvelopes, fetchUserPublicKey)
 }
 
