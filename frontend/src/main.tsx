@@ -9,6 +9,7 @@ import { installInChatAdaObserver, default as InChatAdaEnhancer } from './crypto
 import { installDirectInChatAdaObserver, default as DirectInChatAdaEnhancer } from './crypto/directInChatAdaEnhancer'
 import { installChatStudyDocumentObserver, default as ChatStudyDocumentReader } from './crypto/chatStudyDocumentReader'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
+import WhatsAppAdaPanel from './crypto/WhatsAppAdaPanel'
 import App from './App'
 import './index.css'
 
@@ -28,6 +29,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
     <WhatsAppChatExperience />
+    <WhatsAppAdaPanel />
     <InChatAdaEnhancer />
     <DirectInChatAdaEnhancer />
     <ChatStudyDocumentReader />
