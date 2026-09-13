@@ -19,8 +19,16 @@ function getSocket() {
 }
 
 export function installChatRealtime() { getSocket() }
-export function joinRealtimeChat(conversationId: number) { if (Number.isInteger(conversationId) && conversationId > 0) { joined.add(conversationId); getSocket()?.emit('join_chat', { conversation_id: conversationId }) } }
-export function leaveRealtimeChat(conversationId: number) { if (Number.isInteger(conversationId) && conversationId > 0) { joined.delete(conversationId); getSocket()?.emit('leave_chat', { conversation_id: conversationId }) } }
+export function joinRealtimeChat(conversationId: number) {
+  if (!Number.isInteger(conversationId) || conversationId <= 0) return
+  joined.add(conversationId)
+  if (connected) socket?.emit('join_chat', { conversation_id: conversationId })
+}
+export function leaveRealtimeChat(conversationId: number) {
+  if (!Number.isInteger(conversationId) || conversationId <= 0) return
+  joined.delete(conversationId)
+  if (connected) socket?.emit('leave_chat', { conversation_id: conversationId })
+}
 export function sendTypingRealtime(conversationId: number, typing: boolean) { if (connected) getSocket()?.emit('chat:typing', { conversation_id: conversationId, typing }) }
 export function sendReadRealtime(conversationId: number, readAt?: string) { if (connected) getSocket()?.emit('chat:read', { conversation_id: conversationId, read_at: readAt }) }
 export function isRealtimeConnected() { return connected }
