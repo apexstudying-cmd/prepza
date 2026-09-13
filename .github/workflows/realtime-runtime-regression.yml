@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      SQLALCHEMY_DATABASE_URI: sqlite:///:memory:
+      SQLALCHEMY_DATABASE_URI: 'sqlite:///:memory:'
       SECRET_KEY: realtime-test-secret
     steps:
       - name: Check out repository
