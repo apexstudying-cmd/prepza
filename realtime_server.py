@@ -6,6 +6,7 @@ from flask import request, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from sqlalchemy import text
 from app import app, db
+import chat_interactions  # noqa: F401 - registers additive chat metadata hooks
 
 # Socket.IO is the realtime transport; HTTP/database remains the source of truth.
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins=[], logger=False, engineio_logger=False)
@@ -194,8 +195,6 @@ def broadcast_message_response(response):
             if payload and payload.get("conversation_id") == conversation_id:
                 socketio.emit("chat:message", payload, to=room_for(conversation_id))
         except Exception:
-            # Realtime delivery must never turn a successful message request
-            # into a failed request. HTTP history remains the source of truth.
             app.logger.exception("Realtime message broadcast failed")
     return response
 
