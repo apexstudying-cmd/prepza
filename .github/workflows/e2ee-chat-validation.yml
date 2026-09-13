@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feat/e2ee-study-chats
+      - feat/realtime-study-chat
     paths:
       - 'app.py'
       - 'e2ee_chat_*.py'
@@ -20,6 +21,8 @@ on:
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
       - '.github/workflows/e2ee-chat-validation.yml'
+      - 'scripts/test_realtime_runtime.py'
+      - 'scripts/validate_realtime_security.py'
   pull_request:
     paths:
       - 'app.py'
@@ -36,18 +39,41 @@ on:
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
       - '.github/workflows/e2ee-chat-validation.yml'
+      - 'scripts/test_realtime_runtime.py'
+      - 'scripts/validate_realtime_security.py'
+
+permissions:
+  contents: write
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
+      - name: Apply guarded E2EE chat/Ada wiring patch
+        run: |
+          if grep -q 'ConversationKeyEnvelope = create_e2ee_models(db)' app.py; then
+            echo 'E2EE chat/Ada wiring is already applied.'
+          else
+            python3 wire_e2ee_chat_ada_patch.py
+          fi
       - name: Compile E2EE backend modules and app
         run: |
-          python -m py_compile app.py e2ee_chat_models.py e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py
+          python -m py_compile app.py e2ee_chat_models.py e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py realtime_server.py
+      - name: Validate E2EE and realtime security invariants
+        run: |
+          python scripts/validate_e2ee_security.py
+          python scripts/validate_e2ee_lifecycle.py
+          python scripts/validate_realtime_security.py
+      - name: Install realtime regression dependencies
+        run: python -m pip install -r requirements.txt pytest
+      - name: Run realtime runtime regression
+        run: python -m pytest scripts/test_realtime_runtime.py -q
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -59,3 +85,15 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+      - name: Persist verified wiring to realtime branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/realtime-study-chat'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git diff --quiet -- app.py e2ee_chat_routes.py; then
+            echo 'No E2EE wiring changes to persist.'
+            exit 0
+          fi
+          git add app.py e2ee_chat_routes.py
+          git commit -m 'fix: wire e2ee chat and scoped ada routes'
+          git push origin HEAD:feat/realtime-study-chat
