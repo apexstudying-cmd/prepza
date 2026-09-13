@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import logoImg from './imports/logo.png'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
+import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -3332,15 +3333,66 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
 
 // ─── CHAT DETAIL ──────────────────────────────────────────────────────────────
 type MessageAttachmentData = { id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null }
-type ChatMessageData = { id: number; conversation_id: number; sender_id: number; body: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null; attachment: MessageAttachmentData | null }
+type ChatMessageData = {
+  id: number; conversation_id: number; sender_id: number; body: string | null
+  is_deleted: boolean; created_at: string | null; edited_at: string | null
+  attachment: MessageAttachmentData | null; kind?: 'text' | 'reaction'
+  read_by_count?: number; read_by_all?: boolean
+}
 type ChatDetail = { id: number; is_group: boolean; name: string; created_by: number; created_by_name: string; member_count: number; participants: { user_id: number; display_name: string; role: string }[]; viewer_muted: boolean }
+type ChatEnvelope =
+  | { v: 1; type: 'text'; text: string; reply_to?: number }
+  | { v: 1; type: 'reaction'; target_id: number; emoji: string; action: 'add' | 'remove' }
+type ReactionState = Record<number, Record<string, Set<number>>>
 
 const CHAT_DETAIL_CACHE: Record<number, { msgs: ChatMessageData[]; headerName: string; headerIsGroup: boolean; senderNames: Record<number, string> }> = {}
+
+function parseChatEnvelope(body: string | null): ChatEnvelope | null {
+  if (!body) return null
+  try {
+    const value = JSON.parse(body)
+    if (value?.v === 1 && value?.type === 'text' && typeof value.text === 'string') return value
+    if (value?.v === 1 && value?.type === 'reaction' && Number.isInteger(value.target_id) && typeof value.emoji === 'string' && (value.action === 'add' || value.action === 'remove')) return value
+  } catch { /* legacy plain text */ }
+  return null
+}
+
+function chatDisplayText(message: ChatMessageData) {
+  const envelope = parseChatEnvelope(message.body)
+  return envelope?.type === 'text' ? envelope.text : (message.body || '')
+}
+
+function chatReplyId(message: ChatMessageData) {
+  const envelope = parseChatEnvelope(message.body)
+  return envelope?.type === 'text' ? envelope.reply_to || null : null
+}
+
+function buildChatReactionState(messages: ChatMessageData[]): ReactionState {
+  const state: ReactionState = {}
+  for (const message of messages) {
+    if (message.kind !== 'reaction') continue
+    const event = parseChatEnvelope(message.body)
+    if (!event || event.type !== 'reaction') continue
+    const byEmoji = state[event.target_id] || (state[event.target_id] = {})
+    const users = byEmoji[event.emoji] || (byEmoji[event.emoji] = new Set<number>())
+    if (event.action === 'add') users.add(message.sender_id)
+    else users.delete(message.sender_id)
+  }
+  return state
+}
+
+function chatIsImage(fileType: string) {
+  return /^(jpg|jpeg|png|gif|webp)$/i.test(fileType) || fileType.startsWith('image/')
+}
+
+function chatTime(value: string | null) {
+  return value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+}
+
 function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
   const { tokens: T } = useTheme()
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState<ChatMessageData[]>(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.msgs ?? []) : [])
-  const [showAttach, setShowAttach] = useState(false)
   const [loading, setLoading] = useState(() => conversationId == null || !CHAT_DETAIL_CACHE[conversationId])
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -3351,8 +3403,22 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
   const [senderNames, setSenderNames] = useState<Record<number, string>>(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.senderNames ?? {}) : {})
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
+  const [showAttach, setShowAttach] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<ChatMessageData | null>(null)
+  const [reactionPicker, setReactionPicker] = useState<number | null>(null)
+  const [messageSearchOpen, setMessageSearchOpen] = useState(false)
+  const [messageSearch, setMessageSearch] = useState('')
+  const [messageSearchResults, setMessageSearchResults] = useState<ChatMessageData[]>([])
+  const [loadingEarlier, setLoadingEarlier] = useState(false)
+  const [typingUsers, setTypingUsers] = useState<Record<number, number>>({})
+  const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const typingTimer = useRef<number | null>(null)
+  const typingTimeouts = useRef<Map<number, number>>(new Map())
+  const meIdRef = useRef<number | null>(null)
+
+  useEffect(() => { meIdRef.current = meId }, [meId])
 
   useEffect(() => {
     api<{ id: number; csrf_token: string }>('/me').then(me => { setCsrfToken(me.csrf_token); setMeId(me.id) }).catch(() => {})
@@ -3363,227 +3429,204 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
     let cancelled = false
     const cached = CHAT_DETAIL_CACHE[conversationId]
     if (cached) {
-      setMsgs(cached.msgs)
-      setHeaderName(cached.headerName)
-      setHeaderIsGroup(cached.headerIsGroup)
-      setSenderNames(cached.senderNames)
-      setLoading(false)
-    } else {
-      setLoading(true)
-    }
+      setMsgs(cached.msgs); setHeaderName(cached.headerName); setHeaderIsGroup(cached.headerIsGroup); setSenderNames(cached.senderNames); setLoading(false)
+    } else setLoading(true)
     setError(null)
-
-    api<ChatDetail>(`/chats/${conversationId}`).then(detail => {
+    Promise.all([api<ChatDetail>(`/chats/${conversationId}`), api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)]).then(([detail, data]) => {
       if (cancelled) return
-      setHeaderName(detail.name)
-      setHeaderIsGroup(detail.is_group)
       const names: Record<number, string> = {}
       detail.participants.forEach(p => { names[p.user_id] = p.display_name })
-      setSenderNames(names)
-      const entry = CHAT_DETAIL_CACHE[conversationId] ?? { msgs: [], headerName: detail.name, headerIsGroup: detail.is_group, senderNames: names }
-      entry.headerName = detail.name
-      entry.headerIsGroup = detail.is_group
-      entry.senderNames = names
-      CHAT_DETAIL_CACHE[conversationId] = entry
-    }).catch(() => {})
+      setHeaderName(detail.name); setHeaderIsGroup(detail.is_group); setSenderNames(names); setMsgs(data.messages || []); setOnlineUsers(new Set())
+      CHAT_DETAIL_CACHE[conversationId] = { msgs: data.messages || [], headerName: detail.name, headerIsGroup: detail.is_group, senderNames: names }
+      joinRealtimeChat(conversationId); sendReadRealtime(conversationId)
+    }).catch(e => { if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not load this conversation.') }).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true; leaveRealtimeChat(conversationId) }
+  }, [conversationId])
 
-    const loadMessages = () => api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
-      .then(data => {
-        if (cancelled) return
-        setMsgs(data.messages)
-        const entry = CHAT_DETAIL_CACHE[conversationId] ?? { msgs: data.messages, headerName: 'Conversation', headerIsGroup: false, senderNames: {} }
-        entry.msgs = data.messages
-        CHAT_DETAIL_CACHE[conversationId] = entry
-      })
-      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load messages') })
-
-    loadMessages().finally(() => { if (!cancelled) setLoading(false) })
-
-    api('/chats/' + conversationId + '/read', {
-      method: 'POST',
-      headers: { 'X-CSRF-Token': csrfToken },
-    }).catch(() => {})
-
-    const interval = setInterval(loadMessages, 4000)
-    return () => { cancelled = true; clearInterval(interval) }
+  useEffect(() => {
+    if (conversationId == null || !csrfToken) return
+    void api(`/chats/${conversationId}/read`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }).catch(() => {})
   }, [conversationId, csrfToken])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [msgs])
+    if (conversationId == null) return
+    const refresh = () => api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`).then(result => {
+      const next = result.messages || []
+      setMsgs(next)
+      const cached = CHAT_DETAIL_CACHE[conversationId]
+      if (cached) cached.msgs = next
+    }).catch(() => {})
+    const onMessage = (event: Event) => {
+      const message = (event as CustomEvent<ChatMessageData>).detail
+      if (message?.conversation_id === conversationId) void refresh()
+    }
+    const onRead = (event: Event) => {
+      const data = (event as CustomEvent<{ conversation_id?: number; user_id?: number }>).detail
+      if (data?.conversation_id === conversationId && data.user_id) setMsgs(current => current.map(m => m.sender_id === meIdRef.current ? { ...m, read_by_count: Math.max(m.read_by_count || 0, 1) } : m))
+    }
+    const onTyping = (event: Event) => {
+      const data = (event as CustomEvent<{ conversation_id?: number; user_id?: number; typing?: boolean }>).detail
+      if (data?.conversation_id !== conversationId || !data.user_id || data.user_id === meIdRef.current) return
+      const id = data.user_id
+      if (data.typing) {
+        setTypingUsers(current => ({ ...current, [id]: Date.now() }))
+        const old = typingTimeouts.current.get(id); if (old) window.clearTimeout(old)
+        typingTimeouts.current.set(id, window.setTimeout(() => setTypingUsers(current => { const next = { ...current }; delete next[id]; return next }), 2500))
+      } else {
+        const old = typingTimeouts.current.get(id); if (old) window.clearTimeout(old)
+        setTypingUsers(current => { const next = { ...current }; delete next[id]; return next })
+      }
+    }
+    const onPresence = (event: Event) => {
+      const data = (event as CustomEvent<{ conversation_id?: number; user_id?: number; online?: boolean }>).detail
+      if (data?.conversation_id !== conversationId || !data.user_id || data.user_id === meIdRef.current) return
+      setOnlineUsers(current => { const next = new Set(current); data.online ? next.add(data.user_id!) : next.delete(data.user_id!); return next })
+    }
+    window.addEventListener('prepza-realtime-message', onMessage); window.addEventListener('prepza-realtime-read', onRead); window.addEventListener('prepza-realtime-typing', onTyping); window.addEventListener('prepza-realtime-presence', onPresence)
+    return () => { window.removeEventListener('prepza-realtime-message', onMessage); window.removeEventListener('prepza-realtime-read', onRead); window.removeEventListener('prepza-realtime-typing', onTyping); window.removeEventListener('prepza-realtime-presence', onPresence); typingTimeouts.current.forEach(timer => window.clearTimeout(timer)); typingTimeouts.current.clear() }
+  }, [conversationId])
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [msgs.length])
+
+  const reactionState = buildChatReactionState(msgs)
+  const typingNames = Object.keys(typingUsers).map(id => senderNames[Number(id)] || 'Someone')
+  const initials = (headerName || '??').trim().split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || '??'
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || sending || conversationId == null) return
+    setSending(true); setError(null); sendTypingRealtime(conversationId, false)
+    const envelope: ChatEnvelope = { v: 1, type: 'text', text, ...(replyingTo ? { reply_to: replyingTo.id } : {}) }
+    try {
+      await api(`/chats/${conversationId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) })
+      setInput(''); setReplyingTo(null)
+      const result = await api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
+      setMsgs(result.messages || []); CHAT_DETAIL_CACHE[conversationId] && (CHAT_DETAIL_CACHE[conversationId].msgs = result.messages || [])
+    } catch (e) { setError(e instanceof ApiError ? e.message : 'Could not send message.') } finally { setSending(false) }
+  }
+
+  const react = async (message: ChatMessageData, emoji: string) => {
+    if (conversationId == null || sending || meId == null) return
+    const current = reactionState[message.id]?.[emoji]?.has(meId) || false
+    setReactionPicker(null); setSending(true); setError(null)
+    const envelope: ChatEnvelope = { v: 1, type: 'reaction', target_id: message.id, emoji, action: current ? 'remove' : 'add' }
+    try {
+      await api(`/chats/${conversationId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'reaction' }) })
+      const result = await api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
+      setMsgs(result.messages || [])
+    } catch (e) { setError(e instanceof ApiError ? e.message : 'Could not update reaction.') } finally { setSending(false) }
+  }
+
+  const sendAttachment = async (file: File) => {
+    if (conversationId == null || uploadingAttachment) return
+    const ext = getFileExtension(file.name)
+    if (!ext || !ALLOWED_UPLOAD_EXTENSIONS.includes(ext) || file.size > MAX_CHAT_ATTACHMENT_SIZE_BYTES) { setAttachError('Unsupported file or file exceeds the 20 MB limit.'); return }
+    setUploadingAttachment(true); setAttachError(null); setShowAttach(false)
+    try {
+      const init = await api<{ attachment_id: number; upload_url: string }>(`/chats/${conversationId}/attachments`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }) })
+      const upload = await fetch(init.upload_url, { method: 'PUT', body: file })
+      if (!upload.ok) throw new Error('Upload to storage failed.')
+      await api(`/chats/${conversationId}/attachments/${init.attachment_id}/uploaded`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+      await api(`/chats/${conversationId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ attachment_id: init.attachment_id, kind: 'text' }) })
+      const result = await api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
+      setMsgs(result.messages || [])
+    } catch (e) { setAttachError(e instanceof ApiError ? e.message : 'Could not send attachment.') } finally { setUploadingAttachment(false) }
+  }
+
+  const loadEarlier = async () => {
+    if (conversationId == null || loadingEarlier || msgs.length === 0) return
+    setLoadingEarlier(true)
+    try {
+      const result = await api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages?before_id=${msgs[0].id}`)
+      const earlier = result.messages || []
+      setMsgs(current => [...earlier, ...current.filter(message => !earlier.some(old => old.id === message.id))])
+    } catch (e) { setError(e instanceof ApiError ? e.message : 'Could not load earlier messages.') } finally { setLoadingEarlier(false) }
+  }
+
+  const runMessageSearch = async () => {
+    if (conversationId == null) return
+    const q = messageSearch.trim()
+    if (!q) { setMessageSearchResults([]); return }
+    try {
+      const result = await api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages/search?q=${encodeURIComponent(q)}`)
+      setMessageSearchResults(result.messages || [])
+    } catch (e) { setError(e instanceof ApiError ? e.message : 'Could not search this chat.') }
+  }
+
+  const handleInputChange = (value: string) => {
+    setInput(value)
+    if (conversationId == null) return
+    sendTypingRealtime(conversationId, Boolean(value.trim()))
+    if (typingTimer.current) window.clearTimeout(typingTimer.current)
+    if (value.trim()) typingTimer.current = window.setTimeout(() => sendTypingRealtime(conversationId, false), 1800)
+  }
 
   if (loading) return <SkeletonChatDetail />
 
-  const send = async () => {
-    if (!input.trim() || sending || conversationId == null) return
-    setSending(true)
-    setError(null)
-    try {
-      const message = await api<ChatMessageData>(`/chats/${conversationId}/messages`, {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ body: input.trim() }),
-      })
-      setMsgs(m => [...m, message])
-      setInput('')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send message')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  const startAttachmentUpload = async (file: File) => {
-    if (conversationId == null || uploadingAttachment) return
-    setAttachError(null)
-
-    const ext = getFileExtension(file.name)
-    if (!ext || !ALLOWED_UPLOAD_EXTENSIONS.includes(ext)) {
-      setAttachError(`Unsupported file type. Allowed: ${ALLOWED_UPLOAD_EXTENSIONS.join(', ').toUpperCase()}`)
-      return
-    }
-    if (file.size > MAX_CHAT_ATTACHMENT_SIZE_BYTES) {
-      setAttachError(`File exceeds the ${MAX_CHAT_ATTACHMENT_SIZE_BYTES / (1024 * 1024)} MB limit`)
-      return
-    }
-
-    setUploadingAttachment(true)
-    try {
-      const init = await api<{ attachment_id: number; upload_url: string; storage_path: string }>(
-        `/chats/${conversationId}/attachments`,
-        {
-          method: 'POST',
-          headers: { 'X-CSRF-Token': csrfToken },
-          body: JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }),
-        }
-      )
-
-      const putRes = await fetch(init.upload_url, { method: 'PUT', body: file })
-      if (!putRes.ok) throw new Error('Upload to storage failed - please try again')
-
-      try {
-        await api(`/chats/${conversationId}/attachments/${init.attachment_id}/uploaded`, {
-          method: 'POST',
-          headers: { 'X-CSRF-Token': csrfToken },
-        })
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 409) {
-          await new Promise(r => setTimeout(r, 1500))
-          await api(`/chats/${conversationId}/attachments/${init.attachment_id}/uploaded`, {
-            method: 'POST',
-            headers: { 'X-CSRF-Token': csrfToken },
-          })
-        } else {
-          throw e
-        }
-      }
-
-      const message = await api<ChatMessageData>(`/chats/${conversationId}/messages`, {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ attachment_id: init.attachment_id }),
-      })
-      setMsgs(m => [...m, message])
-    } catch (e) {
-      setAttachError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Could not send attachment')
-    } finally {
-      setUploadingAttachment(false)
-    }
-  }
-
-  const handleAttachmentFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    setShowAttach(false)
-    if (file) startAttachmentUpload(file)
-    e.target.value = ''
-  }
-
-  const initials = (headerName || '??').slice(0, 2).toUpperCase()
-
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-      <div style={{ background: N.navy, padding: '0 16px 14px' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: T.pageBg, fontFamily: 'Plus Jakarta Sans' }}>
+      <div style={{ background: N.navy, padding: '10px 14px', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.12)', zIndex: 2 }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <Avi name={initials} size={38} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>{headerName}</div>
-            {headerIsGroup && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>Group chat</div>}
+          <button onClick={() => window.history.back()} aria-label="Back" style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{Ic.back()}</button>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <Avi name={initials} size={40} />
+            {!headerIsGroup && onlineUsers.size > 0 && <span style={{ position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: '50%', background: '#46c46b', border: `2px solid ${N.navy}` }} />}
           </div>
-          <button onClick={() => setScreen('chat-options')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{headerName}</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.58)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {headerIsGroup ? `${Object.keys(senderNames).length || 0} members` : typingNames.length ? `${typingNames.join(', ')} ${typingNames.length === 1 ? 'is' : 'are'} typing…` : (onlineUsers.size ? 'online' : 'last seen recently')}
+            </div>
+          </div>
+          <button onClick={() => window.dispatchEvent(new CustomEvent('prepza-open-ada', { detail: { conversationId } }))} aria-label="Study with Ada" style={{ border: `1px solid rgba(201,168,76,0.45)`, background: 'rgba(201,168,76,0.12)', color: N.goldL, borderRadius: 11, padding: '7px 9px', fontWeight: 900, fontSize: 11, cursor: 'pointer' }}>@Ada</button>
+          <button onClick={() => setMessageSearchOpen(v => !v)} aria-label="Search messages" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer' }}>{Ic.search('w-4 h-4')}</button>
+          <button onClick={() => setScreen('chat-options')} aria-label="Chat options" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer' }}>{Ic.dots('w-4 h-4')}</button>
         </div>
+        {messageSearchOpen && <div style={{ marginTop: 10, display: 'flex', gap: 7 }}><input value={messageSearch} onChange={e => setMessageSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void runMessageSearch() }} autoFocus placeholder="Search this chat" style={{ flex: 1, border: 'none', outline: 'none', borderRadius: 10, padding: '9px 11px', fontSize: 12, background: '#fff', color: N.navy }} /><button onClick={() => void runMessageSearch()} style={{ border: 'none', borderRadius: 10, padding: '0 12px', background: N.gold, color: N.navy, fontWeight: 800 }}>Search</button></div>}
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }} className="scrollbar-hide">
-        {error && <div style={{ textAlign: 'center', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{error}</div>}
-        {conversationId == null ? (
-          <div style={{ textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginTop: 40 }}>No conversation selected</div>
-        ) : msgs.length === 0 ? (
-          <div style={{ textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans', marginTop: 40 }}>No messages yet - say hi 👋</div>
-        ) : msgs.map(m => {
-          const isMe = m.sender_id === meId
-          const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
-          const senderLabel = senderNames[m.sender_id] || 'Deleted user'
+
+      {messageSearchResults.length > 0 && <div style={{ maxHeight: 150, overflowY: 'auto', background: T.card, borderBottom: `1px solid ${T.border}`, padding: 8 }}>{messageSearchResults.map(result => <button key={result.id} onClick={() => { setMessageSearchResults([]); document.getElementById(`prepza-msg-${result.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'transparent', padding: 7, cursor: 'pointer', color: T.text, fontSize: 11 }}>{chatDisplayText(result)}</button>)}</div>}
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 12px 12px', display: 'flex', flexDirection: 'column', gap: 4, background: `linear-gradient(180deg, ${T.pageBg}, ${T.card})` }} className="scrollbar-hide">
+        {error && <div style={{ alignSelf: 'center', maxWidth: 320, textAlign: 'center', color: '#C94C4C', fontSize: 11, padding: '5px 9px' }}>{error}</div>}
+        {msgs.length > 0 && <button type="button" onClick={() => void loadEarlier()} disabled={loadingEarlier} style={{ alignSelf: 'center', margin: '0 auto 8px', border: `1px solid ${T.border}`, background: T.card, borderRadius: 10, padding: '7px 11px', color: T.textMuted, fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>{loadingEarlier ? 'Loading…' : 'Load earlier messages'}</button>}
+        {msgs.filter(message => message.kind !== 'reaction').map(message => {
+          const mine = message.sender_id === meId
+          const text = chatDisplayText(message)
+          const reply = chatReplyId(message)
+          const quoted = reply ? msgs.find(item => item.id === reply) : null
+          const reactions = reactionState[message.id] || {}
+          const isLastFromSender = true
           return (
-            <div key={m.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 2 }}>
-              {!isMe && headerIsGroup && <span style={{ fontSize: 11, color: N.gold, fontWeight: 700, marginLeft: 4 }}>{senderLabel}</span>}
-              <div style={{ maxWidth: '76%', background: isMe ? `linear-gradient(135deg,${N.navy},${N.navy3})` : '#fff', borderRadius: isMe ? '14px 0 14px 14px' : '0 14px 14px 14px', padding: '10px 13px', boxShadow: '0 2px 6px rgba(0,0,0,0.07)' }}>
-                {m.is_deleted ? (
-                  <div style={{ fontSize: 13, color: isMe ? 'rgba(255,255,255,0.5)' : T.textMuted, lineHeight: 1.6, fontStyle: 'italic' }}>This message was deleted</div>
-                ) : (
-                  <>
-                    {m.attachment && (
-                      IMAGE_FILE_TYPES.includes(m.attachment.file_type) ? (
-                        <a href={m.attachment.view_url || undefined} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: m.body ? 8 : 0 }}>
-                          <img src={m.attachment.view_url || undefined} alt={m.attachment.original_filename} style={{ maxWidth: '100%', maxHeight: 220, borderRadius: 10, display: 'block' }} />
-                        </a>
-                      ) : (
-                        <a href={m.attachment.view_url || undefined} target="_blank" rel="noreferrer" style={{ display: 'flex', gap: 10, alignItems: 'center', background: isMe ? 'rgba(255,255,255,0.1)' : '#F8F9FC', borderRadius: 10, padding: '10px 12px', marginBottom: m.body ? 8 : 0, textDecoration: 'none' }}>
-                          <div style={{ width: 34, height: 34, background: isMe ? 'rgba(255,255,255,0.15)' : '#fff', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>📎</div>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: isMe ? '#fff' : N.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.attachment.original_filename}</div>
-                            <div style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.5)' : T.textMuted }}>{(m.attachment.file_size_bytes / (1024 * 1024)).toFixed(1)} MB</div>
-                          </div>
-                        </a>
-                      )
-                    )}
-                    {m.body && <div style={{ fontSize: 13, color: isMe ? '#fff' : T.text, lineHeight: 1.6 }}>{m.body}</div>}
-                  </>
-                )}
-                <div style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.4)' : T.textMuted, textAlign: 'right', marginTop: 3 }}>{time}</div>
+            <div key={message.id} id={`prepza-msg-${message.id}`} style={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', position: 'relative', marginBottom: 3 }}>
+              {headerIsGroup && !mine && <div style={{ fontSize: 10, color: N.gold, fontWeight: 800, margin: '0 10px 2px' }}>{senderNames[message.sender_id] || 'Student'}</div>}
+              {reactionPicker === message.id && <div style={{ display: 'flex', gap: 2, padding: 4, borderRadius: 11, background: T.card, boxShadow: '0 5px 18px rgba(0,0,0,0.14)', marginBottom: 3, zIndex: 3 }}>{['👍','❤️','😂','😮','😢','🙏'].map(emoji => <button key={emoji} type="button" onClick={() => void react(message, emoji)} style={{ border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', padding: 3 }}>{emoji}</button>)}</div>}
+              <div style={{ maxWidth: '82%', position: 'relative', background: mine ? N.navy : T.card, color: mine ? '#fff' : T.text, borderRadius: mine ? '15px 4px 15px 15px' : '4px 15px 15px 15px', padding: '8px 10px 6px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: mine ? 'none' : `1px solid ${T.border}` }}>
+                <div style={{ position: 'absolute', top: 3, right: 4, display: 'flex', gap: 3 }}><button onClick={() => setReplyingTo(message)} title="Reply" style={{ border: 0, background: 'transparent', color: mine ? 'rgba(255,255,255,.45)' : T.textMuted, cursor: 'pointer', fontSize: 10 }}>↩</button><button onClick={() => setReactionPicker(reactionPicker === message.id ? null : message.id)} title="React" style={{ border: 0, background: 'transparent', color: mine ? 'rgba(255,255,255,.45)' : T.textMuted, cursor: 'pointer', fontSize: 11 }}>☺</button></div>
+                {quoted && <button onClick={() => document.getElementById(`prepza-msg-${quoted.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} style={{ width: '100%', textAlign: 'left', border: 0, borderLeft: `3px solid ${N.gold}`, background: mine ? 'rgba(255,255,255,.08)' : T.pageBg, color: mine ? 'rgba(255,255,255,.82)' : T.textMuted, padding: '5px 7px', borderRadius: 6, marginBottom: 6, cursor: 'pointer', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chatDisplayText(quoted)}</button>}
+                {message.attachment && <a href={message.attachment.view_url || undefined} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none', marginBottom: text ? 6 : 0 }}>{message.attachment.view_url && chatIsImage(message.attachment.file_type) ? <img src={message.attachment.view_url} alt={message.attachment.original_filename} style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 9, display: 'block' }} /> : <div style={{ background: mine ? 'rgba(255,255,255,.09)' : T.pageBg, borderRadius: 9, padding: 9, color: mine ? '#fff' : T.text }}><div style={{ fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{message.attachment.original_filename}</div><div style={{ fontSize: 10, opacity: .55, marginTop: 3 }}>{(message.attachment.file_size_bytes / 1048576).toFixed(1)} MB · tap to open</div></div>}</a>}
+                {message.is_deleted ? <i style={{ opacity: .55, fontSize: 12 }}>This message was deleted</i> : text && <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5, paddingRight: 24 }}>{text}</div>}
+                <div style={{ marginTop: 4, textAlign: 'right', fontSize: 9, opacity: .48 }}>{chatTime(message.created_at)} {mine && <span title={message.read_by_all ? 'Read by everyone' : message.read_by_count ? `Read by ${message.read_by_count}` : 'Sent'}>{message.read_by_count ? '✓✓' : '✓'}</span>}</div>
+                {Object.entries(reactions).filter(([, users]) => users.size > 0).length > 0 && <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>{Object.entries(reactions).filter(([, users]) => users.size > 0).map(([emoji, users]) => <button key={emoji} onClick={() => void react(message, emoji)} style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 12, padding: '2px 7px', fontSize: 11, cursor: 'pointer' }}>{emoji} {users.size}</button>)}</div>}
               </div>
             </div>
           )
         })}
+        {Object.keys(typingUsers).length > 0 && <div style={{ alignSelf: 'flex-start', color: T.textMuted, fontSize: 10, padding: '4px 8px', fontStyle: 'italic' }}>{typingNames.join(', ')} {typingNames.length === 1 ? 'is' : 'are'} typing…</div>}
         <div ref={bottomRef} />
       </div>
-      <div style={{ padding: '10px 12px 14px', background: T.card, borderTop: `1px solid ${T.border}`, position: 'relative' }}>
-        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleAttachmentFileChange} disabled={uploadingAttachment} />
-        {attachError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>{attachError}</div>}
-        {uploadingAttachment && <div style={{ color: T.textMuted, fontSize: 12, fontWeight: 600, marginBottom: 8, textAlign: 'center' }}>Sending attachment…</div>}
-        {showAttach && (
-          <div style={{ position: 'absolute', bottom: '100%', left: 12, right: 12, background: T.card, borderRadius: 16, boxShadow: '0 -4px 24px rgba(0,0,0,0.12)', padding: 16, border: `1px solid ${T.border}` }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 12 }}>Send Attachment</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-              {[['📄','Document', true],['🖼️','Image', true],['📷','Camera', false],['🎵','Audio', false]].map(([icon,label,enabled],i) => (
-                <button key={i} onClick={() => { if (enabled) fileInputRef.current?.click(); else setShowAttach(false) }} disabled={!enabled} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: enabled ? 'pointer' : 'default', opacity: enabled ? 1 : 0.4 }}>
-                  <div style={{ width: 52, height: 52, background: '#F3F4F6', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{icon}</div>
-                  <span style={{ fontSize: 11, color: T.textMuted, fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{enabled ? label : `${label} (soon)`}</span>
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setShowAttach(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '10px 0', marginTop: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: T.text }}>Cancel</button>
+
+      <div style={{ padding: '8px 10px 12px', background: T.card, borderTop: `1px solid ${T.border}`, position: 'relative' }}>
+        {replyingTo && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', marginBottom: 7, borderLeft: `3px solid ${N.gold}`, background: T.pageBg, borderRadius: 8 }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 10, color: N.gold, fontWeight: 800 }}>Replying to {senderNames[replyingTo.sender_id] || (replyingTo.sender_id === meId ? 'yourself' : 'student')}</div><div style={{ fontSize: 11, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chatDisplayText(replyingTo)}</div></div><button onClick={() => setReplyingTo(null)} style={{ border: 0, background: 'transparent', color: T.textMuted, cursor: 'pointer', fontSize: 16 }}>×</button></div>}
+        {(attachError || uploadingAttachment) && <div style={{ color: attachError ? '#C94C4C' : T.textMuted, fontSize: 11, fontWeight: 600, marginBottom: 7, textAlign: 'center' }}>{attachError || 'Sending attachment…'}</div>}
+        {showAttach && <div style={{ position: 'absolute', bottom: '100%', left: 10, right: 10, background: T.card, borderRadius: 15, boxShadow: '0 -5px 24px rgba(0,0,0,.12)', padding: 13, border: `1px solid ${T.border}` }}><div style={{ fontSize: 12, fontWeight: 800, color: T.text, marginBottom: 10 }}>Share with this chat</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}><button onClick={() => fileInputRef.current?.click()} style={{ border: 0, background: T.pageBg, borderRadius: 11, padding: 11, color: T.text, fontWeight: 700, cursor: 'pointer' }}>{Ic.book('w-5 h-5')}<span style={{ marginLeft: 7 }}>Document / image</span></button><button onClick={() => setShowAttach(false)} style={{ border: 0, background: T.pageBg, borderRadius: 11, padding: 11, color: T.textMuted, fontWeight: 700, cursor: 'pointer' }}>Cancel</button></div></div>}
+        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void sendAttachment(file) }} />
+        <div style={{ display: 'flex', gap: 7, alignItems: 'flex-end' }}>
+          <button onClick={() => setShowAttach(v => !v)} disabled={uploadingAttachment} aria-label="Attach" style={{ width: 38, height: 38, border: 0, borderRadius: 12, background: T.pageBg, color: T.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{Ic.attach('w-5 h-5')}</button>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: T.pageBg, border: `1px solid ${T.border}`, borderRadius: 16, padding: '8px 11px' }}>
+            <input value={input} onChange={e => handleInputChange(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} placeholder={replyingTo ? 'Write a reply…' : 'Message…'} style={{ width: '100%', border: 0, outline: 0, background: 'transparent', color: T.text, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }} disabled={sending || uploadingAttachment} />
           </div>
-        )}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => setShowAttach(v => !v)} disabled={uploadingAttachment} style={{ width: 36, height: 36, background: '#F3F4F6', border: 'none', borderRadius: 10, cursor: uploadingAttachment ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: uploadingAttachment ? 0.5 : 1 }}>
-            <div style={{ color: T.textMuted }}>{Ic.attach()}</div>
-          </button>
-          <div style={{ flex: 1, display: 'flex', gap: 8, alignItems: 'center', background: T.pageBg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(0,0,0,0.06)' }}>
-            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Message…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: T.text, fontFamily: 'Plus Jakarta Sans' }} disabled={sending} />
-          </div>
-          <button onClick={send} disabled={sending} style={{ width: 36, height: 36, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 10, cursor: sending ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: sending ? 0.6 : 1 }}>
-            <div style={{ color: T.text }}>{Ic.send('w-4 h-4')}</div>
-          </button>
+          <button onClick={() => void send()} disabled={sending || !input.trim()} aria-label="Send" style={{ width: 40, height: 40, border: 0, borderRadius: 13, background: `linear-gradient(135deg, ${N.gold}, ${N.goldL})`, color: N.navy, cursor: sending || !input.trim() ? 'default' : 'pointer', opacity: sending || !input.trim() ? .55 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{Ic.send('w-4 h-4')}</button>
         </div>
       </div>
     </div>
