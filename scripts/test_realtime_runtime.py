@@ -77,7 +77,9 @@ def test_multiple_tabs_do_not_emit_offline_until_last_socket_disconnects():
     with patch("realtime_server.is_active_participant", return_value=True):
         for client in (observer, first_tab, second_tab):
             assert client.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
-            client.get_received()
+        # Drain the observer after all joins so the assertion below concerns
+        # the disconnect operation rather than the initial online event.
+        observer.get_received(); first_tab.get_received(); second_tab.get_received()
         first_tab.disconnect()
         assert not _event_named(observer.get_received(), "chat:presence")
         second_tab.disconnect()
@@ -93,7 +95,7 @@ def test_explicit_leave_does_not_emit_offline_until_last_socket_leaves():
     with patch("realtime_server.is_active_participant", return_value=True):
         for client in (observer, first_tab, second_tab):
             assert client.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
-            client.get_received()
+        observer.get_received(); first_tab.get_received(); second_tab.get_received()
         assert first_tab.emit("leave_chat", {"conversation_id": 12}, callback=True)["ok"] is True
         assert not _event_named(observer.get_received(), "chat:presence")
         assert second_tab.emit("leave_chat", {"conversation_id": 12}, callback=True)["ok"] is True
