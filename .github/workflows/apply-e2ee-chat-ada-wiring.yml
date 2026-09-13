@@ -18,7 +18,7 @@ permissions:
   contents: write
 
 env:
-  DATABASE_URL: sqlite:///:memory:
+  SQLALCHEMY_DATABASE_URI: sqlite:///:memory:
   SECRET_KEY: realtime-test-secret
 
 jobs:
