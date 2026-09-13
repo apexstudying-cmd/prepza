@@ -7,7 +7,7 @@ let identityReadyPromise: Promise<void> | null = null
 async function jsonFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { credentials: 'include', ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } })
   let body: any = null
-  try { body = await response.json() } catch { /* empty response */ }
+  try { body = await response.json() } catch { /* empty */ }
   if (!response.ok) throw new Error((body && body.error) || `Request failed (${response.status})`)
   return body as T
 }
@@ -22,17 +22,20 @@ export async function uploadGroupKeyEnvelopes(conversationId: number, csrfToken:
   await jsonFetch(`/chats/${conversationId}/key-envelopes`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ envelopes: envelopes.map(envelope => ({ conversation_id: envelope.conversationId, recipient_user_id: envelope.recipientUserId, sender_user_id: envelope.senderUserId, key_epoch: envelope.key_epoch, version: envelope.version, nonce: envelope.nonce, ciphertext: envelope.ciphertext })) }) })
 }
 
-export async function registerUserPublicKey(publicKey: string): Promise<void> {
-  await jsonFetch('/keys/register', { method: 'POST', body: JSON.stringify({ public_key: publicKey }) })
+export async function registerUserPublicKey(publicKey: string, csrfToken?: string): Promise<void> {
+  const token = csrfToken || (await jsonFetch<{ csrf_token: string }>('/me')).csrf_token
+  if (!token) throw new Error('CSRF token is unavailable; please refresh the session')
+  await jsonFetch('/keys/register', { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ public_key: publicKey }) })
 }
 
 export async function ensureE2EEIdentityReady(): Promise<void> {
   if (identityReadyPromise) return identityReadyPromise
   identityReadyPromise = (async () => {
-    const me = await jsonFetch<{ id: number }>('/me')
+    const me = await jsonFetch<{ id: number; csrf_token: string }>('/me')
     if (!me?.id) throw new Error('Authentication required')
+    if (!me?.csrf_token) throw new Error('CSRF token is unavailable; please refresh the session')
     const { keyPair } = await getOrCreateIdentityKeyPair()
-    await registerUserPublicKey(await exportPublicKeyBase64Url(keyPair.publicKey))
+    await registerUserPublicKey(await exportPublicKeyBase64Url(keyPair.publicKey), me.csrf_token)
   })()
   try { await identityReadyPromise } catch (error) { identityReadyPromise = null; throw error }
 }
