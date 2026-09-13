@@ -68,6 +68,16 @@ export default function DirectInChatAdaEnhancer() {
   const selectedDoc = useMemo(() => docs.find(doc => doc.id === documentId) || null, [docs, documentId])
 
   useEffect(() => {
+    const openListener = (event: Event) => {
+      const detail = (event as CustomEvent<{ conversationId?: number }>).detail
+      const requestedConversationId = Number(detail?.conversationId)
+      if (!chat || !requestedConversationId || chat.conversationId === requestedConversationId) setOpen(true)
+    }
+    window.addEventListener('prepza-open-ada', openListener)
+    return () => window.removeEventListener('prepza-open-ada', openListener)
+  }, [chat])
+
+  useEffect(() => {
     if (!open || !chat) return
     let cancelled = false
     setLoadingDocs(true); setError('')
@@ -105,7 +115,7 @@ export default function DirectInChatAdaEnhancer() {
 
   return <>
     {open && <section aria-label="Ada study panel" style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 1200, width: 'min(380px, calc(100vw - 32px))', maxHeight: '72vh', overflowY: 'auto', border: '1px solid rgba(255,255,255,.12)', borderRadius: 18, background: '#0d1420', color: '#f7f2e8', padding: 16, boxShadow: '0 24px 60px rgba(0,0,0,.34)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}><div><div style={{ fontWeight: 800, fontSize: 17 }}>Study with Ada</div><div style={{ opacity: .65, fontSize: 12, marginTop: 3 }}>Only the study context you choose is sent to Ada.</div></div><button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}>Close</button></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}><div><div style={{ fontWeight: 800, fontSize: 17 }}>Study with Ada</div><div style={{ opacity: .65, fontSize: 12, marginTop: 3 }}>Choose the study context Ada should use.</div></div><button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}>Close</button></div>
       <label style={{ display: 'block', fontSize: 12, opacity: .72, marginBottom: 6 }}>Document</label>
       <select value={documentId ?? ''} onChange={event => setDocumentId(Number(event.target.value) || null)} disabled={loadingDocs} style={{ width: '100%', padding: 10, borderRadius: 10, marginBottom: 10 }}><option value="">Select a ready document</option>{docs.map(doc => <option key={doc.id} value={doc.id}>{doc.title}</option>)}</select>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}><label style={{ fontSize: 12 }}>From page<input type="number" min={1} max={pageCount} value={pageStart} onChange={event => updatePageStart(Number(event.target.value) || 1)} style={{ width: '100%', marginTop: 5, padding: 9, borderRadius: 9 }} /></label><label style={{ fontSize: 12 }}>To page<input type="number" min={pageStart} max={Math.min(pageStart + 49, pageCount)} value={pageEnd} onChange={event => updatePageEnd(Number(event.target.value) || pageStart)} style={{ width: '100%', marginTop: 5, padding: 9, borderRadius: 9 }} /></label></div>
@@ -116,4 +126,3 @@ export default function DirectInChatAdaEnhancer() {
       {answer && <div style={{ marginTop: 14, borderTop: '1px solid rgba(255,255,255,.1)', paddingTop: 14, lineHeight: 1.55, fontSize: 14, whiteSpace: 'pre-wrap' }}>{answer.answer}</div>}
     </section>}
   </>
-}
