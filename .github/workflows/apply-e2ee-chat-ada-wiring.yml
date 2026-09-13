@@ -11,6 +11,7 @@ on:
       - 'e2ee_chat_routes.py'
       - 'e2ee_ada_routes.py'
       - 'e2ee_chat_models.py'
+      - 'prepza_control.py'
       - 'scripts/test_realtime_runtime.py'
       - 'scripts/validate_realtime_security.py'
 
@@ -32,13 +33,13 @@ jobs:
           python-version: '3.13'
       - name: Apply guarded wiring patch
         run: |
-          if grep -q 'ConversationKeyEnvelope = create_e2ee_models(db)' app.py; then
-            echo 'E2EE chat/Ada wiring is already applied.'
+          if grep -q 'ConversationKeyEnvelope = create_e2ee_models(db)' app.py || grep -q 'ConversationKeyEnvelope = create_e2ee_models(db)' prepza_control.py; then
+            echo 'E2EE chat/Ada wiring is already applied through the canonical bootstrap path.'
           else
             python3 wire_e2ee_chat_ada_patch.py
           fi
       - name: Compile patched backend
-        run: python3 -m py_compile app.py e2ee_chat_routes.py e2ee_ada_routes.py e2ee_chat_models.py realtime_server.py
+        run: python3 -m py_compile app.py e2ee_chat_routes.py e2ee_ada_routes.py e2ee_chat_models.py realtime_server.py prepza_control.py
       - name: Validate security invariants
         run: |
           python3 scripts/validate_e2ee_security.py
@@ -50,10 +51,10 @@ jobs:
           python3 -m pytest scripts/test_realtime_runtime.py -q
       - name: Verify route wiring
         run: |
-          test "$(grep -c 'from e2ee_chat_models import create_e2ee_models' app.py)" -eq 1
-          test "$(grep -c 'ConversationKeyEnvelope = create_e2ee_models(db)' app.py)" -eq 1
-          test "$(grep -c 'register_e2ee_chat_routes(' app.py)" -eq 1
-          test "$(grep -c 'register_e2ee_ada_route(' app.py)" -eq 1
+          test "$(grep -c 'from e2ee_chat_models import create_e2ee_models' prepza_control.py)" -eq 1
+          test "$(grep -c 'ConversationKeyEnvelope = create_e2ee_models(db)' prepza_control.py)" -eq 1
+          test "$(grep -c 'register_e2ee_chat_routes(' prepza_control.py)" -eq 1
+          test "$(grep -c 'register_e2ee_ada_route(' prepza_control.py)" -eq 1
           ! grep -q '@app.post("/keys/register")' e2ee_chat_routes.py
           ! grep -q '@app.get("/keys/<int:user_id>")' e2ee_chat_routes.py
       - name: Commit verified wiring
