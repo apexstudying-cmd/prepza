@@ -47,3 +47,5 @@ jobs:
           git add frontend/pnpm-lock.yaml
           git commit -m 'chore: refresh frontend lockfile'
           git push origin main
+
+# One-time trigger for the dependency lockfile refresh.
