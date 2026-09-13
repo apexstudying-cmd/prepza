@@ -1,0 +1,89 @@
+name: Repair chat send and mobile viewport
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor == 'apexstudying-cmd'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch chat CSRF readiness and mobile viewport
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          chat = Path('frontend/src/crypto/WhatsAppChatExperience.tsx')
+          text = chat.read_text()
+
+          old = """  const meIdRef = useRef<number | null>(null)\n  useEffect(() => { meIdRef.current = meId }, [meId])"""
+          new = """  const meIdRef = useRef<number | null>(null)\n  const csrfTokenRef = useRef('')\n  useEffect(() => { meIdRef.current = meId }, [meId])\n  useEffect(() => { csrfTokenRef.current = csrfToken }, [csrfToken])\n\n  const getCsrfToken = async (): Promise<string> => {\n    if (csrfTokenRef.current) return csrfTokenRef.current\n    const me = await api<{ id: number; csrf_token: string }>('/me')\n    if (!me?.csrf_token) throw new Error('CSRF token is unavailable; please refresh the session')\n    csrfTokenRef.current = me.csrf_token\n    setMeId(me.id)\n    setCsrfToken(me.csrf_token)\n    return me.csrf_token\n  }"""
+          if old not in text: raise SystemExit('chat anchor 1 not found')
+          text = text.replace(old, new, 1)
+
+          old = """  useEffect(() => { if (!visible) return; void loadList(); api<{ id: number; csrf_token: string }>('/me').then(me => { setMeId(me.id); setCsrfToken(me.csrf_token) }).catch(() => {}) }, [visible])"""
+          new = """  useEffect(() => { if (!visible) return; void loadList(); void getCsrfToken().catch(() => {}) }, [visible])"""
+          if old not in text: raise SystemExit('chat anchor 2 not found')
+          text = text.replace(old, new, 1)
+
+          old = """    try { await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) }); setInput(''); setReplyingTo(null); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this message.')) } finally { setSending(false) }"""
+          new = """    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) }); setInput(''); setReplyingTo(null); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this message.')) } finally { setSending(false) }"""
+          if old not in text: raise SystemExit('chat anchor 3 not found')
+          text = text.replace(old, new, 1)
+
+          old = """    try { await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'reaction' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not update reaction.')) } finally { setSending(false) }"""
+          new = """    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'reaction' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not update reaction.')) } finally { setSending(false) }"""
+          if old not in text: raise SystemExit('chat anchor 4 not found')
+          text = text.replace(old, new, 1)
+
+          old = """    setUploading(true); setError(''); setAttachOpen(false)\n    try { const init = await api<{ attachment_id: number; upload_url: string }>(`/chats/${selectedId}/attachments`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }) }); const upload = await fetch(init.upload_url, { method: 'PUT', body: file }); if (!upload.ok) throw new Error('Upload failed'); await api(`/chats/${selectedId}/attachments/${init.attachment_id}/uploaded`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ attachment_id: init.attachment_id, kind: 'text' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this attachment.')) } finally { setUploading(false) }"""
+          new = """    setUploading(true); setError(''); setAttachOpen(false)\n    try { const token = await getCsrfToken(); const init = await api<{ attachment_id: number; upload_url: string }>(`/chats/${selectedId}/attachments`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }) }); const upload = await fetch(init.upload_url, { method: 'PUT', body: file }); if (!upload.ok) throw new Error('Upload failed'); await api(`/chats/${selectedId}/attachments/${init.attachment_id}/uploaded`, { method: 'POST', headers: { 'X-CSRF-Token': token } }); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ attachment_id: init.attachment_id, kind: 'text' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this attachment.')) } finally { setUploading(false) }"""
+          if old not in text: raise SystemExit('chat anchor 5 not found')
+          text = text.replace(old, new, 1)
+          chat.write_text(text)
+
+          css = Path('frontend/src/index.css')
+          c = css.read_text()
+          old = """html, body {\n  margin: 0;\n  padding: 0;\n  font-family: 'Plus Jakarta Sans', sans-serif;\n  background: #0B1437;\n}"""
+          new = """html, body {\n  margin: 0;\n  padding: 0;\n  width: 100%;\n  height: 100%;\n  min-height: 100dvh;\n  overflow: hidden;\n  overscroll-behavior: none;\n  font-family: 'Plus Jakarta Sans', sans-serif;\n  background: #0B1437;\n}"""
+          if old not in c: raise SystemExit('css anchor 1 not found')
+          c = c.replace(old, new, 1)
+          old = """#root {\n  height: 100dvh;\n  overflow: hidden;\n  background: linear-gradient(135deg, #0B1437 0%, #1a2a6e 50%, #0B1437 100%);\n}"""
+          new = """#root {\n  width: 100%;\n  height: 100dvh;\n  min-height: 100dvh;\n  overflow: hidden;\n  background: linear-gradient(135deg, #0B1437 0%, #1a2a6e 50%, #0B1437 100%);\n}"""
+          if old not in c: raise SystemExit('css anchor 2 not found')
+          c = c.replace(old, new, 1)
+          css.write_text(c)
+          PY
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: corepack pnpm@10.34.3 install --frozen-lockfile
+
+      - name: TypeScript check
+        working-directory: frontend
+        run: corepack pnpm@10.34.3 exec tsc --noEmit
+
+      - name: Production build
+        working-directory: frontend
+        run: corepack pnpm@10.34.3 run build
+
+      - name: Commit repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/crypto/WhatsAppChatExperience.tsx frontend/src/index.css
+          git commit -m 'fix: harden chat sends and mobile viewport'
+          git push origin main
+          git rm .github/workflows/fix-chat-send-mobile-viewport.yml
+          git commit -m 'chore: remove temporary chat viewport repair workflow'
+          git push origin main
