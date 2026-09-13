@@ -109,9 +109,14 @@ def handle_join_chat(data):
     if conversation_id <= 0 or not is_active_participant(user_id, conversation_id):
         return {"ok": False, "error": "Conversation unavailable"}
     room = room_for(conversation_id)
+    already_tracked = False
+    with _socket_state_lock:
+        already_tracked = conversation_id in _socket_rooms.get(request.sid, set())
+    had_other_socket = user_has_other_socket_in_room(user_id, conversation_id)
     join_room(room)
     track_socket_room(conversation_id)
-    emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": True}, to=room)
+    if not already_tracked and not had_other_socket:
+        emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": True}, to=room)
     return {"ok": True, "conversation_id": conversation_id}
 
 
@@ -127,9 +132,11 @@ def handle_leave_chat(data):
     if conversation_id <= 0 or not is_active_participant(user_id, conversation_id):
         return {"ok": False}
     room = room_for(conversation_id)
+    had_other_socket = user_has_other_socket_in_room(user_id, conversation_id)
     leave_room(room)
     untrack_socket_room(conversation_id)
-    emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room)
+    if not had_other_socket:
+        emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room)
     return {"ok": True, "conversation_id": conversation_id}
 
 
