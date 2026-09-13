@@ -27,6 +27,20 @@ export default function ChatStudyDocumentReader() {
   const [documents, setDocuments] = useState<SharedDocument[]>(activeDocuments); const [document, setDocument] = useState<SharedDocument | null>(activeDocuments[0] || null); const [open, setOpen] = useState(false); const [page, setPage] = useState(1); const [selectedText, setSelectedText] = useState(''); const [prompt, setPrompt] = useState(''); const [asking, setAsking] = useState(false); const [error, setError] = useState(''); const [answer, setAnswer] = useState<AdaStudyResponse | null>(null)
   useEffect(() => { const listener = (next: SharedDocument[]) => { setDocuments(next); setDocument(current => current && next.some(item => item.attachmentId === current.attachmentId) ? current : (next[0] || null)); if (!next.length) setOpen(false) }; listeners.add(listener); return () => { listeners.delete(listener) } }, [])
   useEffect(() => { const openListener = (event: Event) => { const detail = (event as CustomEvent<{ attachmentId?: number }>).detail; const requestedId = Number(detail?.attachmentId); const next = Number.isInteger(requestedId) && requestedId > 0 ? documents.find(item => item.attachmentId === requestedId) || null : documents[0] || null; if (next) { setDocument(next); setOpen(true) } }; window.addEventListener('prepza-open-study-document', openListener); return () => window.removeEventListener('prepza-open-study-document', openListener) }, [documents])
+  useEffect(() => {
+    const interceptDocumentLink = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target.closest('a[href]') : null
+      if (!(target instanceof HTMLAnchorElement)) return
+      const href = target.href
+      const match = documents.find(item => item.viewUrl === href)
+      if (!match) return
+      event.preventDefault()
+      event.stopPropagation()
+      window.dispatchEvent(new CustomEvent('prepza-open-study-document', { detail: { attachmentId: match.attachmentId } }))
+    }
+    document.addEventListener('click', interceptDocumentLink, true)
+    return () => document.removeEventListener('click', interceptDocumentLink, true)
+  }, [documents])
   useEffect(() => { setPage(1); setSelectedText(''); setPrompt(''); setAnswer(null); setError('') }, [document?.attachmentId])
   if (!documents.length) return null
   const isPdf = document?.mimeType.includes('pdf') || document?.filename.toLowerCase().endsWith('.pdf'); const isImage = document?.mimeType.startsWith('image/'); const readerUrl = document ? (isPdf ? `${document.viewUrl}#page=${page}` : document.viewUrl) : ''
