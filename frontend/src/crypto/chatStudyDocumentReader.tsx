@@ -90,6 +90,22 @@ export default function ChatStudyDocumentReader() {
   }, [])
 
   useEffect(() => {
+    const openListener = (event: Event) => {
+      const detail = (event as CustomEvent<{ attachmentId?: number }>).detail
+      const requestedId = Number(detail?.attachmentId)
+      const next = Number.isInteger(requestedId) && requestedId > 0
+        ? documents.find(item => item.attachmentId === requestedId) || null
+        : documents[0] || null
+      if (next) {
+        setDocument(next)
+        setOpen(true)
+      }
+    }
+    window.addEventListener('prepza-open-study-document', openListener)
+    return () => window.removeEventListener('prepza-open-study-document', openListener)
+  }, [documents])
+
+  useEffect(() => {
     setPage(1)
     setSelectedText('')
     setPrompt('')
@@ -138,7 +154,7 @@ export default function ChatStudyDocumentReader() {
             {documents.length > 1 && <div style={{ display: 'flex', gap: 7, overflowX: 'auto', padding: '8px 10px', background: '#111722', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
               {documents.map(item => <button key={item.attachmentId} type="button" onClick={() => setDocument(item)} title={item.filename} style={{ flex: '0 0 auto', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '7px 10px', borderRadius: 9, border: item.attachmentId === document.attachmentId ? '1px solid #e8c36a' : '1px solid rgba(255,255,255,.1)', background: item.attachmentId === document.attachmentId ? 'rgba(232,195,106,.12)' : 'transparent', color: 'inherit', cursor: 'pointer' }}>{item.filename}</button>)}
             </div>}
-            <div style={{ minWidth: 0, minHeight: 0 }}>{isPdf || isImage ? <iframe title={document.filename} src={readerUrl} style={{ width: '100%', height: '100%', border: 0 }} /> : <div style={{ padding: 24 }}>This encrypted file cannot be previewed in this browser. Open the attachment from the chat to view it.</div>}</div>
+            <div style={{ minWidth: 0, minHeight: 0 }}>{isPdf || isImage ? <iframe title={document.filename} src={readerUrl} style={{ width: '100%', height: '100%', border: 0 }} /> : <div style={{ padding: 24 }}>This file can be opened from the chat on a device that supports its format.</div>}</div>
           </div>
           <aside style={{ minWidth: 0, overflowY: 'auto', padding: 16, borderLeft: '1px solid rgba(255,255,255,.1)' }}>
             <div style={{ fontWeight: 800, marginBottom: 4 }}>Study this document</div><div style={{ fontSize: 12, opacity: .6, marginBottom: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{document.filename}</div>
@@ -150,8 +166,7 @@ export default function ChatStudyDocumentReader() {
             {answer && <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,.1)', whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: 14 }}>{answer.answer}</div>}
           </aside>
         </div>
-        <footer style={{ padding: '9px 16px', borderTop: '1px solid rgba(255,255,255,.1)', fontSize: 12, opacity: .65 }}>The file is decrypted locally. Only the text you explicitly place in the Ada box is sent to Ada.</footer>
+        <footer style={{ padding: '9px 16px', borderTop: '1px solid rgba(255,255,255,.1)', fontSize: 12, opacity: .65 }}>Your shared study file stays encrypted in transit and is opened on your device.</footer>
       </section>
     </div>}
   </>
-}
