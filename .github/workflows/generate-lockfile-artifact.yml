@@ -1,0 +1,44 @@
+name: Temporary Frontend Lockfile Generation
+
+on:
+  push:
+    branches: [chore/generate-frontend-lockfile]
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Assert exact event commit
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Enable pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Generate lockfile
+        working-directory: frontend
+        run: pnpm install --lockfile-only
+
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: prepza-frontend-pnpm-lock
+          path: frontend/pnpm-lock.yaml
+          if-no-files-found: error
