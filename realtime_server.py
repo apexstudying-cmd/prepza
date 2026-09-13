@@ -11,7 +11,8 @@ from app import app, db
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins=[], logger=False, engineio_logger=False)
 MESSAGE_PATH_RE = re.compile(r"^/chats/(\d+)/messages$")
 _socket_rooms = {}
-_socket_rooms_lock = Lock()
+_socket_users = {}
+_socket_state_lock = Lock()
 
 
 def room_for(conversation_id):
@@ -56,12 +57,12 @@ def safe_message_payload(response_json):
 
 
 def track_socket_room(conversation_id):
-    with _socket_rooms_lock:
+    with _socket_state_lock:
         _socket_rooms.setdefault(request.sid, set()).add(conversation_id)
 
 
 def untrack_socket_room(conversation_id):
-    with _socket_rooms_lock:
+    with _socket_state_lock:
         rooms = _socket_rooms.get(request.sid)
         if not rooms:
             return
@@ -71,8 +72,18 @@ def untrack_socket_room(conversation_id):
 
 
 def socket_rooms_for_disconnect():
-    with _socket_rooms_lock:
-        return _socket_rooms.pop(request.sid, set())
+    with _socket_state_lock:
+        rooms = _socket_rooms.pop(request.sid, set())
+        user_id = _socket_users.pop(request.sid, None)
+        return rooms, user_id
+
+
+def user_has_other_socket_in_room(user_id, conversation_id):
+    with _socket_state_lock:
+        for sid, rooms in _socket_rooms.items():
+            if sid != request.sid and _socket_users.get(sid) == user_id and conversation_id in rooms:
+                return True
+    return False
 
 
 @socketio.on("connect")
@@ -80,8 +91,9 @@ def handle_connect(auth=None):
     user_id = authenticated_user_id()
     if user_id is None:
         return False
-    with _socket_rooms_lock:
+    with _socket_state_lock:
         _socket_rooms.setdefault(request.sid, set())
+        _socket_users[request.sid] = user_id
     emit("realtime:ready", {"user_id": user_id})
 
 
@@ -154,12 +166,12 @@ def handle_read(data):
 
 @socketio.on("disconnect")
 def handle_disconnect():
-    user_id = authenticated_user_id()
+    rooms, user_id = socket_rooms_for_disconnect()
     if user_id is None:
-        socket_rooms_for_disconnect()
         return
-    for conversation_id in socket_rooms_for_disconnect():
-        emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room_for(conversation_id))
+    for conversation_id in rooms:
+        if not user_has_other_socket_in_room(user_id, conversation_id):
+            emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room_for(conversation_id))
 
 
 @app.after_request
