@@ -6,55 +6,60 @@ type SwipeState = {
 }
 
 const MESSAGE_PREFIX = 'prepza-msg-'
-const SWIPE_THRESHOLD = 64
-const MAX_TRANSLATE = 72
+const SWIPE_THRESHOLD = 48
+const MAX_TRANSLATE = 76
 
-function isMessageRow(element: Element | null): element is HTMLElement {
-  return element instanceof HTMLElement && element.id.startsWith(MESSAGE_PREFIX)
+function isMessageRow(element: EventTarget | null): element is HTMLElement {
+  return element instanceof HTMLElement && Boolean(element.closest(`[id^="${MESSAGE_PREFIX}"]`))
+}
+
+function messageRow(element: EventTarget | null): HTMLElement | null {
+  if (!(element instanceof HTMLElement)) return null
+  const row = element.closest(`[id^="${MESSAGE_PREFIX}"]`)
+  return row instanceof HTMLElement ? row : null
 }
 
 function replyButtonFor(row: HTMLElement): HTMLButtonElement | null {
-  const buttons = row.querySelectorAll('button')
-  for (const button of buttons) {
-    if (button.getAttribute('title') === 'Reply') return button as HTMLButtonElement
-  }
-  return null
+  const button = row.querySelector<HTMLButtonElement>('button[title="Reply"]')
+  return button || null
 }
 
 function installOnRow(row: HTMLElement): void {
-  if (row.dataset.prepzaSwipeReply === '1') return
-  row.dataset.prepzaSwipeReply = '1'
+  if (row.dataset.prepzaSwipeReply === '2') return
+  row.dataset.prepzaSwipeReply = '2'
   row.style.touchAction = 'pan-y'
   row.style.willChange = 'transform'
-  row.style.transition = 'transform 120ms ease-out'
 
   let state: SwipeState | null = null
 
-  row.addEventListener('touchstart', event => {
-    if (event.touches.length !== 1) return
-    const touch = event.touches[0]
+  const reset = () => {
+    state = null
+    row.style.transition = 'transform 140ms ease-out'
+    row.style.transform = ''
+  }
+
+  row.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
     state = {
-      startX: touch.clientX,
-      startY: touch.clientY,
-      currentX: touch.clientX,
+      startX: event.clientX,
+      startY: event.clientY,
+      currentX: event.clientX,
       lockedHorizontal: false,
     }
     row.style.transition = 'none'
-  }, { passive: true })
+    try { row.setPointerCapture(event.pointerId) } catch { /* optional */ }
+  })
 
-  row.addEventListener('touchmove', event => {
-    if (!state || event.touches.length !== 1) return
-    const touch = event.touches[0]
-    state.currentX = touch.clientX
-    const dx = touch.clientX - state.startX
-    const dy = touch.clientY - state.startY
+  row.addEventListener('pointermove', event => {
+    if (!state) return
+    state.currentX = event.clientX
+    const dx = event.clientX - state.startX
+    const dy = event.clientY - state.startY
 
     if (!state.lockedHorizontal) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
       if (Math.abs(dy) > Math.abs(dx)) {
-        state = null
-        row.style.transition = 'transform 120ms ease-out'
-        row.style.transform = ''
+        reset()
         return
       }
       state.lockedHorizontal = true
@@ -63,30 +68,24 @@ function installOnRow(row: HTMLElement): void {
     event.preventDefault()
     const translate = Math.max(-MAX_TRANSLATE, Math.min(MAX_TRANSLATE, dx))
     row.style.transform = `translateX(${translate}px)`
-  }, { passive: false })
+  })
 
-  row.addEventListener('touchend', () => {
+  row.addEventListener('pointerup', event => {
     if (!state) return
-    const dx = state.currentX - state.startX
+    const dx = event.clientX - state.startX
     const shouldReply = state.lockedHorizontal && Math.abs(dx) >= SWIPE_THRESHOLD
-    state = null
-    row.style.transition = 'transform 120ms ease-out'
-    row.style.transform = ''
-
-    if (shouldReply) {
-      const replyButton = replyButtonFor(row)
-      if (replyButton) {
-        try { navigator.vibrate?.(8) } catch { /* vibration is optional */ }
-        replyButton.click()
-      }
+    const button = shouldReply ? replyButtonFor(row) : null
+    reset()
+    if (button) {
+      try { navigator.vibrate?.(8) } catch { /* optional */ }
+      button.click()
     }
-  }, { passive: true })
+  })
 
-  row.addEventListener('touchcancel', () => {
-    state = null
-    row.style.transition = 'transform 120ms ease-out'
-    row.style.transform = ''
-  }, { passive: true })
+  row.addEventListener('pointercancel', reset)
+  row.addEventListener('lostpointercapture', () => {
+    if (state) reset()
+  })
 }
 
 export function installChatSwipeReply(): void {
