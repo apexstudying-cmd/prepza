@@ -68,9 +68,12 @@ export default function WhatsAppChatExperience() {
   const [uploading, setUploading] = useState(false)
   const [typing, setTyping] = useState(false)
   const [realtimeConnected, setRealtimeConnected] = useState(false)
+  const meIdRef = useRef<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<number | null>(null)
+
+  useEffect(() => { meIdRef.current = meId }, [meId])
 
   useEffect(() => {
     installConversationObserver()
@@ -95,6 +98,22 @@ export default function WhatsAppChatExperience() {
     return () => window.removeEventListener('prepza-realtime-status', onStatus)
   }, [])
 
+  // Room membership is a connection lifecycle concern, not a data-refresh concern.
+  // Keeping it separate prevents reconnect/status changes from repeatedly leaving
+  // and rejoining the same room while the chat remains open.
+  useEffect(() => {
+    if (!active || conversationId == null) return
+    joinRealtimeChat(conversationId)
+    sendReadRealtime(conversationId)
+    return () => {
+      leaveRealtimeChat(conversationId)
+      if (typingTimer.current != null) {
+        window.clearTimeout(typingTimer.current)
+        typingTimer.current = null
+      }
+    }
+  }, [active, conversationId])
+
   useEffect(() => {
     if (!active || conversationId == null) return
     let cancelled = false
@@ -106,7 +125,7 @@ export default function WhatsAppChatExperience() {
     }
     setLoading(true); setError('')
     Promise.all([api<Detail>(`/chats/${conversationId}`), api<{ messages: Message[] }>(`/chats/${conversationId}/messages`), api<{ id: number }>('/me')])
-      .then(([nextDetail, nextMessages, me]) => { if (!cancelled) { setDetail(nextDetail); setMessages(nextMessages.messages || []); setMeId(me.id); joinRealtimeChat(conversationId); sendReadRealtime(conversationId) } })
+      .then(([nextDetail, nextMessages, me]) => { if (!cancelled) { setDetail(nextDetail); setMessages(nextMessages.messages || []); setMeId(me.id) } })
       .catch(errorValue => { if (!cancelled) setError(friendlyError(errorValue, 'Could not load this chat.')) })
       .finally(() => { if (!cancelled) setLoading(false) })
 
@@ -117,13 +136,27 @@ export default function WhatsAppChatExperience() {
     }
     const onTyping = (event: Event) => {
       const detailValue = (event as CustomEvent<{ conversation_id?: number; user_id?: number; typing?: boolean }>).detail
-      if (detailValue?.conversation_id === conversationId && detailValue.user_id !== meId) setTyping(Boolean(detailValue.typing))
+      if (detailValue?.conversation_id === conversationId && detailValue.user_id !== meIdRef.current) setTyping(Boolean(detailValue.typing))
     }
     window.addEventListener('prepza-realtime-message', onRealtimeMessage)
     window.addEventListener('prepza-realtime-typing', onTyping)
-    const interval = window.setInterval(() => { if (!realtimeConnected) void refresh() }, 15000)
-    return () => { cancelled = true; window.clearInterval(interval); window.removeEventListener('prepza-realtime-message', onRealtimeMessage); window.removeEventListener('prepza-realtime-typing', onTyping); leaveRealtimeChat(conversationId) }
-  }, [active, conversationId, realtimeConnected, meId])
+    return () => { cancelled = true; window.removeEventListener('prepza-realtime-message', onRealtimeMessage); window.removeEventListener('prepza-realtime-typing', onTyping) }
+  }, [active, conversationId])
+
+  // HTTP polling is fallback-only. Realtime room membership stays intact while
+  // connectivity changes, so a transient reconnect does not churn the UI lifecycle.
+  useEffect(() => {
+    if (!active || conversationId == null || realtimeConnected) return
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const data = await api<{ messages: Message[] }>(`/chats/${conversationId}/messages`)
+        if (!cancelled) setMessages(data.messages || [])
+      } catch { /* keep current messages */ }
+    }
+    const interval = window.setInterval(() => { void refresh() }, 15000)
+    return () => { cancelled = true; window.clearInterval(interval) }
+  }, [active, conversationId, realtimeConnected])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [messages.length])
 
