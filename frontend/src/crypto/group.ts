@@ -1,6 +1,6 @@
 // Prepza group-chat E2EE primitives.
-// Group keys are wrapped per member with ECDH and all ciphertext is bound to
-// its conversation/epoch through AES-GCM authenticated additional data.
+// Group keys are wrapped per member with ECDH and all new ciphertext is bound
+// to its conversation/epoch through AES-GCM authenticated additional data.
 
 const HKDF_INFO = 'prepza-group-chat-v1'
 const GCM_IV_BYTES = 12
@@ -155,12 +155,19 @@ export async function encryptGroupMessage(groupKey: CryptoKey, plaintext: string
 export async function decryptGroupMessage(groupKey: CryptoKey, body: string, nonce: string, conversationId?: number, keyEpoch?: number) {
   const iv = unb64(nonce)
   if (iv.length !== GCM_IV_BYTES) throw new Error('Invalid message nonce.')
+  const ciphertext = unb64(body) as BufferSource
   const params: AesGcmParams = { name: 'AES-GCM', iv: iv as BufferSource }
   if (conversationId !== undefined || keyEpoch !== undefined) {
     if (conversationId === undefined || keyEpoch === undefined) throw new Error('Conversation and epoch are required together.')
     params.additionalData = messageAad(conversationId, keyEpoch, 'message') as BufferSource
+    try {
+      const plaintext = await window.crypto.subtle.decrypt(params, groupKey, ciphertext)
+      return new TextDecoder().decode(plaintext)
+    } catch {
+      // Existing group messages were created before AAD binding was introduced.
+    }
   }
-  const plaintext = await window.crypto.subtle.decrypt(params, groupKey, unb64(body) as BufferSource)
+  const plaintext = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv as BufferSource }, groupKey, ciphertext)
   return new TextDecoder().decode(plaintext)
 }
 
@@ -179,11 +186,17 @@ export async function encryptGroupBytes(groupKey: CryptoKey, bytes: ArrayBuffer 
 export async function decryptGroupBytes(groupKey: CryptoKey, ciphertext: ArrayBuffer | Uint8Array, nonce: string, conversationId?: number, keyEpoch?: number) {
   const iv = unb64(nonce)
   if (iv.length !== GCM_IV_BYTES) throw new Error('Invalid attachment nonce.')
+  const input = ciphertext instanceof Uint8Array ? ciphertext : new Uint8Array(ciphertext)
+  const encrypted = input as BufferSource
   const params: AesGcmParams = { name: 'AES-GCM', iv: iv as BufferSource }
   if (conversationId !== undefined || keyEpoch !== undefined) {
     if (conversationId === undefined || keyEpoch === undefined) throw new Error('Conversation and epoch are required together.')
     params.additionalData = messageAad(conversationId, keyEpoch, 'attachment') as BufferSource
+    try {
+      return await window.crypto.subtle.decrypt(params, groupKey, encrypted)
+    } catch {
+      // Existing group attachments were created before AAD binding was introduced.
+    }
   }
-  const input = ciphertext instanceof Uint8Array ? ciphertext : new Uint8Array(ciphertext)
-  return window.crypto.subtle.decrypt(params, groupKey, input as BufferSource)
+  return window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv as BufferSource }, groupKey, encrypted)
 }
