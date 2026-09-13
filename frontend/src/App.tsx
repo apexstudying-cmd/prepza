@@ -12947,7 +12947,27 @@ function OrgTeamTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner: boo
 }
 
 
+function readStoredNavigationState(): {
+  stack: Screen[]
+  activeConversationId: number | null
+  activeDocumentId: number | null
+  activeGroupId: number | null
+  activeProfileUserId: number | null
+  activeOpportunityId: number | null
+} | null {
+  try {
+    const raw = sessionStorage.getItem('prepza-navigation-state')
+    if (!raw) return null
+    const value = JSON.parse(raw)
+    if (!value || !Array.isArray(value.stack) || value.stack.length === 0) return null
+    return value
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
+  const storedNavigation = readStoredNavigationState()
   // Real navigation history instead of a flat useState<Screen>. setScreen(x)
   // still means "go to x" everywhere - none of the ~100 existing call sites
   // need to change, since it now pushes onto a stack instead of replacing a
@@ -12959,7 +12979,7 @@ export default function App() {
   // hardcoded "back" buttons (onClick={() => setScreen('specific-screen')})
   // over to a real goBack() so they return to the ACTUAL previous screen is
   // a separate, screen-by-screen pass - not done here.
-  const [screenStack, setScreenStack] = useState<Screen[]>(['splash'])
+  const [screenStack, setScreenStack] = useState<Screen[]>(() => storedNavigation?.stack || ['splash'])
   const screen = screenStack[screenStack.length - 1]
 
   const setScreen = (s: Screen) => {
@@ -12985,9 +13005,9 @@ export default function App() {
   // the Screen string (no route params), so these - like other "currently
   // open X" ids - have to be lifted here rather than living inside the
   // screens themselves, which unmount on navigation.
-  const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
-  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null)
-  const [activeGroupId, setActiveGroupId] = useState<number | null>(null)
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(() => storedNavigation?.activeConversationId ?? null)
+  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(() => storedNavigation?.activeDocumentId ?? null)
+  const [activeGroupId, setActiveGroupId] = useState<number | null>(() => storedNavigation?.activeGroupId ?? null)
   // Which subscription plan the user picked on SubscriptionScreen, carried
   // over to PaymentScreen the same way activeDocumentId etc. are - these
   // are two separate mounted components, not steps of one component, so
@@ -12998,15 +13018,28 @@ export default function App() {
   // best-effort label carried over from wherever the navigation started
   // (never fetched separately - there's no endpoint for it), so the screen
   // isn't stuck showing "Student" when we already know the real name.
-  const [activeProfileUserId, setActiveProfileUserId] = useState<number | null>(null)
+  const [activeProfileUserId, setActiveProfileUserId] = useState<number | null>(() => storedNavigation?.activeProfileUserId ?? null)
   const [activeProfileName, setActiveProfileName] = useState<string | null>(null)
-  const [activeOpportunityId, setActiveOpportunityId] = useState<number | null>(null)
+  const [activeOpportunityId, setActiveOpportunityId] = useState<number | null>(() => storedNavigation?.activeOpportunityId ?? null)
   // Set when the app loads at /signup?ref=CODE (an ambassador's share
   // link - see ambassador_dashboard()'s referral_link field). Carried as
   // a prop into SignupScreen so its final POST /signup body can include
   // ref/via, same lift-to-App() reasoning as the activeXxx ids above.
   const [referralCode, setReferralCode] = useState<string | null>(null)
   const [referralChannel, setReferralChannel] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('prepza-navigation-state', JSON.stringify({
+        stack: screenStack,
+        activeConversationId,
+        activeDocumentId,
+        activeGroupId,
+        activeProfileUserId,
+        activeOpportunityId,
+      }))
+    } catch { /* storage can be unavailable in private browsing */ }
+  }, [screenStack, activeConversationId, activeDocumentId, activeGroupId, activeProfileUserId, activeOpportunityId])
 
   // Handles the round-trip back from /auth/google/callback, which appends
   // ?complete_profile=1 (new Google account, needs university/course/year/
