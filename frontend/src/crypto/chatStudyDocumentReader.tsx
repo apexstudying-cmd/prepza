@@ -54,7 +54,7 @@ export function installChatStudyDocumentObserver(): void {
         const seen = new Set<number>()
         const documents = messages
           .map((message: any) => attachmentFromMessage(conversationId, message))
-          .filter((document): document is SharedDocument => document !== null)
+          .filter((document: SharedDocument | null): document is SharedDocument => document !== null)
           .filter((document: SharedDocument) => {
             const id = document.attachmentId
             if (seen.has(id)) return false
