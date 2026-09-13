@@ -4,8 +4,8 @@ import {
   encryptMessageBody,
 } from './conversation'
 import { decryptGroupBytes, encryptGroupBytes } from './group'
-import { getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'
-import { fetchUserPublicKey } from './e2eeChatApi'
+import { exportPublicKeyBase64Url, getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'
+import { fetchUserPublicKey, registerUserPublicKey } from './e2eeChatApi'
 
 const DIRECT_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
 const DIRECT_SEARCH_RE = /^\/chats\/(\d+)\/messages\/search(?:\?.*)?$/
@@ -14,6 +14,7 @@ const ENCRYPTED_ATTACHMENT_MARKER = '__prepza_e2ee_attachment_v1'
 
 let installed = false
 let currentUserId: number | null = null
+let identityRegistrationPromise: Promise<void> | null = null
 const keyPromises = new Map<number, Promise<CryptoKey>>()
 const detailPromises = new Map<number, Promise<any>>()
 const pendingUploads = new Map<string, { conversationId: number; attachmentId: number; key: CryptoKey; mimeType: string }>()
@@ -45,6 +46,21 @@ function mimeTypeFor(filename: string): string {
     pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   }
   return map[ext] || 'application/octet-stream'
+}
+
+async function ensureIdentityKeyRegistered(): Promise<void> {
+  if (identityRegistrationPromise) return identityRegistrationPromise
+  identityRegistrationPromise = (async () => {
+    const { keyPair } = await getOrCreateIdentityKeyPair()
+    const publicKey = await exportPublicKeyBase64Url(keyPair.publicKey)
+    await registerUserPublicKey(publicKey)
+  })()
+  try {
+    await identityRegistrationPromise
+  } catch (error) {
+    identityRegistrationPromise = null
+    throw error
+  }
 }
 
 async function fetchConversationDetail(
@@ -223,7 +239,10 @@ export function installDirectChatE2EE(): void {
       const response = await nativeFetch(input, init)
       if (response.ok) {
         const me = await response.clone().json().catch(() => null)
-        if (me?.id) currentUserId = Number(me.id)
+        if (me?.id) {
+          currentUserId = Number(me.id)
+          void ensureIdentityKeyRegistered().catch(() => undefined)
+        }
       }
       return response
     }
