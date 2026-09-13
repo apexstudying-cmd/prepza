@@ -2,6 +2,11 @@
 
 
 def create_e2ee_models(db):
+    """Return the canonical envelope model, creating it once if necessary."""
+    for mapper in db.Model.registry.mappers:
+        if mapper.local_table.name == "conversation_key_envelope":
+            return mapper.class_
+
     class ConversationKeyEnvelope(db.Model):
         __tablename__ = "conversation_key_envelope"
 
