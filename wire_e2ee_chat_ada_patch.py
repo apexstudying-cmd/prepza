@@ -8,6 +8,7 @@ import io
 from pathlib import Path
 
 # CI marker: this script remains a guarded, reviewable patch rather than an import-time mutation.
+# Chunk 1 trigger marker: changes to this guarded script must re-run chat validation.
 ROOT = Path(__file__).resolve().parent
 APP_PATH = ROOT / "app.py"
 CHAT_ROUTES_PATH = ROOT / "e2ee_chat_routes.py"
