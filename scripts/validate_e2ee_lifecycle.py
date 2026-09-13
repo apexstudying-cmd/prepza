@@ -55,6 +55,13 @@ def main() -> None:
         "attachment_id", "message_attachment", "conversation_id", "status = 'ready'",
     )
     require(
+        "frontend/src/crypto/directChatE2EE.ts",
+        "DIRECT_ATTACHMENT_KEY_EPOCH = 1", "conversation_id: conversationId",
+        "encryptGroupBytes(pendingUpload.key, plaintext, pendingUpload.conversationId, DIRECT_ATTACHMENT_KEY_EPOCH)",
+        "decryptGroupBytes(key, encryptedBytes, metadata.file_nonce, conversationId, DIRECT_ATTACHMENT_KEY_EPOCH)",
+        "PENDING_ATTACHMENT_TTL_MS", "pruneAttachmentState", "expiresAt",
+    )
+    require(
         "frontend/src/App.tsx", "function ChatDetailScreen",
         "/chats/${conversationId}/messages", "/chats/${conversationId}/attachments", "setScreen('chat-options')",
     )
