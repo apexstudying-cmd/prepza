@@ -70,6 +70,46 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             return view(conversation, user_id, *args, **kwargs)
         return wrapped
 
+    # Identity-key bootstrap. The private key never leaves the browser; the
+    # server stores only the user's public ECDH key so peers can establish the
+    # encrypted conversation key locally.
+    @app.post("/keys/register")
+    def register_e2ee_identity_key():
+        user_id = current_user_id()
+        if not user_id:
+            return jsonify({"error": "Authentication required"}), 401
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or not isinstance(payload.get("public_key"), str):
+            return jsonify({"error": "public_key is required"}), 400
+        public_key = payload["public_key"].strip()
+        if not public_key or len(public_key) > 4096:
+            return jsonify({"error": "Invalid public_key"}), 400
+        # Base64url-encoded WebCrypto public keys are ASCII. Keep the server
+        # deliberately strict so arbitrary data cannot be stored as key material.
+        if not re.fullmatch(r"[A-Za-z0-9_-]+={0,2}", public_key):
+            return jsonify({"error": "Invalid public_key encoding"}), 400
+        db.session.execute(
+            text(
+                "INSERT INTO user_key (user_id, public_key) VALUES (:user_id, :public_key) "
+                "ON CONFLICT (user_id) DO UPDATE SET public_key = EXCLUDED.public_key, updated_at = CURRENT_TIMESTAMP"
+            ),
+            {"user_id": user_id, "public_key": public_key},
+        )
+        db.session.commit()
+        return jsonify({"ok": True})
+
+    @app.get("/keys/<int:user_id>")
+    def get_e2ee_identity_key(user_id):
+        if not current_user_id():
+            return jsonify({"error": "Authentication required"}), 401
+        row = db.session.execute(
+            text("SELECT public_key FROM user_key WHERE user_id = :user_id"),
+            {"user_id": user_id},
+        ).scalar_one_or_none()
+        if not row:
+            return jsonify({"public_key": ""}), 200
+        return jsonify({"public_key": row})
+
     if not getattr(app, "_prepza_e2ee_plaintext_guard", False):
         @app.before_request
         def _reject_plaintext_group_message_write():
