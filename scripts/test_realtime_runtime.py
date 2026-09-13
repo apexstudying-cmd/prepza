@@ -92,10 +92,12 @@ def test_two_members_receive_typing_read_and_persisted_message_events():
                 returned = broadcast_message_response(response)
         assert returned is response
 
-        message_events = _event_named(receiver.get_received(), "chat:message")
-        assert message_events
-        assert message_events[-1]["args"][0] == payload["message"]
-        assert not _event_named(sender.get_received(), "chat:message")
+        receiver_message_events = _event_named(receiver.get_received(), "chat:message")
+        sender_message_events = _event_named(sender.get_received(), "chat:message")
+        assert receiver_message_events
+        assert sender_message_events
+        assert receiver_message_events[-1]["args"][0] == payload["message"]
+        assert sender_message_events[-1]["args"][0] == payload["message"]
 
     sender.disconnect()
     receiver.disconnect()
