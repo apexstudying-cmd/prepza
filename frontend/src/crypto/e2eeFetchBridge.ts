@@ -98,7 +98,7 @@ async function ensureIdentityKeyRegistered(csrfToken: string): Promise<void> {
       },
       body: JSON.stringify({ public_key: publicKey }),
     })
-    const body = await response.json().catch(() => null)
+    const body: any = await response.json().catch(() => null)
     if (!response.ok) throw new Error((body && body.error) || 'Could not register secure chat key')
   })()
   try { await identityRegistrationPromise } catch (error) { identityRegistrationPromise = null; throw error }
@@ -274,14 +274,14 @@ async function localSearchGroupMessages(conversationId: number, query: string): 
   const collected: any[] = []
   let beforeId: number | null = null
   for (let page = 0; page < LOCAL_SEARCH_PAGE_LIMIT; page += 1) {
-    const url = beforeId == null ? `/chats/${conversationId}/messages` : `/chats/${conversationId}/messages?before_id=${beforeId}`
-    const response = await window.fetch(url, { credentials: 'include' })
+    const url: string = beforeId == null ? `/chats/${conversationId}/messages` : `/chats/${conversationId}/messages?before_id=${beforeId}`
+    const response: Response = await window.fetch(url, { credentials: 'include' })
     if (!response.ok) return response
     const body = await response.json()
-    const pageMessages = Array.isArray(body?.messages) ? body.messages : []
+    const pageMessages: any[] = Array.isArray(body?.messages) ? body.messages : []
     collected.push(...pageMessages)
     if (pageMessages.length === 0 || pageMessages.length < 50) break
-    const firstId = Number(pageMessages[0]?.id)
+    const firstId: number = Number(pageMessages[0]?.id)
     if (!Number.isInteger(firstId) || firstId <= 0) break
     beforeId = firstId
   }
