@@ -1,6 +1,6 @@
 name: Realtime Runtime Regression
 
-on:
+'on':
   push:
     branches:
       - feat/realtime-study-chat
@@ -10,6 +10,7 @@ on:
       - 'scripts/test_realtime_runtime.py'
       - 'requirements.txt'
       - '.github/workflows/realtime-runtime-regression.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
