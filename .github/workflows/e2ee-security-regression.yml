@@ -19,6 +19,7 @@ on:
       - 'scripts/validate_e2ee_security.py'
       - 'scripts/validate_e2ee_lifecycle.py'
       - 'scripts/validate_realtime_security.py'
+      - 'scripts/test_realtime_runtime.py'
       - '.github/workflows/e2ee-security-regression.yml'
 
 jobs:
@@ -37,3 +38,7 @@ jobs:
         run: python scripts/validate_realtime_security.py
       - name: Compile E2EE and realtime backend modules
         run: python -m py_compile e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py realtime_server.py
+      - name: Install realtime regression test dependencies
+        run: python -m pip install -r requirements.txt pytest
+      - name: Run realtime runtime regression tests
+        run: python -m pytest scripts/test_realtime_runtime.py -q
