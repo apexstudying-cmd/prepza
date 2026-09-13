@@ -13,7 +13,6 @@ permissions:
 
 jobs:
   refresh:
-    if: github.event.head_commit.message != 'chore: refresh frontend lockfile'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -47,5 +46,3 @@ jobs:
           git add frontend/pnpm-lock.yaml
           git commit -m 'chore: refresh frontend lockfile'
           git push origin main
-
-# One-time trigger for the dependency lockfile refresh.
