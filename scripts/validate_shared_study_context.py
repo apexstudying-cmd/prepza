@@ -23,7 +23,7 @@ require(
     "frontend/src/crypto/studyAdaApi.ts",
     "navigator.onLine === false",
     "30_000",
-    "value.key_epoch !== context.keyEpoch",
+    "Number(value.key_epoch) !== context.keyEpoch",
     "value.context_scope !== context.contextScope",
 )
 require(
