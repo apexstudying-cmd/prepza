@@ -12,6 +12,7 @@ import { installChatRealtime } from './crypto/chatRealtime'
 import { installChatSwipeReply } from './crypto/chatSwipeReply'
 import { installChatUiPolish } from './crypto/chatUiPolish'
 import { installNavigationTransitions } from './crypto/navigationTransitions'
+import { installGlobalPullRefresh } from './crypto/globalPullRefresh'
 import App from './App'
 import './index.css'
 
@@ -26,6 +27,7 @@ installChatRealtime()
 installChatSwipeReply()
 installChatUiPolish()
 installNavigationTransitions()
+installGlobalPullRefresh()
 
 // E2EE is automatic: establish this device's identity in the background.
 // The private key stays local; only the public key is registered server-side.
