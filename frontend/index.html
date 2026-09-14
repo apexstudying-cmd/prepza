@@ -22,11 +22,12 @@
         const isPrimary = (button) => button instanceof HTMLButtonElement && labels.some(label => labelOf(button).includes(label)) && !!button.querySelector('svg')
         const apply = () => {
           const buttons = Array.from(document.querySelectorAll('button')).filter(isPrimary)
-          if (buttons.length < 2) return
+          if (buttons.length < 4) return
           const host = buttons[0].parentElement
           if (!host || buttons.some(button => button.parentElement !== host)) return
-          if (getComputedStyle(host).position !== 'fixed') return
-          host.style.bottom = 'max(env(safe-area-inset-bottom, 0px), 16px)'
+          const hostStyle = getComputedStyle(host)
+          if (hostStyle.borderTopStyle === 'none' || hostStyle.display !== 'flex') return
+          host.style.paddingBottom = 'calc(6px + env(safe-area-inset-bottom, 0px))'
         }
         const observer = new MutationObserver(apply)
         observer.observe(document.getElementById('root') || document.body, { childList: true, subtree: true })
