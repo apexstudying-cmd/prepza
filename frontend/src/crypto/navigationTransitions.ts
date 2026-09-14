@@ -49,9 +49,6 @@ function activeNavIndex(buttons: HTMLButtonElement[]): number {
 }
 
 function contentElement(): HTMLElement | null {
-  // App renders the page content and bottom navigation as siblings inside
-  // the root app shell. Target only the content wrapper so the bottom nav
-  // remains physically fixed while the page slides underneath it.
   const root = document.getElementById('root')
   const appShell = root?.firstElementChild
   const content = appShell?.firstElementChild
@@ -80,6 +77,105 @@ function prepareNavColorTransitions(): void {
   })
 }
 
+function installViewTransitionStyles(): void {
+  if (document.getElementById('prepza-primary-nav-transition-styles')) return
+
+  const style = document.createElement('style')
+  style.id = 'prepza-primary-nav-transition-styles'
+  style.textContent = `
+    @keyframes prepza-nav-old-left {
+      from { transform: translateX(0); }
+      to { transform: translateX(-100%); }
+    }
+    @keyframes prepza-nav-old-right {
+      from { transform: translateX(0); }
+      to { transform: translateX(100%); }
+    }
+    @keyframes prepza-nav-new-left {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
+    }
+    @keyframes prepza-nav-new-right {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(0); }
+    }
+
+    ::view-transition-old(prepza-primary-content),
+    ::view-transition-new(prepza-primary-content) {
+      animation-duration: 240ms;
+      animation-timing-function: cubic-bezier(.22,.8,.22,1);
+      animation-fill-mode: both;
+      mix-blend-mode: normal;
+    }
+
+    html.prepza-nav-left ::view-transition-old(prepza-primary-content) {
+      animation-name: prepza-nav-old-left;
+    }
+    html.prepza-nav-left ::view-transition-new(prepza-primary-content) {
+      animation-name: prepza-nav-new-left;
+    }
+    html.prepza-nav-right ::view-transition-old(prepza-primary-content) {
+      animation-name: prepza-nav-old-right;
+    }
+    html.prepza-nav-right ::view-transition-new(prepza-primary-content) {
+      animation-name: prepza-nav-new-right;
+    }
+  `
+  document.head.appendChild(style)
+}
+
+function prepareViewTransitionTarget(): void {
+  const content = contentElement()
+  if (!content) return
+  content.style.viewTransitionName = 'prepza-primary-content'
+  content.style.contain = 'paint'
+}
+
+function runViewTransition(direction: 'left' | 'right', navigate: () => void): void {
+  const content = contentElement()
+  if (!content) {
+    navigate()
+    return
+  }
+
+  prepareViewTransitionTarget()
+  installViewTransitionStyles()
+
+  const html = document.documentElement
+  html.classList.remove('prepza-nav-left', 'prepza-nav-right')
+  html.classList.add(direction === 'left' ? 'prepza-nav-left' : 'prepza-nav-right')
+
+  const startViewTransition = (document as Document & {
+    startViewTransition?: (update: () => void) => { finished?: Promise<void> }
+  }).startViewTransition
+
+  if (!startViewTransition) {
+    cancelSwipeAnimation()
+    content.animate(
+      [
+        { transform: `translate3d(${swipeDeltaX}px,0,0)` },
+        { transform: `translate3d(${direction === 'left' ? -100 : 100}%,0,0)` },
+      ],
+      { duration: 240, easing: MOTION_EASE, fill: 'forwards' },
+    ).onfinish = () => {
+      navigate()
+      resetContentTransform()
+    }
+    return
+  }
+
+  // The browser captures the current page and the next page before animating
+  // them as two adjacent layers. This prevents the blank-frame problem caused
+  // by replacing the React screen only after the old page has left the viewport.
+  startViewTransition(() => {
+    resetContentTransform()
+    navigate()
+  }).finished?.finally(() => {
+    html.classList.remove('prepza-nav-left', 'prepza-nav-right')
+    resetContentTransform()
+  })
+}
+
 function animateBack(): void {
   const content = contentElement()
   if (!content) return
@@ -97,53 +193,6 @@ function animateBack(): void {
   }
 }
 
-function finishNavigation(direction: 'left' | 'right', navigate: () => void): void {
-  const content = contentElement()
-  if (!content) {
-    navigate()
-    return
-  }
-
-  cancelSwipeAnimation()
-  content.style.willChange = 'transform'
-  const sign = direction === 'left' ? -1 : 1
-  const viewportDistance = Math.max(window.innerWidth, content.clientWidth || 0)
-
-  // A pager completes the same gesture the user started: the current page
-  // finishes moving off-screen, then the newly selected page arrives from
-  // the opposite side. The bottom navigation is outside this element and
-  // therefore does not move with it.
-  swipeAnimation = content.animate(
-    [
-      { transform: `translate3d(${swipeDeltaX}px,0,0)` },
-      { transform: `translate3d(${sign * viewportDistance}px,0,0)` },
-    ],
-    { duration: 210, easing: MOTION_EASE, fill: 'forwards' },
-  )
-
-  swipeAnimation.onfinish = () => {
-    swipeAnimation = null
-    navigate()
-
-    requestAnimationFrame(() => {
-      const enterDistance = Math.max(window.innerWidth, content.clientWidth || 0)
-      content.style.transform = `translate3d(${-sign * enterDistance}px,0,0)`
-      content.style.willChange = 'transform'
-      swipeAnimation = content.animate(
-        [
-          { transform: `translate3d(${-sign * enterDistance}px,0,0)` },
-          { transform: 'translate3d(0,0,0)' },
-        ],
-        { duration: 210, easing: MOTION_EASE, fill: 'forwards' },
-      )
-      swipeAnimation.onfinish = () => {
-        swipeAnimation = null
-        resetContentTransform()
-      }
-    })
-  }
-}
-
 function navigateBySwipe(direction: 'next' | 'previous'): void {
   const buttons = primaryButtons()
   if (!buttons.length) return
@@ -155,7 +204,7 @@ function navigateBySwipe(direction: 'next' | 'previous'): void {
   }
 
   lastKnownIndex = nextIndex
-  finishNavigation(direction === 'next' ? 'left' : 'right', () => buttons[nextIndex].click())
+  runViewTransition(direction === 'next' ? 'left' : 'right', () => buttons[nextIndex].click())
 }
 
 function isHorizontalScroller(target: EventTarget | null): boolean {
@@ -179,10 +228,12 @@ export function installNavigationTransitions(): void {
     const index = buttons.findIndex(button => button === target)
     if (index >= 0) lastKnownIndex = index
     prepareNavColorTransitions()
+    prepareViewTransitionTarget()
   }, true)
 
   const initializeNav = () => {
     prepareNavColorTransitions()
+    prepareViewTransitionTarget()
     const buttons = primaryButtons()
     if (buttons.length) lastKnownIndex = activeNavIndex(buttons)
   }
@@ -198,6 +249,7 @@ export function installNavigationTransitions(): void {
     cancelSwipeAnimation()
     resetContentTransform()
     prepareNavColorTransitions()
+    prepareViewTransitionTarget()
     swipeStartX = event.touches[0]?.clientX ?? null
     swipeStartY = event.touches[0]?.clientY ?? null
     swipeTarget = event.target
