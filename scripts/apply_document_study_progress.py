@@ -29,12 +29,14 @@ def patch_native_reader(s):
     if old_state in s and 'readerUserId' not in s:
         s = s.replace(old_state, new_state, 1)
 
-    s = s.replace("api<{csrf_token:string}>('/me')", "api<{csrf_token:string; id:number}>('/me')", 1)
+    old_me = "api<{csrf_token:string}>('/me')"
+    if old_me in s:
+        s = s.replace(old_me, "api<{csrf_token:string; id:number}>('/me')", 1)
 
-    old_then = ".then(([detail, progress, me]) => { if (cancelled) return; const userId = Number(me.id); const userKey = `prepza-reading-progress:${userId}:${activeDocumentId}`; const localPage = (() => { try { return Math.max(0, Number(localStorage.getItem(userKey) || 0) || 0) } catch { return 0 } })(); const restoredPage = Math.max(0, localPage || progress.page_num || 0); setReaderUserId(userId); setDoc(detail); setPage(restoredPage); setSavedPage(progress.page_num || 0); saveLocalPage(restoredPage, userKey); setCsrfToken(me.csrf_token) })"
-    new_then = old_then
-    if old_then not in s:
-        raise SystemExit('native reader load callback anchor not found')
+    old_then = ".then(([detail, progress, me]) => { if (cancelled) return; setDoc(detail); setPage(progress.page_num || 0); setSavedPage(progress.page_num || 0); setCsrfToken(me.csrf_token) })"
+    new_then = ".then(([detail, progress, me]) => { if (cancelled) return; const userId = Number(me.id); const userKey = `prepza-reading-progress:${userId}:${activeDocumentId}`; const localPage = (() => { try { return Math.max(0, Number(localStorage.getItem(userKey) || 0) || 0) } catch { return 0 } })(); const restoredPage = Math.max(0, localPage || progress.page_num || 0); setReaderUserId(userId); setDoc(detail); setPage(restoredPage); setSavedPage(progress.page_num || 0); saveLocalPage(restoredPage, userKey); setCsrfToken(me.csrf_token) })"
+    if old_then in s:
+        s = s.replace(old_then, new_then, 1)
 
     old_post = "api(`/documents/${activeDocumentId}/reading`, {method:'POST', headers:{'X-CSRF-Token':csrfToken}, body:JSON.stringify({page_num:page})}).then(()=>setSavedPage(page)).catch(()=>{})"
     new_post = "api(`/documents/${activeDocumentId}/reading`, {method:'POST', headers:{'X-CSRF-Token':csrfToken, 'X-Prepza-Offline-Queue':'true'}, body:JSON.stringify({page_num:page})}).then(()=>setSavedPage(page)).catch(()=>{})"
