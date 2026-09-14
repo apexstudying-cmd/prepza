@@ -8,6 +8,9 @@ let lastKnownIndex: number | null = null
 let swipeAnimation: Animation | null = null
 
 const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile']
+const SWIPE_THRESHOLD = 72
+const FOLLOW_FACTOR = 0.82
+const MOTION_EASE = 'cubic-bezier(.16,1,.3,1)'
 
 function navLabel(button: HTMLElement): string {
   return `${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''} ${button.textContent || ''}`.trim().toLowerCase()
@@ -61,6 +64,23 @@ function resetRootTransform(): void {
   root.style.willChange = ''
 }
 
+function animateBack(): void {
+  const root = rootElement()
+  if (!root) return
+  cancelSwipeAnimation()
+  swipeAnimation = root.animate(
+    [
+      { transform: `translate3d(${swipeDeltaX}px,0,0)` },
+      { transform: 'translate3d(0,0,0)' },
+    ],
+    { duration: 360, easing: MOTION_EASE, fill: 'forwards' },
+  )
+  swipeAnimation.onfinish = () => {
+    swipeAnimation = null
+    resetRootTransform()
+  }
+}
+
 function finishNavigation(direction: 'left' | 'right', navigate: () => void): void {
   const root = rootElement()
   if (!root) {
@@ -69,16 +89,16 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
   }
 
   cancelSwipeAnimation()
-  root.style.willChange = 'transform, opacity'
+  root.style.willChange = 'transform'
   const sign = direction === 'left' ? -1 : 1
-  const exitDistance = Math.min(window.innerWidth * 0.20, 120)
+  const exitDistance = Math.min(window.innerWidth * 0.16, 96)
 
   swipeAnimation = root.animate(
     [
-      { transform: `translate3d(${swipeDeltaX}px,0,0)`, opacity: 1 },
-      { transform: `translate3d(${sign * exitDistance}px,0,0)`, opacity: .78 },
+      { transform: `translate3d(${swipeDeltaX}px,0,0)` },
+      { transform: `translate3d(${sign * exitDistance}px,0,0)` },
     ],
-    { duration: 150, easing: 'cubic-bezier(.32,.72,0,1)', fill: 'forwards' },
+    { duration: 190, easing: MOTION_EASE, fill: 'forwards' },
   )
 
   swipeAnimation.onfinish = () => {
@@ -86,14 +106,14 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
     navigate()
 
     requestAnimationFrame(() => {
-      root.style.transform = `translate3d(${-sign * Math.min(window.innerWidth * .10, 64)}px,0,0)`
-      root.style.opacity = '.78'
+      root.style.transform = `translate3d(${-sign * Math.min(window.innerWidth * 0.09, 56)}px,0,0)`
+      root.style.willChange = 'transform'
       swipeAnimation = root.animate(
         [
-          { transform: root.style.transform, opacity: .78 },
-          { transform: 'translate3d(0,0,0)', opacity: 1 },
+          { transform: root.style.transform },
+          { transform: 'translate3d(0,0,0)' },
         ],
-        { duration: 280, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' },
+        { duration: 360, easing: MOTION_EASE, fill: 'forwards' },
       )
       swipeAnimation.onfinish = () => {
         swipeAnimation = null
@@ -109,21 +129,7 @@ function navigateBySwipe(direction: 'next' | 'previous'): void {
   const active = activeNavIndex(buttons)
   const nextIndex = direction === 'next' ? active + 1 : active - 1
   if (nextIndex < 0 || nextIndex >= buttons.length) {
-    const root = rootElement()
-    if (root && swipeActive) {
-      cancelSwipeAnimation()
-      swipeAnimation = root.animate(
-        [
-          { transform: `translate3d(${swipeDeltaX}px,0,0)` },
-          { transform: 'translate3d(0,0,0)' },
-        ],
-        { duration: 220, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' },
-      )
-      swipeAnimation.onfinish = () => {
-        swipeAnimation = null
-        resetRootTransform()
-      }
-    }
+    animateBack()
     return
   }
 
@@ -145,8 +151,6 @@ export function installNavigationTransitions(): void {
   if (installed || typeof document === 'undefined') return
   installed = true
 
-  // Direct taps retain the app's normal instant navigation. The enhanced motion
-  // is reserved for touch swipes so tapping never gets a double transition.
   document.addEventListener('click', event => {
     const target = event.target instanceof HTMLElement ? event.target.closest('button') as HTMLElement | null : null
     if (!target || !isPrimaryNavButton(target) || swipeActive) return
@@ -173,47 +177,30 @@ export function installNavigationTransitions(): void {
     const dx = (event.touches[0]?.clientX ?? swipeStartX) - swipeStartX
     const dy = (event.touches[0]?.clientY ?? swipeStartY) - swipeStartY
 
-    // A vertical gesture belongs to the page scroll. Only take ownership after
-    // the horizontal direction is clearly established.
     if (!swipeActive && Math.abs(dy) > Math.abs(dx) * 1.15) return
     if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy) * 1.15) return
 
     swipeActive = true
-    const resistance = Math.abs(dx) > window.innerWidth * .55 ? .30 : .58
-    swipeDeltaX = dx * resistance
+    swipeDeltaX = dx * FOLLOW_FACTOR
 
     const root = rootElement()
     if (root) {
-      root.style.willChange = 'transform, opacity'
+      root.style.willChange = 'transform'
       root.style.transform = `translate3d(${swipeDeltaX}px,0,0)`
-      root.style.opacity = String(1 - Math.min(Math.abs(swipeDeltaX) / 900, .12))
+      root.style.opacity = '1'
     }
   }, { passive: true, capture: true })
 
   document.addEventListener('touchend', () => {
     if (swipeStartX == null || swipeStartY == null) return
 
-    const dx = swipeDeltaX / .58
-    const shouldNavigate = swipeActive && Math.abs(dx) >= 72
+    const rawDx = swipeDeltaX / FOLLOW_FACTOR
+    const shouldNavigate = swipeActive && Math.abs(rawDx) >= SWIPE_THRESHOLD
 
     if (shouldNavigate) {
-      navigateBySwipe(dx < 0 ? 'next' : 'previous')
+      navigateBySwipe(rawDx < 0 ? 'next' : 'previous')
     } else if (swipeActive) {
-      const root = rootElement()
-      if (root) {
-        cancelSwipeAnimation()
-        swipeAnimation = root.animate(
-          [
-            { transform: `translate3d(${swipeDeltaX}px,0,0)`, opacity: parseFloat(root.style.opacity || '1') },
-            { transform: 'translate3d(0,0,0)', opacity: 1 },
-          ],
-          { duration: 220, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' },
-        )
-        swipeAnimation.onfinish = () => {
-          swipeAnimation = null
-          resetRootTransform()
-        }
-      }
+      animateBack()
     }
 
     swipeStartX = null
