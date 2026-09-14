@@ -38,6 +38,18 @@ html, body {
   background: linear-gradient(135deg, #0B1437 0%, #1a2a6e 50%, #0B1437 100%);
 }
 
+/*
+ * App.tsx owns the primary navigation as a normal flex child of the app shell.
+ * Reserve a real bottom zone on that shell instead of relying on a runtime
+ * DOM scanner or on safe-area-inset-bottom being non-zero on every Android
+ * standalone-PWA configuration. The selector intentionally targets only the
+ * navigation div (the shell's last div); the optional admin control is a
+ * button and therefore is not matched.
+ */
+#root > div > div:last-of-type {
+  margin-bottom: max(24px, env(safe-area-inset-bottom, 0px)) !important;
+}
+
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
