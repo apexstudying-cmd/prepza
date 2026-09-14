@@ -23,12 +23,12 @@ if generation_replay not in s:
         raise SystemExit('API options anchor not found')
     s = s.replace(anchor, anchor + generation_replay, 1)
 
-hook = """  if (res.ok && /^\\/library\\/\\d+\\/save$/.test(path) && body && Number.isInteger(Number(body.document_id))) {\n    try {\n      await saveStudyHubDocumentOffline(Number(body.document_id))\n      body.offline_available = true\n    } catch (_) {\n      body.offline_available = false\n    }\n  }\n\n  if (res.ok) await saveGeneratedMaterialOffline(path, requestBody, body)\n  body = mergeOfflineStudyResponse(path, body)\n"""
+hook = """  if (/^\\/library\\/\\d+\\/save$/.test(path) && body && Number.isInteger(Number(body.document_id))) {\n    try {\n      await saveStudyHubDocumentOffline(Number(body.document_id))\n      body.offline_available = true\n    } catch (_) {\n      body.offline_available = false\n    }\n  }\n\n  await saveGeneratedMaterialOffline(path, requestBody, body)\n  body = mergeOfflineStudyResponse(path, body)\n"""
 if hook not in s:
-    anchor = "  if (!res.ok) {\n    throw new ApiError((body && body.error) || `Request failed (${res.status})`, res.status)\n  }\n"
+    anchor = "  return body as T\n}"
     if anchor not in s:
-        raise SystemExit('API success anchor not found')
-    s = s.replace(anchor, anchor + hook, 1)
+        raise SystemExit('API return anchor not found')
+    s = s.replace(anchor, hook + anchor, 1)
 
 module_sync = """\nif (typeof window !== 'undefined') {\n  window.addEventListener('online', () => void syncOfflineStudyActivity())\n  window.setTimeout(() => void syncOfflineStudyActivity(), 1500)\n}\n"""
 if module_sync not in s:
