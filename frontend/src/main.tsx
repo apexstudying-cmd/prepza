@@ -16,33 +16,44 @@ import { installGlobalPullRefresh } from './crypto/globalPullRefresh'
 import App from './App'
 import './index.css'
 
-class StartupErrorBoundary extends React.Component<React.PropsWithChildren, { error: Error | null }> {
-  state = { error: null as Error | null }
+type BootstrapError = Error & { digest?: string }
 
-  static getDerivedStateFromError(error: Error) {
+class StartupErrorBoundary extends React.Component<React.PropsWithChildren, { error: BootstrapError | null; info: string }> {
+  state = { error: null as BootstrapError | null, info: '' }
+
+  static getDerivedStateFromError(error: BootstrapError) {
     return { error }
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+  componentDidCatch(error: BootstrapError, info: React.ErrorInfo) {
     console.error('[Prepza] frontend render failure', error, info)
-    try {
-      localStorage.setItem('prepza-last-render-error', JSON.stringify({
-        message: error?.message || 'Unknown render error',
-        stack: error?.stack || '',
-        componentStack: info?.componentStack || '',
-        at: Date.now(),
-      }))
-    } catch {}
+    const diagnostic = JSON.stringify({
+      message: error?.message || 'Unknown render error',
+      stack: error?.stack || '',
+      componentStack: info?.componentStack || '',
+      digest: error?.digest || '',
+      at: Date.now(),
+    })
+    this.setState({ error, info: info?.componentStack || '' })
+    try { localStorage.setItem('prepza-last-render-error', diagnostic) } catch {}
   }
 
   render() {
     if (!this.state.error) return this.props.children
+    const message = this.state.error.message || 'Unknown frontend error'
+    const component = this.state.info || 'No component stack available'
     return (
-      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#0B1437', color: '#fff', fontFamily: 'system-ui, sans-serif', textAlign: 'center' }}>
-        <div style={{ width: '100%', maxWidth: 420 }}>
+      <div style={{ minHeight: '100dvh', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#0B1437', color: '#fff', fontFamily: 'system-ui, sans-serif', textAlign: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 520 }}>
           <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 10 }}>Prepza could not open</div>
-          <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 14, lineHeight: 1.5, marginBottom: 20 }}>The app hit a frontend error. Your account and study data are still on the server.</div>
+          <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 14, lineHeight: 1.5, marginBottom: 18 }}>The app hit a frontend error. Your account and study data are still on the server.</div>
           <button type="button" onClick={() => window.location.reload()} style={{ border: 0, borderRadius: 10, padding: '11px 18px', background: '#C9A84C', color: '#0B1437', fontWeight: 800 }}>Reload Prepza</button>
+          <details style={{ marginTop: 22, textAlign: 'left', color: 'rgba(255,255,255,.72)', fontSize: 11 }}>
+            <summary style={{ cursor: 'pointer' }}>Technical details</summary>
+            <div style={{ marginTop: 10, padding: 12, background: 'rgba(255,255,255,.06)', borderRadius: 10, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              <strong>{message}</strong>{'\n\n'}{component}
+            </div>
+          </details>
         </div>
       </div>
     )
@@ -63,9 +74,6 @@ const root = ReactDOM.createRoot(document.getElementById('root')!, {
   onRecoverableError: (error, info) => console.warn('[Prepza] recoverable React error', error, info),
 })
 
-// Render the application before any optional enhancement can execute. A
-// navigation, chat, E2EE, or offline enhancement must never be able to prevent
-// the core React tree from appearing on a production client.
 root.render(
   <React.StrictMode>
     <StartupErrorBoundary>
@@ -77,8 +85,6 @@ root.render(
   </React.StrictMode>,
 )
 
-// Install integrations after the core tree has been handed to React. Each is
-// isolated so one bad enhancement cannot blank the entire application.
 installSafely('Study Ada fetch guard', installStudyAdaFetchGuard)
 installSafely('E2EE fetch bridge', installE2EEFetchBridge)
 installSafely('direct chat E2EE', installDirectChatE2EE)
@@ -92,6 +98,4 @@ installSafely('chat UI polish', installChatUiPolish)
 installSafely('navigation transitions', installNavigationTransitions)
 installSafely('global pull refresh', installGlobalPullRefresh)
 
-// E2EE is automatic: establish this device's identity in the background.
-// The private key stays local; only the public key is registered server-side.
 void ensureE2EEIdentityReady().catch((error) => console.warn('[Prepza] E2EE identity setup deferred', error))
