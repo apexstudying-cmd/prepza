@@ -1,22 +1,14 @@
 // Prepza application-shell service worker.
 // Tier O1: reliable app-shell caching, fast navigation fallback, and safe
 // background updates. API/data caching belongs to later offline tiers.
-const SW_VERSION = 'v7';
+const SW_VERSION = 'v8';
 const SHELL_CACHE = `prepza-shell-${SW_VERSION}`;
 const RUNTIME_CACHE = `prepza-runtime-${SW_VERSION}`;
 const NAV_TIMEOUT_MS = 1800;
 
-const CORE_SHELL = [
-  '/',
-  '/offline.html',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-];
+const CORE_SHELL = ['/', '/offline.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
-function sameOrigin(url) {
-  return url.origin === self.location.origin;
-}
+function sameOrigin(url) { return url.origin === self.location.origin; }
 
 function isCacheableAsset(request) {
   if (request.method !== 'GET') return false;
@@ -41,34 +33,22 @@ async function precacheShell() {
     try {
       const response = await fetch(url, { cache: 'no-store' });
       if (response.ok) await cache.put(url, response);
-    } catch (_) {
-      // A first install can happen during a transient network failure.
-    }
+    } catch (_) {}
   }));
 
-  // Vite emits hashed JS/CSS into /assets. Cache the exact files referenced
-  // by the production HTML so the shell can boot without the network.
   try {
     const response = await fetch('/', { cache: 'no-store' });
     if (!response.ok) return;
     const html = await response.text();
-    await cache.put('/', new Response(html, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    }));
-
+    await cache.put('/', new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
     const urls = new Set();
-    const patterns = [
-      /<script[^>]+src=["']([^"']+)["']/gi,
-      /<link[^>]+href=["']([^"']+)["']/gi,
-    ];
+    const patterns = [/<script[^>]+src=["']([^"']+)["']/gi, /<link[^>]+href=["']([^"']+)["']/gi];
     for (const pattern of patterns) {
       let match;
       while ((match = pattern.exec(html))) {
         try {
           const asset = new URL(match[1], self.location.origin);
-          if (sameOrigin(asset) && isCacheableAsset(new Request(asset.href))) {
-            urls.add(asset.href);
-          }
+          if (sameOrigin(asset) && isCacheableAsset(new Request(asset.href))) urls.add(asset.href);
         } catch (_) {}
       }
     }
@@ -78,13 +58,14 @@ async function precacheShell() {
         if (assetResponse.ok) await cache.put(url, assetResponse);
       } catch (_) {}
     }));
-  } catch (_) {
-    // Core shell entries remain useful even if HTML discovery fails.
-  }
+  } catch (_) {}
 }
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(precacheShell());
+  // Activate the new shell as soon as its required assets are safely cached.
+  // This prevents an older waiting worker from being the one used by a cold
+  // offline PWA launch after a deployment.
+  event.waitUntil(precacheShell().then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -104,9 +85,7 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
-function timeout(ms) {
-  return new Promise((_, reject) => setTimeout(() => reject(new Error('nav-timeout')), ms));
-}
+function timeout(ms) { return new Promise((_, reject) => setTimeout(() => reject(new Error('nav-timeout')), ms)); }
 
 async function handleNavigation(request) {
   const network = fetch(request).then(async (response) => {
@@ -116,7 +95,6 @@ async function handleNavigation(request) {
     }
     return response;
   });
-
   try {
     const response = await Promise.race([network, timeout(NAV_TIMEOUT_MS)]);
     if (response && response.ok) return response;
@@ -133,7 +111,6 @@ async function handleNavigation(request) {
 async function handleAsset(request) {
   const cached = await caches.match(request, { ignoreSearch: true });
   if (cached) return cached;
-
   try {
     const response = await fetch(request);
     return await cacheResponse(RUNTIME_CACHE, request, response);
@@ -149,31 +126,22 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(handleNavigation(request));
     return;
   }
-  if (isCacheableAsset(request)) {
-    event.respondWith(handleAsset(request));
-  }
+  if (isCacheableAsset(request)) event.respondWith(handleAsset(request));
 });
 
 self.addEventListener('push', (event) => {
   let payload = { title: 'Prepza', body: '' };
-  try {
-    if (event.data) payload = event.data.json();
-  } catch (_) {
-    payload.body = event.data ? event.data.text() : '';
-  }
-  event.waitUntil(
-    self.registration.showNotification(payload.title || 'Prepza', { body: payload.body || '' }),
-  );
+  try { if (event.data) payload = event.data.json(); }
+  catch (_) { payload.body = event.data ? event.data.text() : ''; }
+  event.waitUntil(self.registration.showNotification(payload.title || 'Prepza', { body: payload.body || '' }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {
-      for (const client of clientsList) {
-        if ('focus' in client) return client.focus();
-      }
-      if (self.clients.openWindow) return self.clients.openWindow('/');
-    }),
-  );
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {
+    for (const client of clientsList) {
+      if ('focus' in client) return client.focus();
+    }
+    if (self.clients.openWindow) return self.clients.openWindow('/');
+  }));
 });
