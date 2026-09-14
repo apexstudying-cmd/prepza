@@ -4,6 +4,9 @@ let installed = false
 let fetchInstalled = false
 let scanQueued = false
 let renderingDates = false
+let activeConversationId: number | null = null
+let pullStartY: number | null = null
+let pullTriggered = false
 
 function pathOf(input: RequestInfo | URL): string {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.pathname + input.search : input.url
@@ -51,7 +54,9 @@ function installFetchCapture() {
   window.fetch = async (input, init) => {
     const response = await original(input, init)
     const path = pathOf(input)
-    if (/^\/chats\/\d+\/messages(?:\?.*)?$/.test(path)) {
+    const match = path.match(/^\/chats\/(\d+)\/messages(?:\?.*)?$/)
+    if (match) {
+      activeConversationId = Number(match[1])
       response.clone().json().then((body: unknown) => {
         const messages = Array.isArray((body as { messages?: unknown[] })?.messages)
           ? (body as { messages: unknown[] }).messages
@@ -94,16 +99,46 @@ function applyBubbleTheme(row: HTMLElement, darkMode: boolean) {
   row.dataset.prepzaMine = mine ? '1' : '0'
   row.dataset.prepzaDark = darkMode ? '1' : '0'
 
+  const replyButton = bubble.querySelector<HTMLButtonElement>('button[title="Reply"]')
+  const reactButton = bubble.querySelector<HTMLButtonElement>('button[title="React"]')
+  if (replyButton) replyButton.style.display = 'none'
+  if (reactButton) reactButton.style.display = 'none'
+
   if (darkMode) {
     bubble.style.background = mine ? '#19345f' : '#2a2f3a'
     bubble.style.color = '#f5f7fa'
     bubble.style.borderColor = mine ? 'transparent' : '#3a414d'
-  } else if (row.dataset.prepzaBubblePatched === '1') {
-    bubble.style.background = ''
-    bubble.style.color = ''
-    bubble.style.borderColor = ''
+  } else {
+    // Light mode: keep sent and received bubbles intentionally neutral and equal.
+    bubble.style.background = '#ffffff'
+    bubble.style.color = '#17233f'
+    bubble.style.borderColor = row.dataset.prepzaIsReply === '1' ? 'rgba(23,35,63,.55)' : 'rgba(23,35,63,.12)'
   }
   row.dataset.prepzaBubblePatched = '1'
+
+  const quoted = bubble.querySelector<HTMLElement>('button:not([title])')
+  if (quoted && quoted.textContent?.trim()) {
+    quoted.style.display = 'block'
+    quoted.style.minHeight = '30px'
+    quoted.style.visibility = 'visible'
+    quoted.style.opacity = '1'
+    quoted.style.borderLeft = `3px solid ${N.gold}`
+    quoted.style.background = darkMode ? 'rgba(255,255,255,.09)' : 'rgba(23,35,63,.06)'
+    quoted.style.color = darkMode ? 'rgba(255,255,255,.88)' : '#17233f'
+  }
+}
+
+function markReplyRows(rows: HTMLElement[]) {
+  const rowById = new Map<number, HTMLElement>()
+  rows.forEach(row => rowById.set(Number(row.id.slice(MESSAGE_PREFIX.length)), row))
+  rows.forEach(row => {
+    const bubble = Array.from(row.children).find(child => child instanceof HTMLElement && child.querySelector('button[title="React"]')) as HTMLElement | undefined
+    const quoted = bubble?.querySelector<HTMLElement>('button:not([title])')
+    const isReply = Boolean(quoted && quoted.textContent?.trim())
+    row.dataset.prepzaIsReply = isReply ? '1' : '0'
+    const target = quoted ? quoted.textContent?.trim() : ''
+    if (target && !rowById.size) return
+  })
 }
 
 function renderDateSeparators(surface: HTMLElement, rows: HTMLElement[]) {
@@ -135,6 +170,27 @@ function renderDateSeparators(surface: HTMLElement, rows: HTMLElement[]) {
   }
 }
 
+function installPullToRefresh(surface: HTMLElement) {
+  if (surface.dataset.prepzaPullRefresh === '1') return
+  surface.dataset.prepzaPullRefresh = '1'
+  surface.addEventListener('touchstart', event => {
+    if (surface.scrollTop > 2) return
+    pullStartY = event.touches[0]?.clientY ?? null
+    pullTriggered = false
+  }, { passive: true })
+  surface.addEventListener('touchmove', event => {
+    if (pullStartY == null || pullTriggered || surface.scrollTop > 2) return
+    const distance = (event.touches[0]?.clientY ?? pullStartY) - pullStartY
+    if (distance < 72) return
+    pullTriggered = true
+    if (activeConversationId != null) {
+      window.dispatchEvent(new CustomEvent('prepza-realtime-message', { detail: { conversation_id: activeConversationId, refresh: true } }))
+    }
+  }, { passive: true })
+  surface.addEventListener('touchend', () => { pullStartY = null }, { passive: true })
+  surface.addEventListener('touchcancel', () => { pullStartY = null }, { passive: true })
+}
+
 function scan() {
   const rows = Array.from(document.querySelectorAll<HTMLElement>(`[id^="${MESSAGE_PREFIX}"]`))
   if (!rows.length) return
@@ -145,7 +201,9 @@ function scan() {
   surface.style.overscrollBehaviorY = 'contain'
   surface.style.overscrollBehavior = 'contain'
   surface.style.touchAction = 'pan-y'
+  installPullToRefresh(surface)
   const darkMode = surfaceIsDark(surface)
+  markReplyRows(rows)
   rows.forEach(row => applyBubbleTheme(row, darkMode))
   renderDateSeparators(surface, rows)
 }
