@@ -1,17 +1,20 @@
 let installed = false
+let lastKnownIndex: number | null = null
+let activePointerId: number | null = null
 let swipeStartX: number | null = null
 let swipeStartY: number | null = null
-let swipeTarget: EventTarget | null = null
 let swipeDeltaX = 0
 let swipeActive = false
-let lastKnownIndex: number | null = null
+let swipeTarget: EventTarget | null = null
 let swipeAnimation: Animation | null = null
+let navigationInProgress = false
 
 const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile']
-const SWIPE_THRESHOLD = 72
+const SWIPE_THRESHOLD = 56
 const FOLLOW_FACTOR = 1
 const MOTION_EASE = 'cubic-bezier(.22,.8,.22,1)'
 const COLOR_EASE = 'color 220ms cubic-bezier(.22,.8,.22,1)'
+const TRANSITION_DURATION = 240
 
 function navLabel(button: HTMLElement): string {
   return `${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''} ${button.textContent || ''}`.trim().toLowerCase()
@@ -25,7 +28,9 @@ function isPrimaryNavButton(button: HTMLElement): boolean {
 
 function primaryButtons(): HTMLButtonElement[] {
   const found = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter(isPrimaryNavButton)
-  return PRIMARY_NAV_LABELS.map(label => found.find(button => navLabel(button).includes(label)) || null).filter(Boolean) as HTMLButtonElement[]
+  return PRIMARY_NAV_LABELS
+    .map(label => found.find(button => navLabel(button).includes(label)) || null)
+    .filter(Boolean) as HTMLButtonElement[]
 }
 
 function activeNavIndex(buttons: HTMLButtonElement[]): number {
@@ -69,7 +74,7 @@ function resetContentTransform(): void {
 
 function prepareNavColorTransitions(): void {
   primaryButtons().forEach(button => {
-    if (!button.style.transition.includes('color 220ms cubic-bezier(.22,.8,.22,1)')) {
+    if (!button.style.transition.includes(COLOR_EASE)) {
       button.style.transition = button.style.transition
         ? `${button.style.transition}, ${COLOR_EASE}`
         : COLOR_EASE
@@ -77,103 +82,74 @@ function prepareNavColorTransitions(): void {
   })
 }
 
-function installViewTransitionStyles(): void {
-  if (document.getElementById('prepza-primary-nav-transition-styles')) return
-
-  const style = document.createElement('style')
-  style.id = 'prepza-primary-nav-transition-styles'
-  style.textContent = `
-    @keyframes prepza-nav-old-left {
-      from { transform: translateX(0); }
-      to { transform: translateX(-100%); }
-    }
-    @keyframes prepza-nav-old-right {
-      from { transform: translateX(0); }
-      to { transform: translateX(100%); }
-    }
-    @keyframes prepza-nav-new-left {
-      from { transform: translateX(100%); }
-      to { transform: translateX(0); }
-    }
-    @keyframes prepza-nav-new-right {
-      from { transform: translateX(-100%); }
-      to { transform: translateX(0); }
-    }
-
-    ::view-transition-old(prepza-primary-content),
-    ::view-transition-new(prepza-primary-content) {
-      animation-duration: 240ms;
-      animation-timing-function: cubic-bezier(.22,.8,.22,1);
-      animation-fill-mode: both;
-      mix-blend-mode: normal;
-    }
-
-    html.prepza-nav-left ::view-transition-old(prepza-primary-content) {
-      animation-name: prepza-nav-old-left;
-    }
-    html.prepza-nav-left ::view-transition-new(prepza-primary-content) {
-      animation-name: prepza-nav-new-left;
-    }
-    html.prepza-nav-right ::view-transition-old(prepza-primary-content) {
-      animation-name: prepza-nav-old-right;
-    }
-    html.prepza-nav-right ::view-transition-new(prepza-primary-content) {
-      animation-name: prepza-nav-new-right;
-    }
-  `
-  document.head.appendChild(style)
-}
-
-function prepareViewTransitionTarget(): void {
+function preparePagerSurface(): void {
   const content = contentElement()
   if (!content) return
-  content.style.viewTransitionName = 'prepza-primary-content'
-  content.style.contain = 'paint'
+  // Vertical scrolling remains native. Horizontal movement belongs to the
+  // pager, so Android Chrome does not steal the horizontal gesture.
+  content.style.touchAction = 'pan-y pinch-zoom'
+  content.style.overscrollBehaviorX = 'none'
 }
 
-function runViewTransition(direction: 'left' | 'right', navigate: () => void): void {
-  const content = contentElement()
-  if (!content) {
-    navigate()
-    return
+function copyScrollPositions(source: Element, target: Element): void {
+  if (source instanceof HTMLElement && target instanceof HTMLElement) {
+    target.scrollTop = source.scrollTop
+    target.scrollLeft = source.scrollLeft
   }
-
-  prepareViewTransitionTarget()
-  installViewTransitionStyles()
-
-  const html = document.documentElement
-  html.classList.remove('prepza-nav-left', 'prepza-nav-right')
-  html.classList.add(direction === 'left' ? 'prepza-nav-left' : 'prepza-nav-right')
-
-  const startViewTransition = (document as Document & {
-    startViewTransition?: (update: () => void) => { finished?: Promise<void> }
-  }).startViewTransition
-
-  if (!startViewTransition) {
-    cancelSwipeAnimation()
-    content.animate(
-      [
-        { transform: `translate3d(${swipeDeltaX}px,0,0)` },
-        { transform: `translate3d(${direction === 'left' ? -100 : 100}%,0,0)` },
-      ],
-      { duration: 240, easing: MOTION_EASE, fill: 'forwards' },
-    ).onfinish = () => {
-      navigate()
-      resetContentTransform()
-    }
-    return
+  const sourceChildren = Array.from(source.children)
+  const targetChildren = Array.from(target.children)
+  for (let i = 0; i < sourceChildren.length; i += 1) {
+    const targetChild = targetChildren[i]
+    if (targetChild) copyScrollPositions(sourceChildren[i], targetChild)
   }
+}
 
-  // The browser captures the current page and the next page before animating
-  // them as two adjacent layers. This prevents the blank-frame problem caused
-  // by replacing the React screen only after the old page has left the viewport.
-  startViewTransition(() => {
-    resetContentTransform()
-    navigate()
-  }).finished?.finally(() => {
-    html.classList.remove('prepza-nav-left', 'prepza-nav-right')
-    resetContentTransform()
+function stripCloneIds(root: Element): void {
+  if (root instanceof HTMLElement) root.removeAttribute('id')
+  root.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'))
+}
+
+function createOutgoingLayer(content: HTMLElement): HTMLElement | null {
+  const rect = content.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return null
+
+  const host = document.createElement('div')
+  host.setAttribute('aria-hidden', 'true')
+  host.dataset.prepzaNavLayer = 'outgoing'
+  Object.assign(host.style, {
+    position: 'fixed',
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+    overflow: 'hidden',
+    zIndex: '2147483645',
+    pointerEvents: 'none',
+    background: getComputedStyle(content).backgroundColor || 'transparent',
+    transform: `translate3d(${swipeDeltaX}px,0,0)`,
+    willChange: 'transform',
   })
+
+  const clone = content.cloneNode(true) as HTMLElement
+  stripCloneIds(clone)
+  Object.assign(clone.style, {
+    position: 'absolute',
+    left: '0',
+    top: '0',
+    width: `${content.offsetWidth}px`,
+    minHeight: `${content.offsetHeight}px`,
+    transform: 'none',
+    overflow: getComputedStyle(content).overflow,
+    pointerEvents: 'none',
+  })
+  host.appendChild(clone)
+  document.body.appendChild(host)
+  copyScrollPositions(content, clone)
+  return host
+}
+
+function cleanupOutgoingLayer(layer: HTMLElement | null): void {
+  layer?.remove()
 }
 
 function animateBack(): void {
@@ -185,12 +161,81 @@ function animateBack(): void {
       { transform: `translate3d(${swipeDeltaX}px,0,0)` },
       { transform: 'translate3d(0,0,0)' },
     ],
-    { duration: 240, easing: MOTION_EASE, fill: 'forwards' },
+    { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
   )
   swipeAnimation.onfinish = () => {
     swipeAnimation = null
     resetContentTransform()
   }
+}
+
+function finishNavigation(direction: 'left' | 'right', navigate: () => void): void {
+  if (navigationInProgress) return
+  const content = contentElement()
+  if (!content) {
+    navigate()
+    return
+  }
+
+  navigationInProgress = true
+  cancelSwipeAnimation()
+
+  // Keep the exact current screen visible while React replaces the page.
+  // The old screen is a visual layer; the newly rendered screen enters beside
+  // it in the same animation frame. This is the key difference from the old
+  // exit-then-render approach that produced a white frame.
+  const outgoingLayer = createOutgoingLayer(content)
+  const sign = direction === 'left' ? -1 : 1
+  const width = Math.max(window.innerWidth, content.clientWidth || 0)
+
+  content.style.visibility = 'hidden'
+  content.style.transform = `translate3d(${-sign * width}px,0,0)`
+  content.style.willChange = 'transform'
+
+  navigate()
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const nextContent = contentElement()
+      if (!nextContent) {
+        cleanupOutgoingLayer(outgoingLayer)
+        navigationInProgress = false
+        return
+      }
+
+      nextContent.style.visibility = 'visible'
+      nextContent.style.willChange = 'transform'
+      nextContent.style.transform = `translate3d(${-sign * width}px,0,0)`
+
+      const outgoingStart = swipeDeltaX
+      const outgoingEnd = sign * width
+      const incomingStart = -sign * width
+
+      const outgoingAnimation = outgoingLayer?.animate(
+        [
+          { transform: `translate3d(${outgoingStart}px,0,0)` },
+          { transform: `translate3d(${outgoingEnd}px,0,0)` },
+        ],
+        { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
+      )
+
+      const incomingAnimation = nextContent.animate(
+        [
+          { transform: `translate3d(${incomingStart}px,0,0)` },
+          { transform: 'translate3d(0,0,0)' },
+        ],
+        { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
+      )
+
+      Promise.allSettled([outgoingAnimation?.finished, incomingAnimation.finished]).then(() => {
+        cleanupOutgoingLayer(outgoingLayer)
+        resetContentTransform()
+        nextContent.style.visibility = ''
+        nextContent.style.willChange = ''
+        navigationInProgress = false
+      })
+    })
+  })
 }
 
 function navigateBySwipe(direction: 'next' | 'previous'): void {
@@ -204,7 +249,7 @@ function navigateBySwipe(direction: 'next' | 'previous'): void {
   }
 
   lastKnownIndex = nextIndex
-  runViewTransition(direction === 'next' ? 'left' : 'right', () => buttons[nextIndex].click())
+  finishNavigation(direction === 'next' ? 'left' : 'right', () => buttons[nextIndex].click())
 }
 
 function isHorizontalScroller(target: EventTarget | null): boolean {
@@ -217,23 +262,34 @@ function isHorizontalScroller(target: EventTarget | null): boolean {
   return false
 }
 
+function resetPointerState(): void {
+  swipeStartX = null
+  swipeStartY = null
+  swipeDeltaX = 0
+  swipeActive = false
+  swipeTarget = null
+  activePointerId = null
+}
+
 export function installNavigationTransitions(): void {
   if (installed || typeof document === 'undefined') return
   installed = true
 
   document.addEventListener('click', event => {
-    const target = event.target instanceof HTMLElement ? event.target.closest('button') as HTMLElement | null : null
-    if (!target || !isPrimaryNavButton(target) || swipeActive) return
+    const target = event.target instanceof HTMLElement
+      ? event.target.closest('button') as HTMLElement | null
+      : null
+    if (!target || !isPrimaryNavButton(target) || swipeActive || navigationInProgress) return
     const buttons = primaryButtons()
     const index = buttons.findIndex(button => button === target)
     if (index >= 0) lastKnownIndex = index
     prepareNavColorTransitions()
-    prepareViewTransitionTarget()
+    preparePagerSurface()
   }, true)
 
   const initializeNav = () => {
     prepareNavColorTransitions()
-    prepareViewTransitionTarget()
+    preparePagerSurface()
     const buttons = primaryButtons()
     if (buttons.length) lastKnownIndex = activeNavIndex(buttons)
   }
@@ -242,41 +298,63 @@ export function installNavigationTransitions(): void {
   window.setTimeout(initializeNav, 250)
   window.setTimeout(initializeNav, 1000)
 
-  document.addEventListener('touchstart', event => {
-    if (event.touches.length !== 1 || isHorizontalScroller(event.target)) return
+  document.addEventListener('pointerdown', event => {
+    if (navigationInProgress || event.pointerType === 'mouse' && event.button !== 0) return
+    if (event.isPrimary === false || isHorizontalScroller(event.target)) return
+
     const target = event.target instanceof HTMLElement ? event.target : null
-    if (target?.closest('input, textarea, [contenteditable="true"]')) return
+    if (target?.closest('input, textarea, [contenteditable="true"], button')) return
+
+    const content = contentElement()
+    if (!content) return
+
     cancelSwipeAnimation()
     resetContentTransform()
-    prepareNavColorTransitions()
-    prepareViewTransitionTarget()
-    swipeStartX = event.touches[0]?.clientX ?? null
-    swipeStartY = event.touches[0]?.clientY ?? null
+    preparePagerSurface()
+    swipeStartX = event.clientX
+    swipeStartY = event.clientY
     swipeTarget = event.target
     swipeDeltaX = 0
     swipeActive = false
-  }, { passive: true, capture: true })
+    activePointerId = event.pointerId
+  }, { capture: true })
 
-  document.addEventListener('touchmove', event => {
-    if (swipeStartX == null || swipeStartY == null || !swipeTarget || event.touches.length !== 1) return
-    const dx = (event.touches[0]?.clientX ?? swipeStartX) - swipeStartX
-    const dy = (event.touches[0]?.clientY ?? swipeStartY) - swipeStartY
+  document.addEventListener('pointermove', event => {
+    if (activePointerId == null || event.pointerId !== activePointerId || swipeStartX == null || swipeStartY == null) return
 
-    if (!swipeActive && Math.abs(dy) > Math.abs(dx) * 1.15) return
-    if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy) * 1.15) return
+    const dx = event.clientX - swipeStartX
+    const dy = event.clientY - swipeStartY
 
-    swipeActive = true
-    swipeDeltaX = dx * FOLLOW_FACTOR
+    if (!swipeActive) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+      if (Math.abs(dy) > Math.abs(dx) * 1.12) {
+        resetPointerState()
+        return
+      }
+      if (Math.abs(dx) <= Math.abs(dy)) return
+
+      const content = contentElement()
+      if (!content) return
+      try { content.setPointerCapture(event.pointerId) } catch { /* already captured or unavailable */ }
+      swipeActive = true
+    }
+
+    const buttons = primaryButtons()
+    const active = activeNavIndex(buttons)
+    const atStart = active <= 0 && dx > 0
+    const atEnd = active >= buttons.length - 1 && dx < 0
+    const resistance = atStart || atEnd ? 0.35 : FOLLOW_FACTOR
+    swipeDeltaX = dx * resistance
 
     const content = contentElement()
     if (content) {
       content.style.willChange = 'transform'
       content.style.transform = `translate3d(${swipeDeltaX}px,0,0)`
     }
-  }, { passive: true, capture: true })
+  }, { capture: true })
 
-  document.addEventListener('touchend', () => {
-    if (swipeStartX == null || swipeStartY == null) return
+  const finishPointer = (event: PointerEvent) => {
+    if (activePointerId == null || event.pointerId !== activePointerId) return
 
     const rawDx = swipeDeltaX / FOLLOW_FACTOR
     const shouldNavigate = swipeActive && Math.abs(rawDx) >= SWIPE_THRESHOLD
@@ -287,19 +365,9 @@ export function installNavigationTransitions(): void {
       animateBack()
     }
 
-    swipeStartX = null
-    swipeStartY = null
-    swipeTarget = null
-    swipeDeltaX = 0
-    swipeActive = false
-  }, { passive: true, capture: true })
+    resetPointerState()
+  }
 
-  document.addEventListener('touchcancel', () => {
-    swipeStartX = null
-    swipeStartY = null
-    swipeTarget = null
-    swipeDeltaX = 0
-    swipeActive = false
-    resetContentTransform()
-  }, { passive: true, capture: true })
+  document.addEventListener('pointerup', finishPointer, { capture: true })
+  document.addEventListener('pointercancel', finishPointer, { capture: true })
 }
