@@ -99,6 +99,17 @@ function createOutgoingLayer(content: HTMLElement): HTMLElement | null {
   const rect = content.getBoundingClientRect()
   if (rect.width <= 0 || rect.height <= 0) return null
 
+  const contentStyle = getComputedStyle(content)
+  const root = document.getElementById('root')
+  const appShell = root?.firstElementChild
+  const fallbackBackground = root ? getComputedStyle(root).backgroundColor : 'transparent'
+  const shellBackground = appShell instanceof HTMLElement ? getComputedStyle(appShell).backgroundColor : 'transparent'
+  const background = contentStyle.backgroundColor !== 'rgba(0, 0, 0, 0)'
+    ? contentStyle.backgroundColor
+    : shellBackground !== 'rgba(0, 0, 0, 0)'
+      ? shellBackground
+      : fallbackBackground
+
   const host = document.createElement('div')
   host.setAttribute('aria-hidden', 'true')
   host.dataset.prepzaNavLayer = 'outgoing'
@@ -109,11 +120,14 @@ function createOutgoingLayer(content: HTMLElement): HTMLElement | null {
     width: `${rect.width}px`,
     height: `${rect.height}px`,
     overflow: 'hidden',
+    boxSizing: 'border-box',
     zIndex: '40',
     pointerEvents: 'none',
-    background: getComputedStyle(content).backgroundColor || 'transparent',
+    background,
     transform: `translate3d(${swipeDeltaX}px,0,0)`,
     willChange: 'transform',
+    backfaceVisibility: 'hidden',
+    contain: 'paint',
   })
 
   const clone = content.cloneNode(true) as HTMLElement
@@ -125,8 +139,10 @@ function createOutgoingLayer(content: HTMLElement): HTMLElement | null {
     width: `${content.offsetWidth}px`,
     minHeight: `${content.offsetHeight}px`,
     transform: 'none',
-    overflow: getComputedStyle(content).overflow,
+    overflow: contentStyle.overflow,
+    background,
     pointerEvents: 'none',
+    backfaceVisibility: 'hidden',
   })
   host.appendChild(clone)
   document.body.appendChild(host)
@@ -166,49 +182,49 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
   const sign = direction === 'left' ? -1 : 1
   const width = Math.max(window.innerWidth, content.clientWidth || 0)
 
-  // The outgoing layer keeps the current screen painted while React changes
-  // the actual screen underneath it. The two screens then animate together.
+  // Keep the outgoing snapshot as the visible frame while React swaps the
+  // actual screen underneath it. The snapshot prevents a blank/white frame.
   content.style.visibility = 'hidden'
   content.style.transform = `translate3d(${-sign * width}px,0,0)`
   content.style.willChange = 'transform'
 
   navigate()
 
+  // One frame is enough for React to commit the destination. Waiting two
+  // frames created an unnecessary paint gap on slower Android devices.
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      const nextContent = contentElement()
-      if (!nextContent) {
-        outgoingLayer?.remove()
-        navigationInProgress = false
-        return
-      }
+    const nextContent = contentElement()
+    if (!nextContent) {
+      outgoingLayer?.remove()
+      navigationInProgress = false
+      return
+    }
 
-      nextContent.style.visibility = 'visible'
-      nextContent.style.willChange = 'transform'
-      nextContent.style.transform = `translate3d(${-sign * width}px,0,0)`
+    nextContent.style.visibility = 'visible'
+    nextContent.style.willChange = 'transform'
+    nextContent.style.transform = `translate3d(${-sign * width}px,0,0)`
 
-      const outgoingAnimation = outgoingLayer?.animate(
-        [
-          { transform: `translate3d(${swipeDeltaX}px,0,0)` },
-          { transform: `translate3d(${sign * width}px,0,0)` },
-        ],
-        { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
-      )
-      const incomingAnimation = nextContent.animate(
-        [
-          { transform: `translate3d(${-sign * width}px,0,0)` },
-          { transform: 'translate3d(0,0,0)' },
-        ],
-        { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
-      )
+    const outgoingAnimation = outgoingLayer?.animate(
+      [
+        { transform: `translate3d(${swipeDeltaX}px,0,0)` },
+        { transform: `translate3d(${sign * width}px,0,0)` },
+      ],
+      { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
+    )
+    const incomingAnimation = nextContent.animate(
+      [
+        { transform: `translate3d(${-sign * width}px,0,0)` },
+        { transform: 'translate3d(0,0,0)' },
+      ],
+      { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
+    )
 
-      Promise.allSettled([outgoingAnimation?.finished, incomingAnimation.finished]).then(() => {
-        outgoingLayer?.remove()
-        nextContent.style.visibility = ''
-        nextContent.style.willChange = ''
-        nextContent.style.transform = ''
-        navigationInProgress = false
-      })
+    Promise.allSettled([outgoingAnimation?.finished, incomingAnimation.finished]).then(() => {
+      outgoingLayer?.remove()
+      nextContent.style.visibility = ''
+      nextContent.style.willChange = ''
+      nextContent.style.transform = ''
+      navigationInProgress = false
     })
   })
 }
