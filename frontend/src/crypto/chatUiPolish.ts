@@ -109,10 +109,11 @@ function applyBubbleTheme(row: HTMLElement, darkMode: boolean) {
     bubble.style.color = '#f5f7fa'
     bubble.style.borderColor = mine ? 'transparent' : '#3a414d'
   } else {
-    // Light mode: keep sent and received bubbles intentionally neutral and equal.
-    bubble.style.background = '#ffffff'
+    // Light mode deliberately keeps sender and receiver visually distinct.
+    // Sender gets a subtle cool tint; receiver stays clean white.
+    bubble.style.background = mine ? '#e8eef9' : '#ffffff'
     bubble.style.color = '#17233f'
-    bubble.style.borderColor = row.dataset.prepzaIsReply === '1' ? 'rgba(23,35,63,.55)' : 'rgba(23,35,63,.12)'
+    bubble.style.borderColor = mine ? 'rgba(23,35,63,.10)' : 'rgba(23,35,63,.16)'
   }
   row.dataset.prepzaBubblePatched = '1'
 
@@ -123,7 +124,7 @@ function applyBubbleTheme(row: HTMLElement, darkMode: boolean) {
     quoted.style.visibility = 'visible'
     quoted.style.opacity = '1'
     quoted.style.borderLeft = `3px solid ${N.gold}`
-    quoted.style.background = darkMode ? 'rgba(255,255,255,.09)' : 'rgba(23,35,63,.06)'
+    quoted.style.background = mine ? (darkMode ? 'rgba(255,255,255,.09)' : 'rgba(23,35,63,.07)') : (darkMode ? 'rgba(255,255,255,.09)' : 'rgba(23,35,63,.05)')
     quoted.style.color = darkMode ? 'rgba(255,255,255,.88)' : '#17233f'
   }
 }
