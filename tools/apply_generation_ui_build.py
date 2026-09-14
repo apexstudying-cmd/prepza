@@ -53,24 +53,26 @@ gen_text = gen_text.replace("background: disabled ? '#D9DDE5' :", "background: d
 gen_text = gen_text.replace("border: `2px solid ${selected ? C.gold : '#B9BFCC}'`", "border: `2px solid ${selected ? C.gold : 'light-dark(#B9BFCC, #66718A)'}`", 1)
 GEN.write_text(gen_text, encoding='utf-8')
 
-scroll_wrapper = "colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch'"
+scroll_style = "colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch'"
+base_style = "colorScheme: 'light dark', flex: 1, minHeight: 0"
+text = text.replace(base_style, scroll_style)
 
 replacements = [
     ('// ─── PODCAST PLAYER', '// ─── SUMMARY', f'''// ─── PODCAST PLAYER
 function PodcastPlayerScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{scroll_wrapper}}}><PodcastGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
+  return <div style={{{scroll_style}}}><PodcastGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
 }}
 
 '''),
     ('// ─── FLASHCARDS', '// ─── QUIZ', f'''// ─── FLASHCARDS
 function FlashcardsScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{scroll_wrapper}}}><FlashcardsGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
+  return <div style={{{scroll_style}}}><FlashcardsGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
 }}
 
 '''),
     ('// ─── SUMMARY', '// ─── CHATS', f'''// ─── SUMMARY
 function SummaryScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{scroll_wrapper}}}><SummaryGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
+  return <div style={{{scroll_style}}}><SummaryGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
 }}
 
 '''),
@@ -84,9 +86,18 @@ for start_marker, end_marker, replacement in replacements:
     if end < 0:
         raise SystemExit(f'missing end marker: {end_marker}')
     current = text[start:end]
-    if 'GenerationScreen' not in current or '<div style={{ colorScheme:' not in current:
+    if 'GenerationScreen' not in current:
         text = text[:start] + replacement + text[end:]
 
+# Upgrade previously transformed study-generation wrappers without duplicating them.
+text = text.replace(
+    "return <PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
+    "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
+)
+text = text.replace(
+    "return <MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
+    "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
+)
 
 def replace_section(start_marker: str, replacement: str, aliases: tuple[str, ...] = ()):
     global text
