@@ -21,10 +21,7 @@ replacement = r'''export function MindMapGenerationScreen({ setScreen, activeDoc
 
   useEffect(() => {
     if (activeDocumentId == null) return
-    Promise.all([
-      api<any>('/me'),
-      api<any>(`/documents/${activeDocumentId}`),
-    ])
+    Promise.all([api<any>('/me'), api<any>(`/documents/${activeDocumentId}`)])
       .then(([me, doc]) => { setCsrf(me.csrf_token || ''); setTitle(doc.title || 'Mind Map') })
       .catch(e => setError(e instanceof Error ? e.message : 'Could not load the document.'))
   }, [activeDocumentId])
@@ -54,7 +51,7 @@ replacement = r'''export function MindMapGenerationScreen({ setScreen, activeDoc
   if (phase === 'error') return <Failure message={error} onBack={() => setPhase('config')} onRetry={generate} T={T}/>
 
   if (phase === 'loading') {
-    return <div style={{ flex: 1, minHeight: 0, background: T.page, color: T.text, display: 'flex', flexDirection: 'column' }}>
+    return <div style={{ flex: 1, minHeight: '100dvh', background: T.page, color: T.text, display: 'flex', flexDirection: 'column' }}>
       <Header title="Building your mind map" subtitle={title} onBack={() => setPhase('config')} T={T}/>
       <div style={{ flex: 1, minHeight: 0, padding: 16, display: 'flex', alignItems: 'stretch' }}>
         <div style={{ flex: 1, minHeight: 360, background: T.card, border: `1px solid ${T.border}`, borderRadius: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, textAlign: 'center', boxSizing: 'border-box' }}>
@@ -79,7 +76,7 @@ replacement = r'''export function MindMapGenerationScreen({ setScreen, activeDoc
       return { child, x: 150 + Math.cos(angle) * radius, y: 150 + Math.sin(angle) * radius, color: branchColors[i % branchColors.length] }
     })
 
-    return <div style={{ flex: 1, minHeight: 0, background: T.page, color: T.text, display: 'flex', flexDirection: 'column' }}>
+    return <div style={{ flex: 1, minHeight: '100dvh', background: T.page, color: T.text, display: 'flex', flexDirection: 'column' }}>
       <Header title="Mind Map" subtitle={title} onBack={() => setPhase('config')} T={T}/>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 22, overflow: 'hidden', boxShadow: dark ? '0 14px 40px rgba(0,0,0,.25)' : '0 8px 30px rgba(11,20,55,.08)' }}>
@@ -90,7 +87,7 @@ replacement = r'''export function MindMapGenerationScreen({ setScreen, activeDoc
           {children.length ? <div style={{ padding: 12, background: T.page, overflowX: 'auto' }}>
             <svg viewBox="0 0 300 300" width="100%" height="min(72vw,430px)" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Generated mind map" style={{ display: 'block', minWidth: 280 }}>
               <defs><filter id="prepza-mindmap-shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="3" floodOpacity={dark ? '.45' : '.14'}/></filter></defs>
-              {points.map(({ child, x, y }) => <line key={`line-${mapTitle(child)}`} x1="150" y1="150" x2={x} y2={y} stroke={dark ? 'rgba(255,255,255,.16)' : 'rgba(11,20,55,.14)'} strokeWidth="2.5" strokeLinecap="round"/>)}
+              {points.map(({ child, x, y }, i) => <line key={`line-${i}`} x1="150" y1="150" x2={x} y2={y} stroke={dark ? 'rgba(255,255,255,.16)' : 'rgba(11,20,55,.14)'} strokeWidth="2.5" strokeLinecap="round"/>)}
               <circle cx="150" cy="150" r="47" fill={T.gold} filter="url(#prepza-mindmap-shadow)"/>
               {center.split('\n').slice(0, 3).map((line, i, arr) => <text key={`center-${i}`} x="150" y={150 + (i - (arr.length - 1) / 2) * 13} textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="800" fill={T.navy} fontFamily="Plus Jakarta Sans">{line.slice(0, 32)}</text>)}
               {points.map(({ child, x, y, color }, i) => <g key={`node-${i}`}><circle cx={x} cy={y} r="34" fill={color} filter="url(#prepza-mindmap-shadow)"/>{mapTitle(child).split('\n').slice(0, 3).map((line, j, arr) => <text key={j} x={x} y={y + (j - (arr.length - 1) / 2) * 11} textAnchor="middle" dominantBaseline="middle" fontSize="8.5" fontWeight="750" fill="#fff" fontFamily="Plus Jakarta Sans">{line.slice(0, 28)}</text>)}</g>)}
@@ -106,7 +103,7 @@ replacement = r'''export function MindMapGenerationScreen({ setScreen, activeDoc
     </div>
   }
 
-  return <div style={{ flex: 1, minHeight: 0, background: T.page, color: T.text, display: 'flex', flexDirection: 'column' }}>
+  return <div style={{ flex: 1, minHeight: '100dvh', background: T.page, color: T.text, display: 'flex', flexDirection: 'column' }}>
     <Header title="Mind Map" subtitle={title} onBack={backToDocument} T={T}/>
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 18 }} className="scrollbar-hide">
       <div style={{ color: T.text, fontSize: 20, fontWeight: 900, margin: '8px 0 5px' }}>Choose map depth</div>
