@@ -2,7 +2,7 @@
 // O4: cache study reader assets (PDF responses, native study pages, and the PDF.js CDN runtime)
 // after the student has accessed them online. API/data caching is handled by
 // the offline data foundation.
-const SW_VERSION = 'v10';
+const SW_VERSION = 'v11';
 const SHELL_CACHE = `prepza-shell-${SW_VERSION}`;
 const RUNTIME_CACHE = `prepza-runtime-${SW_VERSION}`;
 const NAV_TIMEOUT_MS = 1800;
