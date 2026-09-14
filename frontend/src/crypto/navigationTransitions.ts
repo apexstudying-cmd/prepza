@@ -6,13 +6,12 @@ let swipeDeltaX = 0
 let swipeActive = false
 let lastKnownIndex: number | null = null
 let swipeAnimation: Animation | null = null
-let navIndicator: HTMLDivElement | null = null
 
 const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile']
 const SWIPE_THRESHOLD = 72
-const FOLLOW_FACTOR = 0.82
-const MOTION_EASE = 'cubic-bezier(.16,1,.3,1)'
-const GOLD = '#C9A84C'
+const FOLLOW_FACTOR = 1
+const MOTION_EASE = 'cubic-bezier(.2,.8,.2,1)'
+const COLOR_EASE = 'color 220ms cubic-bezier(.2,.8,.2,1)'
 
 function navLabel(button: HTMLElement): string {
   return `${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''} ${button.textContent || ''}`.trim().toLowerCase()
@@ -49,8 +48,10 @@ function activeNavIndex(buttons: HTMLButtonElement[]): number {
   return lastKnownIndex ?? 0
 }
 
-function rootElement(): HTMLElement | null {
-  return document.getElementById('root')
+function contentElement(): HTMLElement | null {
+  const root = document.getElementById('root')
+  const content = root?.firstElementChild
+  return content instanceof HTMLElement ? content : null
 }
 
 function cancelSwipeAnimation(): void {
@@ -58,115 +59,56 @@ function cancelSwipeAnimation(): void {
   swipeAnimation = null
 }
 
-function navHost(buttons: HTMLButtonElement[]): HTMLElement | null {
-  const parent = buttons[0]?.parentElement
-  if (!parent || buttons.some(button => button.parentElement !== parent)) return null
-  return parent
+function resetContentTransform(): void {
+  const content = contentElement()
+  if (!content) return
+  content.style.transform = ''
+  content.style.willChange = ''
 }
 
-function ensureNavIndicator(buttons: HTMLButtonElement[]): HTMLDivElement | null {
-  const host = navHost(buttons)
-  if (!host) return null
-
-  if (!navIndicator || navIndicator.parentElement !== host) {
-    navIndicator?.remove()
-    navIndicator = document.createElement('div')
-    navIndicator.setAttribute('aria-hidden', 'true')
-    navIndicator.style.position = 'absolute'
-    navIndicator.style.height = '3px'
-    navIndicator.style.width = '28px'
-    navIndicator.style.borderRadius = '999px'
-    navIndicator.style.background = GOLD
-    navIndicator.style.pointerEvents = 'none'
-    navIndicator.style.zIndex = '3'
-    navIndicator.style.willChange = 'transform'
-    navIndicator.style.boxShadow = `0 0 10px ${GOLD}45`
-    host.appendChild(navIndicator)
-  }
-
-  if (getComputedStyle(host).position === 'static') host.style.position = 'relative'
-  return navIndicator
-}
-
-function indicatorPosition(button: HTMLElement, host: HTMLElement): number {
-  const buttonRect = button.getBoundingClientRect()
-  const hostRect = host.getBoundingClientRect()
-  return buttonRect.left - hostRect.left + (buttonRect.width - 28) / 2
-}
-
-function setNavIndicator(index: number, animate = true): void {
-  const buttons = primaryButtons()
-  if (!buttons.length || !buttons[index]) return
-  const host = navHost(buttons)
-  const indicator = ensureNavIndicator(buttons)
-  if (!host || !indicator) return
-
-  const x = indicatorPosition(buttons[index], host)
-  indicator.style.transition = animate ? 'transform 260ms cubic-bezier(.22,1,.36,1)' : 'none'
-  indicator.style.transform = `translate3d(${x}px,0,0)`
-}
-
-function updateNavIndicatorForSwipe(rawDx: number, activeIndex: number): void {
-  const buttons = primaryButtons()
-  const host = navHost(buttons)
-  const indicator = ensureNavIndicator(buttons)
-  if (!host || !indicator) return
-
-  const direction = rawDx < 0 ? 1 : -1
-  const nextIndex = activeIndex + direction
-  if (nextIndex < 0 || nextIndex >= buttons.length) return
-
-  const start = indicatorPosition(buttons[activeIndex], host)
-  const end = indicatorPosition(buttons[nextIndex], host)
-  const progress = Math.min(1, Math.abs(rawDx) / Math.max(1, window.innerWidth * 0.82))
-  indicator.style.transition = 'none'
-  indicator.style.transform = `translate3d(${start + (end - start) * progress}px,0,0)`
-}
-
-function resetRootTransform(): void {
-  const root = rootElement()
-  if (!root) return
-  root.style.transform = ''
-  root.style.opacity = ''
-  root.style.willChange = ''
+function prepareNavColorTransitions(): void {
+  primaryButtons().forEach(button => {
+    button.style.transition = button.style.transition
+      ? `${button.style.transition}, ${COLOR_EASE}`
+      : COLOR_EASE
+  })
 }
 
 function animateBack(): void {
-  const root = rootElement()
-  if (!root) return
+  const content = contentElement()
+  if (!content) return
   cancelSwipeAnimation()
-  swipeAnimation = root.animate(
+  swipeAnimation = content.animate(
     [
       { transform: `translate3d(${swipeDeltaX}px,0,0)` },
       { transform: 'translate3d(0,0,0)' },
     ],
-    { duration: 360, easing: MOTION_EASE, fill: 'forwards' },
+    { duration: 280, easing: MOTION_EASE, fill: 'forwards' },
   )
-  setNavIndicator(activeNavIndex(primaryButtons()), true)
   swipeAnimation.onfinish = () => {
     swipeAnimation = null
-    resetRootTransform()
+    resetContentTransform()
   }
 }
 
 function finishNavigation(direction: 'left' | 'right', navigate: () => void): void {
-  const root = rootElement()
-  if (!root) {
+  const content = contentElement()
+  if (!content) {
     navigate()
     return
   }
 
   cancelSwipeAnimation()
-  root.style.willChange = 'transform'
+  content.style.willChange = 'transform'
   const sign = direction === 'left' ? -1 : 1
-  const exitDistance = Math.min(window.innerWidth * 0.16, 96)
+  const exitDistance = Math.min(window.innerWidth * 0.2, 120)
 
-  swipeAnimation = root.animate(
+  swipeAnimation = content.animate(
     [
       { transform: `translate3d(${swipeDeltaX}px,0,0)` },
       { transform: `translate3d(${sign * exitDistance}px,0,0)` },
     ],
-    { duration: 190, easing: MOTION_EASE, fill: 'forwards' },
+    { duration: 150, easing: MOTION_EASE, fill: 'forwards' },
   )
 
   swipeAnimation.onfinish = () => {
@@ -174,20 +116,18 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
     navigate()
 
     requestAnimationFrame(() => {
-      setNavIndicator(lastKnownIndex ?? 0, true)
-      root.style.transform = `translate3d(${-sign * Math.min(window.innerWidth * 0.09, 56)}px,0,0)`
-      root.style.willChange = 'transform'
-      swipeAnimation = root.animate(
+      content.style.transform = `translate3d(${-sign * Math.min(window.innerWidth * 0.12, 72)}px,0,0)`
+      content.style.willChange = 'transform'
+      swipeAnimation = content.animate(
         [
-          { transform: root.style.transform },
+          { transform: content.style.transform },
           { transform: 'translate3d(0,0,0)' },
         ],
-        { duration: 360, easing: MOTION_EASE, fill: 'forwards' },
+        { duration: 250, easing: MOTION_EASE, fill: 'forwards' },
       )
       swipeAnimation.onfinish = () => {
         swipeAnimation = null
-        resetRootTransform()
-        setNavIndicator(lastKnownIndex ?? 0, true)
+        resetContentTransform()
       }
     })
   }
@@ -226,32 +166,27 @@ export function installNavigationTransitions(): void {
     if (!target || !isPrimaryNavButton(target) || swipeActive) return
     const buttons = primaryButtons()
     const index = buttons.findIndex(button => button === target)
-    if (index >= 0) {
-      lastKnownIndex = index
-      requestAnimationFrame(() => setNavIndicator(index, true))
-    }
+    if (index >= 0) lastKnownIndex = index
+    prepareNavColorTransitions()
   }, true)
 
-  const initializeIndicator = () => {
+  const initializeNav = () => {
+    prepareNavColorTransitions()
     const buttons = primaryButtons()
-    if (!buttons.length) return
-    const index = activeNavIndex(buttons)
-    ensureNavIndicator(buttons)
-    setNavIndicator(index, false)
+    if (buttons.length) lastKnownIndex = activeNavIndex(buttons)
   }
 
-  initializeIndicator()
-  window.setTimeout(initializeIndicator, 250)
-  window.setTimeout(initializeIndicator, 1000)
+  initializeNav()
+  window.setTimeout(initializeNav, 250)
+  window.setTimeout(initializeNav, 1000)
 
   document.addEventListener('touchstart', event => {
     if (event.touches.length !== 1 || isHorizontalScroller(event.target)) return
     const target = event.target instanceof HTMLElement ? event.target : null
     if (target?.closest('input, textarea, [contenteditable="true"]')) return
     cancelSwipeAnimation()
-    resetRootTransform()
-    const buttons = primaryButtons()
-    if (buttons.length) setNavIndicator(activeNavIndex(buttons), false)
+    resetContentTransform()
+    prepareNavColorTransitions()
     swipeStartX = event.touches[0]?.clientX ?? null
     swipeStartY = event.touches[0]?.clientY ?? null
     swipeTarget = event.target
@@ -270,15 +205,11 @@ export function installNavigationTransitions(): void {
     swipeActive = true
     swipeDeltaX = dx * FOLLOW_FACTOR
 
-    const root = rootElement()
-    if (root) {
-      root.style.willChange = 'transform'
-      root.style.transform = `translate3d(${swipeDeltaX}px,0,0)`
-      root.style.opacity = '1'
+    const content = contentElement()
+    if (content) {
+      content.style.willChange = 'transform'
+      content.style.transform = `translate3d(${swipeDeltaX}px,0,0)`
     }
-
-    const buttons = primaryButtons()
-    if (buttons.length) updateNavIndicatorForSwipe(dx, activeNavIndex(buttons))
   }, { passive: true, capture: true })
 
   document.addEventListener('touchend', () => {
@@ -306,11 +237,6 @@ export function installNavigationTransitions(): void {
     swipeTarget = null
     swipeDeltaX = 0
     swipeActive = false
-    resetRootTransform()
-    setNavIndicator(activeNavIndex(primaryButtons()), true)
+    resetContentTransform()
   }, { passive: true, capture: true })
-
-  window.addEventListener('resize', () => {
-    if (!swipeActive) setNavIndicator(activeNavIndex(primaryButtons()), false)
-  })
 }
