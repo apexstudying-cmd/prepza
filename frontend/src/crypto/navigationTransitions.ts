@@ -18,7 +18,10 @@ const NAVIGATION_STORAGE_KEY = 'prepza-navigation-state'
 function currentAppScreen(): string | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = window.sessionStorage.getItem(NAVIGATION_STORAGE_KEY)
+    // App navigation state is persisted in localStorage so reloads and
+    // standalone PWA restarts can restore the same screen. The swipe gate
+    // must read the same store; sessionStorage here silently disabled swipes.
+    const raw = window.localStorage.getItem(NAVIGATION_STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as { stack?: unknown }
     if (!Array.isArray(parsed.stack) || parsed.stack.length === 0) return null
@@ -89,11 +92,22 @@ function preparePagerSurface(): void {
 }
 
 function prepareNavColorTransitions(): void {
-  primaryButtons().forEach(button => {
+  const buttons = primaryButtons()
+  buttons.forEach(button => {
     if (!button.style.transition.includes(COLOR_EASE)) {
       button.style.transition = button.style.transition ? `${button.style.transition}, ${COLOR_EASE}` : COLOR_EASE
     }
   })
+
+  // Keep the bottom navigation above Android/iOS gesture/navigation bars.
+  // Only move an actually fixed nav that currently sits at the viewport edge;
+  // this leaves desktop/normal-flow layouts untouched.
+  const host = buttons[0]?.parentElement
+  if (!host || buttons.some(button => button.parentElement !== host)) return
+  const style = getComputedStyle(host)
+  if (style.position === 'fixed' && (style.bottom === '0px' || style.bottom === '0')) {
+    host.style.bottom = 'env(safe-area-inset-bottom, 0px)'
+  }
 }
 
 function copyScrollPositions(source: Element, target: Element): void {
