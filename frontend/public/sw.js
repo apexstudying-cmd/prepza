@@ -1,37 +1,102 @@
-// Prepza service worker - v6
-// v6 forces activation of the newest shell so users do not stay on a stale
-// React bundle after a deployment containing navigation/UI fixes.
+// Prepza application-shell service worker.
+// Tier O1: reliable app-shell caching, fast navigation fallback, and safe
+// background updates. API/data caching belongs to later offline tiers.
+const SW_VERSION = 'v7';
+const SHELL_CACHE = `prepza-shell-${SW_VERSION}`;
+const RUNTIME_CACHE = `prepza-runtime-${SW_VERSION}`;
+const NAV_TIMEOUT_MS = 1800;
 
-const SHELL_CACHE_NAME = 'prepza-shell-v6';
-const NAV_TIMEOUT_MS = 3000;
+const CORE_SHELL = [
+  '/',
+  '/offline.html',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+];
 
-const PRECACHE_URLS = ['/', '/offline.html'];
+function sameOrigin(url) {
+  return url.origin === self.location.origin;
+}
+
+function isCacheableAsset(request) {
+  if (request.method !== 'GET') return false;
+  const url = new URL(request.url);
+  if (!sameOrigin(url)) return false;
+  if (url.pathname === '/sw.js' || url.pathname === '/sw-register.js') return false;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return false;
+  return url.pathname.startsWith('/assets/') ||
+    /\.(?:css|js|mjs|png|jpg|jpeg|webp|gif|svg|ico|woff2?|ttf|otf)$/i.test(url.pathname);
+}
+
+async function cacheResponse(cacheName, request, response) {
+  if (!response || !response.ok || response.type === 'opaque') return response;
+  const cache = await caches.open(cacheName);
+  await cache.put(request, response.clone());
+  return response;
+}
+
+async function precacheShell() {
+  const cache = await caches.open(SHELL_CACHE);
+  await Promise.all(CORE_SHELL.map(async (url) => {
+    try {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (response.ok) await cache.put(url, response);
+    } catch (_) {
+      // A first install can happen during a transient network failure.
+    }
+  }));
+
+  // Vite emits hashed JS/CSS into /assets. Cache the exact files referenced
+  // by the production HTML so the shell can boot without the network.
+  try {
+    const response = await fetch('/', { cache: 'no-store' });
+    if (!response.ok) return;
+    const html = await response.text();
+    await cache.put('/', new Response(html, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    }));
+
+    const urls = new Set();
+    const patterns = [
+      /<script[^>]+src=["']([^"']+)["']/gi,
+      /<link[^>]+href=["']([^"']+)["']/gi,
+    ];
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(html))) {
+        try {
+          const asset = new URL(match[1], self.location.origin);
+          if (sameOrigin(asset) && isCacheableAsset(new Request(asset.href))) {
+            urls.add(asset.href);
+          }
+        } catch (_) {}
+      }
+    }
+    await Promise.all(Array.from(urls).map(async (url) => {
+      try {
+        const assetResponse = await fetch(url, { cache: 'no-store' });
+        if (assetResponse.ok) await cache.put(url, assetResponse);
+      } catch (_) {}
+    }));
+  } catch (_) {
+    // Core shell entries remain useful even if HTML discovery fails.
+  }
+}
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(SHELL_CACHE_NAME).then((cache) =>
-      Promise.all(
-        PRECACHE_URLS.map((url) =>
-          fetch(url)
-            .then((res) => {
-              if (res.ok) return cache.put(url, res);
-            })
-            .catch(() => {})
-        )
-      )
-    ).then(() => self.skipWaiting())
-  );
+  event.waitUntil(precacheShell());
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((names) =>
-      Promise.all(
+    caches.keys()
+      .then((names) => Promise.all(
         names
-          .filter((name) => name.indexOf('prepza-shell-') === 0 && name !== SHELL_CACHE_NAME)
-          .map((name) => caches.delete(name))
-      )
-    ).then(() => self.clients.claim())
+          .filter((name) => name.startsWith('prepza-shell-') || name.startsWith('prepza-runtime-'))
+          .filter((name) => name !== SHELL_CACHE && name !== RUNTIME_CACHE)
+          .map((name) => caches.delete(name)),
+      ))
+      .then(() => self.clients.claim()),
   );
 });
 
@@ -43,51 +108,62 @@ function timeout(ms) {
   return new Promise((_, reject) => setTimeout(() => reject(new Error('nav-timeout')), ms));
 }
 
-async function handleNavigate(request) {
-  const networkPromise = fetch(request)
-    .then((res) => {
-      if (res && res.ok) {
-        caches.open(SHELL_CACHE_NAME).then((cache) => cache.put(request, res.clone())).catch(() => {});
-      }
-      return res;
-    })
-    .catch(() => undefined);
+async function handleNavigation(request) {
+  const network = fetch(request).then(async (response) => {
+    if (response && response.ok) {
+      const cache = await caches.open(SHELL_CACHE);
+      await cache.put('/', response.clone());
+    }
+    return response;
+  });
 
   try {
-    const res = await Promise.race([networkPromise, timeout(NAV_TIMEOUT_MS)]);
-    if (res) return res;
-    throw new Error('network-failed');
-  } catch (err) {
-    const cached = await caches.match(request, { ignoreSearch: true });
-    if (cached) return cached;
+    const response = await Promise.race([network, timeout(NAV_TIMEOUT_MS)]);
+    if (response && response.ok) return response;
+    throw new Error('navigation-failed');
+  } catch (_) {
+    const shell = await caches.match('/', { ignoreSearch: true });
+    if (shell) return shell;
     const offline = await caches.match('/offline.html');
     if (offline) return offline;
-    throw err;
+    return new Response('Offline', { status: 503, statusText: 'Offline' });
+  }
+}
+
+async function handleAsset(request) {
+  const cached = await caches.match(request, { ignoreSearch: true });
+  if (cached) return cached;
+
+  try {
+    const response = await fetch(request);
+    return await cacheResponse(RUNTIME_CACHE, request, response);
+  } catch (_) {
+    const fallback = await caches.match(request, { ignoreSearch: true });
+    return fallback || new Response('', { status: 503, statusText: 'Network error' });
   }
 }
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.mode === 'navigate') {
-    event.respondWith(handleNavigate(event.request));
+  const request = event.request;
+  if (request.mode === 'navigate') {
+    event.respondWith(handleNavigation(request));
     return;
   }
-  event.respondWith(
-    fetch(event.request).catch(async () => {
-      const cached = await caches.match(event.request, { ignoreSearch: true });
-      if (cached) return cached;
-      return new Response('', { status: 503, statusText: 'Network error' });
-    })
-  );
+  if (isCacheableAsset(request)) {
+    event.respondWith(handleAsset(request));
+  }
 });
 
 self.addEventListener('push', (event) => {
   let payload = { title: 'Prepza', body: '' };
   try {
     if (event.data) payload = event.data.json();
-  } catch (err) {
+  } catch (_) {
     payload.body = event.data ? event.data.text() : '';
   }
-  event.waitUntil(self.registration.showNotification(payload.title || 'Prepza', { body: payload.body || '' }));
+  event.waitUntil(
+    self.registration.showNotification(payload.title || 'Prepza', { body: payload.body || '' }),
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {
@@ -98,6 +174,6 @@ self.addEventListener('notificationclick', (event) => {
         if ('focus' in client) return client.focus();
       }
       if (self.clients.openWindow) return self.clients.openWindow('/');
-    })
+    }),
   );
 });
