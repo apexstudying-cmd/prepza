@@ -15,29 +15,6 @@
     <!-- figma:body-start -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      (() => {
-        const labels = ['home', 'explore', 'chats', 'profile']
-        const labelOf = (button) => `${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''} ${button.textContent || ''}`.trim().toLowerCase()
-        const isPrimary = (button) => button instanceof HTMLButtonElement && labels.some(label => labelOf(button).includes(label)) && !!button.querySelector('svg')
-        const apply = () => {
-          const buttons = Array.from(document.querySelectorAll('button')).filter(isPrimary)
-          if (buttons.length < 4) return
-          const host = buttons[0].parentElement
-          if (!host || buttons.some(button => button.parentElement !== host)) return
-          const hostStyle = getComputedStyle(host)
-          if (hostStyle.borderTopStyle === 'none' || hostStyle.display !== 'flex') return
-          host.style.paddingBottom = 'calc(6px + env(safe-area-inset-bottom, 0px))'
-        }
-        const observer = new MutationObserver(apply)
-        observer.observe(document.getElementById('root') || document.body, { childList: true, subtree: true })
-        window.addEventListener('pageshow', apply, { passive: true })
-        window.addEventListener('resize', apply, { passive: true })
-        apply()
-        setTimeout(apply, 250)
-        setTimeout(apply, 1000)
-      })()
-    </script>
     <script defer src="/sw-register.js"></script>
     <!-- figma:body-end -->
   </body>
