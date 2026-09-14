@@ -58,22 +58,22 @@ base_style = "colorScheme: 'light dark', flex: 1, minHeight: 0"
 text = text.replace(base_style, scroll_style)
 
 replacements = [
-    ('// ─── PODCAST PLAYER', '// ─── SUMMARY', f'''// ─── PODCAST PLAYER
-function PodcastPlayerScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{scroll_style}}}><PodcastGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
-}}
+    ('// ─── PODCAST PLAYER', '// ─── SUMMARY', '''// ─── PODCAST PLAYER
+function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  return <div style={{ colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' }}><PodcastGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+}
 
 '''),
-    ('// ─── FLASHCARDS', '// ─── QUIZ', f'''// ─── FLASHCARDS
-function FlashcardsScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{scroll_style}}}><FlashcardsGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
-}}
+    ('// ─── FLASHCARDS', '// ─── QUIZ', '''// ─── FLASHCARDS
+function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  return <div style={{ colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' }}><FlashcardsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+}
 
 '''),
-    ('// ─── SUMMARY', '// ─── CHATS', f'''// ─── SUMMARY
-function SummaryScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{scroll_style}}}><SummaryGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
-}}
+    ('// ─── SUMMARY', '// ─── CHATS', '''// ─── SUMMARY
+function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  return <div style={{ colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' }}><SummaryGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+}
 
 '''),
 ]
@@ -89,7 +89,6 @@ for start_marker, end_marker, replacement in replacements:
     if 'GenerationScreen' not in current:
         text = text[:start] + replacement + text[end:]
 
-# Upgrade previously transformed study-generation wrappers without duplicating them.
 text = text.replace(
     "return <PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
     "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
