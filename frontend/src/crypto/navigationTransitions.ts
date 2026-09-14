@@ -2,8 +2,10 @@ let installed = false
 let swipeStartX: number | null = null
 let swipeStartY: number | null = null
 let swipeTarget: EventTarget | null = null
-let swipeTriggered = false
+let swipeDeltaX = 0
+let swipeActive = false
 let lastKnownIndex: number | null = null
+let swipeAnimation: Animation | null = null
 
 const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile']
 
@@ -42,26 +44,91 @@ function activeNavIndex(buttons: HTMLButtonElement[]): number {
   return lastKnownIndex ?? 0
 }
 
-function animate(direction: 'left' | 'right') {
-  const root = document.getElementById('root')
-  if (!root) return
-  root.animate(
-    direction === 'left'
-      ? [{ transform: 'translateX(0)', opacity: 1 }, { transform: 'translateX(-28px)', opacity: .94 }, { transform: 'translateX(0)', opacity: 1 }]
-      : [{ transform: 'translateX(0)', opacity: 1 }, { transform: 'translateX(28px)', opacity: .94 }, { transform: 'translateX(0)', opacity: 1 }],
-    { duration: 260, easing: 'cubic-bezier(.22,.61,.36,1)' },
-  )
+function rootElement(): HTMLElement | null {
+  return document.getElementById('root')
 }
 
-function navigateBySwipe(direction: 'next' | 'previous') {
+function cancelSwipeAnimation(): void {
+  swipeAnimation?.cancel()
+  swipeAnimation = null
+}
+
+function resetRootTransform(): void {
+  const root = rootElement()
+  if (!root) return
+  root.style.transform = ''
+  root.style.opacity = ''
+  root.style.willChange = ''
+}
+
+function finishNavigation(direction: 'left' | 'right', navigate: () => void): void {
+  const root = rootElement()
+  if (!root) {
+    navigate()
+    return
+  }
+
+  cancelSwipeAnimation()
+  root.style.willChange = 'transform, opacity'
+  const sign = direction === 'left' ? -1 : 1
+  const exitDistance = Math.min(window.innerWidth * 0.20, 120)
+
+  swipeAnimation = root.animate(
+    [
+      { transform: `translate3d(${swipeDeltaX}px,0,0)`, opacity: 1 },
+      { transform: `translate3d(${sign * exitDistance}px,0,0)`, opacity: .78 },
+    ],
+    { duration: 150, easing: 'cubic-bezier(.32,.72,0,1)', fill: 'forwards' },
+  )
+
+  swipeAnimation.onfinish = () => {
+    swipeAnimation = null
+    navigate()
+
+    requestAnimationFrame(() => {
+      root.style.transform = `translate3d(${-sign * Math.min(window.innerWidth * .10, 64)}px,0,0)`
+      root.style.opacity = '.78'
+      swipeAnimation = root.animate(
+        [
+          { transform: root.style.transform, opacity: .78 },
+          { transform: 'translate3d(0,0,0)', opacity: 1 },
+        ],
+        { duration: 280, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' },
+      )
+      swipeAnimation.onfinish = () => {
+        swipeAnimation = null
+        resetRootTransform()
+      }
+    })
+  }
+}
+
+function navigateBySwipe(direction: 'next' | 'previous'): void {
   const buttons = primaryButtons()
   if (!buttons.length) return
   const active = activeNavIndex(buttons)
   const nextIndex = direction === 'next' ? active + 1 : active - 1
-  if (nextIndex < 0 || nextIndex >= buttons.length) return
+  if (nextIndex < 0 || nextIndex >= buttons.length) {
+    const root = rootElement()
+    if (root && swipeActive) {
+      cancelSwipeAnimation()
+      swipeAnimation = root.animate(
+        [
+          { transform: `translate3d(${swipeDeltaX}px,0,0)` },
+          { transform: 'translate3d(0,0,0)' },
+        ],
+        { duration: 220, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' },
+      )
+      swipeAnimation.onfinish = () => {
+        swipeAnimation = null
+        resetRootTransform()
+      }
+    }
+    return
+  }
+
   lastKnownIndex = nextIndex
-  animate(direction === 'next' ? 'left' : 'right')
-  buttons[nextIndex].click()
+  finishNavigation(direction === 'next' ? 'left' : 'right', () => buttons[nextIndex].click())
 }
 
 function isHorizontalScroller(target: EventTarget | null): boolean {
@@ -78,41 +145,90 @@ export function installNavigationTransitions(): void {
   if (installed || typeof document === 'undefined') return
   installed = true
 
+  // Direct taps retain the app's normal instant navigation. The enhanced motion
+  // is reserved for touch swipes so tapping never gets a double transition.
   document.addEventListener('click', event => {
     const target = event.target instanceof HTMLElement ? event.target.closest('button') as HTMLElement | null : null
-    if (!target || !isPrimaryNavButton(target)) return
+    if (!target || !isPrimaryNavButton(target) || swipeActive) return
     const buttons = primaryButtons()
     const index = buttons.findIndex(button => button === target)
-    if (index < 0) return
-    const active = activeNavIndex(buttons)
-    if (active === index) return
-    lastKnownIndex = index
-    animate(index > active ? 'left' : 'right')
+    if (index >= 0) lastKnownIndex = index
   }, true)
 
-  // Native-feeling horizontal swipe between Home → Explore → Chats → Profile.
-  // Vertical movement remains normal scrolling, and horizontal carousels keep
-  // ownership of their own gestures.
   document.addEventListener('touchstart', event => {
     if (event.touches.length !== 1 || isHorizontalScroller(event.target)) return
     const target = event.target instanceof HTMLElement ? event.target : null
     if (target?.closest('input, textarea, [contenteditable="true"]')) return
+    cancelSwipeAnimation()
+    resetRootTransform()
     swipeStartX = event.touches[0]?.clientX ?? null
     swipeStartY = event.touches[0]?.clientY ?? null
     swipeTarget = event.target
-    swipeTriggered = false
+    swipeDeltaX = 0
+    swipeActive = false
   }, { passive: true, capture: true })
 
   document.addEventListener('touchmove', event => {
-    if (swipeStartX == null || swipeStartY == null || swipeTriggered || !swipeTarget || event.touches.length !== 1) return
+    if (swipeStartX == null || swipeStartY == null || !swipeTarget || event.touches.length !== 1) return
     const dx = (event.touches[0]?.clientX ?? swipeStartX) - swipeStartX
     const dy = (event.touches[0]?.clientY ?? swipeStartY) - swipeStartY
-    if (Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.35) return
-    swipeTriggered = true
-    navigateBySwipe(dx < 0 ? 'next' : 'previous')
+
+    // A vertical gesture belongs to the page scroll. Only take ownership after
+    // the horizontal direction is clearly established.
+    if (!swipeActive && Math.abs(dy) > Math.abs(dx) * 1.15) return
+    if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy) * 1.15) return
+
+    swipeActive = true
+    const resistance = Math.abs(dx) > window.innerWidth * .55 ? .30 : .58
+    swipeDeltaX = dx * resistance
+
+    const root = rootElement()
+    if (root) {
+      root.style.willChange = 'transform, opacity'
+      root.style.transform = `translate3d(${swipeDeltaX}px,0,0)`
+      root.style.opacity = String(1 - Math.min(Math.abs(swipeDeltaX) / 900, .12))
+    }
   }, { passive: true, capture: true })
 
-  const reset = () => { swipeStartX = null; swipeStartY = null; swipeTarget = null; swipeTriggered = false }
-  document.addEventListener('touchend', reset, { passive: true, capture: true })
-  document.addEventListener('touchcancel', reset, { passive: true, capture: true })
+  document.addEventListener('touchend', () => {
+    if (swipeStartX == null || swipeStartY == null) return
+
+    const dx = swipeDeltaX / .58
+    const shouldNavigate = swipeActive && Math.abs(dx) >= 72
+
+    if (shouldNavigate) {
+      navigateBySwipe(dx < 0 ? 'next' : 'previous')
+    } else if (swipeActive) {
+      const root = rootElement()
+      if (root) {
+        cancelSwipeAnimation()
+        swipeAnimation = root.animate(
+          [
+            { transform: `translate3d(${swipeDeltaX}px,0,0)`, opacity: parseFloat(root.style.opacity || '1') },
+            { transform: 'translate3d(0,0,0)', opacity: 1 },
+          ],
+          { duration: 220, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' },
+        )
+        swipeAnimation.onfinish = () => {
+          swipeAnimation = null
+          resetRootTransform()
+        }
+      }
+    }
+
+    swipeStartX = null
+    swipeStartY = null
+    swipeTarget = null
+    swipeDeltaX = 0
+    swipeActive = false
+  }, { passive: true, capture: true })
+
+  document.addEventListener('touchcancel', () => {
+    swipeStartX = null
+    swipeStartY = null
+    swipeTarget = null
+    swipeDeltaX = 0
+    swipeActive = false
+    resetRootTransform()
+  }, { passive: true, capture: true })
 }
