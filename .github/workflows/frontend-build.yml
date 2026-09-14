@@ -31,5 +31,10 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Validate service worker JavaScript
+        run: |
+          node --check public/sw.js
+          node --check public/sw-register.js
+
       - name: Build
         run: npm run build
