@@ -44,10 +44,9 @@ for start_marker, end_marker, replacement in replacements:
     if 'GenerationScreen' not in current:
         text = text[:start] + replacement + text[end:]
 
-# Replace the existing quiz and mind-map implementations in place. The build
-# script intentionally finds the next section marker instead of depending on
-# exact old implementation text, so future UI edits do not break the build.
+
 def replace_section(start_marker: str, replacement: str, aliases: tuple[str, ...] = ()):
+    global text
     markers = (start_marker,) + aliases
     start = -1
     marker_used = None
