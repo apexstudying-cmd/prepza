@@ -3,17 +3,43 @@ let swipeStartX: number | null = null
 let swipeStartY: number | null = null
 let swipeTarget: EventTarget | null = null
 let swipeTriggered = false
+let lastKnownIndex: number | null = null
+
+const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile']
+
+function navLabel(button: HTMLElement): string {
+  return `${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''} ${button.textContent || ''}`.trim().toLowerCase()
+}
 
 function isPrimaryNavButton(button: HTMLElement): boolean {
-  const rect = button.getBoundingClientRect()
-  if (rect.width < 35 || rect.height < 35) return false
-  if (rect.bottom < window.innerHeight - 120) return false
-  return Boolean(button.querySelector('svg'))
+  const label = navLabel(button)
+  if (!button.querySelector('svg')) return false
+  return PRIMARY_NAV_LABELS.some(item => label === item || label.includes(item))
 }
 
 function primaryButtons(): HTMLButtonElement[] {
-  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter(isPrimaryNavButton)
-  return buttons.filter((button, index) => buttons.findIndex(item => Math.abs(item.getBoundingClientRect().left - button.getBoundingClientRect().left) < 2) === index)
+  const found = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter(isPrimaryNavButton)
+  return PRIMARY_NAV_LABELS.map(label => found.find(button => navLabel(button).includes(label)) || null).filter(Boolean) as HTMLButtonElement[]
+}
+
+function activeNavIndex(buttons: HTMLButtonElement[]): number {
+  const explicit = buttons.findIndex(button => {
+    const style = getComputedStyle(button)
+    const label = navLabel(button)
+    return button.getAttribute('aria-current') === 'page'
+      || button.getAttribute('data-state') === 'active'
+      || /active|selected|current/.test(button.className)
+      || style.fontWeight === '800'
+      || style.fontWeight === '700'
+      || button.getAttribute('aria-pressed') === 'true'
+      || button.querySelector('[aria-current="page"]') !== null
+      || (label.includes('home') && lastKnownIndex == null)
+  })
+  if (explicit >= 0) {
+    lastKnownIndex = explicit
+    return explicit
+  }
+  return lastKnownIndex ?? 0
 }
 
 function animate(direction: 'left' | 'right') {
@@ -30,13 +56,10 @@ function animate(direction: 'left' | 'right') {
 function navigateBySwipe(direction: 'next' | 'previous') {
   const buttons = primaryButtons()
   if (!buttons.length) return
-  const active = buttons.findIndex(button => {
-    const style = getComputedStyle(button)
-    return style.fontWeight === '800' || style.fontWeight === '700' || button.getAttribute('aria-current') === 'page'
-  })
-  if (active < 0) return
+  const active = activeNavIndex(buttons)
   const nextIndex = direction === 'next' ? active + 1 : active - 1
   if (nextIndex < 0 || nextIndex >= buttons.length) return
+  lastKnownIndex = nextIndex
   animate(direction === 'next' ? 'left' : 'right')
   buttons[nextIndex].click()
 }
@@ -61,11 +84,9 @@ export function installNavigationTransitions(): void {
     const buttons = primaryButtons()
     const index = buttons.findIndex(button => button === target)
     if (index < 0) return
-    const active = buttons.findIndex(button => {
-      const style = getComputedStyle(button)
-      return style.fontWeight === '800' || style.fontWeight === '700' || button.getAttribute('aria-current') === 'page'
-    })
-    if (active < 0 || active === index) return
+    const active = activeNavIndex(buttons)
+    if (active === index) return
+    lastKnownIndex = index
     animate(index > active ? 'left' : 'right')
   }, true)
 
