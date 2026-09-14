@@ -1,24 +1,16 @@
-// Prepza service worker - v5 (React SPA shell)
-//
-// v4 history (navigation race/fallback, user-triggered update via
-// postMessage SKIP_WAITING from sw-register.js) is unchanged - see that
-// file for the update-toast flow. v5 only updates PRECACHE_URLS and the
-// offline fallback path: the app is now a single-page React shell served
-// at '/', so there's one shell page to precache instead of the old site's
-// 7 separate static HTML pages.
+// Prepza service worker - v6
+// v6 forces activation of the newest shell so users do not stay on a stale
+// React bundle after a deployment containing navigation/UI fixes.
 
-const SHELL_CACHE_NAME = 'prepza-shell-v5';
+const SHELL_CACHE_NAME = 'prepza-shell-v6';
 const NAV_TIMEOUT_MS = 3000;
 
-const PRECACHE_URLS = [
-  '/',
-  '/offline.html',
-];
+const PRECACHE_URLS = ['/', '/offline.html'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE_NAME).then((cache) => {
-      return Promise.all(
+    caches.open(SHELL_CACHE_NAME).then((cache) =>
+      Promise.all(
         PRECACHE_URLS.map((url) =>
           fetch(url)
             .then((res) => {
@@ -26,8 +18,8 @@ self.addEventListener('install', (event) => {
             })
             .catch(() => {})
         )
-      );
-    })
+      )
+    ).then(() => self.skipWaiting())
   );
 });
 
@@ -44,9 +36,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 function timeout(ms) {
@@ -81,7 +71,6 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(handleNavigate(event.request));
     return;
   }
-
   event.respondWith(
     fetch(event.request).catch(async () => {
       const cached = await caches.match(event.request, { ignoreSearch: true });
@@ -98,11 +87,7 @@ self.addEventListener('push', (event) => {
   } catch (err) {
     payload.body = event.data ? event.data.text() : '';
   }
-  event.waitUntil(
-    self.registration.showNotification(payload.title || 'Prepza', {
-      body: payload.body || '',
-    })
-  );
+  event.waitUntil(self.registration.showNotification(payload.title || 'Prepza', { body: payload.body || '' }));
 });
 
 self.addEventListener('notificationclick', (event) => {
