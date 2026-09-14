@@ -10,8 +10,8 @@ let swipeAnimation: Animation | null = null
 const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile']
 const SWIPE_THRESHOLD = 72
 const FOLLOW_FACTOR = 1
-const MOTION_EASE = 'cubic-bezier(.2,.8,.2,1)'
-const COLOR_EASE = 'color 220ms cubic-bezier(.2,.8,.2,1)'
+const MOTION_EASE = 'cubic-bezier(.22,.8,.22,1)'
+const COLOR_EASE = 'color 220ms cubic-bezier(.22,.8,.22,1)'
 
 function navLabel(button: HTMLElement): string {
   return `${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''} ${button.textContent || ''}`.trim().toLowerCase()
@@ -49,8 +49,12 @@ function activeNavIndex(buttons: HTMLButtonElement[]): number {
 }
 
 function contentElement(): HTMLElement | null {
+  // App renders the page content and bottom navigation as siblings inside
+  // the root app shell. Target only the content wrapper so the bottom nav
+  // remains physically fixed while the page slides underneath it.
   const root = document.getElementById('root')
-  const content = root?.firstElementChild
+  const appShell = root?.firstElementChild
+  const content = appShell?.firstElementChild
   return content instanceof HTMLElement ? content : null
 }
 
@@ -68,7 +72,7 @@ function resetContentTransform(): void {
 
 function prepareNavColorTransitions(): void {
   primaryButtons().forEach(button => {
-    if (!button.style.transition.includes('color 220ms cubic-bezier(.2,.8,.2,1)')) {
+    if (!button.style.transition.includes('color 220ms cubic-bezier(.22,.8,.22,1)')) {
       button.style.transition = button.style.transition
         ? `${button.style.transition}, ${COLOR_EASE}`
         : COLOR_EASE
@@ -85,7 +89,7 @@ function animateBack(): void {
       { transform: `translate3d(${swipeDeltaX}px,0,0)` },
       { transform: 'translate3d(0,0,0)' },
     ],
-    { duration: 280, easing: MOTION_EASE, fill: 'forwards' },
+    { duration: 240, easing: MOTION_EASE, fill: 'forwards' },
   )
   swipeAnimation.onfinish = () => {
     swipeAnimation = null
@@ -103,14 +107,18 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
   cancelSwipeAnimation()
   content.style.willChange = 'transform'
   const sign = direction === 'left' ? -1 : 1
-  const exitDistance = Math.min(window.innerWidth * 0.2, 120)
+  const viewportDistance = Math.max(window.innerWidth, content.clientWidth || 0)
 
+  // A pager completes the same gesture the user started: the current page
+  // finishes moving off-screen, then the newly selected page arrives from
+  // the opposite side. The bottom navigation is outside this element and
+  // therefore does not move with it.
   swipeAnimation = content.animate(
     [
       { transform: `translate3d(${swipeDeltaX}px,0,0)` },
-      { transform: `translate3d(${sign * exitDistance}px,0,0)` },
+      { transform: `translate3d(${sign * viewportDistance}px,0,0)` },
     ],
-    { duration: 150, easing: MOTION_EASE, fill: 'forwards' },
+    { duration: 210, easing: MOTION_EASE, fill: 'forwards' },
   )
 
   swipeAnimation.onfinish = () => {
@@ -118,14 +126,15 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
     navigate()
 
     requestAnimationFrame(() => {
-      content.style.transform = `translate3d(${-sign * Math.min(window.innerWidth * 0.12, 72)}px,0,0)`
+      const enterDistance = Math.max(window.innerWidth, content.clientWidth || 0)
+      content.style.transform = `translate3d(${-sign * enterDistance}px,0,0)`
       content.style.willChange = 'transform'
       swipeAnimation = content.animate(
         [
-          { transform: content.style.transform },
+          { transform: `translate3d(${-sign * enterDistance}px,0,0)` },
           { transform: 'translate3d(0,0,0)' },
         ],
-        { duration: 250, easing: MOTION_EASE, fill: 'forwards' },
+        { duration: 210, easing: MOTION_EASE, fill: 'forwards' },
       )
       swipeAnimation.onfinish = () => {
         swipeAnimation = null
