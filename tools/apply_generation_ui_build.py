@@ -58,19 +58,19 @@ scroll_wrapper = "colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0,
 replacements = [
     ('// ─── PODCAST PLAYER', '// ─── SUMMARY', f'''// ─── PODCAST PLAYER
 function PodcastPlayerScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{{{scroll_wrapper}}}}}><PodcastGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
+  return <div style={{{scroll_wrapper}}}><PodcastGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
 }}
 
 '''),
     ('// ─── FLASHCARDS', '// ─── QUIZ', f'''// ─── FLASHCARDS
 function FlashcardsScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{{{scroll_wrapper}}}}}><FlashcardsGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
+  return <div style={{{scroll_wrapper}}}><FlashcardsGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
 }}
 
 '''),
     ('// ─── SUMMARY', '// ─── CHATS', f'''// ─── SUMMARY
 function SummaryScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{{{scroll_wrapper}}}}}><SummaryGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
+  return <div style={{{scroll_wrapper}}}><SummaryGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
 }}
 
 '''),
@@ -107,16 +107,16 @@ def replace_section(start_marker: str, replacement: str, aliases: tuple[str, ...
     if 'GenerationScreen' not in current:
         text = text[:start] + replacement + text[end:]
 
-replace_section('// ─── QUIZ', f'''// ─── QUIZ
-function QuizScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{{flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch'}}}}}><PracticeQuestionsGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
-}}
+replace_section('// ─── QUIZ', '''// ─── QUIZ
+function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+}
 
 ''')
-replace_section('// ─── MIND MAP', f'''// ─── MIND MAP
-function MindMapScreen({{ setScreen, activeDocumentId }}: {{ setScreen: (s: Screen) => void; activeDocumentId: number | null }}) {{
-  return <div style={{{{flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch'}}}}}><MindMapGenerationScreen setScreen={{setScreen}} activeDocumentId={{activeDocumentId}} /></div>
-}}
+replace_section('// ─── MIND MAP', '''// ─── MIND MAP
+function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+}
 
 ''', aliases=('// ─── MINDMAP',))
 
