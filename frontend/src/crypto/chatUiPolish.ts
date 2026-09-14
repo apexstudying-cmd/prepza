@@ -97,11 +97,18 @@ function applyBubbleTheme(row: HTMLElement, darkMode: boolean) {
   if (replyButton) replyButton.style.display = 'none'
   if (reactButton) reactButton.style.display = 'none'
 
-  // WhatsApp-like contrast: sent bubbles stay white, received bubbles are the cool blue.
-  // This is intentionally the same relationship in both light and dark themes.
-  bubble.style.background = mine ? '#ffffff' : '#e8eef9'
-  bubble.style.color = '#17233f'
-  bubble.style.borderColor = mine ? 'rgba(23,35,63,.16)' : 'rgba(23,35,63,.10)'
+  // Light mode: sent = white, received = Prepza signature navy.
+  // Dark mode: sent = lighter slate, received = deeper navy so the two
+  // directions remain unmistakably different while preserving hierarchy.
+  if (darkMode) {
+    bubble.style.background = mine ? '#3B4A68' : '#162342'
+    bubble.style.color = '#F7F9FC'
+    bubble.style.borderColor = mine ? 'rgba(255,255,255,.10)' : 'rgba(122,161,216,.16)'
+  } else {
+    bubble.style.background = mine ? '#ffffff' : N.navy
+    bubble.style.color = mine ? '#17233f' : '#ffffff'
+    bubble.style.borderColor = mine ? 'rgba(23,35,63,.16)' : 'rgba(11,20,55,.08)'
+  }
   row.dataset.prepzaBubblePatched = '1'
 
   const quoted = bubble.querySelector<HTMLElement>('button:not([title])')
@@ -111,8 +118,8 @@ function applyBubbleTheme(row: HTMLElement, darkMode: boolean) {
     quoted.style.visibility = 'visible'
     quoted.style.opacity = '1'
     quoted.style.borderLeft = `3px solid ${N.gold}`
-    quoted.style.background = 'rgba(23,35,63,.07)'
-    quoted.style.color = '#17233f'
+    quoted.style.background = darkMode ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.12)'
+    quoted.style.color = darkMode ? '#F7F9FC' : '#ffffff'
   }
 
   // Delivery/read ticks. React owns the actual read state; this layer supplies
@@ -218,8 +225,6 @@ function installGlobalPullToRefresh() {
     const distance = (event.touches[0]?.clientY ?? globalPullStartY) - globalPullStartY
     if (distance < 64) return
     globalPullTriggered = true
-    // Chat already has a live in-place refresh listener. Other screens receive
-    // the same global event so they can refresh without navigation changes.
     triggerPullRefresh(activeConversationId)
   }, { passive: true, capture: true })
   const reset = () => { globalPullStartY = null; globalPullSurface = null; globalPullTriggered = false }
