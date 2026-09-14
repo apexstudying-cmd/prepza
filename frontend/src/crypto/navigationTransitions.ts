@@ -68,9 +68,11 @@ function resetContentTransform(): void {
 
 function prepareNavColorTransitions(): void {
   primaryButtons().forEach(button => {
-    button.style.transition = button.style.transition
-      ? `${button.style.transition}, ${COLOR_EASE}`
-      : COLOR_EASE
+    if (!button.style.transition.includes('color 220ms cubic-bezier(.2,.8,.2,1)')) {
+      button.style.transition = button.style.transition
+        ? `${button.style.transition}, ${COLOR_EASE}`
+        : COLOR_EASE
+    }
   })
 }
 
