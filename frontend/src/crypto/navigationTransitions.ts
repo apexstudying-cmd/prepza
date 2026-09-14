@@ -6,11 +6,13 @@ let swipeDeltaX = 0
 let swipeActive = false
 let lastKnownIndex: number | null = null
 let swipeAnimation: Animation | null = null
+let navIndicator: HTMLDivElement | null = null
 
 const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile']
 const SWIPE_THRESHOLD = 72
 const FOLLOW_FACTOR = 0.82
 const MOTION_EASE = 'cubic-bezier(.16,1,.3,1)'
+const GOLD = '#C9A84C'
 
 function navLabel(button: HTMLElement): string {
   return `${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''} ${button.textContent || ''}`.trim().toLowerCase()
@@ -56,6 +58,71 @@ function cancelSwipeAnimation(): void {
   swipeAnimation = null
 }
 
+function navHost(buttons: HTMLButtonElement[]): HTMLElement | null {
+  const parent = buttons[0]?.parentElement
+  if (!parent || buttons.some(button => button.parentElement !== parent)) return null
+  return parent
+}
+
+function ensureNavIndicator(buttons: HTMLButtonElement[]): HTMLDivElement | null {
+  const host = navHost(buttons)
+  if (!host) return null
+
+  if (!navIndicator || navIndicator.parentElement !== host) {
+    navIndicator?.remove()
+    navIndicator = document.createElement('div')
+    navIndicator.setAttribute('aria-hidden', 'true')
+    navIndicator.style.position = 'absolute'
+    navIndicator.style.height = '3px'
+    navIndicator.style.width = '28px'
+    navIndicator.style.borderRadius = '999px'
+    navIndicator.style.background = GOLD
+    navIndicator.style.pointerEvents = 'none'
+    navIndicator.style.zIndex = '3'
+    navIndicator.style.willChange = 'transform'
+    navIndicator.style.boxShadow = `0 0 10px ${GOLD}45`
+    host.appendChild(navIndicator)
+  }
+
+  if (getComputedStyle(host).position === 'static') host.style.position = 'relative'
+  return navIndicator
+}
+
+function indicatorPosition(button: HTMLElement, host: HTMLElement): number {
+  const buttonRect = button.getBoundingClientRect()
+  const hostRect = host.getBoundingClientRect()
+  return buttonRect.left - hostRect.left + (buttonRect.width - 28) / 2
+}
+
+function setNavIndicator(index: number, animate = true): void {
+  const buttons = primaryButtons()
+  if (!buttons.length || !buttons[index]) return
+  const host = navHost(buttons)
+  const indicator = ensureNavIndicator(buttons)
+  if (!host || !indicator) return
+
+  const x = indicatorPosition(buttons[index], host)
+  indicator.style.transition = animate ? 'transform 260ms cubic-bezier(.22,1,.36,1)' : 'none'
+  indicator.style.transform = `translate3d(${x}px,0,0)`
+}
+
+function updateNavIndicatorForSwipe(rawDx: number, activeIndex: number): void {
+  const buttons = primaryButtons()
+  const host = navHost(buttons)
+  const indicator = ensureNavIndicator(buttons)
+  if (!host || !indicator) return
+
+  const direction = rawDx < 0 ? 1 : -1
+  const nextIndex = activeIndex + direction
+  if (nextIndex < 0 || nextIndex >= buttons.length) return
+
+  const start = indicatorPosition(buttons[activeIndex], host)
+  const end = indicatorPosition(buttons[nextIndex], host)
+  const progress = Math.min(1, Math.abs(rawDx) / Math.max(1, window.innerWidth * 0.82))
+  indicator.style.transition = 'none'
+  indicator.style.transform = `translate3d(${start + (end - start) * progress}px,0,0)`
+}
+
 function resetRootTransform(): void {
   const root = rootElement()
   if (!root) return
@@ -75,6 +142,7 @@ function animateBack(): void {
     ],
     { duration: 360, easing: MOTION_EASE, fill: 'forwards' },
   )
+  setNavIndicator(activeNavIndex(primaryButtons()), true)
   swipeAnimation.onfinish = () => {
     swipeAnimation = null
     resetRootTransform()
@@ -106,6 +174,7 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
     navigate()
 
     requestAnimationFrame(() => {
+      setNavIndicator(lastKnownIndex ?? 0, true)
       root.style.transform = `translate3d(${-sign * Math.min(window.innerWidth * 0.09, 56)}px,0,0)`
       root.style.willChange = 'transform'
       swipeAnimation = root.animate(
@@ -118,6 +187,7 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
       swipeAnimation.onfinish = () => {
         swipeAnimation = null
         resetRootTransform()
+        setNavIndicator(lastKnownIndex ?? 0, true)
       }
     })
   }
@@ -156,8 +226,23 @@ export function installNavigationTransitions(): void {
     if (!target || !isPrimaryNavButton(target) || swipeActive) return
     const buttons = primaryButtons()
     const index = buttons.findIndex(button => button === target)
-    if (index >= 0) lastKnownIndex = index
+    if (index >= 0) {
+      lastKnownIndex = index
+      requestAnimationFrame(() => setNavIndicator(index, true))
+    }
   }, true)
+
+  const initializeIndicator = () => {
+    const buttons = primaryButtons()
+    if (!buttons.length) return
+    const index = activeNavIndex(buttons)
+    ensureNavIndicator(buttons)
+    setNavIndicator(index, false)
+  }
+
+  initializeIndicator()
+  window.setTimeout(initializeIndicator, 250)
+  window.setTimeout(initializeIndicator, 1000)
 
   document.addEventListener('touchstart', event => {
     if (event.touches.length !== 1 || isHorizontalScroller(event.target)) return
@@ -165,6 +250,8 @@ export function installNavigationTransitions(): void {
     if (target?.closest('input, textarea, [contenteditable="true"]')) return
     cancelSwipeAnimation()
     resetRootTransform()
+    const buttons = primaryButtons()
+    if (buttons.length) setNavIndicator(activeNavIndex(buttons), false)
     swipeStartX = event.touches[0]?.clientX ?? null
     swipeStartY = event.touches[0]?.clientY ?? null
     swipeTarget = event.target
@@ -189,6 +276,9 @@ export function installNavigationTransitions(): void {
       root.style.transform = `translate3d(${swipeDeltaX}px,0,0)`
       root.style.opacity = '1'
     }
+
+    const buttons = primaryButtons()
+    if (buttons.length) updateNavIndicatorForSwipe(dx, activeNavIndex(buttons))
   }, { passive: true, capture: true })
 
   document.addEventListener('touchend', () => {
@@ -217,5 +307,10 @@ export function installNavigationTransitions(): void {
     swipeDeltaX = 0
     swipeActive = false
     resetRootTransform()
+    setNavIndicator(activeNavIndex(primaryButtons()), true)
   }, { passive: true, capture: true })
+
+  window.addEventListener('resize', () => {
+    if (!swipeActive) setNavIndicator(activeNavIndex(primaryButtons()), false)
+  })
 }
