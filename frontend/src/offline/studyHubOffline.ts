@@ -88,7 +88,9 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
 
   const cache = await caches.open(STUDY_CACHE)
   const assetUrls: string[] = []
-  const fileUrl = detail.file_url || detail.url || detail.download_url
+  // The backend exposes the private original through view_url for the owner.
+  // Cache it immediately at Save time; never wait for the reader to open it.
+  const fileUrl = detail.view_url || detail.file_url || detail.url || detail.download_url
   if (typeof fileUrl === 'string' && fileUrl) {
     const url = absoluteUrl(fileUrl)
     await cacheUrl(cache, url)
@@ -97,9 +99,9 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
 
   const pageCount = Number(detail.page_count || 0)
   if (pageCount > 0) {
-    for (let page = 1; page <= pageCount; page += 1) {
+    for (let page = 0; page < pageCount; page += 1) {
       const url = absoluteUrl(`/documents/${documentId}/reading/page/${page}?prepza_user=${encodeURIComponent(String(userId))}`)
-      if (!await cacheUrl(cache, url)) throw new Error(`Could not save page ${page} for offline study.`)
+      if (!await cacheUrl(cache, url)) throw new Error(`Could not save page ${page + 1} for offline study.`)
       assetUrls.push(url)
     }
   }
