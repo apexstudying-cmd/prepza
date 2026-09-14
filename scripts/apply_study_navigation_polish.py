@@ -19,8 +19,6 @@ def remove_document_opening_interstitials(text: str) -> str:
     only the legacy docLoading gate was insufficient. Both screens need to
     participate in the same DOC_CACHE.
     """
-    # Document Study Hub: render cached data immediately and cache every fresh
-    # response so generation -> back -> study never starts from null again.
     hub_state = "  const [document, setDocument] = useState<DocumentDetail | null>(null)"
     hub_cached_state = "  const [document, setDocument] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)"
     if hub_state in text and hub_cached_state not in text:
@@ -32,20 +30,15 @@ def remove_document_opening_interstitials(text: str) -> str:
         1,
     )
 
-    # If a cached document exists, never gate the hub on the refresh request.
     text = text.replace(
         '  if (loading) return <GenerationLoading label="Opening your document…" />\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
         '  if (loading && !document) return <GenerationLoading label="Loading study hub…" />\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
         1,
     )
 
-    # Native reader: use the same cache and avoid the old opening interstitial
-    # when coming from Document Study.
     reader_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(null)"
     reader_cached_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)"
     if reader_state in text and reader_cached_state not in text:
-        # The first matching state is the Document Study state in older builds,
-        # so replace the remaining null state (the reader's own state).
         text = text.replace(reader_state, reader_cached_state, 1)
 
     text = text.replace(
@@ -54,9 +47,6 @@ def remove_document_opening_interstitials(text: str) -> str:
         1,
     )
 
-    # Defensive final sweep: no generated source should contain the obsolete
-    # user-facing wording, even if an older surrounding implementation returns
-    # a slightly different loading branch.
     text = text.replace('Opening your document…', 'Loading…')
     text = text.replace('Opening your document...', 'Loading…')
     text = text.replace('Opening your document', 'Loading…')
@@ -64,7 +54,6 @@ def remove_document_opening_interstitials(text: str) -> str:
 
 
 def harden_document_navigation(text: str) -> str:
-    # Keep the main document-study screen cache-first as well.
     old_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(null)\n"
     new_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)\n"
     if old_state in text:
@@ -107,11 +96,91 @@ def harden_document_navigation(text: str) -> str:
     return text
 
 
+def harden_offline_startup(text: str) -> str:
+    """When the network is unavailable at cold start, resume the last known
+    authenticated screen from the persisted navigation state instead of
+    trapping the user behind the splash/session-check error screen.
+
+    This is intentionally navigation-only. Screen data remains uncached until
+    O2 (persistent local data), so uncached sections may still show their own
+    data-unavailable states while the app shell remains usable.
+    """
+    marker = "  const [state, setState] = useState<'checking' | 'retry'>('checking')\n"
+    injection = """  const [state, setState] = useState<'checking' | 'retry'>('checking')
+
+  const resumeOffline = () => {
+    const stored = readStoredNavigationState()
+    const resumeable: Screen[] = [
+      'home', 'explore', 'chats', 'profile', 'library', 'document-study',
+      'document-reader', 'ai-tutor', 'study-materials', 'podcast-player',
+      'podcast-library', 'flashcards', 'quiz', 'summary', 'mind-map',
+      'opportunities', 'opportunity-detail', 'notifications', 'student-profile',
+      'chat-detail', 'new-chat', 'chat-options', 'settings', 'edit-profile',
+    ]
+    const target = [...(stored?.stack || [])].reverse().find(s => resumeable.includes(s))
+    if (target) {
+      setScreen(target)
+      return true
+    }
+    return false
+  }
+"""
+    if marker in text and 'const resumeOffline = () =>' not in text:
+        text = text.replace(marker, injection, 1)
+
+    old = """  const checkSession = async (attempt = 0): Promise<void> => {
+    setState('checking')
+    try {
+      const me = await api<{ university_id: number | null }>('/me')
+      setScreen(me.university_id ? 'home' : 'complete-profile')
+    } catch (e) {
+"""
+    new = """  const checkSession = async (attempt = 0): Promise<void> => {
+    setState('checking')
+    // A cold offline launch should behave like reopening a native app: the
+    // cached shell is immediately usable. Do not wait through the splash's
+    // network timeout before restoring the last authenticated screen.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      if (resumeOffline()) return
+    }
+    try {
+      const me = await api<{ university_id: number | null }>('/me')
+      setScreen(me.university_id ? 'home' : 'complete-profile')
+    } catch (e) {
+"""
+    if old in text:
+        text = text.replace(old, new, 1)
+
+    old_error = """      if (attempt === 0) {
+        setTimeout(() => checkSession(1), 1200)
+      } else {
+        setState('retry')
+      }
+"""
+    new_error = """      if (attempt === 0) {
+        // If the browser reports offline, there is no value in waiting for a
+        // second network attempt. Resume the cached shell immediately.
+        if (typeof navigator !== 'undefined' && !navigator.onLine && resumeOffline()) return
+        setTimeout(() => checkSession(1), 1200)
+      } else {
+        // A server/network failure must not erase a still-valid local
+        // navigation session. Only a confirmed 401 above is allowed to force
+        // the login screen.
+        if (resumeOffline()) return
+        setState('retry')
+      }
+"""
+    if old_error in text:
+        text = text.replace(old_error, new_error, 1)
+    return text
+
+
 def main():
     text = APP.read_text(encoding='utf-8')
     text = replace_mind_map(text)
     text = harden_document_navigation(text)
     text = remove_document_opening_interstitials(text)
+    text = harden_offline_startup(text)
     APP.write_text(text, encoding='utf-8')
     print('study navigation polish applied')
 
