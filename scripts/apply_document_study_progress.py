@@ -24,31 +24,30 @@ def patch_study_hub(s):
 
 
 def patch_native_reader(s):
-    # Native reader progress is an idempotent upsert on the server. Opt only
-    # this mutation into O3's durable queue; never queue heartbeats, uploads,
-    # payments, auth, deletion, or AI generation.
+    old_state = "  const [csrfToken, setCsrfToken] = useState('')\n"
+    new_state = "  const [csrfToken, setCsrfToken] = useState('')\n  const [readerUserId, setReaderUserId] = useState<number | null>(null)\n  const localProgressKey = activeDocumentId == null || readerUserId == null ? '' : `prepza-reading-progress:${readerUserId}:${activeDocumentId}`\n  const saveLocalPage = (value: number, key = localProgressKey) => {\n    if (!key) return\n    try { localStorage.setItem(key, String(Math.max(0, value))) } catch {}\n  }\n"
+    if old_state in s and 'readerUserId' not in s:
+        s = s.replace(old_state, new_state, 1)
+
+    old_then = ".then(([detail, progress, me]) => { if (cancelled) return; setDoc(detail); setPage(progress.page_num || 0); setSavedPage(progress.page_num || 0); setCsrfToken(me.csrf_token) })"
+    new_then = ".then(([detail, progress, me]) => { if (cancelled) return; const userId = Number(me.id); const userKey = `prepza-reading-progress:${userId}:${activeDocumentId}`; const localPage = (() => { try { return Math.max(0, Number(localStorage.getItem(userKey) || 0) || 0) } catch { return 0 } })(); const restoredPage = Math.max(0, localPage || progress.page_num || 0); setReaderUserId(userId); setDoc(detail); setPage(restoredPage); setSavedPage(progress.page_num || 0); saveLocalPage(restoredPage, userKey); setCsrfToken(me.csrf_token) })"
+    if old_then in s:
+        s = s.replace(old_then, new_then, 1)
+
     old_post = "api(`/documents/${activeDocumentId}/reading`, {method:'POST', headers:{'X-CSRF-Token':csrfToken}, body:JSON.stringify({page_num:page})}).then(()=>setSavedPage(page)).catch(()=>{})"
     new_post = "api(`/documents/${activeDocumentId}/reading`, {method:'POST', headers:{'X-CSRF-Token':csrfToken, 'X-Prepza-Offline-Queue':'true'}, body:JSON.stringify({page_num:page})}).then(()=>setSavedPage(page)).catch(()=>{})"
     if old_post in s:
         s = s.replace(old_post, new_post, 1)
 
-    # Persist the last page locally as an immediate fallback. The server/API
-    # cache remains authoritative when available, while localStorage keeps the
-    # reader resumable even if the cached GET is missing or expired.
-    marker = "  const [csrfToken, setCsrfToken] = useState('')\n"
-    injection = """  const [csrfToken, setCsrfToken] = useState('')\n  const localProgressKey = activeDocumentId == null ? '' : `prepza-reading-progress:${activeDocumentId}`\n  const readLocalPage = () => {\n    if (!localProgressKey) return 0\n    try { return Math.max(0, Number(localStorage.getItem(localProgressKey) || 0) || 0) } catch { return 0 }\n  }\n  const saveLocalPage = (value: number) => {\n    if (!localProgressKey) return\n    try { localStorage.setItem(localProgressKey, String(Math.max(0, value))) } catch {}\n  }\n"""
-    if marker in s and 'prepza-reading-progress:' not in s:
-        s = s.replace(marker, injection, 1)
-
-    old_then = ".then(([detail, progress, me]) => { if (cancelled) return; setDoc(detail); setPage(progress.page_num || 0); setSavedPage(progress.page_num || 0); setCsrfToken(me.csrf_token) })"
-    new_then = ".then(([detail, progress, me]) => { if (cancelled) return; const restoredPage = Math.max(0, Number(localStorage.getItem(localProgressKey) || progress.page_num || 0) || 0); setDoc(detail); setPage(restoredPage); setSavedPage(progress.page_num || 0); saveLocalPage(restoredPage); setCsrfToken(me.csrf_token) })"
-    if old_then in s:
-        s = s.replace(old_then, new_then, 1)
-
     old_page_effect = "    if (activeDocumentId == null || !csrfToken || page === savedPage) return\n    const timer = setTimeout(() => api(`/documents/${activeDocumentId}/reading`, {method:'POST', headers:{'X-CSRF-Token':csrfToken, 'X-Prepza-Offline-Queue':'true'}, body:JSON.stringify({page_num:page})}).then(()=>setSavedPage(page)).catch(()=>{}), 250)"
     new_page_effect = "    if (activeDocumentId == null || page === savedPage) return\n    saveLocalPage(page)\n    if (!csrfToken) return\n    const timer = setTimeout(() => api(`/documents/${activeDocumentId}/reading`, {method:'POST', headers:{'X-CSRF-Token':csrfToken, 'X-Prepza-Offline-Queue':'true'}, body:JSON.stringify({page_num:page})}).then(()=>setSavedPage(page)).catch(()=>{}), 250)"
     if old_page_effect in s:
         s = s.replace(old_page_effect, new_page_effect, 1)
+
+    old_page_url = "  const pageUrl = `/documents/${activeDocumentId}/reading/page/${current}`"
+    new_page_url = "  const pageUrl = `/documents/${activeDocumentId}/reading/page/${current}${readerUserId != null ? `?prepza_user=${readerUserId}` : ''}`"
+    if old_page_url in s and 'prepza_user=' not in s:
+        s = s.replace(old_page_url, new_page_url, 1)
 
     return s
 
