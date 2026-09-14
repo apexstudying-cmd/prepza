@@ -1,8 +1,8 @@
 // Prepza application-shell service worker.
-// O4: cache study reader assets (PDF responses and the PDF.js CDN runtime)
+// O4: cache study reader assets (PDF responses, native study pages, and the PDF.js CDN runtime)
 // after the student has accessed them online. API/data caching is handled by
 // the offline data foundation.
-const SW_VERSION = 'v9';
+const SW_VERSION = 'v10';
 const SHELL_CACHE = `prepza-shell-${SW_VERSION}`;
 const RUNTIME_CACHE = `prepza-runtime-${SW_VERSION}`;
 const NAV_TIMEOUT_MS = 1800;
@@ -14,6 +14,9 @@ const CORE_SHELL = ['/', '/offline.html', '/manifest.json', '/icon-192.png', '/i
 
 function sameOrigin(url) { return url.origin === self.location.origin; }
 function isPdfJsAsset(url) { return url.hostname === PDFJS_HOST && url.pathname.startsWith(PDFJS_PATH_PREFIX); }
+function isNativeStudyPage(url) {
+  return sameOrigin(url) && /^\/documents\/\d+\/reading\/page\/\d+$/.test(url.pathname);
+}
 
 function isCacheableAsset(request) {
   if (request.method !== 'GET') return false;
@@ -21,6 +24,7 @@ function isCacheableAsset(request) {
   if (url.pathname === '/sw.js' || url.pathname === '/sw-register.js') return false;
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return false;
   if (isPdfJsAsset(url)) return /\.(?:js|mjs|map)$/i.test(url.pathname);
+  if (isNativeStudyPage(url)) return true;
   if (!sameOrigin(url)) return false;
   return url.pathname.startsWith('/assets/') ||
     /\.(?:css|js|mjs|png|jpg|jpeg|webp|gif|svg|ico|woff2?|ttf|otf)$/i.test(url.pathname);
@@ -62,7 +66,12 @@ self.addEventListener('activate', (event) => {
     names.filter((name) => (name.startsWith('prepza-shell-') || name.startsWith('prepza-runtime-')) && name !== SHELL_CACHE && name !== RUNTIME_CACHE).map((name) => caches.delete(name)),
   )).then(() => self.clients.claim()));
 });
-self.addEventListener('message', (event) => { if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting(); });
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data && event.data.type === 'CLEAR_STUDY_ASSETS') {
+    event.waitUntil(caches.delete(STUDY_ASSET_CACHE));
+  }
+});
 function timeout(ms) { return new Promise((_, reject) => setTimeout(() => reject(new Error('nav-timeout')), ms)); }
 async function handleNavigation(request) {
   const network = fetch(request).then(async (response) => { if (response && response.ok) { const cache = await caches.open(SHELL_CACHE); await cache.put('/', response.clone()); } return response; });
@@ -70,11 +79,11 @@ async function handleNavigation(request) {
   catch (_) { const shell = await caches.match('/', { ignoreSearch: true }); if (shell) return shell; const offline = await caches.match('/offline.html'); if (offline) return offline; return new Response('Offline', { status: 503, statusText: 'Offline' }); }
 }
 async function handleAsset(request) {
-  const cacheName = isPdfJsAsset(new URL(request.url)) ? RUNTIME_CACHE : RUNTIME_CACHE;
-  const cached = await caches.match(request, { ignoreSearch: true });
+  const cacheName = isNativeStudyPage(new URL(request.url)) ? STUDY_ASSET_CACHE : RUNTIME_CACHE;
+  const cached = await caches.match(request, { ignoreSearch: false });
   if (cached) return cached;
   try { return await cacheResponse(cacheName, request, await fetch(request)); }
-  catch (_) { const fallback = await caches.match(request, { ignoreSearch: true }); return fallback || new Response('', { status: 503, statusText: 'Network error' }); }
+  catch (_) { const fallback = await caches.match(request, { ignoreSearch: false }); return fallback || new Response('', { status: 503, statusText: 'Network error' }); }
 }
 self.addEventListener('fetch', (event) => {
   const request = event.request;
