@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.34.3",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "prebuild": "python3 ../tools/run_study_navigation_polish.py && python3 ../tools/apply_generation_ui_build.py && python3 ../tools/apply_offline_data_foundation.py && python3 ../tools/apply_offline_sync_queue.py",
+    "prebuild": "python3 ../tools/run_study_navigation_polish.py && python3 ../tools/apply_generation_ui_build.py && python3 ../tools/apply_offline_data_foundation.py && python3 ../tools/apply_offline_sync_queue.py && python3 ../tools/apply_offline_study.py && python3 ../scripts/apply_document_study_progress.py",
     "build": "vite build",
     "preview": "vite preview",
     "format": "oxfmt"
