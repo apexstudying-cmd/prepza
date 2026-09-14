@@ -11,6 +11,7 @@ import { installChatStudyDocumentObserver, default as ChatStudyDocumentReader } 
 import { installChatRealtime } from './crypto/chatRealtime'
 import { installChatSwipeReply } from './crypto/chatSwipeReply'
 import { installChatUiPolish } from './crypto/chatUiPolish'
+import { installNavigationTransitions } from './crypto/navigationTransitions'
 import App from './App'
 import './index.css'
 
@@ -24,6 +25,7 @@ installChatStudyDocumentObserver()
 installChatRealtime()
 installChatSwipeReply()
 installChatUiPolish()
+installNavigationTransitions()
 
 // E2EE is automatic: establish this device's identity in the background.
 // The private key stays local; only the public key is registered server-side.
