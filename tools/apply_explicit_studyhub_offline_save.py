@@ -1,6 +1,7 @@
 from pathlib import Path
 
-APP = Path('frontend/src/App.tsx')
+ROOT = Path(__file__).resolve().parents[1]
+APP = ROOT / 'frontend/src/App.tsx'
 
 IMPORT = "import { saveStudyHubDocumentOffline } from './offline/studyHubOffline'\n"
 ACTIVITY_IMPORT = "import { mergeOfflineStudyResponse, startOfflineStudyTracking, syncOfflineStudyActivity } from './offline/studyActivity'\n"
@@ -15,9 +16,6 @@ for import_line in (IMPORT, ACTIVITY_IMPORT, GENERATED_IMPORT):
         s = s.replace(anchor, anchor + import_line, 1)
         anchor = import_line
 
-# Offline generation replay: previously generated study materials are local
-# study assets, not fresh AI work. This path only activates when the device is
-# offline and never queues a new AI generation request.
 generation_replay = """  const requestBody = (() => { try { return typeof restOptions.body === 'string' ? JSON.parse(restOptions.body) : restOptions.body } catch { return null } })()\n  if (typeof navigator !== 'undefined' && !navigator.onLine && restOptions.method && restOptions.method.toUpperCase() !== 'GET' && /\\/documents\\/\\d+\\/(summarize|quiz|flashcards|podcast-script|mind-map)$/.test(path)) {\n    const cachedGenerated = await getGeneratedMaterialOffline(path, requestBody)\n    if (cachedGenerated != null) return cachedGenerated as T\n  }\n"""
 if generation_replay not in s:
     anchor = "  const { headers: extraHeaders, ...restOptions } = options\n"
@@ -25,7 +23,7 @@ if generation_replay not in s:
         raise SystemExit('API options anchor not found')
     s = s.replace(anchor, anchor + generation_replay, 1)
 
-hook = """  // Product rule: Library Save is also the explicit offline download action.\n  // Explore views never call this; only the successful Library save endpoint does.\n  if (res.ok && /^\\/library\\/\\d+\\/save$/.test(path) && body && Number.isInteger(Number(body.document_id))) {\n    try {\n      await saveStudyHubDocumentOffline(Number(body.document_id))\n      body.offline_available = true\n    } catch (_) {\n      body.offline_available = false\n    }\n  }\n\n  if (res.ok) await saveGeneratedMaterialOffline(path, requestBody, body)\n  body = mergeOfflineStudyResponse(path, body)\n"""
+hook = """  if (res.ok && /^\\/library\\/\\d+\\/save$/.test(path) && body && Number.isInteger(Number(body.document_id))) {\n    try {\n      await saveStudyHubDocumentOffline(Number(body.document_id))\n      body.offline_available = true\n    } catch (_) {\n      body.offline_available = false\n    }\n  }\n\n  if (res.ok) await saveGeneratedMaterialOffline(path, requestBody, body)\n  body = mergeOfflineStudyResponse(path, body)\n"""
 if hook not in s:
     anchor = "  if (!res.ok) {\n    throw new ApiError((body && body.error) || `Request failed (${res.status})`, res.status)\n  }\n"
     if anchor not in s:
