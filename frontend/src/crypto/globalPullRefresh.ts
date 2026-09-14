@@ -1,4 +1,5 @@
 let installed = false
+let startX: number | null = null
 let startY: number | null = null
 let activeSurface: HTMLElement | null = null
 let triggered = false
@@ -29,20 +30,25 @@ export function installGlobalPullRefresh(): void {
   // Covers every screen, including screens that don't contain chat messages.
   document.addEventListener('touchstart', event => {
     const surface = findSurface(event.target)
-    if (!surface || surface.scrollTop > 2) return
+    if (!surface || surface.scrollTop > 2 || event.touches.length !== 1) return
     activeSurface = surface
+    startX = event.touches[0]?.clientX ?? null
     startY = event.touches[0]?.clientY ?? null
     triggered = false
   }, { passive: true, capture: true })
 
   document.addEventListener('touchmove', event => {
-    if (startY == null || !activeSurface || triggered || activeSurface.scrollTop > 2) return
+    if (startX == null || startY == null || !activeSurface || triggered || activeSurface.scrollTop > 2 || event.touches.length !== 1) return
+    const currentX = event.touches[0]?.clientX ?? startX
     const currentY = event.touches[0]?.clientY ?? startY
-    const distance = currentY - startY
-    if (distance >= 72 && distance > Math.abs(event.touches[0]?.clientX ?? 0)) triggerRefresh()
+    const dx = currentX - startX
+    const dy = currentY - startY
+    // Only a genuinely downward gesture should refresh; horizontal swipes
+    // belong to the primary navigation gesture.
+    if (dy >= 72 && dy > Math.abs(dx) * 1.35) triggerRefresh()
   }, { passive: true, capture: true })
 
-  const reset = () => { startY = null; activeSurface = null; triggered = false }
+  const reset = () => { startX = null; startY = null; activeSurface = null; triggered = false }
   document.addEventListener('touchend', reset, { passive: true, capture: true })
   document.addEventListener('touchcancel', reset, { passive: true, capture: true })
 
