@@ -38,7 +38,7 @@ function dateLabel(value: string | null): string {
 function requestScan() {
   if (scanQueued) return
   scanQueued = true
-  queueMicrotask(() => {
+  requestAnimationFrame(() => {
     scanQueued = false
     scan()
   })
@@ -150,13 +150,23 @@ function scan() {
   renderDateSeparators(surface, rows)
 }
 
+function mutationContainsRealChatChange(mutations: MutationRecord[]): boolean {
+  for (const mutation of mutations) {
+    const nodes = [...Array.from(mutation.addedNodes), ...Array.from(mutation.removedNodes)]
+    if (!nodes.length) continue
+    if (nodes.some(node => !(node instanceof HTMLElement && node.closest('[data-prepza-date-separator="1"]')))) return true
+  }
+  return false
+}
+
 export function installChatUiPolish(): void {
   if (installed || typeof window === 'undefined') return
   installed = true
   installFetchCapture()
   scan()
-  const observer = new MutationObserver(() => {
-    if (!renderingDates) requestScan()
+  const observer = new MutationObserver(mutations => {
+    if (renderingDates || !mutationContainsRealChatChange(mutations)) return
+    requestScan()
   })
   observer.observe(document.body, { childList: true, subtree: true })
 }
