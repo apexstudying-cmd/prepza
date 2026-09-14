@@ -8,10 +8,43 @@ let swipeAnimation: Animation | null = null
 let navigationInProgress = false
 
 const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile']
+const PRIMARY_SWIPE_SCREENS = new Set(PRIMARY_NAV_LABELS)
 const SWIPE_THRESHOLD = 56
 const TRANSITION_DURATION = 240
 const MOTION_EASE = 'cubic-bezier(.22,.8,.22,1)'
 const COLOR_EASE = 'color 220ms cubic-bezier(.22,.8,.22,1)'
+
+function currentAppScreen(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    for (let index = 0; index < window.sessionStorage.length; index += 1) {
+      const key = window.sessionStorage.key(index)
+      if (!key) continue
+      const raw = window.sessionStorage.getItem(key)
+      if (!raw) continue
+      if (PRIMARY_SWIPE_SCREENS.has(raw)) return raw
+      try {
+        const parsed = JSON.parse(raw) as unknown
+        if (typeof parsed === 'object' && parsed !== null && 'screen' in parsed) {
+          const screen = (parsed as { screen?: unknown }).screen
+          if (typeof screen === 'string') return screen
+        }
+      } catch {
+        // Ignore non-JSON session values.
+      }
+    }
+  } catch {
+    // Session storage can be unavailable in restricted browser contexts.
+  }
+  return null
+}
+
+function isPrimarySwipeScreen(): boolean {
+  const screen = currentAppScreen()
+  // If the app's persisted navigation state is unavailable, preserve the
+  // existing behavior rather than disabling swipe unexpectedly.
+  return screen == null || PRIMARY_SWIPE_SCREENS.has(screen)
+}
 
 function navLabel(button: HTMLElement): string {
   return `${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''} ${button.textContent || ''}`.trim().toLowerCase()
@@ -182,16 +215,12 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
   const sign = direction === 'left' ? -1 : 1
   const width = Math.max(window.innerWidth, content.clientWidth || 0)
 
-  // Keep the outgoing snapshot as the visible frame while React swaps the
-  // actual screen underneath it. The snapshot prevents a blank/white frame.
   content.style.visibility = 'hidden'
   content.style.transform = `translate3d(${-sign * width}px,0,0)`
   content.style.willChange = 'transform'
 
   navigate()
 
-  // One frame is enough for React to commit the destination. Waiting two
-  // frames created an unnecessary paint gap on slower Android devices.
   requestAnimationFrame(() => {
     const nextContent = contentElement()
     if (!nextContent) {
@@ -247,8 +276,6 @@ function isHorizontalScroller(target: EventTarget | null): boolean {
   const pager = contentElement()
   let node = target instanceof HTMLElement ? target : null
   while (node && node !== document.body) {
-    // The pager itself is the gesture surface. Only nested horizontal
-    // scrollers should consume horizontal swipes.
     if (node === pager) break
     const style = getComputedStyle(node)
     if ((style.overflowX === 'auto' || style.overflowX === 'scroll') && node.scrollWidth > node.clientWidth + 4) return true
@@ -288,12 +315,8 @@ export function installNavigationTransitions(): void {
   window.setTimeout(initialize, 250)
   window.setTimeout(initialize, 1000)
 
-  // Touch Events are used here deliberately. On Android Chrome they let the
-  // app distinguish a horizontal pager gesture from vertical scrolling before
-  // calling preventDefault; Pointer Events in the previous implementation
-  // were getting cancelled before the pager could move.
   document.addEventListener('touchstart', event => {
-    if (navigationInProgress || event.touches.length !== 1 || isHorizontalScroller(event.target)) return
+    if (!isPrimarySwipeScreen() || navigationInProgress || event.touches.length !== 1 || isHorizontalScroller(event.target)) return
     const target = event.target instanceof HTMLElement ? event.target : null
     if (target?.closest('input, textarea, select, button, [contenteditable="true"]')) return
 
@@ -309,7 +332,7 @@ export function installNavigationTransitions(): void {
   }, { capture: true, passive: true })
 
   document.addEventListener('touchmove', event => {
-    if (swipeStartX == null || swipeStartY == null || event.touches.length !== 1) return
+    if (!isPrimarySwipeScreen() || swipeStartX == null || swipeStartY == null || event.touches.length !== 1) return
 
     const dx = event.touches[0].clientX - swipeStartX
     const dy = event.touches[0].clientY - swipeStartY
@@ -338,9 +361,9 @@ export function installNavigationTransitions(): void {
     }
   }, { capture: true, passive: false })
 
-  const finishTouch = (event: TouchEvent) => {
+  const finishTouch = () => {
     if (swipeStartX == null || swipeStartY == null) return
-    const shouldNavigate = swipeActive && Math.abs(swipeDeltaX) >= SWIPE_THRESHOLD
+    const shouldNavigate = isPrimarySwipeScreen() && swipeActive && Math.abs(swipeDeltaX) >= SWIPE_THRESHOLD
 
     if (shouldNavigate) {
       navigateBySwipe(swipeDeltaX < 0 ? 'next' : 'previous')
