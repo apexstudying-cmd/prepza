@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 READER = ROOT / 'frontend' / 'src' / 'crypto' / 'PdfStudyCanvas.tsx'
@@ -10,14 +9,21 @@ def patch_reader():
     s = READER.read_text(encoding='utf-8')
     original = s
 
+    if "./offline/studyActivity" not in s:
+        s = s.replace(
+            "import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'\n",
+            "import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'\nimport { startOfflineStudyTracking } from '../offline/studyActivity'\n",
+            1,
+        )
+
     s = s.replace(
         "type Props = { src: string; title: string; onPageChange?: (page: number) => void; onTextSelection?: (text: string) => void }",
-        "type Props = { src: string; title: string; initialPage?: number; onPageChange?: (page: number) => void; onTextSelection?: (text: string) => void }",
+        "type Props = { src: string; title: string; initialPage?: number; documentId?: number; onPageChange?: (page: number) => void; onTextSelection?: (text: string) => void }",
         1,
     )
     s = s.replace(
         "export default function PdfStudyCanvas({ src, title, onPageChange, onTextSelection }: Props) {",
-        "export default function PdfStudyCanvas({ src, title, initialPage = 1, onPageChange, onTextSelection }: Props) {",
+        "export default function PdfStudyCanvas({ src, title, initialPage = 1, documentId, onPageChange, onTextSelection }: Props) {",
         1,
     )
     s = s.replace(
@@ -30,6 +36,13 @@ def patch_reader():
         "setPage(Math.max(1, initialPage)); setPages(0); setZoom(1);",
         1,
     )
+
+    tracker_effect = "  useEffect(() => { if (documentId == null) return; return startOfflineStudyTracking(documentId, 'reading') }, [documentId])\n"
+    if tracker_effect not in s:
+        anchor = "  const annotationKey = `${STORE}:${src}`, bookmarkKey = `${BOOKMARKS}:${src}`\n"
+        if anchor not in s:
+            raise SystemExit('PDF tracker anchor not found')
+        s = s.replace(anchor, tracker_effect + anchor, 1)
 
     old = """const response = await window.fetch(src, { credentials: 'include' }); if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`); const document = await openPdf(new Uint8Array(await response.arrayBuffer()));"""
     new = """let response: Response
@@ -51,7 +64,6 @@ def patch_reader():
     elif "prepza-study-assets-v1" not in s:
         raise SystemExit('PDF fetch anchor not found')
 
-    # The first render should resume from the persisted page, not always page 1.
     s = s.replace(
         "const result = await renderPdfPage(document, 1, 1, canvasRef.current!); if (!cancelled) { setText(result.text); onPageChange?.(1) }",
         "const resumePage = Math.min(Math.max(1, initialPage), document.numPages); setPage(resumePage); const result = await renderPdfPage(document, resumePage, 1, canvasRef.current!); if (!cancelled) { setText(result.text); onPageChange?.(resumePage) }",
@@ -70,13 +82,11 @@ def patch_reader():
 
 def patch_app():
     s = APP.read_text(encoding='utf-8')
-    # Prefer an existing reader prop site if present; otherwise the reader may
-    # already be wrapped by a generated/build transformation.
     patterns = [
         ("<PdfStudyCanvas src={document.file_url} title={document.title} onPageChange={handlePageChange}",
-         "<PdfStudyCanvas src={document.file_url} title={document.title} initialPage={readingPage + 1} onPageChange={handlePageChange}"),
+         "<PdfStudyCanvas src={document.file_url} title={document.title} documentId={activeDocumentId ?? undefined} initialPage={readingPage + 1} onPageChange={handlePageChange}"),
         ("<PdfStudyCanvas src={doc.file_url} title={doc.title} onPageChange={handlePageChange}",
-         "<PdfStudyCanvas src={doc.file_url} title={doc.title} initialPage={readingPage + 1} onPageChange={handlePageChange}"),
+         "<PdfStudyCanvas src={doc.file_url} title={doc.title} documentId={activeDocumentId ?? undefined} initialPage={readingPage + 1} onPageChange={handlePageChange}"),
     ]
     for old, new in patterns:
         if old in s and new not in s:
@@ -88,7 +98,7 @@ def patch_app():
 def main():
     patch_reader()
     patch_app()
-    print('Offline study asset caching and reader resume patch applied.')
+    print('Offline study asset caching, activity tracking, and reader resume patch applied.')
 
 
 if __name__ == '__main__':
