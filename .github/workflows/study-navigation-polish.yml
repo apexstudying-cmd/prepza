@@ -3,6 +3,8 @@ name: Study navigation polish
 on:
   push:
     branches: [fix/study-navigation-polish]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
