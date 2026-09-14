@@ -7,43 +7,31 @@ let swipeActive = false
 let swipeAnimation: Animation | null = null
 let navigationInProgress = false
 
-const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile']
-const PRIMARY_SWIPE_SCREENS = new Set(PRIMARY_NAV_LABELS)
+const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile'] as const
+const PRIMARY_SWIPE_SCREENS = new Set<string>(PRIMARY_NAV_LABELS)
 const SWIPE_THRESHOLD = 56
 const TRANSITION_DURATION = 240
 const MOTION_EASE = 'cubic-bezier(.22,.8,.22,1)'
 const COLOR_EASE = 'color 220ms cubic-bezier(.22,.8,.22,1)'
+const NAVIGATION_STORAGE_KEY = 'prepza-navigation-state'
 
 function currentAppScreen(): string | null {
   if (typeof window === 'undefined') return null
   try {
-    for (let index = 0; index < window.sessionStorage.length; index += 1) {
-      const key = window.sessionStorage.key(index)
-      if (!key) continue
-      const raw = window.sessionStorage.getItem(key)
-      if (!raw) continue
-      if (PRIMARY_SWIPE_SCREENS.has(raw)) return raw
-      try {
-        const parsed = JSON.parse(raw) as unknown
-        if (typeof parsed === 'object' && parsed !== null && 'screen' in parsed) {
-          const screen = (parsed as { screen?: unknown }).screen
-          if (typeof screen === 'string') return screen
-        }
-      } catch {
-        // Ignore non-JSON session values.
-      }
-    }
+    const raw = window.sessionStorage.getItem(NAVIGATION_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { stack?: unknown }
+    if (!Array.isArray(parsed.stack) || parsed.stack.length === 0) return null
+    const screen = parsed.stack[parsed.stack.length - 1]
+    return typeof screen === 'string' ? screen : null
   } catch {
-    // Session storage can be unavailable in restricted browser contexts.
+    return null
   }
-  return null
 }
 
 function isPrimarySwipeScreen(): boolean {
   const screen = currentAppScreen()
-  // If the app's persisted navigation state is unavailable, preserve the
-  // existing behavior rather than disabling swipe unexpectedly.
-  return screen == null || PRIMARY_SWIPE_SCREENS.has(screen)
+  return screen !== null && PRIMARY_SWIPE_SCREENS.has(screen)
 }
 
 function navLabel(button: HTMLElement): string {
@@ -62,7 +50,6 @@ function primaryButtons(): HTMLButtonElement[] {
 
 function activeNavIndex(buttons: HTMLButtonElement[]): number {
   if (lastKnownIndex != null && lastKnownIndex >= 0 && lastKnownIndex < buttons.length) return lastKnownIndex
-
   const active = buttons.findIndex(button => {
     const className = typeof button.className === 'string' ? button.className : ''
     return button.getAttribute('aria-current') === 'page'
@@ -71,7 +58,6 @@ function activeNavIndex(buttons: HTMLButtonElement[]): number {
       || button.querySelector('[aria-current="page"]') !== null
       || /(^|[\s_-])(active|selected|current)([\s_-]|$)/i.test(className)
   })
-
   lastKnownIndex = active >= 0 ? active : 0
   return lastKnownIndex
 }
@@ -115,10 +101,8 @@ function copyScrollPositions(source: Element, target: Element): void {
     target.scrollTop = source.scrollTop
     target.scrollLeft = source.scrollLeft
   }
-  const sourceChildren = Array.from(source.children)
-  const targetChildren = Array.from(target.children)
-  sourceChildren.forEach((child, index) => {
-    const targetChild = targetChildren[index]
+  Array.from(source.children).forEach((child, index) => {
+    const targetChild = target.children[index]
     if (targetChild) copyScrollPositions(child, targetChild)
   })
 }
@@ -131,51 +115,30 @@ function stripCloneIds(root: Element): void {
 function createOutgoingLayer(content: HTMLElement): HTMLElement | null {
   const rect = content.getBoundingClientRect()
   if (rect.width <= 0 || rect.height <= 0) return null
-
   const contentStyle = getComputedStyle(content)
   const root = document.getElementById('root')
   const appShell = root?.firstElementChild
-  const fallbackBackground = root ? getComputedStyle(root).backgroundColor : 'transparent'
+  const rootBackground = root ? getComputedStyle(root).backgroundColor : 'transparent'
   const shellBackground = appShell instanceof HTMLElement ? getComputedStyle(appShell).backgroundColor : 'transparent'
   const background = contentStyle.backgroundColor !== 'rgba(0, 0, 0, 0)'
     ? contentStyle.backgroundColor
-    : shellBackground !== 'rgba(0, 0, 0, 0)'
-      ? shellBackground
-      : fallbackBackground
-
+    : shellBackground !== 'rgba(0, 0, 0, 0)' ? shellBackground : rootBackground
   const host = document.createElement('div')
   host.setAttribute('aria-hidden', 'true')
   host.dataset.prepzaNavLayer = 'outgoing'
   Object.assign(host.style, {
-    position: 'fixed',
-    left: `${rect.left}px`,
-    top: `${rect.top}px`,
-    width: `${rect.width}px`,
-    height: `${rect.height}px`,
-    overflow: 'hidden',
-    boxSizing: 'border-box',
-    zIndex: '40',
-    pointerEvents: 'none',
-    background,
-    transform: `translate3d(${swipeDeltaX}px,0,0)`,
-    willChange: 'transform',
-    backfaceVisibility: 'hidden',
-    contain: 'paint',
+    position: 'fixed', left: `${rect.left}px`, top: `${rect.top}px`,
+    width: `${rect.width}px`, height: `${rect.height}px`, overflow: 'hidden',
+    boxSizing: 'border-box', zIndex: '40', pointerEvents: 'none', background,
+    transform: `translate3d(${swipeDeltaX}px,0,0)`, willChange: 'transform',
+    backfaceVisibility: 'hidden', contain: 'paint',
   })
-
   const clone = content.cloneNode(true) as HTMLElement
   stripCloneIds(clone)
   Object.assign(clone.style, {
-    position: 'absolute',
-    left: '0',
-    top: '0',
-    width: `${content.offsetWidth}px`,
-    minHeight: `${content.offsetHeight}px`,
-    transform: 'none',
-    overflow: contentStyle.overflow,
-    background,
-    pointerEvents: 'none',
-    backfaceVisibility: 'hidden',
+    position: 'absolute', left: '0', top: '0', width: `${content.offsetWidth}px`,
+    minHeight: `${content.offsetHeight}px`, transform: 'none', overflow: contentStyle.overflow,
+    background, pointerEvents: 'none', backfaceVisibility: 'hidden',
   })
   host.appendChild(clone)
   document.body.appendChild(host)
@@ -188,66 +151,39 @@ function animateBack(): void {
   if (!content) return
   cancelSwipeAnimation()
   swipeAnimation = content.animate(
-    [
-      { transform: `translate3d(${swipeDeltaX}px,0,0)` },
-      { transform: 'translate3d(0,0,0)' },
-    ],
+    [{ transform: `translate3d(${swipeDeltaX}px,0,0)` }, { transform: 'translate3d(0,0,0)' }],
     { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
   )
-  swipeAnimation.onfinish = () => {
-    swipeAnimation = null
-    resetContentTransform()
-  }
+  swipeAnimation.onfinish = () => { swipeAnimation = null; resetContentTransform() }
 }
 
 function finishNavigation(direction: 'left' | 'right', navigate: () => void): void {
   if (navigationInProgress) return
   const content = contentElement()
-  if (!content) {
-    navigate()
-    return
-  }
-
+  if (!content) { navigate(); return }
   navigationInProgress = true
   cancelSwipeAnimation()
-
   const outgoingLayer = createOutgoingLayer(content)
   const sign = direction === 'left' ? -1 : 1
   const width = Math.max(window.innerWidth, content.clientWidth || 0)
-
   content.style.visibility = 'hidden'
   content.style.transform = `translate3d(${-sign * width}px,0,0)`
   content.style.willChange = 'transform'
-
   navigate()
-
   requestAnimationFrame(() => {
     const nextContent = contentElement()
-    if (!nextContent) {
-      outgoingLayer?.remove()
-      navigationInProgress = false
-      return
-    }
-
+    if (!nextContent) { outgoingLayer?.remove(); navigationInProgress = false; return }
     nextContent.style.visibility = 'visible'
     nextContent.style.willChange = 'transform'
     nextContent.style.transform = `translate3d(${-sign * width}px,0,0)`
-
     const outgoingAnimation = outgoingLayer?.animate(
-      [
-        { transform: `translate3d(${swipeDeltaX}px,0,0)` },
-        { transform: `translate3d(${sign * width}px,0,0)` },
-      ],
+      [{ transform: `translate3d(${swipeDeltaX}px,0,0)` }, { transform: `translate3d(${sign * width}px,0,0)` }],
       { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
     )
     const incomingAnimation = nextContent.animate(
-      [
-        { transform: `translate3d(${-sign * width}px,0,0)` },
-        { transform: 'translate3d(0,0,0)' },
-      ],
+      [{ transform: `translate3d(${-sign * width}px,0,0)` }, { transform: 'translate3d(0,0,0)' }],
       { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
     )
-
     Promise.allSettled([outgoingAnimation?.finished, incomingAnimation.finished]).then(() => {
       outgoingLayer?.remove()
       nextContent.style.visibility = ''
@@ -263,11 +199,7 @@ function navigateBySwipe(direction: 'next' | 'previous'): void {
   if (buttons.length < 2) return
   const active = activeNavIndex(buttons)
   const nextIndex = direction === 'next' ? active + 1 : active - 1
-  if (nextIndex < 0 || nextIndex >= buttons.length) {
-    animateBack()
-    return
-  }
-
+  if (nextIndex < 0 || nextIndex >= buttons.length) { animateBack(); return }
   lastKnownIndex = nextIndex
   finishNavigation(direction === 'next' ? 'left' : 'right', () => buttons[nextIndex].click())
 }
@@ -294,7 +226,6 @@ function resetSwipeState(): void {
 export function installNavigationTransitions(): void {
   if (installed || typeof document === 'undefined') return
   installed = true
-
   document.addEventListener('click', event => {
     const target = event.target instanceof HTMLElement ? event.target.closest('button') as HTMLButtonElement | null : null
     if (!target || !isPrimaryNavButton(target) || swipeActive || navigationInProgress) return
@@ -304,7 +235,6 @@ export function installNavigationTransitions(): void {
     prepareNavColorTransitions()
     preparePagerSurface()
   }, true)
-
   const initialize = () => {
     prepareNavColorTransitions()
     preparePagerSurface()
@@ -319,7 +249,6 @@ export function installNavigationTransitions(): void {
     if (!isPrimarySwipeScreen() || navigationInProgress || event.touches.length !== 1 || isHorizontalScroller(event.target)) return
     const target = event.target instanceof HTMLElement ? event.target : null
     if (target?.closest('input, textarea, select, button, [contenteditable="true"]')) return
-
     const content = contentElement()
     if (!content) return
     cancelSwipeAnimation()
@@ -333,27 +262,19 @@ export function installNavigationTransitions(): void {
 
   document.addEventListener('touchmove', event => {
     if (!isPrimarySwipeScreen() || swipeStartX == null || swipeStartY == null || event.touches.length !== 1) return
-
     const dx = event.touches[0].clientX - swipeStartX
     const dy = event.touches[0].clientY - swipeStartY
-
     if (!swipeActive) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
-      if (Math.abs(dy) >= Math.abs(dx) * 1.12 || Math.abs(dx) <= Math.abs(dy)) {
-        resetSwipeState()
-        return
-      }
+      if (Math.abs(dy) >= Math.abs(dx) * 1.12 || Math.abs(dx) <= Math.abs(dy)) { resetSwipeState(); return }
       swipeActive = true
     }
-
     event.preventDefault()
     const buttons = primaryButtons()
     const active = activeNavIndex(buttons)
     const atStart = active <= 0 && dx > 0
     const atEnd = active >= buttons.length - 1 && dx < 0
-    const resistance = atStart || atEnd ? 0.35 : 1
-    swipeDeltaX = dx * resistance
-
+    swipeDeltaX = dx * (atStart || atEnd ? 0.35 : 1)
     const content = contentElement()
     if (content) {
       content.style.willChange = 'transform'
@@ -364,16 +285,10 @@ export function installNavigationTransitions(): void {
   const finishTouch = () => {
     if (swipeStartX == null || swipeStartY == null) return
     const shouldNavigate = isPrimarySwipeScreen() && swipeActive && Math.abs(swipeDeltaX) >= SWIPE_THRESHOLD
-
-    if (shouldNavigate) {
-      navigateBySwipe(swipeDeltaX < 0 ? 'next' : 'previous')
-    } else if (swipeActive) {
-      animateBack()
-    }
-
+    if (shouldNavigate) navigateBySwipe(swipeDeltaX < 0 ? 'next' : 'previous')
+    else if (swipeActive) animateBack()
     resetSwipeState()
   }
-
   document.addEventListener('touchend', finishTouch, { capture: true, passive: true })
   document.addEventListener('touchcancel', finishTouch, { capture: true, passive: true })
 }
