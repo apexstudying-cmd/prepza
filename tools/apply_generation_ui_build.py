@@ -131,7 +131,23 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 
 ''', aliases=('// ─── MINDMAP',))
 
-# The old document-opening interstitial is intentionally removed: document-study should render immediately.
+# Remove the actual document-study interstitial, not merely its label.
+# The study screen itself already fetches the document and renders a usable shell,
+# so navigation is immediate while the document request resolves.
+doc_loading_block = '''  // Only pending while there's an active document whose fetch hasn't yet
+  // resolved (success or error) - if no document is selected, this stays
+  // false so the "no document selected" state below can render immediately.
+  const docLoading = activeDocumentId != null && doc === null && !docLoadError
+  if (docLoading) return <SkeletonDocument />
+
+'''
+if doc_loading_block in text:
+    text = text.replace(doc_loading_block, '', 1)
+else:
+    # Idempotent fallback for whitespace/comment drift.
+    text = re.sub(r"\s*// Only pending while there's an active document[\s\S]*?if \(docLoading\) return <SkeletonDocument />\n", "\n", text, count=1)
+
+# Remove any stale visible label from older generated variants.
 text = text.replace('Opening document…', '')
 text = text.replace('Opening document...', '')
 text = text.replace('Opening document', '')
