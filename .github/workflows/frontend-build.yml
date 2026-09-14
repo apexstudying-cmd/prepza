@@ -1,3 +1,4 @@
+# Frontend CI verification for the generation UI release.
 name: Frontend Build
 
 on:
