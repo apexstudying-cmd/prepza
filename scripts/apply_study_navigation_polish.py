@@ -175,12 +175,32 @@ def harden_offline_startup(text: str) -> str:
     return text
 
 
+def persist_navigation_across_restarts(text: str) -> str:
+    """Navigation state must survive a fully closed PWA process.
+
+    sessionStorage survives normal reloads but is not a reliable persistence
+    boundary for a standalone mobile app after the process is killed. The
+    navigation record contains only screen names and non-sensitive numeric
+    resource IDs, so localStorage is the appropriate O1 persistence layer.
+    """
+    text = text.replace(
+        "sessionStorage.getItem('prepza-navigation-state')",
+        "localStorage.getItem('prepza-navigation-state')",
+    )
+    text = text.replace(
+        "sessionStorage.setItem('prepza-navigation-state'",
+        "localStorage.setItem('prepza-navigation-state'",
+    )
+    return text
+
+
 def main():
     text = APP.read_text(encoding='utf-8')
     text = replace_mind_map(text)
     text = harden_document_navigation(text)
     text = remove_document_opening_interstitials(text)
     text = harden_offline_startup(text)
+    text = persist_navigation_across_restarts(text)
     APP.write_text(text, encoding='utf-8')
     print('study navigation polish applied')
 
