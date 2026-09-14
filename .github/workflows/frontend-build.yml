@@ -9,7 +9,7 @@ on:
       - '.github/workflows/frontend-build.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   frontend-build:
@@ -20,6 +20,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply generation UI transformation
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        run: python3 tools/apply_generation_ui.py
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -32,3 +39,17 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Commit generated UI change
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/App.tsx
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git commit -m "feat: add podcast generation settings UX"
+          git push origin HEAD:${{ github.head_ref }}
