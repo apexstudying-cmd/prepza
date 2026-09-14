@@ -1,7 +1,11 @@
 from pathlib import Path
 import re
+import runpy
 
 ROOT = Path(__file__).resolve().parents[1]
+runpy.run_path(str(ROOT / 'scripts' / 'apply_study_navigation_polish.py'))
+runpy.run_path(str(ROOT / 'tools' / 'apply_study_generation_polish.py'))
+
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 GEN = ROOT / 'frontend' / 'src' / 'generation' / 'GenerationScreens.tsx'
 IMPORT = "import { PodcastGenerationScreen, FlashcardsGenerationScreen, SummaryGenerationScreen } from './generation/GenerationScreens'\n"
@@ -144,10 +148,8 @@ doc_loading_block = '''  // Only pending while there's an active document whose 
 if doc_loading_block in text:
     text = text.replace(doc_loading_block, '', 1)
 else:
-    # Idempotent fallback for whitespace/comment drift.
     text = re.sub(r"\s*// Only pending while there's an active document[\s\S]*?if \(docLoading\) return <SkeletonDocument />\n", "\n", text, count=1)
 
-# Remove any stale visible label from older generated variants.
 text = text.replace('Opening document…', '')
 text = text.replace('Opening document...', '')
 text = text.replace('Opening document', '')
