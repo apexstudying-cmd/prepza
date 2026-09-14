@@ -4,7 +4,7 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 IMPORT = "import { PodcastGenerationScreen, FlashcardsGenerationScreen, SummaryGenerationScreen } from './generation/GenerationScreens'\n"
-STUDY_IMPORT = "import { PracticeQuestionsGenerationScreen, MindMapGenerationScreen } from './generation/StudyGenerationScreens'\n"
+STUDY_IMPORT = "import { PracticeQuestionsGenerationScreen, MindMapGenerationScreen } from './generation/StudyGenerationScreensClean'\n"
 
 text = APP.read_text(encoding='utf-8')
 
@@ -16,21 +16,9 @@ if STUDY_IMPORT not in text:
     text = text[: first_import + 1] + STUDY_IMPORT + text[first_import + 1 :]
 
 replacements = [
-    (
-        '// ─── PODCAST PLAYER',
-        '// ─── SUMMARY',
-        '''// ─── PODCAST PLAYER\nfunction PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n  return <PodcastGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n}\n\n''',
-    ),
-    (
-        '// ─── FLASHCARDS',
-        '// ─── QUIZ',
-        '''// ─── FLASHCARDS\nfunction FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n  return <FlashcardsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n}\n\n''',
-    ),
-    (
-        '// ─── SUMMARY',
-        '// ─── CHATS',
-        '''// ─── SUMMARY\nfunction SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n  return <SummaryGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n}\n\n''',
-    ),
+    ('// ─── PODCAST PLAYER', '// ─── SUMMARY', '''// ─── PODCAST PLAYER\nfunction PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n  return <PodcastGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n}\n\n'''),
+    ('// ─── FLASHCARDS', '// ─── QUIZ', '''// ─── FLASHCARDS\nfunction FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n  return <FlashcardsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n}\n\n'''),
+    ('// ─── SUMMARY', '// ─── CHATS', '''// ─── SUMMARY\nfunction SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n  return <SummaryGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n}\n\n'''),
 ]
 
 for start_marker, end_marker, replacement in replacements:
@@ -64,15 +52,8 @@ def replace_section(start_marker: str, replacement: str, aliases: tuple[str, ...
     if 'GenerationScreen' not in current:
         text = text[:start] + replacement + text[end:]
 
-replace_section(
-    '// ─── QUIZ',
-    '''// ─── QUIZ\nfunction QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n  return <PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n}\n\n''',
-)
-replace_section(
-    '// ─── MIND MAP',
-    '''// ─── MIND MAP\nfunction MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n  return <MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n}\n\n''',
-    aliases=('// ─── MINDMAP',),
-)
+replace_section('// ─── QUIZ', '''// ─── QUIZ\nfunction QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n  return <PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n}\n\n''')
+replace_section('// ─── MIND MAP', '''// ─── MIND MAP\nfunction MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n  return <MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />\n}\n\n''', aliases=('// ─── MINDMAP',))
 
 APP.write_text(text, encoding='utf-8')
 print('Generation UI build transformation applied.')
