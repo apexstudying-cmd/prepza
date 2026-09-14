@@ -6,6 +6,7 @@
   "packageManager": "pnpm@10.34.3",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "prebuild": "python3 ../tools/apply_generation_ui_build.py",
     "build": "vite build",
     "preview": "vite preview",
     "format": "oxfmt"
