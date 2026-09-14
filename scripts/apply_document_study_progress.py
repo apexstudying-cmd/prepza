@@ -60,8 +60,18 @@ def main():
     s = APP.read_text()
     s = patch_study_hub(s)
     s = patch_native_reader(s)
+    required = [
+        'const [readingPage, setReadingPage] = useState(0)',
+        'const [readerUserId, setReaderUserId] = useState<number | null>(null)',
+        "X-Prepza-Offline-Queue':'true'",
+        'prepza-reading-progress:',
+        'prepza_user=',
+    ]
+    missing = [marker for marker in required if marker not in s]
+    if missing:
+        raise SystemExit(f'document study progress verification failed: {missing}')
     APP.write_text(s)
-    print('document study progress patch applied')
+    print('document study progress patch applied and verified.')
 
 
 if __name__ == '__main__':
