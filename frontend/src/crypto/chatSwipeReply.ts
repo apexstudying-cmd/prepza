@@ -39,9 +39,10 @@ function showLongPressMenu(row: HTMLElement): void {
   const replyButton = actionButtonFor(row, 'Reply')
   if (!reactButton || !replyButton) return
 
+  const dark = row.dataset.prepzaDark === '1'
   const menu = document.createElement('div')
   menu.dataset.prepzaLongpressMenu = '1'
-  menu.style.cssText = 'position:fixed;z-index:9999;display:flex;align-items:center;gap:3px;padding:5px 6px;border:1px solid rgba(128,128,128,.2);border-radius:18px;background:rgba(255,255,255,.98);box-shadow:0 8px 28px rgba(0,0,0,.18);backdrop-filter:blur(12px);'
+  menu.style.cssText = `position:fixed;z-index:9999;display:flex;align-items:center;gap:3px;padding:5px 6px;border:1px solid ${dark ? '#3a414d' : 'rgba(23,35,63,.16)'};border-radius:18px;background:${dark ? '#242933' : 'rgba(255,255,255,.98)'};color:${dark ? '#f5f7fa' : '#17233f'};box-shadow:0 8px 28px rgba(0,0,0,.18);backdrop-filter:blur(12px);`
 
   REACTION_EMOJIS.forEach(emoji => {
     const button = document.createElement('button')
@@ -52,10 +53,11 @@ function showLongPressMenu(row: HTMLElement): void {
     button.addEventListener('click', event => {
       event.stopPropagation()
       closeLongPressMenu()
-      const picker = reactButton
-      picker.click()
-      const pickerButtons = Array.from(row.querySelectorAll<HTMLButtonElement>('button')).filter(item => item.textContent === emoji && item !== reactButton)
-      pickerButtons[0]?.click()
+      reactButton.click()
+      window.setTimeout(() => {
+        const pickerButtons = Array.from(row.querySelectorAll<HTMLButtonElement>('button')).filter(item => item.textContent?.trim() === emoji && item !== reactButton)
+        pickerButtons[0]?.click()
+      }, 0)
     })
     menu.appendChild(button)
   })
@@ -67,7 +69,7 @@ function showLongPressMenu(row: HTMLElement): void {
   const reply = document.createElement('button')
   reply.type = 'button'
   reply.textContent = '↩ Reply'
-  reply.style.cssText = 'border:0;background:transparent;color:#17233f;font-size:12px;font-weight:800;padding:7px 8px;border-radius:12px;cursor:pointer;white-space:nowrap;'
+  reply.style.cssText = `border:0;background:transparent;color:${dark ? '#f5f7fa' : '#17233f'};font-size:12px;font-weight:800;padding:7px 8px;border-radius:12px;cursor:pointer;white-space:nowrap;`
   reply.addEventListener('click', event => {
     event.stopPropagation()
     closeLongPressMenu()
