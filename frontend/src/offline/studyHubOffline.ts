@@ -1,4 +1,4 @@
-const STUDY_CACHE = 'prepza-study-assets-v2'
+const STUDY_CACHE = 'prepza-study-assets-v1'
 const META_DB = 'prepza-offline-v2'
 const META_STORE = 'savedStudyHub'
 const MAX_SINGLE_ASSET_BYTES = 75 * 1024 * 1024
@@ -67,27 +67,18 @@ async function cacheUrl(cache: Cache, url: string): Promise<boolean> {
   return cacheResponse(cache, url, response)
 }
 
-/**
- * Explicit Save -> Download contract. This is only called after the student
- * saves an item into StudyHub; arbitrary Explore opens never call this.
- */
+/** Explicit Save -> Download. Explore opens never call this function. */
 export async function saveStudyHubDocumentOffline(documentId: number): Promise<SavedStudyHubMeta> {
   if (!('caches' in window) || !('indexedDB' in window)) throw new Error('Offline storage is unavailable in this browser.')
 
-  let me: { id: number }
-  let detail: any
-  try {
-    const [meResponse, detailResponse] = await Promise.all([
-      fetch('/me', { credentials: 'include', cache: 'no-store' }),
-      fetch(`/documents/${documentId}`, { credentials: 'include', cache: 'no-store' }),
-    ])
-    if (!meResponse.ok || !detailResponse.ok) throw new Error('Could not prepare this StudyHub item for offline use.')
-    me = await meResponse.json()
-    detail = await detailResponse.json()
-  } catch (error) {
-    throw error instanceof Error ? error : new Error('Could not prepare this StudyHub item for offline use.')
-  }
+  const [meResponse, detailResponse] = await Promise.all([
+    fetch('/me', { credentials: 'include', cache: 'no-store' }),
+    fetch(`/documents/${documentId}`, { credentials: 'include', cache: 'no-store' }),
+  ])
+  if (!meResponse.ok || !detailResponse.ok) throw new Error('Could not prepare this StudyHub item for offline use.')
 
+  const me: { id: number } = await meResponse.json()
+  const detail: any = await detailResponse.json()
   const userId = Number(me.id)
   if (!Number.isInteger(userId) || userId <= 0) throw new Error('Could not identify the signed-in student.')
 
@@ -105,31 +96,17 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
   }
 
   const pageCount = Number(detail.page_count || 0)
-  // Native reader pages are the canonical offline representation for content
-  // that is not directly renderable by the browser (DOC/DOCX/PPT/PPTX/images).
-  // Cache every page now, while the student is online, rather than lazily.
   if (pageCount > 0) {
     for (let page = 1; page <= pageCount; page += 1) {
-      const pageUrl = `/documents/${documentId}/reading/page/${page}?prepza_user=${encodeURIComponent(String(userId))}`
-      const absolute = absoluteUrl(pageUrl)
-      const ok = await cacheUrl(cache, absolute)
-      if (!ok) throw new Error(`Could not save page ${page} for offline study.`)
-      assetUrls.push(absolute)
+      const url = absoluteUrl(`/documents/${documentId}/reading/page/${page}?prepza_user=${encodeURIComponent(String(userId))}`)
+      if (!await cacheUrl(cache, url)) throw new Error(`Could not save page ${page} for offline study.`)
+      assetUrls.push(url)
     }
   }
 
   if (!assetUrls.length) throw new Error('This StudyHub document has no downloadable study content yet.')
 
-  const meta: SavedStudyHubMeta = {
-    key: `${userId}:${documentId}`,
-    userId,
-    documentId,
-    title: detail.title,
-    fileType: detail.file_type,
-    pageCount: pageCount || undefined,
-    savedAt: Date.now(),
-    assetUrls,
-  }
+  const meta: SavedStudyHubMeta = { key: `${userId}:${documentId}`, userId, documentId, title: detail.title, fileType: detail.file_type, pageCount: pageCount || undefined, savedAt: Date.now(), assetUrls }
   await putMeta(meta)
   window.dispatchEvent(new CustomEvent('prepza:studyhub-offline-changed', { detail: meta }))
   return meta
