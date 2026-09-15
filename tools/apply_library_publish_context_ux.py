@@ -2,6 +2,17 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx"
 text = APP.read_text()
+
+type_anchor = "type PublishableDoc = { id: number; title: string; status: string; file_type: string | null; page_count: number | null }\n"
+if text.count(type_anchor) != 1:
+    raise SystemExit("FAIL CLOSED: PublishableDoc type anchor expected exactly once")
+if "type LibraryAcademicContext =" not in text:
+    text = text.replace(
+        type_anchor,
+        type_anchor + "type LibraryAcademicContext = { university_id: number | null; program_id: number | null; year: number | null; semester: number | null }\n",
+        1,
+    )
+
 start = text.find("function PublishLibraryScreen(")
 if start < 0:
     raise SystemExit("FAIL CLOSED: PublishLibraryScreen anchor not found")
@@ -17,12 +28,6 @@ def replace_once(old, new, label):
     if count != 1:
         raise SystemExit(f"FAIL CLOSED: {label}: expected 1 match, found {count}")
     function = function.replace(old, new, 1)
-
-replace_once(
-'''type PublishableDoc = { id: number; title: string; status: string; file_type: string | null; page_count: number | null }\n''',
-'''type PublishableDoc = { id: number; title: string; status: string; file_type: string | null; page_count: number | null }\ntype LibraryAcademicContext = { university_id: number | null; program_id: number | null; year: number | null; semester: number | null }\n''',
-    "publish context type",
-)
 
 replace_once(
 '''  const [selectedDocId, setSelectedDocId] = useState<number | null>(null)\n  const [title, setTitle] = useState('')\n  const [matType, setMatType] = useState(LIBRARY_MATERIAL_TYPES[0].value)''',
