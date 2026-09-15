@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.34.3",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "prebuild": "python3 ../tools/apply_studyhub_library_rules.py && python3 ../tools/run_study_navigation_polish.py && python3 ../tools/apply_generation_ui_build.py && python3 ../tools/apply_offline_data_foundation.py && python3 ../tools/apply_offline_sync_queue.py && python3 ../tools/apply_offline_study.py && python3 ../tools/run_document_study_progress.py && python3 ../tools/apply_library_my_study_separation.py && python3 ../tools/apply_last_study_resume.py && python3 ../scripts/apply_home_architecture_v2.py && python3 ../tools/apply_instant_navigation_fixes.py && python3 ../tools/apply_navigation_flicker_fix.py && python3 ../scripts/apply_explore_architecture.py && python3 ../tools/apply_screen_loading_policy.py && python3 ../tools/apply_library_academic_context.py && python3 ../tools/apply_library_publish_context_ux.py && python3 ../tools/apply_explicit_studyhub_offline_save.py && python3 -m py_compile ../app.py",
+    "prebuild": "python3 ../tools/apply_library_academic_context.py && python3 ../tools/apply_studyhub_library_rules.py && python3 ../tools/run_study_navigation_polish.py && python3 ../tools/apply_generation_ui_build.py && python3 ../tools/apply_offline_data_foundation.py && python3 ../tools/apply_offline_sync_queue.py && python3 ../tools/apply_offline_study.py && python3 ../tools/run_document_study_progress.py && python3 ../tools/apply_library_my_study_separation.py && python3 ../tools/apply_last_study_resume.py && python3 ../scripts/apply_home_architecture_v2.py && python3 ../tools/apply_instant_navigation_fixes.py && python3 ../tools/apply_navigation_flicker_fix.py && python3 ../scripts/apply_explore_architecture.py && python3 ../tools/apply_screen_loading_policy.py && python3 ../tools/apply_library_publish_context_ux.py && python3 ../tools/apply_explicit_studyhub_offline_save.py && python3 -m py_compile ../app.py",
     "build": "tsc --noEmit --noImplicitAny false && vite build",
     "preview": "vite preview",
     "format": "oxfmt"
@@ -23,6 +23,7 @@
     "@vitejs/plugin-react": "^6.0.0",
     "@tailwindcss/vite": "^4.0.0",
     "tailwindcss": "^4.0.0",
+    "@tailwindcss/vite": "^4.0.0",
     "oxfmt": "^0.2.0",
     "typescript": "^5.7.0",
     "vite": "^8.0.0"
