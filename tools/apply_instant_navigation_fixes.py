@@ -77,6 +77,22 @@ reader = re.sub(
     reader,
     count=1,
 )
+
+# The reader's data request is asynchronous. During that request, `doc` and/or
+# `error` can briefly reflect the previous render state. Do not paint the
+# terminal "document unavailable" UI until loading has actually finished. A
+# real failed request still surfaces the same error once loading is false.
+reader = re.sub(
+    r"if \(error\) return (<GenerationError error=\{error\} />)",
+    r"if (error && !loading) return \1",
+    reader,
+    count=1,
+)
+reader = reader.replace(
+    "error={error || 'Document unavailable.'}",
+    "error={loading ? '' : (error || 'Document unavailable.')}",
+    1,
+)
 reader = reader.replace('Opening your document…', 'Loading…')
 reader = reader.replace('Opening your document...', 'Loading…')
 reader = reader.replace('Opening your document', 'Loading…')
@@ -88,4 +104,4 @@ if text == original:
     raise SystemExit('Instant navigation patch made no changes')
 
 APP.write_text(text, encoding='utf-8')
-print('Instant navigation and reader loading fixes applied and verified.')
+print('Instant navigation and reader transient-state fixes applied and verified.')
