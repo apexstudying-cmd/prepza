@@ -52,12 +52,17 @@ def patch_app():
   const method = String(restOptions.method || 'GET').toUpperCase()
   const offline = typeof navigator !== 'undefined' && !navigator.onLine
   const offlineUserId = getOfflineUserId()
+  const cleanPath = String(path || '').split('?')[0].split('#')[0].replace(/\\/+$/, '') || '/'
 
   // Saved StudyHub documents are the authoritative local document source
   // for this account while offline. Unsaved documents still require network.
   if (offline && method === 'GET' && offlineUserId) {
-    if (/^\\/documents\\/\\d+$/.test(path)) {
-      const documentId = Number(path.split('/')[2])
+    if (cleanPath === '/me') {
+      return { id: offlineUserId } as T
+    }
+
+    if (/^\\/documents\\/\\d+$/.test(cleanPath)) {
+      const documentId = Number(cleanPath.split('/')[2])
       const saved = await getSavedStudyHubOffline(documentId, offlineUserId)
       if (saved) {
         return {
@@ -75,20 +80,24 @@ def patch_app():
         } as T
       }
     }
-    if (path === '/documents') {
+
+    if (cleanPath === '/documents' || cleanPath === '/library' || cleanPath === '/study-hub') {
       const saved = await listSavedStudyHubOffline(offlineUserId)
-      return {
-        documents: saved.map((row: any) => ({
-          id: row.documentId,
-          title: row.title || 'Saved document',
-          status: 'ready',
-          file_type: row.fileType || 'pdf',
-          page_count: row.pageCount || null,
-          created_at: new Date(row.savedAt).toISOString(),
-        })),
-      } as T
+      const documents = saved.map((row: any) => ({
+        id: row.documentId,
+        document_id: row.documentId,
+        title: row.title || 'Saved document',
+        original_filename: row.title || 'Saved document',
+        status: 'ready',
+        file_type: row.fileType || 'pdf',
+        page_count: row.pageCount || null,
+        created_at: new Date(row.savedAt).toISOString(),
+        offline_available: true,
+      }))
+      return { documents, saved_documents: documents, library: documents } as T
     }
-    if (/^\\/documents\\/\\d+\\/reading$/.test(path)) return { page_num: 0 } as T
+
+    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) return { page_num: 0 } as T
   }
 """
         api_block = api_block.replace(needle, offline_gate, 1)
@@ -109,6 +118,8 @@ def patch_app():
         'getOfflineUserId()',
         'getSavedStudyHubOffline(documentId, offlineUserId)',
         'listSavedStudyHubOffline(offlineUserId)',
+        "cleanPath === '/me'",
+        "cleanPath === '/documents' || cleanPath === '/library' || cleanPath === '/study-hub'",
         'saveStudyHubDocumentOffline(Number(body.document_id))',
     ]
     missing = [x for x in required if x not in s]
