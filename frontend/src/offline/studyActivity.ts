@@ -1,9 +1,14 @@
-const KEY = 'prepza-offline-study-activity-v3'
+const KEY_PREFIX = 'prepza-offline-study-activity-v4'
+const USER_KEY = 'prepza-offline-user-id'
 const MAX_DAILY_SECONDS = 8 * 60 * 60
 
 type DayEntry = { seconds: number; syncedSeconds: number }
 type ScreenEntry = { documentId: number; feature: string; days: Record<string, DayEntry> }
 type ActivityState = { screens: Record<string, ScreenEntry> }
+
+function storageKey(): string {
+  try { return `${KEY_PREFIX}:${localStorage.getItem(USER_KEY) || 'unknown'}` } catch { return `${KEY_PREFIX}:unknown` }
+}
 
 function todayKey(date = new Date()): string {
   const y = date.getFullYear(), m = String(date.getMonth() + 1).padStart(2, '0'), d = String(date.getDate()).padStart(2, '0')
@@ -16,18 +21,22 @@ function screenKey(documentId: number, feature: string): string {
 
 function load(): ActivityState {
   try {
-    const parsed = JSON.parse(localStorage.getItem(KEY) || '{}')
+    const parsed = JSON.parse(localStorage.getItem(storageKey()) || '{}')
     if (parsed && typeof parsed.screens === 'object') return parsed
   } catch {}
   return { screens: {} }
 }
 
 function save(state: ActivityState) {
-  try { localStorage.setItem(KEY, JSON.stringify(state)) } catch {}
+  try { localStorage.setItem(storageKey(), JSON.stringify(state)) } catch {}
 }
 
-function notify() {
-  window.dispatchEvent(new CustomEvent('prepza:offline-study-activity-changed'))
+function notify() { window.dispatchEvent(new CustomEvent('prepza:offline-study-activity-changed')) }
+
+/** Bind offline study activity to the signed-in account before tracking starts. */
+export function setOfflineStudyUserId(userId: number) {
+  if (!Number.isInteger(userId) || userId <= 0) return
+  try { localStorage.setItem(USER_KEY, String(userId)) } catch {}
 }
 
 /** Records time for exactly one My Study / My Library study surface. */
@@ -116,15 +125,13 @@ export function getOfflineStudySnapshot() {
   const todaySeconds = screens.reduce((sum, row) => sum + Math.max(0, Number(row.days?.[today]?.seconds) || 0), 0)
   const allSeconds = screens.reduce((sum, row) => sum + Object.values(row.days || {}).reduce((daySum, day) => daySum + Math.max(0, Number(day.seconds) || 0), 0), 0)
   const activeDates = new Set<string>()
-  for (const row of screens) {
-    for (const [date, day] of Object.entries(row.days || {})) if (Number(day.seconds) > 0) activeDates.add(date)
-  }
+  for (const row of screens) for (const [date, day] of Object.entries(row.days || {})) if (Number(day.seconds) > 0) activeDates.add(date)
 
   let currentStreak = 0
   const cursor = new Date()
   for (;;) {
     const key = todayKey(cursor)
-    if (![...screens].some(row => Number(row.days?.[key]?.seconds) > 0)) break
+    if (!screens.some(row => Number(row.days?.[key]?.seconds) > 0)) break
     currentStreak += 1
     cursor.setDate(cursor.getDate() - 1)
   }
@@ -135,12 +142,8 @@ export function getOfflineStudySnapshot() {
 export function mergeOfflineStudyResponse(path: string, body: any) {
   if (!body || typeof body !== 'object') return body
   const snap = getOfflineStudySnapshot()
-  if (path.startsWith('/study-time')) {
-    return { ...body, total_seconds: Math.max(Number(body.total_seconds) || 0, snap.totalSeconds), offline_today_seconds: snap.todaySeconds }
-  }
-  if (path === '/gamification/summary') {
-    return { ...body, current_streak: Math.max(Number(body.current_streak) || 0, snap.currentStreak), offline_study_seconds_today: snap.todaySeconds }
-  }
+  if (path.startsWith('/study-time')) return { ...body, total_seconds: Math.max(Number(body.total_seconds) || 0, snap.totalSeconds), offline_today_seconds: snap.todaySeconds }
+  if (path === '/gamification/summary') return { ...body, current_streak: Math.max(Number(body.current_streak) || 0, snap.currentStreak), offline_study_seconds_today: snap.todaySeconds }
   return body
 }
 
@@ -148,13 +151,10 @@ export async function syncOfflineStudyActivity(csrfToken?: string) {
   if (!navigator.onLine) return
   const state = load()
   const pending: Array<{ screen: ScreenEntry; date: string; seconds: number }> = []
-
-  for (const screen of Object.values(state.screens)) {
-    for (const [date, day] of Object.entries(screen.days || {})) {
-      const seconds = Math.max(0, Math.floor(Number(day.seconds) || 0))
-      const synced = Math.max(0, Math.floor(Number(day.syncedSeconds) || 0))
-      if (seconds > synced) pending.push({ screen, date, seconds: seconds - synced })
-    }
+  for (const screen of Object.values(state.screens)) for (const [date, day] of Object.entries(screen.days || {})) {
+    const seconds = Math.max(0, Math.floor(Number(day.seconds) || 0))
+    const synced = Math.max(0, Math.floor(Number(day.syncedSeconds) || 0))
+    if (seconds > synced) pending.push({ screen, date, seconds: seconds - synced })
   }
   if (!pending.length) return
 
@@ -172,18 +172,12 @@ export async function syncOfflineStudyActivity(csrfToken?: string) {
 
   try {
     const res = await fetch('/study-time/offline-sync', {
-      method: 'POST',
-      credentials: 'include',
+      method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token || '' },
       body: JSON.stringify({ entries: Object.entries(byDate).map(([date, seconds]) => ({ date, seconds: Math.min(MAX_DAILY_SECONDS, seconds) })) }),
     })
     if (!res.ok) return
-
     const accepted: Record<string, number> = (await res.json()).accepted_seconds_by_date || {}
-
-    // The existing server endpoint accepts daily totals, not screen IDs.
-    // Allocate the server-accepted amount deterministically across the exact
-    // screen/day records that produced it, preserving their local ownership.
     for (const [date, acceptedValue] of Object.entries(accepted)) {
       let remaining = Math.max(0, Number(acceptedValue) || 0)
       for (const item of pending) {
@@ -196,8 +190,6 @@ export async function syncOfflineStudyActivity(csrfToken?: string) {
         remaining -= credited
       }
     }
-
-    save(state)
-    notify()
+    save(state); notify()
   } catch {}
 }
