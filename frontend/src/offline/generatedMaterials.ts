@@ -14,10 +14,16 @@ function openDb(): Promise<IDBDatabase> {
   })
 }
 
+function serializedBody(body: unknown) {
+  try { return JSON.stringify(body ?? null) } catch { return '' }
+}
+
+function keyPrefix(path: string, body: unknown) {
+  return `${localStorage.getItem(USER_KEY) || 'unknown'}:${path}:${serializedBody(body)}:`
+}
+
 function keyFor(path: string, body: unknown) {
-  let serialized = ''
-  try { serialized = JSON.stringify(body ?? null) } catch { serialized = '' }
-  return `${localStorage.getItem(USER_KEY) || 'unknown'}:${path}:${serialized}`
+  return `${keyPrefix(path, body)}${Date.now()}:${Math.random().toString(36).slice(2)}`
 }
 
 export function setOfflineUserId(userId: number) {
@@ -41,10 +47,19 @@ export async function getGeneratedMaterialOffline(path: string, requestBody: unk
   if (!path.includes('/documents/') || !/(summarize|quiz|flashcards|podcast-script|mind-map)/.test(path)) return null
   try {
     const db = await openDb()
+    const prefix = keyPrefix(path, requestBody)
     const value = await new Promise<any | null>((resolve, reject) => {
       const tx = db.transaction(STORE, 'readonly')
-      const req = tx.objectStore(STORE).get(keyFor(path, requestBody))
-      req.onsuccess = () => resolve(req.result?.payload ?? null); req.onerror = () => reject(req.error)
+      const request = tx.objectStore(STORE).openCursor()
+      let latest: any = null
+      request.onsuccess = () => {
+        const cursor = request.result
+        if (!cursor) { resolve(latest?.payload ?? null); return }
+        const row = cursor.value
+        if (typeof row?.key === 'string' && row.key.startsWith(prefix) && (!latest || Number(row.savedAt) > Number(latest.savedAt))) latest = row
+        cursor.continue()
+      }
+      request.onerror = () => reject(request.error)
     })
     db.close(); return value
   } catch (_) { return null }
