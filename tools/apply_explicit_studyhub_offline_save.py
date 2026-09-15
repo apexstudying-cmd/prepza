@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
@@ -18,12 +19,12 @@ for line in IMPORTS:
         s = s.replace(anchor, anchor + line, 1)
     anchor = line
 
-# The offline foundation is intentionally built by earlier prebuild stages.
-# Anchor to a line introduced by the sync-queue layer so this patch cannot
-# accidentally modify an unrelated function if App.tsx changes later.
-api_marker = "  const queueOffline = method !== 'GET' && String((extraHeaders as Record<string, string> | undefined)?.['X-Prepza-Offline-Queue'] || '').toLowerCase() === 'true'\n"
-if api_marker not in s:
-    raise SystemExit('Offline wiring: sync-queue API anchor not found')
+# O2/O3 have already produced the final API helper by this stage. Find the
+# method declaration rather than depending on whitespace from an earlier
+# version of App.tsx.
+method_match = re.search(r"(?m)^  const method = String\(restOptions\.method \|\| 'GET'\)\.toUpperCase\(\)\\n", s)
+if not method_match:
+    raise SystemExit('Offline wiring: final API method anchor not found')
 
 offline_gate = """  const requestBody = (() => {
     try { return typeof restOptions.body === 'string' ? JSON.parse(restOptions.body) : restOptions.body }
@@ -35,7 +36,8 @@ offline_gate = """  const requestBody = (() => {
   }
 """
 if 'const cachedGenerated = await getGeneratedMaterialOffline(path, requestBody)' not in s:
-    s = s.replace(api_marker, api_marker + offline_gate, 1)
+    insert_at = method_match.end()
+    s = s[:insert_at] + offline_gate + s[insert_at:]
 
 fetch_anchor = """    if (canUseOfflineData && body !== null) {
       void writePrepzaOffline(cacheKey, body)
@@ -58,7 +60,7 @@ fetch_replacement = """    if (canUseOfflineData && body !== null) {
 """
 if 'saveStudyHubDocumentOffline(Number((body as any).document_id))' not in s:
     if fetch_anchor not in s:
-        raise SystemExit('Offline wiring: cached API success anchor not found')
+        raise SystemExit('Offline wiring: final API success anchor not found')
     s = s.replace(fetch_anchor, fetch_replacement, 1)
 
 SYNC = """\nif (typeof window !== 'undefined') {
