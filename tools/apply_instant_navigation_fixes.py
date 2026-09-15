@@ -77,8 +77,6 @@ reader = re.sub(
     reader,
     count=1,
 )
-
-# Do not paint the terminal error while the reader's request is still resolving.
 reader = re.sub(
     r"if \(error\) return (<GenerationError error=\{error\} />)",
     r"if (error && !loading) return \1",
@@ -86,18 +84,15 @@ reader = re.sub(
     count=1,
 )
 
-# The base App source still has this final unavailable guard. It is legitimate
-# only after loading completes; during the fetch it must not flash an error page.
+# The source guard must narrow `doc` for TypeScript as well as suppress the
+# transient unavailable screen. While the request is pending, keep only the
+# reader surface mounted; once it completes, a genuine missing document gets
+# the real error state.
 reader = re.sub(
     r"if \(!doc \|\| activeDocumentId == null\) return <GenerationError error=\"Document unavailable\.\" />",
-    "if ((!doc || activeDocumentId == null) && !loading) return <GenerationError error=\"Document unavailable.\" />",
+    "if (!doc) {\n    if (loading) return <div style={{ flex: 1, minHeight: 0, background: '#111827' }} />\n    return <GenerationError error=\"Document unavailable.\" />\n  }\n  if (activeDocumentId == null) return <GenerationError error=\"No document selected.\" />",
     reader,
     count=1,
-)
-reader = reader.replace(
-    "error={loading ? '' : (error || 'Document unavailable.')}",
-    "error={loading ? '' : (error || 'Document unavailable.')}",
-    1,
 )
 reader = reader.replace('Opening your document…', 'Loading…')
 reader = reader.replace('Opening your document...', 'Loading…')
