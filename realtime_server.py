@@ -8,6 +8,7 @@ from sqlalchemy import text
 from app import app, db
 import chat_interactions  # noqa: F401 - registers additive chat metadata hooks
 from offline_activity_routes import register_offline_activity_routes
+import chat_group_routes  # noqa: F401 - registers multi-user chat-group membership routes
 
 # Socket.IO is the realtime transport; HTTP/database remains the source of truth.
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins=[], logger=False, engineio_logger=False)
