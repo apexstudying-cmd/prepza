@@ -181,21 +181,37 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
   if (navigationInProgress) return
   const content = contentElement()
   if (!content) { navigate(); return }
+
   navigationInProgress = true
   cancelSwipeAnimation()
+
+  // Keep the real app surface visible throughout the React state change.
+  // The previous implementation hid it before React committed the next screen,
+  // which could expose the page/root background for a frame on dark-mode swipes.
+  // The outgoing clone remains visible above it while the real surface moves to
+  // the incoming side, so there is never an empty transition gap.
   const outgoingLayer = createOutgoingLayer(content)
   const sign = direction === 'left' ? -1 : 1
   const width = Math.max(window.innerWidth, content.clientWidth || 0)
-  content.style.visibility = 'hidden'
+  content.style.visibility = 'visible'
   content.style.transform = `translate3d(${-sign * width}px,0,0)`
   content.style.willChange = 'transform'
+
   navigate()
+
   requestAnimationFrame(() => {
     const nextContent = contentElement()
-    if (!nextContent) { outgoingLayer?.remove(); navigationInProgress = false; return }
+    if (!nextContent) {
+      outgoingLayer?.remove()
+      resetContentTransform()
+      navigationInProgress = false
+      return
+    }
+
     nextContent.style.visibility = 'visible'
     nextContent.style.willChange = 'transform'
     nextContent.style.transform = `translate3d(${-sign * width}px,0,0)`
+
     const outgoingAnimation = outgoingLayer?.animate(
       [{ transform: `translate3d(${swipeDeltaX}px,0,0)` }, { transform: `translate3d(${sign * width}px,0,0)` }],
       { duration: TRANSITION_DURATION, easing: MOTION_EASE, fill: 'forwards' },
