@@ -46,7 +46,7 @@ replace_once(
 replace_all_exact(
 '''            "unit_id": pub.unit_id,\n            "unit_code": unit.code if unit else None,''',
 '''            "unit_id": pub.unit_id,\n            "unit_code": unit.code if unit else None,\n            "university_id": pub.university_id,\n            "program_id": pub.program_id,\n            "year": pub.year,\n            "semester": pub.semester,''',
-    3,
+    4,
     "student-facing library metadata responses",
 )
 
