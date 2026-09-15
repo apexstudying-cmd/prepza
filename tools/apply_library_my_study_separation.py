@@ -51,7 +51,7 @@ study_effect_anchor = "  useEffect(() => {\n    let cancelled = false\n    api<{
 text = replace_once(
     text,
     study_effect_anchor,
-    "  useEffect(() => {\n    let cancelled = false\n    api<{ saved: SavedLibraryItem[] }>('/library/saved').then(res => {\n      if (!cancelled) setSavedLibrary(res.saved)\n    }).catch(() => {\n      // Saved Library content is supplementary; My Study documents remain usable.\n    })\n    return () => { cancelled = true }\n  }, [])\n\n" + study_effect_anchor,
+    "  useEffect(() => {\n    let cancelled = false\n    api<{ saved: SavedLibraryItem[] }>('/library/saved').then(res => {\n      if (!cancelled) {\n        // Keep the existing backend contract, but tolerate camelCase payloads\n        // from older/generated API responses so a saved item never silently\n        // loses its document target in My Study.\n        const normalized = (res.saved || []).map(item => ({\n          ...item,\n          document_id: item.document_id ?? (item as any).documentId,\n        }))\n        setSavedLibrary(normalized)\n      }\n    }).catch(() => {\n      // Saved Library content is supplementary; My Study documents remain usable.\n    })\n    return () => { cancelled = true }\n  }, [])\n\n" + study_effect_anchor,
     "My Study saved Library loader",
 )
 
@@ -68,7 +68,10 @@ replacement = """tab==='documents' ? <>
           </>}
           {savedLibrary.length>0 && <>
             <div style={{fontSize:11,fontWeight:800,color:T.textMuted,margin:'16px 0 8px',textTransform:'uppercase',letterSpacing:0.5}}>Saved from Prepza Library</div>
-            {savedLibrary.map(item=><button key={`library-${item.id}`} onClick={()=>openDocument(item.document_id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>{Ic.bookmark()}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className=\"line-clamp-1\">{item.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{item.material_type.replace(/_/g,' ')}{item.author?` · ${item.author}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}
+            {savedLibrary.map(item=>{
+              const targetDocumentId = Number(item.document_id ?? (item as any).documentId)
+              return <button key={`library-${item.id}`} onClick={()=>{ if (Number.isFinite(targetDocumentId) && targetDocumentId > 0) openDocument(targetDocumentId) }} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:Number.isFinite(targetDocumentId) && targetDocumentId > 0?'pointer':'default',fontFamily:'Plus Jakarta Sans',opacity:Number.isFinite(targetDocumentId) && targetDocumentId > 0?1:0.72}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>{Ic.bookmark()}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className=\"line-clamp-1\">{item.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{item.material_type.replace(/_/g,' ')}{item.author?` · ${item.author}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>
+            })}
           </>}
         </>}
       </> : <>"""
