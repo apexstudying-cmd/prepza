@@ -10,12 +10,12 @@ def patch_generated_user_id():
     s = GEN.read_text(encoding='utf-8')
     if 'export function getOfflineUserId()' in s:
         return
-    anchor = "export function setOfflineUserId(userId: number | null) {\n"
+    anchor = "export function setOfflineUserId(userId: number) {\n"
     if anchor not in s:
         raise SystemExit('Offline library: user-id anchor not found')
     start = s.index(anchor)
     insert_after = s.index('\n}', start) + 2
-    addition = "\n\nexport function getOfflineUserId(): number | null {\n  try {\n    const raw = localStorage.getItem(OFFLINE_USER_KEY)\n    const id = Number(raw)\n    return Number.isInteger(id) && id > 0 ? id : null\n  } catch (_) { return null }\n}"
+    addition = "\n\nexport function getOfflineUserId(): number | null {\n  try {\n    const raw = localStorage.getItem(USER_KEY)\n    const id = Number(raw)\n    return Number.isInteger(id) && id > 0 ? id : null\n  } catch (_) { return null }\n}"
     s = s[:insert_after] + addition + s[insert_after:]
     GEN.write_text(s, encoding='utf-8')
 
@@ -36,7 +36,6 @@ def patch_app():
     if insert != anchor:
         s = s.replace(anchor, insert, 1)
 
-    # Make explicit Library Save/download actually populate device storage.
     api_marker = "async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {"
     api_start = s.find(api_marker)
     if api_start < 0:
@@ -96,7 +95,6 @@ def patch_app():
 """
         api_block = api_block.replace(needle, offline_gate, 1)
 
-    # After a successful Library save, download the complete StudyHub asset set.
     success_anchor = "  if (!res.ok) {\n    throw new ApiError((body && body.error) || `Request failed (${res.status})`, res.status)\n  }\n"
     if 'saveStudyHubDocumentOffline(Number(body.document_id))' not in api_block:
         if success_anchor not in api_block:
@@ -109,9 +107,6 @@ def patch_app():
         api_block = api_block.replace(success_anchor, hook, 1)
     s = s[:api_start] + api_block + s[api_end:]
 
-    # Add a device-local offline shelf to My Library. It is visible whenever
-    # the user has saved local StudyHub copies, including after a cold offline
-    # launch, and opens the same document-study route used online.
     if 'function OfflineSavedStudyShelf' not in s:
         marker = "function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {"
         if marker not in s:
@@ -170,8 +165,6 @@ def patch_app():
         s = s.replace(marker, component + marker, 1)
 
     marker = "function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {"
-    if 'OfflineSavedStudyShelf' not in s:
-        raise SystemExit('Offline library: shelf component insertion failed')
     start = s.index(marker)
     ret = s.find('  return (', start)
     if ret < 0:
