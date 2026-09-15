@@ -120,14 +120,14 @@ def add_chat_group_members(conversation_id):
             role="member",
         ))
 
-    _bump_group_key_epoch(conversation)
+    new_epoch = _bump_group_key_epoch(conversation)
     conversation.updated_at = datetime.utcnow()
     db.session.commit()
 
     return jsonify({
         "conversation": _serialize_conversation_detail(conversation, user_id),
         "added_user_ids": sorted(new_ids),
-        "key_epoch": conversation.key_epoch,
+        "key_epoch": new_epoch,
     }), 201
 
 
@@ -153,39 +153,12 @@ def remove_chat_group_member(conversation_id, target_user_id):
         return jsonify({"error": "Demote this admin before removing them"}), 400
 
     target.left_at = datetime.utcnow()
-    _bump_group_key_epoch(conversation)
+    new_epoch = _bump_group_key_epoch(conversation)
     conversation.updated_at = datetime.utcnow()
     db.session.commit()
 
     return jsonify({
         "conversation": _serialize_conversation_detail(conversation, user_id),
         "removed_user_id": target_user_id,
-        "key_epoch": conversation.key_epoch,
+        "key_epoch": new_epoch,
     })
-
-
-@app.route("/chats/<int:conversation_id>/leave", methods=["POST"])
-@require_csrf
-def leave_chat_group(conversation_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    conversation, requester = _group_for_member_change(conversation_id, user_id)
-    if not conversation:
-        return jsonify({"error": "Group conversation not found"}), 404
-
-    active_members = ConversationParticipant.query.filter_by(
-        conversation_id=conversation_id, left_at=None
-    ).all()
-    if len(active_members) > 1 and requester.role == "admin":
-        other_admins = sum(1 for member in active_members if member.role == "admin" and member.user_id != user_id)
-        if other_admins == 0:
-            return jsonify({"error": "Promote another admin before leaving"}), 400
-
-    requester.left_at = datetime.utcnow()
-    _bump_group_key_epoch(conversation)
-    conversation.updated_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify({"message": "Left group", "conversation_id": conversation_id})
