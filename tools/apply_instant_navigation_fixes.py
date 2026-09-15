@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
@@ -12,14 +13,12 @@ original = text
 text = text.replace("sessionStorage.getItem('prepza-navigation-state')", "localStorage.getItem('prepza-navigation-state')")
 text = text.replace("sessionStorage.setItem('prepza-navigation-state'", "localStorage.setItem('prepza-navigation-state'")
 
-old_set_screen = """  const setScreen = (s: Screen) => {
-    if (s === screen) return
-    setScreenStack(stack => [...stack, s])
-    window.history.pushState({ prepzaNav: true }, '')
-  }
-"""
 new_set_screen = """  const setScreen = (s: Screen) => {
     if (s === screen) return
+    if (screenStack.length > 1 && screenStack[screenStack.length - 2] === s) {
+      window.history.back()
+      return
+    }
     const nextStack = [...screenStack, s]
     setScreenStack(nextStack)
     try {
@@ -38,10 +37,19 @@ new_set_screen = """  const setScreen = (s: Screen) => {
     window.history.pushState({ prepzaNav: true }, '')
   }
 """
-if old_set_screen in text:
-    text = text.replace(old_set_screen, new_set_screen, 1)
-elif new_set_screen not in text:
-    raise SystemExit('Instant navigation patch: setScreen anchor not found')
+
+# run_study_navigation_polish may already have rewritten this function before
+# this script runs. Replace the complete generated function regardless of
+# which safe version precedes it, while leaving surrounding App state intact.
+start = text.find("  const setScreen = (s: Screen) => {")
+if start >= 0:
+    end_marker = "\n  }\n\n  useEffect(() => {"
+    end = text.find(end_marker, start)
+    if end < 0:
+        raise SystemExit('Instant navigation patch: transformed setScreen boundary not found')
+    text = text[:start] + new_set_screen.rstrip('\n') + text[end + len("\n  }"):]
+elif new_set_screen.strip() not in text:
+    raise SystemExit('Instant navigation patch: setScreen function not found')
 
 # Study Hub must render its actual shell immediately. The old full-screen
 # SkeletonDocument/"Loading study hub" interstitial was especially jarring in
