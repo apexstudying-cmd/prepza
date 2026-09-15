@@ -2,6 +2,8 @@ const DB_NAME = 'prepza-offline-v2'
 const STORE = 'generatedMaterials'
 const USER_KEY = 'prepza-offline-user-id'
 
+type StoredMaterial = { key: string; path: string; requestBody: unknown; payload: unknown; savedAt: number }
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 2)
@@ -30,37 +32,66 @@ export function setOfflineUserId(userId: number) {
   try { localStorage.setItem(USER_KEY, String(userId)) } catch {}
 }
 
+function supported(path: string) {
+  return path.includes('/documents/') && /(summarize|quiz|flashcards|podcast-script|mind-map)/.test(path)
+}
+
 export async function saveGeneratedMaterialOffline(path: string, requestBody: unknown, payload: unknown) {
-  if (!path.includes('/documents/') || !/(summarize|quiz|flashcards|podcast-script|mind-map)/.test(path)) return
+  if (!supported(path)) return
   try {
     const db = await openDb()
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite')
-      tx.objectStore(STORE).put({ key: keyFor(path, requestBody), path, requestBody, payload, savedAt: Date.now() })
+      tx.objectStore(STORE).put({ key: keyFor(path, requestBody), path, requestBody, payload, savedAt: Date.now() } satisfies StoredMaterial)
       tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error)
     })
     db.close()
   } catch (_) {}
 }
 
-export async function getGeneratedMaterialOffline(path: string, requestBody: unknown): Promise<any | null> {
-  if (!path.includes('/documents/') || !/(summarize|quiz|flashcards|podcast-script|mind-map)/.test(path)) return null
+async function readMatching(path: string, requestBody: unknown): Promise<StoredMaterial[]> {
+  if (!supported(path)) return []
+  const db = await openDb()
   try {
-    const db = await openDb()
-    const prefix = keyPrefix(path, requestBody)
-    const value = await new Promise<any | null>((resolve, reject) => {
+    return await new Promise<StoredMaterial[]>((resolve, reject) => {
       const tx = db.transaction(STORE, 'readonly')
       const request = tx.objectStore(STORE).openCursor()
-      let latest: any = null
+      const prefix = keyPrefix(path, requestBody)
+      const rows: StoredMaterial[] = []
       request.onsuccess = () => {
         const cursor = request.result
-        if (!cursor) { resolve(latest?.payload ?? null); return }
-        const row = cursor.value
-        if (typeof row?.key === 'string' && row.key.startsWith(prefix) && (!latest || Number(row.savedAt) > Number(latest.savedAt))) latest = row
+        if (!cursor) { rows.sort((a, b) => b.savedAt - a.savedAt); resolve(rows); return }
+        const row = cursor.value as StoredMaterial
+        if (typeof row?.key === 'string' && row.key.startsWith(prefix)) rows.push(row)
         cursor.continue()
       }
       request.onerror = () => reject(request.error)
     })
-    db.close(); return value
-  } catch (_) { return null }
+  } finally { db.close() }
+}
+
+/** Latest saved generation, preserving older generations in IndexedDB. */
+export async function getGeneratedMaterialOffline(path: string, requestBody: unknown): Promise<any | null> {
+  try { return (await readMatching(path, requestBody))[0]?.payload ?? null } catch (_) { return null }
+}
+
+/** Full saved generation history, newest first. */
+export async function listGeneratedMaterialsOffline(path: string, requestBody: unknown): Promise<Array<{ payload: unknown; savedAt: number }>> {
+  try { return (await readMatching(path, requestBody)).map(row => ({ payload: row.payload, savedAt: row.savedAt })) } catch (_) { return [] }
+}
+
+/** Removes one exact saved generation without affecting newer/older copies. */
+export async function deleteGeneratedMaterialOffline(path: string, requestBody: unknown, savedAt: number): Promise<void> {
+  try {
+    const rows = await readMatching(path, requestBody)
+    const target = rows.find(row => row.savedAt === savedAt)
+    if (!target) return
+    const db = await openDb()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite')
+      tx.objectStore(STORE).delete(target.key)
+      tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error)
+    })
+    db.close()
+  } catch (_) {}
 }
