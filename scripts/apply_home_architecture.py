@@ -39,8 +39,12 @@ def main() -> None:
         raise SystemExit('Home architecture patch: Library quick action was not installed')
     if "label: 'My Study'" not in home or "setScreen('study-materials')" not in home:
         raise SystemExit('Home architecture patch: My Study quick action missing')
-    if not any(label in home for label in ('Continue Studying', 'Continue to Study')):
-        raise SystemExit('Home architecture patch: Continue Study section missing')
+
+    # Continue Study is already owned by the Phase 3 last-study implementation.
+    # Validate its actual navigation contract rather than depending on a
+    # presentation label that can change without affecting the behavior.
+    if "setActiveDocumentId(featuredDoc.id)" not in home or "setScreen('document-study')" not in home:
+        raise SystemExit('Home architecture patch: Continue Study navigation contract missing')
 
     APP.write_text(before + home + after, encoding='utf-8')
     print('Home architecture applied and verified.')
