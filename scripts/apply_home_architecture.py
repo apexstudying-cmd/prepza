@@ -39,8 +39,8 @@ def main() -> None:
         raise SystemExit('Home architecture patch: Library quick action was not installed')
     if "label: 'My Study'" not in home or "setScreen('study-materials')" not in home:
         raise SystemExit('Home architecture patch: My Study quick action missing')
-    if 'Continue Studying' not in home:
-        raise SystemExit('Home architecture patch: Continue Studying section missing')
+    if not any(label in home for label in ('Continue Studying', 'Continue to Study')):
+        raise SystemExit('Home architecture patch: Continue Study section missing')
 
     APP.write_text(before + home + after, encoding='utf-8')
     print('Home architecture applied and verified.')
