@@ -1,66 +1,67 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 s = APP.read_text(encoding='utf-8')
 
+IMPORT_ANCHOR = "import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'\n"
 IMPORTS = [
     "import { saveStudyHubDocumentOffline } from './offline/studyHubOffline'\n",
     "import { mergeOfflineStudyResponse, syncOfflineStudyActivity } from './offline/studyActivity'\n",
     "import { getGeneratedMaterialOffline, saveGeneratedMaterialOffline } from './offline/generatedMaterials'\n",
 ]
-anchor = "import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'\n"
-if anchor not in s:
-    raise SystemExit('Offline wiring: App import anchor not found')
+if IMPORT_ANCHOR not in s:
+    raise SystemExit('Offline wiring: import anchor not found')
+anchor = IMPORT_ANCHOR
 for line in IMPORTS:
     if line not in s:
         s = s.replace(anchor, anchor + line, 1)
-        anchor = line
+    anchor = line
 
 api_start = s.find('async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {')
-api_end = s.find('\n}\n\n//', api_start)
-if api_start < 0 or api_end < 0:
-    raise SystemExit('Offline wiring: generated api helper boundaries not found')
+if api_start < 0:
+    raise SystemExit('Offline wiring: api helper not found')
+api_end = s.find('\n}\n\n', api_start)
+if api_end < 0:
+    raise SystemExit('Offline wiring: api helper boundary not found')
 api = s[api_start:api_end + 2]
 
-replay = """  const requestBody = (() => {
-    try { return typeof restOptions.body === 'string' ? JSON.parse(restOptions.body) : restOptions.body }
+offline_gate = """  const requestBody = (() => {
+    try { return typeof options.body === 'string' ? JSON.parse(options.body) : options.body }
     catch { return null }
   })()
-  if (typeof navigator !== 'undefined' && !navigator.onLine && String(restOptions.method || 'GET').toUpperCase() !== 'GET' && /\\/documents\\/\\d+\\/(summarize|quiz|flashcards|podcast-script|mind-map)$/.test(path)) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine && method !== 'GET' && /\\/documents\\/\\d+\\/(summarize|quiz|flashcards|podcast-script|mind-map)$/.test(path)) {
     const cachedGenerated = await getGeneratedMaterialOffline(path, requestBody)
     if (cachedGenerated != null) return cachedGenerated as T
   }
 """
-options_anchor = "  const { headers: extraHeaders, ...restOptions } = options\n"
+method_anchor = "  const method = String(options.method || 'GET').toUpperCase()\n"
 if 'const cachedGenerated = await getGeneratedMaterialOffline(path, requestBody)' not in api:
-    if options_anchor not in api:
-        raise SystemExit('Offline wiring: API options anchor not found')
-    api = api.replace(options_anchor, options_anchor + replay, 1)
+    if method_anchor not in api:
+        raise SystemExit('Offline wiring: API method anchor not found')
+    api = api.replace(method_anchor, method_anchor + offline_gate, 1)
 
-hook = """  if (/^\\/library\\/\\d+\\/save$/.test(path) && body && Number.isInteger(Number(body.document_id))) {
+post_response = """  const body = await requestApiJson<T>(path, options)
+  if (/^\\/library\\/\\d+\\/save$/.test(path) && body && Number.isInteger(Number((body as any).document_id))) {
     try {
-      await saveStudyHubDocumentOffline(Number(body.document_id))
-      body.offline_available = true
+      await saveStudyHubDocumentOffline(Number((body as any).document_id))
+      ;(body as any).offline_available = true
     } catch {
-      body.offline_available = false
+      ;(body as any).offline_available = false
     }
   }
   void saveGeneratedMaterialOffline(path, requestBody, body)
-  body = mergeOfflineStudyResponse(path, body)
+  return mergeOfflineStudyResponse(path, body)
 """
-if 'saveStudyHubDocumentOffline(Number(body.document_id))' not in api:
-    return_match = re.search(r'(?m)^  return body as T\n$', api)
-    if not return_match:
-        return_match = re.search(r'(?m)^  return body\n$', api)
-    if not return_match:
-        raise SystemExit('Offline wiring: API return boundary not found')
-    api = api[:return_match.start()] + hook + api[return_match.start():]
+old_return = "  const value = await requestApiJson<T>(path, options)\n"
+if 'saveStudyHubDocumentOffline(Number((body as any).document_id))' not in api:
+    if old_return not in api:
+        raise SystemExit('Offline wiring: cached API return anchor not found')
+    api = api.replace(old_return, post_response, 1)
 
 s = s[:api_start] + api + s[api_end + 2:]
 
-module_sync = """\nif (typeof window !== 'undefined') {
+SYNC = """\nif (typeof window !== 'undefined') {
   window.addEventListener('online', () => void syncOfflineStudyActivity())
   window.setTimeout(() => void syncOfflineStudyActivity(), 1500)
 }
@@ -69,17 +70,17 @@ if "window.addEventListener('online', () => void syncOfflineStudyActivity())" no
     marker = "// ─── Document upload helpers"
     if marker not in s:
         raise SystemExit('Offline wiring: module sync anchor not found')
-    s = s.replace(marker, module_sync + "\n" + marker, 1)
+    s = s.replace(marker, SYNC + "\n" + marker, 1)
 
 required = [
-    IMPORTS[0], IMPORTS[1], IMPORTS[2],
+    *IMPORTS,
     'getGeneratedMaterialOffline(path, requestBody)',
-    'saveStudyHubDocumentOffline(Number(body.document_id))',
+    'saveStudyHubDocumentOffline(Number((body as any).document_id))',
     'saveGeneratedMaterialOffline(path, requestBody, body)',
     'mergeOfflineStudyResponse(path, body)',
     'syncOfflineStudyActivity()',
 ]
-missing = [x for x in required if x not in s]
+missing = [item for item in required if item not in s]
 if missing:
     raise SystemExit('Offline wiring verification failed: ' + ', '.join(missing))
 
