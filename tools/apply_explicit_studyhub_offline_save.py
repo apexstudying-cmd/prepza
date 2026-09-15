@@ -26,8 +26,9 @@ if api_end < 0:
     raise SystemExit('Offline wiring: api helper boundary not found')
 api = s[api_start:api_end + 2]
 
+method_anchor = "  const method = String(restOptions.method || 'GET').toUpperCase()\n"
 offline_gate = """  const requestBody = (() => {
-    try { return typeof options.body === 'string' ? JSON.parse(options.body) : options.body }
+    try { return typeof restOptions.body === 'string' ? JSON.parse(restOptions.body) : restOptions.body }
     catch { return null }
   })()
   if (typeof navigator !== 'undefined' && !navigator.onLine && method !== 'GET' && /\\/documents\\/\\d+\\/(summarize|quiz|flashcards|podcast-script|mind-map)$/.test(path)) {
@@ -35,29 +36,30 @@ offline_gate = """  const requestBody = (() => {
     if (cachedGenerated != null) return cachedGenerated as T
   }
 """
-method_anchor = "  const method = String(options.method || 'GET').toUpperCase()\n"
 if 'const cachedGenerated = await getGeneratedMaterialOffline(path, requestBody)' not in api:
     if method_anchor not in api:
         raise SystemExit('Offline wiring: API method anchor not found')
     api = api.replace(method_anchor, method_anchor + offline_gate, 1)
 
-post_response = """  const body = await requestApiJson<T>(path, options)
-  if (/^\\/library\\/\\d+\\/save$/.test(path) && body && Number.isInteger(Number((body as any).document_id))) {
-    try {
-      await saveStudyHubDocumentOffline(Number((body as any).document_id))
-      ;(body as any).offline_available = true
-    } catch {
-      ;(body as any).offline_available = false
+fetch_anchor = "    if (canUseOfflineData && body !== null) {\n      void writePrepzaOffline(cacheKey, body)\n    }\n    return body as T\n"
+fetch_replacement = """    if (canUseOfflineData && body !== null) {
+      void writePrepzaOffline(cacheKey, body)
     }
-  }
-  void saveGeneratedMaterialOffline(path, requestBody, body)
-  return mergeOfflineStudyResponse(path, body)
+    if (/^\\/library\\/\\d+\\/save$/.test(path) && body && Number.isInteger(Number((body as any).document_id))) {
+      try {
+        await saveStudyHubDocumentOffline(Number((body as any).document_id))
+        ;(body as any).offline_available = true
+      } catch {
+        ;(body as any).offline_available = false
+      }
+    }
+    void saveGeneratedMaterialOffline(path, requestBody, body)
+    return mergeOfflineStudyResponse(path, body)
 """
-old_return = "  const value = await requestApiJson<T>(path, options)\n"
 if 'saveStudyHubDocumentOffline(Number((body as any).document_id))' not in api:
-    if old_return not in api:
-        raise SystemExit('Offline wiring: cached API return anchor not found')
-    api = api.replace(old_return, post_response, 1)
+    if fetch_anchor not in api:
+        raise SystemExit('Offline wiring: generated API success anchor not found')
+    api = api.replace(fetch_anchor, fetch_replacement, 1)
 
 s = s[:api_start] + api + s[api_end + 2:]
 
