@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+import subprocess
+import sys
 from urllib.parse import urlparse
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
@@ -31,6 +33,7 @@ _browser: Browser | None = None
 _context: BrowserContext | None = None
 _page: Page | None = None
 _lock = asyncio.Lock()
+_console_errors: list[str] = []
 
 
 def _validate_url(url: str) -> str:
@@ -42,6 +45,36 @@ def _validate_url(url: str) -> str:
     return candidate.geturl()
 
 
+def _install_browser_if_missing() -> None:
+    """Install Chromium lazily so the existing Render build remains lightweight."""
+    global _browser
+    if _browser is not None:
+        return
+    env = dict(os.environ)
+    env.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/tmp/prepza-playwright")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+    except subprocess.SubprocessError as exc:
+        raise RuntimeError("Unable to bootstrap the Prepza browser runtime.") from exc
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "browser install failed")[-1200:]
+        raise RuntimeError(f"Unable to bootstrap Chromium: {detail}")
+    os.environ.update({"PLAYWRIGHT_BROWSERS_PATH": env["PLAYWRIGHT_BROWSERS_PATH"]})
+
+
+def _record_console(message: object) -> None:
+    text = str(message)
+    if len(_console_errors) < 100:
+        _console_errors.append(text[:1000])
+
+
 async def _ensure_browser() -> Page:
     global _playwright, _browser, _context, _page
     if _page and not _page.is_closed():
@@ -49,11 +82,17 @@ async def _ensure_browser() -> Page:
     if _playwright is None:
         _playwright = await async_playwright().start()
     if _browser is None or not _browser.is_connected():
-        _browser = await _playwright.chromium.launch(headless=True, args=["--disable-dev-shm-usage"])
+        try:
+            _browser = await _playwright.chromium.launch(headless=True, args=["--disable-dev-shm-usage"])
+        except Exception:
+            _install_browser_if_missing()
+            _browser = await _playwright.chromium.launch(headless=True, args=["--disable-dev-shm-usage"])
     if _context is None:
         _context = await _browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=1)
         _context.set_default_timeout(10_000)
     _page = await _context.new_page()
+    _page.on("console", lambda message: _record_console(message.text) if message.type == "error" else None)
+    _page.on("pageerror", lambda error: _record_console(f"pageerror: {error}"))
     return _page
 
 
@@ -90,7 +129,10 @@ async def click(selector: str) -> dict:
     async with _lock:
         page = await _ensure_browser()
         await page.locator(selector).first.click()
-        await page.wait_for_load_state("domcontentloaded", timeout=5_000)
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=5_000)
+        except Exception:
+            pass
         return {"url": page.url, "title": await page.title()}
 
 
@@ -138,23 +180,22 @@ async def reload() -> dict:
 async def back() -> dict:
     async with _lock:
         page = await _ensure_browser()
-        await page.go_back(wait_until="domcontentloaded", timeout=15_000)
-        return {"url": page.url, "title": await page.title()}
+        response = await page.go_back(wait_until="domcontentloaded", timeout=15_000)
+        return {"url": page.url, "title": await page.title(), "status": response.status if response else None}
 
 
 async def console_and_errors() -> dict:
     async with _lock:
         page = await _ensure_browser()
-        errors = await page.evaluate("""() => ({
-            url: location.href,
-            consoleErrors: window.__prepza_mcp_console_errors || [],
-            bodyText: document.body ? document.body.innerText.slice(0, 2000) : ''
-        })""")
-        return errors
+        return {
+            "url": page.url,
+            "consoleErrors": list(_console_errors[-50:]),
+            "bodyText": (await page.locator("body").inner_text())[:2000],
+        }
 
 
 async def close() -> None:
-    global _playwright, _browser, _context, _page
+    global _playwright, _browser, _context, _page, _console_errors
     async with _lock:
         if _context:
             await _context.close()
@@ -163,6 +204,7 @@ async def close() -> None:
         if _playwright:
             await _playwright.stop()
         _playwright = _browser = _context = _page = None
+        _console_errors = []
 
 
 def screenshot_base64(data: bytes) -> str:
