@@ -13,6 +13,7 @@ import { installChatSwipeReply } from './crypto/chatSwipeReply'
 import { installChatUiPolish } from './crypto/chatUiPolish'
 import { installNavigationTransitions } from './crypto/navigationTransitions'
 import { installGlobalPullRefresh } from './crypto/globalPullRefresh'
+import { installOfflineBootstrap } from './offline/bootstrap'
 import App from './App'
 import './index.css'
 
@@ -61,11 +62,7 @@ class StartupErrorBoundary extends React.Component<React.PropsWithChildren, { er
 }
 
 function installSafely(name: string, installer: () => void): void {
-  try {
-    installer()
-  } catch (error) {
-    console.error(`[Prepza] optional startup module failed: ${name}`, error)
-  }
+  try { installer() } catch (error) { console.error(`[Prepza] optional startup module failed: ${name}`, error) }
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root')!, {
@@ -97,5 +94,6 @@ installSafely('chat swipe/reply', installChatSwipeReply)
 installSafely('chat UI polish', installChatUiPolish)
 installSafely('navigation transitions', installNavigationTransitions)
 installSafely('global pull refresh', installGlobalPullRefresh)
+installSafely('offline bootstrap', installOfflineBootstrap)
 
 void ensureE2EEIdentityReady().catch((error) => console.warn('[Prepza] E2EE identity setup deferred', error))
