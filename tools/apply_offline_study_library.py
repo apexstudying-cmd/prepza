@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
@@ -53,10 +52,8 @@ def patch_app():
   const offline = typeof navigator !== 'undefined' && !navigator.onLine
   const offlineUserId = getOfflineUserId()
 
-  // Saved StudyHub documents become the authoritative local document source
-  // for the user's own documents while offline. This is deliberately scoped
-  // to the saved-document set so one account can never see another account's
-  // offline records.
+  // Saved StudyHub documents are the authoritative local document source
+  // for this account while offline. Unsaved documents still require network.
   if (offline && method === 'GET' && offlineUserId) {
     if (/^\\/documents\\/\\d+$/.test(path)) {
       const documentId = Number(path.split('/')[2])
@@ -95,16 +92,16 @@ def patch_app():
 """
         api_block = api_block.replace(needle, offline_gate, 1)
 
-    success_anchor = "  if (!res.ok) {\n    throw new ApiError((body && body.error) || `Request failed (${res.status})`, res.status)\n  }\n"
-    if 'saveStudyHubDocumentOffline(Number(body.document_id))' not in api_block:
-        if success_anchor not in api_block:
-            raise SystemExit('Offline library: API success anchor not found')
-        hook = success_anchor + """  if (path.match(/^\\/library\\/\\d+\\/save$/) && body && Number.isInteger(Number(body.document_id))) {
+    save_hook = """  if (path.match(/^\\/library\\/\\d+\\/save$/) && body && Number.isInteger(Number(body.document_id))) {
     try { body.offline_available = true; await saveStudyHubDocumentOffline(Number(body.document_id)) }
     catch (_) { body.offline_available = false }
   }
 """
-        api_block = api_block.replace(success_anchor, hook, 1)
+    if 'saveStudyHubDocumentOffline(Number(body.document_id))' not in api_block:
+        return_anchor = "  return body as T\n"
+        if return_anchor not in api_block:
+            raise SystemExit('Offline library: API return anchor not found')
+        api_block = api_block.replace(return_anchor, save_hook + return_anchor, 1)
     s = s[:api_start] + api_block + s[api_end:]
 
     if 'function OfflineSavedStudyShelf' not in s:
