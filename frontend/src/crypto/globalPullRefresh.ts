@@ -2,7 +2,13 @@ let installed = false
 let startX: number | null = null
 let startY: number | null = null
 let activeSurface: HTMLElement | null = null
-let triggered = false
+let indicator: HTMLElement | null = null
+let pullDistance = 0
+let armed = false
+let refreshing = false
+
+const MAX_PULL = 116
+const TRIGGER_DISTANCE = 72
 
 function findSurface(target: EventTarget | null): HTMLElement | null {
   let node = target instanceof HTMLElement ? target : null
@@ -11,51 +17,99 @@ function findSurface(target: EventTarget | null): HTMLElement | null {
     if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && node.scrollHeight > node.clientHeight + 2) return node
     node = node.parentElement
   }
-  const root = document.scrollingElement
-  return root && root.scrollHeight > root.clientHeight + 2 ? root as HTMLElement : null
+  return document.scrollingElement as HTMLElement | null
 }
 
-function triggerRefresh() {
-  if (triggered) return
-  triggered = true
-  // App persists its navigation stack and active IDs in sessionStorage, so a
-  // real reload refreshes the current screen rather than routing to Home.
-  window.location.reload()
+function ensureIndicator(): HTMLElement {
+  if (indicator) return indicator
+  indicator = document.createElement('div')
+  indicator.setAttribute('aria-hidden', 'true')
+  indicator.style.cssText = [
+    'position:fixed', 'top:0', 'left:50%', 'z-index:2147483000',
+    'transform:translate(-50%,-100%)', 'width:42px', 'height:42px',
+    'border-radius:999px', 'display:flex', 'align-items:center', 'justify-content:center',
+    'background:rgba(11,20,55,.96)', 'color:#C9A84C', 'font-size:22px',
+    'box-shadow:0 3px 14px rgba(0,0,0,.22)', 'pointer-events:none',
+    'transition:transform 120ms ease, opacity 120ms ease', 'opacity:0',
+  ].join(';')
+  indicator.textContent = '↓'
+  document.body.appendChild(indicator)
+  return indicator
+}
+
+function paintPull(distance: number): void {
+  const value = Math.max(0, Math.min(MAX_PULL, distance))
+  pullDistance = value
+  const el = ensureIndicator()
+  const progress = value / MAX_PULL
+  el.style.transform = `translate(-50%, ${-100 + progress * 190}%)`
+  el.style.opacity = String(Math.min(1, progress * 1.8))
+  el.textContent = armed ? '↻' : '↓'
+  if (activeSurface) {
+    activeSurface.style.transform = value > 0 ? `translateY(${value * 0.32}px)` : ''
+    activeSurface.style.transition = 'none'
+  }
+}
+
+function clearPull(): void {
+  if (activeSurface) {
+    activeSurface.style.transition = 'transform 180ms ease'
+    activeSurface.style.transform = ''
+  }
+  if (indicator) {
+    indicator.style.transform = 'translate(-50%,-100%)'
+    indicator.style.opacity = '0'
+  }
+  pullDistance = 0
+  armed = false
+  startX = null
+  startY = null
+  activeSurface = null
+}
+
+function triggerRefresh(): void {
+  if (refreshing) return
+  refreshing = true
+  const el = ensureIndicator()
+  el.textContent = '↻'
+  el.style.transform = 'translate(-50%, 20%)'
+  el.style.opacity = '1'
+  window.setTimeout(() => window.location.reload(), 120)
 }
 
 export function installGlobalPullRefresh(): void {
   if (installed || typeof document === 'undefined') return
   installed = true
 
-  // Covers every screen, including screens that don't contain chat messages.
   document.addEventListener('touchstart', event => {
+    if (event.touches.length !== 1) return
     const surface = findSurface(event.target)
-    if (!surface || surface.scrollTop > 2 || event.touches.length !== 1) return
+    if (!surface || surface.scrollTop > 2) return
     activeSurface = surface
     startX = event.touches[0]?.clientX ?? null
     startY = event.touches[0]?.clientY ?? null
-    triggered = false
+    pullDistance = 0
+    armed = false
   }, { passive: true, capture: true })
 
   document.addEventListener('touchmove', event => {
-    if (startX == null || startY == null || !activeSurface || triggered || activeSurface.scrollTop > 2 || event.touches.length !== 1) return
+    if (startX == null || startY == null || !activeSurface || refreshing || event.touches.length !== 1) return
+    if (activeSurface.scrollTop > 2) return
     const currentX = event.touches[0]?.clientX ?? startX
     const currentY = event.touches[0]?.clientY ?? startY
     const dx = currentX - startX
     const dy = currentY - startY
-    // Only a genuinely downward gesture should refresh; horizontal swipes
-    // belong to the primary navigation gesture.
-    if (dy >= 72 && dy > Math.abs(dx) * 1.35) triggerRefresh()
+    if (dy <= 0 || dy <= Math.abs(dx) * 1.25) return
+    const resisted = Math.sqrt(dy) * 8.5
+    paintPull(Math.min(MAX_PULL, resisted))
+    armed = pullDistance >= TRIGGER_DISTANCE
   }, { passive: true, capture: true })
 
-  const reset = () => { startX = null; startY = null; activeSurface = null; triggered = false }
-  document.addEventListener('touchend', reset, { passive: true, capture: true })
-  document.addEventListener('touchcancel', reset, { passive: true, capture: true })
+  document.addEventListener('touchend', () => {
+    if (armed && !refreshing) triggerRefresh()
+    else clearPull()
+  }, { passive: true, capture: true })
+  document.addEventListener('touchcancel', clearPull, { passive: true, capture: true })
 
-  // The existing chat polish layer emits this event. Listening here makes its
-  // pull gesture perform the same real refresh instead of a no-op event.
-  window.addEventListener('prepza-realtime-message', event => {
-    const detail = (event as CustomEvent).detail as { refresh?: boolean } | undefined
-    if (detail?.refresh) triggerRefresh()
-  })
+  window.addEventListener('pagehide', clearPull)
 }
