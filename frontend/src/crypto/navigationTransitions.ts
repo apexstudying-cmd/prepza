@@ -6,6 +6,7 @@ let swipeDeltaX = 0
 let swipeActive = false
 let swipeAnimation: Animation | null = null
 let navigationInProgress = false
+let navObserver: MutationObserver | null = null
 
 const PRIMARY_NAV_LABELS = ['home', 'explore', 'chats', 'profile'] as const
 const PRIMARY_SWIPE_SCREENS = new Set<string>(PRIMARY_NAV_LABELS)
@@ -18,9 +19,6 @@ const NAVIGATION_STORAGE_KEY = 'prepza-navigation-state'
 function currentAppScreen(): string | null {
   if (typeof window === 'undefined') return null
   try {
-    // App navigation state is persisted in localStorage so reloads and
-    // standalone PWA restarts can restore the same screen. The swipe gate
-    // must read the same store; sessionStorage here silently disabled swipes.
     const raw = window.localStorage.getItem(NAVIGATION_STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as { stack?: unknown }
@@ -51,8 +49,13 @@ function primaryButtons(): HTMLButtonElement[] {
   return PRIMARY_NAV_LABELS.map(label => found.find(button => navLabel(button).includes(label)) || null).filter(Boolean) as HTMLButtonElement[]
 }
 
-function activeNavIndex(buttons: HTMLButtonElement[]): number {
-  if (lastKnownIndex != null && lastKnownIndex >= 0 && lastKnownIndex < buttons.length) return lastKnownIndex
+function syncKnownIndex(buttons: HTMLButtonElement[]): void {
+  const screen = currentAppScreen()
+  const screenIndex = screen ? PRIMARY_NAV_LABELS.indexOf(screen as typeof PRIMARY_NAV_LABELS[number]) : -1
+  if (screenIndex >= 0 && screenIndex < buttons.length) {
+    lastKnownIndex = screenIndex
+    return
+  }
   const active = buttons.findIndex(button => {
     const className = typeof button.className === 'string' ? button.className : ''
     return button.getAttribute('aria-current') === 'page'
@@ -61,8 +64,14 @@ function activeNavIndex(buttons: HTMLButtonElement[]): number {
       || button.querySelector('[aria-current="page"]') !== null
       || /(^|[\s_-])(active|selected|current)([\s_-]|$)/i.test(className)
   })
-  lastKnownIndex = active >= 0 ? active : 0
-  return lastKnownIndex
+  if (active >= 0) lastKnownIndex = active
+  else if (lastKnownIndex == null) lastKnownIndex = 0
+}
+
+function activeNavIndex(buttons: HTMLButtonElement[]): number {
+  if (lastKnownIndex != null && lastKnownIndex >= 0 && lastKnownIndex < buttons.length) return lastKnownIndex
+  syncKnownIndex(buttons)
+  return lastKnownIndex ?? 0
 }
 
 function contentElement(): HTMLElement | null {
@@ -99,9 +108,6 @@ function prepareNavColorTransitions(): void {
     }
   })
 
-  // Keep the bottom navigation above Android/iOS gesture/navigation bars.
-  // Only move an actually fixed nav that currently sits at the viewport edge;
-  // this leaves desktop/normal-flow layouts untouched.
   const host = buttons[0]?.parentElement
   if (!host || buttons.some(button => button.parentElement !== host)) return
   const style = getComputedStyle(host)
@@ -204,6 +210,7 @@ function finishNavigation(direction: 'left' | 'right', navigate: () => void): vo
       nextContent.style.willChange = ''
       nextContent.style.transform = ''
       navigationInProgress = false
+      syncKnownIndex(primaryButtons())
     })
   })
 }
@@ -249,15 +256,28 @@ export function installNavigationTransitions(): void {
     prepareNavColorTransitions()
     preparePagerSurface()
   }, true)
+
   const initialize = () => {
-    prepareNavColorTransitions()
-    preparePagerSurface()
     const buttons = primaryButtons()
-    if (buttons.length) activeNavIndex(buttons)
+    if (buttons.length) {
+      syncKnownIndex(buttons)
+      prepareNavColorTransitions()
+      preparePagerSurface()
+    }
   }
   initialize()
+  window.setTimeout(initialize, 100)
   window.setTimeout(initialize, 250)
   window.setTimeout(initialize, 1000)
+
+  // React can replace the bottom navigation during the first render/reload.
+  // Observe those commits so swipe/navigation state becomes ready immediately
+  // instead of waiting for the timeout-based initialization.
+  if (typeof MutationObserver !== 'undefined') {
+    navObserver = new MutationObserver(() => initialize())
+    const root = document.getElementById('root')
+    if (root) navObserver.observe(root, { childList: true, subtree: true })
+  }
 
   document.addEventListener('touchstart', event => {
     if (!isPrimarySwipeScreen() || navigationInProgress || event.touches.length !== 1 || isHorizontalScroller(event.target)) return
@@ -268,6 +288,8 @@ export function installNavigationTransitions(): void {
     cancelSwipeAnimation()
     resetContentTransform()
     preparePagerSurface()
+    const buttons = primaryButtons()
+    if (buttons.length) syncKnownIndex(buttons)
     swipeStartX = event.touches[0].clientX
     swipeStartY = event.touches[0].clientY
     swipeDeltaX = 0
