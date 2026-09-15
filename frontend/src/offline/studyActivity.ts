@@ -57,13 +57,19 @@ export function startOfflineStudyTracking(documentId: number, feature = 'reading
   let last = performance.now()
   let active = document.visibilityState === 'visible'
   let stopped = false
+  let fractionalSeconds = 0
 
   const tick = () => {
     if (stopped) return
     const now = performance.now()
     if (active) {
       const seconds = Math.min(30, Math.max(0, (now - last) / 1000))
-      recordOfflineStudySeconds(documentId, feature, seconds)
+      fractionalSeconds += seconds
+      const wholeSeconds = Math.floor(fractionalSeconds)
+      if (wholeSeconds > 0) {
+        recordOfflineStudySeconds(documentId, feature, wholeSeconds)
+        fractionalSeconds -= wholeSeconds
+      }
     }
     last = now
   }
@@ -81,6 +87,8 @@ export function startOfflineStudyTracking(documentId: number, feature = 'reading
   return () => {
     if (stopped) return
     tick()
+    if (fractionalSeconds >= 0.5) recordOfflineStudySeconds(documentId, feature, fractionalSeconds)
+    fractionalSeconds = 0
     stopped = true
     window.clearInterval(interval)
     document.removeEventListener('visibilitychange', onVisibility)
