@@ -26,8 +26,9 @@ if api_end < 0:
     raise SystemExit('Offline wiring: api helper boundary not found')
 api = s[api_start:api_end + 2]
 
-method_anchor = "  const method = String(restOptions.method || 'GET').toUpperCase()\n"
-offline_gate = """  const requestBody = (() => {
+options_anchor = "  const { headers: extraHeaders, ...restOptions } = options\n"
+offline_gate = """  const method = String(restOptions.method || 'GET').toUpperCase()
+  const requestBody = (() => {
     try { return typeof restOptions.body === 'string' ? JSON.parse(restOptions.body) : restOptions.body }
     catch { return null }
   })()
@@ -37,9 +38,9 @@ offline_gate = """  const requestBody = (() => {
   }
 """
 if 'const cachedGenerated = await getGeneratedMaterialOffline(path, requestBody)' not in api:
-    if method_anchor not in api:
-        raise SystemExit('Offline wiring: API method anchor not found')
-    api = api.replace(method_anchor, method_anchor + offline_gate, 1)
+    if options_anchor not in api:
+        raise SystemExit('Offline wiring: API options anchor not found')
+    api = api.replace(options_anchor, options_anchor + offline_gate, 1)
 
 fetch_anchor = "    if (canUseOfflineData && body !== null) {\n      void writePrepzaOffline(cacheKey, body)\n    }\n    return body as T\n"
 fetch_replacement = """    if (canUseOfflineData && body !== null) {
