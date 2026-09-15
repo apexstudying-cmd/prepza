@@ -1,7 +1,7 @@
 // Prepza application-shell service worker.
 // Keep the shell network-first so a bad cached HTML document can never pin a
 // production release. Runtime asset caching remains opt-in and versioned.
-const SW_VERSION = 'v12';
+const SW_VERSION = 'v13';
 const SHELL_CACHE = `prepza-shell-${SW_VERSION}`;
 const RUNTIME_CACHE = `prepza-runtime-${SW_VERSION}`;
 const NAV_TIMEOUT_MS = 1800;
@@ -52,7 +52,8 @@ self.addEventListener('activate', (event) => {
       names
         .filter((name) => name.startsWith('prepza-') &&
           name !== SHELL_CACHE &&
-          name !== RUNTIME_CACHE)
+          name !== RUNTIME_CACHE &&
+          name !== STUDY_ASSET_CACHE)
         .map((name) => caches.delete(name)),
     )).then(() => self.clients.claim()),
   );
@@ -94,11 +95,19 @@ async function handleNavigation(request) {
 }
 
 async function handleAsset(request) {
-  const cacheName = isNativeStudyPage(new URL(request.url)) ? STUDY_ASSET_CACHE : RUNTIME_CACHE;
+  const url = new URL(request.url);
+  const studyPage = isNativeStudyPage(url);
+
+  // Study pages are cached only when the Study Hub explicitly saves them.
+  // Normal online reading must never silently consume storage or mix accounts.
   const cached = await caches.match(request, { ignoreSearch: false });
   if (cached) return cached;
-  try { return await cacheResponse(cacheName, request, await fetch(request)); }
-  catch (_) {
+
+  try {
+    const response = await fetch(request);
+    if (studyPage) return response;
+    return await cacheResponse(RUNTIME_CACHE, request, response);
+  } catch (_) {
     const fallback = await caches.match(request, { ignoreSearch: false });
     return fallback || new Response('', { status: 503, statusText: 'Network error' });
   }
