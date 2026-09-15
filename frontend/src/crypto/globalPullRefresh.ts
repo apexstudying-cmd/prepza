@@ -62,14 +62,21 @@ function paintPull(distance: number): void {
   el.textContent = armed ? '↻' : '↓'
 
   if (activeSurface) {
+    // Pull-to-refresh should feel elastic, not like the entire page is simply
+    // being dragged down. Keep the top edge anchored and gently stretch the
+    // surface from it; this also prevents a light parent/background strip from
+    // being exposed above dark-mode screens.
+    const stretch = 1 + Math.min(0.075, value / 1500)
     activeSurface.style.transition = 'none'
-    activeSurface.style.transform = `translate3d(0,${value * 0.34}px,0)`
+    activeSurface.style.transformOrigin = '50% 0%'
+    activeSurface.style.transform = `scale3d(1,${stretch},1)`
   }
 }
 
 function clearPull(): void {
   if (activeSurface) {
-    activeSurface.style.transition = 'transform 180ms cubic-bezier(.22,.8,.22,1)'
+    activeSurface.style.transition = 'transform 220ms cubic-bezier(.22,.8,.22,1)'
+    activeSurface.style.transformOrigin = ''
     activeSurface.style.transform = ''
   }
   if (indicator) {
@@ -94,7 +101,8 @@ function triggerRefresh(): void {
   el.style.opacity = '1'
   if (activeSurface) {
     activeSurface.style.transition = 'transform 220ms cubic-bezier(.22,.8,.22,1)'
-    activeSurface.style.transform = `translate3d(0,${TRIGGER_DISTANCE * 0.34}px,0)`
+    activeSurface.style.transformOrigin = '50% 0%'
+    activeSurface.style.transform = 'scale3d(1,1.055,1)'
   }
   window.setTimeout(() => window.location.reload(), 180)
 }
