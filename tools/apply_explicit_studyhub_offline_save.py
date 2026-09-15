@@ -18,17 +18,14 @@ for line in IMPORTS:
         s = s.replace(anchor, anchor + line, 1)
     anchor = line
 
-api_start = s.find('async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {')
-if api_start < 0:
-    raise SystemExit('Offline wiring: api helper not found')
-api_end = s.find('\n}\n\n', api_start)
-if api_end < 0:
-    raise SystemExit('Offline wiring: api helper boundary not found')
-api = s[api_start:api_end + 2]
+# The offline foundation is intentionally built by earlier prebuild stages.
+# Anchor to a line introduced by the sync-queue layer so this patch cannot
+# accidentally modify an unrelated function if App.tsx changes later.
+api_marker = "  const queueOffline = method !== 'GET' && String((extraHeaders as Record<string, string> | undefined)?.['X-Prepza-Offline-Queue'] || '').toLowerCase() === 'true'\n"
+if api_marker not in s:
+    raise SystemExit('Offline wiring: sync-queue API anchor not found')
 
-options_anchor = "  const { headers: extraHeaders, ...restOptions } = options\n"
-offline_gate = """  const method = String(restOptions.method || 'GET').toUpperCase()
-  const requestBody = (() => {
+offline_gate = """  const requestBody = (() => {
     try { return typeof restOptions.body === 'string' ? JSON.parse(restOptions.body) : restOptions.body }
     catch { return null }
   })()
@@ -37,12 +34,14 @@ offline_gate = """  const method = String(restOptions.method || 'GET').toUpperCa
     if (cachedGenerated != null) return cachedGenerated as T
   }
 """
-if 'const cachedGenerated = await getGeneratedMaterialOffline(path, requestBody)' not in api:
-    if options_anchor not in api:
-        raise SystemExit('Offline wiring: API options anchor not found')
-    api = api.replace(options_anchor, options_anchor + offline_gate, 1)
+if 'const cachedGenerated = await getGeneratedMaterialOffline(path, requestBody)' not in s:
+    s = s.replace(api_marker, api_marker + offline_gate, 1)
 
-fetch_anchor = "    if (canUseOfflineData && body !== null) {\n      void writePrepzaOffline(cacheKey, body)\n    }\n    return body as T\n"
+fetch_anchor = """    if (canUseOfflineData && body !== null) {
+      void writePrepzaOffline(cacheKey, body)
+    }
+    return body as T
+"""
 fetch_replacement = """    if (canUseOfflineData && body !== null) {
       void writePrepzaOffline(cacheKey, body)
     }
@@ -57,12 +56,10 @@ fetch_replacement = """    if (canUseOfflineData && body !== null) {
     void saveGeneratedMaterialOffline(path, requestBody, body)
     return mergeOfflineStudyResponse(path, body)
 """
-if 'saveStudyHubDocumentOffline(Number((body as any).document_id))' not in api:
-    if fetch_anchor not in api:
-        raise SystemExit('Offline wiring: generated API success anchor not found')
-    api = api.replace(fetch_anchor, fetch_replacement, 1)
-
-s = s[:api_start] + api + s[api_end + 2:]
+if 'saveStudyHubDocumentOffline(Number((body as any).document_id))' not in s:
+    if fetch_anchor not in s:
+        raise SystemExit('Offline wiring: cached API success anchor not found')
+    s = s.replace(fetch_anchor, fetch_replacement, 1)
 
 SYNC = """\nif (typeof window !== 'undefined') {
   window.addEventListener('online', () => void syncOfflineStudyActivity())
