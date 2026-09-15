@@ -1,7 +1,7 @@
 // Prepza application-shell service worker.
 // Keep the shell network-first so a bad cached HTML document can never pin a
 // production release. Runtime asset caching remains opt-in and versioned.
-const SW_VERSION = 'v13';
+const SW_VERSION = 'v14';
 const SHELL_CACHE = `prepza-shell-${SW_VERSION}`;
 const RUNTIME_CACHE = `prepza-runtime-${SW_VERSION}`;
 const NAV_TIMEOUT_MS = 1800;
