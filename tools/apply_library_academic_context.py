@@ -11,6 +11,14 @@ def replace_once(old, new, label):
         raise SystemExit(f"FAIL CLOSED: {label}: expected 1 match, found {count}")
     text = text.replace(old, new, 1)
 
+
+def replace_all_exact(old, new, expected, label):
+    global text
+    count = text.count(old)
+    if count != expected:
+        raise SystemExit(f"FAIL CLOSED: {label}: expected {expected} matches, found {count}")
+    text = text.replace(old, new)
+
 replace_once(
 '''    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)\n    title = db.Column(db.String(200), nullable=False)''',
 '''    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)\n    # Publication context is a snapshot for this document, not a permanent\n    # mutation of the student's profile. This lets a student publish older\n    # or future-semester material without corrupting their current profile.\n    university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=True)\n    program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=True)\n    year = db.Column(db.Integer, nullable=True)\n    semester = db.Column(db.Integer, nullable=True)\n    title = db.Column(db.String(200), nullable=False)''',
@@ -35,10 +43,11 @@ replace_once(
     "persist publication academic context",
 )
 
-replace_once(
+replace_all_exact(
 '''            "unit_id": pub.unit_id,\n            "unit_code": unit.code if unit else None,''',
 '''            "unit_id": pub.unit_id,\n            "unit_code": unit.code if unit else None,\n            "university_id": pub.university_id,\n            "program_id": pub.program_id,\n            "year": pub.year,\n            "semester": pub.semester,''',
-    "submission metadata response",
+    3,
+    "student-facing library metadata responses",
 )
 
 replace_once(
@@ -57,21 +66,6 @@ replace_once(
 '''    publications = (\n        query.order_by(order_col)\n        .offset((page - 1) * per_page)\n        .limit(per_page)\n        .all()\n    )''',
 '''    relevance_order = []\n    if viewer and not q and not unit_id and not university_id and not program_id and not year and not semester and not material_type:\n        # Exact academic matches rise to the top without excluding broader\n        # discovery. Publication context is independent from the student's\n        # current profile, so old-semester uploads stay correctly placed.\n        if viewer.university_id is not None:\n            relevance_order.append((LibraryPublication.university_id == viewer.university_id).desc())\n        if viewer.program_id is not None:\n            relevance_order.append((LibraryPublication.program_id == viewer.program_id).desc())\n        if viewer.year is not None:\n            relevance_order.append((LibraryPublication.year == viewer.year).desc())\n        if viewer.semester is not None:\n            relevance_order.append((LibraryPublication.semester == viewer.semester).desc())\n\n    publications = (\n        query.order_by(*relevance_order, order_col)\n        .offset((page - 1) * per_page)\n        .limit(per_page)\n        .all()\n    )''',
     "library relevance ordering",
-)
-
-replace_once(
-'''            "unit_id": pub.unit_id,\n            "unit_code": unit.code if unit else None,\n            "author": _display_name(author) if author else "Deleted user",''',
-'''            "unit_id": pub.unit_id,\n            "unit_code": unit.code if unit else None,\n            "university_id": pub.university_id,\n            "program_id": pub.program_id,\n            "year": pub.year,\n            "semester": pub.semester,\n            "author": _display_name(author) if author else "Deleted user",''',
-    "library browse metadata response",
-)
-
-# The same response shape appears in /library/saved; apply the academic
-# fields to that occurrence after the browse response has already been
-# changed above.
-replace_once(
-'''            "unit_id": pub.unit_id,\n            "unit_code": unit.code if unit else None,\n            "author": _display_name(author) if author else "Deleted user",''',
-'''            "unit_id": pub.unit_id,\n            "unit_code": unit.code if unit else None,\n            "university_id": pub.university_id,\n            "program_id": pub.program_id,\n            "year": pub.year,\n            "semester": pub.semester,\n            "author": _display_name(author) if author else "Deleted user",''',
-    "saved library metadata response",
 )
 
 replace_once(
