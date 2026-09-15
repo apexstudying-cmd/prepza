@@ -1,7 +1,8 @@
-const KEY = 'prepza-offline-study-activity-v2'
+const KEY = 'prepza-offline-study-activity-v3'
 const MAX_DAILY_SECONDS = 8 * 60 * 60
 
-type ScreenEntry = { seconds: number; syncedSeconds: number; documentId: number; feature: string }
+type DayEntry = { seconds: number; syncedSeconds: number }
+type ScreenEntry = { documentId: number; feature: string; days: Record<string, DayEntry> }
 type ActivityState = { screens: Record<string, ScreenEntry> }
 
 function todayKey(date = new Date()): string {
@@ -29,26 +30,26 @@ function notify() {
   window.dispatchEvent(new CustomEvent('prepza:offline-study-activity-changed'))
 }
 
-/**
- * Records time for one specific study surface. This is deliberately not a
- * global timer: each My Study / My Library study screen owns its own tracker.
- */
+/** Records time for exactly one My Study / My Library study surface. */
 export function recordOfflineStudySeconds(documentId: number, feature: string, seconds: number) {
   if (!Number.isInteger(documentId) || documentId <= 0) return
   if (!Number.isFinite(seconds) || seconds <= 0) return
 
   const state = load()
   const key = screenKey(documentId, feature)
-  const row = state.screens[key] || { seconds: 0, syncedSeconds: 0, documentId, feature }
-  row.seconds = Math.min(MAX_DAILY_SECONDS, row.seconds + Math.floor(seconds))
+  const row = state.screens[key] || { documentId, feature, days: {} }
+  const date = todayKey()
+  const day = row.days[date] || { seconds: 0, syncedSeconds: 0 }
+  day.seconds = Math.min(MAX_DAILY_SECONDS, day.seconds + Math.floor(seconds))
+  row.days[date] = day
   state.screens[key] = row
   save(state)
   notify()
 }
 
 /**
- * Starts a timer owned by exactly one study screen. Leaving that screen stops
- * its timer, so time spent elsewhere in Prepza is never counted as study time.
+ * Timer is mounted by the individual study screen and stops on unmount.
+ * Navigation to another screen therefore cannot leak time into this screen.
  */
 export function startOfflineStudyTracking(documentId: number, feature = 'reading'): () => void {
   if (!Number.isInteger(documentId) || documentId <= 0) return () => {}
@@ -87,25 +88,40 @@ export function startOfflineStudyTracking(documentId: number, feature = 'reading
   }
 }
 
-/** Returns time accumulated for one document + study feature. */
+/** Returns time for one exact document + study feature, today. */
 export function getOfflineStudyScreenSnapshot(documentId: number, feature = 'reading') {
   const state = load()
   const row = state.screens[screenKey(documentId, feature)]
+  const day = row?.days?.[todayKey()]
   return {
     documentId,
     feature,
-    seconds: Math.max(0, Number(row?.seconds) || 0),
-    syncedSeconds: Math.max(0, Number(row?.syncedSeconds) || 0),
+    seconds: Math.max(0, Number(day?.seconds) || 0),
+    syncedSeconds: Math.max(0, Number(day?.syncedSeconds) || 0),
   }
 }
 
 export function getOfflineStudySnapshot() {
   const state = load()
+  const today = todayKey()
   const screens = Object.values(state.screens || {})
-  const totalSeconds = screens.reduce((sum, row) => sum + Math.max(0, Number(row.seconds) || 0), 0)
-  const todaySeconds = totalSeconds
-  const activeDates = todaySeconds > 0 ? [todayKey()] : []
-  return { totalSeconds, todaySeconds, currentStreak: todaySeconds > 0 ? 1 : 0, activeDates }
+  const todaySeconds = screens.reduce((sum, row) => sum + Math.max(0, Number(row.days?.[today]?.seconds) || 0), 0)
+  const allSeconds = screens.reduce((sum, row) => sum + Object.values(row.days || {}).reduce((daySum, day) => daySum + Math.max(0, Number(day.seconds) || 0), 0), 0)
+  const activeDates = new Set<string>()
+  for (const row of screens) {
+    for (const [date, day] of Object.entries(row.days || {})) if (Number(day.seconds) > 0) activeDates.add(date)
+  }
+
+  let currentStreak = 0
+  const cursor = new Date()
+  for (;;) {
+    const key = todayKey(cursor)
+    if (![...screens].some(row => Number(row.days?.[key]?.seconds) > 0)) break
+    currentStreak += 1
+    cursor.setDate(cursor.getDate() - 1)
+  }
+
+  return { totalSeconds: allSeconds, todaySeconds, currentStreak, activeDates: [...activeDates].sort() }
 }
 
 export function mergeOfflineStudyResponse(path: string, body: any) {
@@ -123,19 +139,19 @@ export function mergeOfflineStudyResponse(path: string, body: any) {
 export async function syncOfflineStudyActivity(csrfToken?: string) {
   if (!navigator.onLine) return
   const state = load()
-  const entries = Object.values(state.screens)
-    .map(row => ({
-      date: todayKey(),
-      seconds: Math.max(0, Math.floor(Number(row.seconds) || 0)),
-      syncedSeconds: Math.max(0, Math.floor(Number(row.syncedSeconds) || 0)),
-    }))
-    .filter(row => row.seconds > row.syncedSeconds)
-    .map(row => ({ date: row.date, seconds: Math.min(MAX_DAILY_SECONDS, row.seconds - row.syncedSeconds) }))
+  const pending: Array<{ screen: ScreenEntry; date: string; seconds: number }> = []
 
-  if (!entries.length) return
+  for (const screen of Object.values(state.screens)) {
+    for (const [date, day] of Object.entries(screen.days || {})) {
+      const seconds = Math.max(0, Math.floor(Number(day.seconds) || 0))
+      const synced = Math.max(0, Math.floor(Number(day.syncedSeconds) || 0))
+      if (seconds > synced) pending.push({ screen, date, seconds: seconds - synced })
+    }
+  }
+  if (!pending.length) return
 
   const byDate: Record<string, number> = {}
-  for (const entry of entries) byDate[entry.date] = (byDate[entry.date] || 0) + entry.seconds
+  for (const item of pending) byDate[item.date] = (byDate[item.date] || 0) + item.seconds
 
   let token = csrfToken
   if (!token) {
@@ -151,15 +167,28 @@ export async function syncOfflineStudyActivity(csrfToken?: string) {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token || '' },
-      body: JSON.stringify({ entries: Object.entries(byDate).map(([date, seconds]) => ({ date, seconds })) }),
+      body: JSON.stringify({ entries: Object.entries(byDate).map(([date, seconds]) => ({ date, seconds: Math.min(MAX_DAILY_SECONDS, seconds) })) }),
     })
     if (!res.ok) return
 
     const accepted: Record<string, number> = (await res.json()).accepted_seconds_by_date || {}
-    for (const row of Object.values(state.screens)) {
-      const acceptedForDate = Math.max(0, Number(accepted[todayKey()]) || 0)
-      if (acceptedForDate > 0) row.syncedSeconds = Math.min(row.seconds, row.syncedSeconds + acceptedForDate)
+
+    // The existing server endpoint accepts daily totals, not screen IDs.
+    // Allocate the server-accepted amount deterministically across the exact
+    // screen/day records that produced it, preserving their local ownership.
+    for (const [date, acceptedValue] of Object.entries(accepted)) {
+      let remaining = Math.max(0, Number(acceptedValue) || 0)
+      for (const item of pending) {
+        if (remaining <= 0 || item.date !== date) continue
+        const day = item.screen.days[date]
+        if (!day) continue
+        const unsynced = Math.max(0, day.seconds - day.syncedSeconds)
+        const credited = Math.min(unsynced, remaining)
+        day.syncedSeconds += credited
+        remaining -= credited
+      }
     }
+
     save(state)
     notify()
   } catch {}
