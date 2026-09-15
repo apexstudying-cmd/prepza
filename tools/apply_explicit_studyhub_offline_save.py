@@ -22,7 +22,7 @@ for line in IMPORTS:
 # O2/O3 have already produced the final API helper by this stage. Find the
 # method declaration rather than depending on whitespace from an earlier
 # version of App.tsx.
-method_match = re.search(r"(?m)^  const method = String\(restOptions\.method \|\| 'GET'\)\.toUpperCase\(\)\\n", s)
+method_match = re.search(r"(?m)^  const method = String\(restOptions\.method \|\| 'GET'\)\.toUpperCase\(\)$", s)
 if not method_match:
     raise SystemExit('Offline wiring: final API method anchor not found')
 
@@ -37,7 +37,7 @@ offline_gate = """  const requestBody = (() => {
 """
 if 'const cachedGenerated = await getGeneratedMaterialOffline(path, requestBody)' not in s:
     insert_at = method_match.end()
-    s = s[:insert_at] + offline_gate + s[insert_at:]
+    s = s[:insert_at] + '\n' + offline_gate + s[insert_at:]
 
 fetch_anchor = """    if (canUseOfflineData && body !== null) {
       void writePrepzaOffline(cacheKey, body)
