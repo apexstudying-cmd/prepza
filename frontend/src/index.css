@@ -25,21 +25,36 @@
   box-sizing: border-box;
 }
 
-html, body {
+/* Keep the document canvas painted behind the full-viewport PWA shell so
+ * route transitions and viewport/safe-area changes cannot expose a white
+ * browser canvas at the bottom or edges of the app. */
+html {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
+  background: #0B1437;
+}
+
+html, body {
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   font-family: 'Plus Jakarta Sans', sans-serif;
   background: #0B1437;
 }
 
-/*
- * The app is a full-viewport PWA, but the viewport is owned by the device,
+/* The app is a full-viewport PWA, but the viewport is owned by the device,
  * not by a particular phone's pixel dimensions. Keep the root on the actual
  * available viewport and let the browser supply any cutout/system-bar insets.
  */
