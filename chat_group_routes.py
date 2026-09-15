@@ -9,6 +9,7 @@ new messages use a fresh key and removed members cannot decrypt future traffic.
 from datetime import datetime
 
 from flask import jsonify, request, session
+from sqlalchemy import text
 
 from app import (
     app,
@@ -42,22 +43,20 @@ def _active_group_member_count(conversation_id):
 
 
 def _bump_group_key_epoch(conversation):
-    """Advance the server-selected epoch and clear old current envelopes.
+    """Advance the existing server-selected group E2EE epoch.
 
     The client-side E2EE bridge notices the empty envelope set for the new
     epoch and elects the lowest active member to provision a fresh key.
     Historical keys remain locally available only to devices that already
-    possessed them, preserving access to old messages without granting a
-    removed member access to messages sent after removal.
+    possessed them, so old messages remain readable while removed members
+    cannot decrypt messages sent after removal.
     """
-    from sqlalchemy import text
-
     result = db.session.execute(
         text("""
             UPDATE conversation
-            SET e2ee_key_epoch = COALESCE(e2ee_key_epoch, 1) + 1
+            SET key_epoch = COALESCE(key_epoch, 1) + 1
             WHERE id = :conversation_id
-            RETURNING e2ee_key_epoch
+            RETURNING key_epoch
         """),
         {"conversation_id": conversation.id},
     ).first()
@@ -128,7 +127,7 @@ def add_chat_group_members(conversation_id):
     return jsonify({
         "conversation": _serialize_conversation_detail(conversation, user_id),
         "added_user_ids": sorted(new_ids),
-        "key_epoch": conversation.e2ee_key_epoch,
+        "key_epoch": conversation.key_epoch,
     }), 201
 
 
@@ -161,7 +160,7 @@ def remove_chat_group_member(conversation_id, target_user_id):
     return jsonify({
         "conversation": _serialize_conversation_detail(conversation, user_id),
         "removed_user_id": target_user_id,
-        "key_epoch": conversation.e2ee_key_epoch,
+        "key_epoch": conversation.key_epoch,
     })
 
 
