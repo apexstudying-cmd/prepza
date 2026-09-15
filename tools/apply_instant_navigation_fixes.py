@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
@@ -59,20 +60,32 @@ text = text.replace(
     1,
 )
 
-# Do not show the remaining reader skeleton/interstitial when entering a
-# document from Continue Studying. The reader shell should appear immediately;
-# its existing document-shaped content/fallbacks handle the short fetch window.
-text = text.replace(
-    '  if (loading && !doc) return <SkeletonDocument />\n',
-    '',
-    1,
+# Remove the reader loading gate inside the reader component only. The earlier
+# navigation-polish transform may express this gate as GenerationLoading rather
+# than SkeletonDocument, so matching one exact generated line is not safe.
+reader_start = text.find('function DocumentReaderScreen(')
+if reader_start < 0:
+    raise SystemExit('Instant navigation patch: DocumentReaderScreen not found')
+reader_end = text.find('\n// ───', reader_start)
+if reader_end < 0:
+    reader_end = len(text)
+reader = text[reader_start:reader_end]
+reader_before = reader
+reader = re.sub(
+    r"\n\s*if \(loading(?: && !doc)?\) return <(?:GenerationLoading|SkeletonDocument)[^\n]*\n",
+    "\n",
+    reader,
+    count=1,
 )
-text = text.replace('Opening your document…', 'Loading…')
-text = text.replace('Opening your document...', 'Loading…')
-text = text.replace('Opening your document', 'Loading…')
+reader = reader.replace('Opening your document…', 'Loading…')
+reader = reader.replace('Opening your document...', 'Loading…')
+reader = reader.replace('Opening your document', 'Loading…')
+if reader == reader_before:
+    raise SystemExit('Instant navigation patch: reader loading gate not found')
+text = text[:reader_start] + reader + text[reader_end:]
 
 if text == original:
     raise SystemExit('Instant navigation patch made no changes')
 
 APP.write_text(text, encoding='utf-8')
-print('Instant navigation and reload fixes applied and verified.')
+print('Instant navigation and reader loading fixes applied and verified.')
