@@ -7,7 +7,7 @@ s = APP.read_text(encoding='utf-8')
 
 IMPORTS = [
     "import { saveStudyHubDocumentOffline } from './offline/studyHubOffline'\n",
-    "import { mergeOfflineStudyResponse, startOfflineStudyTracking, syncOfflineStudyActivity } from './offline/studyActivity'\n",
+    "import { mergeOfflineStudyResponse, syncOfflineStudyActivity } from './offline/studyActivity'\n",
     "import { getGeneratedMaterialOffline, saveGeneratedMaterialOffline } from './offline/generatedMaterials'\n",
 ]
 anchor = "import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'\n"
@@ -19,13 +19,11 @@ for line in IMPORTS:
         anchor = line
 
 api_start = s.find('async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {')
-api_end = s.find('\n}\n\n// ─── Document upload helpers', api_start)
+api_end = s.find('\n}\n\n//', api_start)
 if api_start < 0 or api_end < 0:
     raise SystemExit('Offline wiring: generated api helper boundaries not found')
 api = s[api_start:api_end + 2]
 
-# Generated-material replay is strictly GET-independent and only applies to
-# known generation endpoints. It never turns arbitrary mutations into offline work.
 replay = """  const requestBody = (() => {
     try { return typeof restOptions.body === 'string' ? JSON.parse(restOptions.body) : restOptions.body }
     catch { return null }
@@ -41,8 +39,6 @@ if 'const cachedGenerated = await getGeneratedMaterialOffline(path, requestBody)
         raise SystemExit('Offline wiring: API options anchor not found')
     api = api.replace(options_anchor, options_anchor + replay, 1)
 
-# Only the successful Library-save response triggers the explicit download.
-# The request itself remains online-only; this avoids queueing a save twice.
 hook = """  if (/^\\/library\\/\\d+\\/save$/.test(path) && body && Number.isInteger(Number(body.document_id))) {
     try {
       await saveStudyHubDocumentOffline(Number(body.document_id))
@@ -64,21 +60,17 @@ if 'saveStudyHubDocumentOffline(Number(body.document_id))' not in api:
 
 s = s[:api_start] + api + s[api_end + 2:]
 
-# Sync on reconnect and once after startup. Both are idempotent; failures are
-# intentionally swallowed by the sync helper so online startup cannot break.
 module_sync = """\nif (typeof window !== 'undefined') {
   window.addEventListener('online', () => void syncOfflineStudyActivity())
   window.setTimeout(() => void syncOfflineStudyActivity(), 1500)
 }
 """
-if 'window.addEventListener(\'online\', () => void syncOfflineStudyActivity())' not in s:
-    marker = "// ─── Document upload helpers ───────────────────────────────────────────────\n"
+if "window.addEventListener('online', () => void syncOfflineStudyActivity())" not in s:
+    marker = "// ─── Document upload helpers"
     if marker not in s:
         raise SystemExit('Offline wiring: module sync anchor not found')
     s = s.replace(marker, module_sync + "\n" + marker, 1)
 
-# PDF reader tracking is already supplied by apply_offline_study.py. Do not
-# inject a second tracker into the reader component.
 required = [
     IMPORTS[0], IMPORTS[1], IMPORTS[2],
     'getGeneratedMaterialOffline(path, requestBody)',
