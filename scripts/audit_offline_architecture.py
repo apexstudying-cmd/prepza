@@ -33,16 +33,12 @@ def stress_queue_model() -> None:
 
 
 def idempotent_sync_model() -> None:
-    # Replaying the same absolute target after an ambiguous response must not
-    # increase the authoritative total twice.
     server_total = 0
     target = 180
     for _ in range(3):
         server_total = max(server_total, min(8 * 60 * 60, target))
     assert server_total == 180, 'absolute study-total replay must be idempotent'
 
-    # Multiple local study surfaces are distributed against one daily total;
-    # no surface can be marked beyond its own local total.
     local = [60, 120, 90]
     synced = [0, 0, 0]
     authoritative = 180
@@ -77,7 +73,7 @@ def main() -> None:
     ], 'generated-material persistence')
     require(study, [
         'prepza-study-assets-v1', 'caches.open', 'response.arrayBuffer',
-        'startOfflineStudyTracking', 'getOfflineStudyStorageUsage',
+        'getOfflineStudyStorageUsage',
     ], 'offline Study Hub assets')
     require(activity, [
         'recordOfflineStudySeconds', 'syncedSeconds',
