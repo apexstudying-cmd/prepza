@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
@@ -51,9 +54,6 @@ def patch_app():
 
         method_line = "  const method = String(restOptions.method || 'GET').toUpperCase()\n"
         if method_line in api_block:
-            # O3 already owns both destructuring and method initialization.
-            # Replace only the method line so the existing destructuring remains
-            # exactly once and the offline gate follows initialization.
             gate_anchor = method_line
             gate_prefix = method_line
         else:
@@ -112,10 +112,31 @@ def patch_app():
 """
         api_block = api_block.replace(gate_anchor, offline_gate, 1)
 
-    if 'saveStudyHubDocumentOffline(Number(body.document_id))' not in api_block:
-        save_hook = """  if (path.startsWith('/library/') && path.endsWith('/save') && body && Number.isInteger(Number(body.document_id))) {
-    try { body.offline_available = true; await saveStudyHubDocumentOffline(Number(body.document_id)) }
-    catch (_) { body.offline_available = false }
+    # A Library save is a user-visible offline action: after the server creates
+    # the personal StudyHub copy, immediately download the actual document and
+    # all reader pages into the existing account-scoped offline store.
+    if 'Library save -> offline asset download' not in api_block:
+        save_hook = """  // Library save -> offline asset download. The save endpoint is keyed by publication,
+  // so do not assume its request body contains a document id. Prefer an id returned
+  // by the endpoint and otherwise resolve the newly saved publication from the
+  // account's saved list before downloading the actual StudyHub document.
+  if (method === 'POST' && /^\\/library\\/\\d+\\/save$/.test(cleanPath) && body && typeof body === 'object') {
+    try {
+      let documentId = Number(body.document_id ?? body.documentId ?? body.saved_document_id ?? body.document?.id)
+      if (!Number.isInteger(documentId) || documentId <= 0) {
+        const publicationId = Number(cleanPath.split('/')[2])
+        const savedResponse = await fetch('/library/saved', { credentials: 'include', cache: 'no-store' })
+        if (savedResponse.ok) {
+          const savedBody: any = await savedResponse.json()
+          const match = (savedBody?.saved || []).find((item: any) => Number(item.id) === publicationId)
+          documentId = Number(match?.document_id ?? match?.documentId)
+        }
+      }
+      if (Number.isInteger(documentId) && documentId > 0) {
+        try { await saveStudyHubDocumentOffline(documentId) } catch (_) {}
+        body.offline_available = !!(await getSavedStudyHubOffline(documentId, Number(getOfflineUserId() || 0)))
+      }
+    } catch (_) {}
   }
 """
         return_anchor = "  return body as T\n"
@@ -130,7 +151,8 @@ def patch_app():
         'listSavedStudyHubOffline(offlineUserId)',
         "cleanPath === '/me'",
         "cleanPath === '/documents' || cleanPath === '/library' || cleanPath === '/study-hub'",
-        'saveStudyHubDocumentOffline(Number(body.document_id))',
+        'Library save -> offline asset download',
+        'saveStudyHubDocumentOffline(documentId)',
     ]
     missing = [x for x in required if x not in s]
     if missing:
