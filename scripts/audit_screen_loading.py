@@ -26,17 +26,25 @@ base_api_count = len(re.findall(r'async function baseApi<T = any>\(', app))
 cache_count = len(re.findall(r'const screenApiCache = new Map', app))
 refresh_count = len(re.findall(r'function refreshScreenApiCache<T>', app))
 offline_db_count = len(re.findall(r"const PREPZA_OFFLINE_DB = 'prepza-offline-v1'", app))
+delayed_skeleton_count = len(re.findall(r'function DelayedScreenSkeleton', app))
+un_gated_skeleton_count = len(re.findall(r'if\s*\(loading\)\s*return\s*<Skeleton[A-Za-z0-9_]+\s*/>', app))
 
 print(f'api_helper_count: {api_count}')
 print(f'base_api_helper_count: {base_api_count}')
 print(f'screen_cache_definition_count: {cache_count}')
 print(f'background_refresh_helper_count: {refresh_count}')
 print(f'offline_db_definition_count: {offline_db_count}')
+print(f'delayed_skeleton_helper_count: {delayed_skeleton_count}')
+print(f'un_gated_skeleton_return_count: {un_gated_skeleton_count}')
 
 if api_count != 1 or base_api_count != 1:
     raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: duplicate or missing API layers')
 if cache_count != 1 or refresh_count != 1 or offline_db_count != 1:
     raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: duplicate or missing cache/offline implementation')
+if delayed_skeleton_count != 1:
+    raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: delayed skeleton helper missing or duplicated')
+if un_gated_skeleton_count != 0:
+    raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: skeleton rendered without delayed gate')
 
 print(f'App.tsx characters: {len(app)}')
 print('SCREEN_LOADING_AUDIT_END')
