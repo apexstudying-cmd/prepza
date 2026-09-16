@@ -12,9 +12,15 @@ def patch_reader():
     if "./offline/studyActivity" not in s:
         s = s.replace(
             "import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'\n",
-            "import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'\nimport { startOfflineStudyTracking } from '../offline/studyActivity'\n",
+            "import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'\nimport { startOfflineStudyTracking } from '../offline/studyActivity'\nimport { getOfflineStudyDocumentUrl } from '../offline/studyHubOffline'\nimport { getOfflineUserId } from '../offline/generatedMaterials'\n",
             1,
         )
+    elif "getOfflineStudyDocumentUrl" not in s:
+        anchor = "import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'\n"
+        additions = "import { getOfflineStudyDocumentUrl } from '../offline/studyHubOffline'\nimport { getOfflineUserId } from '../offline/generatedMaterials'\n"
+        if anchor not in s:
+            raise SystemExit('PDF offline package import anchor not found')
+        s = s.replace(anchor, anchor + additions, 1)
 
     s = s.replace(
         "type Props = { src: string; title: string; onPageChange?: (page: number) => void; onTextSelection?: (text: string) => void }",
@@ -46,32 +52,54 @@ def patch_reader():
 
     old = """const response = await window.fetch(src, { credentials: 'include' }); if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`); const document = await openPdf(new Uint8Array(await response.arrayBuffer()));"""
     new = """let response: Response
+        let localObjectUrl: string | null = null
         try {
-          response = await window.fetch(src, { credentials: 'include', cache: 'no-store' })
-          if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`)
-          if ('caches' in window && response.type !== 'opaque') {
-            try { const cache = await window.caches.open('prepza-study-assets-v1'); await cache.put(src, response.clone()) } catch (_) {}
+          if (!navigator.onLine && documentId != null) {
+            const userId = getOfflineUserId()
+            localObjectUrl = userId ? await getOfflineStudyDocumentUrl(documentId, Number(userId)) : null
+            if (!localObjectUrl) throw new Error('This study has not been saved for offline use. Connect to the internet and tap Save first.')
+            response = await window.fetch(localObjectUrl)
+          } else {
+            response = await window.fetch(src, { credentials: 'include', cache: 'no-store' })
+            if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`)
+            if ('caches' in window && response.type !== 'opaque') {
+              try { const cache = await window.caches.open('prepza-study-assets-v1'); await cache.put(src, response.clone()) } catch (_) {}
+            }
           }
+          const document = await openPdf(new Uint8Array(await response.arrayBuffer()))
+          if (localObjectUrl) { try { URL.revokeObjectURL(localObjectUrl) } catch (_) {} }
+          if (cancelled) return
+          documentRef.current = document
+          setPages(document.numPages)
+          const resumePage = Math.min(Math.max(1, initialPage), document.numPages)
+          setPage(resumePage)
+          const result = await renderPdfPage(document, resumePage, 1, canvasRef.current!)
+          if (!cancelled) { setText(result.text); onPageChange?.(resumePage) }
+          return
         } catch (networkError) {
+          if (localObjectUrl) { try { URL.revokeObjectURL(localObjectUrl) } catch (_) {} }
+          if (!navigator.onLine) throw networkError
           if (!('caches' in window)) throw networkError
           const cached = await window.caches.match(src)
           if (!cached) throw networkError
           response = cached
-        }
-        const document = await openPdf(new Uint8Array(await response.arrayBuffer()));"""
+          const document = await openPdf(new Uint8Array(await response.arrayBuffer()))
+          if (cancelled) return
+          documentRef.current = document
+          setPages(document.numPages)
+          const resumePage = Math.min(Math.max(1, initialPage), document.numPages)
+          setPage(resumePage)
+          const result = await renderPdfPage(document, resumePage, 1, canvasRef.current!)
+          if (!cancelled) { setText(result.text); onPageChange?.(resumePage) }
+        }"""
     if old in s:
         s = s.replace(old, new, 1)
-    elif "prepza-study-assets-v1" not in s:
+    elif "getOfflineStudyDocumentUrl(documentId" not in s:
         raise SystemExit('PDF fetch anchor not found')
 
     s = s.replace(
-        "const result = await renderPdfPage(document, 1, 1, canvasRef.current!); if (!cancelled) { setText(result.text); onPageChange?.(1) }",
-        "const resumePage = Math.min(Math.max(1, initialPage), document.numPages); setPage(resumePage); const result = await renderPdfPage(document, resumePage, 1, canvasRef.current!); if (!cancelled) { setText(result.text); onPageChange?.(resumePage) }",
-        1,
-    )
-    s = s.replace(
         "}, [src, onPageChange])",
-        "}, [src, initialPage, onPageChange])",
+        "}, [src, initialPage, documentId, onPageChange])",
         1,
     )
 
@@ -98,7 +126,7 @@ def patch_app():
 def main():
     patch_reader()
     patch_app()
-    print('Offline study asset caching, activity tracking, and reader resume patch applied.')
+    print('Offline study package reader, activity tracking, and reader resume patch applied.')
 
 
 if __name__ == '__main__':
