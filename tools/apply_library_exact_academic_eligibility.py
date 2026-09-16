@@ -48,9 +48,13 @@ replace_once(
     "save exact academic gate",
 )
 
+# The academic-context patch has already introduced these fields by the time
+# this script runs during the frontend production prebuild. Force Library
+# publications to remain unit-free while retaining the legacy DB column for
+# compatibility with unrelated historical schema.
 replace_once(
-    '        unit_id=unit_id,\n        title=title,',
-    '        unit_id=None,\n        title=title,',
+    '        unit_id=unit_id,\n        university_id=university_id,',
+    '        unit_id=None,\n        university_id=university_id,',
     "remove Library unit persistence",
 )
 
