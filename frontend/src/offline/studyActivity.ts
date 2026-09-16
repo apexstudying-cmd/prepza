@@ -24,9 +24,10 @@ function load(): ActivityState {
 function save(state: ActivityState) { try { localStorage.setItem(storageKey(), JSON.stringify(state)) } catch {} }
 function notify() { window.dispatchEvent(new CustomEvent('prepza:offline-study-activity-changed')) }
 
-export function setOfflineStudyUserId(userId: number) {
-  if (!Number.isInteger(userId) || userId <= 0) return
-  try { localStorage.setItem(USER_KEY, String(userId)) } catch {}
+export function setOfflineStudyUserId(userId: number | string) {
+  const normalized = Number(userId)
+  if (!Number.isInteger(normalized) || normalized <= 0) return
+  try { localStorage.setItem(USER_KEY, String(normalized)) } catch {}
 }
 
 export function recordOfflineStudySeconds(documentId: number, feature: string, seconds: number) {
