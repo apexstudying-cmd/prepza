@@ -25,8 +25,8 @@ replace_once(
 )
 
 replace_once(
-    '    if semester is not None:\n        if not isinstance(semester, int) or isinstance(semester, bool) or semester not in (1, 2):\n            return jsonify({"error": "semester must be 1 or 2"}), 400\n\n    if unit_id is not None:',
-    '    if semester is not None:\n        if not isinstance(semester, int) or isinstance(semester, bool) or semester not in (1, 2):\n            return jsonify({"error": "semester must be 1 or 2"}), 400\n\n    if any(value is None for value in (university_id, program_id, year, semester)):\n        return jsonify({"error": "university, course, year, and semester are required for Library publication"}), 400\n\n    if unit_id is not None:',
+    '    if semester is not None:\n        if not isinstance(semester, int) or isinstance(semester, bool) or semester not in (1, 2):\n            return jsonify({"error": "semester must be 1 or 2"}), 400\n\n    if _document_content_has_flagged_material(document.document_content_id):',
+    '    if semester is not None:\n        if not isinstance(semester, int) or isinstance(semester, bool) or semester not in (1, 2):\n            return jsonify({"error": "semester must be 1 or 2"}), 400\n\n    if any(value is None for value in (university_id, program_id, year, semester)):\n        return jsonify({"error": "university, course, year, and semester are required for Library publication"}), 400\n\n    if _document_content_has_flagged_material(document.document_content_id):',
     "require complete context",
 )
 
