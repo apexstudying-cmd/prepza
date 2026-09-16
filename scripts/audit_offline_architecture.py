@@ -14,9 +14,6 @@ def require(text: str, markers: list[str], label: str) -> None:
 
 
 def stress_queue_model() -> None:
-    # Contract-level 30-action stress model: FIFO order is retained for unique
-    # mutations, exact duplicates collapse to one durable record, transient
-    # failures retry, and failed records remain durable after max attempts.
     queue: list[dict] = []
     for index in range(30):
         body = '{"page_num":%d}' % (index % 10)
@@ -26,21 +23,43 @@ def stress_queue_model() -> None:
             queue.append({'order': index, 'dedupe': dedupe, 'attempts': 0, 'failed': False})
         else:
             existing['order'] = min(existing['order'], index)
-
     assert len(queue) == 10, f'30-action dedupe stress expected 10 unique records, got {len(queue)}'
     assert [item['order'] for item in queue] == list(range(10)), 'queue ordering contract failed'
 
     retry = {'attempts': 0, 'failed': False}
-    for _ in range(8):
-        retry['attempts'] += 1
+    for _ in range(8): retry['attempts'] += 1
     retry['failed'] = retry['attempts'] >= 8
     assert retry['failed'] and retry['attempts'] == 8, 'retry/max-attempt contract failed'
+
+
+def idempotent_sync_model() -> None:
+    # Replaying the same absolute target after an ambiguous response must not
+    # increase the authoritative total twice.
+    server_total = 0
+    target = 180
+    for _ in range(3):
+        server_total = max(server_total, min(8 * 60 * 60, target))
+    assert server_total == 180, 'absolute study-total replay must be idempotent'
+
+    # Multiple local study surfaces are distributed against one daily total;
+    # no surface can be marked beyond its own local total.
+    local = [60, 120, 90]
+    synced = [0, 0, 0]
+    authoritative = 180
+    available = authoritative - sum(synced)
+    for i, total in enumerate(local):
+        credit = min(total - synced[i], max(0, available))
+        synced[i] += credit
+        available -= credit
+    assert synced == [60, 120, 0], f'local reconciliation distribution failed: {synced}'
+    assert sum(synced) == authoritative
 
 
 def main() -> None:
     generated = read('frontend/src/offline/generatedMaterials.ts')
     study = read('frontend/src/offline/studyHubOffline.ts')
     activity = read('frontend/src/offline/studyActivity.ts')
+    backend_activity = read('offline_activity_routes.py')
     bootstrap = read('frontend/src/offline/bootstrap.ts')
     queue = read('tools/apply_offline_sync_queue.py')
     hardening = read('tools/apply_offline_queue_hardening.py')
@@ -63,7 +82,12 @@ def main() -> None:
     require(activity, [
         'recordOfflineStudySeconds', 'syncedSeconds',
         'syncOfflineStudyActivity', '/study-time/offline-sync',
+        'total_seconds', 'server_total_seconds_by_date',
     ], 'offline study activity')
+    require(backend_activity, [
+        'total_seconds', 'server_total_seconds_by_date',
+        'new_total = max(existing_total, target)',
+    ], 'server study reconciliation')
     require(bootstrap, ['setOfflineUserId', 'syncOfflineStudyActivity'], 'offline bootstrap')
     require(queue, [
         'syncQueue', 'PREPZA_OFFLINE_QUEUE_MAX_ATTEMPTS',
@@ -79,8 +103,7 @@ def main() -> None:
         'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl',
     ], 'offline AI boundary')
     require(library, [
-        'saveStudyHubDocumentOffline', '/library/saved',
-        'offline_available',
+        'saveStudyHubDocumentOffline', '/library/saved', 'offline_available',
     ], 'offline Library save flow')
     require(status, [
         'Offline — saved study materials remain available',
@@ -94,11 +117,11 @@ def main() -> None:
         "caches.delete('prepza-generated-audio-v1')",
     ], 'offline account isolation')
     require(reader, [
-        'startOfflineStudyTracking', 'prepza-study-assets-v1',
-        'initialPage', 'documentId',
+        'startOfflineStudyTracking', 'prepza-study-assets-v1', 'initialPage', 'documentId',
     ], 'offline reader')
 
     stress_queue_model()
+    idempotent_sync_model()
     print('Offline architecture regression audit passed.')
 
 
