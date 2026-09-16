@@ -15,6 +15,7 @@ if 'prepza-offline-last-auth-user' not in text:
       if (previous > 0 && previous !== userId) {
         try { indexedDB.deleteDatabase('prepza-offline-v2') } catch (_) {}
         try { indexedDB.deleteDatabase('prepza-offline-v1') } catch (_) {}
+        try { indexedDB.deleteDatabase('prepza-offline-study-v1') } catch (_) {}
         try { await caches.delete('prepza-study-assets-v1') } catch (_) {}
         try { await caches.delete('prepza-generated-audio-v1') } catch (_) {}
         try { localStorage.removeItem('prepza-offline-user-id') } catch (_) {}
@@ -37,6 +38,11 @@ else:
         if old not in text:
             raise SystemExit('Offline account isolation: existing DB cleanup anchor missing')
         text = text.replace(old, new, 1)
+    if "indexedDB.deleteDatabase('prepza-offline-study-v1')" not in text:
+        db_anchor = "        try { indexedDB.deleteDatabase('prepza-offline-v1') } catch (_) {}\n"
+        if db_anchor not in text:
+            raise SystemExit('Offline account isolation: offline study DB cleanup anchor missing')
+        text = text.replace(db_anchor, db_anchor + "        try { indexedDB.deleteDatabase('prepza-offline-study-v1') } catch (_) {}\n", 1)
     if "caches.delete('prepza-generated-audio-v1')" not in text:
         cache_anchor = "        try { await caches.delete('prepza-study-assets-v1') } catch (_) {}\n"
         if cache_anchor not in text:
@@ -47,6 +53,7 @@ required = [
     'prepza-offline-last-auth-user',
     "indexedDB.deleteDatabase('prepza-offline-v2')",
     "indexedDB.deleteDatabase('prepza-offline-v1')",
+    "indexedDB.deleteDatabase('prepza-offline-study-v1')",
     "caches.delete('prepza-study-assets-v1')",
     "caches.delete('prepza-generated-audio-v1')",
 ]
