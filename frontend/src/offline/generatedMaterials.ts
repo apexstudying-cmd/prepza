@@ -49,6 +49,18 @@ export async function saveGeneratedMaterialOffline(path: string, requestBody: un
   } catch (_) {}
 }
 
+async function readAll(): Promise<StoredMaterial[]> {
+  const db = await openDb()
+  try {
+    return await new Promise<StoredMaterial[]>((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly')
+      const request = tx.objectStore(STORE).getAll()
+      request.onsuccess = () => resolve((request.result as StoredMaterial[]) || [])
+      request.onerror = () => reject(request.error)
+    })
+  } finally { db.close() }
+}
+
 async function readMatching(path: string, requestBody: unknown): Promise<StoredMaterial[]> {
   if (!supported(path)) return []
   const db = await openDb()
@@ -68,6 +80,17 @@ async function readMatching(path: string, requestBody: unknown): Promise<StoredM
       request.onerror = () => reject(request.error)
     })
   } finally { db.close() }
+}
+
+/** Latest saved generation for an endpoint, regardless of its original request body. */
+export async function getLatestGeneratedMaterialForPath(path: string): Promise<any | null> {
+  if (!supported(path)) return null
+  try {
+    const userId = localStorage.getItem(USER_KEY) || 'unknown'
+    const rows = (await readAll()).filter(row => row.path === path && row.key.startsWith(`${userId}:`))
+    rows.sort((a, b) => b.savedAt - a.savedAt)
+    return rows[0]?.payload ?? null
+  } catch (_) { return null }
 }
 
 /** Latest saved generation, preserving older generations in IndexedDB. */
