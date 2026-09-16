@@ -95,7 +95,8 @@ def main() -> None:
         'prepza:offline-queue-syncing', 'prepza:offline-queue-synced',
     ], 'offline queue hardening')
     require(generation, [
-        'saveGeneratedMaterialOffline', 'New AI generation remains online-only',
+        'saveGeneratedMaterialOffline',
+        'Offline AI boundary: generation itself always requires a connection.',
         'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl',
     ], 'offline AI boundary')
     require(library, [
