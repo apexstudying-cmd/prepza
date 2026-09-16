@@ -25,9 +25,9 @@ replace_once(
 )
 
 replace_once(
-    '    if semester is not None:\n        if not isinstance(semester, int) or isinstance(semester, bool) or semester not in (1, 2):\n            return jsonify({"error": "semester must be 1 or 2"}), 400\n\n    if _document_content_has_flagged_material(document.document_content_id):',
-    '    if semester is not None:\n        if not isinstance(semester, int) or isinstance(semester, bool) or semester not in (1, 2):\n            return jsonify({"error": "semester must be 1 or 2"}), 400\n\n    if any(value is None for value in (university_id, program_id, year, semester)):\n        return jsonify({"error": "university, course, year, and semester are required for Library publication"}), 400\n\n    if _document_content_has_flagged_material(document.document_content_id):',
-    "require complete context",
+'''    if material_type not in LIBRARY_MATERIAL_TYPES:\n        return jsonify({"error": "material_type must be one of: " + ", ".join(sorted(LIBRARY_MATERIAL_TYPES))}), 400\n\n    if _document_content_has_flagged_material(document.document_content_id):''',
+'''    if material_type not in LIBRARY_MATERIAL_TYPES:\n        return jsonify({"error": "material_type must be one of: " + ", ".join(sorted(LIBRARY_MATERIAL_TYPES))}), 400\n\n    if any(value is None for value in (university_id, program_id, year, semester)):\n        return jsonify({"error": "university, course, year, and semester are required for Library publication"}), 400\n    if not isinstance(university_id, int) or isinstance(university_id, bool):\n        return jsonify({"error": "university_id must be an integer"}), 400\n    university = University.query.filter_by(id=university_id, is_active=True).first()\n    if not university:\n        return jsonify({"error": "Selected university was not found"}), 400\n    if not isinstance(program_id, int) or isinstance(program_id, bool):\n        return jsonify({"error": "program_id must be an integer"}), 400\n    program = Program.query.filter_by(id=program_id, university_id=university_id, is_active=True).first()\n    if not program:\n        return jsonify({"error": "Selected course does not belong to the selected university"}), 400\n    if not isinstance(year, int) or isinstance(year, bool) or not 1 <= year <= 8:\n        return jsonify({"error": "year must be an integer between 1 and 8"}), 400\n    if not isinstance(semester, int) or isinstance(semester, bool) or semester not in (1, 2):\n        return jsonify({"error": "semester must be 1 or 2"}), 400\n\n    if _document_content_has_flagged_material(document.document_content_id):''',
+    "complete academic context validation",
 )
 
 replace_once(
@@ -48,10 +48,6 @@ replace_once(
     "save exact academic gate",
 )
 
-# The academic-context patch has already introduced these fields by the time
-# this script runs during the frontend production prebuild. Force Library
-# publications to remain unit-free while retaining the legacy DB column for
-# compatibility with unrelated historical schema.
 replace_once(
     '        unit_id=unit_id,\n        university_id=university_id,',
     '        unit_id=None,\n        university_id=university_id,',
