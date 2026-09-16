@@ -19,7 +19,7 @@ replace_once(
 )
 
 replace_once(
-    '    unit_id = data.get("unit_id")\n    university_id = data.get("university_id")',
+    '    university_id = data.get("university_id")',
     '    if data.get("unit_id") is not None:\n        return jsonify({"error": "unit_id is no longer supported for Library publications"}), 400\n    university_id = data.get("university_id")',
     "reject legacy unit metadata",
 )
