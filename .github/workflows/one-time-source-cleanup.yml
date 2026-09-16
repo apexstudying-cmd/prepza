@@ -1,0 +1,70 @@
+name: One-time source cleanup
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Materialize the final Library architecture
+        run: |
+          python3 tools/apply_library_academic_context.py
+          python3 tools/apply_library_exact_academic_eligibility.py
+          python3 tools/audit_unit_references.py
+          python3 tools/apply_library_material_type_restriction.py
+          python3 -m py_compile app.py
+
+      - name: Remove obsolete build-time Unit patches
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          path = Path('frontend/package.json')
+          data = json.loads(path.read_text())
+          prebuild = data['scripts']['prebuild']
+          obsolete = [
+              'python3 ../tools/apply_library_academic_context.py',
+              'python3 ../tools/apply_library_exact_academic_eligibility.py',
+              'python3 ../tools/audit_unit_references.py',
+          ]
+          for command in obsolete:
+              prebuild = prebuild.replace(command + ' && ', '')
+              prebuild = prebuild.replace(' && ' + command, '')
+              prebuild = prebuild.replace(command, '')
+          data['scripts']['prebuild'] = prebuild
+          path.write_text(json.dumps(data, indent=2) + '\n')
+          PY
+          git rm tools/apply_library_academic_context.py tools/apply_library_exact_academic_eligibility.py tools/audit_unit_references.py .github/workflows/one-time-source-cleanup.yml
+
+      - name: Verify the cleaned source is internally consistent
+        run: |
+          ! grep -R -n -E 'class Unit\\b|class UnitProgram\\b|ForeignKey\("unit\\.id"\)|LibraryPublication\.unit_id|Group\.unit_id' app.py tools frontend/package.json
+          python3 -m py_compile app.py
+          cd frontend
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Commit and push the permanent cleanup
+        run: |
+          if git diff --quiet; then
+            echo 'Cleanup produced no changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.py frontend/package.json
+          git commit -m 'refactor: materialize current academic architecture'
+          git push
