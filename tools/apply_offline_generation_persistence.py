@@ -6,7 +6,7 @@ FILES = [
     ROOT / 'frontend' / 'src' / 'generation' / 'GenerationScreens.tsx',
     ROOT / 'frontend' / 'src' / 'generation' / 'StudyGenerationScreensClean.tsx',
 ]
-IMPORT = "import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, saveGeneratedMaterialOffline, cacheGeneratedAudioOffline } from '../offline/generatedMaterials'\n"
+IMPORT = "import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, saveGeneratedMaterialOffline, cacheGeneratedAudioOffline } from '../offline/generatedMaterials'\nimport { getOfflineUserId } from '../offline/generatedMaterials'\nimport { getSavedStudyHubOffline } from '../offline/studyHubOffline'\n"
 
 
 def patch(path: Path) -> None:
@@ -19,6 +19,11 @@ def patch(path: Path) -> None:
         if first_import_end < 0:
             raise SystemExit(f'Offline generation: import anchor missing in {path.name}')
         text = text[:first_import_end + 1] + IMPORT + text[first_import_end + 1:]
+    elif "getSavedStudyHubOffline" not in text:
+        anchor = "import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, saveGeneratedMaterialOffline, cacheGeneratedAudioOffline } from '../offline/generatedMaterials'\n"
+        if anchor not in text:
+            raise SystemExit(f'Offline generation: existing import anchor missing in {path.name}')
+        text = text.replace(anchor, anchor + "import { getOfflineUserId } from '../offline/generatedMaterials'\nimport { getSavedStudyHubOffline } from '../offline/studyHubOffline'\n", 1)
 
     # Keep the API response deliberately runtime-shaped. Generated endpoint
     # responses vary by material type, so the persistence layer must not make
@@ -28,12 +33,19 @@ def patch(path: Path) -> None:
     guard = "  // Offline AI boundary: generation itself always requires a connection."
     if guard not in text:
         guard_code = """  // Offline AI boundary: generation itself always requires a connection.
-  // Previously generated results are persisted locally and remain studyable offline.
+  // Saved StudyHub metadata and previously generated results are local sources.
   const requestMethod = String(rest.method || 'GET').toUpperCase()
   if (!navigator.onLine && requestMethod !== 'GET') {
     throw new Error('AI generation requires an internet connection. Your saved study materials are still available offline.')
   }
   if (!navigator.onLine && requestMethod === 'GET') {
+    const offlineUserId = getOfflineUserId()
+    if (path === '/me' && offlineUserId) return { id: Number(offlineUserId), csrf_token: '' } as T
+    const documentMatch = path.match(/^\\/documents\\/(\\d+)$/)
+    if (documentMatch && offlineUserId) {
+      const saved = await getSavedStudyHubOffline(Number(documentMatch[1]), Number(offlineUserId))
+      if (saved) return { id: saved.documentId, title: saved.title || 'Saved document', page_count: saved.pageCount || null, file_type: saved.fileType || 'pdf' } as T
+    }
     const localGeneration = await getLatestGeneratedMaterialForPath(path)
     if (localGeneration !== null) return localGeneration as T
   }
@@ -94,4 +106,4 @@ def patch(path: Path) -> None:
 
 for file in FILES:
     patch(file)
-print('Offline generated-material persistence, podcast audio caching, and AI boundary applied and verified.')
+print('Offline generated-material persistence, saved-document routing, podcast audio caching, and AI boundary applied and verified.')
