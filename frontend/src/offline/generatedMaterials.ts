@@ -1,16 +1,18 @@
 const DB_NAME = 'prepza-offline-v2'
 const STORE = 'generatedMaterials'
+const AUDIO_STORE = 'generatedAudio'
 const USER_KEY = 'prepza-offline-user-id'
-const AUDIO_CACHE = 'prepza-generated-audio-v1'
 
 type StoredMaterial = { key: string; path: string; requestBody: unknown; payload: unknown; savedAt: number }
+type StoredAudio = { key: string; userId: string; sourceUrl: string; blob: Blob; savedAt: number }
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 2)
+    const request = indexedDB.open(DB_NAME, 3)
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'key' })
+      if (!db.objectStoreNames.contains(AUDIO_STORE)) db.createObjectStore(AUDIO_STORE, { keyPath: 'key' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
@@ -87,7 +89,6 @@ async function readMatching(path: string, requestBody: unknown): Promise<StoredM
   } finally { db.close() }
 }
 
-/** Latest saved generation for an endpoint, regardless of its original request body. */
 export async function getLatestGeneratedMaterialForPath(path: string): Promise<any | null> {
   if (!supported(path)) return null
   try {
@@ -98,17 +99,14 @@ export async function getLatestGeneratedMaterialForPath(path: string): Promise<a
   } catch (_) { return null }
 }
 
-/** Latest saved generation, preserving older generations in IndexedDB. */
 export async function getGeneratedMaterialOffline(path: string, requestBody: unknown): Promise<any | null> {
   try { return (await readMatching(path, requestBody))[0]?.payload ?? null } catch (_) { return null }
 }
 
-/** Full saved generation history, newest first. */
 export async function listGeneratedMaterialsOffline(path: string, requestBody: unknown): Promise<Array<{ payload: unknown; savedAt: number }>> {
   try { return (await readMatching(path, requestBody)).map(row => ({ payload: row.payload, savedAt: row.savedAt })) } catch (_) { return [] }
 }
 
-/** Removes one exact saved generation without affecting newer/older copies. */
 export async function deleteGeneratedMaterialOffline(path: string, requestBody: unknown, savedAt: number): Promise<void> {
   try {
     const rows = await readMatching(path, requestBody)
@@ -124,31 +122,68 @@ export async function deleteGeneratedMaterialOffline(path: string, requestBody: 
   } catch (_) {}
 }
 
-/** Cache generated podcast audio bytes so playback remains possible after a signed URL expires or while offline. */
+function audioKey(url: string) {
+  return `${localStorage.getItem(USER_KEY) || 'unknown'}:${url}`
+}
+
 export async function cacheGeneratedAudioOffline(url: string): Promise<void> {
-  if (!url || typeof caches === 'undefined') return
+  if (!url) return
   try {
-    const cache = await caches.open(AUDIO_CACHE)
-    const existing = await cache.match(url)
-    if (existing) return
-    const response = await fetch(url, { credentials: 'include' })
-    if (response.ok || response.type === 'opaque') await cache.put(url, response.clone())
+    const db = await openDb()
+    const existing = await new Promise<StoredAudio | undefined>((resolve, reject) => {
+      const tx = db.transaction(AUDIO_STORE, 'readonly')
+      const request = tx.objectStore(AUDIO_STORE).get(audioKey(url))
+      request.onsuccess = () => resolve(request.result as StoredAudio | undefined)
+      request.onerror = () => reject(request.error)
+    })
+    if (existing?.blob instanceof Blob && existing.blob.size > 0) { db.close(); return }
+    const response = await fetch(url, { credentials: 'include', cache: 'no-store' })
+    if (!response.ok || response.type === 'opaque') { db.close(); return }
+    const blob = await response.blob()
+    if (!blob.size) { db.close(); return }
+    const userId = localStorage.getItem(USER_KEY) || 'unknown'
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(AUDIO_STORE, 'readwrite')
+      tx.objectStore(AUDIO_STORE).put({ key: audioKey(url), userId, sourceUrl: url, blob, savedAt: Date.now() } satisfies StoredAudio)
+      tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error)
+    })
+    db.close()
   } catch (_) {}
 }
 
-/** Return a local object URL for previously cached podcast audio. Caller owns the URL and should revoke it when no longer needed. */
 export async function getCachedGeneratedAudioUrl(url: string): Promise<string | null> {
-  if (!url || typeof caches === 'undefined') return null
+  if (!url) return null
   try {
-    const cache = await caches.open(AUDIO_CACHE)
-    const response = await cache.match(url)
-    if (!response) return null
-    const blob = await response.blob()
-    return URL.createObjectURL(blob)
+    const db = await openDb()
+    const audio = await new Promise<StoredAudio | undefined>((resolve, reject) => {
+      const tx = db.transaction(AUDIO_STORE, 'readonly')
+      const request = tx.objectStore(AUDIO_STORE).get(audioKey(url))
+      request.onsuccess = () => resolve(request.result as StoredAudio | undefined)
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+    if (!audio?.blob || audio.userId !== (localStorage.getItem(USER_KEY) || 'unknown')) return null
+    return URL.createObjectURL(audio.blob)
   } catch (_) { return null }
 }
 
 export async function clearGeneratedAudioCache(): Promise<void> {
-  if (typeof caches === 'undefined') return
-  try { await caches.delete(AUDIO_CACHE) } catch (_) {}
+  try {
+    const db = await openDb()
+    const userId = localStorage.getItem(USER_KEY) || 'unknown'
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(AUDIO_STORE, 'readwrite')
+      const store = tx.objectStore(AUDIO_STORE)
+      const request = store.openCursor()
+      request.onsuccess = () => {
+        const cursor = request.result
+        if (!cursor) { resolve(); return }
+        const row = cursor.value as StoredAudio
+        if (row.userId === userId) cursor.delete()
+        cursor.continue()
+      }
+      request.onerror = () => reject(request.error)
+    })
+    db.close()
+  } catch (_) {}
 }
