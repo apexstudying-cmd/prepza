@@ -20,6 +20,11 @@ def patch(path: Path) -> None:
             raise SystemExit(f'Offline generation: import anchor missing in {path.name}')
         text = text[:first_import_end + 1] + IMPORT + text[first_import_end + 1:]
 
+    # Keep the API response deliberately runtime-shaped. Generated endpoint
+    # responses vary by material type, so the persistence layer must not make
+    # the generic T type pretend that every response has every media field.
+    text = text.replace('let body: ApiErrorShape & T = {} as ApiErrorShape & T', 'let body: any = {}')
+
     guard = "  // Offline AI boundary: generation itself always requires a connection."
     if guard not in text:
         guard_code = """  // Offline AI boundary: generation itself always requires a connection.
