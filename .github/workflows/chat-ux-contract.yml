@@ -1,0 +1,38 @@
+name: Chat UX Contract
+
+'on':
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'frontend/src/crypto/WhatsAppChatExperience.tsx'
+      - 'frontend/src/crypto/chatDraftPersistence.ts'
+      - 'frontend/src/main.tsx'
+      - 'scripts/test_chat_ui_contract.py'
+      - '.github/workflows/chat-ux-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chat-ux-contract:
+    name: Chat UX contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact event commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Assert exact commit under test
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Run chat UX contract
+        run: python -m pytest scripts/test_chat_ui_contract.py -q
