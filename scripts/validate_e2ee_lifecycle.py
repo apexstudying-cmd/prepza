@@ -37,7 +37,14 @@ def main() -> None:
         "frontend/src/crypto/newGroupE2EECreationGuard.ts", "created.reused !== false",
         "state?.e2ee_mode !== 'group_v1'", "state.envelopes.length === 0", "Secure group setup is incomplete",
     )
-    require("frontend/src/main.tsx", "installNewGroupE2EECreationGuard()")
+    # The startup installer is intentionally wrapped by main.tsx's optional-module
+    # safety boundary. Accept that production-safe form rather than requiring a
+    # bare call that would make a startup exception fatal.
+    require(
+        "frontend/src/main.tsx",
+        "installNewGroupE2EECreationGuard",
+        "installSafely('new group E2EE guard', installNewGroupE2EECreationGuard)",
+    )
     require(
         "frontend/src/crypto/groupProvisioning.ts", "provisionInitialGroupKey",
         "provisionRotatedGroupKey", "keyEpoch < 1", "keyEpoch < 2", "creatorUserId",
