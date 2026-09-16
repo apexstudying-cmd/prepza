@@ -1,21 +1,60 @@
 <!doctype html>
-<html lang="<!-- figma:lang -->">
+<html lang="en">
   <head>
-    <!-- figma:head-start -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title><!-- figma:title --></title>
+    <meta name="theme-color" content="#0B1437" />
+    <meta name="color-scheme" content="dark light" />
+
+    <title>Prepza — Study smarter with notes, past papers and AI</title>
+    <meta name="description" content="Prepza is a student study platform for university courses and professional qualifications, combining study materials, past papers, AI tutoring, flashcards, quizzes and collaborative study." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://prepza-sf60.onrender.com/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Prepza" />
+    <meta property="og:title" content="Prepza — Study smarter" />
+    <meta property="og:description" content="Study materials, past papers, AI tutoring and collaborative study in one student platform." />
+    <meta property="og:url" content="https://prepza-sf60.onrender.com/" />
+    <meta property="og:image" content="https://prepza-sf60.onrender.com/icon-512.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Prepza — Study smarter" />
+    <meta name="twitter:description" content="Study materials, past papers, AI tutoring and collaborative study in one student platform." />
+    <meta name="twitter:image" content="https://prepza-sf60.onrender.com/icon-512.png" />
+
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#16233E" />
     <link rel="icon" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <!-- figma:head-end -->
+
+    <script>
+      // Paint the correct shell color before React/CSS loads to prevent a
+      // white/dark flash when returning to the app in a persisted theme.
+      (() => {
+        try {
+          const saved = localStorage.getItem('prepza-theme')
+          const dark = saved === 'dark' || (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          const color = dark ? '#0B1437' : '#F8FAFC'
+          document.documentElement.style.backgroundColor = color
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+          document.body?.style.setProperty('background-color', color)
+        } catch {}
+      })()
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "EducationalOrganization",
+        "name": "Prepza",
+        "url": "https://prepza-sf60.onrender.com/",
+        "logo": "https://prepza-sf60.onrender.com/icon-512.png",
+        "description": "Student study platform with study materials, past papers, AI tutoring and collaborative learning tools."
+      }
+    </script>
   </head>
   <body>
-    <!-- figma:body-start -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script defer src="/sw-register.js"></script>
-    <!-- figma:body-end -->
   </body>
 </html>
