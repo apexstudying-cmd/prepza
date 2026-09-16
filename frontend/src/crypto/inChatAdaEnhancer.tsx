@@ -9,6 +9,7 @@ let installed = false
 let activeChat: ChatState | null = null
 let lastTrafficAt = 0
 const listeners = new Set<(state: ChatState | null) => void>()
+const ADA_MENTION_RE = /(^|\s)@ada\b/i
 
 function emit(state: ChatState | null) { activeChat = state; listeners.forEach(listener => listener(state)) }
 function pathOf(input: RequestInfo | URL): string {
@@ -79,23 +80,19 @@ export default function InChatAdaEnhancer() {
   const [answer, setAnswer] = useState<AdaStudyResponse | null>(null)
   const selected = useMemo(() => documents.find(doc => doc.attachmentId === attachmentId) || null, [documents, attachmentId])
 
-  useEffect(() => {
-    const openAda = (event: Event) => {
-      const id = Number((event as CustomEvent<{ conversationId?: number }>).detail?.conversationId)
-      if (chat && (!id || id === chat.conversationId)) setOpen(true)
-    }
-    window.addEventListener('prepza-open-ada', openAda)
-    return () => window.removeEventListener('prepza-open-ada', openAda)
-  }, [chat?.conversationId])
-
+  // Group Ada is mention-driven only. There is intentionally no standalone
+  // open event/button path here: a group student must type @Ada in the message.
   useEffect(() => {
     if (!chat) return
     const input = document.querySelector('input[placeholder="Message…"]') as HTMLInputElement | null
     if (!input) return
-    const onInput = () => { if (/@ada\b/i.test(input.value)) setOpen(true) }
+    const onInput = () => {
+      if (ADA_MENTION_RE.test(input.value)) setOpen(true)
+    }
+    onInput()
     input.addEventListener('input', onInput)
     return () => input.removeEventListener('input', onInput)
-  })
+  }, [chat?.conversationId])
 
   useEffect(() => {
     if (!open || !chat) return
