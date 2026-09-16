@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './chatRealtime'
 import { ensureE2EEIdentityReady, fetchUserPublicKey, uploadGroupKeyEnvelopes } from './e2eeChatApi'
-import { provisionInitialGroupKey, provisionRotatedGroupKey } from './groupProvisioning'
+import { provisionInitialGroupKey } from './groupProvisioning'
 
 type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; unread_count: number; status?: string }
 type Attachment = { id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null }
@@ -87,11 +87,6 @@ export default function WhatsAppChatExperience() {
   const [groupSelected, setGroupSelected] = useState<GroupPickerUser[]>([])
   const [groupCreating, setGroupCreating] = useState(false)
   const [groupError, setGroupError] = useState('')
-  const [showGroupInfo, setShowGroupInfo] = useState(false)
-  const [groupMemberSearch, setGroupMemberSearch] = useState('')
-  const [groupMemberResults, setGroupMemberResults] = useState<GroupPickerUser[]>([])
-  const [groupMemberBusy, setGroupMemberBusy] = useState(false)
-  const [groupInfoError, setGroupInfoError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<number | null>(null)
@@ -225,62 +220,6 @@ export default function WhatsAppChatExperience() {
     }
   }
 
-  useEffect(() => {
-    if (!showGroupInfo || !isGroup) return
-    const needle = groupMemberSearch.trim()
-    if (needle.length < 2) { setGroupMemberResults([]); return }
-    let cancelled = false
-    const timer = window.setTimeout(() => {
-      fetch(`/users/search?q=${encodeURIComponent(needle)}`, { credentials: 'include' })
-        .then(async response => { const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body?.error || 'Search failed'); return body })
-        .then(body => { if (!cancelled) setGroupMemberResults(Array.isArray(body?.users) ? body.users : Array.isArray(body?.results) ? body.results : []) })
-        .catch(() => { if (!cancelled) setGroupMemberResults([]) })
-    }, 220)
-    return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [showGroupInfo, isGroup, groupMemberSearch])
-
-  const refreshGroupDetail = async () => {
-    if (selectedId == null) return
-    const next = await api<Detail>(`/chats/${selectedId}`)
-    setDetail(next)
-    return next
-  }
-
-  const rotateGroupKeyAfterMembershipChange = async (nextDetail: Detail, epoch: number) => {
-    if (!meIdRef.current) throw new Error('Your secure chat identity is unavailable')
-    await ensureE2EEIdentityReady()
-    const members = await Promise.all(nextDetail.participants.map(async participant => ({ userId: participant.user_id, publicKey: await fetchUserPublicKey(participant.user_id) })))
-    const token = await getCsrfToken()
-    await provisionRotatedGroupKey(nextDetail.id, epoch, meIdRef.current, members, (conversationId, envelopes) => uploadGroupKeyEnvelopes(conversationId, token, envelopes))
-  }
-
-  const addGroupMembers = async () => {
-    if (selectedId == null || !detail || !isGroup || detail.participants.find(p => p.user_id === meIdRef.current)?.role !== 'admin') return
-    const selected = groupMemberResults.filter(user => groupMemberSearch.trim().toLowerCase() === user.display_name.trim().toLowerCase())
-    if (!selected.length) { setGroupInfoError('Search for a student, then tap their name to add them.'); return }
-    setGroupMemberBusy(true); setGroupInfoError('')
-    try {
-      const token = await getCsrfToken()
-      const result = await api<{ conversation: Detail; key_epoch: number }>(`/chats/${selectedId}/members`, { method:'POST', headers:{'X-CSRF-Token':token}, body:JSON.stringify({ user_ids:[selected[0].id] }) })
-      await rotateGroupKeyAfterMembershipChange(result.conversation, result.key_epoch)
-      setGroupMemberSearch(''); setGroupMemberResults([]); await refreshGroupDetail(); await loadList()
-    } catch (value) { setGroupInfoError(friendlyError(value, 'Could not add that student to the group.')) }
-    finally { setGroupMemberBusy(false) }
-  }
-
-  const removeGroupMember = async (member: Participant) => {
-    if (selectedId == null || !detail || member.user_id === meIdRef.current || member.role === 'admin') return
-    if (!window.confirm(`Remove ${member.display_name} from this group?`)) return
-    setGroupMemberBusy(true); setGroupInfoError('')
-    try {
-      const token = await getCsrfToken()
-      const result = await api<{ conversation: Detail; key_epoch: number }>(`/chats/${selectedId}/members/${member.user_id}`, { method:'DELETE', headers:{'X-CSRF-Token':token} })
-      await rotateGroupKeyAfterMembershipChange(result.conversation, result.key_epoch)
-      await refreshGroupDetail(); await loadList()
-    } catch (value) { setGroupInfoError(friendlyError(value, 'Could not remove that member.')) }
-    finally { setGroupMemberBusy(false) }
-  }
-
   const send = async () => {
     const text = input.trim(); if (!text || sending || selectedId == null) return
     setSending(true); setError(''); sendTypingRealtime(selectedId, false)
@@ -307,21 +246,6 @@ export default function WhatsAppChatExperience() {
   if (!visible) return null
 
   return <div className="prepza-wa-shell"><style>{`.prepza-wa-shell{position:fixed;inset:0;z-index:1000;background:#eef0f3;font-family:Plus Jakarta Sans,sans-serif;display:flex;align-items:stretch;justify-content:center}.prepza-wa-window{width:100%;height:100%;display:grid;grid-template-columns:340px minmax(0,1fr);background:#fff;overflow:hidden}.prepza-wa-list{border-right:1px solid #e2e5ea;background:#fff;display:flex;flex-direction:column;min-width:0}.prepza-wa-list-head{background:#0b1437;color:#fff;padding:14px;display:flex;align-items:center;gap:9px}.prepza-wa-search{margin:10px 12px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:12px;padding:9px 11px;display:flex;gap:8px;align-items:center}.prepza-wa-search input{border:0;outline:0;background:transparent;width:100%;font:inherit;font-size:12px}.prepza-wa-row{display:flex;gap:10px;align-items:center;padding:11px 13px;border-bottom:1px solid #f0f1f3;cursor:pointer}.prepza-wa-row:hover{background:#fafafa}.prepza-wa-main{min-width:0;flex:1;display:flex;flex-direction:column;background:#f5f6f7}.prepza-wa-head{height:66px;flex-shrink:0;background:#0b1437;color:#fff;display:flex;align-items:center;gap:10px;padding:0 14px}.prepza-wa-messages{flex:1;min-height:0;overflow-y:auto;padding:18px max(12px,calc((100vw - 1120px)/2)) 14px;background:linear-gradient(180deg,#eef0f3,#f8f8f7)}.prepza-wa-composer{flex-shrink:0;background:#fff;border-top:1px solid #e1e4e8;padding:9px max(10px,calc((100vw - 1120px)/2)) 12px}.prepza-wa-bubble{position:relative;max-width:min(72%,620px);padding:9px 11px 7px;border-radius:15px;margin-bottom:8px;box-shadow:0 2px 7px rgba(0,0,0,.07)}.prepza-wa-actions{position:absolute;top:-28px;right:0;display:flex;gap:4px;opacity:0;pointer-events:none;transition:opacity .15s}.prepza-wa-wrap:hover .prepza-wa-actions{opacity:1;pointer-events:auto}.prepza-wa-action{border:1px solid #ddd;background:#fff;border-radius:9px;padding:5px 7px;font-size:11px;cursor:pointer;box-shadow:0 2px 7px rgba(0,0,0,.08)}.prepza-wa-reactions{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}.prepza-wa-reaction{border:1px solid #ddd;background:#fff7db;border-radius:12px;padding:2px 7px;font-size:11px;cursor:pointer}.prepza-wa-attach{border:0;background:#f1f2f4;border-radius:12px;padding:0 11px;height:40px;cursor:pointer;font-weight:800;color:#5e6470}@media(max-width:760px){.prepza-wa-shell{display:block}.prepza-wa-window{display:block}.prepza-wa-list{height:100%;border-right:0}.prepza-wa-main{height:100%}.prepza-wa-window.detail-mode .prepza-wa-list{display:none}.prepza-wa-window.list-mode .prepza-wa-main{display:none}.prepza-wa-bubble{max-width:84%}.prepza-wa-actions{opacity:1;pointer-events:auto;position:static;margin-bottom:3px;justify-content:flex-end}.prepza-wa-head{height:62px}.prepza-wa-messages{padding-left:9px;padding-right:9px}}`}</style>
-    {showGroupInfo && isGroup && detail && <div role="dialog" aria-modal="true" aria-label="Group info" style={{ position:'fixed',inset:0,zIndex:1150,background:'rgba(3,7,18,.72)',backdropFilter:'blur(8px)',display:'flex',alignItems:'stretch',justifyContent:'flex-end' }}>
-      <div style={{ width:'min(420px,100%)',height:'100%',background:'#fff',display:'flex',flexDirection:'column',boxShadow:'-18px 0 60px rgba(0,0,0,.28)' }}>
-        <div style={{ background:'#0b1437',color:'#fff',padding:'18px 18px 22px' }}>
-          <div style={{ display:'flex',alignItems:'center',gap:10 }}><button type="button" onClick={() => setShowGroupInfo(false)} aria-label="Close group info" style={{ width:36,height:36,border:0,borderRadius:11,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer',fontSize:22 }}>‹</button><div style={{fontSize:16,fontWeight:850}}>Group info</div></div>
-          <div style={{ marginTop:20,display:'flex',alignItems:'center',gap:13 }}><div style={{ width:58,height:58,borderRadius:18,background:'linear-gradient(135deg,#c9a84c,#e4c96a)',color:'#0b1437',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:950,fontSize:20 }}>{initials(detail.name)}</div><div style={{minWidth:0}}><div style={{fontSize:17,fontWeight:900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{detail.name}</div><div style={{fontSize:11,opacity:.65,marginTop:3}}>{detail.member_count} participants · E2EE</div></div></div>
-        </div>
-        <div style={{flex:1,overflowY:'auto',padding:'14px 0'}}>
-          {detail.participants.find(p => p.user_id === meIdRef.current)?.role === 'admin' && <div style={{padding:'0 16px 15px'}}><div style={{fontSize:10,fontWeight:850,color:'#747b87',marginBottom:7}}>ADD MEMBERS</div><div style={{display:'flex',gap:8}}><input value={groupMemberSearch} onChange={event => setGroupMemberSearch(event.target.value)} placeholder="Search students" style={{flex:1,height:42,border:'1px solid #dfe3e8',borderRadius:12,padding:'0 11px',outline:0,font:'inherit',fontSize:12}} /><button type="button" onClick={() => void addGroupMembers()} disabled={groupMemberBusy || !groupMemberResults.length} style={{border:0,borderRadius:12;background:'#0b1437',color:'#e4c96a',padding:'0 13px',fontWeight:850,fontSize:11,cursor:'pointer'}}>Add</button></div>{groupMemberResults.length > 0 && <div style={{marginTop:6,border:'1px solid #eceef1',borderRadius:12,overflow:'hidden'}}>{groupMemberResults.slice(0,6).map(user => <button key={user.id} type="button" onClick={() => { setGroupMemberSearch(user.display_name); setGroupMemberResults([user]) }} style={{width:'100%',display:'flex',alignItems:'center',gap:9,border:0,borderBottom:'1px solid #f0f1f3',background:'#fff',padding:'10px',textAlign:'left',cursor:'pointer'}}><span style={{width:32,height:32,borderRadius:10,background:'#f2ead1',color:'#0b1437',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>{initials(user.display_name)}</span><span style={{fontSize:12,fontWeight:750}}>{user.display_name}</span></button>)}</div>}</div>}
-          <div style={{padding:'8px 16px 6px',fontSize:10,fontWeight:850,color:'#747b87'}}>PARTICIPANTS · {detail.member_count}</div>
-          {detail.participants.map(member => <div key={member.user_id} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 16px'}}><div style={{width:42,height:42,borderRadius:13,background:'linear-gradient(135deg,#c9a84c,#e4c96a)',color:'#0b1437',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>{initials(member.display_name)}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:800}}>{member.display_name}{member.user_id === meIdRef.current ? ' (You)' : ''}</div><div style={{fontSize:10,color:'#8a909a',marginTop:2}}>{member.role === 'admin' ? 'Group admin' : 'Participant'}</div></div>{detail.participants.find(p => p.user_id === meIdRef.current)?.role === 'admin' && member.user_id !== meIdRef.current && member.role !== 'admin' && <button type="button" onClick={() => void removeGroupMember(member)} disabled={groupMemberBusy} style={{border:0;background:'transparent;color:#a33a35;fontSize:10;fontWeight:800,cursor:'pointer',padding:'7px'}}>Remove</button>}</div>)}
-          {groupInfoError && <div style={{margin:'10px 16px',padding:11,borderRadius:12,background:'#fff1ef',color:'#a33a35',fontSize:11}}>{groupInfoError}</div>}
-        </div>
-        <div style={{padding:'13px 16px',borderTop:'1px solid #eceef1'}}><button type="button" onClick={() => setShowGroupInfo(false)} style={{width:'100%',height:44,border:'1px solid #dfe3e8',background:'#fff',borderRadius:12,fontWeight:800,cursor:'pointer'}}>Done</button></div>
-      </div>
-    </div>}
     {showGroupCreator && <div role="dialog" aria-modal="true" aria-label="Create group chat" style={{ position:'fixed',inset:0,zIndex:1100,background:'rgba(3,7,18,.72)',backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}>
       <div style={{ width:'min(520px,100%)',maxHeight:'min(760px,92vh)',display:'flex',flexDirection:'column',background:'#fff',borderRadius:22,overflow:'hidden',boxShadow:'0 24px 70px rgba(0,0,0,.35)' }}>
         <div style={{ background:'#0b1437',color:'#fff',padding:'18px 18px 16px',display:'flex',alignItems:'center',gap:12 }}>
@@ -360,7 +284,7 @@ export default function WhatsAppChatExperience() {
         </div>
       </aside>
       <section className="prepza-wa-main">
-        {view === 'detail' && <><header className="prepza-wa-head"><button type="button" onClick={backToList} aria-label="Back to conversations" style={{ width:36,height:36,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer',fontSize:21 }}>‹</button><div style={{ width:42,height:42,borderRadius:14,background:'linear-gradient(135deg,#c9a84c,#e4c96a)',color:'#0b1437',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900 }}>{initials(headerName)}</div><button type="button" onClick={() => isGroup ? (setGroupInfoError(''), setShowGroupInfo(true)) : undefined} disabled={!isGroup} aria-label={isGroup ? 'Open group info' : headerName} style={{ flex:1,minWidth:0,textAlign:'left',border:0,background:'transparent',padding:0,color:'#fff',cursor:isGroup ? 'pointer' : 'default' }}><div style={{ fontWeight:850,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{headerName}</div><div style={{ fontSize:10,opacity:.6 }}>{isGroup ? `${detail?.member_count || 0} members` : typingNames.length ? `${typingNames.join(', ')} ${typingNames.length === 1 ? 'is' : 'are'} typing…` : (onlineUsers.size ? 'online' : (realtimeConnected ? 'connected' : 'offline'))}</div></button><div title="End-to-end encrypted" style={{ fontSize:10,opacity:.65 }}>E2EE</div><button type="button" onClick={openAda} aria-label="Study with Ada" style={{ border:'1px solid rgba(201,168,76,.45)',background:'rgba(201,168,76,.12)',color:'#e4c96a',borderRadius:11,padding:'8px 10px',fontWeight:900,fontSize:11,cursor:'pointer' }}>@Ada</button><button type="button" onClick={() => setMessageSearchOpen(v => !v)} aria-label="Search messages" style={{ width:34,height:34,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer' }}>⌕</button></header>
+        {view === 'detail' && <><header className="prepza-wa-head"><button type="button" onClick={backToList} aria-label="Back to conversations" style={{ width:36,height:36,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer',fontSize:21 }}>‹</button><div style={{ width:42,height:42,borderRadius:14,background:'linear-gradient(135deg,#c9a84c,#e4c96a)',color:'#0b1437',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900 }}>{initials(headerName)}</div><div style={{ flex:1,minWidth:0 }}><div style={{ fontWeight:850,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{headerName}</div><div style={{ fontSize:10,opacity:.6 }}>{isGroup ? `${detail?.member_count || 0} members` : typingNames.length ? `${typingNames.join(', ')} ${typingNames.length === 1 ? 'is' : 'are'} typing…` : (onlineUsers.size ? 'online' : (realtimeConnected ? 'connected' : 'offline'))}</div></div><div title="End-to-end encrypted" style={{ fontSize:10,opacity:.65 }}>E2EE</div><button type="button" onClick={openAda} aria-label="Study with Ada" style={{ border:'1px solid rgba(201,168,76,.45)',background:'rgba(201,168,76,.12)',color:'#e4c96a',borderRadius:11,padding:'8px 10px',fontWeight:900,fontSize:11,cursor:'pointer' }}>@Ada</button><button type="button" onClick={() => setMessageSearchOpen(v => !v)} aria-label="Search messages" style={{ width:34,height:34,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer' }}>⌕</button></header>
           {messageSearchOpen && <div style={{ background:'#fff',borderBottom:'1px solid #e1e4e8',padding:'8px 12px',display:'flex',gap:8 }}><input value={messageSearch} onChange={event => setMessageSearch(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void runMessageSearch() }} autoFocus placeholder="Search this chat" style={{ flex:1,border:'1px solid #e2e5ea',borderRadius:10,padding:'9px 11px',outline:0 }} /><button type="button" onClick={() => void runMessageSearch()} style={{ border:0,borderRadius:10,background:'#0b1437',color:'#e4c96a',padding:'0 12px',fontWeight:800 }}>Search</button></div>}
           {messageSearchResults.length > 0 && <div style={{ maxHeight:160,overflowY:'auto',background:'#fff',borderBottom:'1px solid #e1e4e8',padding:8 }}>{messageSearchResults.map(result => <button key={result.id} type="button" onClick={() => { setMessageSearchResults([]); setMessageSearchOpen(false); document.getElementById(`prepza-msg-${result.id}`)?.scrollIntoView({ behavior:'smooth',block:'center' }) }} style={{ display:'block',width:'100%',textAlign:'left',border:0,background:'transparent',padding:'7px',cursor:'pointer',fontSize:11,color:'#303541' }}>{displayText(result)}</button>)}</div>}
           <main className="prepza-wa-messages">
