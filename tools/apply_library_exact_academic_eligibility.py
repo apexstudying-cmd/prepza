@@ -1,7 +1,7 @@
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1] / "app.py"
-text = APP.read_text(encoding="utf-8")
+text = APP.read_text()
 
 
 def replace_once(old, new, label):
@@ -20,8 +20,8 @@ replace_once(
 
 replace_once(
     '    unit_id = data.get("unit_id")\n    university_id = data.get("university_id")',
-    '    if data.get("unit_id") is not None:\n        return jsonify({"error": "unit_id is no longer supported for Library publications"}), 400\n    unit_id = None\n    university_id = data.get("university_id")',
-    "reject unit metadata",
+    '    if data.get("unit_id") is not None:\n        return jsonify({"error": "unit_id is no longer supported for Library publications"}), 400\n    university_id = data.get("university_id")',
+    "reject legacy unit metadata",
 )
 
 replace_once(
@@ -48,11 +48,5 @@ replace_once(
     "save exact academic gate",
 )
 
-replace_once(
-    '        unit_id=unit_id,\n        university_id=university_id,',
-    '        unit_id=None,\n        university_id=university_id,',
-    "remove Library unit persistence",
-)
-
-APP.write_text(text, encoding="utf-8")
+APP.write_text(text)
 print("Applied exact Library academic eligibility rules successfully.")
