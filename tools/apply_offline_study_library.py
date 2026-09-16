@@ -51,11 +51,11 @@ def patch_app():
 
         method_line = "  const method = String(restOptions.method || 'GET').toUpperCase()\n"
         if method_line in api_block:
-            # O3 already owns the method declaration. Insert the offline gate
-            # after it so the existing declaration is neither duplicated nor
-            # referenced before initialization.
+            # O3 already owns both destructuring and method initialization.
+            # Replace only the method line so the existing destructuring remains
+            # exactly once and the offline gate follows initialization.
             gate_anchor = method_line
-            gate_prefix = destructure + method_line
+            gate_prefix = method_line
         else:
             gate_anchor = destructure
             gate_prefix = destructure + method_line
