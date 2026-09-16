@@ -72,7 +72,7 @@ def main() -> None:
         'prepza-generated-audio-v1',
     ], 'generated-material persistence')
     require(study, [
-        'prepza-study-assets-v1', 'caches.open', 'response.arrayBuffer',
+        'prepza-study-assets-v1', 'caches.open', 'clone().arrayBuffer',
         'getOfflineStudyStorageUsage',
     ], 'offline Study Hub assets')
     require(activity, [
