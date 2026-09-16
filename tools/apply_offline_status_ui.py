@@ -19,10 +19,23 @@ if start < 0:
 match = re.search(r'\n\s*return\s*\(', text[start:])
 if not match:
     raise SystemExit('Offline status UI: App return anchor not found')
-return_pos = start + match.start()
-return_text = text[return_pos:]
-if '<OfflineStatusBanner />' not in return_text:
-    insert_at = start + match.end()
-    text = text[:insert_at] + '\n      <OfflineStatusBanner />' + text[insert_at:]
+section = text[start:]
+return_open = start + match.end()
+if '<OfflineStatusBanner />' not in section:
+    # Keep the existing App tree intact by wrapping it in a fragment rather than
+    # introducing a second top-level JSX sibling.
+    text = text[:return_open] + '\n      <>' + text[return_open:]
+    section = text[start:]
+    close = section.rfind('\n  )')
+    if close < 0:
+        raise SystemExit('Offline status UI: App return close anchor not found')
+    close_abs = start + close
+    text = text[:close_abs] + '\n      </>' + text[close_abs:]
+    # Place the banner as the first child of the fragment.
+    fragment_start = text.find('\n      <>', return_open)
+    if fragment_start < 0:
+        raise SystemExit('Offline status UI: fragment insertion failed')
+    child_insert = fragment_start + len('\n      <>')
+    text = text[:child_insert] + '\n      <OfflineStatusBanner />' + text[child_insert:]
 APP.write_text(text, encoding='utf-8')
 print('Offline connection/sync status UI applied and verified.')
