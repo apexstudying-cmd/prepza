@@ -36,6 +36,13 @@ if old_loop in text:
 elif 'freshCsrf' not in text:
     raise SystemExit('Offline queue hardening: replay loop anchor missing.')
 
+conflict_anchor = """        if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 409 && res.status !== 429)) {\n          // Success, or a non-retryable client error. Do not replay it forever.\n          await deletePrepzaOfflineQueueItem(item.id as number)\n          continue\n        }\n\n        item.attempts += 1"""
+conflict_replacement = """        if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 409 && res.status !== 429)) {\n          // Success, or a non-retryable client error. Do not replay it forever.\n          await deletePrepzaOfflineQueueItem(item.id as number)\n          continue\n        }\n\n        if (res.status === 409) {\n          // Conflict reconciliation: if the authoritative GET now succeeds,\n          // the queued mutation has been superseded and should not be replayed.\n          try {\n            const authoritative = await fetch(item.path, { credentials: 'include', cache: 'no-store' })\n            if (authoritative.ok) {\n              await deletePrepzaOfflineQueueItem(item.id as number)\n              continue\n            }\n          } catch {}\n        }\n\n        item.attempts += 1"""
+if conflict_anchor in text:
+    text = text.replace(conflict_anchor, conflict_replacement, 1)
+elif 'Conflict reconciliation:' not in text:
+    raise SystemExit('Offline queue hardening: conflict reconciliation anchor missing.')
+
 flush_start = """  prepzaOfflineQueueFlushPromise = (async () => {\n    try {"""
 flush_replacement = """  prepzaOfflineQueueFlushPromise = (async () => {\n    try {\n      try { window.dispatchEvent(new CustomEvent('prepza:offline-queue-syncing')) } catch {}"""
 if flush_start in text and 'prepza:offline-queue-syncing' not in text:
@@ -46,9 +53,9 @@ flush_end_replacement = """    } finally {\n      try { window.dispatchEvent(new
 if flush_end in text and 'prepza:offline-queue-synced' not in text:
     text = text.replace(flush_end, flush_end_replacement, 1)
 
-required = ['userId: number | null', 'dedupeKey: string', 'prepzaOfflineQueueDedupeKey', 'freshCsrf', 'Never replay one account', 'prepza:offline-queue-syncing', 'prepza:offline-queue-synced']
+required = ['userId: number | null', 'dedupeKey: string', 'prepzaOfflineQueueDedupeKey', 'freshCsrf', 'Never replay one account', 'Conflict reconciliation:', 'prepza:offline-queue-syncing', 'prepza:offline-queue-synced']
 missing = [x for x in required if x not in text]
 if missing:
     raise SystemExit('Offline queue hardening verification failed: ' + ', '.join(missing))
 APP.write_text(text, encoding='utf-8')
-print('Offline mutation queue hardening and sync lifecycle applied and verified.')
+print('Offline mutation queue hardening, account isolation, retry, and conflict reconciliation applied and verified.')
