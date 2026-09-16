@@ -11,6 +11,7 @@ import { installChatStudyDocumentObserver, default as ChatStudyDocumentReader } 
 import { installChatRealtime } from './crypto/chatRealtime'
 import { installChatSwipeReply } from './crypto/chatSwipeReply'
 import { installChatUiPolish } from './crypto/chatUiPolish'
+import { installChatDraftPersistence } from './crypto/chatDraftPersistence'
 import { installNavigationTransitions } from './crypto/navigationTransitions'
 import { installGlobalPullRefresh } from './crypto/globalPullRefresh'
 import { installOfflineBootstrap } from './offline/bootstrap'
@@ -92,6 +93,7 @@ installSafely('chat study document observer', installChatStudyDocumentObserver)
 installSafely('chat realtime', installChatRealtime)
 installSafely('chat swipe/reply', installChatSwipeReply)
 installSafely('chat UI polish', installChatUiPolish)
+installSafely('chat draft persistence', installChatDraftPersistence)
 installSafely('navigation transitions', installNavigationTransitions)
 installSafely('global pull refresh', installGlobalPullRefresh)
 installSafely('offline bootstrap', installOfflineBootstrap)
