@@ -77,7 +77,9 @@ def main() -> None:
     require(isolation, ["indexedDB.deleteDatabase('prepza-offline-v2')", "indexedDB.deleteDatabase('prepza-offline-v1')", "caches.delete('prepza-study-assets-v1')"], 'offline account isolation')
     require(reader, ['startOfflineStudyTracking', 'getOfflineStudyDocumentUrl', 'getOfflineUserId', 'initialPage', 'documentId'], 'offline reader')
     require(engine, ["const PDFJS_BASE = '/vendor/pdfjs'", '${PDFJS_BASE}/pdf.mjs', '${PDFJS_BASE}/pdf.worker.mjs'], 'zero-network PDF engine')
-    require(pdf_vendor, ['pdf.mjs', 'pdf.worker.mjs', 'cdn.jsdelivr.net', 'frontend/public/vendor/pdfjs'], 'local PDF.js build asset')
+    # The build step creates these files in frontend/public; the source audit
+    # validates the build contract rather than requiring generated artifacts in git.
+    require(pdf_vendor, ['pdf.mjs', 'pdf.worker.mjs', 'cdn.jsdelivr.net', 'OUT = ROOT / \'frontend\' / \'public\' / \'vendor\' / \'pdfjs\''], 'local PDF.js build asset')
     assert 'https://cdn.jsdelivr.net' not in engine, 'PDF runtime must not use a CDN'
     stress_queue_model()
     idempotent_sync_model()
