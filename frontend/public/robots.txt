@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://prepza-sf60.onrender.com/sitemap.xml
