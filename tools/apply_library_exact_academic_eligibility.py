@@ -19,8 +19,8 @@ replace_once(
 )
 
 replace_once(
-    '    university_id = data.get("university_id")',
-    '    if data.get("unit_id") is not None:\n        return jsonify({"error": "unit_id is no longer supported for Library publications"}), 400\n    university_id = data.get("university_id")',
+'''    material_type = (data.get("material_type") or "").strip()\n    university_id = data.get("university_id")\n    program_id = data.get("program_id")\n    year = data.get("year")\n    semester = data.get("semester")''',
+'''    material_type = (data.get("material_type") or "").strip()\n    if data.get("unit_id") is not None:\n        return jsonify({"error": "unit_id is no longer supported for Library publications"}), 400\n    university_id = data.get("university_id")\n    program_id = data.get("program_id")\n    year = data.get("year")\n    semester = data.get("semester")''',
     "reject legacy unit metadata",
 )
 
