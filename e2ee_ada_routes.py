@@ -7,7 +7,7 @@ messages, or accepts a local E2EE key from the client.
 
 import re
 
-from flask import jsonify, request, session
+from flask import jsonify, request, session, send_from_directory
 from sqlalchemy import text
 
 from ai_service import (
@@ -32,6 +32,20 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
     """Register scoped Ada and the direct-chat plaintext guard."""
     if getattr(app, "_prepza_e2ee_ada_route_registered", False):
         return
+
+    # These are browser entry points, not API endpoints. Flask otherwise has
+    # no reason to serve the React shell for /login or /forgot-password,
+    # which means refreshing/deep-linking to those authentication screens can
+    # produce a server-side 404 even though the SPA knows how to render them.
+    # Keep the existing POST /login and POST /forgot-password handlers in
+    # app.py untouched; these GET routes only serve index.html.
+    @app.get("/login")
+    def login_page():
+        return send_from_directory(app.static_folder, "index.html")
+
+    @app.get("/forgot-password")
+    def forgot_password_page():
+        return send_from_directory(app.static_folder, "index.html")
 
     if not getattr(app, "_prepza_e2ee_direct_plaintext_guard", False):
         @app.before_request
