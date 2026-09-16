@@ -26,7 +26,7 @@ def patch(path: Path) -> None:
   // Previously generated results are persisted locally and remain studyable offline.
   const requestMethod = String(rest.method || 'GET').toUpperCase()
   if (!navigator.onLine && requestMethod !== 'GET') {
-    throw new GenerationApiError('AI generation requires an internet connection. Your saved study materials are still available offline.', 0)
+    throw new Error('AI generation requires an internet connection. Your saved study materials are still available offline.')
   }
   if (!navigator.onLine && requestMethod === 'GET') {
     const localGeneration = await getLatestGeneratedMaterialForPath(path)
