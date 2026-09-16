@@ -91,7 +91,7 @@ def patch_app():
       }}
     }}
 
-    if (cleanPath === '/documents' || cleanPath === '/library' || cleanPath === '/study-hub') {{
+    if (cleanPath === '/documents' || cleanPath === '/library' || cleanPath === '/study-hub' || cleanPath === '/library/saved') {{
       const saved = await listSavedStudyHubOffline(offlineUserId)
       const documents = saved.map((row: any) => ({{
         id: row.documentId,
@@ -104,6 +104,7 @@ def patch_app():
         created_at: new Date(row.savedAt).toISOString(),
         offline_available: true,
       }}))
+      if (cleanPath === '/library/saved') return {{ saved: documents }} as T
       return {{ documents, saved_documents: documents, library: documents }} as T
     }}
 
@@ -120,9 +121,10 @@ def patch_app():
   // so do not assume its request body contains a document id. Prefer an id returned
   // by the endpoint and otherwise resolve the newly saved publication from the
   // account's saved list before downloading the actual StudyHub document.
-  if (method === 'POST' && /^\\/library\\/\\d+\\/save$/.test(cleanPath) && body && typeof body === 'object') {
+  if (method === 'POST' && /^\\/library\\/\\d+\\/save$/.test(cleanPath)) {
     try {
-      let documentId = Number(body.document_id ?? body.documentId ?? body.saved_document_id ?? body.document?.id)
+      const responseBody = body && typeof body === 'object' ? body as any : {}
+      let documentId = Number(responseBody.document_id ?? responseBody.documentId ?? responseBody.saved_document_id ?? responseBody.document?.id)
       if (!Number.isInteger(documentId) || documentId <= 0) {
         const publicationId = Number(cleanPath.split('/')[2])
         const savedResponse = await fetch('/library/saved', { credentials: 'include', cache: 'no-store' })
@@ -134,7 +136,9 @@ def patch_app():
       }
       if (Number.isInteger(documentId) && documentId > 0) {
         try { await saveStudyHubDocumentOffline(documentId) } catch (_) {}
-        body.offline_available = !!(await getSavedStudyHubOffline(documentId, Number(getOfflineUserId() || 0)))
+        if (body && typeof body === 'object') {
+          responseBody.offline_available = !!(await getSavedStudyHubOffline(documentId, Number(getOfflineUserId() || 0)))
+        }
       }
     } catch (_) {}
   }
@@ -150,7 +154,7 @@ def patch_app():
         'getSavedStudyHubOffline(documentId, offlineUserId)',
         'listSavedStudyHubOffline(offlineUserId)',
         "cleanPath === '/me'",
-        "cleanPath === '/documents' || cleanPath === '/library' || cleanPath === '/study-hub'",
+        "cleanPath === '/documents' || cleanPath === '/library' || cleanPath === '/study-hub' || cleanPath === '/library/saved'",
         'Library save -> offline asset download',
         'saveStudyHubDocumentOffline(documentId)',
     ]
