@@ -16,6 +16,7 @@ if 'prepza-offline-last-auth-user' not in text:
         try { indexedDB.deleteDatabase('prepza-offline-v2') } catch (_) {}
         try { indexedDB.deleteDatabase('prepza-offline-v1') } catch (_) {}
         try { await caches.delete('prepza-study-assets-v1') } catch (_) {}
+        try { await caches.delete('prepza-generated-audio-v1') } catch (_) {}
         try { localStorage.removeItem('prepza-offline-user-id') } catch (_) {}
       }
       localStorage.setItem('prepza-offline-last-auth-user', String(userId))
@@ -31,17 +32,23 @@ if 'prepza-offline-last-auth-user' not in text:
     text = text.replace(needle, replacement, 1)
 else:
     old = "try { indexedDB.deleteDatabase('prepza-offline-v2') } catch (_) {}"
-    new = "try { indexedDB.deleteDatabase('prepza-offline-v2') } catch (_) {}\n        try { indexedDB.deleteDatabase('prepza-offline-v1') } catch (_) {}"
     if "indexedDB.deleteDatabase('prepza-offline-v1')" not in text:
+        new = old + "\n        try { indexedDB.deleteDatabase('prepza-offline-v1') } catch (_) {}"
         if old not in text:
             raise SystemExit('Offline account isolation: existing DB cleanup anchor missing')
         text = text.replace(old, new, 1)
+    if "caches.delete('prepza-generated-audio-v1')" not in text:
+        cache_anchor = "        try { await caches.delete('prepza-study-assets-v1') } catch (_) {}\n"
+        if cache_anchor not in text:
+            raise SystemExit('Offline account isolation: study asset cache cleanup anchor missing')
+        text = text.replace(cache_anchor, cache_anchor + "        try { await caches.delete('prepza-generated-audio-v1') } catch (_) {}\n", 1)
 
 required = [
     'prepza-offline-last-auth-user',
     "indexedDB.deleteDatabase('prepza-offline-v2')",
     "indexedDB.deleteDatabase('prepza-offline-v1')",
     "caches.delete('prepza-study-assets-v1')",
+    "caches.delete('prepza-generated-audio-v1')",
 ]
 missing = [x for x in required if x not in text]
 if missing:
