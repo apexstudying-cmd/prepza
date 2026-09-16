@@ -4,8 +4,7 @@ type PdfViewport = { width: number; height: number; convertToViewportPoint?: (x:
 type PdfPage = { getViewport: (options: { scale: number }) => PdfViewport; getTextContent: () => Promise<{ items: Array<{ str?: string; transform?: number[]; width?: number; height?: number }> }>; render: (options: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }) => { promise: Promise<void> } }
 export type PdfDocument = { numPages: number; getPage: (pageNumber: number) => Promise<PdfPage> }
 type PdfModule = { getDocument: (options: { data: Uint8Array }) => { promise: Promise<PdfDocument> }; GlobalWorkerOptions?: { workerSrc: string } }
-const PDFJS_VERSION = '6.3.289'
-const PDFJS_BASE = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build`
+const PDFJS_BASE = '/vendor/pdfjs'
 let modulePromise: Promise<PdfModule> | null = null
 async function loadPdfJs(): Promise<PdfModule> {
   if (!modulePromise) modulePromise = import(/* @vite-ignore */ `${PDFJS_BASE}/pdf.mjs`).then(module => { const pdfjs = module as PdfModule; if (pdfjs.GlobalWorkerOptions) pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/pdf.worker.mjs`; return pdfjs })
