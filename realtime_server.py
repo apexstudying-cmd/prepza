@@ -9,10 +9,12 @@ from app import app, db
 import chat_interactions  # noqa: F401 - registers additive chat metadata hooks
 from offline_activity_routes import register_offline_activity_routes
 import chat_group_routes  # noqa: F401 - registers multi-user chat-group membership routes
+from e2ee_production_hardening import register_e2ee_production_hardening
 
 # Socket.IO is the realtime transport; HTTP/database remains the source of truth.
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins=[], logger=False, engineio_logger=False)
 register_offline_activity_routes(app, db)
+register_e2ee_production_hardening(app, db, __import__("app").Conversation, __import__("app").ConversationParticipant)
 MESSAGE_PATH_RE = re.compile(r"^/chats/(\d+)/messages$")
 _socket_rooms = {}
 _socket_users = {}
