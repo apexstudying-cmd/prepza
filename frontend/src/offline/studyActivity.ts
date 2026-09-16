@@ -9,16 +9,11 @@ type ActivityState = { screens: Record<string, ScreenEntry> }
 function storageKey(): string {
   try { return `${KEY_PREFIX}:${localStorage.getItem(USER_KEY) || 'unknown'}` } catch { return `${KEY_PREFIX}:unknown` }
 }
-
 function todayKey(date = new Date()): string {
   const y = date.getFullYear(), m = String(date.getMonth() + 1).padStart(2, '0'), d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
-
-function screenKey(documentId: number, feature: string): string {
-  return `${Number(documentId)}:${String(feature || 'reading')}`
-}
-
+function screenKey(documentId: number, feature: string): string { return `${Number(documentId)}:${String(feature || 'reading')}` }
 function load(): ActivityState {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey()) || '{}')
@@ -26,11 +21,7 @@ function load(): ActivityState {
   } catch {}
   return { screens: {} }
 }
-
-function save(state: ActivityState) {
-  try { localStorage.setItem(storageKey(), JSON.stringify(state)) } catch {}
-}
-
+function save(state: ActivityState) { try { localStorage.setItem(storageKey(), JSON.stringify(state)) } catch {} }
 function notify() { window.dispatchEvent(new CustomEvent('prepza:offline-study-activity-changed')) }
 
 export function setOfflineStudyUserId(userId: number) {
@@ -41,7 +32,6 @@ export function setOfflineStudyUserId(userId: number) {
 export function recordOfflineStudySeconds(documentId: number, feature: string, seconds: number) {
   if (!Number.isInteger(documentId) || documentId <= 0) return
   if (!Number.isFinite(seconds) || seconds <= 0) return
-
   const state = load()
   const key = screenKey(documentId, feature)
   const row = state.screens[key] || { documentId, feature, days: {} }
@@ -50,85 +40,49 @@ export function recordOfflineStudySeconds(documentId: number, feature: string, s
   day.seconds = Math.min(MAX_DAILY_SECONDS, day.seconds + Math.floor(seconds))
   row.days[date] = day
   state.screens[key] = row
-  save(state)
-  notify()
+  save(state); notify()
 }
 
 export function startOfflineStudyTracking(documentId: number, feature = 'reading'): () => void {
   if (!Number.isInteger(documentId) || documentId <= 0) return () => {}
-
-  let last = performance.now()
-  let active = document.visibilityState === 'visible'
-  let stopped = false
-  let fractionalSeconds = 0
-
+  let last = performance.now(), active = document.visibilityState === 'visible', stopped = false, fractionalSeconds = 0
   const tick = () => {
     if (stopped) return
     const now = performance.now()
     if (active) {
-      const seconds = Math.min(30, Math.max(0, (now - last) / 1000))
-      fractionalSeconds += seconds
+      fractionalSeconds += Math.min(30, Math.max(0, (now - last) / 1000))
       const wholeSeconds = Math.floor(fractionalSeconds)
-      if (wholeSeconds > 0) {
-        recordOfflineStudySeconds(documentId, feature, wholeSeconds)
-        fractionalSeconds -= wholeSeconds
-      }
+      if (wholeSeconds > 0) { recordOfflineStudySeconds(documentId, feature, wholeSeconds); fractionalSeconds -= wholeSeconds }
     }
     last = now
   }
-
-  const onVisibility = () => {
-    tick()
-    active = document.visibilityState === 'visible'
-    last = performance.now()
-  }
-
+  const onVisibility = () => { tick(); active = document.visibilityState === 'visible'; last = performance.now() }
   document.addEventListener('visibilitychange', onVisibility)
   const interval = window.setInterval(tick, 5000)
   window.addEventListener('pagehide', tick)
-
   return () => {
     if (stopped) return
     tick()
     if (fractionalSeconds >= 0.5) recordOfflineStudySeconds(documentId, feature, fractionalSeconds)
-    fractionalSeconds = 0
-    stopped = true
-    window.clearInterval(interval)
-    document.removeEventListener('visibilitychange', onVisibility)
-    window.removeEventListener('pagehide', tick)
+    fractionalSeconds = 0; stopped = true
+    window.clearInterval(interval); document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('pagehide', tick)
   }
 }
 
 export function getOfflineStudyScreenSnapshot(documentId: number, feature = 'reading') {
-  const state = load()
-  const row = state.screens[screenKey(documentId, feature)]
-  const day = row?.days?.[todayKey()]
-  return {
-    documentId,
-    feature,
-    seconds: Math.max(0, Number(day?.seconds) || 0),
-    syncedSeconds: Math.max(0, Number(day?.syncedSeconds) || 0),
-  }
+  const state = load(), row = state.screens[screenKey(documentId, feature)], day = row?.days?.[todayKey()]
+  return { documentId, feature, seconds: Math.max(0, Number(day?.seconds) || 0), syncedSeconds: Math.max(0, Number(day?.syncedSeconds) || 0) }
 }
 
 export function getOfflineStudySnapshot() {
-  const state = load()
-  const today = todayKey()
-  const screens = Object.values(state.screens || {})
+  const state = load(), today = todayKey(), screens = Object.values(state.screens || {})
   const todaySeconds = screens.reduce((sum, row) => sum + Math.max(0, Number(row.days?.[today]?.seconds) || 0), 0)
   const allSeconds = screens.reduce((sum, row) => sum + Object.values(row.days || {}).reduce((daySum, day) => daySum + Math.max(0, Number(day.seconds) || 0), 0), 0)
   const activeDates = new Set<string>()
   for (const row of screens) for (const [date, day] of Object.entries(row.days || {})) if (Number(day.seconds) > 0) activeDates.add(date)
-
   let currentStreak = 0
   const cursor = new Date()
-  for (;;) {
-    const key = todayKey(cursor)
-    if (!screens.some(row => Number(row.days?.[key]?.seconds) > 0)) break
-    currentStreak += 1
-    cursor.setDate(cursor.getDate() - 1)
-  }
-
+  for (;;) { const key = todayKey(cursor); if (!screens.some(row => Number(row.days?.[key]?.seconds) > 0)) break; currentStreak += 1; cursor.setDate(cursor.getDate() - 1) }
   return { totalSeconds: allSeconds, todaySeconds, currentStreak, activeDates: [...activeDates].sort() }
 }
 
@@ -141,35 +95,30 @@ export function mergeOfflineStudyResponse(path: string, body: any) {
 }
 
 /**
- * Reconciles absolute local daily totals. Sending the same total repeatedly is
- * safe: the server only advances its authoritative total. This also lets the
- * client recover when a response was lost after the server committed it.
+ * Sends absolute local daily totals. Server reconciliation is monotonic, so a
+ * response lost after commit can safely be retried without double-counting.
  */
 export async function syncOfflineStudyActivity(csrfToken?: string) {
   if (!navigator.onLine) return
   const state = load()
-  const pending: Array<{ screen: ScreenEntry; date: string; totalSeconds: number }> = []
-  const byDate: Record<string, number> = {}
+  const pending: Array<{ screen: ScreenEntry; date: string; totalSeconds: number; syncedSeconds: number }> = []
+  const unsyncedByDate: Record<string, number> = {}
+  const syncedByDate: Record<string, number> = {}
 
   for (const screen of Object.values(state.screens)) for (const [date, day] of Object.entries(screen.days || {})) {
     const totalSeconds = Math.min(MAX_DAILY_SECONDS, Math.max(0, Math.floor(Number(day.seconds) || 0)))
-    const synced = Math.max(0, Math.floor(Number(day.syncedSeconds) || 0))
-    if (totalSeconds > synced) {
-      pending.push({ screen, date, totalSeconds })
-      byDate[date] = Math.min(MAX_DAILY_SECONDS, (byDate[date] || 0) + (totalSeconds - synced))
+    const syncedSeconds = Math.min(totalSeconds, Math.max(0, Math.floor(Number(day.syncedSeconds) || 0)))
+    if (totalSeconds > syncedSeconds) {
+      pending.push({ screen, date, totalSeconds, syncedSeconds })
+      unsyncedByDate[date] = Math.min(MAX_DAILY_SECONDS, (unsyncedByDate[date] || 0) + (totalSeconds - syncedSeconds))
     }
+    syncedByDate[date] = (syncedByDate[date] || 0) + syncedSeconds
   }
   if (!pending.length) return
 
-  // The server expects a target total. Reconstruct it from the local synced
-  // baseline plus unsynced delta, while keeping the payload capped per day.
-  const localSyncedByDate: Record<string, number> = {}
-  for (const screen of Object.values(state.screens)) for (const [date, day] of Object.entries(screen.days || {})) {
-    localSyncedByDate[date] = Math.max(localSyncedByDate[date] || 0, Math.max(0, Math.floor(Number(day.syncedSeconds) || 0)))
-  }
-  const entries = Object.entries(byDate).map(([date, delta]) => ({
+  const entries = Object.entries(unsyncedByDate).map(([date, delta]) => ({
     date,
-    total_seconds: Math.min(MAX_DAILY_SECONDS, (localSyncedByDate[date] || 0) + delta),
+    total_seconds: Math.min(MAX_DAILY_SECONDS, Math.max(0, (syncedByDate[date] || 0) + delta)),
   }))
 
   let token = csrfToken
@@ -191,14 +140,18 @@ export async function syncOfflineStudyActivity(csrfToken?: string) {
     const body = await res.json()
     const serverTotals: Record<string, number> = body.server_total_seconds_by_date || {}
 
-    // Mark each local screen up to the authoritative server total. If another
-    // device already has more time, the local unsynced delta is considered
-    // reconciled rather than being replayed indefinitely.
-    for (const item of pending) {
-      const day = item.screen.days[item.date]
-      if (!day) continue
-      const authoritative = Math.max(0, Math.min(MAX_DAILY_SECONDS, Number(serverTotals[item.date]) || 0))
-      day.syncedSeconds = Math.min(day.seconds, Math.max(day.syncedSeconds, authoritative))
+    for (const date of Object.keys(unsyncedByDate)) {
+      let available = Math.max(0, Math.min(MAX_DAILY_SECONDS, Number(serverTotals[date]) || 0) - (syncedByDate[date] || 0))
+      if (available <= 0) continue
+      for (const item of pending) {
+        if (item.date !== date || available <= 0) continue
+        const day = item.screen.days[date]
+        if (!day) continue
+        const unsynced = Math.max(0, day.seconds - day.syncedSeconds)
+        const credited = Math.min(unsynced, available)
+        day.syncedSeconds += credited
+        available -= credited
+      }
     }
     save(state); notify()
   } catch {}
