@@ -5,13 +5,68 @@ APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 
 text = APP.read_text(encoding='utf-8')
 
-# The cached-first API policy belongs to apply_offline_data_foundation.py so
-# there is exactly one API/cache implementation. This script only owns the
-# generation loading surface and must never replace the API helper.
-if 'const PREPZA_OFFLINE_DB' not in text:
-    raise SystemExit('Loading policy: offline data foundation must run first')
-if text.count('async function api<T = any>') != 1:
-    raise SystemExit('Loading policy: expected exactly one api helper')
+# Loading architecture sits above the existing API/offline/queue stack.
+# Never replace that stack: those transforms intentionally share one API layer.
+if 'async function baseApi<T = any>' not in text:
+    api_start = text.find('async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {')
+    if api_start < 0:
+        raise SystemExit('Loading policy: api helper not found')
+    text = text[:api_start] + text[api_start:].replace(
+        'async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {',
+        'async function baseApi<T = any>(path: string, options: RequestInit = {}): Promise<T> {',
+        1,
+    )
+
+    wrapper = '''
+
+const SCREEN_API_CACHE_TTL_MS = 2 * 60 * 1000
+const screenApiCache = new Map<string, { value: any; fetchedAt: number }>()
+const screenApiRefreshes = new Map<string, Promise<void>>()
+
+function isScreenCacheableApiRequest(path: string, method: string): boolean {
+  if (method !== 'GET') return false
+  if (path.startsWith('/documents/') || path.includes('/reading/')) return false
+  return path.startsWith('/') && !path.startsWith('/socket.io/')
+}
+
+function refreshScreenApiCache<T>(path: string, options: RequestInit): void {
+  if (screenApiRefreshes.has(path)) return
+  const refresh = baseApi<T>(path, options).then(fresh => {
+    screenApiCache.set(path, { value: fresh, fetchedAt: Date.now() })
+  }).catch(() => {
+    // Stale data remains usable when background refresh fails.
+  }).finally(() => screenApiRefreshes.delete(path))
+  screenApiRefreshes.set(path, refresh)
+}
+
+async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = String(options.method || 'GET').toUpperCase()
+  const cacheable = isScreenCacheableApiRequest(path, method)
+
+  if (cacheable) {
+    const cached = screenApiCache.get(path)
+    if (cached) {
+      if (Date.now() - cached.fetchedAt >= SCREEN_API_CACHE_TTL_MS) {
+        refreshScreenApiCache<T>(path, options)
+      }
+      return cached.value as T
+    }
+  } else if (method !== 'GET') {
+    screenApiCache.clear()
+  }
+
+  return baseApi<T>(path, options).then(value => {
+    if (cacheable) screenApiCache.set(path, { value, fetchedAt: Date.now() })
+    return value
+  })
+}
+'''
+
+    marker = '\n// ─── Document upload helpers'
+    marker_index = text.find(marker)
+    if marker_index < 0:
+        raise SystemExit('Loading policy: document helper marker not found')
+    text = text[:marker_index] + wrapper + text[marker_index:]
 
 loading_start = text.find('function GenerationLoading({ label }: { label: string }) {')
 if loading_start < 0:
@@ -40,7 +95,14 @@ loading_block = '''function GenerationLoading({ label }: { label: string }) {
   )
 }
 '''
-
 text = text[:loading_start] + loading_block + text[loading_end + 2:]
+
+if text.count('async function api<T = any>') != 1:
+    raise SystemExit('Loading policy: public API wrapper generation invariant failed')
+if text.count('async function baseApi<T = any>') != 1:
+    raise SystemExit('Loading policy: underlying API generation invariant failed')
+if text.count('const screenApiCache = new Map') != 1:
+    raise SystemExit('Loading policy: duplicate screen cache detected')
+
 APP.write_text(text, encoding='utf-8')
-print('Screen loading policy applied without duplicating the API/cache layer.')
+print('Screen loading policy applied as a single wrapper around the existing offline API stack.')
