@@ -45,7 +45,7 @@ export async function fetchUserPublicKey(userId: number): Promise<string> {
   let lastError: unknown = null
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const result = await jsonFetch<{ public_key: string }>(`/keys/${userId}`)
+      const result = await jsonFetch<{ public_key: string; secure_chat_ready?: boolean }>(`/e2ee/keys/${userId}`)
       if (result.public_key) return result.public_key
       lastError = new Error('Peer encryption key is not available yet')
     } catch (error) { lastError = error }
