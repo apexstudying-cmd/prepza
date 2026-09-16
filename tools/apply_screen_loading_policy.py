@@ -61,13 +61,10 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
     const cached = screenApiCache.get(path)
     if (cached) {
       const age = Date.now() - cached.fetchedAt
-      // Any previously rendered snapshot is immediately usable. Fresh entries
-      // avoid a network request; stale entries render first and revalidate in
-      // the background (stale-while-refresh).
+      // Previously rendered data always wins the render race. Fresh data is
+      // returned immediately; stale data is returned immediately as well and
+      // revalidated in the background (stale-while-refresh).
       if (age >= SCREEN_API_CACHE_TTL_MS) {
-        refreshScreenApiCache<T>(path, options)
-      } else if (!screenApiRefreshes.has(path)) {
-        // Keep data reasonably fresh without making navigation wait for it.
         refreshScreenApiCache<T>(path, options)
       }
       return cached.value as T
