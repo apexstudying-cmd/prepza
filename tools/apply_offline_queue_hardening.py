@@ -37,10 +37,10 @@ elif 'freshCsrf' not in text:
     raise SystemExit('Offline queue hardening: replay loop anchor missing.')
 
 conflict_anchor = """        if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 409 && res.status !== 429)) {\n          // Success, or a non-retryable client error. Do not replay it forever.\n          await deletePrepzaOfflineQueueItem(item.id as number)\n          continue\n        }\n\n        item.attempts += 1"""
-conflict_replacement = """        if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 409 && res.status !== 429)) {\n          // Success, or a non-retryable client error. Do not replay it forever.\n          await deletePrepzaOfflineQueueItem(item.id as number)\n          continue\n        }\n\n        if (res.status === 409) {\n          // Re-read the authoritative resource before deciding whether a\n          // conflicting queued mutation has already been superseded.\n          try {\n            const authoritative = await fetch(item.path, { method: 'GET', credentials: 'include', cache: 'no-store' })\n            if (authoritative.ok) {\n              await deletePrepzaOfflineQueueItem(item.id as number)\n              continue\n            }\n          } catch {}\n        }\n\n        item.attempts += 1"""
+conflict_replacement = """        if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 409 && res.status !== 429)) {\n          // Success, or a non-retryable client error. Do not replay it forever.\n          await deletePrepzaOfflineQueueItem(item.id as number)\n          continue\n        }\n\n        if (res.status === 409) {\n          // Conflict reconciliation: re-read the authoritative resource before deciding\n          // whether a conflicting queued mutation has already been superseded.\n          try {\n            const authoritative = await fetch(item.path, { method: 'GET', credentials: 'include', cache: 'no-store' })\n            if (authoritative.ok) {\n              await deletePrepzaOfflineQueueItem(item.id as number)\n              continue\n            }\n          } catch {}\n        }\n\n        item.attempts += 1"""
 if conflict_anchor in text:
     text = text.replace(conflict_anchor, conflict_replacement, 1)
-elif 'Re-read the authoritative resource' not in text:
+elif 'Conflict reconciliation:' not in text:
     raise SystemExit('Offline queue hardening: conflict reconciliation anchor missing.')
 
 flush_start = """  prepzaOfflineQueueFlushPromise = (async () => {\n    try {"""
@@ -53,7 +53,7 @@ flush_end_replacement = """    } finally {\n      try { window.dispatchEvent(new
 if flush_end in text and 'prepza:offline-queue-synced' not in text:
     text = text.replace(flush_end, flush_end_replacement, 1)
 
-required = ['userId: number | null', 'dedupeKey: string', 'prepzaOfflineQueueDedupeKey', 'freshCsrf', 'Never replay one account', 'Re-read the authoritative resource', 'prepza:offline-queue-syncing', 'prepza:offline-queue-synced']
+required = ['userId: number | null', 'dedupeKey: string', 'prepzaOfflineQueueDedupeKey', 'freshCsrf', 'Never replay one account', 'Conflict reconciliation:', 'prepza:offline-queue-syncing', 'prepza:offline-queue-synced']
 missing = [x for x in required if x not in text]
 if missing:
     raise SystemExit('Offline queue hardening verification failed: ' + ', '.join(missing))
