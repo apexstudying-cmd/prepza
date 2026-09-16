@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   cleanup:
-    if: !contains(github.event.head_commit.message, 'refactor: materialize current academic architecture')
+    if: ${{ !contains(github.event.head_commit.message, 'refactor: materialize current academic architecture') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
