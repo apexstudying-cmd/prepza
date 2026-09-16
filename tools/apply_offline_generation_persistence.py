@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = [
@@ -21,9 +22,6 @@ def patch(path: Path) -> None:
 
     guard = "  // Offline AI boundary: generation itself always requires a connection."
     if guard not in text:
-        fetch_anchor = "  const res = await fetch(path, {\n"
-        if fetch_anchor not in text:
-            raise SystemExit(f'Offline generation: fetch anchor missing in {path.name}')
         guard_code = """  // Offline AI boundary: generation itself always requires a connection.
   // Previously generated results are persisted locally and remain studyable offline.
   const requestMethod = String(rest.method || 'GET').toUpperCase()
@@ -35,7 +33,11 @@ def patch(path: Path) -> None:
     if (localGeneration !== null) return localGeneration as T
   }
 """
-        text = text.replace(fetch_anchor, guard_code + fetch_anchor, 1)
+        match = re.search(r'(?m)^(\s*)const res = await fetch\(path,', text)
+        if not match:
+            raise SystemExit(f'Offline generation: fetch anchor missing in {path.name}')
+        insert_at = match.start()
+        text = text[:insert_at] + guard_code + text[insert_at:]
 
     marker = "  if (!res.ok) throw new GenerationApiError(body?.error || body?.message || `Request failed (${res.status})`, res.status)"
     if marker not in text:
