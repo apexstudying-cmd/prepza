@@ -16,6 +16,18 @@ def register_e2ee_production_hardening(app, db, Conversation, ConversationPartic
     if getattr(app, "_prepza_e2ee_production_hardening", False):
         return
 
+    def registered_key_user_ids(user_ids):
+        ids = sorted({int(value) for value in user_ids})
+        if not ids:
+            return set()
+        placeholders = ", ".join(f":id_{index}" for index in range(len(ids)))
+        params = {f"id_{index}": value for index, value in enumerate(ids)}
+        rows = db.session.execute(
+            text(f"SELECT user_id FROM user_key WHERE user_id IN ({placeholders})"),
+            params,
+        ).all()
+        return {int(row[0]) for row in rows}
+
     @app.get("/e2ee/keys/<int:user_id>")
     def get_e2ee_public_key_for_chat(user_id):
         if not session.get("user_id"):
@@ -34,7 +46,6 @@ def register_e2ee_production_hardening(app, db, Conversation, ConversationPartic
         if request.method != "POST":
             return None
 
-        # Initial group creation must be atomic with respect to E2EE readiness.
         if request.path == "/chats":
             payload = request.get_json(silent=True) or {}
             if not isinstance(payload, dict) or not payload.get("is_group"):
@@ -46,22 +57,7 @@ def register_e2ee_production_hardening(app, db, Conversation, ConversationPartic
             except (TypeError, ValueError):
                 return jsonify({"error": "Invalid group participant list"}), 400
             requested_ids.add(creator_id)
-            if not requested_ids:
-                return None
-            rows = db.session.execute(
-                text(
-                    "SELECT cp.user_id FROM conversation_participant cp "
-                    "WHERE 1 = 0"
-                )
-            )
-            # The query above intentionally does not depend on an existing
-            # conversation; use the user_key table directly for this preflight.
-            existing_key_rows = db.session.execute(
-                text("SELECT user_id FROM user_key WHERE user_id = ANY(:ids)"),
-                {"ids": list(requested_ids)},
-            ).all()
-            ready_ids = {int(row[0]) for row in existing_key_rows}
-            missing_ids = sorted(requested_ids - ready_ids)
+            missing_ids = sorted(requested_ids - registered_key_user_ids(requested_ids))
             if missing_ids:
                 return jsonify({
                     "error": "Every group member must complete secure chat setup before the group can be created",
@@ -70,9 +66,6 @@ def register_e2ee_production_hardening(app, db, Conversation, ConversationPartic
                 }), 409
             return None
 
-        # Membership additions must also be E2EE-ready because adding a member
-        # advances the group epoch and requires a complete encrypted envelope
-        # set for the new epoch.
         match = re.fullmatch(r"/chats/(\d+)/members", request.path)
         if not match:
             return None
@@ -98,12 +91,7 @@ def register_e2ee_production_hardening(app, db, Conversation, ConversationPartic
             return None
         if not requested_ids:
             return None
-        existing_key_rows = db.session.execute(
-            text("SELECT user_id FROM user_key WHERE user_id = ANY(:ids)"),
-            {"ids": list(requested_ids)},
-        ).all()
-        ready_ids = {int(row[0]) for row in existing_key_rows}
-        missing_ids = sorted(requested_ids - ready_ids)
+        missing_ids = sorted(requested_ids - registered_key_user_ids(requested_ids))
         if missing_ids:
             return jsonify({
                 "error": "Every new group member must complete secure chat setup before being added",
