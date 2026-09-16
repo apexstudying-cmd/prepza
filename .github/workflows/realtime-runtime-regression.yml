@@ -3,6 +3,7 @@ name: Realtime Runtime Regression
 'on':
   push:
     branches:
+      - main
       - feat/realtime-study-chat
   pull_request:
     paths:
