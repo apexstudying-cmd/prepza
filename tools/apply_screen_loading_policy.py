@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
@@ -14,12 +13,13 @@ if api_end < 0:
     raise SystemExit('Loading policy: api helper boundary not found')
 
 api_block = '''const SCREEN_API_CACHE_TTL_MS = 2 * 60 * 1000
-const screenApiCache = new Map<string, { value: any; expiresAt: number }>()
-let screenApiRefreshes = new Map<string, Promise<void>>()
+const screenApiCache = new Map<string, { value: any; fetchedAt: number }>()
+const screenApiRefreshes = new Map<string, Promise<void>>()
 
 function isCacheableApiRequest(path: string, method: string): boolean {
   if (method !== 'GET') return false
-  // Keep document/file payloads on their dedicated Study Hub/offline paths.
+  // Document/file payloads have their own Study Hub/offline lifecycle and can
+  // be large or user-specific, so they must not enter the generic screen cache.
   if (path.startsWith('/documents/')) return false
   if (path.includes('/reading/')) return false
   return true
@@ -40,22 +40,35 @@ async function requestApiJson<T>(path: string, options: RequestInit): Promise<T>
   return body as T
 }
 
+function refreshScreenApiCache<T>(path: string, options: RequestInit): void {
+  if (screenApiRefreshes.has(path)) return
+  const refresh = requestApiJson<T>(path, options).then(fresh => {
+    screenApiCache.set(path, { value: fresh, fetchedAt: Date.now() })
+  }).catch(() => {
+    // Stale data remains usable when a background refresh fails. The next
+    // visit can retry instead of replacing useful UI with an error state.
+  }).finally(() => {
+    screenApiRefreshes.delete(path)
+  })
+  screenApiRefreshes.set(path, refresh.then(() => undefined))
+}
+
 async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const method = String(options.method || 'GET').toUpperCase()
   const cacheable = isCacheableApiRequest(path, method)
 
   if (cacheable) {
     const cached = screenApiCache.get(path)
-    if (cached && cached.expiresAt > Date.now()) {
-      // Cached data wins the render race. Refresh quietly in the background so
-      // the next visit sees newer data without flashing a loading state.
-      if (!screenApiRefreshes.has(path)) {
-        const refresh = requestApiJson<T>(path, options).then(fresh => {
-          screenApiCache.set(path, { value: fresh, expiresAt: Date.now() + SCREEN_API_CACHE_TTL_MS })
-        }).catch(() => {}).finally(() => {
-          screenApiRefreshes.delete(path)
-        })
-        screenApiRefreshes.set(path, refresh.then(() => undefined))
+    if (cached) {
+      const age = Date.now() - cached.fetchedAt
+      // Any previously rendered snapshot is immediately usable. Fresh entries
+      // avoid a network request; stale entries render first and revalidate in
+      // the background (stale-while-refresh).
+      if (age >= SCREEN_API_CACHE_TTL_MS) {
+        refreshScreenApiCache<T>(path, options)
+      } else if (!screenApiRefreshes.has(path)) {
+        // Keep data reasonably fresh without making navigation wait for it.
+        refreshScreenApiCache<T>(path, options)
       }
       return cached.value as T
     }
@@ -63,9 +76,10 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
 
   const value = await requestApiJson<T>(path, options)
   if (cacheable) {
-    screenApiCache.set(path, { value, expiresAt: Date.now() + SCREEN_API_CACHE_TTL_MS })
+    screenApiCache.set(path, { value, fetchedAt: Date.now() })
   } else if (method !== 'GET') {
-    // Mutations can invalidate any screen-level cached snapshot.
+    // Mutations can change multiple screens; invalidate the generic snapshot
+    // cache rather than risking stale user-facing state after a write.
     screenApiCache.clear()
   }
   return value
@@ -86,6 +100,8 @@ loading_block = '''function GenerationLoading({ label }: { label: string }) {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
+    // Never flash a loading surface for a fast request. If generation really
+    // takes time, the delayed state communicates that work is still happening.
     const timer = window.setTimeout(() => setVisible(true), 280)
     return () => window.clearTimeout(timer)
   }, [])
