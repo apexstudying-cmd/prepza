@@ -48,14 +48,17 @@ def main() -> None:
     library = read('tools/apply_offline_study_library.py')
     status = read('frontend/src/offline/OfflineStatusBanner.tsx')
     isolation = read('tools/apply_offline_account_isolation.py')
+    reader = read('tools/apply_offline_study.py')
 
     require(generated, [
         'getLatestGeneratedMaterialForPath', 'listGeneratedMaterialsOffline',
         'deleteGeneratedMaterialOffline', 'prepza-offline-user-id',
+        'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl',
+        'prepza-generated-audio-v1',
     ], 'generated-material persistence')
     require(study, [
         'prepza-study-assets-v1', 'caches.open', 'response.arrayBuffer',
-        'startOfflineStudyTracking',
+        'startOfflineStudyTracking', 'getOfflineStudyStorageUsage',
     ], 'offline Study Hub assets')
     require(activity, [
         'recordOfflineStudySeconds', 'syncedSeconds',
@@ -73,6 +76,7 @@ def main() -> None:
     ], 'offline queue hardening')
     require(generation, [
         'saveGeneratedMaterialOffline', 'New AI generation remains online-only',
+        'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl',
     ], 'offline AI boundary')
     require(library, [
         'saveStudyHubDocumentOffline', '/library/saved',
@@ -80,14 +84,19 @@ def main() -> None:
     ], 'offline Library save flow')
     require(status, [
         'Offline — saved study materials remain available',
-        'Syncing your study activity', 'All caught up',
-        'navigator.onLine',
+        'Connection restored — reconnecting…', 'Syncing your study activity',
+        'All caught up', 'navigator.onLine',
     ], 'offline status UI')
     require(isolation, [
         "indexedDB.deleteDatabase('prepza-offline-v2')",
         "indexedDB.deleteDatabase('prepza-offline-v1')",
         "caches.delete('prepza-study-assets-v1')",
+        "caches.delete('prepza-generated-audio-v1')",
     ], 'offline account isolation')
+    require(reader, [
+        'startOfflineStudyTracking', 'prepza-study-assets-v1',
+        'initialPage', 'documentId',
+    ], 'offline reader')
 
     stress_queue_model()
     print('Offline architecture regression audit passed.')
