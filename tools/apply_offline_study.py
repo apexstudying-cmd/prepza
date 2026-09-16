@@ -66,14 +66,14 @@ def patch_reader():
               try { const cache = await window.caches.open('prepza-study-assets-v1'); await cache.put(src, response.clone()) } catch (_) {}
             }
           }
-          const document = await openPdf(new Uint8Array(await response.arrayBuffer()))
+          const pdfDocument: PdfDocument = await openPdf(new Uint8Array(await response.arrayBuffer()))
           if (localObjectUrl) { try { URL.revokeObjectURL(localObjectUrl) } catch (_) {} }
           if (cancelled) return
-          documentRef.current = document
-          setPages(document.numPages)
-          const resumePage = Math.min(Math.max(1, initialPage), document.numPages)
+          documentRef.current = pdfDocument
+          setPages(pdfDocument.numPages)
+          const resumePage = Math.min(Math.max(1, initialPage), pdfDocument.numPages)
           setPage(resumePage)
-          const result = await renderPdfPage(document, resumePage, 1, canvasRef.current!)
+          const result = await renderPdfPage(pdfDocument, resumePage, 1, canvasRef.current!)
           if (!cancelled) { setText(result.text); onPageChange?.(resumePage) }
           return
         } catch (networkError) {
@@ -83,13 +83,13 @@ def patch_reader():
           const cached = await window.caches.match(src)
           if (!cached) throw networkError
           response = cached
-          const document = await openPdf(new Uint8Array(await response.arrayBuffer()))
+          const pdfDocument: PdfDocument = await openPdf(new Uint8Array(await response.arrayBuffer()))
           if (cancelled) return
-          documentRef.current = document
-          setPages(document.numPages)
-          const resumePage = Math.min(Math.max(1, initialPage), document.numPages)
+          documentRef.current = pdfDocument
+          setPages(pdfDocument.numPages)
+          const resumePage = Math.min(Math.max(1, initialPage), pdfDocument.numPages)
           setPage(resumePage)
-          const result = await renderPdfPage(document, resumePage, 1, canvasRef.current!)
+          const result = await renderPdfPage(pdfDocument, resumePage, 1, canvasRef.current!)
           if (!cancelled) { setText(result.text); onPageChange?.(resumePage) }
         }"""
     if old in s:
