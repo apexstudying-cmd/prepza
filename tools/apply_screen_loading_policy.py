@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
@@ -68,6 +69,36 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
         raise SystemExit('Loading policy: document helper marker not found')
     text = text[:marker_index] + wrapper + text[marker_index:]
 
+# Cached-first data should not briefly reveal a skeleton while the cached API
+# promise resolves. Slow/no-cache requests still get a skeleton after a short
+# delay, which prevents the "loading flash" without removing useful feedback.
+if 'function DelayedScreenSkeleton' not in text:
+    skeleton = '''
+
+function DelayedScreenSkeleton({ children }: { children: React.ReactNode }) {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisible(true), 220)
+    return () => window.clearTimeout(timer)
+  }, [])
+  if (!visible) return null
+  return <>{children}</>
+}
+'''
+    marker = '\nfunction GenerationLoading({ label }: { label: string }) {'
+    marker_index = text.find(marker)
+    if marker_index < 0:
+        raise SystemExit('Loading policy: GenerationLoading insertion marker not found')
+    text = text[:marker_index] + skeleton + text[marker_index:]
+
+# Wrap simple one-line screen skeleton returns. Keep the original skeleton
+# components themselves untouched so their layout/design remains stable.
+pattern = re.compile(r'if\s*\(loading\)\s*return\s*(<Skeleton[A-Za-z0-9_]+\s*/>)')
+text, wrapped_count = pattern.subn(
+    r'if (loading) return <DelayedScreenSkeleton>\1</DelayedScreenSkeleton>',
+    text,
+)
+
 loading_start = text.find('function GenerationLoading({ label }: { label: string }) {')
 if loading_start < 0:
     raise SystemExit('Loading policy: GenerationLoading not found')
@@ -80,8 +111,6 @@ loading_block = '''function GenerationLoading({ label }: { label: string }) {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    // Never flash a loading surface for a fast request. If generation really
-    // takes time, the delayed state communicates that work is still happening.
     const timer = window.setTimeout(() => setVisible(true), 280)
     return () => window.clearTimeout(timer)
   }, [])
@@ -103,6 +132,8 @@ if text.count('async function baseApi<T = any>') != 1:
     raise SystemExit('Loading policy: underlying API generation invariant failed')
 if text.count('const screenApiCache = new Map') != 1:
     raise SystemExit('Loading policy: duplicate screen cache detected')
+if text.count('function DelayedScreenSkeleton') != 1:
+    raise SystemExit('Loading policy: duplicate delayed skeleton helper detected')
 
 APP.write_text(text, encoding='utf-8')
-print('Screen loading policy applied as a single wrapper around the existing offline API stack.')
+print(f'Screen loading policy applied: single API cache wrapper, delayed skeleton fallback, wrapped skeleton returns={wrapped_count}.')
