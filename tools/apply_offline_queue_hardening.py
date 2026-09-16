@@ -30,17 +30,17 @@ elif 'prepzaOfflineQueueDedupeKey(userId' not in text:
     raise SystemExit('Offline queue hardening: enqueue anchor missing.')
 
 old_loop = """      for (const item of items) {\n        if (!navigator.onLine) break\n        const headers = { ...item.headers }\n        const res = await fetch(item.path, {"""
-new_loop = """      let currentUserId: number | null = prepzaOfflineQueueUserId()\n      let freshCsrf = ''\n      try {\n        const meRes = await fetch('/me', { credentials: 'include', cache: 'no-store' })\n        if (meRes.ok) {\n          const me = await meRes.json()\n          const resolved = Number(me?.id)\n          currentUserId = Number.isInteger(resolved) && resolved > 0 ? resolved : currentUserId\n          freshCsrf = String(me?.csrf_token || '')\n        }\n      } catch {}\n\n      for (const item of items) {\n        if (!navigator.onLine) break\n        // Never replay one account's durable mutation into another account.\n        if (item.userId != null && currentUserId != null && item.userId !== currentUserId) {\n          await deletePrepzaOfflineQueueItem(item.id as number)\n          continue\n        }\n        const headers = { ...item.headers }\n        if (freshCsrf && Object.keys(headers).some(key => key.toLowerCase() === 'x-csrf-token')) {\n          const csrfHeader = Object.keys(headers).find(key => key.toLowerCase() === 'x-csrf-token') as string\n          headers[csrfHeader] = freshCsrf\n        }\n        const res = await fetch(item.path, {"""
+new_loop = """      let currentUserId: number | null = prepzaOfflineQueueUserId()\n      let freshCsrf = ''\n      try {\n        const meRes = await fetch('/me', { credentials: 'include', cache: 'no-store' })\n        if (meRes.ok) {\n          const me = await meRes.json()\n          const resolved = Number(me?.id)\n          currentUserId = Number.isInteger(resolved) && resolved > 0 ? resolved : currentUserId\n          freshCsrf = String(me?.csrf_token || '')\n        }\n      } catch {}\n\n      for (const item of items) {\n        if (!navigator.onLine) break\n        // Never replay one account's durable mutation into another account.\n        if (item.userId == null || currentUserId == null || item.userId !== currentUserId) {\n          continue\n        }\n        const headers = { ...item.headers }\n        if (freshCsrf && Object.keys(headers).some(key => key.toLowerCase() === 'x-csrf-token')) {\n          const csrfHeader = Object.keys(headers).find(key => key.toLowerCase() === 'x-csrf-token') as string\n          headers[csrfHeader] = freshCsrf\n        }\n        const res = await fetch(item.path, {"""
 if old_loop in text:
     text = text.replace(old_loop, new_loop, 1)
 elif 'freshCsrf' not in text:
     raise SystemExit('Offline queue hardening: replay loop anchor missing.')
 
 conflict_anchor = """        if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 409 && res.status !== 429)) {\n          // Success, or a non-retryable client error. Do not replay it forever.\n          await deletePrepzaOfflineQueueItem(item.id as number)\n          continue\n        }\n\n        item.attempts += 1"""
-conflict_replacement = """        if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 409 && res.status !== 429)) {\n          // Success, or a non-retryable client error. Do not replay it forever.\n          await deletePrepzaOfflineQueueItem(item.id as number)\n          continue\n        }\n\n        if (res.status === 409) {\n          // Conflict reconciliation: if the authoritative GET now succeeds,\n          // the queued mutation has been superseded and should not be replayed.\n          try {\n            const authoritative = await fetch(item.path, { credentials: 'include', cache: 'no-store' })\n            if (authoritative.ok) {\n              await deletePrepzaOfflineQueueItem(item.id as number)\n              continue\n            }\n          } catch {}\n        }\n\n        item.attempts += 1"""
+conflict_replacement = """        if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 409 && res.status !== 429)) {\n          // Success, or a non-retryable client error. Do not replay it forever.\n          await deletePrepzaOfflineQueueItem(item.id as number)\n          continue\n        }\n\n        if (res.status === 409) {\n          // Re-read the authoritative resource before deciding whether a\n          // conflicting queued mutation has already been superseded.\n          try {\n            const authoritative = await fetch(item.path, { method: 'GET', credentials: 'include', cache: 'no-store' })\n            if (authoritative.ok) {\n              await deletePrepzaOfflineQueueItem(item.id as number)\n              continue\n            }\n          } catch {}\n        }\n\n        item.attempts += 1"""
 if conflict_anchor in text:
     text = text.replace(conflict_anchor, conflict_replacement, 1)
-elif 'Conflict reconciliation:' not in text:
+elif 'Re-read the authoritative resource' not in text:
     raise SystemExit('Offline queue hardening: conflict reconciliation anchor missing.')
 
 flush_start = """  prepzaOfflineQueueFlushPromise = (async () => {\n    try {"""
@@ -53,9 +53,9 @@ flush_end_replacement = """    } finally {\n      try { window.dispatchEvent(new
 if flush_end in text and 'prepza:offline-queue-synced' not in text:
     text = text.replace(flush_end, flush_end_replacement, 1)
 
-required = ['userId: number | null', 'dedupeKey: string', 'prepzaOfflineQueueDedupeKey', 'freshCsrf', 'Never replay one account', 'Conflict reconciliation:', 'prepza:offline-queue-syncing', 'prepza:offline-queue-synced']
+required = ['userId: number | null', 'dedupeKey: string', 'prepzaOfflineQueueDedupeKey', 'freshCsrf', 'Never replay one account', 'Re-read the authoritative resource', 'prepza:offline-queue-syncing', 'prepza:offline-queue-synced']
 missing = [x for x in required if x not in text]
 if missing:
     raise SystemExit('Offline queue hardening verification failed: ' + ', '.join(missing))
 APP.write_text(text, encoding='utf-8')
-print('Offline mutation queue hardening, account isolation, retry, and conflict reconciliation applied and verified.')
+print('Offline mutation queue hardening, account isolation, retry, and authoritative conflict reconciliation applied and verified.')
