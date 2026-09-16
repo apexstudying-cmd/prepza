@@ -71,7 +71,7 @@ def main() -> None:
     ], 'offline queue foundation')
     require(hardening, [
         'dedupeKey', 'prepzaOfflineQueueDedupeKey',
-        'Never replay one account', 'freshCsrf',
+        'Never replay one account', 'Conflict reconciliation:', 'freshCsrf',
         'prepza:offline-queue-syncing', 'prepza:offline-queue-synced',
     ], 'offline queue hardening')
     require(generation, [
