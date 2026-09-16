@@ -25,7 +25,6 @@ def stress_queue_model() -> None:
             existing['order'] = min(existing['order'], index)
     assert len(queue) == 10, f'30-action dedupe stress expected 10 unique records, got {len(queue)}'
     assert [item['order'] for item in queue] == list(range(10)), 'queue ordering contract failed'
-
     retry = {'attempts': 0, 'failed': False}
     for _ in range(8): retry['attempts'] += 1
     retry['failed'] = retry['attempts'] >= 8
@@ -35,10 +34,8 @@ def stress_queue_model() -> None:
 def idempotent_sync_model() -> None:
     server_total = 0
     target = 180
-    for _ in range(3):
-        server_total = max(server_total, min(8 * 60 * 60, target))
+    for _ in range(3): server_total = max(server_total, min(8 * 60 * 60, target))
     assert server_total == 180, 'absolute study-total replay must be idempotent'
-
     local = [60, 120, 90]
     synced = [0, 0, 0]
     authoritative = 180
@@ -67,72 +64,24 @@ def main() -> None:
     engine = read('frontend/src/crypto/pdfStudyReaderEngine.ts')
     pdf_vendor = read('tools/ensure_local_pdfjs.py')
 
-    require(generated, [
-        'getLatestGeneratedMaterialForPath', 'listGeneratedMaterialsOffline',
-        'deleteGeneratedMaterialOffline', 'prepza-offline-user-id',
-        'generatedAudio', 'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl',
-    ], 'generated-material persistence')
-    require(study, [
-        'prepza-study-assets-v1', 'openAssetDb', 'putStudyAsset',
-        'getOfflineStudyDocumentBlob', 'getOfflineStudyDocumentUrl',
-        'getOfflineStudyStorageUsage',
-    ], 'offline Study Hub package')
-    require(activity, [
-        'recordOfflineStudySeconds', 'syncedSeconds',
-        'syncOfflineStudyActivity', '/study-time/offline-sync',
-        'total_seconds', 'server_total_seconds_by_date',
-    ], 'offline study activity')
-    require(backend_activity, [
-        'total_seconds', 'server_total_seconds_by_date',
-        'new_total = max(existing_total, target)',
-    ], 'server study reconciliation')
+    require(generated, ['getLatestGeneratedMaterialForPath', 'listGeneratedMaterialsOffline', 'deleteGeneratedMaterialOffline', 'prepza-offline-user-id', 'generatedAudio', 'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl'], 'generated-material persistence')
+    require(study, ['prepza-study-assets-v1', 'openAssetDb', 'putStudyAsset', 'getOfflineStudyDocumentBlob', 'getOfflineStudyDocumentUrl', 'getOfflineStudyStorageUsage'], 'offline Study Hub package')
+    require(activity, ['recordOfflineStudySeconds', 'syncedSeconds', 'syncOfflineStudyActivity', '/study-time/offline-sync', 'total_seconds', 'server_total_seconds_by_date'], 'offline study activity')
+    require(backend_activity, ['total_seconds', 'server_total_seconds_by_date', 'new_total = max(existing_total, target)'], 'server study reconciliation')
     require(bootstrap, ['setOfflineUserId', 'syncOfflineStudyActivity'], 'offline bootstrap')
-    require(queue, [
-        'syncQueue', 'PREPZA_OFFLINE_QUEUE_MAX_ATTEMPTS',
-        'flushPrepzaOfflineQueue', 'createdAt', 'lastError',
-    ], 'offline queue foundation')
-    require(hardening, [
-        'dedupeKey', 'prepzaOfflineQueueDedupeKey',
-        'Never replay one account', 'Conflict reconciliation:', 'freshCsrf',
-        'prepza:offline-queue-syncing', 'prepza:offline-queue-synced',
-    ], 'offline queue hardening')
-    require(generation, [
-        'saveGeneratedMaterialOffline',
-        'Offline AI boundary: generation itself always requires a connection.',
-        'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl',
-    ], 'offline AI boundary')
-    require(library, [
-        'saveStudyHubDocumentOffline', '/library/saved', 'offline_available',
-    ], 'offline Library save flow')
-    require(status, [
-        'Offline — saved study materials remain available',
-        'Connection restored — reconnecting…', 'Syncing your study activity',
-        'All caught up', 'navigator.onLine',
-    ], 'offline status UI')
-    require(isolation, [
-        "indexedDB.deleteDatabase('prepza-offline-v2')",
-        "indexedDB.deleteDatabase('prepza-offline-v1')",
-        "caches.delete('prepza-study-assets-v1')",
-    ], 'offline account isolation')
-    require(reader, [
-        'startOfflineStudyTracking', 'getOfflineStudyDocumentUrl', 'getOfflineUserId',
-        'initialPage', 'documentId',
-    ], 'offline reader')
-    require(engine, [
-        "const PDFJS_BASE = '/vendor/pdfjs'",
-        "${PDFJS_BASE}/pdf.mjs",
-        "${PDFJS_BASE}/pdf.worker.mjs",
-    ], 'zero-network PDF engine')
-    require(pdf_vendor, [
-        'pdf.mjs', 'pdf.worker.mjs', 'cdn.jsdelivr.net',
-        'frontend' / Path('public') if False else 'frontend/public/vendor/pdfjs',
-    ], 'local PDF.js build asset')
-
+    require(queue, ['syncQueue', 'PREPZA_OFFLINE_QUEUE_MAX_ATTEMPTS', 'flushPrepzaOfflineQueue', 'createdAt', 'lastError'], 'offline queue foundation')
+    require(hardening, ['dedupeKey', 'prepzaOfflineQueueDedupeKey', 'Never replay one account', 'Conflict reconciliation:', 'freshCsrf', 'prepza:offline-queue-syncing', 'prepza:offline-queue-synced'], 'offline queue hardening')
+    require(generation, ['saveGeneratedMaterialOffline', 'Offline AI boundary: generation itself always requires a connection.', 'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl'], 'offline AI boundary')
+    require(library, ['saveStudyHubDocumentOffline', '/library/saved', 'offline_available'], 'offline Library save flow')
+    require(status, ['Offline — saved study materials remain available', 'Connection restored — reconnecting…', 'Syncing your study activity', 'All caught up', 'navigator.onLine'], 'offline status UI')
+    require(isolation, ["indexedDB.deleteDatabase('prepza-offline-v2')", "indexedDB.deleteDatabase('prepza-offline-v1')", "caches.delete('prepza-study-assets-v1')"], 'offline account isolation')
+    require(reader, ['startOfflineStudyTracking', 'getOfflineStudyDocumentUrl', 'getOfflineUserId', 'initialPage', 'documentId'], 'offline reader')
+    require(engine, ["const PDFJS_BASE = '/vendor/pdfjs'", '${PDFJS_BASE}/pdf.mjs', '${PDFJS_BASE}/pdf.worker.mjs'], 'zero-network PDF engine')
+    require(pdf_vendor, ['pdf.mjs', 'pdf.worker.mjs', 'cdn.jsdelivr.net', 'frontend/public/vendor/pdfjs'], 'local PDF.js build asset')
     assert 'https://cdn.jsdelivr.net' not in engine, 'PDF runtime must not use a CDN'
     stress_queue_model()
     idempotent_sync_model()
     print('Offline architecture regression audit passed.')
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__main__': main()
