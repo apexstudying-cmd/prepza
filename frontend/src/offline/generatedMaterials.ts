@@ -1,6 +1,7 @@
 const DB_NAME = 'prepza-offline-v2'
 const STORE = 'generatedMaterials'
 const USER_KEY = 'prepza-offline-user-id'
+const AUDIO_CACHE = 'prepza-generated-audio-v1'
 
 type StoredMaterial = { key: string; path: string; requestBody: unknown; payload: unknown; savedAt: number }
 
@@ -32,8 +33,12 @@ export function setOfflineUserId(userId: number) {
   try { localStorage.setItem(USER_KEY, String(userId)) } catch {}
 }
 
+export function getOfflineUserId(): string | null {
+  try { return localStorage.getItem(USER_KEY) } catch { return null }
+}
+
 function supported(path: string) {
-  return path.includes('/documents/') && /(summarize|quiz|flashcards|podcast-script|mind-map)/.test(path)
+  return path.includes('/documents/') && /(summarize|quiz|flashcards|podcast-script|podcast-audio|mind-map)/.test(path)
 }
 
 export async function saveGeneratedMaterialOffline(path: string, requestBody: unknown, payload: unknown) {
@@ -117,4 +122,33 @@ export async function deleteGeneratedMaterialOffline(path: string, requestBody: 
     })
     db.close()
   } catch (_) {}
+}
+
+/** Cache generated podcast audio bytes so playback remains possible after a signed URL expires or while offline. */
+export async function cacheGeneratedAudioOffline(url: string): Promise<void> {
+  if (!url || typeof caches === 'undefined') return
+  try {
+    const cache = await caches.open(AUDIO_CACHE)
+    const existing = await cache.match(url)
+    if (existing) return
+    const response = await fetch(url, { credentials: 'include' })
+    if (response.ok || response.type === 'opaque') await cache.put(url, response.clone())
+  } catch (_) {}
+}
+
+/** Return a local object URL for previously cached podcast audio. Caller owns the URL and should revoke it when no longer needed. */
+export async function getCachedGeneratedAudioUrl(url: string): Promise<string | null> {
+  if (!url || typeof caches === 'undefined') return null
+  try {
+    const cache = await caches.open(AUDIO_CACHE)
+    const response = await cache.match(url)
+    if (!response) return null
+    const blob = await response.blob()
+    return URL.createObjectURL(blob)
+  } catch (_) { return null }
+}
+
+export async function clearGeneratedAudioCache(): Promise<void> {
+  if (typeof caches === 'undefined') return
+  try { await caches.delete(AUDIO_CACHE) } catch (_) {}
 }
