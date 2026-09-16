@@ -48,24 +48,28 @@ def patch_app():
         needle = "  const { headers: extraHeaders, ...restOptions } = options\n"
         if needle not in api_block:
             raise SystemExit('Offline library: api options anchor not found')
-        offline_gate = """  const { headers: extraHeaders, ...restOptions } = options
-  const method = String(restOptions.method || 'GET').toUpperCase()
-  const offline = typeof navigator !== 'undefined' && !navigator.onLine
+        method_line = "  const method = String(restOptions.method || 'GET').toUpperCase()\n"
+        if method_line not in api_block:
+            method_line = method_line
+        else:
+            method_line = ''
+        offline_gate = f"""  const {{ headers: extraHeaders, ...restOptions }} = options
+{method_line}  const offline = typeof navigator !== 'undefined' && !navigator.onLine
   const offlineUserId = getOfflineUserId()
   const cleanPath = String(path || '').split('?')[0].split('#')[0].replace(/\\/+$/, '') || '/'
 
   // Saved StudyHub documents are the authoritative local document source
   // for this account while offline. Unsaved documents still require network.
-  if (offline && method === 'GET' && offlineUserId) {
-    if (cleanPath === '/me') {
-      return { id: offlineUserId } as T
-    }
+  if (offline && method === 'GET' && offlineUserId) {{
+    if (cleanPath === '/me') {{
+      return {{ id: offlineUserId }} as T
+    }}
 
-    if (/^\\/documents\\/\\d+$/.test(cleanPath)) {
+    if (/^\\/documents\\/\\d+$/.test(cleanPath)) {{
       const documentId = Number(cleanPath.split('/')[2])
       const saved = await getSavedStudyHubOffline(documentId, offlineUserId)
-      if (saved) {
-        return {
+      if (saved) {{
+        return {{
           id: saved.documentId,
           title: saved.title || 'Saved document',
           original_filename: saved.title || 'Saved document',
@@ -77,13 +81,13 @@ def patch_app():
           view_url: saved.assetUrls?.find((url: string) => !url.includes('/reading/page/')) || null,
           materials: [],
           created_at: new Date(saved.savedAt).toISOString(),
-        } as T
-      }
-    }
+        }} as T
+      }}
+    }}
 
-    if (cleanPath === '/documents' || cleanPath === '/library' || cleanPath === '/study-hub') {
+    if (cleanPath === '/documents' || cleanPath === '/library' || cleanPath === '/study-hub') {{
       const saved = await listSavedStudyHubOffline(offlineUserId)
-      const documents = saved.map((row: any) => ({
+      const documents = saved.map((row: any) => ({{
         id: row.documentId,
         document_id: row.documentId,
         title: row.title || 'Saved document',
@@ -93,12 +97,12 @@ def patch_app():
         page_count: row.pageCount || null,
         created_at: new Date(row.savedAt).toISOString(),
         offline_available: true,
-      }))
-      return { documents, saved_documents: documents, library: documents } as T
-    }
+      }}))
+      return {{ documents, saved_documents: documents, library: documents }} as T
+    }}
 
-    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) return { page_num: 0 } as T
-  }
+    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) return {{ page_num: 0 }} as T
+  }}
 """
         api_block = api_block.replace(needle, offline_gate, 1)
 
