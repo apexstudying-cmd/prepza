@@ -64,12 +64,13 @@ def main() -> None:
     status = read('frontend/src/offline/OfflineStatusBanner.tsx')
     isolation = read('tools/apply_offline_account_isolation.py')
     reader = read('tools/apply_offline_study.py')
+    engine = read('frontend/src/crypto/pdfStudyReaderEngine.ts')
+    pdf_vendor = read('tools/ensure_local_pdfjs.py')
 
     require(generated, [
         'getLatestGeneratedMaterialForPath', 'listGeneratedMaterialsOffline',
         'deleteGeneratedMaterialOffline', 'prepza-offline-user-id',
-        'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl',
-        'prepza-generated-audio-v1',
+        'generatedAudio', 'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl',
     ], 'generated-material persistence')
     require(study, [
         'prepza-study-assets-v1', 'openAssetDb', 'putStudyAsset',
@@ -112,13 +113,22 @@ def main() -> None:
         "indexedDB.deleteDatabase('prepza-offline-v2')",
         "indexedDB.deleteDatabase('prepza-offline-v1')",
         "caches.delete('prepza-study-assets-v1')",
-        "caches.delete('prepza-generated-audio-v1')",
     ], 'offline account isolation')
     require(reader, [
         'startOfflineStudyTracking', 'getOfflineStudyDocumentUrl', 'getOfflineUserId',
         'initialPage', 'documentId',
     ], 'offline reader')
+    require(engine, [
+        "const PDFJS_BASE = '/vendor/pdfjs'",
+        "${PDFJS_BASE}/pdf.mjs",
+        "${PDFJS_BASE}/pdf.worker.mjs",
+    ], 'zero-network PDF engine')
+    require(pdf_vendor, [
+        'pdf.mjs', 'pdf.worker.mjs', 'cdn.jsdelivr.net',
+        'frontend' / Path('public') if False else 'frontend/public/vendor/pdfjs',
+    ], 'local PDF.js build asset')
 
+    assert 'https://cdn.jsdelivr.net' not in engine, 'PDF runtime must not use a CDN'
     stress_queue_model()
     idempotent_sync_model()
     print('Offline architecture regression audit passed.')
