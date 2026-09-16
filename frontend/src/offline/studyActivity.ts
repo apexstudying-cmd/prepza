@@ -33,13 +33,11 @@ function save(state: ActivityState) {
 
 function notify() { window.dispatchEvent(new CustomEvent('prepza:offline-study-activity-changed')) }
 
-/** Bind offline study activity to the signed-in account before tracking starts. */
 export function setOfflineStudyUserId(userId: number) {
   if (!Number.isInteger(userId) || userId <= 0) return
   try { localStorage.setItem(USER_KEY, String(userId)) } catch {}
 }
 
-/** Records time for exactly one My Study / My Library study surface. */
 export function recordOfflineStudySeconds(documentId: number, feature: string, seconds: number) {
   if (!Number.isInteger(documentId) || documentId <= 0) return
   if (!Number.isFinite(seconds) || seconds <= 0) return
@@ -56,10 +54,6 @@ export function recordOfflineStudySeconds(documentId: number, feature: string, s
   notify()
 }
 
-/**
- * Timer is mounted by the individual study screen and stops on unmount.
- * Navigation to another screen therefore cannot leak time into this screen.
- */
 export function startOfflineStudyTracking(documentId: number, feature = 'reading'): () => void {
   if (!Number.isInteger(documentId) || documentId <= 0) return () => {}
 
@@ -105,7 +99,6 @@ export function startOfflineStudyTracking(documentId: number, feature = 'reading
   }
 }
 
-/** Returns time for one exact document + study feature, today. */
 export function getOfflineStudyScreenSnapshot(documentId: number, feature = 'reading') {
   const state = load()
   const row = state.screens[screenKey(documentId, feature)]
@@ -147,19 +140,37 @@ export function mergeOfflineStudyResponse(path: string, body: any) {
   return body
 }
 
+/**
+ * Reconciles absolute local daily totals. Sending the same total repeatedly is
+ * safe: the server only advances its authoritative total. This also lets the
+ * client recover when a response was lost after the server committed it.
+ */
 export async function syncOfflineStudyActivity(csrfToken?: string) {
   if (!navigator.onLine) return
   const state = load()
-  const pending: Array<{ screen: ScreenEntry; date: string; seconds: number }> = []
+  const pending: Array<{ screen: ScreenEntry; date: string; totalSeconds: number }> = []
+  const byDate: Record<string, number> = {}
+
   for (const screen of Object.values(state.screens)) for (const [date, day] of Object.entries(screen.days || {})) {
-    const seconds = Math.max(0, Math.floor(Number(day.seconds) || 0))
+    const totalSeconds = Math.min(MAX_DAILY_SECONDS, Math.max(0, Math.floor(Number(day.seconds) || 0)))
     const synced = Math.max(0, Math.floor(Number(day.syncedSeconds) || 0))
-    if (seconds > synced) pending.push({ screen, date, seconds: seconds - synced })
+    if (totalSeconds > synced) {
+      pending.push({ screen, date, totalSeconds })
+      byDate[date] = Math.min(MAX_DAILY_SECONDS, (byDate[date] || 0) + (totalSeconds - synced))
+    }
   }
   if (!pending.length) return
 
-  const byDate: Record<string, number> = {}
-  for (const item of pending) byDate[item.date] = (byDate[item.date] || 0) + item.seconds
+  // The server expects a target total. Reconstruct it from the local synced
+  // baseline plus unsynced delta, while keeping the payload capped per day.
+  const localSyncedByDate: Record<string, number> = {}
+  for (const screen of Object.values(state.screens)) for (const [date, day] of Object.entries(screen.days || {})) {
+    localSyncedByDate[date] = Math.max(localSyncedByDate[date] || 0, Math.max(0, Math.floor(Number(day.syncedSeconds) || 0)))
+  }
+  const entries = Object.entries(byDate).map(([date, delta]) => ({
+    date,
+    total_seconds: Math.min(MAX_DAILY_SECONDS, (localSyncedByDate[date] || 0) + delta),
+  }))
 
   let token = csrfToken
   if (!token) {
@@ -174,21 +185,20 @@ export async function syncOfflineStudyActivity(csrfToken?: string) {
     const res = await fetch('/study-time/offline-sync', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token || '' },
-      body: JSON.stringify({ entries: Object.entries(byDate).map(([date, seconds]) => ({ date, seconds: Math.min(MAX_DAILY_SECONDS, seconds) })) }),
+      body: JSON.stringify({ entries }),
     })
     if (!res.ok) return
-    const accepted: Record<string, number> = (await res.json()).accepted_seconds_by_date || {}
-    for (const [date, acceptedValue] of Object.entries(accepted)) {
-      let remaining = Math.max(0, Number(acceptedValue) || 0)
-      for (const item of pending) {
-        if (remaining <= 0 || item.date !== date) continue
-        const day = item.screen.days[date]
-        if (!day) continue
-        const unsynced = Math.max(0, day.seconds - day.syncedSeconds)
-        const credited = Math.min(unsynced, remaining)
-        day.syncedSeconds += credited
-        remaining -= credited
-      }
+    const body = await res.json()
+    const serverTotals: Record<string, number> = body.server_total_seconds_by_date || {}
+
+    // Mark each local screen up to the authoritative server total. If another
+    // device already has more time, the local unsynced delta is considered
+    // reconciled rather than being replayed indefinitely.
+    for (const item of pending) {
+      const day = item.screen.days[item.date]
+      if (!day) continue
+      const authoritative = Math.max(0, Math.min(MAX_DAILY_SECONDS, Number(serverTotals[item.date]) || 0))
+      day.syncedSeconds = Math.min(day.seconds, Math.max(day.syncedSeconds, authoritative))
     }
     save(state); notify()
   } catch {}
