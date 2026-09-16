@@ -45,16 +45,22 @@ def patch_app():
     api_block = s[api_start:api_end]
 
     if 'getSavedStudyHubOffline' not in api_block:
-        needle = "  const { headers: extraHeaders, ...restOptions } = options\n"
-        if needle not in api_block:
+        destructure = "  const { headers: extraHeaders, ...restOptions } = options\n"
+        if destructure not in api_block:
             raise SystemExit('Offline library: api options anchor not found')
+
         method_line = "  const method = String(restOptions.method || 'GET').toUpperCase()\n"
-        if method_line not in api_block:
-            method_line = method_line
+        if method_line in api_block:
+            # O3 already owns the method declaration. Insert the offline gate
+            # after it so the existing declaration is neither duplicated nor
+            # referenced before initialization.
+            gate_anchor = method_line
+            gate_prefix = destructure + method_line
         else:
-            method_line = ''
-        offline_gate = f"""  const {{ headers: extraHeaders, ...restOptions }} = options
-{method_line}  const offline = typeof navigator !== 'undefined' && !navigator.onLine
+            gate_anchor = destructure
+            gate_prefix = destructure + method_line
+
+        offline_gate = f"""{gate_prefix}  const offline = typeof navigator !== 'undefined' && !navigator.onLine
   const offlineUserId = getOfflineUserId()
   const cleanPath = String(path || '').split('?')[0].split('#')[0].replace(/\\/+$/, '') || '/'
 
@@ -104,7 +110,7 @@ def patch_app():
     if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) return {{ page_num: 0 }} as T
   }}
 """
-        api_block = api_block.replace(needle, offline_gate, 1)
+        api_block = api_block.replace(gate_anchor, offline_gate, 1)
 
     if 'saveStudyHubDocumentOffline(Number(body.document_id))' not in api_block:
         save_hook = """  if (path.startsWith('/library/') && path.endsWith('/save') && body && Number.isInteger(Number(body.document_id))) {
