@@ -97,6 +97,12 @@ def patch_reader():
     elif "getOfflineStudyDocumentUrl(documentId" not in s:
         raise SystemExit('PDF fetch anchor not found')
 
+    # Guard against the DOM global `document` name being inferred by TypeScript
+    # in the generated one-line reader source.
+    s = s.replace('const document = await openPdf(', 'const pdfDocument: PdfDocument = await openPdf(', 1)
+    s = s.replace('documentRef.current = document; setPages(document.numPages);', 'documentRef.current = pdfDocument; setPages(pdfDocument.numPages);', 1)
+    s = s.replace('renderPdfPage(document, 1, 1, canvasRef.current!)', 'renderPdfPage(pdfDocument, 1, 1, canvasRef.current!)', 1)
+
     s = s.replace(
         "}, [src, onPageChange])",
         "}, [src, initialPage, documentId, onPageChange])",
