@@ -72,9 +72,10 @@ def main() -> None:
         'prepza-generated-audio-v1',
     ], 'generated-material persistence')
     require(study, [
-        'prepza-study-assets-v1', 'caches.open', 'clone().arrayBuffer',
+        'prepza-study-assets-v1', 'openAssetDb', 'putStudyAsset',
+        'getOfflineStudyDocumentBlob', 'getOfflineStudyDocumentUrl',
         'getOfflineStudyStorageUsage',
-    ], 'offline Study Hub assets')
+    ], 'offline Study Hub package')
     require(activity, [
         'recordOfflineStudySeconds', 'syncedSeconds',
         'syncOfflineStudyActivity', '/study-time/offline-sync',
@@ -114,7 +115,8 @@ def main() -> None:
         "caches.delete('prepza-generated-audio-v1')",
     ], 'offline account isolation')
     require(reader, [
-        'startOfflineStudyTracking', 'prepza-study-assets-v1', 'initialPage', 'documentId',
+        'startOfflineStudyTracking', 'getOfflineStudyDocumentUrl', 'getOfflineUserId',
+        'initialPage', 'documentId',
     ], 'offline reader')
 
     stress_queue_model()
