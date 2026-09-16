@@ -1,4 +1,4 @@
-import { setOfflineUserId } from './generatedMaterials'
+import { setOfflineUserId, saveGeneratedMaterialOffline, cacheGeneratedAudioOffline } from './generatedMaterials'
 
 const STUDY_CACHE = 'prepza-study-assets-v1'
 const META_DB = 'prepza-offline-v2'
@@ -150,15 +150,11 @@ async function cacheResponse(cache: Cache, url: string, response: Response): Pro
   return true
 }
 
-async function cacheUrl(cache: Cache, url: string): Promise<boolean> {
-  const response = await fetch(url, { credentials: 'include', cache: 'no-store' })
-  return cacheResponse(cache, url, response)
-}
-
 /**
  * Explicit Save -> Download. A saved study is a self-contained local package:
- * the complete source document is stored as a Blob in IndexedDB. The Cache API
- * remains a compatibility fallback, but offline study does not depend on it.
+ * the complete source document is stored as a Blob in IndexedDB. Generated
+ * materials already attached to the document are also copied into the local
+ * generated-material store so reopening the study never needs their API.
  */
 export async function saveStudyHubDocumentOffline(documentId: number): Promise<SavedStudyHubMeta> {
   if (!('indexedDB' in window)) throw new Error('Offline storage is unavailable in this browser.')
@@ -194,8 +190,24 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
 
     await putStudyAsset({ key: assetKey, userId, documentId, blob, savedAt: Date.now() })
     assetUrls.push(url)
-    // Compatibility cache for older reader builds; IndexedDB is authoritative.
     if (cache) { try { await cacheResponse(cache, url, new Response(blob, { headers: { 'Content-Type': blob.type || 'application/pdf' } })) } catch (_) {} }
+
+    // Package every generated material that already exists for this document.
+    // Missing/unsupported GET endpoints are intentionally non-fatal: Save must
+    // still succeed with the complete source document, while available results
+    // are persisted for zero-network reopening.
+    const generatedPaths = ['summarize', 'quiz', 'flashcards', 'podcast-script', 'podcast-audio', 'mind-map']
+    await Promise.all(generatedPaths.map(async feature => {
+      try {
+        const materialResponse = await fetch(`/documents/${documentId}/${feature}`, { credentials: 'include', cache: 'no-store' })
+        if (!materialResponse.ok) return
+        const payload = await materialResponse.json()
+        await saveGeneratedMaterialOffline(`/documents/${documentId}/${feature}`, null, payload)
+        if (feature === 'podcast-audio' && payload?.audio_status === 'ready' && payload?.audio_url) {
+          await cacheGeneratedAudioOffline(String(payload.audio_url))
+        }
+      } catch (_) {}
+    }))
 
     const meta: SavedStudyHubMeta = { key: assetKey, userId, documentId, title: detail.title, fileType: detail.file_type, pageCount: Number(detail.page_count || 0) || undefined, savedAt: Date.now(), assetUrls }
     await putMeta(meta)
