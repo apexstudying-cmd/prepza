@@ -4,9 +4,9 @@ import re
 app = Path('frontend/src/App.tsx').read_text(encoding='utf-8')
 
 patterns = [
-    r'if\\s*\\([^\\n)]*\\bloading\\b[^\\n)]*\\)[^\\n]*return',
-    r'return\\s*<Skeleton[A-Za-z0-9_]*',
-    r'<GenerationLoading\\b',
+    r'if\s*\([^\n)]*\bloading\b[^\n)]*\)[^\n]*return',
+    r'return\s*<Skeleton[A-Za-z0-9_]*',
+    r'<GenerationLoading\b',
     r'Opening your document',
     r'Loading[.…]{3}',
 ]
