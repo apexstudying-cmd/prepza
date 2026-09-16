@@ -28,7 +28,7 @@ type StoredStudyAsset = {
 
 function openMetaDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(META_DB, 2)
+    const request = indexedDB.open(META_DB, 3)
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(META_STORE)) db.createObjectStore(META_STORE, { keyPath: 'key' })
@@ -192,10 +192,6 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     assetUrls.push(url)
     if (cache) { try { await cacheResponse(cache, url, new Response(blob, { headers: { 'Content-Type': blob.type || 'application/pdf' } })) } catch (_) {} }
 
-    // Package every generated material that already exists for this document.
-    // Missing/unsupported GET endpoints are intentionally non-fatal: Save must
-    // still succeed with the complete source document, while available results
-    // are persisted for zero-network reopening.
     const generatedPaths = ['summarize', 'quiz', 'flashcards', 'podcast-script', 'podcast-audio', 'mind-map']
     await Promise.all(generatedPaths.map(async feature => {
       try {
