@@ -65,16 +65,33 @@ def patch_native_reader(s):
     return s[:start] + section + s[end:]
 
 
+def patch_offline_reading_gate(s):
+    marker = "    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) return { page_num: 0 } as T"
+    replacement = "    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) {\n      const documentId = Number(cleanPath.split('/')[2])\n      let page_num = 0\n      try { page_num = Math.max(0, Number(localStorage.getItem(`prepza-reading-progress:${offlineUserId}:${documentId}`) || 0) || 0) } catch (_) {}\n      return { page_num } as T\n    }"
+    if marker in s:
+        s = s.replace(marker, replacement, 1)
+    elif 'localStorage.getItem(`prepza-reading-progress:${offlineUserId}:${documentId}`)' not in s:
+        raise SystemExit('offline reading gate anchor not found')
+    return s
+
+
+def patch_api_gate(s):
+    marker = "    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) return { page_num: 0 } as T"
+    return patch_offline_reading_gate(s)
+
+
 def main():
     s = APP.read_text()
     s = patch_study_hub(s)
     s = patch_native_reader(s)
+    s = patch_offline_reading_gate(s)
     required = [
         'const [readingPage, setReadingPage] = useState(0)',
         'const [readerUserId, setReaderUserId] = useState<number | null>(null)',
         "X-Prepza-Offline-Queue':'true'",
         'prepza-reading-progress:',
         'prepza_user=',
+        'localStorage.getItem(`prepza-reading-progress:${offlineUserId}:${documentId}`)',
     ]
     missing = [marker for marker in required if marker not in s]
     if missing:
