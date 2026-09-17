@@ -45,7 +45,9 @@ async function precacheShell() {
 }
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(precacheShell().then(() => self.skipWaiting()));
+  // Deliberately do not skip waiting here. sw-register.js owns the user-facing
+  // update decision so a background release cannot reload an active session.
+  event.waitUntil(precacheShell());
 });
 
 self.addEventListener('activate', (event) => {
