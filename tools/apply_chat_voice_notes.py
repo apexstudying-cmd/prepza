@@ -3,25 +3,6 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
-
-def write_if_changed(path: Path, old: str, new: str) -> bool:
-    if old not in path.read_text(encoding='utf-8'):
-        return False
-    text = path.read_text(encoding='utf-8').replace(old, new, 1)
-    path.write_text(text, encoding='utf-8')
-    return True
-
-
-def insert_after(path: Path, anchor: str, addition: str) -> bool:
-    text = path.read_text(encoding='utf-8')
-    if addition in text:
-        return False
-    if anchor not in text:
-        return False
-    path.write_text(text.replace(anchor, anchor + addition, 1), encoding='utf-8')
-    return True
-
-# Backend audio allowlist is deliberately scoped to chat attachments.
 app = ROOT / 'app.py'
 text = app.read_text(encoding='utf-8')
 if 'CHAT_AUDIO_EXTENSIONS' not in text:
@@ -29,7 +10,6 @@ if 'CHAT_AUDIO_EXTENSIONS' not in text:
 text = text.replace('    ext = get_document_extension(original_filename)\n    if not ext:\n        return jsonify({"error": "Unsupported file type"}), 400\n', '    ext = get_document_extension(original_filename)\n    if not ext:\n        candidate_ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""\n        ext = candidate_ext if candidate_ext in CHAT_AUDIO_EXTENSIONS else None\n    if not ext:\n        return jsonify({"error": "Unsupported file type"}), 400\n', 1)
 app.write_text(text, encoding='utf-8')
 
-# Preserve audio MIME types after encrypted attachments are locally decrypted.
 for rel in ('frontend/src/crypto/e2eeFetchBridge.ts', 'frontend/src/crypto/directChatE2EE.ts'):
     path = ROOT / rel
     text = path.read_text(encoding='utf-8')
@@ -42,15 +22,13 @@ s = chat.read_text(encoding='utf-8')
 
 if 'function isAudio(' not in s:
     s = s.replace("function isImage(fileType: string) { return /^(jpg|jpeg|png|gif|webp)$/i.test(fileType) || fileType.startsWith('image/') }", "function isImage(fileType: string) { return /^(jpg|jpeg|png|gif|webp)$/i.test(fileType) || fileType.startsWith('image/') }\nfunction isAudio(fileType: string) { return /^(webm|ogg|mp3|m4a|wav|aac|mp4)$/i.test(fileType) || fileType.startsWith('audio/') }")
-
 if 'recordingVoice' not in s:
     s = s.replace("  const [groupError, setGroupError] = useState('')", "  const [groupError, setGroupError] = useState('')\n  const [recordingVoice, setRecordingVoice] = useState(false)\n  const [recordingSeconds, setRecordingSeconds] = useState(0)")
-
 if 'voiceRecorderRef' not in s:
-    s = s.replace("  const csrfTokenRef = useRef('')", "  const csrfTokenRef = useRef('')\n  const voiceRecorderRef = useRef<MediaRecorder | null>(null)\n  const voiceChunksRef = useRef<Blob[]>([])\n  const voiceTimerRef = useRef<number | null>(null)")
+    s = s.replace("  const csrfTokenRef = useRef('')", "  const csrfTokenRef = useRef('')\n  const voiceRecorderRef = useRef<MediaRecorder | null>(null)\n  const voiceChunksRef = useRef<Blob[]>([])\n  const voiceTimerRef = useRef<number | null>(null)
+")
 
 if 'startVoiceRecording' not in s:
-    marker = '  const loadEarlier = async () => {'
     fn = """  const startVoiceRecording = async () => {
     if (selectedId == null || recordingVoice || uploading || sending) return
     if (!navigator.onLine) { setError('Voice notes require an internet connection.'); return }
@@ -82,34 +60,29 @@ if 'startVoiceRecording' not in s:
   }
   const stopVoiceRecording = () => { const recorder = voiceRecorderRef.current; voiceRecorderRef.current = null; if (recorder && recorder.state !== 'inactive') recorder.stop() }
 """
-    if marker not in s:
-        raise SystemExit('Chat voice patch: loadEarlier anchor missing')
-    s = s.replace(marker, fn + marker, 1)
+    marker = next((candidate for candidate in ('  const loadEarlier = async () => {', '  const runMessageSearch = async () => {', '  const openAda = () =>') if candidate in s), None)
+    if marker:
+        s = s.replace(marker, fn + marker, 1)
 
-# Accept audio uploads regardless of which earlier UI patch touched the accept list.
 s = re.sub(r'accept="\.pdf,\.doc,\.docx,\.ppt,\.pptx,\.jpg,\.jpeg,\.png(?:,[^"]*)?"', 'accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.webm,.ogg,.mp3,.m4a,.wav,.aac,.mp4"', s, count=1)
 
-# Render encrypted voice notes as playable audio.
 if 'message.attachment.view_url && isAudio' not in s:
     needle = "message.attachment.view_url && isImage(message.attachment.file_type) ? <img src={message.attachment.view_url} alt={message.attachment.original_filename} style={{ maxWidth:'100%',maxHeight:260,borderRadius:10,display:'block' }} /> :"
     if needle in s:
-        s = s.replace(needle, needle[:-1] + " : message.attachment.view_url && isAudio(message.attachment.file_type) ? <audio controls preload=\"metadata\" src={message.attachment.view_url} style={{ width:'min(320px,100%)',display:'block' }} /> :", 1)
+        s = s.replace(needle, needle + " message.attachment.view_url && isAudio(message.attachment.file_type) ? <audio controls preload=\"metadata\" src={message.attachment.view_url} style={{ width:'min(320px,100%)',display:'block' }} /> :", 1)
 
-# Always expose a microphone control in the composer, not only inside the + menu.
 if 'aria-label="Record voice note"' not in s:
-    pattern = r'(<button type="button" className="prepza-wa-attach"[^>]*>\+?</button>)'
-    match = re.search(pattern, s)
+    match = re.search(r'(<button type="button" className="prepza-wa-attach"[^>]*>\+?</button>)', s)
     if match:
         mic = match.group(1) + "<button type=\"button\" onClick={() => void startVoiceRecording()} disabled={recordingVoice || uploading || sending} aria-label=\"Record voice note\" title=\"Record voice note\" style={{ width:40,height:40,border:0,borderRadius:12,background:recordingVoice?'#d84b4b':'#f1f2f4',color:recordingVoice?'#fff':'#5e6470',fontWeight:900,cursor:'pointer' }}>{recordingVoice ? '■' : '◉'}</button>"
         s = s[:match.start()] + mic + s[match.end():]
 
 if 'Recording voice note ·' not in s:
-    marker = '{replyingTo && <div style={{ maxWidth:900,margin:\'0 auto 7px\',background:\'#f6f1df\''
+    marker = "{replyingTo && <div style={{ maxWidth:900,margin:'0 auto 7px',background:'#f6f1df'"
     if marker in s:
         ui = "{recordingVoice && <div style={{ maxWidth:900,margin:'0 auto 7px',background:'#0b1437',color:'#fff',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:9 }}><span style={{ width:9,height:9,borderRadius:'50%',background:'#e05252' }} /><span style={{ flex:1,fontSize:11,fontWeight:800 }}>Recording voice note · {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2,'0')}</span><button type=\"button\" onClick={stopVoiceRecording} style={{ border:0,borderRadius:9,background:'#e4c96a',color:'#0b1437',padding:'6px 10px',fontWeight:900,cursor:'pointer' }}>Stop</button></div>}"
         s = s.replace(marker, ui + marker, 1)
 
-# Decrypt the latest message locally for the chat-list preview.
 if 'const enriched = await Promise.all(baseChats.map' not in s:
     old = re.search(r"  const loadList = async \(\) => \{.*?\n  useEffect\(\(\) => \{ if \(!visible\) return; void loadList\(\);", s, flags=re.S)
     if old:
