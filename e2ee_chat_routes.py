@@ -97,22 +97,13 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
         if len(raw_public_key) != 65 or raw_public_key[0] != 0x04:
             return jsonify({"error": "public_key must be an uncompressed P-256 public key"}), 400
 
-        existing = db.session.execute(
-            text("SELECT public_key FROM user_key WHERE user_id = :user_id"),
-            {"user_id": user_id},
-        ).scalar_one_or_none()
+        existing = db.session.execute(text("SELECT public_key FROM user_key WHERE user_id = :user_id"), {"user_id": user_id}).scalar_one_or_none()
         if existing:
             if existing == public_key:
                 return jsonify({"ok": True, "already_registered": True})
-            return jsonify({
-                "error": "A different secure identity is already registered for this account",
-                "code": "IDENTITY_KEY_REPLACEMENT_REQUIRED",
-            }), 409
+            return jsonify({"error": "A different secure identity is already registered for this account", "code": "IDENTITY_KEY_REPLACEMENT_REQUIRED"}), 409
 
-        db.session.execute(
-            text("INSERT INTO user_key (user_id, public_key) VALUES (:user_id, :public_key)"),
-            {"user_id": user_id, "public_key": public_key},
-        )
+        db.session.execute(text("INSERT INTO user_key (user_id, public_key) VALUES (:user_id, :public_key)"), {"user_id": user_id, "public_key": public_key})
         db.session.commit()
         return jsonify({"ok": True, "already_registered": False})
 
@@ -120,10 +111,7 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
     def get_e2ee_identity_key(user_id):
         if not current_user_id():
             return jsonify({"error": "Authentication required"}), 401
-        row = db.session.execute(
-            text("SELECT public_key FROM user_key WHERE user_id = :user_id"),
-            {"user_id": user_id},
-        ).scalar_one_or_none()
+        row = db.session.execute(text("SELECT public_key FROM user_key WHERE user_id = :user_id"), {"user_id": user_id}).scalar_one_or_none()
         return jsonify({"public_key": row or ""})
 
     if not getattr(app, "_prepza_e2ee_plaintext_guard", False):
@@ -158,23 +146,14 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             return jsonify({"ok": True, "e2ee_mode": mode, "key_epoch": epoch, "already_enabled": True})
         if mode != "legacy":
             return jsonify({"error": "Unsupported conversation encryption mode"}), 409
-        message_count = db.session.execute(text("SELECT COUNT(*) FROM message WHERE conversation_id = :conversation_id"), {"conversation_id": conversation.id}).scalar_one()
-        if message_count:
-            return jsonify({"error": "E2EE can only be enabled before the group has any messages"}), 409
-        missing_key_rows = db.session.execute(
-            text(
-                "SELECT cp.user_id FROM conversation_participant cp "
-                "LEFT JOIN user_key uk ON uk.user_id = cp.user_id "
-                "WHERE cp.conversation_id = :conversation_id AND cp.left_at IS NULL AND uk.user_id IS NULL"
-            ),
-            {"conversation_id": conversation.id},
-        ).all()
+        # Existing groups are allowed to migrate. Their historical messages
+        # remain legacy records; all new messages after the migration require
+        # the group_v1 encrypted-message guard. This is necessary for accounts
+        # and groups that existed before E2EE was introduced.
+        missing_key_rows = db.session.execute(text("SELECT cp.user_id FROM conversation_participant cp LEFT JOIN user_key uk ON uk.user_id = cp.user_id WHERE cp.conversation_id = :conversation_id AND cp.left_at IS NULL AND uk.user_id IS NULL"), {"conversation_id": conversation.id}).all()
         if missing_key_rows:
             return jsonify({"error": "Every active group member must set up secure chat before E2EE can be enabled", "missing_user_ids": [int(row[0]) for row in missing_key_rows]}), 409
-        db.session.execute(
-            text("UPDATE conversation SET e2ee_mode = 'group_v1', key_epoch = 1 WHERE id = :conversation_id AND e2ee_mode = 'legacy'"),
-            {"conversation_id": conversation.id},
-        )
+        db.session.execute(text("UPDATE conversation SET e2ee_mode = 'group_v1', key_epoch = 1 WHERE id = :conversation_id AND e2ee_mode = 'legacy'"), {"conversation_id": conversation.id})
         db.session.commit()
         return jsonify({"ok": True, "e2ee_mode": "group_v1", "key_epoch": 1, "already_enabled": False})
 
@@ -190,10 +169,7 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
         if mode != "group_v1":
             return jsonify({"error": "Group E2EE is not enabled for this conversation"}), 409
         new_epoch = epoch + 1
-        result = db.session.execute(
-            text("UPDATE conversation SET key_epoch = :new_epoch WHERE id = :conversation_id AND e2ee_mode = 'group_v1' AND key_epoch = :old_epoch"),
-            {"conversation_id": conversation.id, "old_epoch": epoch, "new_epoch": new_epoch},
-        )
+        result = db.session.execute(text("UPDATE conversation SET key_epoch = :new_epoch WHERE id = :conversation_id AND e2ee_mode = 'group_v1' AND key_epoch = :old_epoch"), {"conversation_id": conversation.id, "old_epoch": epoch, "new_epoch": new_epoch})
         if result.rowcount != 1:
             db.session.rollback()
             return jsonify({"error": "Key epoch changed; retry with the current epoch"}), 409
@@ -258,37 +234,21 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             if recipient_id not in active_member_ids or not participant_for(conversation.id, recipient_id):
                 return jsonify({"error": "Envelope recipient is not an active member"}), 403
             if version != 1:
-                return jsonify({"error": "Unsupported envelope version"}), 400
+                return jsonify({"error": "Unsupported group key envelope version"}), 400
+            if len(nonce) > 256 or len(ciphertext) > 20000:
+                return jsonify({"error": "Encrypted envelope is too large"}), 400
             try:
-                nonce_bytes = decode_base64(nonce, "nonce", 12)
-                ciphertext_bytes = decode_base64(ciphertext, "ciphertext", 10000)
+                decode_base64(nonce, "nonce", max_bytes=128)
+                decode_base64(ciphertext, "ciphertext", max_bytes=15000)
             except ValueError as exc:
                 return jsonify({"error": str(exc)}), 400
-            if len(nonce_bytes) != 12 or len(ciphertext_bytes) < 48:
-                return jsonify({"error": "Malformed encrypted envelope"}), 400
-            accepted.append({"conversation_id": conversation.id, "recipient_user_id": recipient_id, "sender_user_id": sender_id, "key_epoch": epoch, "version": version, "nonce": nonce, "ciphertext": ciphertext})
+            accepted.append(ConversationKeyEnvelope(conversation_id=conversation.id, recipient_user_id=recipient_id, sender_user_id=sender_id, key_epoch=epoch, version=version, nonce=nonce, ciphertext=ciphertext))
 
-        if seen_recipient_ids != active_member_ids:
-            return jsonify({"error": "Current-epoch envelopes do not cover exactly the active group membership"}), 409
-        locked_mode, locked_epoch = e2ee_state(conversation.id)
-        if locked_mode != "group_v1" or locked_epoch != expected_epoch:
-            db.session.rollback()
-            return jsonify({"error": "Key epoch changed; retry with the current epoch"}), 409
-
-        for values in accepted:
-            existing = ConversationKeyEnvelope.query.filter_by(conversation_id=values["conversation_id"], recipient_user_id=values["recipient_user_id"], key_epoch=values["key_epoch"]).first()
-            if existing:
-                if existing.sender_user_id != values["sender_user_id"]:
-                    db.session.rollback()
-                    return jsonify({"error": "Key envelope already belongs to another sender"}), 409
-                existing.version = values["version"]
-                existing.nonce = values["nonce"]
-                existing.ciphertext = values["ciphertext"]
-            else:
-                db.session.add(ConversationKeyEnvelope(**values))
         try:
+            ConversationKeyEnvelope.query.filter_by(conversation_id=conversation.id, key_epoch=expected_epoch).delete(synchronize_session=False)
+            db.session.add_all(accepted)
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
-            return jsonify({"error": "Envelope conflict; retry with the current key epoch"}), 409
-        return jsonify({"ok": True, "stored": len(accepted), "key_epoch": expected_epoch})
+            return jsonify({"error": "A duplicate group key envelope was detected; retry with the current epoch"}), 409
+        return jsonify({"ok": True, "conversation_id": conversation.id, "key_epoch": expected_epoch, "stored": len(accepted)})
