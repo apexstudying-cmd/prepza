@@ -6,18 +6,24 @@ FILES = [
     ROOT / 'frontend' / 'src' / 'generation' / 'StudyGenerationScreensClean.tsx',
 ]
 
-IMPORT_OLD = "import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, saveGeneratedMaterialOffline, cacheGeneratedAudioOffline } from '../offline/generatedMaterials'\n"
-IMPORT_NEW = "import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, getGeneratedMaterialOffline, saveGeneratedMaterialOffline, cacheGeneratedAudioOffline } from '../offline/generatedMaterials'\n"
+# This pass is a validator only. The persistence pass owns the actual source
+# transformation; keeping this check deterministic prevents build-time source
+# rewrites from fighting each other.
+REQUIRED = [
+    'getGeneratedMaterialOffline',
+    'const requestMethod = String(rest.method || \'GET\').toUpperCase()',
+    'let requestBody: unknown = null',
+    'getGeneratedMaterialOffline(path, requestBody)',
+    '// Offline AI boundary: generation itself always requires a connection.',
+]
 
 for path in FILES:
     text = path.read_text(encoding='utf-8')
-    if 'getGeneratedMaterialOffline' not in text and IMPORT_OLD in text:
-        text = text.replace(IMPORT_OLD, IMPORT_NEW, 1)
-    # The persistence pass already installs the offline guard. Do not attempt
-    # a second brittle source transformation; this script is intentionally
-    # idempotent and build-safe.
-    if '// Offline AI boundary: generation itself always requires a connection.' not in text:
-        raise SystemExit(f'Offline replay v2: offline persistence guard missing in {path.name}')
-    path.write_text(text, encoding='utf-8')
+    missing = [needle for needle in REQUIRED if needle not in text]
+    if missing:
+        raise SystemExit(
+            f"Offline generation replay v2: exact replay wiring missing in {path.name}: "
+            + ', '.join(missing)
+        )
 
-print('Offline generation replay v2: build-safe validation passed; persistence guard retained.')
+print('Offline generation replay v2: exact request-aware replay wiring validated.')
