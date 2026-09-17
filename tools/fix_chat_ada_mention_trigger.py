@@ -20,8 +20,8 @@ def main() -> None:
     # though the explicit @Ada button worked.
     replace_once(
         GROUP,
-        'const input = document.querySelector(\'input[placeholder="Message…"]\') as HTMLInputElement | null',
-        'const input = document.querySelector(\'textarea[placeholder="Message…"]\') as HTMLTextAreaElement | null',
+        'const input = document.querySelector(\'[data-prepza-chat-composer="true"]\') as HTMLTextAreaElement | null',
+        'const input = document.querySelector(\'[data-prepza-chat-composer="true"]\') as HTMLTextAreaElement | null',
         'group composer selector',
     )
 
