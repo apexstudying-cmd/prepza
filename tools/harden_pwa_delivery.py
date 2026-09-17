@@ -1,12 +1,12 @@
 """Harden PWA delivery and fail builds when install-critical assets are broken."""
 from pathlib import Path
-import struct
-import zlib
+import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app.py"
 PUBLIC = ROOT / "frontend" / "public"
 DIST = ROOT / "frontend" / "dist"
+SOURCE_ICONS = ROOT / "static" / "images"
 
 
 def patch_app_headers() -> None:
@@ -29,44 +29,24 @@ def patch_app_headers() -> None:
         APP.write_text(text, encoding="utf-8")
 
 
-def _png_chunk(kind: bytes, data: bytes) -> bytes:
-    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+def install_brand_icons() -> None:
+    """Copy Prepza's existing real brand icons into Vite's public directory.
 
-
-def generate_install_icons() -> None:
-    """Replace Git-LFS placeholder icons with small deterministic real PNGs at build time."""
+    The canonical 192/512 assets already exist as normal Git blobs under
+    static/images. frontend/public/icon-*.png is tracked by Git LFS, and Render
+    deployments receive LFS pointer files rather than the binary objects. Do
+    not synthesize a replacement logo: use the existing Prepza assets exactly.
+    """
     PUBLIC.mkdir(parents=True, exist_ok=True)
-    bg = (11, 20, 55)
-    gold = (201, 162, 39)
-
     for size in (192, 512):
-        margin = size * 0.18
-        stroke = max(4, int(size * 0.12))
-        raw = bytearray()
-        span = size - 2 * margin
-        for y in range(size):
-            raw.append(0)
-            for x in range(size):
-                on = False
-                if margin <= y <= margin + stroke and margin <= x <= size - margin:
-                    on = True
-                if size - margin - stroke <= y <= size - margin and margin <= x <= size - margin:
-                    on = True
-                if margin <= x <= size - margin:
-                    top_line = margin + span * (x - margin) / span
-                    bottom_line = size - margin - span * (x - margin) / span
-                    if abs(y - top_line) <= stroke / 2 or abs(y - bottom_line) <= stroke / 2:
-                        on = True
-                raw.extend(gold if on else bg)
-
-        def chunk(kind: bytes, data: bytes) -> bytes:
-            return _png_chunk(kind, data)
-
-        png = b"\x89PNG\r\n\x1a\n"
-        png += chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
-        png += chunk(b"IDAT", zlib.compress(bytes(raw), 9))
-        png += chunk(b"IEND", b"")
-        (PUBLIC / f"icon-{size}.png").write_bytes(png)
+        source = SOURCE_ICONS / f"icon-{size}.png"
+        target = PUBLIC / f"icon-{size}.png"
+        if not source.exists():
+            raise SystemExit(f"PWA hardening: canonical Prepza icon missing: {source}")
+        data = source.read_bytes()
+        if len(data) < 100 or data[:8] != b"\x89PNG\r\n\x1a\n":
+            raise SystemExit(f"PWA hardening: canonical Prepza icon is not a valid PNG: {source}")
+        target.write_bytes(data)
 
 
 def assert_png(path: Path) -> None:
@@ -74,9 +54,7 @@ def assert_png(path: Path) -> None:
         raise SystemExit(f"PWA delivery: missing required icon {path}")
     data = path.read_bytes()
     if len(data) < 100 or data[:8] != b"\x89PNG\r\n\x1a\n":
-        raise SystemExit(
-            f"PWA delivery: {path} is not a real PNG (it may be an unresolved Git LFS pointer)"
-        )
+        raise SystemExit(f"PWA delivery: {path} is not a real PNG")
 
 
 def audit_dist() -> None:
@@ -99,12 +77,22 @@ def audit_dist() -> None:
     assert_png(DIST / "icon-192.png")
     assert_png(DIST / "icon-512.png")
 
+    # The build output must contain the exact canonical brand assets, not a
+    # generated approximation.
+    for size in (192, 512):
+        source = SOURCE_ICONS / f"icon-{size}.png"
+        target = DIST / f"icon-{size}.png"
+        if source.read_bytes() != target.read_bytes():
+            raise SystemExit(f"PWA delivery: icon-{size}.png does not match the canonical Prepza icon")
+
     manifest = (DIST / "manifest.json").read_text(encoding="utf-8")
     for key in ('"name"', '"short_name"', '"start_url"', '"scope"', '"display"', '"icons"'):
         if key not in manifest:
             raise SystemExit(f"PWA delivery: manifest is missing {key}")
 
     sw = (DIST / "sw.js").read_text(encoding="utf-8")
+    if "SW_VERSION = 'v16'" not in sw:
+        raise SystemExit("PWA delivery: expected v16 service-worker cache reset is missing")
     if "self.addEventListener('fetch'" not in sw and 'self.addEventListener("fetch"' not in sw:
         raise SystemExit("PWA delivery: service worker has no fetch handler")
 
@@ -115,7 +103,7 @@ def audit_dist() -> None:
 
 if __name__ == "__main__":
     patch_app_headers()
-    generate_install_icons()
+    install_brand_icons()
     if DIST.exists():
         audit_dist()
     print("PWA delivery hardening: OK")
