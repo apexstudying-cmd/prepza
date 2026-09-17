@@ -71,10 +71,16 @@ if 'message.attachment.view_url && isAudio' not in s:
         s = s.replace(needle, needle + " message.attachment.view_url && isAudio(message.attachment.file_type) ? <audio controls preload=\"metadata\" src={message.attachment.view_url} style={{ width:'min(320px,100%)',display:'block' }} /> :", 1)
 
 if 'aria-label=\"Record voice note\"' not in s:
+    voice_button = "<button type=\"button\" onClick={() => void startVoiceRecording()} disabled={recordingVoice || uploading || sending} aria-label=\"Record voice note\" title=\"Record voice note\" style={{ width:40,height:40,border:0,borderRadius:12,background:recordingVoice?'#d84b4b':'#f1f2f4',color:recordingVoice?'#fff':'#5e6470',fontWeight:900,cursor:'pointer' }}>{recordingVoice ? '■' : '◉'}</button>"
     match = re.search(r'(<button type=\"button\" className=\"prepza-wa-attach\"[^>]*>\+?</button>)', s)
     if match:
-        mic = match.group(1) + "<button type=\"button\" onClick={() => void startVoiceRecording()} disabled={recordingVoice || uploading || sending} aria-label=\"Record voice note\" title=\"Record voice note\" style={{ width:40,height:40,border:0,borderRadius:12,background:recordingVoice?'#d84b4b':'#f1f2f4',color:recordingVoice?'#fff':'#5e6470',fontWeight:900,cursor:'pointer' }}>{recordingVoice ? '■' : '◉'}</button>"
-        s = s[:match.start()] + mic + s[match.end():]
+        s = s[:match.end()] + voice_button + s[match.end():]
+    else:
+        form_matches = list(re.finditer(r'</form>', s))
+        if not form_matches:
+            raise SystemExit('CHAT_VOICE_PATCH_FAILED: no stable composer/form anchor found for voice-note button')
+        pos = form_matches[-1].start()
+        s = s[:pos] + voice_button + s[pos:]
 
 if 'Recording voice note ·' not in s:
     marker = "{replyingTo && <div style={{ maxWidth:900,margin:'0 auto 7px',background:'#f6f1df'"
