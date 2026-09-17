@@ -16,7 +16,13 @@ def main() -> None:
     require(
         "prepza_control.py", "ConversationParticipant", "left_at", "before_insert",
         "_rotate_group_epoch_on_join", "existing_member", "SET key_epoch = key_epoch + 1",
+        "once-per-transaction", "prepza_e2ee_rotated_memberships",
         "Message", "e2ee_key_epoch", "after_insert",
+    )
+    require(
+        "chat_group_routes.py", "_current_group_key_epoch", "Every new group member must set up secure chat",
+        "The E2EE membership mapper rotates once per transaction",
+        "Do not also bump the epoch here",
     )
     require(
         "e2ee_chat_routes.py", "SET e2ee_mode = 'group_v1', key_epoch = 1",
