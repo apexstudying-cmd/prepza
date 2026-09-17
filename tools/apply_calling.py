@@ -3,33 +3,42 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FRONT = ROOT / 'frontend' / 'src' / 'crypto'
 
-# Wire the call overlay into the existing authenticated chat experience.
 chat = FRONT / 'WhatsAppChatExperience.tsx'
 s = chat.read_text(encoding='utf-8')
+
 if "import CallExperience from './CallExperience'" not in s:
     anchor = "import { provisionInitialGroupKey } from './groupProvisioning'"
     if anchor not in s:
         raise SystemExit('Calling patch: chat import anchor missing')
     s = s.replace(anchor, anchor + "\nimport CallExperience from './CallExperience'", 1)
 
-# The real header is a JSX <header>, not the CSS class string.
-if 'prepza-call-actions' not in s:
-    marker = '<header className="prepza-wa-head">'
-    if marker not in s:
-        raise SystemExit('Calling patch: chat header anchor missing')
-    injection = """<header className=\"prepza-wa-head\">\n            {view === 'detail' && detail && !detail.is_group && (() => { const peer = detail.participants.find(item => item.user_id !== meId); return peer ? <div className=\"prepza-call-actions\" style={{ marginLeft:'auto',display:'flex',gap:7 }}><button type=\"button\" className=\"prepza-start-call\" aria-label=\"Start voice call\" title=\"Voice call\" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call',{detail:{conversationId:detail.id,peerId:peer.user_id,peerName:peer.display_name,kind:'voice'}}))} style={{width:36,height:36,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer'}}>☎</button><button type=\"button\" className=\"prepza-start-call\" aria-label=\"Start video call\" title=\"Video call\" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call',{detail:{conversationId:detail.id,peerId:peer.user_id,peerName:peer.display_name,kind:'video'}}))} style={{width:36,height:36,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer'}}>▣</button></div> : null })()}"""
-    s = s.replace(marker, injection, 1)
+# Put the two call controls at the end of the real chat header. This keeps
+# them visible on narrow screens instead of relying on flex ordering.
+if 'className="prepza-call-actions"' not in s:
+    header_start = '<header className="prepza-wa-head">'
+    header_end = '</header>'
+    start = s.find(header_start)
+    end = s.find(header_end, start + len(header_start)) if start >= 0 else -1
+    if start < 0 or end < 0:
+        raise SystemExit('Calling patch: chat header anchors missing')
+    injection = """{view === 'detail' && detail && !detail.is_group && (() => { const peer = detail.participants.find(item => item.user_id !== meId); return peer ? <div className=\"prepza-call-actions\" style={{ marginLeft:7,display:'flex',gap:7,flexShrink:0 }}><button type=\"button\" className=\"prepza-start-call\" aria-label=\"Start voice call\" title=\"Voice call\" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call',{detail:{conversationId:detail.id,peerId:peer.user_id,peerName:peer.display_name,kind:'voice'}}))} style={{width:34,height:34,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer',fontSize:16}}>☎</button><button type=\"button\" className=\"prepza-start-call\" aria-label=\"Start video call\" title=\"Video call\" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call',{detail:{conversationId:detail.id,peerId:peer.user_id,peerName:peer.display_name,kind:'video'}}))} style={{width:34,height:34,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer',fontSize:16}}>▣</button></div> : null })()}"""
+    s = s[:end] + injection + s[end:]
 
-# Mount the overlay reliably immediately before the component's final shell close.
+# Mount the call overlay inside the chat shell immediately before the final
+# component close. Do not depend on exact indentation or other child markup.
 if '<CallExperience userId={meId} />' not in s:
-    closing = '\n  </div>\n}'
-    if not s.endswith(closing):
-        raise SystemExit('Calling patch: component closing anchor missing')
-    s = s[:-len(closing)] + '\n    <CallExperience userId={meId} />\n  </div>\n}'
+    final_component_close = s.rfind('\n}')
+    if final_component_close < 0:
+        raise SystemExit('Calling patch: component close missing')
+    root_close = s.rfind('\n  </div>', 0, final_component_close)
+    if root_close < 0:
+        raise SystemExit('Calling patch: root shell close missing')
+    s = s[:root_close] + '\n    <CallExperience userId={meId} />' + s[root_close:]
 
 chat.write_text(s, encoding='utf-8')
 
-# Add authenticated, membership-checked signaling to the existing Socket.IO server.
+# Backend: authenticated, membership-checked WebRTC signaling. Media never
+# passes through this server; only offer/answer/ICE metadata does.
 server = ROOT / 'realtime_server.py'
 s = server.read_text(encoding='utf-8')
 if '_active_calls = {}' not in s:
@@ -140,10 +149,10 @@ def handle_call_answer(data):
 def handle_call_ice(data):
     return _route_call_signal("call:ice", data)
 '''
-    disconnect_anchor = '\n@socketio.on("disconnect")'
-    if disconnect_anchor not in s:
+    anchor = '\n@socketio.on("disconnect")'
+    if anchor not in s:
         raise SystemExit('Calling patch: disconnect anchor missing')
-    s = s.replace(disconnect_anchor, helper + '\n\n@socketio.on("disconnect")', 1)
+    s = s.replace(anchor, helper + '\n\n@socketio.on("disconnect")', 1)
     server.write_text(s, encoding='utf-8')
 
 print('CALLING_PATCH_APPLIED')
