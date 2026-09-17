@@ -76,11 +76,10 @@ if 'aria-label=\"Record voice note\"' not in s:
     if match:
         s = s[:match.end()] + voice_button + s[match.end():]
     else:
-        form_matches = list(re.finditer(r'</form>', s))
-        if not form_matches:
-            raise SystemExit('CHAT_VOICE_PATCH_FAILED: no stable composer/form anchor found for voice-note button')
-        pos = form_matches[-1].start()
-        s = s[:pos] + voice_button + s[pos:]
+        textarea = re.search(r'<textarea\b', s)
+        if not textarea:
+            raise SystemExit('CHAT_VOICE_PATCH_FAILED: no stable textarea/composer anchor found for voice-note button')
+        s = s[:textarea.start()] + voice_button + s[textarea.start():]
 
 if 'Recording voice note ·' not in s:
     marker = "{replyingTo && <div style={{ maxWidth:900,margin:'0 auto 7px',background:'#f6f1df'"
