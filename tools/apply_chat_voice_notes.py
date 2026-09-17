@@ -25,8 +25,7 @@ if 'function isAudio(' not in s:
 if 'recordingVoice' not in s:
     s = s.replace("  const [groupError, setGroupError] = useState('')", "  const [groupError, setGroupError] = useState('')\n  const [recordingVoice, setRecordingVoice] = useState(false)\n  const [recordingSeconds, setRecordingSeconds] = useState(0)")
 if 'voiceRecorderRef' not in s:
-    s = s.replace("  const csrfTokenRef = useRef('')", "  const csrfTokenRef = useRef('')\n  const voiceRecorderRef = useRef<MediaRecorder | null>(null)\n  const voiceChunksRef = useRef<Blob[]>([])\n  const voiceTimerRef = useRef<number | null>(null)
-")
+    s = s.replace("  const csrfTokenRef = useRef('')", "  const csrfTokenRef = useRef('')\n  const voiceRecorderRef = useRef<MediaRecorder | null>(null)\n  const voiceChunksRef = useRef<Blob[]>([])\n  const voiceTimerRef = useRef<number | null>(null)\n")
 
 if 'startVoiceRecording' not in s:
     fn = """  const startVoiceRecording = async () => {
@@ -71,8 +70,8 @@ if 'message.attachment.view_url && isAudio' not in s:
     if needle in s:
         s = s.replace(needle, needle + " message.attachment.view_url && isAudio(message.attachment.file_type) ? <audio controls preload=\"metadata\" src={message.attachment.view_url} style={{ width:'min(320px,100%)',display:'block' }} /> :", 1)
 
-if 'aria-label="Record voice note"' not in s:
-    match = re.search(r'(<button type="button" className="prepza-wa-attach"[^>]*>\+?</button>)', s)
+if 'aria-label=\"Record voice note\"' not in s:
+    match = re.search(r'(<button type=\"button\" className=\"prepza-wa-attach\"[^>]*>\+?</button>)', s)
     if match:
         mic = match.group(1) + "<button type=\"button\" onClick={() => void startVoiceRecording()} disabled={recordingVoice || uploading || sending} aria-label=\"Record voice note\" title=\"Record voice note\" style={{ width:40,height:40,border:0,borderRadius:12,background:recordingVoice?'#d84b4b':'#f1f2f4',color:recordingVoice?'#fff':'#5e6470',fontWeight:900,cursor:'pointer' }}>{recordingVoice ? '■' : '◉'}</button>"
         s = s[:match.start()] + mic + s[match.end():]
