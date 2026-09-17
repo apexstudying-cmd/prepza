@@ -6,7 +6,7 @@ FILES = [
     ROOT / 'frontend' / 'src' / 'generation' / 'GenerationScreens.tsx',
     ROOT / 'frontend' / 'src' / 'generation' / 'StudyGenerationScreensClean.tsx',
 ]
-IMPORT = "import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, saveGeneratedMaterialOffline, cacheGeneratedAudioOffline } from '../offline/generatedMaterials'\nimport { getOfflineUserId } from '../offline/generatedMaterials'\nimport { getSavedStudyHubOffline } from '../offline/studyHubOffline'\n"
+IMPORT = "import { getCachedGeneratedAudioUrl, getGeneratedMaterialOffline, getLatestGeneratedMaterialForPath, saveGeneratedMaterialOffline, cacheGeneratedAudioOffline } from '../offline/generatedMaterials'\nimport { getOfflineUserId } from '../offline/generatedMaterials'\nimport { getSavedStudyHubOffline } from '../offline/studyHubOffline'\n"
 
 
 def add_imports(text: str, path: Path) -> str:
@@ -18,10 +18,15 @@ def add_imports(text: str, path: Path) -> str:
         if first_import_end < 0:
             raise SystemExit(f'Offline generation: import anchor missing in {path.name}')
         return text[:first_import_end + 1] + IMPORT + text[first_import_end + 1:]
-    if "getSavedStudyHubOffline" not in text:
+    if "getGeneratedMaterialOffline" not in text:
         anchor = "import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, saveGeneratedMaterialOffline, cacheGeneratedAudioOffline } from '../offline/generatedMaterials'\n"
         if anchor not in text:
             raise SystemExit(f'Offline generation: existing import anchor missing in {path.name}')
+        text = text.replace(anchor, IMPORT, 1)
+    if "getSavedStudyHubOffline" not in text:
+        anchor = IMPORT
+        if anchor not in text:
+            raise SystemExit(f'Offline generation: generated-material import anchor missing in {path.name}')
         text = text.replace(anchor, anchor + "import { getOfflineUserId } from '../offline/generatedMaterials'\nimport { getSavedStudyHubOffline } from '../offline/studyHubOffline'\n", 1)
     return text
 
@@ -43,7 +48,7 @@ def patch_api(text: str, path: Path) -> str:
       const saved = await getSavedStudyHubOffline(Number(documentMatch[1]), Number(offlineUserId))
       if (saved) return { id: saved.documentId, title: saved.title || 'Saved document', page_count: saved.pageCount || null, file_type: saved.fileType || 'pdf' } as T
     }
-    const localGeneration = await getLatestGeneratedMaterialForPath(path)
+    const localGeneration = await getGeneratedMaterialOffline(path, null)
     if (localGeneration !== null) return localGeneration as T
   }
 """
@@ -77,7 +82,6 @@ def patch_podcast(text: str, path: Path) -> str:
     if ready_anchor in text and 'cacheGeneratedAudioOffline(res.audio_url)' not in text:
         text = text.replace(ready_anchor, "          setAudioUrl(res.audio_url); setAudioDuration(res.duration_seconds || 0); void cacheGeneratedAudioOffline(res.audio_url); setPhase('ready'); return", 1)
 
-    # On reopen, restore the previously generated podcast from the local GET response.
     podcast_effect_marker = "  // Offline generated podcast restore\n"
     if podcast_effect_marker not in text:
         doc_effect = "  useEffect(() => {\n    if (activeDocumentId == null) return\n    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string; page_count: number | null }>(`/documents/${activeDocumentId}`)])"
@@ -147,7 +151,6 @@ def patch_flashcards(text: str, path: Path) -> str:
   }, [activeDocumentId])
 
 """
-    # normalize is declared after the document effect, but the callback executes after render and is valid.
     text = text.replace(anchor, restore + anchor, 1)
     return text
 
@@ -156,7 +159,6 @@ def patch_summary(text: str, path: Path) -> str:
     if 'SummaryGenerationScreen' not in text or '// Offline summary restore' in text:
         return text
     anchor = "  useEffect(() => {\n    if (activeDocumentId == null) return\n    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string }>(`/documents/${activeDocumentId}`)])"
-    # There are two identical document-loading effects in this file; patch the second one (the Summary screen).
     positions = [m.start() for m in re.finditer(re.escape(anchor), text)]
     if not positions:
         raise SystemExit(f'Offline generation: summary document effect anchor missing in {path.name}')
@@ -190,4 +192,4 @@ def patch(path: Path) -> None:
 
 for file in FILES:
     patch(file)
-print('Offline generated-material persistence, exact replay for summary/flashcards/podcast, podcast audio caching, saved-document routing, and AI boundary applied and verified.')
+print('Offline generated-material persistence, exact request-aware replay, podcast audio caching, saved-document routing, and AI boundary applied and verified.')
