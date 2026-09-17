@@ -1,12 +1,12 @@
 // Prepza application-shell service worker.
-// Keep the shell network-first so a bad cached HTML document can never pin a
-// production release. Runtime asset caching remains opt-in and versioned.
-// Bump this on every production frontend release so installed clients are
-// forced onto the new shell/runtime cache namespace.
-const SW_VERSION = 'v15';
+// v16 is a deliberate cache-reset release: the previous worker could keep an
+// older application shell alive on installed Android clients after uninstall /
+// reinstall. Network is authoritative for navigations; cached data is only a
+// fallback for genuine offline use.
+const SW_VERSION = 'v16';
 const SHELL_CACHE = `prepza-shell-${SW_VERSION}`;
 const RUNTIME_CACHE = `prepza-runtime-${SW_VERSION}`;
-const NAV_TIMEOUT_MS = 10000;
+const NAV_TIMEOUT_MS = 30000;
 const STUDY_ASSET_CACHE = 'prepza-study-assets-v1';
 const PDFJS_HOST = 'cdn.jsdelivr.net';
 const PDFJS_PATH_PREFIX = '/npm/pdfjs-dist@6.3.289/build/';
@@ -16,7 +16,7 @@ const CORE_SHELL = ['/offline.html', '/manifest.json', '/icon-192.png', '/icon-5
 function sameOrigin(url) { return url.origin === self.location.origin; }
 function isPdfJsAsset(url) { return url.hostname === PDFJS_HOST && url.pathname.startsWith(PDFJS_PATH_PREFIX); }
 function isNativeStudyPage(url) {
-  return sameOrigin(url) && /^\/documents\/\d+\/reading\/page\/\d+$/.test(url.pathname);
+  return sameOrigin(url) && /^\\/documents\\/\\d+\\/reading\\/page\\/\\d+$/.test(url.pathname);
 }
 
 function isCacheableAsset(request) {
@@ -24,11 +24,11 @@ function isCacheableAsset(request) {
   const url = new URL(request.url);
   if (url.pathname === '/sw.js' || url.pathname === '/sw-register.js') return false;
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return false;
-  if (isPdfJsAsset(url)) return /\.(?:js|mjs|map)$/i.test(url.pathname);
+  if (isPdfJsAsset(url)) return /\\.(?:js|mjs|map)$/i.test(url.pathname);
   if (isNativeStudyPage(url)) return true;
   if (!sameOrigin(url)) return false;
   return url.pathname.startsWith('/assets/') ||
-    /\.(?:css|js|mjs|png|jpg|jpeg|webp|gif|svg|ico|woff2?|ttf|otf)$/i.test(url.pathname);
+    /\\.(?:css|js|mjs|png|jpg|jpeg|webp|gif|svg|ico|woff2?|ttf|otf)$/i.test(url.pathname);
 }
 
 async function cacheResponse(cacheName, request, response) {
@@ -45,8 +45,10 @@ async function precacheShell() {
 }
 
 self.addEventListener('install', (event) => {
-  // Deliberately do not skip waiting here. sw-register.js owns the user-facing
-  // update decision so a background release cannot reload an active session.
+  // Emergency cache-reset release. This is intentionally immediate so an
+  // installed client cannot remain controlled by the stale worker while the
+  // new production frontend is already live.
+  self.skipWaiting();
   event.waitUntil(precacheShell());
 });
 
@@ -73,9 +75,8 @@ self.addEventListener('message', (event) => {
 function timeout(ms) { return new Promise((_, reject) => setTimeout(() => reject(new Error('nav-timeout')), ms)); }
 
 async function handleNavigation(request) {
-  // Always prefer the current production document. Only use the cached shell
-  // after a genuine network failure/offline condition, not after a short
-  // startup delay while the free Render service is waking up.
+  // Current production HTML is authoritative. We allow a generous startup
+  // window because Render free services can need time to wake from sleep.
   const network = fetch(request, { cache: 'no-store' }).then(async (response) => {
     if (response && response.ok && response.headers.get('content-type')?.includes('text/html')) {
       try {
@@ -102,9 +103,6 @@ async function handleNavigation(request) {
 async function handleAsset(request) {
   const url = new URL(request.url);
   const studyPage = isNativeStudyPage(url);
-
-  // Study pages are cached only when the Study Hub explicitly saves them.
-  // Normal online reading must never silently consume storage or mix accounts.
   const cached = await caches.match(request, { ignoreSearch: false });
   if (cached) return cached;
 
