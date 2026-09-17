@@ -1,10 +1,12 @@
 // Prepza application-shell service worker.
 // Keep the shell network-first so a bad cached HTML document can never pin a
 // production release. Runtime asset caching remains opt-in and versioned.
-const SW_VERSION = 'v14';
+// Bump this on every production frontend release so installed clients are
+// forced onto the new shell/runtime cache namespace.
+const SW_VERSION = 'v15';
 const SHELL_CACHE = `prepza-shell-${SW_VERSION}`;
 const RUNTIME_CACHE = `prepza-runtime-${SW_VERSION}`;
-const NAV_TIMEOUT_MS = 1800;
+const NAV_TIMEOUT_MS = 10000;
 const STUDY_ASSET_CACHE = 'prepza-study-assets-v1';
 const PDFJS_HOST = 'cdn.jsdelivr.net';
 const PDFJS_PATH_PREFIX = '/npm/pdfjs-dist@6.3.289/build/';
@@ -69,8 +71,9 @@ self.addEventListener('message', (event) => {
 function timeout(ms) { return new Promise((_, reject) => setTimeout(() => reject(new Error('nav-timeout')), ms)); }
 
 async function handleNavigation(request) {
-  // Never serve a cached app shell before giving the network a chance. This is
-  // the critical recovery path after a frontend rollback or failed release.
+  // Always prefer the current production document. Only use the cached shell
+  // after a genuine network failure/offline condition, not after a short
+  // startup delay while the free Render service is waking up.
   const network = fetch(request, { cache: 'no-store' }).then(async (response) => {
     if (response && response.ok && response.headers.get('content-type')?.includes('text/html')) {
       try {
