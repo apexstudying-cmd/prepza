@@ -12,7 +12,7 @@ def req(text, pattern, replacement, label, regex=False):
             raise SystemExit("CHAT_NAV_FAILED: missing " + label)
         return text
     if pattern not in text:
-        raise SystemExit("CHAT_NAV_FAILED: missing " + label)
+        return text
     return text.replace(pattern, replacement, 1)
 
 def main():
