@@ -22,6 +22,7 @@ def main() -> None:
         "e2ee_chat_routes.py", "SET e2ee_mode = 'group_v1', key_epoch = 1",
         "active_provisioner(conversation.id, expected_epoch)", "locked_epoch != expected_epoch",
         "recipient_user_id", "key_epoch", "IDENTITY_KEY_REPLACEMENT_REQUIRED",
+        '@app.get("/keys/<int:user_id>")',
     )
     require(
         "migrations/fix_group_e2ee_default_state.sql",
@@ -37,9 +38,6 @@ def main() -> None:
         "frontend/src/crypto/newGroupE2EECreationGuard.ts", "created.reused !== false",
         "state?.e2ee_mode !== 'group_v1'", "state.envelopes.length === 0", "Secure group setup is incomplete",
     )
-    # The startup installer is intentionally wrapped by main.tsx's optional-module
-    # safety boundary. Accept that production-safe form rather than requiring a
-    # bare call that would make a startup exception fatal.
     require(
         "frontend/src/main.tsx",
         "installNewGroupE2EECreationGuard",
@@ -67,6 +65,10 @@ def main() -> None:
         "encryptGroupBytes(pendingUpload.key, plaintext, pendingUpload.conversationId, DIRECT_ATTACHMENT_KEY_EPOCH)",
         "decryptGroupBytes(key, encryptedBytes, metadata.file_nonce, conversationId, DIRECT_ATTACHMENT_KEY_EPOCH)",
         "PENDING_ATTACHMENT_TTL_MS", "pruneAttachmentState", "expiresAt",
+    )
+    require(
+        "frontend/src/crypto/e2eeChatApi.ts",
+        "fetchUserPublicKey", "`/keys/${userId}`", "Peer encryption key is not available yet",
     )
     require(
         "frontend/src/App.tsx", "function ChatDetailScreen",
