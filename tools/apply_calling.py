@@ -1,31 +1,40 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONT = ROOT / 'frontend' / 'src' / 'crypto'
 
 # Wire the call overlay into the existing authenticated chat experience.
 chat = FRONT / 'WhatsAppChatExperience.tsx'
-s = chat.read_text()
-if "./CallExperience" not in s:
-    s = s.replace("import { provisionInitialGroupKey } from './groupProvisioning'", "import { provisionInitialGroupKey } from './groupProvisioning'\nimport CallExperience from './CallExperience'")
-marker = '<div className="prepza-wa-head">'
-if marker in s and 'prepza-call-actions' not in s:
-    injection = """<div className=\"prepza-call-actions\" style={{ marginLeft:'auto',display:'flex',gap:7 }}>
-      {view === 'detail' && detail && !detail.is_group && (() => { const peer = detail.participants.find(item => item.user_id !== meId); return peer ? <><button type=\"button\" aria-label=\"Start voice call\" title=\"Voice call\" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call',{detail:{conversationId:detail.id,peerId:peer.user_id,peerName:peer.display_name,kind:'voice'}}))} style={{width:36,height:36,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer'}}>☎</button><button type=\"button\" aria-label=\"Start video call\" title=\"Video call\" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call',{detail:{conversationId:detail.id,peerId:peer.user_id,peerName:peer.display_name,kind:'video'}}))} style={{width:36,height:36,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer'}}>▣</button></> : null })()}
-    </div>"""
-    s = s.replace(marker, marker + injection, 1)
-# Render the overlay after the main chat shell so it can cover the whole viewport.
-if '<CallExperience userId={meId}' not in s:
-    s = s.replace('</div>\n  </div>\n}', '</div>\n    <CallExperience userId={meId} />\n  </div>\n}', 1)
-chat.write_text(s)
+s = chat.read_text(encoding='utf-8')
+if "import CallExperience from './CallExperience'" not in s:
+    anchor = "import { provisionInitialGroupKey } from './groupProvisioning'"
+    if anchor not in s:
+        raise SystemExit('Calling patch: chat import anchor missing')
+    s = s.replace(anchor, anchor + "\nimport CallExperience from './CallExperience'", 1)
+
+# The real header is a JSX <header>, not the CSS class string.
+if 'prepza-call-actions' not in s:
+    marker = '<header className="prepza-wa-head">'
+    if marker not in s:
+        raise SystemExit('Calling patch: chat header anchor missing')
+    injection = """<header className=\"prepza-wa-head\">\n            {view === 'detail' && detail && !detail.is_group && (() => { const peer = detail.participants.find(item => item.user_id !== meId); return peer ? <div className=\"prepza-call-actions\" style={{ marginLeft:'auto',display:'flex',gap:7 }}><button type=\"button\" className=\"prepza-start-call\" aria-label=\"Start voice call\" title=\"Voice call\" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call',{detail:{conversationId:detail.id,peerId:peer.user_id,peerName:peer.display_name,kind:'voice'}}))} style={{width:36,height:36,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer'}}>☎</button><button type=\"button\" className=\"prepza-start-call\" aria-label=\"Start video call\" title=\"Video call\" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call',{detail:{conversationId:detail.id,peerId:peer.user_id,peerName:peer.display_name,kind:'video'}}))} style={{width:36,height:36,border:0,borderRadius:10,background:'rgba(255,255,255,.1)',color:'#fff',cursor:'pointer'}}>▣</button></div> : null })()}"""
+    s = s.replace(marker, injection, 1)
+
+# Mount the overlay reliably immediately before the component's final shell close.
+if '<CallExperience userId={meId} />' not in s:
+    closing = '\n  </div>\n}'
+    if not s.endswith(closing):
+        raise SystemExit('Calling patch: component closing anchor missing')
+    s = s[:-len(closing)] + '\n    <CallExperience userId={meId} />\n  </div>\n}'
+
+chat.write_text(s, encoding='utf-8')
 
 # Add authenticated, membership-checked signaling to the existing Socket.IO server.
 server = ROOT / 'realtime_server.py'
-s = server.read_text()
+s = server.read_text(encoding='utf-8')
 if '_active_calls = {}' not in s:
-    s = s.replace('_socket_state_lock = Lock()', '_socket_state_lock = Lock()\n_active_calls = {}\n_active_calls_lock = Lock()')
-    s = s.replace('from app import app, db, Conversation, ConversationParticipant', 'from app import app, db, Conversation, ConversationParticipant, User')
+    s = s.replace('_socket_state_lock = Lock()', '_socket_state_lock = Lock()\n_active_calls = {}\n_active_calls_lock = Lock()', 1)
+    s = s.replace('from app import app, db, Conversation, ConversationParticipant', 'from app import app, db, Conversation, ConversationParticipant, User', 1)
     helper = r'''
 
 def emit_to_user(user_id, event, payload):
@@ -131,7 +140,10 @@ def handle_call_answer(data):
 def handle_call_ice(data):
     return _route_call_signal("call:ice", data)
 '''
-    s = s.replace('\n@socketio.on("disconnect")', helper + '\n\n@socketio.on("disconnect")')
-server.write_text(s)
+    disconnect_anchor = '\n@socketio.on("disconnect")'
+    if disconnect_anchor not in s:
+        raise SystemExit('Calling patch: disconnect anchor missing')
+    s = s.replace(disconnect_anchor, helper + '\n\n@socketio.on("disconnect")', 1)
+    server.write_text(s, encoding='utf-8')
 
 print('CALLING_PATCH_APPLIED')
