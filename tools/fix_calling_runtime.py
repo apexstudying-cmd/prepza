@@ -21,9 +21,14 @@ if 'const callRef = useRef<ActiveCall | null>(null)' not in s:
     s = s.replace("    const current = call\n", "    const current = callRef.current\n")
     s = s.replace("    setCall(null); setIncoming(null);", "    callRef.current = null; setCall(null); setIncoming(null);")
 
+# Socket.IO unsubscribe returns boolean; React effects must return a cleanup
+# function that returns void.
+s = s.replace("    return onCallSignal(event => {", "    const unsubscribe = onCallSignal(event => {")
+s = s.replace("    })\n  }, [userId])", "    })\n    return () => { unsubscribe() }\n  }, [userId])", 1)
+
 # Calls are intentionally not queued while offline. Call signaling and media
 # require a live network; silently queuing an invite would create stale calls.
-if "if (!navigator.onLine)" not in s:
+if "Calls require an internet connection." not in s:
     s = s.replace("  async function startCall(conversationId: number, peerId: number, peerName: string, kind: 'voice' | 'video') {\n    if (call || !userId) return\n", "  async function startCall(conversationId: number, peerId: number, peerName: string, kind: 'voice' | 'video') {\n    if (call || !userId) return\n    if (!navigator.onLine) { window.dispatchEvent(new CustomEvent('prepza-call-error', { detail: 'Calls require an internet connection.' })); return }\n")
     s = s.replace("  async function acceptIncoming() {\n    if (!incoming || !userId) return\n", "  async function acceptIncoming() {\n    if (!incoming || !userId) return\n    if (!navigator.onLine) { window.dispatchEvent(new CustomEvent('prepza-call-error', { detail: 'Calls require an internet connection.' })); return }\n")
 
