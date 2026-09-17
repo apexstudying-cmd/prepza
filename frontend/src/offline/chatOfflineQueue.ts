@@ -3,6 +3,7 @@ const STORE = 'messages'
 const USER_KEY = 'prepza-offline-user-id'
 const MAX_ATTEMPTS = 8
 const BASE_DELAY_MS = 2000
+const RETRY_TICK_MS = 5000
 
 type QueuedChatMessage = {
   id?: number
@@ -114,6 +115,7 @@ async function update(item: QueuedChatMessage): Promise<void> {
 }
 
 let flushPromise: Promise<void> | null = null
+let retryTimer: number | null = null
 
 export async function flushOfflineChatMessages(): Promise<void> {
   if (!navigator.onLine || flushPromise) return flushPromise || Promise.resolve()
@@ -121,14 +123,23 @@ export async function flushOfflineChatMessages(): Promise<void> {
     try {
       const queue = await readQueue()
       if (!queue.length) return
+      const currentUser = currentUserId()
+      if (!currentUser) return
+
       let csrf = ''
       try {
         const me = await fetch('/me', { credentials: 'include', cache: 'no-store' })
-        if (me.ok) csrf = String((await me.json())?.csrf_token || '')
-      } catch {}
+        if (!me.ok) return
+        const meBody = await me.json()
+        const serverUserId = Number(meBody?.id || 0)
+        if (serverUserId !== currentUser) return
+        csrf = String(meBody?.csrf_token || '')
+      } catch { return }
 
+      let changed = false
       for (const item of queue) {
-        if (!navigator.onLine) break
+        if (!navigator.onLine || item.userId !== currentUser) break
+        if (item.nextAttemptAt > Date.now()) continue
         const headers = { ...item.headers }
         if (csrf) headers['X-CSRF-Token'] = csrf
         try {
@@ -140,6 +151,7 @@ export async function flushOfflineChatMessages(): Promise<void> {
           })
           if (response.ok || (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 409 && response.status !== 429)) {
             await remove(item.id as number)
+            changed = true
             continue
           }
           throw new Error(`Request failed (${response.status})`)
@@ -150,11 +162,10 @@ export async function flushOfflineChatMessages(): Promise<void> {
             ? Number.MAX_SAFE_INTEGER
             : Date.now() + Math.min(60_000, BASE_DELAY_MS * (2 ** Math.min(item.attempts, 5)))
           await update(item)
-          if (item.attempts >= MAX_ATTEMPTS) continue
-          break
+          changed = true
         }
       }
-      window.dispatchEvent(new CustomEvent('prepza:offline-chat-synced'))
+      if (changed) window.dispatchEvent(new CustomEvent('prepza:offline-chat-synced'))
     } finally { flushPromise = null }
   })()
   return flushPromise
@@ -163,5 +174,6 @@ export async function flushOfflineChatMessages(): Promise<void> {
 export function installOfflineChatQueue(): void {
   if (typeof window === 'undefined') return
   window.addEventListener('online', () => { void flushOfflineChatMessages() })
+  if (retryTimer == null) retryTimer = window.setInterval(() => { if (navigator.onLine) void flushOfflineChatMessages() }, RETRY_TICK_MS)
   void flushOfflineChatMessages()
 }
