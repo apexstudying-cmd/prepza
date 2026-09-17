@@ -232,22 +232,34 @@ def register_control_routes(
         User,
     )
 
+    def _rotate_once_for_transaction(connection, conversation_id):
+        """Return True once per conversation in the current DB transaction."""
+        transaction = connection.get_transaction()
+        transaction_id = id(transaction) if transaction is not None else None
+        state = connection.info.get("prepza_e2ee_rotation_state")
+        if not state or state[0] != transaction_id:
+            state = (transaction_id, set())
+            connection.info["prepza_e2ee_rotation_state"] = state
+        rotated = state[1]
+        if conversation_id in rotated:
+            return False
+        rotated.add(conversation_id)
+        return True
+
     # Membership changes are soft state transitions (left_at), so mapper
     # hooks are safer than duplicating membership endpoints. A group_v1 epoch
     # advances when an active participant leaves. It also advances when a new
-    # participant joins an already-populated E2EE group. The connection-local
-    # set makes the rotation once-per-transaction, so batch member adds cannot
-    # accidentally advance through several unused epochs.
+    # participant joins an already-populated E2EE group. Rotation is guarded
+    # by the active DB transaction, not by a permanent connection flag, so a
+    # later membership change on the same pooled connection still rotates.
     if not getattr(ConversationParticipant, "_prepza_e2ee_membership_listener", False):
         @event.listens_for(ConversationParticipant, "before_update")
         def _rotate_group_epoch_on_leave(mapper, connection, target):
             history = inspect(target).attrs.left_at.history
             if not history.has_changes() or not history.added:
                 return
-            rotated = connection.info.setdefault("prepza_e2ee_rotated_memberships", set())
-            if target.conversation_id in rotated:
+            if not _rotate_once_for_transaction(connection, target.conversation_id):
                 return
-            connection.info["prepza_e2ee_rotated_memberships"] = rotated | {target.conversation_id}
             connection.execute(
                 text(
                     "UPDATE conversation "
@@ -280,10 +292,8 @@ def register_control_routes(
             ).first()
             if not existing_member:
                 return
-            rotated = connection.info.setdefault("prepza_e2ee_rotated_memberships", set())
-            if conversation_id in rotated:
+            if not _rotate_once_for_transaction(connection, conversation_id):
                 return
-            connection.info["prepza_e2ee_rotated_memberships"] = rotated | {conversation_id}
             connection.execute(
                 text(
                     "UPDATE conversation "
