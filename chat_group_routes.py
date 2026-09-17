@@ -42,27 +42,12 @@ def _active_group_member_count(conversation_id):
     ).count()
 
 
-def _bump_group_key_epoch(conversation):
-    """Advance the existing server-selected group E2EE epoch.
-
-    The client-side E2EE bridge notices the empty envelope set for the new
-    epoch and elects the lowest active member to provision a fresh key.
-    Historical keys remain locally available only to devices that already
-    possessed them, so old messages remain readable while removed members
-    cannot decrypt messages sent after removal.
-    """
-    result = db.session.execute(
-        text("""
-            UPDATE conversation
-            SET key_epoch = COALESCE(key_epoch, 1) + 1
-            WHERE id = :conversation_id
-            RETURNING key_epoch
-        """),
-        {"conversation_id": conversation.id},
-    ).first()
-    if result is None:
-        raise RuntimeError("Could not advance group encryption epoch")
-    return int(result[0])
+def _current_group_key_epoch(conversation_id):
+    value = db.session.execute(
+        text("SELECT key_epoch FROM conversation WHERE id = :conversation_id"),
+        {"conversation_id": conversation_id},
+    ).scalar_one_or_none()
+    return int(value or 0)
 
 
 @app.route("/chats/<int:conversation_id>/members", methods=["POST"])
@@ -113,6 +98,29 @@ def add_chat_group_members(conversation_id):
     if valid_ids != new_ids:
         return jsonify({"error": "One or more users were not found or are unavailable"}), 404
 
+    # A live E2EE group cannot safely add a member who has no registered
+    # identity key: the next epoch requires an encrypted envelope for every
+    # active member. Reject the membership change before mutating the group
+    # rather than leaving the group waiting for an impossible key setup.
+    mode = db.session.execute(
+        text("SELECT e2ee_mode FROM conversation WHERE id = :conversation_id"),
+        {"conversation_id": conversation_id},
+    ).scalar_one_or_none()
+    if mode == "group_v1":
+        keyed_ids = {
+            row[0]
+            for row in db.session.execute(
+                text("SELECT user_id FROM user_key WHERE user_id = ANY(:user_ids)"),
+                {"user_ids": list(new_ids)},
+            ).all()
+        }
+        missing_ids = sorted(new_ids - keyed_ids)
+        if missing_ids:
+            return jsonify({
+                "error": "Every new group member must set up secure chat before they can be added",
+                "missing_user_ids": missing_ids,
+            }), 409
+
     for member_id in sorted(new_ids):
         db.session.add(ConversationParticipant(
             conversation_id=conversation_id,
@@ -120,9 +128,12 @@ def add_chat_group_members(conversation_id):
             role="member",
         ))
 
-    new_epoch = _bump_group_key_epoch(conversation)
     conversation.updated_at = datetime.utcnow()
+    # The E2EE membership mapper rotates once per transaction. Do not also
+    # bump the epoch here: doing both caused the response to report an epoch
+    # older than the committed database state.
     db.session.commit()
+    new_epoch = _current_group_key_epoch(conversation_id)
 
     return jsonify({
         "conversation": _serialize_conversation_detail(conversation, user_id),
@@ -153,9 +164,11 @@ def remove_chat_group_member(conversation_id, target_user_id):
         return jsonify({"error": "Demote this admin before removing them"}), 400
 
     target.left_at = datetime.utcnow()
-    new_epoch = _bump_group_key_epoch(conversation)
     conversation.updated_at = datetime.utcnow()
+    # The E2EE membership mapper rotates once for this transaction. Keeping
+    # rotation in one place prevents a double increment and stale response.
     db.session.commit()
+    new_epoch = _current_group_key_epoch(conversation_id)
 
     return jsonify({
         "conversation": _serialize_conversation_detail(conversation, user_id),
