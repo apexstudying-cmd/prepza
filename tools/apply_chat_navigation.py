@@ -134,8 +134,8 @@ type CallHistoryEntry = { id: string; peerId: number; peerName: string; kind: 'v
     TARGET.write_text(text, encoding="utf-8")
 
     ada = ADA_TARGET.read_text(encoding="utf-8")
-    ada = req(ada, 'document.querySelector(\\'input[placeholder="Message…"]\\') as HTMLInputElement | null',
-              'document.querySelector(\\'[data-prepza-chat-composer="true"]\\') as HTMLTextAreaElement | null',
+    ada = req(ada, """document.querySelector('input[placeholder="Message…"]') as HTMLInputElement | null""",
+              """document.querySelector('[data-prepza-chat-composer="true"]') as HTMLTextAreaElement | null""",
               "Ada textarea selector")
     ADA_TARGET.write_text(ada, encoding="utf-8")
     print("CHAT_NAVIGATION_APPLIED")
