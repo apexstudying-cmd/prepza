@@ -62,10 +62,10 @@ def main() -> None:
 
 """
     if 'prepza:offline-chat-synced' not in text:
-        anchor = "  useEffect(() => { if (!visible || view !== 'detail' || selectedId == null) return\n"
+        anchor = "  useEffect(() => { const onStatus = (event: Event) => setRealtimeConnected(Boolean((event as CustomEvent<{ connected?: boolean }>).detail?.connected)); window.addEventListener('prepza-realtime-status', onStatus); return () => window.removeEventListener('prepza-realtime-status', onStatus) }, [])\n"
         if anchor not in text:
             raise SystemExit('Offline chat queue: reconnect effect anchor missing')
-        text = text.replace(anchor, reconnect_effect + anchor, 1)
+        text = text.replace(anchor, anchor + reconnect_effect, 1)
 
     required = [
         "../offline/chatOfflineQueue",
