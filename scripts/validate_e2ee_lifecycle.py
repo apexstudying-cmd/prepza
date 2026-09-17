@@ -16,7 +16,7 @@ def main() -> None:
     require(
         "prepza_control.py", "ConversationParticipant", "left_at", "before_insert",
         "_rotate_group_epoch_on_join", "existing_member", "SET key_epoch = key_epoch + 1",
-        "once-per-transaction", "prepza_e2ee_rotated_memberships",
+        "once per conversation in the current DB transaction", "prepza_e2ee_rotation_state",
         "Message", "e2ee_key_epoch", "after_insert",
     )
     require(
