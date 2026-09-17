@@ -13,24 +13,22 @@ else:
         raise SystemExit('Runtime chat controls: stable csrf effect anchor missing')
 
     effect = r'''  // PREPZA_RUNTIME_CHAT_CONTROLS
-  // Keep this fallback mounted for the lifetime of the chat component. The
-  // rendered chat shell can change its internal React state before the detail
-  // state settles, so gating the DOM observer on `view === 'detail'` can make
-  // the controls silently disappear. The DOM itself is the source of truth.
+  // Runtime fallback: anchor controls to the actual visible composer, not to a
+  // particular header class. This keeps voice/call controls visible even when
+  // the chat shell changes its layout or the header is temporarily absent.
   useEffect(() => {
     const requestVoice = () => window.dispatchEvent(new CustomEvent('prepza-request-voice-recording'))
     const requestCall = (kind: 'voice' | 'video') => window.dispatchEvent(new CustomEvent('prepza-request-call', { detail: { kind } }))
 
     const addControls = () => {
-      const header = document.querySelector('.prepza-wa-head') as HTMLElement | null
-      if (!header) return
-
       const textarea = Array.from(document.querySelectorAll('textarea')).find((node) => {
         const element = node as HTMLTextAreaElement
         return element.offsetParent !== null && !element.disabled
       }) as HTMLTextAreaElement | undefined
+      if (!textarea) return
 
-      if (textarea && !document.querySelector('[data-prepza-runtime-voice]')) {
+      const composer = textarea.parentElement as HTMLElement | null
+      if (composer && !document.querySelector('[data-prepza-runtime-voice]')) {
         const button = document.createElement('button')
         button.type = 'button'
         button.dataset.prepzaRuntimeVoice = 'true'
@@ -39,10 +37,11 @@ else:
         button.textContent = '◉'
         button.style.cssText = 'width:40px;height:40px;flex:0 0 40px;border:0;border-radius:12px;background:#f1f2f4;color:#5e6470;font-weight:900;font-size:18px;cursor:pointer;margin-right:7px;align-self:center;'
         button.addEventListener('click', requestVoice)
-        textarea.parentElement?.insertBefore(button, textarea)
+        composer.insertBefore(button, textarea)
       }
 
-      if (!header.querySelector('[data-prepza-runtime-call]')) {
+      const callHost = (document.querySelector('.prepza-wa-head') as HTMLElement | null) || composer
+      if (callHost && !callHost.querySelector('[data-prepza-runtime-call]') && !document.querySelector('[data-prepza-runtime-call]')) {
         const wrap = document.createElement('div')
         wrap.dataset.prepzaRuntimeCall = 'true'
         wrap.style.cssText = 'display:flex;gap:7px;margin-left:7px;flex:0 0 auto;align-items:center;'
@@ -52,11 +51,11 @@ else:
           button.setAttribute('aria-label', label)
           button.title = label.replace('Start ', '')
           button.textContent = glyph
-          button.style.cssText = 'width:34px;height:34px;border:0;border-radius:10px;background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:16px;'
+          button.style.cssText = 'width:34px;height:34px;border:0;border-radius:10px;background:#f1f2f4;color:#5e6470;cursor:pointer;font-size:16px;'
           button.addEventListener('click', () => requestCall(kind))
           wrap.appendChild(button)
         }
-        header.appendChild(wrap)
+        callHost.appendChild(wrap)
       }
     }
 
