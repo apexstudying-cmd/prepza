@@ -1,26 +1,35 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 GEN = ROOT / 'frontend' / 'src' / 'generation' / 'GenerationScreens.tsx'
 CLEAN = ROOT / 'frontend' / 'src' / 'generation' / 'StudyGenerationScreensClean.tsx'
 
 
-def inject_before_generate(text: str, function_name: str, marker: str, code: str) -> str:
+def inject_before_component_return(text: str, function_name: str, marker: str, code: str) -> str:
     if marker in text:
         return text
     start = text.find(function_name)
     if start < 0:
         raise SystemExit(f'Offline material replay: function missing: {function_name}')
-    target = text.find('  const generate = async () =>', start)
+    targets = [
+        '  const generate = async () =>',
+        '  const generate = ',
+        '  return (',
+        '  return <',
+    ]
+    target = -1
+    for candidate in targets:
+        pos = text.find(candidate, start)
+        if pos >= 0 and (target < 0 or pos < target):
+            target = pos
     if target < 0:
-        raise SystemExit(f'Offline material replay: generate anchor missing: {function_name}')
+        raise SystemExit(f'Offline material replay: component insertion anchor missing: {function_name}')
     return text[:target] + code + '\n' + text[target:]
 
 
 def patch_generation():
     s = GEN.read_text(encoding='utf-8')
-    s = inject_before_generate(
+    s = inject_before_component_return(
         s,
         'export function SummaryGenerationScreen',
         'Offline replay: summary',
@@ -32,7 +41,7 @@ def patch_generation():
     }).catch(() => {})
   }, [activeDocumentId])""",
     )
-    s = inject_before_generate(
+    s = inject_before_component_return(
         s,
         'export function FlashcardsGenerationScreen',
         'Offline replay: flashcards',
@@ -53,7 +62,7 @@ def patch_generation():
 
 def patch_clean():
     s = CLEAN.read_text(encoding='utf-8')
-    s = inject_before_generate(
+    s = inject_before_component_return(
         s,
         'export function PracticeQuestionsGenerationScreen',
         'Offline replay: practice questions',
@@ -66,7 +75,7 @@ def patch_clean():
     }).catch(() => {})
   }, [activeDocumentId])""",
     )
-    s = inject_before_generate(
+    s = inject_before_component_return(
         s,
         'export function MindMapGenerationScreen',
         'Offline replay: mind map',
