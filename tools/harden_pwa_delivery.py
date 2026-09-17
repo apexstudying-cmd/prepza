@@ -1,9 +1,11 @@
 """Harden PWA delivery and fail builds when install-critical assets are broken."""
 from pathlib import Path
-import re
+import struct
+import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app.py"
+PUBLIC = ROOT / "frontend" / "public"
 DIST = ROOT / "frontend" / "dist"
 
 
@@ -27,11 +29,51 @@ def patch_app_headers() -> None:
         APP.write_text(text, encoding="utf-8")
 
 
+def _png_chunk(kind: bytes, data: bytes) -> bytes:
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+
+def generate_install_icons() -> None:
+    """Replace Git-LFS placeholder icons with small deterministic real PNGs at build time."""
+    PUBLIC.mkdir(parents=True, exist_ok=True)
+    bg = (11, 20, 55)
+    gold = (201, 162, 39)
+
+    for size in (192, 512):
+        margin = size * 0.18
+        stroke = max(4, int(size * 0.12))
+        raw = bytearray()
+        span = size - 2 * margin
+        for y in range(size):
+            raw.append(0)
+            for x in range(size):
+                on = False
+                if margin <= y <= margin + stroke and margin <= x <= size - margin:
+                    on = True
+                if size - margin - stroke <= y <= size - margin and margin <= x <= size - margin:
+                    on = True
+                if margin <= x <= size - margin:
+                    top_line = margin + span * (x - margin) / span
+                    bottom_line = size - margin - span * (x - margin) / span
+                    if abs(y - top_line) <= stroke / 2 or abs(y - bottom_line) <= stroke / 2:
+                        on = True
+                raw.extend(gold if on else bg)
+
+        def chunk(kind: bytes, data: bytes) -> bytes:
+            return _png_chunk(kind, data)
+
+        png = b"\x89PNG\r\n\x1a\n"
+        png += chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+        png += chunk(b"IDAT", zlib.compress(bytes(raw), 9))
+        png += chunk(b"IEND", b"")
+        (PUBLIC / f"icon-{size}.png").write_bytes(png)
+
+
 def assert_png(path: Path) -> None:
     if not path.exists():
         raise SystemExit(f"PWA delivery: missing required icon {path}")
     data = path.read_bytes()
-    if len(data) < 100 or data[:8] != b"\\x89PNG\\r\\n\\x1a\\n":
+    if len(data) < 100 or data[:8] != b"\x89PNG\r\n\x1a\n":
         raise SystemExit(
             f"PWA delivery: {path} is not a real PNG (it may be an unresolved Git LFS pointer)"
         )
@@ -73,6 +115,7 @@ def audit_dist() -> None:
 
 if __name__ == "__main__":
     patch_app_headers()
+    generate_install_icons()
     if DIST.exists():
         audit_dist()
     print("PWA delivery hardening: OK")
