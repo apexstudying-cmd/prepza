@@ -6,8 +6,10 @@ type ActiveCall = { callId: string; conversationId: number; peerId: number; peer
 
 const ICE_SERVERS: RTCIceServer[] = (() => {
   const raw = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_WEBRTC_ICE_SERVERS
-  if (!raw) return []
-  try { const parsed = JSON.parse(raw); return Array.isArray(parsed) ? parsed : [] } catch { return [] }
+  if (raw) {
+    try { const parsed = JSON.parse(raw); if (Array.isArray(parsed) && parsed.length) return parsed } catch { /* use safe default */ }
+  }
+  return [{ urls: 'stun:stun.l.google.com:19302' }]
 })()
 
 function randomCallId() { return `${Date.now().toString(36)}-${crypto.randomUUID()}` }
@@ -22,6 +24,11 @@ export default function CallExperience({ userId }: Props) {
   const peer = useRef<RTCPeerConnection | null>(null)
   const localStream = useRef<MediaStream | null>(null)
   const pendingIce = useRef<RTCIceCandidateInit[]>([])
+  const callRef = useRef<ActiveCall | null>(null)
+  const incomingRef = useRef<CallSignal | null>(null)
+
+  useEffect(() => { callRef.current = call }, [call])
+  useEffect(() => { incomingRef.current = incoming }, [incoming])
 
   useEffect(() => {
     if (!userId) return
@@ -29,11 +36,11 @@ export default function CallExperience({ userId }: Props) {
     return onCallSignal(event => {
       if (event.to_user_id !== userId) return
       if (event.type === 'call:incoming') { setIncoming(event); return }
-      if (event.type === 'call:rejected' || event.type === 'call:ended') cleanup(false)
-      if (event.type === 'call:offer' && event.payload) void acceptOffer(event)
-      if (event.type === 'call:answer' && event.payload && peer.current) void peer.current.setRemoteDescription(event.payload as RTCSessionDescriptionInit)
-      if (event.type === 'call:ice' && event.payload) void addIce(event.payload as RTCIceCandidateInit)
-      if (event.type === 'call:accepted' && call) setCall({ ...call, connected: true })
+      if (event.type === 'call:rejected' || event.type === 'call:ended') { cleanup(false); return }
+      if (event.type === 'call:accepted') { void createAndSendOffer(event); return }
+      if (event.type === 'call:offer' && event.payload) { void acceptOffer(event); return }
+      if (event.type === 'call:answer' && event.payload && peer.current) { void peer.current.setRemoteDescription(event.payload as RTCSessionDescriptionInit); return }
+      if (event.type === 'call:ice' && event.payload) { void addIce(event.payload as RTCIceCandidateInit) }
     })
   }, [userId])
 
@@ -49,44 +56,75 @@ export default function CallExperience({ userId }: Props) {
 
   function createPeer(callInfo: ActiveCall) {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
-    pc.onicecandidate = event => { if (event.candidate) emitCall('call:ice', { call_id: callInfo.callId, to_user_id: callInfo.peerId, payload: event.candidate.toJSON() }) }
-    pc.ontrack = event => { if (remoteVideo.current && event.streams[0]) remoteVideo.current.srcObject = event.streams[0] }
-    pc.onconnectionstatechange = () => { if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) cleanup(true); else if (pc.connectionState === 'connected') setCall(current => current ? { ...current, connected: true } : current) }
+    pc.onicecandidate = event => {
+      if (event.candidate) emitCall('call:ice', { call_id: callInfo.callId, to_user_id: callInfo.peerId, payload: event.candidate.toJSON() })
+    }
+    pc.ontrack = event => {
+      if (remoteVideo.current && event.streams[0]) remoteVideo.current.srcObject = event.streams[0]
+    }
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) cleanup(true)
+      else if (pc.connectionState === 'connected') setCall(current => current ? { ...current, connected: true } : current)
+    }
     peer.current = pc
     return pc
   }
 
   async function startCall(conversationId: number, peerId: number, peerName: string, kind: 'voice' | 'video') {
-    if (call || !userId) return
+    if (callRef.current || !userId) return
     const callId = randomCallId()
     const active = { callId, conversationId, peerId, peerName, kind, incoming: false, connected: false } as ActiveCall
     try {
       const stream = await ensureMedia(kind)
       const pc = createPeer(active)
       stream.getTracks().forEach(track => pc.addTrack(track, stream))
+      callRef.current = active
       setCall(active)
       emitCall('call:invite', { call_id: callId, conversation_id: conversationId, to_user_id: peerId, kind })
-    } catch { cleanup(false); window.dispatchEvent(new CustomEvent('prepza-call-error', { detail: 'Microphone or camera permission is required for calls.' })) }
+    } catch {
+      cleanup(false)
+      window.dispatchEvent(new CustomEvent('prepza-call-error', { detail: 'Microphone or camera permission is required for calls.' }))
+    }
+  }
+
+  async function createAndSendOffer(event: CallSignal) {
+    const current = callRef.current
+    if (!current || current.callId !== event.call_id || !peer.current) return
+    try {
+      const offer = await peer.current.createOffer()
+      await peer.current.setLocalDescription(offer)
+      emitCall('call:offer', { call_id: current.callId, conversation_id: current.conversationId, to_user_id: current.peerId, payload: offer })
+    } catch { cleanup(true) }
   }
 
   async function acceptIncoming() {
-    if (!incoming || !userId) return
-    const event = incoming
+    const event = incomingRef.current
+    if (!event || !userId || callRef.current) return
     const active = { callId: event.call_id, conversationId: event.conversation_id, peerId: event.from_user_id, peerName: event.from_name || 'Student', kind: event.kind, incoming: true, connected: false } as ActiveCall
     try {
-      await ensureMedia(event.kind)
-      createPeer(active)
-      setCall(active); setIncoming(null)
+      const stream = await ensureMedia(event.kind)
+      const pc = createPeer(active)
+      stream.getTracks().forEach(track => pc.addTrack(track, stream))
+      callRef.current = active
+      setCall(active)
+      setIncoming(null)
       emitCall('call:accept', { call_id: event.call_id, conversation_id: event.conversation_id, to_user_id: event.from_user_id })
-    } catch { emitCall('call:reject', { call_id: event.call_id, to_user_id: event.from_user_id }); setIncoming(null) }
+    } catch {
+      emitCall('call:reject', { call_id: event.call_id, to_user_id: event.from_user_id })
+      setIncoming(null)
+    }
   }
 
   async function acceptOffer(event: CallSignal) {
-    if (!peer.current || !call) return
-    await peer.current.setRemoteDescription(event.payload as RTCSessionDescriptionInit)
-    for (const candidate of pendingIce.current.splice(0)) await peer.current.addIceCandidate(candidate)
-    const answer = await peer.current.createAnswer(); await peer.current.setLocalDescription(answer)
-    emitCall('call:answer', { call_id: event.call_id, conversation_id: event.conversation_id, to_user_id: event.from_user_id, payload: answer })
+    const current = callRef.current
+    if (!peer.current || !current || current.callId !== event.call_id) return
+    try {
+      await peer.current.setRemoteDescription(event.payload as RTCSessionDescriptionInit)
+      for (const candidate of pendingIce.current.splice(0)) await peer.current.addIceCandidate(candidate)
+      const answer = await peer.current.createAnswer()
+      await peer.current.setLocalDescription(answer)
+      emitCall('call:answer', { call_id: event.call_id, conversation_id: event.conversation_id, to_user_id: event.from_user_id, payload: answer })
+    } catch { cleanup(true) }
   }
 
   async function addIce(candidate: RTCIceCandidateInit) {
@@ -95,12 +133,13 @@ export default function CallExperience({ userId }: Props) {
   }
 
   function cleanup(notify: boolean) {
-    const current = call
+    const current = callRef.current
     if (notify && current) emitCall('call:end', { call_id: current.callId, conversation_id: current.conversationId, to_user_id: current.peerId })
     peer.current?.close(); peer.current = null
     localStream.current?.getTracks().forEach(track => track.stop()); localStream.current = null
     if (localVideo.current) localVideo.current.srcObject = null
     if (remoteVideo.current) remoteVideo.current.srcObject = null
+    callRef.current = null
     setCall(null); setIncoming(null); setMuted(false); setCameraOff(false); pendingIce.current = []
   }
 
