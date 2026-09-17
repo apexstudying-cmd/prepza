@@ -10,6 +10,7 @@ name: Realtime Runtime Regression
       - 'realtime_server.py'
       - 'chat_interactions.py'
       - 'scripts/test_realtime_runtime.py'
+      - 'scripts/test_calling_runtime.py'
       - 'scripts/test_chat_interactions.py'
       - 'requirements.txt'
       - '.github/workflows/realtime-runtime-regression.yml'
@@ -42,5 +43,5 @@ jobs:
           python-version: '3.13'
       - name: Install backend dependencies
         run: python -m pip install -r requirements.txt pytest
-      - name: Run realtime and chat interaction regressions
-        run: python -m pytest scripts/test_realtime_runtime.py scripts/test_chat_interactions.py -q
+      - name: Run realtime, call, and chat interaction regressions
+        run: python -m pytest scripts/test_realtime_runtime.py scripts/test_calling_runtime.py scripts/test_chat_interactions.py -q
