@@ -33,7 +33,7 @@ export default function CallExperience({ userId }: Props) {
   useEffect(() => {
     if (!userId) return
     installCallRealtime()
-    return onCallSignal(event => {
+    const unsubscribe = onCallSignal(event => {
       if (event.to_user_id !== userId) return
       if (event.type === 'call:incoming') { setIncoming(event); return }
       if (event.type === 'call:rejected' || event.type === 'call:ended') { cleanup(false); return }
@@ -42,6 +42,7 @@ export default function CallExperience({ userId }: Props) {
       if (event.type === 'call:answer' && event.payload && peer.current) { void peer.current.setRemoteDescription(event.payload as RTCSessionDescriptionInit); return }
       if (event.type === 'call:ice' && event.payload) { void addIce(event.payload as RTCIceCandidateInit) }
     })
+    return () => { unsubscribe() }
   }, [userId])
 
   useEffect(() => () => cleanup(false), [])
@@ -72,6 +73,7 @@ export default function CallExperience({ userId }: Props) {
 
   async function startCall(conversationId: number, peerId: number, peerName: string, kind: 'voice' | 'video') {
     if (callRef.current || !userId) return
+    if (!navigator.onLine) { window.dispatchEvent(new CustomEvent('prepza-call-error', { detail: 'Calls require an internet connection.' })); return }
     const callId = randomCallId()
     const active = { callId, conversationId, peerId, peerName, kind, incoming: false, connected: false } as ActiveCall
     try {
@@ -100,6 +102,7 @@ export default function CallExperience({ userId }: Props) {
   async function acceptIncoming() {
     const event = incomingRef.current
     if (!event || !userId || callRef.current) return
+    if (!navigator.onLine) { window.dispatchEvent(new CustomEvent('prepza-call-error', { detail: 'Calls require an internet connection.' })); return }
     const active = { callId: event.call_id, conversationId: event.conversation_id, peerId: event.from_user_id, peerName: event.from_name || 'Student', kind: event.kind, incoming: true, connected: false } as ActiveCall
     try {
       const stream = await ensureMedia(event.kind)
