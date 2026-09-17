@@ -235,23 +235,26 @@ def register_control_routes(
     # Membership changes are soft state transitions (left_at), so mapper
     # hooks are safer than duplicating membership endpoints. A group_v1 epoch
     # advances when an active participant leaves. It also advances when a new
-    # participant joins an already-populated E2EE group. That second rotation
-    # is critical: otherwise a newly added member could receive the existing
-    # current epoch and decrypt messages created before they joined.
+    # participant joins an already-populated E2EE group. The connection-local
+    # set makes the rotation once-per-transaction, so batch member adds cannot
+    # accidentally advance through several unused epochs.
     if not getattr(ConversationParticipant, "_prepza_e2ee_membership_listener", False):
         @event.listens_for(ConversationParticipant, "before_update")
         def _rotate_group_epoch_on_leave(mapper, connection, target):
             history = inspect(target).attrs.left_at.history
             if not history.has_changes() or not history.added:
                 return
-            conversation_id = target.conversation_id
+            rotated = connection.info.setdefault("prepza_e2ee_rotated_memberships", set())
+            if target.conversation_id in rotated:
+                return
+            connection.info["prepza_e2ee_rotated_memberships"] = rotated | {target.conversation_id}
             connection.execute(
                 text(
                     "UPDATE conversation "
                     "SET key_epoch = key_epoch + 1 "
                     "WHERE id = :conversation_id AND e2ee_mode = 'group_v1'"
                 ),
-                {"conversation_id": conversation_id},
+                {"conversation_id": target.conversation_id},
             )
 
         @event.listens_for(ConversationParticipant, "before_insert")
@@ -275,15 +278,20 @@ def register_control_routes(
                 ),
                 {"conversation_id": conversation_id},
             ).first()
-            if existing_member:
-                connection.execute(
-                    text(
-                        "UPDATE conversation "
-                        "SET key_epoch = key_epoch + 1 "
-                        "WHERE id = :conversation_id AND e2ee_mode = 'group_v1'"
-                    ),
-                    {"conversation_id": conversation_id},
-                )
+            if not existing_member:
+                return
+            rotated = connection.info.setdefault("prepza_e2ee_rotated_memberships", set())
+            if conversation_id in rotated:
+                return
+            connection.info["prepza_e2ee_rotated_memberships"] = rotated | {conversation_id}
+            connection.execute(
+                text(
+                    "UPDATE conversation "
+                    "SET key_epoch = key_epoch + 1 "
+                    "WHERE id = :conversation_id AND e2ee_mode = 'group_v1'"
+                ),
+                {"conversation_id": conversation_id},
+            )
 
         ConversationParticipant._prepza_e2ee_membership_listener = True
 
