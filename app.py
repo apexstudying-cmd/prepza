@@ -1133,7 +1133,7 @@ class Message(db.Model):
     edited_at = db.Column(db.DateTime, nullable=True)
     # E2EE group messages/edits are bound to the exact group key epoch used
     # for encryption. Nullable for legacy/direct messages.
-    key_epoch = db.Column(db.Integer, nullable=True)
+    e2ee_key_epoch = db.Column(db.Integer, nullable=False, default=0)
 
 
 class MessageAttachment(db.Model):
@@ -8966,7 +8966,7 @@ def _serialize_message(message, attachment=None):
         "sender_id": message.sender_id,
         "body": message.body if not message.is_deleted else None,
         "nonce": message.nonce if not message.is_deleted else None,
-        "key_epoch": message.key_epoch if not message.is_deleted else None,
+        "key_epoch": message.e2ee_key_epoch if not message.is_deleted else None,
         "is_deleted": message.is_deleted,
         "created_at": message.created_at.isoformat() if message.created_at else None,
         "edited_at": message.edited_at.isoformat() if message.edited_at else None,
@@ -9518,7 +9518,7 @@ def send_message(conversation_id):
     if not body and not attachment:
         return jsonify({"error": "Message must include text or an attachment"}), 400
 
-    message = Message(conversation_id=conversation_id, sender_id=user_id, body=body, nonce=nonce, key_epoch=requested_key_epoch if e2ee_mode == "group_v1" else None)
+    message = Message(conversation_id=conversation_id, sender_id=user_id, body=body, nonce=nonce, e2ee_key_epoch=requested_key_epoch if e2ee_mode == "group_v1" else 0)
     db.session.add(message)
     db.session.flush()  # assign message.id before linking the attachment
 
@@ -9645,7 +9645,7 @@ def edit_message(conversation_id, message_id):
             return jsonify({"error": "Encrypted group edit key epoch is stale or missing; retry with the current group key", "key_epoch": current_epoch}), 409
 
     message.body = body
-    message.key_epoch = requested_key_epoch if e2ee_mode == "group_v1" else None
+    message.e2ee_key_epoch = requested_key_epoch if e2ee_mode == "group_v1" else 0
     message.nonce = nonce or None
     message.edited_at = datetime.utcnow()
     db.session.commit()
