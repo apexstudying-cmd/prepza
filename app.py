@@ -12889,6 +12889,22 @@ def _serialize_opportunity_promotion(promo, include_context=False):
     return result
 
 
+@app.route("/organisations/promotion-prices")
+def organisation_promotion_prices():
+    """Returns the current admin-configured promotion price catalogue.
+    Prices are informational; every promotion still snapshots its server-side
+    price when requested, so the client can never choose the charge amount."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    prices = get_promotion_prices()
+    return jsonify({
+        "currency": "KES",
+        "prices": prices,
+        "billing_flow": "request -> server price snapshot -> Paystack checkout -> payment verification -> admin approval",
+    })
+
+
 @app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>/promotions", methods=["POST"])
 @require_csrf
 def request_opportunity_promotion(organisation_id, opportunity_id):
