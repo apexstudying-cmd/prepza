@@ -1126,6 +1126,9 @@ class Message(db.Model):
     is_deleted = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     edited_at = db.Column(db.DateTime, nullable=True)
+    # E2EE group messages/edits are bound to the exact group key epoch used
+    # for encryption. Nullable for legacy/direct messages.
+    key_epoch = db.Column(db.Integer, nullable=True)
 
 
 class MessageAttachment(db.Model):
@@ -8958,6 +8961,7 @@ def _serialize_message(message, attachment=None):
         "sender_id": message.sender_id,
         "body": message.body if not message.is_deleted else None,
         "nonce": message.nonce if not message.is_deleted else None,
+        "key_epoch": message.key_epoch if not message.is_deleted else None,
         "is_deleted": message.is_deleted,
         "created_at": message.created_at.isoformat() if message.created_at else None,
         "edited_at": message.edited_at.isoformat() if message.edited_at else None,
@@ -9474,6 +9478,18 @@ def send_message(conversation_id):
 
     body = (data.get("body") or "").strip() or None
     nonce = (data.get("nonce") or "").strip() or None
+    conversation = db.session.get(Conversation, conversation_id)
+    e2ee_mode = getattr(conversation, "e2ee_mode", "legacy") if conversation else "legacy"
+    requested_key_epoch = data.get("key_epoch")
+    if requested_key_epoch is not None and (not isinstance(requested_key_epoch, int) or isinstance(requested_key_epoch, bool) or requested_key_epoch < 1):
+        return jsonify({"error": "key_epoch must be a positive integer"}), 400
+    if e2ee_mode == "group_v1":
+        current_epoch = db.session.execute(text("SELECT key_epoch FROM conversation WHERE id = :conversation_id"), {"conversation_id": conversation_id}).scalar_one_or_none()
+        current_epoch = int(current_epoch or 0)
+        if not body or not nonce:
+            return jsonify({"error": "Encrypted group messages require body and nonce"}), 400
+        if requested_key_epoch != current_epoch:
+            return jsonify({"error": "Encrypted group message key epoch is stale; retry with the current group key", "key_epoch": current_epoch}), 409
     if body and len(body) > CHAT_MESSAGE_CIPHERTEXT_MAX:
         return jsonify({"error": f"Message must be {CHAT_MESSAGE_CIPHERTEXT_MAX} characters or fewer"}), 400
     if body and not nonce:
@@ -9497,7 +9513,7 @@ def send_message(conversation_id):
     if not body and not attachment:
         return jsonify({"error": "Message must include text or an attachment"}), 400
 
-    message = Message(conversation_id=conversation_id, sender_id=user_id, body=body, nonce=nonce)
+    message = Message(conversation_id=conversation_id, sender_id=user_id, body=body, nonce=nonce, key_epoch=requested_key_epoch if e2ee_mode == "group_v1" else None)
     db.session.add(message)
     db.session.flush()  # assign message.id before linking the attachment
 
@@ -9545,7 +9561,6 @@ def send_message(conversation_id):
                 return jsonify(_serialize_message(existing_message, existing_attachment)), 200
             return jsonify({"error": "Message idempotency conflict; retry"}), 409
 
-    conversation = db.session.get(Conversation, conversation_id)
     if conversation:
         conversation.updated_at = datetime.utcnow()
 
@@ -9614,10 +9629,18 @@ def edit_message(conversation_id, message_id):
     if len(body) > CHAT_MESSAGE_CIPHERTEXT_MAX:
         return jsonify({"error": f"Message must be {CHAT_MESSAGE_CIPHERTEXT_MAX} characters or fewer"}), 400
     conversation = db.session.get(Conversation, conversation_id)
-    if getattr(conversation, "e2ee_mode", "legacy") == "group_v1" and not nonce:
-        return jsonify({"error": "Encrypted group edits require a nonce"}), 400
+    e2ee_mode = getattr(conversation, "e2ee_mode", "legacy") if conversation else "legacy"
+    requested_key_epoch = data.get("key_epoch")
+    if requested_key_epoch is not None and (not isinstance(requested_key_epoch, int) or isinstance(requested_key_epoch, bool) or requested_key_epoch < 1):
+        return jsonify({"error": "key_epoch must be a positive integer"}), 400
+    if e2ee_mode == "group_v1":
+        current_epoch = db.session.execute(text("SELECT key_epoch FROM conversation WHERE id = :conversation_id"), {"conversation_id": conversation_id}).scalar_one_or_none()
+        current_epoch = int(current_epoch or 0)
+        if not nonce or requested_key_epoch != current_epoch:
+            return jsonify({"error": "Encrypted group edit key epoch is stale or missing; retry with the current group key", "key_epoch": current_epoch}), 409
 
     message.body = body
+    message.key_epoch = requested_key_epoch if e2ee_mode == "group_v1" else None
     message.nonce = nonce or None
     message.edited_at = datetime.utcnow()
     db.session.commit()
