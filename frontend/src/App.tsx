@@ -470,6 +470,19 @@ function DocumentStudyHubScreen({
           const saved = await getSavedStudyHubOffline(activeDocumentId, userId)
           if (!saved) throw new Error('Not saved offline')
           if (cancelled) return
+          const cachedMaterialTypes = await Promise.all([
+            ['summary', `/documents/${activeDocumentId}/summarize`],
+            ['flashcards', `/documents/${activeDocumentId}/flashcards`],
+            ['quiz', `/documents/${activeDocumentId}/quiz`],
+            ['mind_map', `/documents/${activeDocumentId}/mind-map`],
+            ['podcast', `/documents/${activeDocumentId}/podcast-audio`],
+          ].map(async ([type, path]) => {
+            const payload = await getLatestGeneratedMaterialForPath(path)
+            if (!payload) return null
+            if (type === 'podcast' && payload?.audio_status !== 'ready') return null
+            return { type, status: 'ready' }
+          }))
+          const offlineMaterials = cachedMaterialTypes.filter(Boolean) as { type: string; status: string }[]
           setDocument({
             id: activeDocumentId,
             title: saved.title || 'Saved study document',
@@ -480,7 +493,7 @@ function DocumentStudyHubScreen({
             page_count: saved.pageCount || null,
             error_message: null,
             view_url: null,
-            materials: [],
+            materials: offlineMaterials,
             created_at: new Date(saved.savedAt).toISOString(),
           })
           let offlinePage = 0
