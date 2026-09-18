@@ -122,6 +122,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
     if (!me?.csrf_token) throw new Error('CSRF token is unavailable; please refresh the session')
     csrfTokenRef.current = me.csrf_token
     setMeId(me.id)
+    setReadReceiptsEnabled(me.read_receipts_enabled !== false)
     setCsrfToken(me.csrf_token)
     return me.csrf_token
   }
