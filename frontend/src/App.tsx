@@ -12862,7 +12862,7 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
   const Header = ({ title, onBack }: { title: string; onBack?: () => void }) => (
     <div style={{ background: ORG_COLORS.navy, padding: '0 18px 16px', flexShrink: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button onClick={onBack ?? onExit} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', color: '#fff', fontSize: 18, fontFamily: 'Plus Jakarta Sans' }}>‹</button>
+        <button onClick={onBack ?? onExit} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', color: '#fff', fontFamily: 'Plus Jakarta Sans' }}>{Ic.back('w-5 h-5')}</button>
         <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>{title}</div>
       </div>
     </div>
@@ -12915,7 +12915,7 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
             </div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Description</div>
-              <textarea value={regDesc} onChange={e => setRegDesc(e.target.value)} rows={3} placeholder="What does your organisation do?" style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy, resize: 'none', lineHeight: 1.6 }} />
+              <textarea value={regDesc} onChange={e => setRegDesc(e.target.value)} rows={3} placeholder="What does your organisation do?" style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.pageBg, resize: 'none', lineHeight: 1.6 }} />
             </div>
             <button onClick={register} disabled={!regName.trim() || !regEmail.trim() || registering} style={{ width: '100%', background: (!regName.trim() || !regEmail.trim()) ? T.border : `linear-gradient(135deg,${ORG_COLORS.gold},${ORG_COLORS.goldLight})`, color: (!regName.trim() || !regEmail.trim()) ? T.textMuted : ORG_COLORS.navy, border: 'none', borderRadius: 14, padding: '14px 0', fontWeight: 800, fontSize: 14, cursor: (!regName.trim() || !regEmail.trim()) ? 'not-allowed' : 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
               {registering ? 'Registering…' : 'Register Organisation'}
