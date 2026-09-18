@@ -11671,6 +11671,9 @@ def admin_get_settings():
         "price_qna": price("price_qna"),
         "price_plan_semester": price("price_plan_semester") or 599,
         "price_plan_annual": price("price_plan_annual") or 999,
+        "price_promotion_standard": price("price_promotion_standard"),
+        "price_promotion_featured": price("price_promotion_featured") or 300,
+        "price_promotion_sponsored": price("price_promotion_sponsored") or 800,
         "ai_daily_limit_free": daily_limit("ai_daily_limit_free", 5),
         "ai_daily_limit_plus": daily_limit("ai_daily_limit_plus", 15),
         "ai_daily_limit_premium": daily_limit("ai_daily_limit_premium", None),
@@ -11727,7 +11730,7 @@ def admin_update_settings():
             details={"enabled": value},
         )
 
-    for price_key in ("price_notes", "price_past_paper", "price_qna", "price_plan_semester", "price_plan_annual"):
+    for price_key in ("price_notes", "price_past_paper", "price_qna", "price_plan_semester", "price_plan_annual", "price_promotion_standard", "price_promotion_featured", "price_promotion_sponsored"):
         if price_key in data:
             value = data[price_key]
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
