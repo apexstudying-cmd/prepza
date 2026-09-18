@@ -358,9 +358,21 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
     let cancelled = false
     const loadOffline = async () => {
       try {
-        const me = await api<{ id?: number }>('/me')
-        const userId = Number(me.id || 0)
-        if (Number.isInteger(userId) && userId > 0) setOfflineUserId(userId)
+        // The server may be unreachable while offline. Use the last
+        // authenticated local user immediately, then refresh it from /me
+        // when connectivity allows. Never fall back to another account's
+        // offline package.
+        let userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
+        if (!Number.isInteger(userId) || userId <= 0) userId = 0
+        try {
+          const me = await api<{ id?: number }>('/me')
+          const serverUserId = Number(me.id || 0)
+          if (Number.isInteger(serverUserId) && serverUserId > 0) {
+            userId = serverUserId
+            setOfflineUserId(serverUserId)
+          }
+        } catch { /* offline: keep the last local account id */ }
+        if (userId <= 0) return
         const saved = await listSavedStudyHubOffline(userId)
         if (!cancelled) {
           setOfflineDocuments(saved.map(row => ({
@@ -374,7 +386,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
             created_at: new Date(row.savedAt).toISOString(),
           } as HomeDocument)))
         }
-      } catch { /* offline: saved package lookup can still use the last local user id */ }
+      } catch { /* offline package lookup is non-fatal */ }
     }
     void loadOffline()
     api<{ documents: HomeDocument[] }>('/documents').then(async res => {
