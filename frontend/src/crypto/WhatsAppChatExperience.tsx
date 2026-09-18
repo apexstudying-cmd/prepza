@@ -2,7 +2,7 @@ import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'
 import { getCachedChatMessages, cacheChatMessages } from '../offline/chatMessageCache'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './chatRealtime'
+import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime, sendChatMessageUpdated } from './chatRealtime'
 import { ensureE2EEIdentityReady, fetchUserPublicKey, uploadGroupKeyEnvelopes } from './e2eeChatApi'
 import { provisionInitialGroupKey } from './groupProvisioning'
 import CallExperience from './CallExperience'
