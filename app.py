@@ -13556,6 +13556,8 @@ def admin_list_audit_logs():
 
 
 
+import chat_interactions
+
 from prepza_control import register_control_routes
 
 register_control_routes(
