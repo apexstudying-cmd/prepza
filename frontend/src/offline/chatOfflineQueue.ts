@@ -164,7 +164,13 @@ export async function flushOfflineChatMessages(): Promise<void> {
             headers,
             body: item.body,
           })
-          if (response.ok || (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 409 && response.status !== 429)) {
+          // Only discard requests the server has definitively rejected as
+          // malformed or permanently unavailable. Authentication/CSRF,
+          // conflict, rate-limit, and server errors stay queued so a
+          // reconnect/session refresh can reconcile them instead of silently
+          // losing an offline message.
+          const permanentlyRejected = response.status === 400 || response.status === 404 || response.status === 410 || response.status === 422
+          if (response.ok || permanentlyRejected) {
             await remove(item.id as number)
             changed = true
             continue
