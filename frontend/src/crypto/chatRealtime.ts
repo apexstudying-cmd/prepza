@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client'
 
-export type RealtimeMessageEvent = { id: number; conversation_id: number; sender_id: number; body?: string | null; nonce?: string | null; created_at?: string | null; [key: string]: unknown }
+export type RealtimeMessageEvent = { id: number; conversation_id: number; sender_id: number; body?: string | null; nonce?: string | null; created_at?: string | null; key_epoch?: number | null; [key: string]: unknown }
 let socket: Socket | null = null
 let connected = false
 const joined = new Set<number>()
