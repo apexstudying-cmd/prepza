@@ -2270,47 +2270,157 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
+  const readerRef = useRef<HTMLDivElement>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
     if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
     let cancelled = false
-    Promise.all([api<DocumentDetail>(`/documents/${activeDocumentId}`), api<{page_num:number}>(`/documents/${activeDocumentId}/reading`), api<{csrf_token:string}>('/me')])
-      .then(([detail, progress, me]) => { if (cancelled) return; setDoc(detail); setPage(progress.page_num || 0); setSavedPage(progress.page_num || 0); setCsrfToken(me.csrf_token) })
+    Promise.all([
+      api<DocumentDetail>(`/documents/${activeDocumentId}`),
+      api<{page_num:number}>(`/documents/${activeDocumentId}/reading`),
+      api<{csrf_token:string}>('/me'),
+    ])
+      .then(([detail, progress, me]) => {
+        if (cancelled) return
+        setDoc(detail)
+        setPage(progress.page_num || 0)
+        setSavedPage(progress.page_num || 0)
+        setCsrfToken(me.csrf_token)
+      })
       .catch(e => { if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not open this document.') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [activeDocumentId])
+
   useEffect(() => {
     if (activeDocumentId == null || !csrfToken) return
-    const ping = () => { if (document.visibilityState === 'visible') api('/study-time/heartbeat', { method:'POST', headers:{'X-CSRF-Token':csrfToken}, body:JSON.stringify({feature:'reading', document_id:activeDocumentId}) }).catch(()=>{}) }
-    ping(); const interval = setInterval(ping, 20000); return () => clearInterval(interval)
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return
+      api('/study-time/heartbeat', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ feature: 'reading', document_id: activeDocumentId }),
+      }).catch(() => {})
+    }
+    ping()
+    const interval = setInterval(ping, 20000)
+    return () => clearInterval(interval)
   }, [activeDocumentId, csrfToken])
+
   useEffect(() => {
     if (activeDocumentId == null || !csrfToken || page === savedPage) return
-    const timer = setTimeout(() => api(`/documents/${activeDocumentId}/reading`, {method:'POST', headers:{'X-CSRF-Token':csrfToken}, body:JSON.stringify({page_num:page})}).then(()=>setSavedPage(page)).catch(()=>{}), 250)
-    return () => clearTimeout(timer)
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      api(`/documents/${activeDocumentId}/reading`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ page_num: page }),
+      }).then(() => setSavedPage(page)).catch(() => {})
+    }, 350)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
   }, [activeDocumentId, csrfToken, page, savedPage])
+
+  useEffect(() => {
+    const root = readerRef.current
+    if (!root || !doc?.page_count) return
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>('[data-reader-page]'))
+    if (!nodes.length) return
+    const observer = new IntersectionObserver(entries => {
+      const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
+      if (!visible) return
+      const nextPage = Number((visible.target as HTMLElement).dataset.readerPage)
+      if (Number.isInteger(nextPage)) setPage(nextPage)
+    }, { root, threshold: [0.25, 0.5, 0.75] })
+    nodes.forEach(node => observer.observe(node))
+    return () => observer.disconnect()
+  }, [doc?.page_count, loading])
+
   if (loading) return <GenerationLoading label="Opening your document…" />
   if (error) return <GenerationError error={error} />
   if (!doc || activeDocumentId == null) return <GenerationError error="Document unavailable." />
   if (doc.file_type !== 'pdf') return <GenerationError error="Native reading currently supports PDF documents only." />
-  const count = Math.max(1, doc.page_count || 1), current = Math.min(Math.max(page,0), count-1), progress = ((current+1)/count)*100
-  const pageUrl = `/documents/${activeDocumentId}/reading/page/${current}`
-  const atEnd = current >= count - 1
-  const nextBackground = atEnd ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg,${N.gold},${N.goldL})`
-  const nextColor = atEnd ? 'rgba(255,255,255,0.25)' : N.navy
-  return <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',background:'#111827'}}>
-    <div style={{background:N.navy,padding:'10px 14px 12px',flexShrink:0}}><div style={{display:'flex',alignItems:'center',gap:10}}>
-      <button onClick={()=>setScreen('document-study')} style={{width:34,height:34,background:'rgba(255,255,255,0.1)',border:'none',borderRadius:10,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#fff'}}>{Ic.back()}</div></button>
-      <div style={{flex:1,minWidth:0}}><div style={{color:'#fff',fontWeight:800,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{doc.title}</div><div style={{color:'rgba(255,255,255,0.5)',fontSize:10}}>Page {current+1} of {count}</div></div>
-    </div><div style={{marginTop:10,height:3,background:'rgba(255,255,255,0.12)',borderRadius:99,overflow:'hidden'}}><div style={{width:`${progress}%`,height:'100%',background:N.gold}}/></div></div>
-    <div style={{flex:1,minHeight:0,overflow:'auto',padding:'14px 10px',display:'flex',justifyContent:'center'}}><img key={pageUrl} src={pageUrl} alt={`Page ${current+1} of ${doc.title}`} style={{display:'block',width:'min(100%,900px)',height:'auto',background:'#fff',boxShadow:'0 4px 24px rgba(0,0,0,0.35)'}} /></div>
-    <div style={{background:N.navy,padding:'10px 14px calc(10px + env(safe-area-inset-bottom))',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-      <button disabled={current===0} onClick={()=>setPage(p=>Math.max(0,p-1))} style={{flex:1,border:'none',borderRadius:12,padding:'11px 0',background:current===0?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.1)',color:current===0?'rgba(255,255,255,0.25)':'#fff',fontWeight:800,fontFamily:'Plus Jakarta Sans'}}>Previous</button>
-      <div style={{color:'rgba(255,255,255,0.55)',fontSize:11,fontWeight:700,minWidth:62,textAlign:'center'}}>{Math.round(progress)}%</div>
-      <button disabled={atEnd} onClick={()=>setPage(p=>Math.min(count-1,p+1))} style={{flex:1,border:'none',borderRadius:12,padding:'11px 0',background:nextBackground,color:nextColor,fontWeight:800,fontFamily:'Plus Jakarta Sans'}}>Next</button>
-    </div></div>
-}
 
+  const count = Math.max(1, doc.page_count || 1)
+  const current = Math.min(Math.max(page, 0), count - 1)
+  const progress = ((current + 1) / count) * 100
+
+  return <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#111827' }}>
+    <div style={{ background: N.navy, padding: '10px 14px 12px', flexShrink: 0, zIndex: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          onClick={() => window.history.back()}
+          aria-label="Back"
+          style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+        >
+          <div style={{ color: '#fff' }}>{Ic.back()}</div>
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ color: '#fff', fontWeight: 800, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.title}</div>
+          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 }}>Page {current + 1} of {count}</div>
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10, fontWeight: 800, flexShrink: 0 }}>{Math.round(progress)}%</div>
+      </div>
+      <div style={{ marginTop: 10, height: 3, background: 'rgba(255,255,255,0.12)', borderRadius: 99, overflow: 'hidden' }}>
+        <div style={{ width: `${progress}%`, height: '100%', background: N.gold, transition: 'width 0.15s ease-out' }} />
+      </div>
+    </div>
+
+    <div
+      ref={readerRef}
+      style={{
+        flex: 1,
+        minHeight: 0,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        padding: '12px 8px 28px',
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehaviorY: 'contain',
+      }}
+      className="scrollbar-hide"
+    >
+      <div style={{ width: 'min(100%, 980px)', margin: '0 auto' }}>
+        {Array.from({ length: count }, (_, index) => {
+          const pageUrl = `/documents/${activeDocumentId}/reading/page/${index}`
+          const isCurrent = index === current
+          return (
+            <div
+              key={pageUrl}
+              data-reader-page={index}
+              style={{
+                margin: '0 auto 12px',
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                scrollMarginTop: 12,
+                position: 'relative',
+              }}
+            >
+              <img
+                src={pageUrl}
+                alt={`Page ${index + 1} of ${doc.title}`}
+                loading={index < 2 ? 'eager' : 'lazy'}
+                decoding="async"
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  height: 'auto',
+                  background: '#fff',
+                  boxShadow: '0 3px 18px rgba(0,0,0,0.28)',
+                  outline: isCurrent ? `1px solid ${N.gold}55` : 'none',
+                }}
+              />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  </div>
+}
 // ─── AI TUTOR ─────────────────────────────────────────────────────────────────
 type TutorMsg = { id: number | string; role: 'user' | 'assistant'; content: string }
 
