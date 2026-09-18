@@ -129,8 +129,10 @@ export default function WhatsAppChatExperience() {
     if (!visible || view !== 'detail' || selectedId == null) return
     let cancelled = false
     setLoading(true); setError(''); setMessageSearchResults([])
+    let cacheLoaded = false
     void getCachedChatMessages(selectedId).then(cached => {
       if (cancelled || !cached) return
+      cacheLoaded = true
       setMessages(cached as Message[])
       setLoading(false)
     })
@@ -146,7 +148,7 @@ export default function WhatsAppChatExperience() {
       joinRealtimeChat(selectedId)
       sendReadRealtime(selectedId)
     }).catch(value => {
-      if (!cancelled && !messages.length) setError(friendlyError(value, 'Could not load this conversation.'))
+      if (!cancelled && !cacheLoaded) setError(friendlyError(value, 'Could not load this conversation.'))
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true; leaveRealtimeChat(selectedId) }
   }, [visible, view, selectedId])
