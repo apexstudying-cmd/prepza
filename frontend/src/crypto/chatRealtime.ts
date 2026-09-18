@@ -14,6 +14,7 @@ function getSocket() {
   socket.on('chat:message', (message: RealtimeMessageEvent) => { if (message && typeof message.conversation_id === 'number' && typeof message.id === 'number') window.dispatchEvent(new CustomEvent('prepza-realtime-message', { detail: message })) })
   socket.on('chat:typing', detail => window.dispatchEvent(new CustomEvent('prepza-realtime-typing', { detail })))
   socket.on('chat:read', detail => window.dispatchEvent(new CustomEvent('prepza-realtime-read', { detail })))
+  socket.on('chat:message-updated', detail => window.dispatchEvent(new CustomEvent('prepza-realtime-message-updated', { detail })))
   socket.on('chat:presence', detail => window.dispatchEvent(new CustomEvent('prepza-realtime-presence', { detail })))
   return socket
 }
@@ -32,3 +33,5 @@ export function leaveRealtimeChat(conversationId: number) {
 export function sendTypingRealtime(conversationId: number, typing: boolean) { if (connected) getSocket()?.emit('chat:typing', { conversation_id: conversationId, typing }) }
 export function sendReadRealtime(conversationId: number, readAt?: string) { if (connected) getSocket()?.emit('chat:read', { conversation_id: conversationId, read_at: readAt }) }
 export function isRealtimeConnected() { return connected }
+
+export function sendChatMessageUpdated(conversationId: number, messageId: number, deleted: boolean) { if (connected) getSocket()?.emit('chat:message-updated', { conversation_id: conversationId, message_id: messageId, deleted }) }
