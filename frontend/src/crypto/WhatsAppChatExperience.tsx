@@ -263,7 +263,6 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
       for (const message of deletable) await api(`/chats/${selectedId}/messages/${message.id}`, { method:'DELETE', headers:{'X-CSRF-Token':token} })
       const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`)
       setMessages(result.messages || [])
-      for (const message of deletable) sendChatMessageUpdated(selectedId, message.id, true)
       clearSelection(); void loadList()
     } catch (value) { setError(friendlyError(value, 'Could not delete the selected message(s).')) }
     finally { setSending(false) }
@@ -426,7 +425,6 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
       const token = await getCsrfToken()
       if (editingMessageId != null) {
         await api(`/chats/${selectedId}/messages/${editingMessageId}`, { method:'PATCH', headers:{'X-CSRF-Token':token}, body:JSON.stringify({ body: JSON.stringify(envelope) }) })
-        sendChatMessageUpdated(selectedId, editingMessageId, false)
         setEditingMessageId(null); setInput('')
       } else {
         await api(`/chats/${selectedId}/messages`, { method:'POST', headers:{'X-CSRF-Token':token}, body:requestBody })
