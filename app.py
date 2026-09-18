@@ -9332,13 +9332,14 @@ def list_messages(conversation_id):
         return jsonify({"error": "Conversation not found"}), 404
 
     before_id = request.args.get("before_id", type=int)
+    preview_only = request.args.get("preview") == "1"
     query = Message.query.filter_by(conversation_id=conversation_id)
     if before_id:
         query = query.filter(Message.id < before_id)
 
     messages = (
         query.order_by(Message.created_at.desc())
-        .limit(CHAT_MESSAGE_PAGE_SIZE)
+        .limit(1 if preview_only else CHAT_MESSAGE_PAGE_SIZE)
         .all()
     )
     messages.reverse()  # oldest-first for the client's scroll-down feed
