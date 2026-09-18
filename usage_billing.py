@@ -57,24 +57,24 @@ ORGANISATION_PLANS = {
         "active_user_cap": 250,
         "active_opportunities": 2,
         "sponsored_campaigns": 1,
+        "candidate_search_window_days": 7,
+        "analytics_retention_days": 30,
     },
     "growth": {
         "monthly_fee_kes": 7500,
         "active_user_cap": 1000,
         "active_opportunities": 10,
         "sponsored_campaigns": 3,
+        "candidate_search_window_days": 30,
+        "analytics_retention_days": 90,
     },
     "scale": {
         "monthly_fee_kes": 15000,
         "active_user_cap": 3000,
         "active_opportunities": 50,
         "sponsored_campaigns": 10,
-    },
-    "enterprise": {
-        "monthly_fee_kes": None,
-        "active_user_cap": None,
-        "active_opportunities": None,
-        "sponsored_campaigns": None,
+        "candidate_search_window_days": 30,
+        "analytics_retention_days": 365,
     },
 }
 
@@ -410,7 +410,7 @@ def register_usage_billing(app, db):
             LEFT JOIN product_activity_day AS a
               ON a.user_id = u.id
              AND a.activity_date >= CURRENT_DATE - :days
-             AND (a.engaged_seconds >= 10 OR a.core_actions > 0)
+             AND (a.engaged_seconds >= 30 OR a.core_actions > 0)
             LEFT JOIN university AS un ON un.id = u.university_id
             LEFT JOIN program AS p ON p.id = u.program_id
             WHERE u.is_suspended = FALSE
@@ -589,10 +589,12 @@ def register_usage_billing(app, db):
             },
             "billing": billing,
             "pricing_model": {
-                "basis": "active_user_band",
+                "basis": "active_user_band_plus_campaign_spend",
+                "subscription_is_not_per_signup": True,
                 "sponsored_cpm_kes": SPONSORED_CPM_KES,
                 "sponsored_min_campaign_kes": SPONSORED_MIN_CAMPAIGN_KES,
                 "plans": ORGANISATION_PLANS,
+                "note": "Organisation subscription buys audience access, candidate discovery and analytics capacity. Sponsored campaigns are metered separately by verified impressions; CPM is the advertiser metric, while RPM is publisher-side revenue.",
             },
         })
 
@@ -621,36 +623,5 @@ def register_usage_billing(app, db):
             "active_definition": "At least 30 seconds of foreground engagement in a day or a core product action. Signup/login alone does not count.",
         })
 
-    @app.post("/api/organisations/<int:organisation_id>/plan")
-    def organisation_set_plan(organisation_id):
-        user_id = session.get("user_id")
-        if not user_id:
-            return jsonify({"error": "Not logged in"}), 401
-        if not _csrf_ok():
-            return jsonify({"error": "Invalid CSRF token"}), 403
-        role = _org_member(organisation_id, user_id)
-        if role != "owner":
-            return jsonify({"error": "Only the organisation owner can change billing"}), 403
-
-        data = request.get_json(silent=True) or {}
-        plan_code = str(data.get("plan") or "").strip().lower()
-        if plan_code not in ORGANISATION_PLANS:
-            return jsonify({"error": "Unknown organisation plan"}), 400
-        plan = ORGANISATION_PLANS[plan_code]
-        db.session.execute(text("""
-            INSERT INTO organisation_billing
-                (organisation_id, plan_code, status, monthly_fee_kes, active_user_cap, started_at, updated_at)
-            VALUES (:oid, :plan, 'trial', :fee, :cap, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ON CONFLICT (organisation_id)
-            DO UPDATE SET plan_code = EXCLUDED.plan_code,
-                          monthly_fee_kes = EXCLUDED.monthly_fee_kes,
-                          active_user_cap = EXCLUDED.active_user_cap,
-                          updated_at = CURRENT_TIMESTAMP
-        """), {
-            "oid": organisation_id, "plan": plan_code,
-            "fee": plan["monthly_fee_kes"], "cap": plan["active_user_cap"],
-        })
-        db.session.commit()
-        return jsonify({"ok": True, "plan": plan_code, "billing": plan})
 
     return None
