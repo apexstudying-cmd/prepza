@@ -3426,7 +3426,6 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
     meIdRef.current = meId
     if (!headerIsGroup && meId != null) {
       const peer = callParticipants.find(p => p.user_id !== meId)
-      setCallParticipants(detail.participants)
       setCallPeerId(peer?.user_id ?? null)
       setCallPeerName(peer?.display_name || 'Student')
     }
@@ -3449,6 +3448,7 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
       const names: Record<number, string> = {}
       detail.participants.forEach(p => { names[p.user_id] = p.display_name })
       setHeaderName(detail.name); setHeaderIsGroup(detail.is_group); setSenderNames(names); setMsgs(data.messages || []); setOnlineUsers(new Set())
+      setCallParticipants(detail.participants)
       const peer = detail.is_group ? null : detail.participants.find(p => p.user_id !== meId)
       setCallPeerId(peer?.user_id ?? null)
       setCallPeerName(peer?.display_name || 'Student')
@@ -3608,9 +3608,13 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
             </div>
           </div>
           <button onClick={() => window.dispatchEvent(new CustomEvent('prepza-open-ada', { detail: { conversationId } }))} aria-label="Study with Ada" style={{ border: `1px solid rgba(201,168,76,0.45)`, background: 'rgba(201,168,76,0.12)', color: N.goldL, borderRadius: 11, padding: '7px 9px', fontWeight: 900, fontSize: 11, cursor: 'pointer' }}>@Ada</button>
-          {!headerIsGroup && callPeerId != null && meId != null && <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call', { detail: { conversationId, peerId: callPeerId, peerName: callPeerName, kind: 'voice' } }))} aria-label="Start voice call" title="Voice call" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 17 }}>☎</button>
-            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call', { detail: { conversationId, peerId: callPeerId, peerName: callPeerName, kind: 'video' } }))} aria-label="Start video call" title="Video call" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 17 }}>▣</button>
+          {!headerIsGroup && callPeerId != null && meId != null && <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call', { detail: { conversationId, peerId: callPeerId, peerName: callPeerName, kind: 'voice' } }))} aria-label="Start voice call" title="Voice call" style={{ width: 38, height: 38, background: 'transparent', border: 0, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.8 19.8 0 0 1 3.1 5.18 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.72c.12.9.33 1.77.62 2.61a2 2 0 0 1-.45 2.11L9 10.71a16 16 0 0 0 4.29 4.29l1.27-1.27a2 2 0 0 1 2.11-.45c.84.29 1.71.5 2.61.62A2 2 0 0 1 22 16.92Z"/></svg>
+            </button>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call', { detail: { conversationId, peerId: callPeerId, peerName: callPeerName, kind: 'video' } }))} aria-label="Start video call" title="Video call" style={{ width: 38, height: 38, background: 'transparent', border: 0, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m16 13 5 3V8l-5 3Z"/><rect x="3" y="6" width="13" height="12" rx="2"/></svg>
+            </button>
           </div>}
           <button onClick={() => setMessageSearchOpen(v => !v)} aria-label="Search messages" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer' }}>{Ic.search('w-4 h-4')}</button>
           <button onClick={() => setScreen('chat-options')} aria-label="Chat options" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer' }}>{Ic.dots('w-4 h-4')}</button>
