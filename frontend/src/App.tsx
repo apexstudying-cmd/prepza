@@ -1125,9 +1125,12 @@ function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) =>
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState(oauthError)
   const [submitting, setSubmitting] = useState(false)
+  const [resendingVerification, setResendingVerification] = useState(false)
+  const [resendMessage, setResendMessage] = useState('')
 
   const handleLogin = async () => {
     setError('')
+    setResendMessage('')
     if (!email || !pass) { setError('Please enter both your email and password.'); return }
     setSubmitting(true)
     try {
@@ -1135,6 +1138,7 @@ function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) =>
       setScreen('home')
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
+      setResendMessage('If this account still needs email verification, you can request a new link below.')
     } finally {
       setSubmitting(false)
     }
@@ -1163,6 +1167,19 @@ function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) =>
 
           {error && (
             <div style={{ background: 'rgba(140,29,43,0.25)', border: '1px solid rgba(140,29,43,0.5)', borderRadius: 12, padding: '10px 14px', color: '#ffb4bd', fontSize: 13 }}>{error}</div>
+          )}
+
+          {resendMessage && email && (
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
+              {resendMessage} <button type="button" disabled={resendingVerification} onClick={async () => {
+                setResendingVerification(true)
+                try {
+                  const res = await api<{ message: string }>('/resend-verification', { method: 'POST', body: JSON.stringify({ email }) })
+                  setResendMessage(res.message)
+                } catch { setResendMessage('Could not request a new verification link. Please try again.') }
+                finally { setResendingVerification(false) }
+              }} style={{ background: 'none', border: 'none', padding: 0, color: N.gold, fontWeight: 700, cursor: resendingVerification ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontSize: 12 }}>{resendingVerification ? 'Sending…' : 'Resend verification email'}</button>
+            </div>
           )}
 
           <button disabled={submitting} onClick={handleLogin} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: submitting ? 'default' : 'pointer', opacity: submitting ? 0.7 : 1, fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)', marginTop: 4 }}>{submitting ? 'Signing in...' : 'Sign In'}</button>
