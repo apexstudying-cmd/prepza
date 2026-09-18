@@ -45,6 +45,15 @@ limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"])
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
+
+
+@app.after_request
+def add_security_headers(response):
+    # Auth/reset/verification URLs can contain one-time tokens. Prevent
+    # those query strings from becoming Referer data on subsequent requests.
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    return response
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_HTTPONLY"] = True
