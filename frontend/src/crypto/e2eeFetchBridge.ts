@@ -63,6 +63,7 @@ function mimeTypeFor(filename: string): string {
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     ppt: 'application/vnd.ms-powerpoint',
     pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    webm: 'audio/webm', ogg: 'audio/ogg', mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', aac: 'audio/aac', mp4: 'audio/mp4',
   }
   return map[ext] || 'application/octet-stream'
 }
