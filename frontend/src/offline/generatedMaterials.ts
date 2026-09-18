@@ -2,6 +2,10 @@ const DB_NAME = 'prepza-offline-v2'
 const STORE = 'generatedMaterials'
 const AUDIO_STORE = 'generatedAudio'
 const USER_KEY = 'prepza-offline-user-id'
+const MAX_GENERATED_ROWS = 80
+const MAX_GENERATED_PAYLOAD_BYTES = 512 * 1024
+const MAX_AUDIO_CACHE_BYTES = 80 * 1024 * 1024
+const MAX_SINGLE_AUDIO_BYTES = 25 * 1024 * 1024
 
 type StoredMaterial = { key: string; path: string; requestBody: unknown; payload: unknown; savedAt: number }
 type StoredAudio = { key: string; userId: string; sourceUrl: string; blob: Blob; savedAt: number }
@@ -45,6 +49,7 @@ function supported(path: string) {
 
 export async function saveGeneratedMaterialOffline(path: string, requestBody: unknown, payload: unknown) {
   if (!supported(path)) return
+  try { if (new Blob([JSON.stringify(payload ?? null)]).size > MAX_GENERATED_PAYLOAD_BYTES) return } catch { return }
   try {
     const db = await openDb()
     await new Promise<void>((resolve, reject) => {
@@ -52,6 +57,11 @@ export async function saveGeneratedMaterialOffline(path: string, requestBody: un
       tx.objectStore(STORE).put({ key: keyFor(path, requestBody), path, requestBody, payload, savedAt: Date.now() } satisfies StoredMaterial)
       tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error)
     })
+    const rows = await readAll()
+    if (rows.length > MAX_GENERATED_ROWS) {
+      const excess = rows.sort((a,b) => a.savedAt-b.savedAt).slice(0, rows.length - MAX_GENERATED_ROWS)
+      const tx = db.transaction(STORE, 'readwrite'); for (const row of excess) tx.objectStore(STORE).delete(row.key)
+    }
     db.close()
   } catch (_) {}
 }
@@ -140,8 +150,11 @@ export async function cacheGeneratedAudioOffline(url: string): Promise<void> {
     const response = await fetch(url, { credentials: 'include', cache: 'no-store' })
     if (!response.ok || response.type === 'opaque') { db.close(); return }
     const blob = await response.blob()
-    if (!blob.size) { db.close(); return }
+    if (!blob.size || blob.size > MAX_SINGLE_AUDIO_BYTES) { db.close(); return }
+    const existingRows = await new Promise<StoredAudio[]>((resolve, reject) => { const tx = db.transaction(AUDIO_STORE, 'readonly'); const req = tx.objectStore(AUDIO_STORE).getAll(); req.onsuccess=()=>resolve((req.result as StoredAudio[])||[]); req.onerror=()=>reject(req.error) })
     const userId = localStorage.getItem(USER_KEY) || 'unknown'
+    const used = existingRows.filter(x => x.userId === userId && x.key !== audioKey(url)).reduce((sum,x)=>sum+(x.blob?.size||0),0)
+    if (used + blob.size > MAX_AUDIO_CACHE_BYTES) { db.close(); return }
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(AUDIO_STORE, 'readwrite')
       tx.objectStore(AUDIO_STORE).put({ key: audioKey(url), userId, sourceUrl: url, blob, savedAt: Date.now() } satisfies StoredAudio)
