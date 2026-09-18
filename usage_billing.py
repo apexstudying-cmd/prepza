@@ -284,7 +284,7 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
         "used_units": used_units + units,
         "unit_limit": total_unit_limit,
         "max_units_per_generation": max_units,
-        "period_start": period.isoformat(),
+        "period_start": period,
     }
 
 def refund_ai_quota(db, user_id, feature, units, period_start=None):
