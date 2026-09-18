@@ -407,6 +407,7 @@ export function installE2EEFetchBridge(): void {
         const encrypted = await encryptGroupText(state.key, payload.body, conversationId, state.keyEpoch)
         payload.body = encrypted.body
         payload.nonce = encrypted.nonce
+        payload.key_epoch = state.keyEpoch
         init = { ...init, body: JSON.stringify(payload) }
       } catch {
         return failedResponse('Secure message edit encryption is unavailable')
@@ -430,6 +431,7 @@ export function installE2EEFetchBridge(): void {
           const encrypted = await encryptGroupText(state.key, payload.body, conversationId, state.keyEpoch)
           payload.body = encrypted.body
           payload.nonce = encrypted.nonce
+          payload.key_epoch = state.keyEpoch
           init = { ...init, body: JSON.stringify(payload) }
         } else if (payload?.attachment_id != null) {
           const attachmentId = Number(payload.attachment_id)
