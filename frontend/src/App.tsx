@@ -3750,7 +3750,9 @@ function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, s
     try {
       const token = await getChatCsrfToken()
       const init = await api<{ attachment_id: number; upload_url: string }>(`/chats/${conversationId}/attachments`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }) })
-      const upload = await fetch(init.upload_url, { method: 'PUT', body: file })
+      const uploadHeaders: HeadersInit = {}
+      if (file.type) uploadHeaders['Content-Type'] = file.type
+      const upload = await fetch(init.upload_url, { method: 'PUT', headers: uploadHeaders, body: file })
       if (!upload.ok) throw new Error('Upload to storage failed.')
       await api(`/chats/${conversationId}/attachments/${init.attachment_id}/uploaded`, { method: 'POST', headers: { 'X-CSRF-Token': token } })
       await api(`/chats/${conversationId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ attachment_id: init.attachment_id, kind: 'text' }) })
