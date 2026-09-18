@@ -21,6 +21,7 @@ export default function CallExperience({ userId }: Props) {
   const [cameraOff, setCameraOff] = useState(false)
   const localVideo = useRef<HTMLVideoElement>(null)
   const remoteVideo = useRef<HTMLVideoElement>(null)
+  const remoteAudio = useRef<HTMLAudioElement>(null)
   const peer = useRef<RTCPeerConnection | null>(null)
   const localStream = useRef<MediaStream | null>(null)
   const pendingIce = useRef<RTCIceCandidateInit[]>([])
@@ -39,7 +40,7 @@ export default function CallExperience({ userId }: Props) {
       if (event.type === 'call:rejected' || event.type === 'call:ended') { cleanup(false); return }
       if (event.type === 'call:accepted') { void createAndSendOffer(event); return }
       if (event.type === 'call:offer' && event.payload) { void acceptOffer(event); return }
-      if (event.type === 'call:answer' && event.payload && peer.current) { void peer.current.setRemoteDescription(event.payload as RTCSessionDescriptionInit); return }
+      if (event.type === 'call:answer' && event.payload && peer.current) { void (async () => { await peer.current!.setRemoteDescription(event.payload as RTCSessionDescriptionInit); for (const candidate of pendingIce.current.splice(0)) await peer.current!.addIceCandidate(candidate) })(); return }
       if (event.type === 'call:ice' && event.payload) { void addIce(event.payload as RTCIceCandidateInit) }
     })
     return () => { unsubscribe() }
@@ -62,6 +63,7 @@ export default function CallExperience({ userId }: Props) {
     }
     pc.ontrack = event => {
       if (remoteVideo.current && event.streams[0]) remoteVideo.current.srcObject = event.streams[0]
+      if (remoteAudio.current && event.streams[0]) { remoteAudio.current.srcObject = event.streams[0]; void remoteAudio.current.play().catch(() => {}) }
     }
     pc.onconnectionstatechange = () => {
       if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) cleanup(true)
@@ -142,6 +144,7 @@ export default function CallExperience({ userId }: Props) {
     localStream.current?.getTracks().forEach(track => track.stop()); localStream.current = null
     if (localVideo.current) localVideo.current.srcObject = null
     if (remoteVideo.current) remoteVideo.current.srcObject = null
+    if (remoteAudio.current) remoteAudio.current.srcObject = null
     callRef.current = null
     setCall(null); setIncoming(null); setMuted(false); setCameraOff(false); pendingIce.current = []
   }
@@ -157,6 +160,7 @@ export default function CallExperience({ userId }: Props) {
 
   if (!incoming && !call) return null
   return <>
+    <audio ref={remoteAudio} autoPlay playsInline style={{ display: 'none' }} />
     {incoming && !call && <div style={{ position:'fixed', inset:0, zIndex:3000, background:'rgba(4,8,20,.86)', display:'flex', alignItems:'center', justifyContent:'center', padding:20, color:'#fff' }}>
       <div style={{ width:'min(360px,100%)', textAlign:'center' }}>
         <div style={{ width:92,height:92,borderRadius:'50%',margin:'0 auto 18px',background:'#c9a84c',color:'#0b1437',display:'grid',placeItems:'center',fontSize:34,fontWeight:900 }}>{(incoming.from_name || 'S').slice(0,1).toUpperCase()}</div>
