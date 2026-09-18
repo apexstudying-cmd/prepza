@@ -3211,7 +3211,7 @@ def payment_history():
 
 # ---------- Document routes (student uploads) ----------
 
-ALLOWED_DOCUMENT_EXTENSIONS = {"pdf", "doc", "docx", "ppt", "pptx", "jpg", "jpeg", "png"}
+ALLOWED_DOCUMENT_EXTENSIONS = {"pdf", "doc", "docx", "ppt", "pptx", "jpg", "jpeg", "png", "webm", "ogg", "mp3", "m4a", "wav", "aac", "mp4"}
 MAX_DOCUMENT_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB - revisit once real usage data exists
 CONTENT_HASH_REGEX = re.compile(r"^[a-f0-9]{64}$")
 
