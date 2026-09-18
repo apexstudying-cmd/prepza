@@ -52,6 +52,7 @@ function displayText(message: Message) { const envelope = parseEnvelope(message.
 function replyId(message: Message) { const envelope = parseEnvelope(message.body); return envelope?.type === 'text' ? envelope.reply_to || null : null }
 function buildReactionState(messages: Message[]) { const state: ReactionState = {}; for (const message of messages) { if (message.kind !== 'reaction') continue; const event = parseEnvelope(message.body); if (!event || event.type !== 'reaction') continue; const byEmoji = state[event.target_id] || (state[event.target_id] = {}); const users = byEmoji[event.emoji] || (byEmoji[event.emoji] = new Set<number>()); if (event.action === 'add') users.add(message.sender_id); else users.delete(message.sender_id) } return state }
 function isImage(fileType: string) { return /^(jpg|jpeg|png|gif|webp)$/i.test(fileType) || fileType.startsWith('image/') }
+function isAudio(fileType: string) { return /^(webm|ogg|mp3|m4a|wav|aac|mp4)$/i.test(fileType) || fileType.startsWith('audio/') }
 
 export default function WhatsAppChatExperience() {
   const [visible, setVisible] = useState(false)
@@ -87,12 +88,17 @@ export default function WhatsAppChatExperience() {
   const [groupSelected, setGroupSelected] = useState<GroupPickerUser[]>([])
   const [groupCreating, setGroupCreating] = useState(false)
   const [groupError, setGroupError] = useState('')
+  const [recordingVoice, setRecordingVoice] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<number | null>(null)
   const typingTimeouts = useRef<Map<number, number>>(new Map())
   const meIdRef = useRef<number | null>(null)
   const csrfTokenRef = useRef('')
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null)
+  const voiceChunksRef = useRef<Blob[]>([])
+  const voiceTimerRef = useRef<number | null>(null)
   useEffect(() => { meIdRef.current = meId }, [meId])
   useEffect(() => { csrfTokenRef.current = csrfToken }, [csrfToken])
 
@@ -220,6 +226,31 @@ export default function WhatsAppChatExperience() {
     }
   }
 
+  const startVoiceRecording = async () => {
+    if (selectedId == null || recordingVoice || uploading || sending) return
+    if (!navigator.onLine) { setError('Voice notes require an internet connection.'); return }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') { setError('Voice recording is not supported in this browser.'); return }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'].find(type => MediaRecorder.isTypeSupported(type)) || ''
+      const recorder = mimeType ? new MediaRecorder(stream,{mimeType}) : new MediaRecorder(stream)
+      voiceChunksRef.current=[]
+      recorder.ondataavailable=e=>{if(e.data.size>0)voiceChunksRef.current.push(e.data)}
+      recorder.onstop=()=>{
+        stream.getTracks().forEach(t=>t.stop())
+        const blob=new Blob(voiceChunksRef.current,{type:recorder.mimeType||'audio/webm'})
+        voiceChunksRef.current=[]
+        setRecordingVoice(false)
+        if(voiceTimerRef.current){window.clearInterval(voiceTimerRef.current);voiceTimerRef.current=null}
+        setRecordingSeconds(0)
+        if(blob.size>0){const ext=recorder.mimeType.includes('mp4')?'m4a':recorder.mimeType.includes('ogg')?'ogg':'webm';void sendAttachment(new File([blob],`voice-note-${Date.now()}.${ext}`,{type:blob.type}))}
+      }
+      voiceRecorderRef.current=recorder
+      recorder.start(250);setRecordingVoice(true);setRecordingSeconds(0)
+      voiceTimerRef.current=window.setInterval(()=>setRecordingSeconds(v=>v+1),1000)
+    }catch{setError('Microphone access was not granted.');setRecordingVoice(false)}
+  }
+  const stopVoiceRecording=()=>{const r=voiceRecorderRef.current;voiceRecorderRef.current=null;if(r&&r.state!=='inactive')r.stop()}
   const send = async () => {
     const text = input.trim(); if (!text || sending || selectedId == null) return
     setSending(true); setError(''); sendTypingRealtime(selectedId, false)
