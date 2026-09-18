@@ -129,7 +129,11 @@ export default function WhatsAppChatExperience() {
     if (!visible || view !== 'detail' || selectedId == null) return
     let cancelled = false
     setLoading(true); setError(''); setMessageSearchResults([])
-    const cachedMessagesPromise = getCachedChatMessages(selectedId)
+    void getCachedChatMessages(selectedId).then(cached => {
+      if (cancelled || !cached) return
+      setMessages(cached as Message[])
+      setLoading(false)
+    })
     Promise.all([
       api<Detail>(`/chats/${selectedId}`),
       api<{ messages: Message[] }>(`/chats/${selectedId}/messages`),
@@ -141,15 +145,8 @@ export default function WhatsAppChatExperience() {
       setOnlineUsers(new Set())
       joinRealtimeChat(selectedId)
       sendReadRealtime(selectedId)
-    }).catch(async value => {
-      const cached = await cachedMessagesPromise
-      if (cancelled) return
-      if (cached) {
-        setMessages(cached as Message[])
-        setError('')
-      } else {
-        setError(friendlyError(value, 'Could not load this conversation.'))
-      }
+    }).catch(value => {
+      if (!cancelled && !messages.length) setError(friendlyError(value, 'Could not load this conversation.'))
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true; leaveRealtimeChat(selectedId) }
   }, [visible, view, selectedId])
