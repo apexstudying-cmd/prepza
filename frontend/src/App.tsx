@@ -4099,11 +4099,12 @@ function ShareSheetScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 // endpoint alone has both halves. fallbackName is whatever display name the
 // calling screen already had on hand (a follow-list row, a notification,
 // etc) - used only until public-profile's own display_name arrives.
-function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActiveConversationId }: {
+function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActiveConversationId, backScreen = 'chats' }: {
   setScreen: (s: Screen) => void
   targetUserId: number | null
   fallbackName?: string | null
   setActiveConversationId?: (id: number) => void
+  backScreen?: Screen
 }) {
   const { tokens: T } = useTheme()
   const [profile, setProfile] = useState<PublicProfile | null>(null)
@@ -4173,8 +4174,9 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-          <button type="button" onClick={() => setScreen('chat-options')} aria-label="Back to chat info" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <button type="button" onClick={() => setScreen(backScreen)} aria-label="Back" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <span style={{ fontWeight: 700, fontSize: 13, color: 'rgba(255,255,255,0.72)' }}>Contact info</span>
         </div>
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
@@ -13344,7 +13346,7 @@ export default function App() {
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} opportunityId={activeOpportunityId} />
       case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
-      case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} />
+      case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} backScreen="chat-detail" />
       case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} onOpenOrgPortal={() => setOrgPortalMode(true)} />
       case 'settings':          return <SettingsScreen setScreen={setScreen} />
       case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} />
