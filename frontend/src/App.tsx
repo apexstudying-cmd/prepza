@@ -2448,7 +2448,7 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
-  const [input, setInput] = useState(() => getChatDraft(conversationId))
+  const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
   const [voiceMode, setVoiceMode] = useState(false)
