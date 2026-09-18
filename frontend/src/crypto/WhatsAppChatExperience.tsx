@@ -89,7 +89,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<number>>(new Set())
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [csrfToken, setCsrfToken] = useState('')
-  const [readReceiptsEnabled, setReadReceiptsEnabled] = useState(true)
+  const [readReceiptsEnabled, setReadReceiptsEnabled] = useState<boolean | null>(null)
   const [showListSearch, setShowListSearch] = useState(false)
   const [showGroupCreator, setShowGroupCreator] = useState(false)
   const [groupName, setGroupName] = useState('')
@@ -205,7 +205,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
       void cacheChatMessages(selectedId, nextMessages.messages || [])
       setOnlineUsers(new Set())
       joinRealtimeChat(selectedId)
-      if (readReceiptsEnabled) sendReadRealtime(selectedId)
+      if (readReceiptsEnabled === true) sendReadRealtime(selectedId)
     }).catch(value => {
       if (!cancelled && !cacheLoaded) setError(friendlyError(value, 'Could not load this conversation.'))
     }).finally(() => { if (!cancelled) setLoading(false) })
@@ -213,7 +213,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   }, [visible, view, selectedId])
 
   useEffect(() => {
-    if (!visible || view !== 'detail' || selectedId == null || !csrfToken || !readReceiptsEnabled) return
+    if (!visible || view !== 'detail' || selectedId == null || !csrfToken || readReceiptsEnabled !== true) return
     void api(`/chats/${selectedId}/read`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }).then(() => { void loadList() }).catch(() => {})
   }, [visible, view, selectedId, csrfToken, readReceiptsEnabled])
 
