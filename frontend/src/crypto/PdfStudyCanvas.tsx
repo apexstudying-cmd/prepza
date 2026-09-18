@@ -24,7 +24,57 @@ export default function PdfStudyCanvas({ src, title, onPageChange, onTextSelecti
   const fit = async (mode: 'width' | 'page') => { const document = documentRef.current, stage = stageRef.current; if (!document || !stage) return; const size = await getPdfPageSize(document, page); const w = Math.max(240, stage.clientWidth - 32), h = Math.max(240, stage.clientHeight - 100); const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, mode === 'width' ? w / size.width : Math.min(w / size.width, h / size.height))); setZoom(next); await render(page, next) }
   const changePage = async (next: number) => { if (next >= 1 && next <= pages) await render(next, zoom) }
   const applyTextAnnotation = (kind: 'highlight' | 'underline' | 'strike') => { if (!selectedRange.length) return; const additions = selectedRange.map(rect => ({ id: crypto.randomUUID(), page, tool: kind, x: rect.x, y: rect.y, w: rect.width, h: rect.height } as Annotation)); commitAnnotations([...annotations, ...additions]); setSelectedRange([]); window.getSelection()?.removeAllRanges() }
-  const pointer = (event: ReactPointerEvent) => { if (tool === 'select' || !overlayRef.current) return; const rect = overlayRef.current.getBoundingClientRect(), start: [number, number] = [Math.max(0, event.clientX - rect.left), Math.max(0, event.clientY - rect.top)]; let points: Array<[number, number]> = [start]; const move = (e: PointerEvent) => points.push([Math.max(0, e.clientX - rect.left), Math.max(0, e.clientY - rect.top)]); const up = (e: PointerEvent) => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); const ex = Math.max(0, e.clientX - rect.left), ey = Math.max(0, e.clientY - rect.top), w = Math.max(3, Math.abs(ex - start[0])), h = Math.max(3, Math.abs(ey - start[1])); if (tool === 'eraser') { const hit = [...annotations].reverse().find(a => a.page === page && start[0] >= a.x && start[0] <= a.x + a.w && start[1] >= a.y && start[1] <= a.y + a.h); if (hit) commitAnnotations(annotations.filter(a => a.id !== hit.id)); return } if (tool === 'note') { const value = window.prompt('Study note', note || ''); if (!value) return; setNote(value); commitAnnotations([...annotations, { id: crypto.randomUUID(), page, tool, x: start[0], y: start[1], w: 180, h: 70, text: value }]); return } commitAnnotations([...annotations, { id: crypto.randomUUID(), page, tool, x: Math.min(start[0], ex), y: Math.min(start[1], ey), w, h, points: tool === 'pen' ? points : undefined }]) }; window.addEventListener('pointermove', move); window.addEventListener('pointerup', up) }
+  const pointer = (event: ReactPointerEvent) => {
+    if (tool === 'select' || !overlayRef.current) return
+    const rect = overlayRef.current.getBoundingClientRect()
+    const start: [number, number] = [Math.max(0, event.clientX - rect.left), Math.max(0, event.clientY - rect.top)]
+    let points: Array<[number, number]> = [start]
+    const move = (e: PointerEvent) => points.push([Math.max(0, e.clientX - rect.left), Math.max(0, e.clientY - rect.top)])
+    const up = (e: PointerEvent) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      const ex = Math.max(0, e.clientX - rect.left)
+      const ey = Math.max(0, e.clientY - rect.top)
+      const x = Math.min(start[0], ex)
+      const y = Math.min(start[1], ey)
+      const w = Math.max(3, Math.abs(ex - start[0]))
+      const h = Math.max(3, Math.abs(ey - start[1]))
+
+      if (tool === 'eraser') {
+        const hit = [...annotations].reverse().find(a => a.page === page && start[0] >= a.x && start[0] <= a.x + a.w && start[1] >= a.y && start[1] <= a.y + a.h)
+        if (hit) commitAnnotations(annotations.filter(a => a.id !== hit.id))
+        return
+      }
+
+      if (tool === 'note') {
+        const value = window.prompt('Study note', note || '')
+        if (!value) return
+        setNote(value)
+        commitAnnotations([...annotations, { id: crypto.randomUUID(), page, tool, x: start[0], y: start[1], w: 180, h: 70, text: value }])
+        return
+      }
+
+      // Drawing a rectangle is also a study-context action: collect the PDF
+      // text items that overlap the drawn box and expose that text to Ada.
+      // This is what makes "circle/box this passage -> ask Ada" work without
+      // requiring the student to precisely drag-select the PDF text layer.
+      if (tool === 'rect') {
+        const pageHeight = overlayRef.current.clientHeight
+        const picked = text
+          .map(item => ({ item, box: textStyle(item, pageHeight) }))
+          .filter(({ box }) => box.left < x + w && box.left + box.width > x && box.top < y + h && box.top + box.height > y)
+          .map(({ item }) => item.str.trim())
+          .filter(Boolean)
+        const context = picked.join(' ').slice(0, 20000)
+        setSelectedText(context)
+        onTextSelection?.(context)
+      }
+
+      commitAnnotations([...annotations, { id: crypto.randomUUID(), page, tool, x, y, w, h, points: tool === 'pen' ? points : undefined }])
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
   const undo = () => { const previous = undoRef.current.pop(); if (previous) { setAnnotations(previous); saveAnnotations(annotationKey, previous) } }
   const toggleBookmark = () => { const next = bookmarks.includes(page) ? bookmarks.filter(value => value !== page) : [...bookmarks, page].sort((a, b) => a - b); setBookmarks(next); saveBookmarks(bookmarkKey, next) }
   const ann = annotations.filter(a => a.page === page)
