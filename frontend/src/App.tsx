@@ -11921,18 +11921,19 @@ function AdminPromotionsPanel() {
           <div style={{ padding: 24, textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No promotion requests with this status.</div>
         ) : (
           <AdminTable
-            cols={['Opportunity', 'Organisation', 'Type', 'Window', 'Price', 'Status']}
+            cols={['Opportunity', 'Organisation', 'Type', 'Window', 'Price', 'Payment', 'Status']}
             rows={rows.map(r => [
               r.opportunity_title || `#${r.opportunity_id}`,
               r.organisation_name || `#${r.organisation_id}`,
               r.promotion_type.charAt(0).toUpperCase() + r.promotion_type.slice(1),
               `${r.start_date ? new Date(r.start_date).toLocaleDateString() : '—'} – ${r.end_date ? new Date(r.end_date).toLocaleDateString() : '—'}`,
               r.price > 0 ? `KES ${r.price.toLocaleString()}` : 'Free',
+              <AdminBadge text={r.price > 0 ? r.payment_status : 'not required'} color={r.price > 0 && r.payment_status !== 'success' ? 'amber' : 'green'} />,
               <AdminBadge text={r.approval_status} color={ADMIN_PROMO_STATUS_COLOR[r.approval_status] || 'gray'} />,
             ])}
             actions={i => rows[i].approval_status === 'pending' ? (
               <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
-                <button disabled={actionBusy} onClick={() => runAction(rows[i].id, 'approve')} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Approve</button>
+                <button disabled={actionBusy || (rows[i].price > 0 && rows[i].payment_status !== 'success')} onClick={() => runAction(rows[i].id, 'approve')} title={rows[i].price > 0 && rows[i].payment_status !== 'success' ? 'Payment required before approval' : 'Approve'} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: (actionBusy || (rows[i].price > 0 && rows[i].payment_status !== 'success')) ? 'not-allowed' : 'pointer', opacity: rows[i].price > 0 && rows[i].payment_status !== 'success' ? 0.45 : 1, fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Approve</button>
                 <button disabled={actionBusy} onClick={() => runAction(rows[i].id, 'reject')} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>Reject</button>
               </div>
             ) : null}
