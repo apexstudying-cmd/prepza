@@ -13900,7 +13900,7 @@ export default function App() {
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
   if (orgPortalMode) return <OrganisationPortalScreen onExit={() => setOrgPortalMode(false)} />
 
-  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','upload-share-choice','payment','payment-success','payment-failure','chat-detail','chat-options','document-reader']
+  // Bottom navigation belongs to the primary app surfaces. Detail/immersive flows must own the full viewport so the global nav does not compete with their back/close controls.\n  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','upload-share-choice','processing','doc-ready','document-study','document-reader','ai-tutor','flashcards','quiz','podcast-player','podcast-library','summary','opportunity-detail','share-sheet','settings','student-profile','notifications','library','mind-map','new-chat','chat-detail','chat-options','edit-profile','payment','payment-success','payment-failure','payment-history','publish-library','xp-progress','study-streak','achievements','time-studied','followers','following','follow-requests','group-detail','group-create']
   const darkHomeIndicator: Screen[] = ['processing','splash','login']
 
   const renderScreen = () => {
