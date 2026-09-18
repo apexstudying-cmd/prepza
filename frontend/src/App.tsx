@@ -2200,11 +2200,11 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
         {tab === 'tools' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[
-              { icon: null, title: 'Flashcards', sub: '35 cards generated', action: () => setScreen('flashcards'), color: N.gold },
-              { icon: null, title: 'Practice Quiz', sub: '15 MCQ questions', action: () => setScreen('quiz'), color: '#4C7BC9' },
-              { icon: null, title: 'Summary', sub: '2-page condensed notes', action: () => setScreen('summary'), color: '#4CC97B' },
-              { icon: null, title: 'Study Podcast', sub: '9 min AI-generated episode', action: () => setScreen('podcast-player'), color: '#C94C4C' },
-              { icon: '🗺️', title: 'Mind Map', sub: 'Visual concept overview', action: () => setScreen('mind-map'), color: '#9B59B6' },
+              { icon: Ic.book('w-5 h-5'), title: 'Flashcards', sub: '35 cards generated', action: () => setScreen('flashcards'), color: N.gold },
+              { icon: Ic.check('w-5 h-5'), title: 'Practice Quiz', sub: '15 MCQ questions', action: () => setScreen('quiz'), color: '#4C7BC9' },
+              { icon: Ic.book('w-5 h-5'), title: 'Summary', sub: '2-page condensed notes', action: () => setScreen('summary'), color: '#4CC97B' },
+              { icon: Ic.podcast('w-5 h-5'), title: 'Study Podcast', sub: '9 min AI-generated episode', action: () => setScreen('podcast-player'), color: '#C94C4C' },
+              { icon: Ic.explore('w-5 h-5'), title: 'Mind Map', sub: 'Visual concept overview', action: () => setScreen('mind-map'), color: '#9B59B6' },
               { icon: 'download', title: 'Save for offline study', sub: 'Keep this document in your Study Hub', action: () => void saveForOfflineStudy(), color: T.textMuted },
             ].map((t, i) => (
               <button key={i} onClick={t.action} style={{ display: 'flex', alignItems: 'center', gap: 12, background: T.card, border: '1px solid rgba(0,0,0,0.04)', borderRadius: 14, padding: '13px 15px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', fontFamily: 'Plus Jakarta Sans' }}>
