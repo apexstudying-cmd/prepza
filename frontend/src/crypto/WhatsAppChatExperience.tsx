@@ -388,14 +388,24 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
     const text = input.trim(); if (!text || sending || selectedId == null) return
     setSending(true); setError(''); sendTypingRealtime(selectedId, false)
     const envelope: ChatEnvelope = { v: 1, type: 'text', text, ...(replyingTo ? { reply_to: replyingTo.id } : {}) }
-    const clientMessageId = crypto.randomUUID()
-    const requestBody = JSON.stringify({ body: JSON.stringify(envelope), kind: 'text', client_message_id: clientMessageId })
-    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: requestBody }); setInput(''); setReplyingTo(null); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) {
-      if (!navigator.onLine) {
+    const requestBody = JSON.stringify({ body: JSON.stringify(envelope), kind: 'text', client_message_id: crypto.randomUUID() })
+    try {
+      const token = await getCsrfToken()
+      if (editingMessageId != null) {
+        await api(`/chats/${selectedId}/messages/${editingMessageId}`, { method:'PATCH', headers:{'X-CSRF-Token':token}, body:JSON.stringify({ body: JSON.stringify(envelope) }) })
+        setEditingMessageId(null); setInput('')
+      } else {
+        await api(`/chats/${selectedId}/messages`, { method:'POST', headers:{'X-CSRF-Token':token}, body:requestBody })
+        setInput(''); setReplyingTo(null)
+      }
+      const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`)
+      setMessages(result.messages || []); void loadList()
+    } catch (value) {
+      if (editingMessageId == null && !navigator.onLine) {
         const queued = await enqueueOfflineChatMessage(`/chats/${selectedId}/messages`, requestBody, csrfToken)
         if (queued) { setInput(''); setReplyingTo(null); setError('Message saved. It will send when you reconnect.') }
         else setError('Could not save this message for offline sending. Your offline message queue may be full.')
-      } else setError(friendlyError(value, 'Could not send this message.'))
+      } else setError(friendlyError(value, editingMessageId != null ? 'Could not edit this message.' : 'Could not send this message.'))
     } finally { setSending(false) }
   }
   const react = async (message: Message, emoji: string) => {
