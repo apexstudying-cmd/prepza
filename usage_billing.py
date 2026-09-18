@@ -180,6 +180,8 @@ def _current_student_plan(db, user_id):
 
 
 def _usage_row(db, user_id, feature):
+    plan_code = _current_student_plan(db, user_id)
+    plan = STUDENT_PLANS[plan_code]
     return db.session.execute(text("""
         SELECT units, requests
         FROM student_ai_usage
@@ -236,7 +238,7 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
     if used_requests >= max_requests or used_units + units > total_unit_limit:
         db.session.rollback()
         return False, {
-            "error": "You have reached this plan's monthly generation allowance.",
+            "error": "You have reached this plan's generation allowance.",
             "code": "generation_quota_exhausted",
             "feature": feature,
             "plan": plan_code,
@@ -500,7 +502,31 @@ def register_usage_billing(app, db):
             return jsonify(meta), 402
         request.environ["prepza_quota_consumed"] = "1"
         request.environ["prepza_quota_feature"] = feature
+        request.environ["prepza_quota_units"] = str(units)
+        request.environ["prepza_quota_user_id"] = str(user_id)
         return None
+
+    @app.after_request
+    def _refund_failed_generation_quota(response):
+        # Refund a reservation when the existing generation route fails.
+        if response.status_code >= 400 and request.environ.get("prepza_quota_consumed") == "1":
+            try:
+                uid = int(request.environ["prepza_quota_user_id"])
+                feature = request.environ["prepza_quota_feature"]
+                units = int(request.environ["prepza_quota_units"])
+                plan = STUDENT_PLANS[_current_student_plan(db, uid)]
+                period = _period_start(plan)
+                db.session.execute(text("""
+                    UPDATE student_ai_usage
+                    SET units = GREATEST(0, units - :units),
+                        requests = GREATEST(0, requests - 1),
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = :uid AND period_start = :period AND feature = :feature
+                """), {"uid": uid, "period": period, "feature": feature, "units": units})
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        return response
 
     def _org_member(org_id, user_id):
         return db.session.execute(text("""
