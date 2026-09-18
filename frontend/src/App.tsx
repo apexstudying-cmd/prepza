@@ -13444,7 +13444,7 @@ export default function App() {
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
   if (orgPortalMode) return <OrganisationPortalScreen onExit={() => setOrgPortalMode(false)} />
 
-  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','upload-share-choice','payment','payment-success','payment-failure','chat-detail','chat-options']
+  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','upload-share-choice','payment','payment-success','payment-failure','chat-detail','chat-options','document-reader']
   const darkHomeIndicator: Screen[] = ['processing','splash','login']
 
   const renderScreen = () => {
