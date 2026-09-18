@@ -9572,6 +9572,75 @@ def send_message(conversation_id):
     return jsonify(_serialize_message(message, attachment)), 201
 
 
+CHAT_EDIT_WINDOW = timedelta(minutes=15)
+CHAT_DELETE_WINDOW = timedelta(days=2)
+
+
+@app.route("/chats/<int:conversation_id>/messages/<int:message_id>", methods=["PATCH"])
+@require_csrf
+def edit_message(conversation_id, message_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Conversation not found"}), 404
+
+    message = Message.query.filter_by(id=message_id, conversation_id=conversation_id).first()
+    if not message or message.is_deleted:
+        return jsonify({"error": "Message not found"}), 404
+    if message.sender_id != user_id:
+        return jsonify({"error": "You can only edit your own messages"}), 403
+    if message.created_at and datetime.utcnow() - message.created_at > CHAT_EDIT_WINDOW:
+        return jsonify({"error": "Messages can only be edited within 15 minutes"}), 409
+    if MessageAttachment.query.filter_by(message_id=message.id).first():
+        return jsonify({"error": "Attachments cannot be edited"}), 400
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+    body = (data.get("body") or "").strip()
+    nonce = (data.get("nonce") or "").strip()
+    if not body:
+        return jsonify({"error": "Edited message body is required"}), 400
+    if len(body) > CHAT_MESSAGE_CIPHERTEXT_MAX:
+        return jsonify({"error": f"Message must be {CHAT_MESSAGE_CIPHERTEXT_MAX} characters or fewer"}), 400
+    if not nonce:
+        return jsonify({"error": "nonce is required alongside an edited message body"}), 400
+
+    message.body = body
+    message.nonce = nonce
+    message.edited_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify(_serialize_message(message))
+
+
+@app.route("/chats/<int:conversation_id>/messages/<int:message_id>", methods=["DELETE"])
+@require_csrf
+def delete_message(conversation_id, message_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if not _active_participant(conversation_id, user_id):
+        return jsonify({"error": "Conversation not found"}), 404
+
+    message = Message.query.filter_by(id=message_id, conversation_id=conversation_id).first()
+    if not message or message.is_deleted:
+        return jsonify({"error": "Message not found"}), 404
+    if message.sender_id != user_id:
+        return jsonify({"error": "You can only delete your own messages"}), 403
+    if message.created_at and datetime.utcnow() - message.created_at > CHAT_DELETE_WINDOW:
+        return jsonify({"error": "Messages can only be deleted within 2 days"}), 409
+
+    message.is_deleted = True
+    message.body = None
+    message.nonce = None
+    message.edited_at = None
+    db.session.commit()
+    return jsonify(_serialize_message(message))
+
+
 CHAT_ATTACHMENT_MAX_SIZE_BYTES = 20 * 1024 * 1024
 # 20 MB - deliberately smaller than document uploads (50 MB); chat
 # attachments don't get AI processing or text extraction, so there's no
