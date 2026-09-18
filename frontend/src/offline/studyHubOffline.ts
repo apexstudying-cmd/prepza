@@ -247,7 +247,16 @@ export async function getOfflineStudyDocumentUrl(documentId: number, userId: num
 }
 
 export async function listSavedStudyHubOffline(userId?: number): Promise<SavedStudyHubMeta[]> {
-  try { return await getAllMeta(userId) } catch (_) { return [] }
+  try {
+    const rows = await getAllMeta(userId)
+    const valid: SavedStudyHubMeta[] = []
+    for (const row of rows) {
+      const asset = await getStudyAsset(row.key)
+      if (asset?.blob instanceof Blob && asset.blob.size > 0) valid.push(row)
+      else await deleteMeta(row.key)
+    }
+    return valid
+  } catch (_) { return [] }
 }
 
 export async function getSavedStudyHubOffline(documentId: number, userId: number): Promise<SavedStudyHubMeta | null> {
