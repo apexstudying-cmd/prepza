@@ -58,9 +58,14 @@ export async function saveGeneratedMaterialOffline(path: string, requestBody: un
       tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error)
     })
     const rows = await readAll()
-    if (rows.length > MAX_GENERATED_ROWS) {
-      const excess = rows.sort((a,b) => a.savedAt-b.savedAt).slice(0, rows.length - MAX_GENERATED_ROWS)
-      const tx = db.transaction(STORE, 'readwrite'); for (const row of excess) tx.objectStore(STORE).delete(row.key)
+    const userId = localStorage.getItem(USER_KEY) || 'unknown'
+    const userRows = rows.filter(row => row.key.startsWith(`${userId}:`)).sort((a,b) => a.savedAt-b.savedAt)
+    if (userRows.length > MAX_GENERATED_ROWS) {
+      const excess = userRows.slice(0, userRows.length - MAX_GENERATED_ROWS)
+      const cleanupDb = await openDb()
+      const tx = cleanupDb.transaction(STORE, 'readwrite'); for (const row of excess) tx.objectStore(STORE).delete(row.key)
+      await new Promise<void>((resolve, reject) => { tx.oncomplete=()=>resolve(); tx.onerror=()=>reject(tx.error) })
+      cleanupDb.close()
     }
     db.close()
   } catch (_) {}
