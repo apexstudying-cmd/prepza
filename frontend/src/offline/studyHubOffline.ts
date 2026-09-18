@@ -6,6 +6,7 @@ const META_STORE = 'savedStudyHub'
 const ASSET_DB = 'prepza-offline-study-v1'
 const ASSET_STORE = 'documents'
 const MAX_SINGLE_ASSET_BYTES = 75 * 1024 * 1024
+const MAX_TOTAL_ASSET_BYTES = 250 * 1024 * 1024
 
 type SavedStudyHubMeta = {
   key: string
@@ -70,6 +71,18 @@ async function putStudyAsset(asset: StoredStudyAsset) {
       tx.objectStore(ASSET_STORE).put(asset)
       tx.oncomplete = () => resolve()
       tx.onerror = () => reject(tx.error || new Error('Could not persist the complete study document.'))
+    })
+  } finally { db.close() }
+}
+
+async function getStoredAssetUsage(excludeKey?: string): Promise<number> {
+  const db = await openAssetDb()
+  try {
+    return await new Promise<number>((resolve, reject) => {
+      const tx = db.transaction(ASSET_STORE, 'readonly')
+      const request = tx.objectStore(ASSET_STORE).getAll()
+      request.onsuccess = () => resolve((request.result as StoredStudyAsset[]).reduce((sum, item) => item.key === excludeKey ? sum : sum + (item.blob?.size || 0), 0))
+      request.onerror = () => reject(request.error)
     })
   } finally { db.close() }
 }
@@ -188,6 +201,8 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     if (!blob.size) throw new Error('The downloaded study document is empty.')
     if (blob.size > MAX_SINGLE_ASSET_BYTES) throw new Error('This document is too large to save for offline study.')
 
+    const currentStoredBytes = await getStoredAssetUsage(assetKey)
+    if (currentStoredBytes + blob.size > MAX_TOTAL_ASSET_BYTES) throw new Error('Offline study storage is full. Remove an older saved document before downloading another.')
     await putStudyAsset({ key: assetKey, userId, documentId, blob, savedAt: Date.now() })
     assetUrls.push(url)
     if (cache) { try { await cacheResponse(cache, url, new Response(blob, { headers: { 'Content-Type': blob.type || 'application/pdf' } })) } catch (_) {} }
