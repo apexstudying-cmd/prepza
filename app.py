@@ -8992,12 +8992,45 @@ def list_chats():
         if conversation.status == "pending" and conversation.created_by != user_id:
             continue
 
+        last_attachment = None
+        if last_message:
+            last_attachment = (
+                MessageAttachment.query
+                .filter_by(message_id=last_message.id, status="ready")
+                .first()
+            )
+
+        peer_user_id = None
+        peer_display_name = None
+        if not conversation.is_group:
+            peer = (
+                ConversationParticipant.query
+                .filter(
+                    ConversationParticipant.conversation_id == conversation.id,
+                    ConversationParticipant.user_id != user_id,
+                    ConversationParticipant.left_at.is_(None),
+                )
+                .first()
+            )
+            if peer:
+                peer_user_id = peer.user_id
+                peer_user = db.session.get(User, peer.user_id)
+                peer_display_name = _display_name(peer_user) if peer_user else None
+
         result.append({
             "id": conversation.id,
             "is_group": conversation.is_group,
             "name": _conversation_display_name(conversation, user_id),
+            "peer_user_id": peer_user_id,
             "last_message": last_message.body if last_message else None,
             "last_message_at": last_message.created_at.isoformat() if last_message else None,
+            "last_message_sender_name": (
+                _display_name(db.session.get(User, last_message.sender_id))
+                if last_message and last_message.sender_id
+                else None
+            ),
+            "last_message_file_type": last_attachment.file_type if last_attachment else None,
+            "last_message_filename": last_attachment.original_filename if last_attachment else None,
             "unread_count": unread_count,
             "status": conversation.status,
         })
