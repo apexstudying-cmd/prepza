@@ -2546,6 +2546,7 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
         <PdfStudyCanvas
           src={offlineSrc}
           title={doc.title}
+          storageKey={`offline:${Number(localStorage.getItem('prepza-offline-user-id') || 0)}:${activeDocumentId ?? 0}`}
           onPageChange={p => {
             const nextPage = Math.max(0, p - 1)
             setPage(nextPage)
