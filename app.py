@@ -2832,11 +2832,10 @@ def login():
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({"error": "Invalid email or password"}), 401
 
-    if not user.email_verified:
-        return jsonify({"error": "Please verify your email before logging in"}), 403
-
-    if user.is_suspended:
-        return jsonify({"error": "This account has been suspended"}), 403
+    # Keep account state generic at the login boundary. Verification and
+    # suspension status must not become an account-enumeration oracle.
+    if not user.email_verified or user.is_suspended:
+        return jsonify({"error": "Invalid email or password"}), 401
 
     session.permanent = True
     session["user_id"] = user.id
