@@ -136,6 +136,13 @@ def _ensure_schema(db):
             PRIMARY KEY (organisation_id, period_start)
         )
     """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS student_opportunity_discovery (
+            user_id INTEGER PRIMARY KEY,
+            discoverable BOOLEAN NOT NULL DEFAULT FALSE,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
     db.session.commit()
 
 
@@ -301,6 +308,100 @@ def register_usage_billing(app, db):
         })
         db.session.commit()
         return jsonify({"ok": True})
+
+    @app.post("/api/opportunity-discovery")
+    def opportunity_discovery():
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        if not _csrf_ok():
+            return jsonify({"error": "Invalid CSRF token"}), 403
+        data = request.get_json(silent=True) or {}
+        discoverable = bool(data.get("discoverable", False))
+        db.session.execute(text("""
+            INSERT INTO student_opportunity_discovery
+                (user_id, discoverable, updated_at)
+            VALUES (:uid, :discoverable, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id)
+            DO UPDATE SET discoverable = EXCLUDED.discoverable,
+                          updated_at = CURRENT_TIMESTAMP
+        """), {"uid": user_id, "discoverable": discoverable})
+        db.session.commit()
+        return jsonify({"discoverable": discoverable})
+
+    @app.get("/api/opportunity-discovery")
+    def get_opportunity_discovery():
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        value = db.session.execute(text("""
+            SELECT discoverable
+            FROM student_opportunity_discovery
+            WHERE user_id = :uid
+        """), {"uid": user_id}).scalar_one_or_none()
+        return jsonify({"discoverable": bool(value)})
+
+    @app.get("/api/organisations/<int:organisation_id>/candidates")
+    def organisation_candidates(organisation_id):
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        role = _org_member(organisation_id, user_id)
+        if role not in ("owner", "manager"):
+            return jsonify({"error": "Organisation membership required"}), 403
+
+        # Only students who explicitly opted into opportunity discovery are
+        # returned. Activity is aggregated to recent active days/sessions;
+        # exact online timestamps are never exposed.
+        days = request.args.get("days", default=7, type=int)
+        days = max(1, min(30, days))
+        rows = db.session.execute(text("""
+            SELECT
+                u.id,
+                u.display_name,
+                u.university_id,
+                un.name AS university_name,
+                u.program_id,
+                p.name AS program_name,
+                u.year,
+                u.semester,
+                COUNT(a.activity_date) AS active_days,
+                COALESCE(SUM(a.sessions), 0) AS sessions
+            FROM "user" AS u
+            JOIN student_opportunity_discovery AS d
+              ON d.user_id = u.id AND d.discoverable = TRUE
+            LEFT JOIN product_activity_day AS a
+              ON a.user_id = u.id
+             AND a.activity_date >= CURRENT_DATE - :days
+             AND (a.engaged_seconds >= 10 OR a.core_actions > 0)
+            LEFT JOIN university AS un ON un.id = u.university_id
+            LEFT JOIN program AS p ON p.id = u.program_id
+            WHERE u.is_suspended = FALSE
+            GROUP BY u.id, u.display_name, u.university_id, un.name,
+                     u.program_id, p.name, u.year, u.semester
+            HAVING COUNT(a.activity_date) > 0
+            ORDER BY active_days DESC, sessions DESC, u.id DESC
+            LIMIT 500
+        """), {"days": days - 1}).mappings().all()
+
+        return jsonify({
+            "window_days": days,
+            "candidates": [
+                {
+                    "id": int(row["id"]),
+                    "display_name": row["display_name"],
+                    "university_id": row["university_id"],
+                    "university_name": row["university_name"],
+                    "program_id": row["program_id"],
+                    "program_name": row["program_name"],
+                    "year": row["year"],
+                    "semester": row["semester"],
+                    "active_days": int(row["active_days"] or 0),
+                    "sessions": int(row["sessions"] or 0),
+                }
+                for row in rows
+            ],
+        })
 
     @app.get("/api/usage/me")
     def usage_me():
