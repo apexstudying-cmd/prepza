@@ -13281,7 +13281,7 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {tab === 'opportunities' && <OrgOpportunitiesTab orgId={activeOrg.id} isOwner={activeOrg.role === 'owner'} csrfToken={csrfToken} onCreate={() => setTab('create')} />}
         {tab === 'create' && <OrgCreateOpportunityTab orgId={activeOrg.id} org={activeOrg} csrfToken={csrfToken} onDone={() => setTab('opportunities')} />}
-        {tab === 'analytics' && <OrgAnalyticsTab orgId={activeOrg.id} />}
+        {tab === 'analytics' && <OrgAnalyticsTab orgId={activeOrg.id} isOwner={activeOrg.role === 'owner'} csrfToken={csrfToken} />}
         {tab === 'team' && <OrgTeamTab orgId={activeOrg.id} isOwner={activeOrg.role === 'owner'} csrfToken={csrfToken} />}
         {tab === 'profile' && <OrgProfileTab org={activeOrg} csrfToken={csrfToken} onSaved={loadOrgs} />}
       </div>
@@ -13646,9 +13646,10 @@ function OrgCreateOpportunityTab({ orgId, org, csrfToken, onDone }: { orgId: num
   )
 }
 
-function OrgAnalyticsTab({ orgId }: { orgId: number }) {
+function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner: boolean; csrfToken: string }) {
   const [items, setItems] = useState<OrgOpportunity[]>([])
   const [audience, setAudience] = useState<any>(null)
+  const [billingBusy, setBillingBusy] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -13673,6 +13674,28 @@ function OrgAnalyticsTab({ orgId }: { orgId: number }) {
   const cap = audience?.billing?.active_user_cap
   const mau = audience?.audience?.mau || 0
   const capPct = cap ? Math.min(100, Math.round((mau / cap) * 100)) : 0
+  const orgPlans = [
+    { code: 'launch', label: 'Launch', price: 2500, cap: 250, opportunities: 2 },
+    { code: 'growth', label: 'Growth', price: 7500, cap: 1000, opportunities: 10 },
+    { code: 'scale', label: 'Scale', price: 15000, cap: 3000, opportunities: 50 },
+  ]
+
+  const buyPlan = async (code: string) => {
+    if (!isOwner || billingBusy) return
+    setBillingBusy(code)
+    try {
+      const res = await api<{ redirect_url: string }>(`/api/organisations/${orgId}/plan/checkout`, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ plan: code }),
+      })
+      window.location.href = res.redirect_url
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Could not start organisation checkout.')
+    } finally {
+      setBillingBusy(null)
+    }
+  }
 
   return (
     <div style={{ padding: 16 }}>
@@ -13694,6 +13717,23 @@ function OrgAnalyticsTab({ orgId }: { orgId: number }) {
         <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 7 }}>Active means at least 10 seconds of foreground engagement or a core action. A signup/login alone is not active.</div>
       </div>
 
+      <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>Organisation plan</div>
+      <div style={{ display: 'grid', gap: 8, marginBottom: 18 }}>
+        {orgPlans.map(p => {
+          const current = plan === p.code && audience?.billing?.status === 'active'
+          return (
+            <div key={p.code} style={{ background: '#fff', borderRadius: 14, padding: 13, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 12, color: N.navy }}>{p.label}</div>
+                <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3 }}>KES {p.price.toLocaleString()}/month · up to {p.cap.toLocaleString()} MAU · {p.opportunities} active opportunities</div>
+              </div>
+              {current ? <span style={{ fontSize: 10, fontWeight: 800, color: ORG_COLORS.green }}>Active</span> : isOwner ? (
+                <button onClick={() => buyPlan(p.code)} disabled={!!billingBusy} style={{ background: ORG_COLORS.gold, color: ORG_COLORS.navy, border: 'none', borderRadius: 9, padding: '7px 11px', fontSize: 10, fontWeight: 800, cursor: billingBusy ? 'not-allowed' : 'pointer' }}>{billingBusy === p.code ? 'Opening…' : 'Choose'}</button>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
       <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>Opportunity performance</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
         {[['Total Views', totalViews], ['Live', publishedCount], ['Total Postings', items.length]].map(([label, val]) => (
