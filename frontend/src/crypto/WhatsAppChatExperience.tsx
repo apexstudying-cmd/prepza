@@ -183,7 +183,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
       void cacheChatMessages(selectedId, nextMessages.messages || [])
       setOnlineUsers(new Set())
       joinRealtimeChat(selectedId)
-      sendReadRealtime(selectedId)
+      if (readReceiptsEnabled) sendReadRealtime(selectedId)
     }).catch(value => {
       if (!cancelled && !cacheLoaded) setError(friendlyError(value, 'Could not load this conversation.'))
     }).finally(() => { if (!cancelled) setLoading(false) })
