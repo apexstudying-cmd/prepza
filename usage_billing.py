@@ -33,6 +33,10 @@ STUDENT_PLANS = {
         "podcast_max_minutes": 5,
         "flashcard_generations": 3,
         "flashcard_max_cards": 10,
+        "quiz_generations": 2,
+        "quiz_max_questions": 10,
+        "mind_map_generations": 2,
+        "mind_map_max_nodes": 6,
         "tutor_messages": 20,
     },
     "premium": {
@@ -45,6 +49,10 @@ STUDENT_PLANS = {
         "podcast_max_minutes": 30,
         "flashcard_generations": 30,
         "flashcard_max_cards": 50,
+        "quiz_generations": 20,
+        "quiz_max_questions": 30,
+        "mind_map_generations": 20,
+        "mind_map_max_nodes": 12,
         "tutor_messages": 300,
     },
 }
@@ -85,6 +93,16 @@ FEATURES = {
     "summary": ("summary_generations", "summary_max_pages"),
     "podcast": ("podcast_generations", "podcast_max_minutes"),
     "flashcards": ("flashcard_generations", "flashcard_max_cards"),
+    "quiz": ("quiz_generations", "quiz_max_questions"),
+    "mind_map": ("mind_map_generations", "mind_map_max_nodes"),
+}
+
+DEFAULT_GENERATION_UNITS = {
+    "summary": 2,
+    "podcast": 5,
+    "flashcards": 10,
+    "quiz": 10,
+    "mind_map": 6,
 }
 
 
@@ -267,6 +285,27 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
         "unit_limit": total_unit_limit,
         "max_units_per_generation": max_units,
     }
+
+def refund_ai_quota(db, user_id, feature, units, period_start=None):
+    """Return a previously reserved generation allowance after a failed call."""
+    if feature not in FEATURES:
+        return
+    try:
+        units = max(1, int(units))
+    except (TypeError, ValueError):
+        return
+    plan_code = _current_student_plan(db, user_id)
+    plan = STUDENT_PLANS[plan_code]
+    period = period_start or _period_start(plan)
+    db.session.execute(text("""
+        UPDATE student_ai_usage
+        SET units = GREATEST(0, units - :units),
+            requests = GREATEST(0, requests - 1),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = :uid AND period_start = :period AND feature = :feature
+    """), {"uid": user_id, "period": period, "feature": feature, "units": units})
+    db.session.commit()
+
 
 def _active_user_ids(db, since_date):
     rows = db.session.execute(text("""
@@ -489,63 +528,9 @@ def register_usage_billing(app, db):
     # frontend to invent a second billing API. The request is rejected before
     # an AI call starts, and the existing route then remains responsible for
     # generation/persistence.
-    @app.before_request
-    def _generation_quota_gate():
-        user_id = session.get("user_id")
-        if not user_id or request.method != "POST":
-            return None
-        path = request.path.rstrip("/")
-        feature = None
-        units = None
-
-        if re.fullmatch(r"/documents/\d+/summarize", path):
-            feature = "summary"
-            data = request.get_json(silent=True) or {}
-            units = data.get("max_pages", 2)
-        elif re.fullmatch(r"/documents/\d+/flashcards", path):
-            feature = "flashcards"
-            data = request.get_json(silent=True) or {}
-            units = data.get("card_count", 20)
-        elif re.fullmatch(r"/documents/\d+/podcast-script", path):
-            feature = "podcast"
-            data = request.get_json(silent=True) or {}
-            units = data.get("duration_minutes", 20)
-
-        if not feature:
-            return None
-        if not _csrf_ok():
-            return jsonify({"error": "Invalid CSRF token"}), 403
-
-        allowed, meta = check_and_consume_ai_quota(db, user_id, feature, units)
-        if not allowed:
-            return jsonify(meta), 402
-        request.environ["prepza_quota_consumed"] = "1"
-        request.environ["prepza_quota_feature"] = feature
-        request.environ["prepza_quota_units"] = str(units)
-        request.environ["prepza_quota_user_id"] = str(user_id)
-        return None
-
-    @app.after_request
-    def _refund_failed_generation_quota(response):
-        # Refund a reservation when the existing generation route fails.
-        if response.status_code >= 400 and request.environ.get("prepza_quota_consumed") == "1":
-            try:
-                uid = int(request.environ["prepza_quota_user_id"])
-                feature = request.environ["prepza_quota_feature"]
-                units = int(request.environ["prepza_quota_units"])
-                plan = STUDENT_PLANS[_current_student_plan(db, uid)]
-                period = _period_start(plan)
-                db.session.execute(text("""
-                    UPDATE student_ai_usage
-                    SET units = GREATEST(0, units - :units),
-                        requests = GREATEST(0, requests - 1),
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE user_id = :uid AND period_start = :period AND feature = :feature
-                """), {"uid": uid, "period": period, "feature": feature, "units": units})
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-        return response
+    # Generation quotas are enforced inside ai_reusable_generation.py
+    # after artifact reuse has been ruled out, so cached/shared material
+    # never consumes a student's allowance.
 
     def _org_member(org_id, user_id):
         return db.session.execute(text("""
