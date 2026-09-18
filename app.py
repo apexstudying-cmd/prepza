@@ -1067,6 +1067,11 @@ class Conversation(db.Model):
     # updated_at is bumped on every new message so /chats can sort by
     # most recent activity without a join + max(created_at) per row.
     status = db.Column(db.String(20), nullable=False, default="accepted")
+    # E2EE state is nullable only at the application-compatibility level;
+    # the database migration defaults these columns to legacy/0. Keeping
+    # them on the ORM model makes fresh chat tables match the live schema.
+    e2ee_mode = db.Column(db.String(20), nullable=False, default="legacy")
+    key_epoch = db.Column(db.Integer, nullable=False, default=0)
     # accepted | pending. Only meaningful for 1:1 (is_group=False)
     # conversations created against a who_can_message="followers"
     # target by a non-follower - Instagram-style message requests.
