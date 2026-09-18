@@ -1,3 +1,4 @@
+import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'
 import { getCachedChatMessages, cacheChatMessages } from '../offline/chatMessageCache'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -311,7 +312,13 @@ export default function WhatsAppChatExperience() {
     const text = input.trim(); if (!text || sending || selectedId == null) return
     setSending(true); setError(''); sendTypingRealtime(selectedId, false)
     const envelope: ChatEnvelope = { v: 1, type: 'text', text, ...(replyingTo ? { reply_to: replyingTo.id } : {}) }
-    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) }); setInput(''); setReplyingTo(null); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this message.')) } finally { setSending(false) }
+    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) }); setInput(''); setReplyingTo(null); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) {
+      if (!navigator.onLine) {
+        const queued = await enqueueOfflineChatMessage(`/chats/${selectedId}/messages`, JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }), csrfToken)
+        if (queued) { setInput(''); setReplyingTo(null); setError('Message saved. It will send when you reconnect.') }
+        else setError('Could not save this message for offline sending. Your offline message queue may be full.')
+      } else setError(friendlyError(value, 'Could not send this message.'))
+    } finally { setSending(false) }
   }
   const react = async (message: Message, emoji: string) => {
     if (selectedId == null || sending) return
