@@ -6766,8 +6766,8 @@ const SHARED_MEDIA_AUDIO_TYPES = new Set(['webm', 'ogg', 'mp3', 'm4a', 'wav', 'a
 function sharedMediaCategory(item: SharedMediaItem): Exclude<SharedMediaTab, 'all'> {
   const ext = getFileExtension(item.original_filename || '') || String(item.file_type || '').toLowerCase().replace(/^\./, '')
   if (IMAGE_FILE_TYPES.includes(ext)) return 'images'
+  if (SHARED_MEDIA_AUDIO_TYPES.has(ext) && (ext !== 'webm' || item.original_filename.toLowerCase().startsWith('voice-note-'))) return 'audio'
   if (SHARED_MEDIA_VIDEO_TYPES.has(ext)) return 'videos'
-  if (SHARED_MEDIA_AUDIO_TYPES.has(ext)) return 'audio'
   return 'files'
 }
 
