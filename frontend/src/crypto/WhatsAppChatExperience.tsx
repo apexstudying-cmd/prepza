@@ -191,9 +191,9 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   }, [visible, view, selectedId])
 
   useEffect(() => {
-    if (!visible || view !== 'detail' || selectedId == null || !csrfToken) return
+    if (!visible || view !== 'detail' || selectedId == null || !csrfToken || !readReceiptsEnabled) return
     void api(`/chats/${selectedId}/read`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }).then(() => { void loadList() }).catch(() => {})
-  }, [visible, view, selectedId, csrfToken])
+  }, [visible, view, selectedId, csrfToken, readReceiptsEnabled])
 
   useEffect(() => {
     if (!visible || view !== 'detail' || selectedId == null) return
