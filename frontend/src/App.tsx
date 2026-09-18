@@ -13765,7 +13765,7 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
         <div style={{ fontSize: 11, color: '#6B7280', lineHeight: 1.55, marginBottom: 10 }}>
           Only students who explicitly opt in to opportunity discovery appear here. Results are based on meaningful activity over the last 7 days; signups and logins alone do not qualify.
         </div>
-        {candidatesLoading ? <div style={{ fontSize: 11, color: '#9CA3AF' }}>Loading eligible students…</div> : candidates.length === 0 ? (
+        {candidates.length === 0 ? (
           <div style={{ fontSize: 11, color: '#9CA3AF' }}>No opted-in active students matched the current window.</div>
         ) : candidates.slice(0, 20).map((candidate: any) => (
           <div key={candidate.id} style={{ padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
