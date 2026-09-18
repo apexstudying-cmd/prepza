@@ -410,6 +410,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
       const token = await getCsrfToken()
       if (editingMessageId != null) {
         await api(`/chats/${selectedId}/messages/${editingMessageId}`, { method:'PATCH', headers:{'X-CSRF-Token':token}, body:JSON.stringify({ body: JSON.stringify(envelope) }) })
+        sendChatMessageUpdated(selectedId, editingMessageId, false)
         setEditingMessageId(null); setInput('')
       } else {
         await api(`/chats/${selectedId}/messages`, { method:'POST', headers:{'X-CSRF-Token':token}, body:requestBody })
