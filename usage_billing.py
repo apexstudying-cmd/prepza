@@ -35,7 +35,7 @@ STUDENT_PLANS = {
         "tutor_messages": 20,
     },
     "premium": {
-        "price_kes": 799,
+        "price_kes": 599,
         "billing_period": "semester",
         "summary_generations": 30,
         "summary_max_pages": 10,
@@ -328,13 +328,23 @@ def register_usage_billing(app, db):
 
     @app.get("/api/student-plans")
     def student_plans():
-        return jsonify({
-            "currency": "KES",
-            "plans": [
-                {"code": code, **values}
-                for code, values in STUDENT_PLANS.items()
-            ],
-        })
+        # These defaults match the existing Paystack checkout pricing in
+        # app.py: KES 599/semester and KES 999/annual. Admin-configured
+        # SystemSetting values can change checkout pricing independently;
+        # the response exposes the current launch defaults until that
+        # pricing layer is unified.
+        plans = [
+            {"code": "free", **STUDENT_PLANS["free"]},
+            {
+                "code": "premium",
+                **STUDENT_PLANS["premium"],
+                "price_options": {
+                    "semester": 599,
+                    "annual": 999,
+                },
+            },
+        ]
+        return jsonify({"currency": "KES", "plans": plans})
 
     # Enforce the existing generation endpoints without requiring the
     # frontend to invent a second billing API. The request is rejected before
