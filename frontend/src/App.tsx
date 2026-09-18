@@ -5787,14 +5787,14 @@ function SignupScreen({ setScreen, referralCode, referralChannel }: { setScreen:
         )}
 
         {step === 0 && (
-          <input value={data.display_name} onChange={e => setData(d => ({ ...d, display_name: e.target.value }))} placeholder="e.g. Arnold Gichuru" maxLength={50} style={inputStyle} />
+          <input name="name" autoComplete="name" aria-label="Full name" value={data.display_name} onChange={e => setData(d => ({ ...d, display_name: e.target.value }))} placeholder="e.g. Arnold Gichuru" maxLength={50} style={inputStyle} />
         )}
         {step === 1 && (
-          <input type="text" value={data.email} onChange={e => setData(d => ({ ...d, email: e.target.value }))} placeholder="arnold@students.ku.ac.ke" style={inputStyle} />
+          <input type="email" name="email" autoComplete="email" inputMode="email" aria-label="Email address" value={data.email} onChange={e => setData(d => ({ ...d, email: e.target.value }))} placeholder="arnold@students.ku.ac.ke" style={inputStyle} />
         )}
         {step === 2 && (
           <>
-            <input type="password" value={data.password} onChange={e => setData(d => ({ ...d, password: e.target.value }))} placeholder="••••••••" style={inputStyle} />
+            <input type="password" name="password" autoComplete="new-password" aria-label="Create password" value={data.password} onChange={e => setData(d => ({ ...d, password: e.target.value }))} placeholder="••••••••" style={inputStyle} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
               {passwordChecks(data.password).map(c => (
                 <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.met ? '#4CC97B' : 'rgba(255,255,255,0.4)', fontFamily: 'Plus Jakarta Sans' }}>
@@ -5807,7 +5807,7 @@ function SignupScreen({ setScreen, referralCode, referralChannel }: { setScreen:
 
         {step === 3 && (
           <>
-            <input value={uniSearch} onChange={e => setUniSearch(e.target.value)} placeholder="Type to search your university..." style={inputStyle} />
+            <input type="search" aria-label="Search universities" value={uniSearch} onChange={e => setUniSearch(e.target.value)} placeholder="Type to search your university..." style={inputStyle} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-hide">
               {loadingUniversities ? (
                 <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading universities...</div>
@@ -5823,7 +5823,7 @@ function SignupScreen({ setScreen, referralCode, referralChannel }: { setScreen:
 
         {step === 4 && (
           <>
-            <input value={courseSearch} onChange={e => setCourseSearch(e.target.value)} placeholder="Type to search your course..." style={inputStyle} />
+            <input type="search" aria-label="Search courses" value={courseSearch} onChange={e => setCourseSearch(e.target.value)} placeholder="Type to search your course..." style={inputStyle} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-hide">
               {loadingPrograms ? (
                 <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading courses...</div>
