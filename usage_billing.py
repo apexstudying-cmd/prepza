@@ -226,7 +226,7 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
 
     if units > max_units:
         return False, {
-            "error": f"This plan supports at most {max_units} {('pages' if feature == 'summary' else 'minutes' if feature == 'podcast' else 'cards')} per generation.",
+            "error": f"This plan supports at most {max_units} {('pages' if feature == 'summary' else 'minutes' if feature == 'podcast' else 'cards' if feature == 'flashcards' else 'questions' if feature == 'quiz' else 'nodes')} per generation.",
             "code": "generation_size_limit",
             "feature": feature,
             "plan": plan_code,
@@ -284,6 +284,7 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
         "used_units": used_units + units,
         "unit_limit": total_unit_limit,
         "max_units_per_generation": max_units,
+        "period_start": period.isoformat(),
     }
 
 def refund_ai_quota(db, user_id, feature, units, period_start=None):
