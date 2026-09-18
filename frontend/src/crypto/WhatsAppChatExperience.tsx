@@ -86,6 +86,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<number>>(new Set())
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [csrfToken, setCsrfToken] = useState('')
+  const [readReceiptsEnabled, setReadReceiptsEnabled] = useState(true)
   const [showListSearch, setShowListSearch] = useState(false)
   const [showGroupCreator, setShowGroupCreator] = useState(false)
   const [groupName, setGroupName] = useState('')
