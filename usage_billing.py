@@ -175,9 +175,7 @@ def _usage_row(db, user_id, feature):
 
 
 def check_and_consume_ai_quota(db, user_id, feature, units):
-    """Return (allowed, metadata). Consumption is atomic enough for MVP:
-    the row is locked and updated inside the current request transaction.
-    """
+    """Atomically consume a generation allowance before an AI call."""
     if feature not in FEATURES:
         return True, {"feature": feature}
 
@@ -191,10 +189,6 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
     plan_code = _current_student_plan(db, user_id)
     plan = STUDENT_PLANS[plan_code]
     request_limit_key, unit_limit_key = FEATURES[feature]
-    row = _usage_row(db, user_id, feature)
-    used_requests = int(row["requests"]) if row else 0
-    used_units = int(row["units"]) if row else 0
-
     max_requests = int(plan[request_limit_key])
     max_units = int(plan[unit_limit_key])
 
@@ -207,9 +201,27 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
             "max_units": max_units,
         }
 
-    # For podcasts, one request consumes the requested minutes. For
-    # summaries/flashcards it consumes output units.
-    if used_requests >= max_requests or used_units + units > max_units * max_requests:
+    period = _period_start()
+    db.session.execute(text("""
+        INSERT INTO student_ai_usage
+            (user_id, period_start, feature, units, requests, updated_at)
+        VALUES (:uid, :period, :feature, 0, 0, CURRENT_TIMESTAMP)
+        ON CONFLICT (user_id, period_start, feature) DO NOTHING
+    """), {"uid": user_id, "period": period, "feature": feature})
+
+    row = db.session.execute(text("""
+        SELECT units, requests
+        FROM student_ai_usage
+        WHERE user_id = :uid AND period_start = :period AND feature = :feature
+        FOR UPDATE
+    """), {"uid": user_id, "period": period, "feature": feature}).mappings().first()
+
+    used_requests = int(row["requests"] or 0)
+    used_units = int(row["units"] or 0)
+    total_unit_limit = max_units * max_requests
+
+    if used_requests >= max_requests or used_units + units > total_unit_limit:
+        db.session.rollback()
         return False, {
             "error": "You have reached this plan's monthly generation allowance.",
             "code": "generation_quota_exhausted",
@@ -218,33 +230,29 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
             "used_requests": used_requests,
             "request_limit": max_requests,
             "used_units": used_units,
-            "unit_limit": max_units * max_requests,
+            "unit_limit": total_unit_limit,
         }
 
-    period = _period_start()
     db.session.execute(text("""
-        INSERT INTO student_ai_usage
-            (user_id, period_start, feature, units, requests, updated_at)
-        VALUES (:uid, :period, :feature, :units, 1, CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id, period_start, feature)
-        DO UPDATE SET
-            units = student_ai_usage.units + EXCLUDED.units,
-            requests = student_ai_usage.requests + 1,
+        UPDATE student_ai_usage
+        SET units = units + :units,
+            requests = requests + 1,
             updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = :uid AND period_start = :period AND feature = :feature
     """), {
         "uid": user_id, "period": period, "feature": feature, "units": units,
     })
     db.session.commit()
+
     return True, {
         "feature": feature,
         "plan": plan_code,
         "used_requests": used_requests + 1,
         "request_limit": max_requests,
         "used_units": used_units + units,
-        "unit_limit": max_units * max_requests,
+        "unit_limit": total_unit_limit,
         "max_units_per_generation": max_units,
     }
-
 
 def _active_user_ids(db, since_date):
     rows = db.session.execute(text("""
