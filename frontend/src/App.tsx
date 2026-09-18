@@ -13677,8 +13677,8 @@ function OrgAnalyticsTab({ orgId }: { orgId: number }) {
   return (
     <div style={{ padding: 16 }}>
       <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>Prepza audience</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 10 }}>
-        {[['DAU', audience?.audience?.dau || 0], ['WAU', audience?.audience?.wau || 0], ['MAU', mau]].map(([label, val]) => (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 10 }}>
+        {[['Online', audience?.online_now || 0], ['DAU', audience?.audience?.dau || 0], ['WAU', audience?.audience?.wau || 0], ['MAU', mau]].map(([label, val]) => (
           <div key={label as string} style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
             <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{val as number}</div>
             <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginTop: 2 }}>{label as string}</div>
