@@ -50,9 +50,9 @@ STUDENT_PLANS = {
         "flashcard_generations": 30,
         "flashcard_max_cards": 50,
         "quiz_generations": 20,
-        "quiz_max_questions": 30,
+        "quiz_max_questions": 50,
         "mind_map_generations": 20,
-        "mind_map_max_nodes": 12,
+        "mind_map_max_nodes": 50,
         "tutor_messages": 300,
     },
 }
