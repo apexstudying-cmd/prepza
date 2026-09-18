@@ -142,6 +142,33 @@ def generate_document_material(*, material_type, document_content_id, triggering
         prompt_version=prompt_version, schema_version=schema_version,
         scope=scope, owner_user_id=owner_user_id,
     )
+    # Every requested generation consumes the student's allowance, including
+    # a reused artifact. Reuse saves Prepza AI cost; it does not create free
+    # unlimited generations for the student.
+    quota_reserved = False
+    quota_feature = material_type
+    quota_units = 0
+    quota_period = None
+    from usage_billing import FEATURES, check_and_consume_ai_quota
+    if material_type in FEATURES:
+        unit_keys = {
+            "summary": "max_pages",
+            "podcast": "duration_minutes",
+            "flashcards": "card_count",
+            "quiz": "question_count",
+            "mind_map": "node_count",
+        }
+        quota_units = params.get(unit_keys[material_type])
+        if quota_units is None:
+            raise ValueError(f"Missing required generation size for {material_type}")
+        allowed, quota_meta = check_and_consume_ai_quota(
+            db, triggering_user_id, material_type, quota_units
+        )
+        if not allowed:
+            raise ai_service.AIRateLimitExceededError(quota_meta.get("error", "Generation quota exhausted."))
+        quota_reserved = True
+        quota_period = quota_meta.get("period_start")
+
     lookup = claim_or_get_generation(
         fingerprint=fingerprint, content_hash=content.content_hash, feature=material_type,
         parameters=params, prompt_version=prompt_version, schema_version=schema_version,
@@ -167,36 +194,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
 
     job = None
     artifact_ready = False
-    quota_reserved = False
-    quota_feature = material_type
-    quota_units = 0
-    quota_period = None
     try:
-        # Quota is checked only after reusable/shared material has been ruled
-        # out. A cached artifact must never consume a student's allowance.
-        from usage_billing import (
-            FEATURES,
-            DEFAULT_GENERATION_UNITS,
-            check_and_consume_ai_quota,
-        )
-        if material_type in FEATURES:
-            unit_keys = {
-                "summary": "max_pages",
-                "podcast": "duration_minutes",
-                "flashcards": "card_count",
-                "quiz": "question_count",
-                "mind_map": "node_count",
-            }
-            plan_units = params.get(unit_keys[material_type], DEFAULT_GENERATION_UNITS[material_type])
-            allowed, quota_meta = check_and_consume_ai_quota(
-                db, triggering_user_id, material_type, plan_units
-            )
-            if not allowed:
-                raise ai_service.AIRateLimitExceededError(quota_meta.get("error", "Generation quota exhausted."))
-            quota_reserved = True
-            quota_units = int(plan_units)
-            quota_period = quota_meta.get("period_start")
-
         if ai_service.is_spend_cap_reached():
             raise ai_service.AIBudgetExceededError(
                 f"Prepza AI has reached its monthly budget - fresh {material_type} generation is paused, but existing material is still available."
