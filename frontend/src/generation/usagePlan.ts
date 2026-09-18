@@ -9,6 +9,10 @@ export type PrepzaUsage = {
     podcast_max_minutes: number
     flashcard_generations: number
     flashcard_max_cards: number
+    quiz_generations: number
+    quiz_max_questions: number
+    mind_map_generations: number
+    mind_map_max_nodes: number
     tutor_messages: number
   }
   usage: Record<string, { requests: number; units: number }>
@@ -24,7 +28,7 @@ export async function fetchPrepzaUsage(): Promise<PrepzaUsage> {
 
 export function canGenerate(
   usage: PrepzaUsage | null,
-  feature: 'summary' | 'podcast' | 'flashcards',
+  feature: 'summary' | 'podcast' | 'flashcards' | 'quiz' | 'mind_map',
   units: number,
 ) {
   if (!usage || !Number.isFinite(units) || units <= 0) return false
@@ -34,12 +38,16 @@ export function canGenerate(
   const requestLimit =
     feature === 'summary' ? limits.summary_generations :
     feature === 'podcast' ? limits.podcast_generations :
-    limits.flashcard_generations
+    feature === 'flashcards' ? limits.flashcard_generations :
+    feature === 'quiz' ? limits.quiz_generations :
+    limits.mind_map_generations
 
   const unitLimit =
     feature === 'summary' ? limits.summary_max_pages :
     feature === 'podcast' ? limits.podcast_max_minutes :
-    limits.flashcard_max_cards
+    feature === 'flashcards' ? limits.flashcard_max_cards :
+    feature === 'quiz' ? limits.quiz_max_questions :
+    limits.mind_map_max_nodes
 
   return (
     units <= unitLimit &&
