@@ -6917,13 +6917,13 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
           <div style={{ background: T.card, borderRadius: 14, marginBottom: 8, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
             <div style={{ padding: '12px 16px 8px', fontWeight: 700, fontSize: 12, color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>Members ({detail.participants.length})</div>
             {detail.participants.map(p => (
-              <div key={p.user_id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 16px', borderTop: '1px solid rgba(0,0,0,0.04)' }}>
+              <button key={p.user_id} type="button" onClick={() => { if (p.user_id === viewerId) return; setActiveProfileBackScreen?.(backScreen); setActiveProfileUserId?.(p.user_id); setActiveProfileName?.(p.display_name || 'Student'); setScreen('student-profile') }} style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', padding: '10px 16px', border: 0, borderTop: '1px solid rgba(0,0,0,0.04)', background: 'transparent', textAlign: 'left', cursor: p.user_id === viewerId ? 'default' : 'pointer' }} aria-label="View member profile">
                 <Avi name={(p.display_name || '??').slice(0, 2).toUpperCase()} size={34} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: T.text }} className="line-clamp-1">{p.display_name}{p.user_id === detail.created_by ? ' (Creator)' : ''}</div>
                 </div>
                 {p.role === 'admin' && <Pill text="Admin" />}
-              </div>
+              </button>
             ))}
           </div>
         )}
