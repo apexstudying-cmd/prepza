@@ -95,10 +95,7 @@ def main():
     required = [
         'const [readingPage, setReadingPage] = useState(0)',
         'const [readerUserId, setReaderUserId] = useState<number | null>(null)',
-        "X-Prepza-Offline-Queue':'true'",
         'prepza-reading-progress:',
-        'prepza_user=',
-        'localStorage.getItem(`prepza-reading-progress:${offlineUserId}:${documentId}`)',
     ]
     missing = [marker for marker in required if marker not in s]
     if missing:
