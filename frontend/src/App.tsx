@@ -12455,6 +12455,24 @@ function AdminCommunityPanel() {
 
   useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
 
+  const payPromotion = async (promotionId: number) => {
+    if (!isOwner || promoPayingId === promotionId) return
+    setPromoPayingId(promotionId); setPromoError('')
+    try {
+      const res = await api<{ payment_required: boolean; redirect_url?: string }>(
+        `/organisations/${orgId}/opportunity-promotions/${promotionId}/pay`,
+        { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } },
+      )
+      if (res.payment_required && res.redirect_url) window.location.href = res.redirect_url
+      else {
+        const refreshed = await api<{ promotions: OrgPromotion[] }>(`/organisations/${orgId}/opportunities/${promoTarget?.id}/promotions`)
+        setPromoHistory(refreshed.promotions)
+      }
+    } catch (e) {
+      setPromoError(e instanceof ApiError ? e.message : 'Could not start payment.')
+    } finally { setPromoPayingId(null) }
+  }
+
   const load = () => {
     setLoading(true); setError('')
     api<{ reports: AdminContentReport[] }>('/admin/content-reports?status=pending')
@@ -13213,7 +13231,7 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {tab === 'opportunities' && <OrgOpportunitiesTab orgId={activeOrg.id} csrfToken={csrfToken} onCreate={() => setTab('create')} />}
+        {tab === 'opportunities' && <OrgOpportunitiesTab orgId={activeOrg.id} isOwner={activeOrg.role === 'owner'} csrfToken={csrfToken} onCreate={() => setTab('create')} />}
         {tab === 'create' && <OrgCreateOpportunityTab orgId={activeOrg.id} org={activeOrg} csrfToken={csrfToken} onDone={() => setTab('opportunities')} />}
         {tab === 'analytics' && <OrgAnalyticsTab orgId={activeOrg.id} />}
         {tab === 'team' && <OrgTeamTab orgId={activeOrg.id} isOwner={activeOrg.role === 'owner'} csrfToken={csrfToken} />}
@@ -13238,7 +13256,7 @@ const ORG_PROMOTION_APPROVAL_META: Record<string, { label: string; color: string
   rejected: { label: 'Rejected', color: '#C94C4C' },
 }
 
-function OrgOpportunitiesTab({ orgId, csrfToken, onCreate }: { orgId: number; csrfToken: string; onCreate: () => void }) {
+function OrgOpportunitiesTab({ orgId, isOwner, csrfToken, onCreate }: { orgId: number; isOwner: boolean; csrfToken: string; onCreate: () => void }) {
   const [items, setItems] = useState<OrgOpportunity[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -13253,6 +13271,7 @@ function OrgOpportunitiesTab({ orgId, csrfToken, onCreate }: { orgId: number; cs
   const [promoHistoryLoading, setPromoHistoryLoading] = useState(false)
   const [promoSubmitting, setPromoSubmitting] = useState(false)
   const [promoError, setPromoError] = useState('')
+  const [promoPayingId, setPromoPayingId] = useState<number | null>(null)
 
   const openPromoModal = (o: OrgOpportunity) => {
     setPromoTarget(o); setPromoType('featured'); setPromoStart(''); setPromoEnd(''); setPromoError('')
@@ -13412,7 +13431,17 @@ function OrgOpportunitiesTab({ orgId, csrfToken, onCreate }: { orgId: number; cs
                     <div style={{ fontSize: 12, fontWeight: 600, color: N.navy, textTransform: 'capitalize' }}>{p.promotion_type}</div>
                     <div style={{ fontSize: 10, color: '#9CA3AF' }}>{p.start_date ? new Date(p.start_date).toLocaleDateString() : ''} – {p.end_date ? new Date(p.end_date).toLocaleDateString() : ''}</div>
                   </div>
-                  {orgPill(meta.label, meta.color)}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div>
+                      {orgPill(meta.label, meta.color)}
+                      <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3 }}>{p.price > 0 ? `KES ${p.price.toLocaleString('en-KE')}` : 'Free'}</div>
+                    </div>
+                    {isOwner && p.price > 0 && p.payment_status !== 'success' && p.approval_status !== 'rejected' && (
+                      <button onClick={() => payPromotion(p.id)} disabled={promoPayingId === p.id} style={{ background: N.navy, color: '#fff', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 10, fontWeight: 700, fontFamily: 'Plus Jakarta Sans' }}>
+                        {promoPayingId === p.id ? 'Opening…' : p.payment_status === 'pending' ? 'Continue payment' : 'Pay'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               )
             })}
