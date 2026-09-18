@@ -85,7 +85,7 @@ export async function enqueueOfflineChatMessage(path: string, body: string, csrf
           'Content-Type': 'application/json',
           ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         },
-        body,
+        body: normalizedBody,
         createdAt: Date.now(),
         attempts: 0,
         nextAttemptAt: Date.now(),
