@@ -219,7 +219,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const backToList = () => { if (selectedId != null) leaveRealtimeChat(selectedId); setView('list'); setSelectedId(null); setDetail(null); setMessages([]); setReactionPicker(null); setSelectedMessageIds(new Set()); setEditingMessageId(null); void loadList() }
   const clearSelection = () => { setSelectedMessageIds(new Set()); setReactionPicker(null) }
   const toggleMessageSelection = (messageId: number) => { setSelectedMessageIds(current => { const next = new Set(current); if (next.has(messageId)) next.delete(messageId); else next.add(messageId); return next }) }
-  const startMessageLongPress = (messageId: number) => { cancelMessageLongPress(); longPressTimerRef.current = window.setTimeout(() => { toggleMessageSelection(messageId); longPressTimerRef.current = null }, 450) }
+  const startMessageLongPress = (messageId: number) => { cancelMessageLongPress(); longPressTimerRef.current = window.setTimeout(() => { longPressActivatedRef.current = true; toggleMessageSelection(messageId); longPressTimerRef.current = null }, 450) }
   const cancelMessageLongPress = () => { if (longPressTimerRef.current) { window.clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null } }
   const selectedMessages = messages.filter(message => selectedMessageIds.has(message.id))
   const selectedEditableMessage = selectedMessages.length === 1 && selectedMessages[0].sender_id === meId && !selectedMessages[0].is_deleted && !selectedMessages[0].attachment && !!displayText(selectedMessages[0]) ? selectedMessages[0] : null
