@@ -6727,7 +6727,7 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
 // ─── CHAT OPTIONS ─────────────────────────────────────────────────────────────
 type SharedMediaItem = { id: number; message_id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null; uploaded_by_user_id: number; uploaded_by_name: string; created_at: string | null }
 
-function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; conversationId: number | null; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
+function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, setActiveProfileName, backScreen = 'chat-detail', setActiveProfileBackScreen }: { setScreen: (s: Screen) => void; conversationId: number | null; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void; backScreen?: Screen; setActiveProfileBackScreen?: (screen: Screen) => void }) {
   const { tokens: T } = useTheme()
   const [detail, setDetail] = useState<ChatDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -6852,7 +6852,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button type="button" onClick={() => setScreen('chat-detail')} aria-label="Back to chat" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <button type="button" onClick={() => setScreen(backScreen)} aria-label="Back to chat" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
             <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Chat Info</span>
           </div>
         </div>
@@ -6868,7 +6868,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg, position: 'relative' }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <button type="button" onClick={() => setScreen('chat-detail')} aria-label="Back to chat" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button type="button" onClick={() => setScreen(backScreen)} aria-label="Back to chat" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>{detail?.is_group ? 'Group Info' : 'Chat Info'}</span>
         </div>
         {error ? (
@@ -6889,7 +6889,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
             {Ic.chevR()}
           </div>
         )}
-        {directPeer && <div onClick={() => { setActiveProfileUserId?.(directPeer.user_id); setActiveProfileName?.(directPeer.display_name || detail?.name || 'Student'); setScreen('student-profile') }} style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+        {directPeer && <div onClick={() => { setActiveProfileBackScreen?.(backScreen); setActiveProfileUserId?.(directPeer.user_id); setActiveProfileName?.(directPeer.display_name || detail?.name || 'Student'); setScreen('student-profile') }} style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
           <Avi name={(directPeer.display_name || detail?.name || '??').slice(0, 2).toUpperCase()} size={34} />
           <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>View profile</div><div style={{ fontSize: 11, color: T.textMuted }}>{directPeer.display_name || detail?.name}</div></div>
           {Ic.chevR()}
@@ -13958,7 +13958,7 @@ export default function App() {
       case 'study-materials':   return <StudyMaterialsScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'mind-map':          return <MindMapScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'new-chat':          return <NewChatScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
-      case 'chat-options':      return <ChatOptionsScreen setScreen={setScreen} conversationId={activeConversationId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
+      case 'chat-options':      return <ChatOptionsScreen setScreen={setScreen} conversationId={activeConversationId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} backScreen="chats" setActiveProfileBackScreen={setActiveProfileBackScreen} />
       case 'edit-profile':      return <EditProfileScreen setScreen={setScreen} />
       case 'subscription':      return <SubscriptionScreen setScreen={setScreen} selectedPlan={selectedPlan} setSelectedPlan={setSelectedPlan} />
       case 'payment':           return <PaymentScreen setScreen={setScreen} selectedPlan={selectedPlan} />
