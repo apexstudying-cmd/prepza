@@ -2958,7 +2958,7 @@ def google_auth_callback():
     session["user_id"] = user.id
     session["_session_version"] = user.session_version
 
-    if is_new or user.university_id is None:
+    if is_new or user.university_id is None or user.program_id is None or user.year is None or user.semester is None:
         return redirect("/?complete_profile=1")
     return redirect("/")
 
