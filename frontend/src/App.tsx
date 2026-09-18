@@ -1076,8 +1076,8 @@ function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const checkSession = async (attempt = 0): Promise<void> => {
     setState('checking')
     try {
-      const me = await api<{ university_id: number | null }>('/me')
-      setScreen(me.university_id ? 'home' : 'complete-profile')
+      const me = await api<{ university_id: number | null; program_id: number | null; year: number | null; semester: number | null }>('/me')
+      setScreen(me.university_id && me.program_id && me.year && me.semester ? 'home' : 'complete-profile')
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setScreen('login')
