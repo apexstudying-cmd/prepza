@@ -8,6 +8,7 @@ import { getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'
 import { ensureE2EEIdentityReady, fetchUserPublicKey } from './e2eeChatApi'
 
 const DIRECT_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
+const DIRECT_MESSAGE_ITEM_RE = /^\/chats\/(\d+)\/messages\/(\d+)$/
 const DIRECT_SEARCH_RE = /^\/chats\/(\d+)\/messages\/search(?:\?.*)?$/
 const DIRECT_ATTACHMENT_CREATE_RE = /^\/chats\/(\d+)\/attachments$/
 const ENCRYPTED_ATTACHMENT_MARKER = '__prepza_e2ee_attachment_v1'
@@ -319,21 +320,16 @@ export function installDirectChatE2EE(): void {
       return localSearchDirectMessages(nativeFetch, conversationId, query)
     }
 
+    const messageItemMatch = path.match(DIRECT_MESSAGE_ITEM_RE)
     const messageMatch = path.match(DIRECT_MESSAGES_RE)
-    if (!messageMatch) return nativeFetch(input, init)
-
-    const conversationId = Number(messageMatch[1])
-    if (!Number.isInteger(conversationId) || conversationId <= 0) return nativeFetch(input, init)
-
-    const detail = await fetchConversationDetail(nativeFetch, conversationId).catch(() => null)
-    if (!detail || detail.is_group === true) return nativeFetch(input, init)
-
-    if (method === 'PATCH' && init?.body) {
+    if (messageItemMatch && method === 'PATCH' && init?.body) {
+      const conversationId = Number(messageItemMatch[1])
+      if (!Number.isInteger(conversationId) || conversationId <= 0) return nativeFetch(input, init)
+      const detail = await fetchConversationDetail(nativeFetch, conversationId).catch(() => null)
+      if (!detail || detail.is_group === true) return nativeFetch(input, init)
       let payload: any
       try { payload = JSON.parse(String(init.body)) } catch { return new Response(JSON.stringify({ error: 'Secure edit payload is invalid' }), { status: 409, headers: { 'Content-Type': 'application/json' } }) }
-      if (typeof payload?.body !== 'string' || !payload.body.trim()) {
-        return new Response(JSON.stringify({ error: 'Secure edit body is missing' }), { status: 409, headers: { 'Content-Type': 'application/json' } })
-      }
+      if (typeof payload?.body !== 'string' || !payload.body.trim()) return new Response(JSON.stringify({ error: 'Secure edit body is missing' }), { status: 409, headers: { 'Content-Type': 'application/json' } })
       try {
         const key = await directConversationKey(nativeFetch, conversationId)
         const encrypted = await encryptMessageBody(key, payload.body)
@@ -346,6 +342,14 @@ export function installDirectChatE2EE(): void {
       const response = await nativeFetch(input, init)
       return transformDirectMessageResponse(nativeFetch, response, conversationId)
     }
+    if (!messageMatch) return nativeFetch(input, init)
+
+    const conversationId = Number(messageMatch[1])
+    if (!Number.isInteger(conversationId) || conversationId <= 0) return nativeFetch(input, init)
+
+    const detail = await fetchConversationDetail(nativeFetch, conversationId).catch(() => null)
+    if (!detail || detail.is_group === true) return nativeFetch(input, init)
+
 
     if (method === 'POST' && init?.body) {
       let payload: any
