@@ -3728,13 +3728,18 @@ function ChatVoiceBubble({ src, mine, filename }: { src: string; mine: boolean; 
       </button>
       <div style={{ flex:1,minWidth:0 }}>
         <div style={{ display:'flex',alignItems:'center',gap:7 }}>
-          <div style={{ flex:1,height:4,borderRadius:99,background:mine?'rgba(255,255,255,.22)':T.border,overflow:'hidden' }}>
-            <div style={{ width: duration ? `${Math.min(100,(current/duration)*100)}%` : '0%',height:'100%',background:mine?N.gold:N.navy,borderRadius:99 }} />
+          <div style={{ position:'relative',flex:1,height:28,display:'flex',alignItems:'center',gap:2,overflow:'hidden' }}>
+            {Array.from({ length: 28 }, (_, index) => {
+              const height = 5 + ((index * 17 + filename.length * 7) % 19)
+              const progress = duration ? (current / duration) * 28 : 0
+              const active = index < progress
+              return <span key={index} style={{ flex:1,minWidth:2,height,background:active ? N.gold : (mine ? 'rgba(255,255,255,.32)' : T.border),borderRadius:99,transition:'background .08s' }} />
+            })}
+            <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(current,duration || current)} onChange={seek} disabled={!duration} aria-label="Voice message progress" style={{ position:'absolute',inset:0,width:'100%',height:'100%',opacity:0,cursor:duration?'pointer':'default' }} />
           </div>
           <span style={{ fontSize:9,opacity:.6,flexShrink:0 }}>{formatTime(playing ? current : duration)}</span>
         </div>
-        <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(current,duration || current)} onChange={seek} disabled={!duration} aria-label="Voice message progress" style={{ width:'100%',height:16,margin:'3px 0 0',padding:0,accentColor:N.gold,cursor:duration?'pointer':'default' }} />
-        <div style={{ marginTop:5,fontSize:9,opacity:.52,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>Voice message</div>
+        <div style={{ marginTop:3,fontSize:9,opacity:.52,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>Voice message</div>
       </div>
     </div>
   )
