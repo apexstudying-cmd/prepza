@@ -1350,7 +1350,11 @@ function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setAc
   const [joiningGroupId, setJoiningGroupId] = useState<number | null>(null)
   const [csrfToken, setCsrfToken] = useState('')
 
-  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+  useEffect(() => {
+    api<{ id: number; csrf_token: string }>('/me')
+      .then(me => { setCsrfToken(me.csrf_token); setCurrentUserId(me.id) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (filter !== 'All' && filter !== 'Groups') return
@@ -3248,6 +3252,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
   const [requestsError, setRequestsError] = useState('')
   const [requestBusy, setRequestBusy] = useState<Record<string, boolean>>({})
   const [csrfToken, setCsrfToken] = useState('')
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -3479,13 +3484,20 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
         ) : displayed.map(chat => {
           const initials = (chat.name || '??').trim().split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || '??'
           const unread = chat.unread_count > 0
-          const canOpenProfile = !chat.is_group && !!chat.peer_user_id
-          const openProfile = (event: React.MouseEvent) => {
+          const canOpenProfile = !chat.is_group
+          const openProfile = async (event: React.MouseEvent) => {
             event.stopPropagation()
-            if (!chat.peer_user_id) return
-            setActiveProfileUserId?.(chat.peer_user_id)
-            setActiveProfileName?.(chat.name)
-            setScreen('student-profile')
+            if (chat.is_group) return
+            try {
+              const detail = await api<ChatDetail>(`/chats/${chat.id}`)
+              const peer = detail.participants.find(p => p.user_id !== currentUserId)
+              if (!peer) return
+              setActiveProfileUserId?.(peer.user_id)
+              setActiveProfileName?.(peer.display_name || chat.name)
+              setScreen('student-profile')
+            } catch {
+              // Keep the chat list usable if contact lookup fails.
+            }
           }
           return (
             <div key={chat.id} onClick={() => openChat(chat.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)', background: unread ? 'rgba(201,168,76,0.035)' : 'transparent' }}>
