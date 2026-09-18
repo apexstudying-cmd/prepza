@@ -7,7 +7,7 @@ the existing Payment/Opportunity models.
 Product rules:
 - A signup is not an active user.
 - An engaged active user is a signed-in user with a visible heartbeat/session
-  and at least 10 seconds of foreground engagement OR a meaningful core action.
+  and at least 30 seconds of foreground engagement OR a meaningful core action.
 - DAU/WAU/MAU are derived from daily activity rows.
 - Student AI quotas are enforced server-side before generation.
 - Organisation audience reporting exposes aggregate active counts, not a
@@ -273,7 +273,7 @@ def _active_user_ids(db, since_date):
         SELECT DISTINCT user_id
         FROM product_activity_day
         WHERE activity_date >= :since_date
-          AND (engaged_seconds >= 10 OR core_actions > 0)
+          AND (engaged_seconds >= 30 OR core_actions > 0)
     """), {"since_date": since_date}).all()
     return {int(row[0]) for row in rows}
 
@@ -564,7 +564,7 @@ def register_usage_billing(app, db):
                 "dau": dau,
                 "wau": wau,
                 "mau": mau,
-                "definition": "Active means meaningful foreground engagement or a core action; signup/login alone does not count.",
+                "definition": "Active means meaningful foreground engagement (30+ seconds) or a core action; signup/login alone does not count.",
             },
             "billing": billing,
             "pricing_model": {
@@ -596,7 +596,7 @@ def register_usage_billing(app, db):
             "mau": mau,
             "online_now": None,
             "online_note": "Live presence is not sold as a billing metric. Prepza bills organisations on audience bands and measures DAU/WAU/MAU from meaningful engagement.",
-            "active_definition": "At least 10 seconds of foreground engagement in a day or a core product action. Signup/login alone does not count.",
+            "active_definition": "At least 30 seconds of foreground engagement in a day or a core product action. Signup/login alone does not count.",
         })
 
     @app.post("/api/organisations/<int:organisation_id>/plan")
