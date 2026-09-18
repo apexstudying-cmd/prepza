@@ -13670,7 +13670,6 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
   const [audience, setAudience] = useState<any>(null)
   const [billingBusy, setBillingBusy] = useState<string | null>(null)
   const [candidates, setCandidates] = useState<any[]>([])
-  const [candidatesLoading, setCandidatesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
