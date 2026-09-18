@@ -2857,7 +2857,7 @@ def google_auth_start():
 
     state = secrets.token_urlsafe(24)
     session["google_oauth_state"] = state
-    redirect_uri = request.host_url.rstrip("/") + "/auth/google/callback"
+    redirect_uri = f"{BASE_URL.rstrip('/')}/auth/google/callback"
 
     params = {
         "client_id": GOOGLE_CLIENT_ID,
@@ -2896,7 +2896,7 @@ def google_auth_callback():
     if not code:
         return redirect("/?auth_error=missing_code")
 
-    redirect_uri = request.host_url.rstrip("/") + "/auth/google/callback"
+    redirect_uri = f"{BASE_URL.rstrip('/')}/auth/google/callback"
     try:
         token_resp = requests.post(
             "https://oauth2.googleapis.com/token",
