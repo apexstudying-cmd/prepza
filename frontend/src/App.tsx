@@ -3,6 +3,7 @@ import logoImg from './imports/logo.png'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
 import CallExperience from './crypto/CallExperience'
+import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrl, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'
 import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
 
@@ -13941,7 +13942,7 @@ export default function App() {
       case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'chats':             return <ChatsScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} setActiveGroupId={setActiveGroupId} />
+      case 'chats':             return <WhatsAppChatExperience onClose={() => setScreen('home')} />
       case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} opportunityId={activeOpportunityId} />
