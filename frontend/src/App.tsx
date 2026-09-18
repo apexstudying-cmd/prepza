@@ -3394,7 +3394,7 @@ function chatTime(value: string | null) {
   return value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
 }
 
-function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
+function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; conversationId: number | null; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   const { tokens: T } = useTheme()
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState<ChatMessageData[]>(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.msgs ?? []) : [])
@@ -3671,7 +3671,17 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
       <div style={{ background: N.navy, padding: '8px 10px', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.12)', zIndex: 2 }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', minHeight: 52 }}>
           <button type="button" onClick={() => setScreen('chats')} aria-label="Back to chats" style={{ width: 40, height: 40, background: 'transparent', border: 0, borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>{Ic.back('w-6 h-6')}</button>
-          <button type="button" onClick={() => setScreen('chat-options')} aria-label="Open chat info" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', border: 0, padding: 0, color: '#fff', textAlign: 'left', cursor: 'pointer' }}>
+          <button type="button" onClick={() => {
+            if (headerIsGroup) {
+              setScreen('chat-options')
+            } else if (callPeerId != null) {
+              setActiveProfileUserId?.(callPeerId)
+              setActiveProfileName?.(callPeerName || headerName)
+              setScreen('student-profile')
+            } else {
+              setScreen('chat-options')
+            }
+          }} aria-label={headerIsGroup ? 'Open chat info' : 'Open contact profile'} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', border: 0, padding: 0, color: '#fff', textAlign: 'left', cursor: 'pointer' }}>
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <Avi name={initials} size={42} />
               {!headerIsGroup && onlineUsers.size > 0 && <span style={{ position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: '50%', background: '#46c46b', border: '2px solid ' + N.navy }} />}
@@ -13330,7 +13340,7 @@ export default function App() {
       case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'chats':             return <ChatsScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} setActiveGroupId={setActiveGroupId} />
-      case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} />
+      case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} opportunityId={activeOpportunityId} />
       case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
