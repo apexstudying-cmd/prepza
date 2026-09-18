@@ -4230,9 +4230,19 @@ function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, s
           <button type="button" onClick={() => {
             if (headerIsGroup) {
               setScreen('chat-options')
-            } else if (callPeerId != null) {
-              setActiveProfileUserId?.(callPeerId)
-              setActiveProfileName?.(callPeerName || headerName)
+              return
+            }
+            // Use the participant map as the source of truth as well as callPeerId.
+            // A cached conversation can render before the call-peer effect has
+            // repopulated its state; the contact header must still open the
+            // contact profile immediately, like a normal messaging app.
+            const cachedPeerId = meId != null
+              ? Object.keys(senderNames).map(Number).find(id => id !== meId)
+              : null
+            const peerId = callPeerId ?? cachedPeerId
+            if (peerId != null) {
+              setActiveProfileUserId?.(peerId)
+              setActiveProfileName?.(senderNames[peerId] || callPeerName || headerName)
               setScreen('student-profile')
             } else {
               setScreen('chat-options')
