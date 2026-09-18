@@ -12945,7 +12945,7 @@ def request_opportunity_promotion(organisation_id, opportunity_id):
         start_date=start_date,
         end_date=end_date,
         price=price,
-        payment_status="unpaid",
+        payment_status="not_required" if price <= 0 else "unpaid",
         approval_status="pending",
     )
     db.session.add(promo)
