@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import logoImg from './imports/logo.png'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
+import CallExperience from './crypto/CallExperience'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -3398,6 +3399,8 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
   const [sending, setSending] = useState(false)
   const [csrfToken, setCsrfToken] = useState('')
   const [meId, setMeId] = useState<number | null>(null)
+  const [callPeerId, setCallPeerId] = useState<number | null>(null)
+  const [callPeerName, setCallPeerName] = useState('Student')
   const [headerName, setHeaderName] = useState(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.headerName ?? 'Conversation') : 'Conversation')
   const [headerIsGroup, setHeaderIsGroup] = useState(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.headerIsGroup ?? false) : false)
   const [senderNames, setSenderNames] = useState<Record<number, string>>(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.senderNames ?? {}) : {})
@@ -3437,6 +3440,9 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
       const names: Record<number, string> = {}
       detail.participants.forEach(p => { names[p.user_id] = p.display_name })
       setHeaderName(detail.name); setHeaderIsGroup(detail.is_group); setSenderNames(names); setMsgs(data.messages || []); setOnlineUsers(new Set())
+      const peer = detail.is_group ? null : detail.participants.find(p => p.user_id !== meId)
+      setCallPeerId(peer?.user_id ?? null)
+      setCallPeerName(peer?.display_name || 'Student')
       CHAT_DETAIL_CACHE[conversationId] = { msgs: data.messages || [], headerName: detail.name, headerIsGroup: detail.is_group, senderNames: names }
       joinRealtimeChat(conversationId); sendReadRealtime(conversationId)
     }).catch(e => { if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not load this conversation.') }).finally(() => { if (!cancelled) setLoading(false) })
@@ -3578,6 +3584,7 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: T.pageBg, fontFamily: 'Plus Jakarta Sans' }}>
+      {meId != null && <CallExperience userId={meId} />}
       <div style={{ background: N.navy, padding: '10px 14px', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.12)', zIndex: 2 }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button onClick={() => window.history.back()} aria-label="Back" style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{Ic.back()}</button>
@@ -3592,6 +3599,10 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
             </div>
           </div>
           <button onClick={() => window.dispatchEvent(new CustomEvent('prepza-open-ada', { detail: { conversationId } }))} aria-label="Study with Ada" style={{ border: `1px solid rgba(201,168,76,0.45)`, background: 'rgba(201,168,76,0.12)', color: N.goldL, borderRadius: 11, padding: '7px 9px', fontWeight: 900, fontSize: 11, cursor: 'pointer' }}>@Ada</button>
+          {!headerIsGroup && callPeerId != null && meId != null && <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call', { detail: { conversationId, peerId: callPeerId, peerName: callPeerName, kind: 'voice' } }))} aria-label="Start voice call" title="Voice call" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 17 }}>☎</button>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call', { detail: { conversationId, peerId: callPeerId, peerName: callPeerName, kind: 'video' } }))} aria-label="Start video call" title="Video call" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 17 }}>▣</button>
+          </div>}
           <button onClick={() => setMessageSearchOpen(v => !v)} aria-label="Search messages" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer' }}>{Ic.search('w-4 h-4')}</button>
           <button onClick={() => setScreen('chat-options')} aria-label="Chat options" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer' }}>{Ic.dots('w-4 h-4')}</button>
         </div>
