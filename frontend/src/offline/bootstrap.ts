@@ -1,4 +1,5 @@
 import { setOfflineUserId } from './generatedMaterials'
+import { installOfflineChatQueue } from './chatOfflineQueue'
 import { setOfflineStudyUserId, syncOfflineStudyActivity } from './studyActivity'
 
 let started = false
@@ -12,6 +13,9 @@ let started = false
 export function installOfflineBootstrap(): void {
   if (started || typeof window === 'undefined') return
   started = true
+  // Chat queue has its own retry/locking guard and is safe to start here.
+  // This makes the persisted outgoing queue active after a cold restart.
+  installOfflineChatQueue()
 
   const reconcile = async () => {
     if (!navigator.onLine) return
