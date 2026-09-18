@@ -223,7 +223,7 @@ def broadcast_message_response(response):
                 return response
             payload = safe_message_payload(response.get_json(silent=True))
             if payload and payload.get("conversation_id") == conversation_id:
-                socketio.emit("chat:message", payload, to=room_for(conversation_id))
+                socketio.emit("chat:message", payload, to=room_for(conversation_id), include_self=False)
         except Exception:
             app.logger.exception("Realtime message broadcast failed")
     return response
