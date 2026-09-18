@@ -105,18 +105,16 @@ const PODCAST_OPTIONS = [
 ] as const
 
 export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setScreen: SetScreen; activeDocumentId: number | null }) {
-  const [minutes, setMinutes] = useState(20)
-  const [style, setStyle] = useState('deep_explanation')
+  const [minutes, setMinutes] = useState(5)
+  const [style, setStyle] = useState('quick_revision')
   const [csrf, setCsrf] = useState('')
   const [title, setTitle] = useState('Study Podcast')
   const [pages, setPages] = useState<number | null>(null)
   const [phase, setPhase] = useState<'config' | 'script' | 'audio' | 'ready' | 'error'>('config')
   const [error, setError] = useState('')
   const [usage, setUsage] = useState<PrepzaUsage | null>(null)
-  const [usage, setUsage] = useState<PrepzaUsage | null>(null)
   const [materialId, setMaterialId] = useState<number | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
-  const [usage, setUsage] = useState<PrepzaUsage | null>(null)
   const [audioDuration, setAudioDuration] = useState(0)
   const [progress, setProgress] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -203,7 +201,7 @@ const FLASHCARD_DIFFICULTIES = [
 ]
 
 export function FlashcardsGenerationScreen({ setScreen, activeDocumentId }: { setScreen: SetScreen; activeDocumentId: number | null }) {
-  const [count, setCount] = useState(20)
+  const [count, setCount] = useState(10)
   const [difficulty, setDifficulty] = useState('balanced')
   const [phase, setPhase] = useState<'config' | 'generating' | 'review' | 'done' | 'error'>('config')
   const [csrf, setCsrf] = useState('')
@@ -215,6 +213,7 @@ export function FlashcardsGenerationScreen({ setScreen, activeDocumentId }: { se
   const [materialId, setMaterialId] = useState<number | null>(null)
   const [completion, setCompletion] = useState<any>(null)
   const [error, setError] = useState('')
+  const [usage, setUsage] = useState<PrepzaUsage | null>(null)
 
   useEffect(() => {
     if (activeDocumentId == null) return
@@ -276,6 +275,7 @@ export function SummaryGenerationScreen({ setScreen, activeDocumentId }: { setSc
   const [phase, setPhase] = useState<'config' | 'generating' | 'ready' | 'error'>('config')
   const [summary, setSummary] = useState<any>(null)
   const [error, setError] = useState('')
+  const [usage, setUsage] = useState<PrepzaUsage | null>(null)
 
   useEffect(() => {
     if (activeDocumentId == null) return
