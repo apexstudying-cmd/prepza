@@ -251,6 +251,7 @@ def _active_user_ids(db, since_date):
         SELECT DISTINCT user_id
         FROM product_activity_day
         WHERE activity_date >= :since_date
+          AND (engaged_seconds >= 10 OR core_actions > 0)
     """), {"since_date": since_date}).all()
     return {int(row[0]) for row in rows}
 
