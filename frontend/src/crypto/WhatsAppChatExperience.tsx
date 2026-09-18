@@ -130,7 +130,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   }, [actionMenuOpen])
 
   useEffect(() => {
-    const urls = attachmentDrafts.filter(file => file.type.startsWith('image/')).map(file => URL.createObjectURL(file))
+    const urls = attachmentDrafts.map(file => file.type.startsWith('image/') ? URL.createObjectURL(file) : '')
     setAttachmentPreviewUrls(urls)
     return () => urls.forEach(url => URL.revokeObjectURL(url))
   }, [attachmentDrafts])
