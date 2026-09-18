@@ -447,11 +447,10 @@ def register_usage_billing(app, db):
 
     @app.get("/api/student-plans")
     def student_plans():
-        # These defaults match the existing Paystack checkout pricing in
-        # app.py: KES 599/semester and KES 999/annual. Admin-configured
-        # SystemSetting values can change checkout pricing independently;
-        # the response exposes the current launch defaults until that
-        # pricing layer is unified.
+        # These defaults match the current student subscription UI pricing:
+        # KES 599/semester and KES 999/annual. The current student checkout
+        # is a hosted payment flow; keep pricing in one server-owned layer
+        # before adding another payment provider.
         plans = [
             {"code": "free", **STUDENT_PLANS["free"]},
             {
