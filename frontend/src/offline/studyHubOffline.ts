@@ -195,6 +195,7 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
   const cache = 'caches' in window ? await caches.open(STUDY_CACHE) : null
   const assetUrls: string[] = []
   let storedNewAsset = false
+  let previousAsset: StoredStudyAsset | undefined
   const fileUrl = detail.view_url || detail.file_url || detail.url || detail.download_url
 
   try {
@@ -208,6 +209,7 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     if (!blob.size) throw new Error('The downloaded study document is empty.')
     if (blob.size > MAX_SINGLE_ASSET_BYTES) throw new Error('This document is too large to save for offline study.')
 
+    previousAsset = await getStudyAsset(assetKey)
     const currentStoredBytes = await getStoredAssetUsage(assetKey)
     if (currentStoredBytes + blob.size > MAX_TOTAL_ASSET_BYTES) throw new Error('Offline study storage is full. Remove an older saved document before downloading another.')
     await putStudyAsset({ key: assetKey, userId, documentId, blob, savedAt: Date.now() })
@@ -233,7 +235,13 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     window.dispatchEvent(new CustomEvent('prepza:studyhub-offline-changed', { detail: meta }))
     return meta
   } catch (error) {
-    if (storedNewAsset) await deleteStudyAsset(assetKey)
+    if (storedNewAsset) {
+      if (previousAsset) {
+        try { await putStudyAsset(previousAsset) } catch (_) { await deleteStudyAsset(assetKey) }
+      } else {
+        await deleteStudyAsset(assetKey)
+      }
+    }
     for (const url of assetUrls) { if (cache) { try { await cache.delete(url) } catch (_) {} } }
     throw error
   }
