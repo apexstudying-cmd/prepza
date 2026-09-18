@@ -4,6 +4,9 @@ const USER_KEY = 'prepza-offline-user-id'
 const MAX_ATTEMPTS = 8
 const BASE_DELAY_MS = 2000
 const RETRY_TICK_MS = 5000
+const MAX_QUEUE_ITEMS = 100
+const MAX_QUEUE_BYTES = 2 * 1024 * 1024
+const MAX_SINGLE_MESSAGE_BYTES = 64 * 1024
 
 type QueuedChatMessage = {
   id?: number
@@ -48,8 +51,20 @@ export function isOfflineChatMessagePath(path: string): boolean {
 export async function enqueueOfflineChatMessage(path: string, body: string, csrfToken = ''): Promise<boolean> {
   const userId = currentUserId()
   if (!userId || !isOfflineChatMessagePath(path) || !body) return false
+  const bodyBytes = new TextEncoder().encode(body).byteLength
+  if (bodyBytes > MAX_SINGLE_MESSAGE_BYTES) return false
   const db = await openDb()
   try {
+    const queued = await new Promise<QueuedChatMessage[]>((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly')
+      const request = tx.objectStore(STORE).getAll()
+      request.onsuccess = () => resolve((request.result as QueuedChatMessage[]).filter(item => item.userId === userId))
+      request.onerror = () => reject(request.error)
+    })
+    const queuedBytes = queued.reduce((sum, item) => sum + new TextEncoder().encode(item.body || '').byteLength, 0)
+    if (queued.length >= MAX_QUEUE_ITEMS || queuedBytes + bodyBytes > MAX_QUEUE_BYTES) {
+      return false
+    }
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite')
       tx.objectStore(STORE).add({
