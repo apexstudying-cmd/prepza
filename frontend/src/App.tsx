@@ -2448,7 +2448,7 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() => getChatDraft(conversationId))
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
   const [voiceMode, setVoiceMode] = useState(false)
@@ -3240,6 +3240,26 @@ function chatListPreview(chat: ChatSummary): string {
 // Stale-while-revalidate cache for Chats: on repeat visits, render
 // instantly from cache while a fresh fetch runs quietly in the background.
 const CHATS_CACHE: { chats?: ChatSummary[]; myGroups?: GroupSummary[] } = {}
+const CHAT_DRAFTS: Record<number, string> = {}
+function getChatDraft(conversationId: number | null): string {
+  if (conversationId == null) return ''
+  if (Object.prototype.hasOwnProperty.call(CHAT_DRAFTS, conversationId)) return CHAT_DRAFTS[conversationId]
+  try {
+    const value = window.localStorage.getItem('prepza-chat-draft-' + conversationId) || ''
+    CHAT_DRAFTS[conversationId] = value
+    return value
+  } catch {
+    return ''
+  }
+}
+function setChatDraft(conversationId: number, value: string) {
+  CHAT_DRAFTS[conversationId] = value
+  try {
+    if (value) window.localStorage.setItem('prepza-chat-draft-' + conversationId, value)
+    else window.localStorage.removeItem('prepza-chat-draft-' + conversationId)
+  } catch {}
+  window.dispatchEvent(new CustomEvent('prepza-chat-draft-changed', { detail: { conversationId } }))
+}
 function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void; setActiveGroupId?: (id: number) => void }) {
   const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'Chats'|'Groups'|'Requests'>('Chats')
@@ -3265,6 +3285,12 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
   const [requestBusy, setRequestBusy] = useState<Record<string, boolean>>({})
   const [csrfToken, setCsrfToken] = useState('')
   const [currentUserId, setCurrentUserId] = useState<number | null>(null)
+
+  useEffect(() => {
+    const onDraftChanged = () => setDraftVersion(value => value + 1)
+    window.addEventListener('prepza-chat-draft-changed', onDraftChanged)
+    return () => window.removeEventListener('prepza-chat-draft-changed', onDraftChanged)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -3352,6 +3378,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
   }
 
   if (loading) return <SkeletonChats />
+  void draftVersion
   const displayed = chats.filter(c => {
     const matchSearch = c.name.toLowerCase().includes(search.toLowerCase())
     const matchTab = tab === 'Groups' ? c.is_group : tab === 'Requests' ? false : true
@@ -3500,7 +3527,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
                               <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.name}</span>
                               <span style={{ fontSize: 10.5, color: unread ? N.gold : T.textMuted, fontWeight: unread ? 700 : 500, flexShrink: 0 }}>{chatListTime(chat.last_message_at)}</span>
                             </div>
-                            <div style={{ fontSize: 12, color: unread ? T.text : T.textMuted, fontWeight: unread ? 650 : 500 }} className="line-clamp-1">{chatListPreview(chat)}</div>
+                            <div style={{ fontSize: 12, color: unread ? T.text : T.textMuted, fontWeight: unread ? 650 : 500 }} className="line-clamp-1">{getChatDraft(chat.id) ? <><span style={{ color: '#C94C4C', fontWeight: 800 }}>Draft</span><span style={{ color: T.textMuted }}> · {getChatDraft(chat.id)}</span></> : chatListPreview(chat)}</div>
                           </div>
                           {unread && <div style={{ minWidth: 22, height: 22, padding: '0 6px', boxSizing: 'border-box', background: N.gold, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread_count > 99 ? '99+' : chat.unread_count}</div>}
                         </div>
@@ -3710,6 +3737,7 @@ function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, s
   const [msgs, setMsgs] = useState<ChatMessageData[]>(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.msgs ?? []) : [])
   const [loading, setLoading] = useState(() => conversationId == null || !CHAT_DETAIL_CACHE[conversationId])
   const [error, setError] = useState<string | null>(null)
+  const [draftVersion, setDraftVersion] = useState(0)
   const [sending, setSending] = useState(false)
   const [csrfToken, setCsrfToken] = useState('')
   const [meId, setMeId] = useState<number | null>(null)
@@ -3767,6 +3795,7 @@ function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, s
   }, [])
 
   useEffect(() => {
+    setInput(getChatDraft(conversationId))
     if (conversationId == null) { setLoading(false); return }
     let cancelled = false
     const cached = CHAT_DETAIL_CACHE[conversationId]
@@ -3856,7 +3885,7 @@ function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, s
     try {
       const token = await getChatCsrfToken()
       await api(`/chats/${conversationId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) })
-      setInput(''); setReplyingTo(null)
+      setInput(''); setChatDraft(conversationId, ''); setReplyingTo(null)
       const result = await api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
       setMsgs(result.messages || []); CHAT_DETAIL_CACHE[conversationId] && (CHAT_DETAIL_CACHE[conversationId].msgs = result.messages || [])
     } catch (e) { setError(e instanceof ApiError ? e.message : 'Could not send message.') } finally { setSending(false) }
@@ -3969,6 +3998,7 @@ function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, s
 
   const handleInputChange = (value: string) => {
     setInput(value)
+    if (conversationId != null) setChatDraft(conversationId, value)
     if (conversationId == null) return
     sendTypingRealtime(conversationId, Boolean(value.trim()))
     if (typingTimer.current) window.clearTimeout(typingTimer.current)
