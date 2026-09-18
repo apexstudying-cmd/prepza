@@ -75,13 +75,18 @@ async function putStudyAsset(asset: StoredStudyAsset) {
   } finally { db.close() }
 }
 
-async function getStoredAssetUsage(excludeKey?: string): Promise<number> {
+async function getStoredAssetUsage(userId: number, excludeKey?: string): Promise<number> {
   const db = await openAssetDb()
   try {
     return await new Promise<number>((resolve, reject) => {
       const tx = db.transaction(ASSET_STORE, 'readonly')
       const request = tx.objectStore(ASSET_STORE).getAll()
-      request.onsuccess = () => resolve((request.result as StoredStudyAsset[]).reduce((sum, item) => item.key === excludeKey ? sum : sum + (item.blob?.size || 0), 0))
+      request.onsuccess = () => resolve(
+        (request.result as StoredStudyAsset[]).reduce(
+          (sum, item) => item.userId === userId && item.key !== excludeKey ? sum + (item.blob?.size || 0) : sum,
+          0,
+        ),
+      )
       request.onerror = () => reject(request.error)
     })
   } finally { db.close() }
@@ -210,7 +215,7 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     if (blob.size > MAX_SINGLE_ASSET_BYTES) throw new Error('This document is too large to save for offline study.')
 
     previousAsset = await getStudyAsset(assetKey)
-    const currentStoredBytes = await getStoredAssetUsage(assetKey)
+    const currentStoredBytes = await getStoredAssetUsage(userId, assetKey)
     if (currentStoredBytes + blob.size > MAX_TOTAL_ASSET_BYTES) throw new Error('Offline study storage is full. Remove an older saved document before downloading another.')
     await putStudyAsset({ key: assetKey, userId, documentId, blob, savedAt: Date.now() })
     storedNewAsset = true
