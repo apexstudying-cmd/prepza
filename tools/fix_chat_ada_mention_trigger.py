@@ -8,10 +8,6 @@ def main() -> None:
     # The group enhancer already targets the shared textarea marker in the
     # current chat architecture. Keep this step idempotent; never rewrite the
     # composer through brittle string matching.
-    group_text = GROUP.read_text(encoding='utf-8')
-    if 'data-prepza-chat-composer="true"' not in group_text:
-        raise SystemExit('ADA_MENTION_PATCH_FAILED: group composer marker missing')
-
     text = DIRECT.read_text(encoding='utf-8')
     if 'textarea[placeholder="Message…"]' not in text or 'Direct chat @Ada mention trigger' in text:
         print('CHAT_ADA_MENTION_PATCH_ALREADY_READY')
