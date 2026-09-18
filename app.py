@@ -258,6 +258,10 @@ class Payment(db.Model):
     payment_type = db.Column(db.String(20), nullable=False, default="content")
     plan = db.Column(db.String(20), nullable=True)  # 'semester' | 'annual' - subscription only
     subscription_expires_at = db.Column(db.DateTime, nullable=True)  # subscription only
+    # Organisation promotion billing. Nullable so existing student/content/subscription
+    # payments remain unchanged.
+    organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id"), nullable=True)
+    opportunity_promotion_id = db.Column(db.Integer, db.ForeignKey("opportunity_promotion.id"), nullable=True)
 
 
 class SystemSetting(db.Model):
@@ -12855,6 +12859,7 @@ def _serialize_opportunity_promotion(promo, include_context=False):
         "end_date": promo.end_date.isoformat() if promo.end_date else None,
         "price": promo.price,
         "payment_status": promo.payment_status,
+        "payment_required": promo.price > 0,
         "approval_status": promo.approval_status,
         "reviewed_at": promo.reviewed_at.isoformat() if promo.reviewed_at else None,
         "created_at": promo.created_at.isoformat() if promo.created_at else None,
@@ -12993,6 +12998,79 @@ def admin_list_opportunity_promotions():
     })
 
 
+@app.route("/organisations/<int:organisation_id>/opportunity-promotions/<int:promotion_id>/pay", methods=["POST"])
+@limiter.limit("1 per 20 seconds", key_func=lambda: f"org-promo-pay:{session.get('user_id', get_remote_address())}")
+@require_csrf
+def pay_for_opportunity_promotion(organisation_id, promotion_id):
+    """Create the one-time Paystack checkout for a paid promotion.
+
+    Billing is owner-only. Managers can create and manage opportunity content,
+    but cannot spend organisation funds. The promotion price is already a
+    server-side snapshot, so the client cannot choose its amount.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    membership = _get_org_membership(organisation_id, user_id)
+    if not membership:
+        return jsonify({"error": "Organisation not found"}), 404
+    if membership.role != "owner":
+        return jsonify({"error": "Only the organisation owner can pay for promotions"}), 403
+
+    promo = db.session.get(OpportunityPromotion, promotion_id)
+    if not promo or promo.organisation_id != organisation_id:
+        return jsonify({"error": "Promotion request not found"}), 404
+    if promo.approval_status == "rejected":
+        return jsonify({"error": "This promotion request was rejected"}), 400
+    if promo.price <= 0:
+        promo.payment_status = "not_required"
+        db.session.commit()
+        return jsonify({"payment_required": False, "promotion": _serialize_opportunity_promotion(promo)})
+    if promo.payment_status == "success":
+        return jsonify({"payment_required": False, "promotion": _serialize_opportunity_promotion(promo)})
+
+    existing = Payment.query.filter_by(
+        opportunity_promotion_id=promo.id, status="pending"
+    ).order_by(Payment.created_at.desc()).first()
+    if existing:
+        try:
+            synced = sync_paystack_payment_status(existing.reference)
+            if synced and synced.status == "success":
+                return jsonify({"payment_required": False, "promotion": _serialize_opportunity_promotion(promo)})
+        except Exception:
+            pass
+
+    reference = f"PZA-promo-{promo.id}-{secrets.token_hex(6)}"
+    user = db.session.get(User, user_id)
+    try:
+        provider_reference, authorization_url = create_paystack_transaction(
+            reference, promo.price, f"Prepza promotion - {promo.promotion_type}", user
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+    payment = Payment(
+        user_id=user_id,
+        organisation_id=organisation_id,
+        opportunity_promotion_id=promo.id,
+        amount=promo.price,
+        provider="paystack",
+        reference=reference,
+        provider_reference=provider_reference,
+        payment_type="promotion",
+        status="pending",
+    )
+    db.session.add(payment)
+    promo.payment_status = "pending"
+    db.session.commit()
+    return jsonify({
+        "payment_required": True,
+        "redirect_url": authorization_url,
+        "reference": reference,
+        "promotion": _serialize_opportunity_promotion(promo),
+    })
+
+
 @app.route("/admin/opportunity-promotions/<int:promotion_id>/approve", methods=["POST"])
 @require_csrf
 @require_admin
@@ -13013,6 +13091,8 @@ def admin_approve_opportunity_promotion(promotion_id):
         return jsonify({
             "error": f"Promotion request is not pending (approval_status: {promo.approval_status})"
         }), 400
+    if promo.price > 0 and promo.payment_status != "success":
+        return jsonify({"error": "Promotion must be paid before it can be approved"}), 402
 
     promo.approval_status = "approved"
     promo.reviewed_by = acting_admin_id
@@ -13121,6 +13201,7 @@ def _get_active_promotions_map(opportunity_ids):
     rows = OpportunityPromotion.query.filter(
         OpportunityPromotion.opportunity_id.in_(opportunity_ids),
         OpportunityPromotion.approval_status == "approved",
+        db.or_(OpportunityPromotion.price == 0, OpportunityPromotion.payment_status == "success"),
         OpportunityPromotion.start_date <= now,
         OpportunityPromotion.end_date >= now,
     ).all()
