@@ -2208,7 +2208,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
               { icon: 'download', title: 'Save for offline study', sub: 'Keep this document in your Study Hub', action: () => void saveForOfflineStudy(), color: T.textMuted },
             ].map((t, i) => (
               <button key={i} onClick={t.action} style={{ display: 'flex', alignItems: 'center', gap: 12, background: T.card, border: '1px solid rgba(0,0,0,0.04)', borderRadius: 14, padding: '13px 15px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', fontFamily: 'Plus Jakarta Sans' }}>
-                <div style={{ width: 44, height: 44, background: t.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{t.icon}</div>
+                <div style={{ width: 44, height: 44, background: t.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{t.icon === 'download' ? <div style={{ color: t.color }}>{Ic.download('w-5 h-5')}</div> : t.icon}</div>
                 <div style={{ flex: 1, textAlign: 'left' }}>
                   <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{t.title}</div>
                   <div style={{ fontSize: 11, color: T.textMuted }}>{t.sub}</div>
