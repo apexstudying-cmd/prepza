@@ -22,7 +22,7 @@ def main():
 
     text = once(text,
         '<aside className="prepza-wa-list">',
-        '<CommunicationsNavigation conversationId={selectedId} detail={detail} messages={messages} onOpenChat={chooseChat} /><aside className="prepza-wa-list">',
+        '<aside className="prepza-wa-list">',
         "navigation mount")
 
     text = once(text,
