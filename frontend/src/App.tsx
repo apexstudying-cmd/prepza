@@ -13292,6 +13292,16 @@ function OrgOpportunitiesTab({ orgId, isOwner, csrfToken, onCreate }: { orgId: n
   const [promoSubmitting, setPromoSubmitting] = useState(false)
   const [promoError, setPromoError] = useState('')
   const [promoPayingId, setPromoPayingId] = useState<number | null>(null)
+  const [promoPrices, setPromoPrices] = useState<Record<string, number>>({})
+  const [promoPricesLoading, setPromoPricesLoading] = useState(false)
+
+  useEffect(() => {
+    setPromoPricesLoading(true)
+    api<{ prices: Record<string, number> }>('/organisations/promotion-prices')
+      .then(res => setPromoPrices(res.prices || {}))
+      .catch(() => setPromoPrices({}))
+      .finally(() => setPromoPricesLoading(false))
+  }, [])
 
   const openPromoModal = (o: OrgOpportunity) => {
     setPromoTarget(o); setPromoType('featured'); setPromoStart(''); setPromoEnd(''); setPromoError('')
@@ -13418,10 +13428,13 @@ function OrgOpportunitiesTab({ orgId, isOwner, csrfToken, onCreate }: { orgId: n
             <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 16 }} className="line-clamp-1">{promoTarget.title}</div>
 
             <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', marginBottom: 6 }}>Promotion type</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               {ORG_PROMOTION_TYPES.map(t => (
                 <button key={t} onClick={() => setPromoType(t)} style={{ flex: 1, padding: '9px 0', borderRadius: 10, border: `1.5px solid ${promoType === t ? N.gold : 'rgba(0,0,0,0.1)'}`, background: promoType === t ? `${N.gold}18` : '#fff', color: promoType === t ? N.gold : '#6B7280', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', textTransform: 'capitalize' }}>{t}</button>
               ))}
+            </div>
+            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 14 }}>
+              {promoPricesLoading ? 'Loading current pricing…' : `Price: KES ${(promoPrices[promoType] ?? 0).toLocaleString('en-KE')} for this promotion request`}
             </div>
             <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
               <div style={{ flex: 1 }}>
