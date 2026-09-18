@@ -111,6 +111,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const voiceChunksRef = useRef<Blob[]>([])
   const voiceTimerRef = useRef<number | null>(null)
   const longPressTimerRef = useRef<number | null>(null)
+  const longPressActivatedRef = useRef(false)
   useEffect(() => { meIdRef.current = meId }, [meId])
   useEffect(() => { csrfTokenRef.current = csrfToken }, [csrfToken])
 
