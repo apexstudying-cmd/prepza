@@ -3724,7 +3724,7 @@ function ChatVoiceBubble({ src, mine, filename }: { src: string; mine: boolean; 
           </div>
           <span style={{ fontSize:9,opacity:.6,flexShrink:0 }}>{formatTime(playing ? current : duration)}</span>
         </div>
-        <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(current,duration || current)} onChange={seek} aria-label="Voice message progress" style={{ position:'absolute',width:1,height:1,opacity:0,pointerEvents:'none' }} />
+        <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(current,duration || current)} onChange={seek} disabled={!duration} aria-label="Voice message progress" style={{ width:'100%',height:16,margin:'3px 0 0',padding:0,accentColor:N.gold,cursor:duration?'pointer':'default' }} />
         <div style={{ marginTop:5,fontSize:9,opacity:.52,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>Voice message</div>
       </div>
     </div>
