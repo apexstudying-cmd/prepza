@@ -67,12 +67,19 @@ def patch_native_reader(s):
 
 def patch_offline_reading_gate(s):
     marker = "    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) return { page_num: 0 } as T"
-    replacement = "    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) {\n      const documentId = Number(cleanPath.split('/')[2])\n      let page_num = 0\n      try { page_num = Math.max(0, Number(localStorage.getItem(`prepza-reading-progress:${offlineUserId}:${documentId}`) || 0) || 0) } catch (_) {}\n      return { page_num } as T\n    }"
+    replacement = """    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) {
+      const documentId = Number(cleanPath.split('/')[2])
+      let page_num = 0
+      try { page_num = Math.max(0, Number(localStorage.getItem(`prepza-reading-progress:${offlineUserId}:${documentId}`) || 0) || 0) } catch (_) {}
+      return { page_num } as T
+    }"""
     if marker in s:
-        s = s.replace(marker, replacement, 1)
-    elif 'localStorage.getItem(`prepza-reading-progress:${offlineUserId}:${documentId}`)' not in s:
-        raise SystemExit('offline reading gate anchor not found')
-    return s
+        return s.replace(marker, replacement, 1)
+    # The StudyHub offline-library patch can already install this route.
+    # Treat that as satisfied so the production build remains idempotent.
+    if "getSavedStudyHubOffline(documentId, offlineUserId)" in s and "cleanPath" in s:
+        return s
+    raise SystemExit('offline reading gate anchor not found')
 
 
 def patch_api_gate(s):
