@@ -48,6 +48,14 @@ def ensure_chat_metadata_schema():
                     ALTER TABLE "user"
                     ADD COLUMN IF NOT EXISTS read_receipts_enabled BOOLEAN NOT NULL DEFAULT TRUE
                 """))
+                db.session.execute(text("""
+                    ALTER TABLE message
+                    ADD COLUMN IF NOT EXISTS key_epoch INTEGER
+                """))
+                db.session.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_message_conversation_key_epoch
+                    ON message (conversation_id, key_epoch)
+                """))
                 db.session.commit()
             _SCHEMA_READY = True
         except Exception:
