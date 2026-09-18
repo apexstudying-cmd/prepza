@@ -187,11 +187,24 @@ export async function flushOfflineChatMessages(): Promise<void> {
           }
           throw new Error(`Request failed (${response.status})`)
         } catch (error) {
-          item.attempts += 1
+          const status = error instanceof Error && /^Request failed \((\d+)\)$/.test(error.message)
+            ? Number(error.message.match(/^Request failed \((\d+)\)$/)?.[1] || 0)
+            : 0
+          const sessionOrCsrfFailure = status === 401 || status === 403
+          if (sessionOrCsrfFailure) {
+            // Do not burn through the retry budget while the authenticated
+            // session/message-request state is being restored. /me refreshes
+            // the CSRF token on each flush, so this item can recover after a
+            // login/session refresh instead of becoming permanently parked.
+            item.attempts = 0
+            item.nextAttemptAt = Date.now() + 60_000
+          } else {
+            item.attempts += 1
+            item.nextAttemptAt = item.attempts >= MAX_ATTEMPTS
+              ? Number.MAX_SAFE_INTEGER
+              : Date.now() + Math.min(60_000, BASE_DELAY_MS * (2 ** Math.min(item.attempts, 5)))
+          }
           item.lastError = error instanceof Error ? error.message : 'Message sync failed'
-          item.nextAttemptAt = item.attempts >= MAX_ATTEMPTS
-            ? Number.MAX_SAFE_INTEGER
-            : Date.now() + Math.min(60_000, BASE_DELAY_MS * (2 ** Math.min(item.attempts, 5)))
           await update(item)
           changed = true
         }
