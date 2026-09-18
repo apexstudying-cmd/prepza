@@ -51,7 +51,17 @@ export function isOfflineChatMessagePath(path: string): boolean {
 export async function enqueueOfflineChatMessage(path: string, body: string, csrfToken = ''): Promise<boolean> {
   const userId = currentUserId()
   if (!userId || !isOfflineChatMessagePath(path) || !body) return false
-  const bodyBytes = new TextEncoder().encode(body).byteLength
+  let normalizedBody = body
+  try {
+    const payload = JSON.parse(body)
+    if (payload && typeof payload === 'object' && !payload.client_message_id) {
+      payload.client_message_id = crypto.randomUUID()
+      normalizedBody = JSON.stringify(payload)
+    }
+  } catch {
+    // Keep non-JSON payloads unchanged; the chat sender uses JSON.
+  }
+  const bodyBytes = new TextEncoder().encode(normalizedBody).byteLength
   if (bodyBytes > MAX_SINGLE_MESSAGE_BYTES) return false
   const db = await openDb()
   try {
@@ -85,7 +95,7 @@ export async function enqueueOfflineChatMessage(path: string, body: string, csrf
       tx.onerror = () => reject(tx.error || new Error('Could not queue this message.'))
       tx.onabort = () => reject(tx.error || new Error('Could not queue this message.'))
     })
-    window.dispatchEvent(new CustomEvent('prepza:offline-chat-queued', { detail: { path, body } }))
+    window.dispatchEvent(new CustomEvent('prepza:offline-chat-queued', { detail: { path, body: normalizedBody } }))
     return true
   } finally { db.close() }
 }
