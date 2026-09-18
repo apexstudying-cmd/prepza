@@ -5037,7 +5037,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
 function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [notifs, setNotifs] = useState({ push: true, messages: true, opportunities: false, community: true, reminders: true })
-  const [priv, setPriv] = useState({ profilePublic: true, whoMessages: false, whoFollows: true })
+  const [priv, setPriv] = useState({ profilePublic: true, whoMessages: false, whoFollows: true, readReceipts: true })
   const [privacyBusy, setPrivacyBusy] = useState(false)
   const [showLogout, setShowLogout] = useState(false)
   const [showModal, setShowModal] = useState<string|null>(null)
@@ -5108,11 +5108,11 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   useEffect(() => {
-    api<{ email: string; csrf_token: string; university_id: number | null; program_id: number | null; profile_visibility?: string; who_can_message?: string; who_can_follow?: string; year?: number; semester?: number }>('/me')
+    api<{ email: string; csrf_token: string; university_id: number | null; program_id: number | null; profile_visibility?: string; who_can_message?: string; who_can_follow?: string; read_receipts_enabled?: boolean; year?: number; semester?: number }>('/me')
       .then(me => {
         setCsrfToken(me.csrf_token)
         setEmail(me.email)
-        setPriv({ profilePublic: me.profile_visibility !== 'private', whoMessages: me.who_can_message === 'everyone', whoFollows: me.who_can_follow === 'everyone' })
+        setPriv({ profilePublic: me.profile_visibility !== 'private', whoMessages: me.who_can_message === 'everyone', whoFollows: me.who_can_follow === 'everyone', readReceipts: me.read_receipts_enabled !== false })
         if (me.university_id != null) {
           api<UniversityOption[]>('/universities')
             .then(list => setUniName(list.find(u => u.id === me.university_id)?.name ?? null))
