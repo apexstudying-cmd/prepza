@@ -13816,6 +13816,9 @@ export default function App() {
   // isn't stuck showing "Student" when we already know the real name.
   const [activeProfileUserId, setActiveProfileUserId] = useState<number | null>(() => storedNavigation?.activeProfileUserId ?? null)
   const [activeProfileName, setActiveProfileName] = useState<string | null>(null)
+  // Tracks where a profile was opened from so the profile's Back action does not
+  // fall into the legacy chat-detail screen when the new WhatsApp chat experience is active.
+  const [activeProfileBackScreen, setActiveProfileBackScreen] = useState<Screen>('chat-detail')
   const [activeOpportunityId, setActiveOpportunityId] = useState<number | null>(() => storedNavigation?.activeOpportunityId ?? null)
   // Set when the app loads at /signup?ref=CODE (an ambassador's share
   // link - see ambassador_dashboard()'s referral_link field). Carried as
@@ -13942,12 +13945,12 @@ export default function App() {
       case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'chats':             return <WhatsAppChatExperience onClose={() => setScreen('home')} onOpenProfile={(userId, name) => { setActiveProfileUserId(userId); setActiveProfileName(name || null); setScreen('student-profile') }} onOpenOptions={(conversationId) => { setActiveConversationId(conversationId); setScreen('chat-options') }} />
+      case 'chats':             return <WhatsAppChatExperience onClose={() => setScreen('home')} onOpenProfile={(userId, name) => { setActiveProfileBackScreen('chats'); setActiveProfileUserId(userId); setActiveProfileName(name || null); setScreen('student-profile') }} onOpenOptions={(conversationId) => { setActiveConversationId(conversationId); setScreen('chat-options') }} />
       case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} opportunityId={activeOpportunityId} />
       case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
-      case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} backScreen="chat-detail" />
+      case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} backScreen={activeProfileBackScreen} />
       case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} onOpenOrgPortal={() => setOrgPortalMode(true)} />
       case 'settings':          return <SettingsScreen setScreen={setScreen} />
       case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} />
