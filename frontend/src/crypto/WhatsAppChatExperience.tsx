@@ -7,7 +7,7 @@ import { ensureE2EEIdentityReady, fetchUserPublicKey, uploadGroupKeyEnvelopes } 
 import { provisionInitialGroupKey } from './groupProvisioning'
 import CallExperience from './CallExperience'
 
-type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; unread_count: number; status?: string }
+type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; last_message_sender_name?: string | null; last_message_filename?: string | null; unread_count: number; status?: string }
 type Attachment = { id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null }
 type Message = { id: number; conversation_id: number; sender_id: number; body: string | null; nonce?: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null; attachment: Attachment | null; kind?: 'text' | 'reaction'; read_by_count?: number; read_by_all?: boolean }
 type Participant = { user_id: number; display_name: string; role: string }
