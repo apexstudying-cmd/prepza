@@ -160,6 +160,24 @@ def handle_typing(data):
     emit("chat:typing", {"conversation_id": conversation_id, "user_id": user_id, "typing": bool(data.get("typing"))}, to=room_for(conversation_id), include_self=False)
 
 
+@socketio.on("chat:message-updated")
+def handle_message_updated(data):
+    user_id = authenticated_user_id()
+    if user_id is None or not isinstance(data, dict):
+        return
+    try:
+        conversation_id = int(data.get("conversation_id"))
+        message_id = int(data.get("message_id"))
+    except (TypeError, ValueError):
+        return
+    if conversation_id <= 0 or message_id <= 0 or not is_active_participant(user_id, conversation_id):
+        return
+    row = db.session.execute(text("SELECT id FROM message WHERE id = :message_id AND conversation_id = :conversation_id LIMIT 1"), {"message_id": message_id, "conversation_id": conversation_id}).first()
+    if row is None:
+        return
+    emit("chat:message-updated", {"conversation_id": conversation_id, "message_id": message_id, "deleted": bool(data.get("deleted"))}, to=room_for(conversation_id), include_self=False)
+
+
 @socketio.on("chat:read")
 def handle_read(data):
     user_id = authenticated_user_id()
