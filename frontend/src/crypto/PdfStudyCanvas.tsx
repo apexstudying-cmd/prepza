@@ -5,9 +5,20 @@ type Tool = 'select' | 'highlight' | 'underline' | 'strike' | 'pen' | 'eraser' |
 type Annotation = { id: string; page: number; tool: Exclude<Tool, 'select'>; x: number; y: number; w: number; h: number; text?: string; points?: Array<[number, number]> }
 const MIN_ZOOM = 0.5, MAX_ZOOM = 3, ZOOM_STEP = 0.15
 const STORE = 'prepza-study-annotations-v2'
+const MAX_ANNOTATIONS = 500
+const MAX_ANNOTATION_BYTES = 900 * 1024
+const MAX_PEN_POINTS = 1200
 const BOOKMARKS = 'prepza-study-bookmarks-v1'
 function loadAnnotations(key: string): Annotation[] { try { const value = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(value) ? value : [] } catch { return [] } }
-function saveAnnotations(key: string, value: Annotation[]) { try { localStorage.setItem(key, JSON.stringify(value)) } catch {} }
+function saveAnnotations(key: string, value: Annotation[]): boolean {
+  try {
+    const bounded = value.length > MAX_ANNOTATIONS ? value.slice(-MAX_ANNOTATIONS) : value
+    const encoded = JSON.stringify(bounded)
+    if (new Blob([encoded]).size > MAX_ANNOTATION_BYTES) return false
+    localStorage.setItem(key, encoded)
+    return true
+  } catch { return false }
+}
 function loadBookmarks(key: string): number[] { try { const value = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(value) ? value.filter(v => Number.isInteger(v) && v > 0) : [] } catch { return [] } }
 function saveBookmarks(key: string, value: number[]) { try { localStorage.setItem(key, JSON.stringify(value)) } catch {} }
 function textStyle(item: PdfTextItem, pageHeight: number) { const fontSize = Math.max(6, Math.hypot(item.transform[2], item.transform[3]) || item.height); const x = item.transform[4]; const y = pageHeight - item.transform[5] - fontSize; return { left: x, top: y, width: Math.max(item.width, 1), height: Math.max(item.height, fontSize), fontSize } }
@@ -16,7 +27,14 @@ export default function PdfStudyCanvas({ src, title, onPageChange, onTextSelecti
   const [page, setPage] = useState(1), [pages, setPages] = useState(0), [zoom, setZoom] = useState(1), [loading, setLoading] = useState(true), [error, setError] = useState(''), [text, setText] = useState<PdfTextItem[]>([]), [tool, setTool] = useState<Tool>('select'), [annotations, setAnnotations] = useState<Annotation[]>([]), [search, setSearch] = useState(''), [searchMatches, setSearchMatches] = useState<number[]>([]), [note, setNote] = useState(''), [bookmarks, setBookmarks] = useState<number[]>([]), [selectedRange, setSelectedRange] = useState<DOMRect[]>([]), [selectedText, setSelectedText] = useState('')
   const annotationKey = `${STORE}:${src}`, bookmarkKey = `${BOOKMARKS}:${src}`
   useEffect(() => { setAnnotations(loadAnnotations(annotationKey)); undoRef.current = []; setBookmarks(loadBookmarks(bookmarkKey)) }, [annotationKey, bookmarkKey])
-  const commitAnnotations = (next: Annotation[]) => { undoRef.current.push(annotations); if (undoRef.current.length > 30) undoRef.current.shift(); setAnnotations(next); saveAnnotations(annotationKey, next) }
+  const commitAnnotations = (next: Annotation[]) => {
+    const bounded = next.length > MAX_ANNOTATIONS ? next.slice(-MAX_ANNOTATIONS) : next
+    if (!saveAnnotations(annotationKey, bounded)) return false
+    undoRef.current.push(annotations)
+    if (undoRef.current.length > 30) undoRef.current.shift()
+    setAnnotations(bounded)
+    return true
+  }
   const render = useCallback(async (nextPage: number, nextZoom: number) => { const document = documentRef.current, canvas = canvasRef.current; if (!document || !canvas) return; const token = ++tokenRef.current; setLoading(true); setError(''); try { const result = await renderPdfPage(document, nextPage, nextZoom, canvas); if (token !== tokenRef.current) return; setText(result.text); setSelectedRange([]); setSelectedText(''); onTextSelection?.(''); setPage(nextPage); onPageChange?.(nextPage) } catch (value) { if (token === tokenRef.current) setError(value instanceof Error ? value.message : 'Could not render this page.') } finally { if (token === tokenRef.current) setLoading(false) } }, [onPageChange, onTextSelection])
   useEffect(() => { let cancelled = false; documentRef.current = null; setPage(1); setPages(0); setZoom(1); setLoading(true); setError(''); ;(async () => { try { const response = await window.fetch(src, { credentials: 'include' }); if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`); const document = await openPdf(new Uint8Array(await response.arrayBuffer())); if (cancelled) return; documentRef.current = document; setPages(document.numPages); const result = await renderPdfPage(document, 1, 1, canvasRef.current!); if (!cancelled) { setText(result.text); onPageChange?.(1) } } catch (value) { if (!cancelled) setError(value instanceof Error ? value.message : 'Could not open this PDF.') } finally { if (!cancelled) setLoading(false) } })(); return () => { cancelled = true; tokenRef.current += 1; documentRef.current = null } }, [src, onPageChange])
   useEffect(() => { const query = search.trim().toLowerCase(); setSearchMatches(query ? text.map((item, i) => item.str.toLowerCase().includes(query) ? i : -1).filter(i => i >= 0) : []) }, [search, text])
@@ -70,12 +88,12 @@ export default function PdfStudyCanvas({ src, title, onPageChange, onTextSelecti
         onTextSelection?.(context)
       }
 
-      commitAnnotations([...annotations, { id: crypto.randomUUID(), page, tool, x, y, w, h, points: tool === 'pen' ? points : undefined }])
+      commitAnnotations([...annotations, { id: crypto.randomUUID(), page, tool, x, y, w, h, points: tool === 'pen' ? points.slice(0, MAX_PEN_POINTS) : undefined }])
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
   }
-  const undo = () => { const previous = undoRef.current.pop(); if (previous) { setAnnotations(previous); saveAnnotations(annotationKey, previous) } }
+  const undo = () => { const previous = undoRef.current.pop(); if (previous && saveAnnotations(annotationKey, previous)) setAnnotations(previous) }
   const toggleBookmark = () => { const next = bookmarks.includes(page) ? bookmarks.filter(value => value !== page) : [...bookmarks, page].sort((a, b) => a - b); setBookmarks(next); saveBookmarks(bookmarkKey, next) }
   const ann = annotations.filter(a => a.page === page)
   return <section style={{ height: '100%', minHeight: 0, display: 'grid', gridTemplateRows: 'auto 1fr', background: '#171b22' }} aria-label={`PDF study reader for ${title}`}>
