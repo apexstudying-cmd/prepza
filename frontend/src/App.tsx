@@ -5226,6 +5226,18 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.profilePublic)}</div>} sub={priv.profilePublic ? 'Public' : 'Private'} />
           <Row label="Who can message me" right={<div onClick={() => setPriv(p => ({ ...p, whoMessages: !p.whoMessages }))}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
           <Row label="Who can follow me" right={<div onClick={() => setPriv(p => ({ ...p, whoFollows: !p.whoFollows }))}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
+          <Row label="Read receipts" sub={priv.readReceipts ? 'Enabled' : 'Disabled'} right={<div onClick={async e => {
+            e.stopPropagation()
+            if (privacyBusy) return
+            const next = !priv.readReceipts
+            setPrivacyBusy(true)
+            try {
+              const me = await api<{ year: number; semester: number }>('/me')
+              await api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ year: me.year, semester: me.semester, read_receipts_enabled: next }) })
+              setPriv(p => ({ ...p, readReceipts: next }))
+            } catch { /* keep previous value */ }
+            finally { setPrivacyBusy(false) }
+          }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.readReceipts)}</div>} />
         </Section>
 
         <Section title="Security">
