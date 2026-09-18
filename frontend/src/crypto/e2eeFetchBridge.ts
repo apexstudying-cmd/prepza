@@ -6,6 +6,7 @@ import { loadGroupConversationKey } from './groupStore'
 
 const GROUP_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
 const GROUP_SEARCH_RE = /^\/chats\/(\d+)\/messages\/search(?:\?.*)?$/
+const GROUP_MESSAGE_ITEM_RE = /^\/chats\/(\d+)\/messages\/(\d+)$/
 const CHAT_ATTACHMENT_CREATE_RE = /^\/chats\/(\d+)\/attachments$/
 const GROUP_CREATE_PATH = '/chats'
 const GROUP_ENABLE_SUFFIX = '/enable-e2ee'
@@ -387,6 +388,31 @@ export function installE2EEFetchBridge(): void {
       if (!enabled) return nativeFetch(input, init)
       const query = new URL(path, window.location.origin).searchParams.get('q') || ''
       return localSearchGroupMessages(conversationId, query)
+    }
+
+    const messageItemMatch = path.match(GROUP_MESSAGE_ITEM_RE)
+    if (messageItemMatch && (method === 'PATCH' || method === 'DELETE')) {
+      const conversationId = Number(messageItemMatch[1])
+      if (!Number.isInteger(conversationId) || conversationId <= 0) return nativeFetch(input, init)
+      const enabled = await groupIsE2EE(conversationId).catch(() => false)
+      if (!enabled || method === 'DELETE') return nativeFetch(input, init)
+
+      if (!init?.body) return failedResponse('Secure edit payload is missing')
+      let payload: any
+      try { payload = JSON.parse(String(init.body)) } catch { return failedResponse('Secure edit payload is invalid') }
+      if (typeof payload?.body !== 'string' || !payload.body.trim()) return failedResponse('Secure edit body is missing')
+
+      try {
+        const state = await openCurrentGroupSession(conversationId)
+        const encrypted = await encryptGroupText(state.key, payload.body, conversationId, state.keyEpoch)
+        payload.body = encrypted.body
+        payload.nonce = encrypted.nonce
+        init = { ...init, body: JSON.stringify(payload) }
+      } catch {
+        return failedResponse('Secure message edit encryption is unavailable')
+      }
+      const response = await nativeFetch(input, init)
+      return transformGroupMessageResponse(response, conversationId)
     }
 
     const messageMatch = path.match(GROUP_MESSAGES_RE)
