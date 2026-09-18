@@ -328,6 +328,25 @@ export function installDirectChatE2EE(): void {
     const detail = await fetchConversationDetail(nativeFetch, conversationId).catch(() => null)
     if (!detail || detail.is_group === true) return nativeFetch(input, init)
 
+    if (method === 'PATCH' && init?.body) {
+      let payload: any
+      try { payload = JSON.parse(String(init.body)) } catch { return new Response(JSON.stringify({ error: 'Secure edit payload is invalid' }), { status: 409, headers: { 'Content-Type': 'application/json' } }) }
+      if (typeof payload?.body !== 'string' || !payload.body.trim()) {
+        return new Response(JSON.stringify({ error: 'Secure edit body is missing' }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+      }
+      try {
+        const key = await directConversationKey(nativeFetch, conversationId)
+        const encrypted = await encryptMessageBody(key, payload.body)
+        payload.body = encrypted.body
+        payload.nonce = encrypted.nonce
+        init = { ...init, body: JSON.stringify(payload) }
+      } catch {
+        return new Response(JSON.stringify({ error: 'Secure message edit encryption is unavailable' }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+      }
+      const response = await nativeFetch(input, init)
+      return transformDirectMessageResponse(nativeFetch, response, conversationId)
+    }
+
     if (method === 'POST' && init?.body) {
       let payload: any
       try { payload = JSON.parse(String(init.body)) } catch { return nativeFetch(input, init) }
