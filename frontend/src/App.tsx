@@ -6,6 +6,7 @@ import CallExperience from './crypto/CallExperience'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrl, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'
 import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
+import { installActivityHeartbeat } from './activityHeartbeat'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -14014,6 +14015,12 @@ export default function App() {
 
   const [adminMode, setAdminMode] = useState(false)
   const [orgPortalMode, setOrgPortalMode] = useState(false)
+  useEffect(() => {
+    // Product analytics: a signup/login is not an active user. The heartbeat
+    // records foreground engagement and meaningful sessions for DAU/WAU/MAU
+    // and organisation audience reporting without exposing individual presence.
+    installActivityHeartbeat()
+  }, [])
   const [oauthError, setOauthError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   // Which Document is open in SummaryScreen. Screens communicate purely via
