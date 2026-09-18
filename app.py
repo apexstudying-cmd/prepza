@@ -9605,11 +9605,12 @@ def edit_message(conversation_id, message_id):
         return jsonify({"error": "Edited message body is required"}), 400
     if len(body) > CHAT_MESSAGE_CIPHERTEXT_MAX:
         return jsonify({"error": f"Message must be {CHAT_MESSAGE_CIPHERTEXT_MAX} characters or fewer"}), 400
-    if not nonce:
-        return jsonify({"error": "nonce is required alongside an edited message body"}), 400
+    conversation = db.session.get(Conversation, conversation_id)
+    if getattr(conversation, "e2ee_mode", "legacy") == "group_v1" and not nonce:
+        return jsonify({"error": "Encrypted group edits require a nonce"}), 400
 
     message.body = body
-    message.nonce = nonce
+    message.nonce = nonce or None
     message.edited_at = datetime.utcnow()
     db.session.commit()
     return jsonify(_serialize_message(message))
