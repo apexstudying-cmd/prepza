@@ -6801,6 +6801,16 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
     return () => { cancelled = true }
   }, [conversationId])
 
+  const chatOptionsOverlayRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!showRename && !showSearch && !showMedia) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setShowRename(false); setShowSearch(false); setShowMedia(false) }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [showRename, showSearch, showMedia])
+
   useEffect(() => {
     if (!showSearch || conversationId == null) return
     const q = searchQuery.trim()
