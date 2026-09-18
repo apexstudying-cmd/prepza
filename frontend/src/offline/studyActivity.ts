@@ -163,15 +163,6 @@ export async function syncOfflineStudyActivity(csrfToken?: string) {
     total_seconds: Math.min(MAX_DAILY_SECONDS, Math.max(0, (state.serverBaselines[date] || 0) + delta)),
   }))
 
-  let token = csrfToken
-  if (!token) {
-    try {
-      const res = await fetch('/me', { credentials: 'include', cache: 'no-store' })
-      if (!res.ok) return
-      token = (await res.json()).csrf_token
-    } catch { return }
-  }
-
   try {
     const res = await fetch('/study-time/offline-sync', {
       method: 'POST', credentials: 'include',
