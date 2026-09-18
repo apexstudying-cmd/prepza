@@ -3204,25 +3204,37 @@ function chatListTime(value: string | null): string {
 function chatListPreview(chat: ChatSummary): string {
   const raw = (chat.last_message || '').trim()
   const fileType = (chat.last_message_file_type || '').toLowerCase()
-  const filename = chat.last_message_filename || raw
-  if (!raw) return filename || 'No messages yet'
-  try {
-    const parsed = JSON.parse(raw)
-    if (parsed?.v === 1 && parsed?.type === 'text' && typeof parsed.text === 'string') {
-      const preview = parsed.text.trim() || 'Message'
-      return chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: ${preview}` : preview
-    }
-  } catch {}
-  if (/(voice-note|voice_note|audio)/i.test(raw) || /^(webm|ogg|mp3|m4a|wav|aac|mp4|mpeg)$/i.test(fileType)) {
-    return chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: 🎤 Voice message` : '🎤 Voice message'
+  const filename = chat.last_message_filename || ''
+  const prefix = chat.is_group && chat.last_message_sender_name
+    ? `${chat.last_message_sender_name}: `
+    : ''
+
+  // WhatsApp-style inbox previews: the latest message type determines the
+  // compact preview, while text messages show their actual content.
+  if (fileType.startsWith('audio/') || /^(webm|ogg|mp3|m4a|wav|aac|mp4|mpeg)$/i.test(fileType) || /(voice-note|voice_note|audio)/i.test(raw)) {
+    return prefix + '🎤 Voice message'
   }
-  if (/^(jpg|jpeg|png|gif|webp)$/i.test(fileType) || /^image\//.test(fileType)) {
-    return chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: 📷 Photo` : '📷 Photo'
+  if (fileType.startsWith('image/') || /^(jpg|jpeg|png|gif|webp)$/i.test(fileType)) {
+    return prefix + '📷 Photo'
+  }
+  if (fileType.startsWith('video/') || /^(mp4|mov|m4v|webm)$/i.test(fileType) && /video/i.test(fileType)) {
+    return prefix + '🎥 Video'
   }
   if (/^(pdf|doc|docx|ppt|pptx)$/i.test(fileType) || /\.(pdf|docx?|pptx?)$/i.test(filename)) {
-    return chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: 📄 ${filename}` : `📄 ${filename}`
+    return prefix + `📄 ${filename || raw || 'Document'}`
   }
-  return chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: ${raw}` : raw
+
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed?.v === 1 && parsed?.type === 'text' && typeof parsed.text === 'string') {
+        return prefix + (parsed.text.trim() || 'Message')
+      }
+    } catch {}
+    return prefix + raw
+  }
+
+  return prefix + 'No messages yet'
 }
 
 // Stale-while-revalidate cache for Chats: on repeat visits, render
