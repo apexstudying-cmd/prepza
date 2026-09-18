@@ -83,6 +83,8 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set())
   const [attachOpen, setAttachOpen] = useState(false)
   const [reactionPicker, setReactionPicker] = useState<number | null>(null)
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<number>>(new Set())
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [csrfToken, setCsrfToken] = useState('')
   const [showListSearch, setShowListSearch] = useState(false)
   const [showGroupCreator, setShowGroupCreator] = useState(false)
@@ -108,6 +110,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const voiceRecorderRef = useRef<MediaRecorder | null>(null)
   const voiceChunksRef = useRef<Blob[]>([])
   const voiceTimerRef = useRef<number | null>(null)
+  const longPressTimerRef = useRef<number | null>(null)
   useEffect(() => { meIdRef.current = meId }, [meId])
   useEffect(() => { csrfTokenRef.current = csrfToken }, [csrfToken])
 
@@ -212,7 +215,36 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const isGroup = Boolean(detail?.is_group)
   const closeExperience = () => { suppressObserverUntil = Date.now() + 2500; if (selectedId != null) leaveRealtimeChat(selectedId); setVisible(false); setView('list'); setSelectedId(null); setDetail(null); setMessages([]); setTypingUsers({}); setReactionPicker(null); onClose?.() }
   const chooseChat = (id: number) => { setSelectedId(id); setView('detail'); setVisible(true); setMessageSearchOpen(false); setMessageSearch('') }
-  const backToList = () => { if (selectedId != null) leaveRealtimeChat(selectedId); setView('list'); setSelectedId(null); setDetail(null); setMessages([]); setReactionPicker(null); void loadList() }
+  const backToList = () => { if (selectedId != null) leaveRealtimeChat(selectedId); setView('list'); setSelectedId(null); setDetail(null); setMessages([]); setReactionPicker(null); setSelectedMessageIds(new Set()); setEditingMessageId(null); void loadList() }
+  const clearSelection = () => { setSelectedMessageIds(new Set()); setReactionPicker(null) }
+  const toggleMessageSelection = (messageId: number) => { setSelectedMessageIds(current => { const next = new Set(current); if (next.has(messageId)) next.delete(messageId); else next.add(messageId); return next }) }
+  const startMessageLongPress = (messageId: number) => { cancelMessageLongPress(); longPressTimerRef.current = window.setTimeout(() => { toggleMessageSelection(messageId); longPressTimerRef.current = null }, 450) }
+  const cancelMessageLongPress = () => { if (longPressTimerRef.current) { window.clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null } }
+  const selectedMessages = messages.filter(message => selectedMessageIds.has(message.id))
+  const selectedEditableMessage = selectedMessages.length === 1 && selectedMessages[0].sender_id === meId && !selectedMessages[0].is_deleted && !selectedMessages[0].attachment && !!displayText(selectedMessages[0]) ? selectedMessages[0] : null
+  const beginEditSelected = () => {
+    if (!selectedEditableMessage) return
+    if (selectedEditableMessage.created_at && Date.now() - new Date(selectedEditableMessage.created_at).getTime() > 15 * 60 * 1000) { setError('Messages can only be edited within 15 minutes.'); return }
+    setInput(displayText(selectedEditableMessage)); setEditingMessageId(selectedEditableMessage.id); setReplyingTo(null); clearSelection()
+  }
+  const deleteSelected = async () => {
+    const deletable = selectedMessages.filter(message => message.sender_id === meId && !message.is_deleted)
+    if (!selectedId || !deletable.length) return
+    if (!window.confirm(deletable.length === 1 ? 'Delete this message for everyone?' : `Delete ${deletable.length} messages for everyone?`)) return
+    setSending(true); setError('')
+    try {
+      const token = await getCsrfToken()
+      for (const message of deletable) await api(`/chats/${selectedId}/messages/${message.id}`, { method:'DELETE', headers:{'X-CSRF-Token':token} })
+      const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`)
+      setMessages(result.messages || []); clearSelection(); void loadList()
+    } catch (value) { setError(friendlyError(value, 'Could not delete the selected message(s).')) }
+    finally { setSending(false) }
+  }
+  const copySelected = async () => {
+    const text = selectedMessages.map(displayText).filter(Boolean).join('\n')
+    if (!text) return
+    try { await navigator.clipboard.writeText(text); clearSelection() } catch { setError('Copy is not available in this browser.') }
+  }
   const openPeerProfile = () => { if (selectedId == null || !detail || isGroup) return; const peer = detail.participants.find(item => item.user_id !== meId); if (peer) onOpenProfile?.(peer.user_id, peer.display_name, selectedId) }
   const openListPeerProfile = async (chat: ChatSummary) => {
     if (chat.is_group || !onOpenProfile) return
