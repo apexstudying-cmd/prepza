@@ -4,45 +4,18 @@ ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "frontend/src/crypto/WhatsAppChatExperience.tsx"
 ADA_TARGET = ROOT / "frontend/src/crypto/inChatAdaEnhancer.tsx"
 
-def once(text, old, new, label):
-    if old not in text:
-        raise SystemExit("CHAT_NAV_FAILED: missing " + label)
-    return text.replace(old, new, 1)
-
 def main():
     text = TARGET.read_text(encoding="utf-8")
-    text = once(text, "import { provisionInitialGroupKey } from './groupProvisioning'",
-                 "import { provisionInitialGroupKey } from './groupProvisioning'\nimport CommunicationsNavigation from './CommunicationsNavigation'",
-                 "navigation import")
-
-    text = once(text,
-        "if (!visible || view !== 'detail' || selectedId == null || !csrfToken) return",
-        "if (!visible || view !== 'detail' || selectedId == null || !csrfToken || localStorage.getItem('prepza-chat-read-receipts') === 'off') return",
-        "read receipt setting")
-
-    text = once(text,
-        '<aside className="prepza-wa-list">',
-        '<aside className="prepza-wa-list">',
-        "navigation mount")
-
-    if "localStorage.getItem('prepza-chat-media-visibility') !== 'off' && message.attachment.view_url && isImage(message.attachment.file_type)" not in text:
-        text = once(text,
-            "{message.attachment.view_url && isImage(message.attachment.file_type) ? <img",
-            "{localStorage.getItem('prepza-chat-media-visibility') !== 'off' && message.attachment.view_url && isImage(message.attachment.file_type) ? <img",
-            "media visibility")
-
+    # Navigation/media/composer are now maintained by the chat source itself.
+    # This build step is intentionally validation-only so repeated production
+    # builds cannot corrupt JSX through brittle string insertion.
+    if "localStorage.getItem('prepza-chat-media-visibility') !== 'off'" not in text:
+        raise SystemExit("CHAT_NAV_FAILED: media visibility guard missing")
     if 'data-prepza-chat-composer="true"' not in text:
-        text = once(text,
-            'placeholder="Message…" disabled={sending || uploading} rows={1}',
-            'placeholder="Message…" data-prepza-chat-composer="true" disabled={sending || uploading} rows={1}',
-            "composer marker")
-
-    TARGET.write_text(text, encoding="utf-8")
-    ada = ADA_TARGET.read_text(encoding="utf-8")
-    ada = ada.replace("document.querySelector('input[placeholder=\"Message…\"]') as HTMLInputElement | null",
-                      "document.querySelector('[data-prepza-chat-composer=\"true\"]') as HTMLTextAreaElement | null")
-    ADA_TARGET.write_text(ada, encoding="utf-8")
-    print("CHAT_NAVIGATION_APPLIED")
+        raise SystemExit("CHAT_NAV_FAILED: composer marker missing")
+    if not ADA_TARGET.exists():
+        raise SystemExit("CHAT_NAV_FAILED: Ada enhancer missing")
+    print("CHAT_NAVIGATION_VALIDATED")
     print("CALLS_SECTION_READY")
     print("CHAT_SETTINGS_READY")
     print("MEDIA_AND_GROUP_INFO_READY")
