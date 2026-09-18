@@ -86,7 +86,7 @@ function surfaceIsDark(surface: HTMLElement): boolean {
 }
 
 function applyBubbleTheme(row: HTMLElement, darkMode: boolean) {
-  const bubble = Array.from(row.children).find(child => child instanceof HTMLElement && child.querySelector('button[title="Reply"]')) as HTMLElement | undefined
+  const bubble = row.querySelector<HTMLElement>('.prepza-wa-bubble')
   if (!bubble) return
   const mine = row.style.alignItems === 'flex-end'
   row.dataset.prepzaMine = mine ? '1' : '0'
@@ -111,7 +111,7 @@ function applyBubbleTheme(row: HTMLElement, darkMode: boolean) {
   }
   row.dataset.prepzaBubblePatched = '1'
 
-  const quoted = bubble.querySelector<HTMLElement>('button:not([title])')
+  const quoted = bubble.querySelector<HTMLElement>('[data-prepza-quoted="1"]')
   if (quoted && quoted.textContent?.trim()) {
     quoted.style.display = 'block'
     quoted.style.minHeight = '30px'
