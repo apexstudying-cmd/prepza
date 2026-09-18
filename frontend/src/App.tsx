@@ -13942,7 +13942,7 @@ export default function App() {
       case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'chats':             return <WhatsAppChatExperience onClose={() => setScreen('home')} />
+      case 'chats':             return <WhatsAppChatExperience onClose={() => setScreen('home')} onOpenProfile={(userId, name) => { setActiveProfileUserId(userId); setActiveProfileName(name || null); setScreen('student-profile') }} onOpenOptions={(conversationId) => { setActiveConversationId(conversationId); setScreen('chat-options') }} />
       case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} opportunityId={activeOpportunityId} />
