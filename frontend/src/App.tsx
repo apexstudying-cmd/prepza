@@ -4844,6 +4844,16 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
   const [pendingRequestCount, setPendingRequestCount] = useState(0)
 
   useEffect(() => {
+    if (!showMenu) return
+    const close = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target && !target.closest('[data-prepza-profile-menu]')) setShowMenu(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [showMenu])
+
+  useEffect(() => {
     api<ProfileMe>('/me').then(res => { setMe(res); PROFILE_CACHE.me = res }).catch(() => {}).finally(() => setMeLoading(false))
     api<GamificationSummary>('/gamification/summary').then(res => { setSummary(res); PROFILE_CACHE.summary = res }).catch(() => {})
     api<AchievementsResponse>('/achievements').then(res => { setAchievementsList(res.achievements); PROFILE_CACHE.achievementsList = res.achievements }).catch(() => {})
@@ -4870,8 +4880,8 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowMenu(v => !v)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
+          <div style={{ position: 'relative' }} data-prepza-profile-menu>
+            <button type="button" onClick={() => setShowMenu(v => !v)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
             {showMenu && (
               <div style={{ position: 'absolute', right: 0, top: 40, background: T.card, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, width: 170, overflow: 'hidden' }}>
                 {[['Edit Profile', () => { setShowMenu(false); setScreen('edit-profile') }], ['Ambassador Program', () => { setShowMenu(false); setScreen('ambassador') }], ['Organisation Portal', () => { setShowMenu(false); onOpenOrgPortal?.() }], ['Settings', () => { setShowMenu(false); setScreen('settings') }], ['Share Profile', () => { setShowMenu(false); setScreen('share-sheet') }]].map(([label, action]) => (
