@@ -13683,9 +13683,9 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
   const mau = audience?.audience?.mau || 0
   const capPct = cap ? Math.min(100, Math.round((mau / cap) * 100)) : 0
   const orgPlans = [
-    { code: 'launch', label: 'Launch', price: 2500, cap: 250, opportunities: 2 },
-    { code: 'growth', label: 'Growth', price: 7500, cap: 1000, opportunities: 10 },
-    { code: 'scale', label: 'Scale', price: 15000, cap: 3000, opportunities: 50 },
+    { code: 'launch', label: 'Launch', price: 2500, cap: 250, opportunities: 2, campaigns: 1, window: '7-day', retention: '30-day' },
+    { code: 'growth', label: 'Growth', price: 7500, cap: 1000, opportunities: 10, campaigns: 3, window: '30-day', retention: '90-day' },
+    { code: 'scale', label: 'Scale', price: 15000, cap: 3000, opportunities: 50, campaigns: 10, window: '30-day', retention: '1-year' },
   ]
 
   const buyPlan = async (code: string) => {
@@ -13733,7 +13733,8 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
             <div key={p.code} style={{ background: '#fff', borderRadius: 14, padding: 13, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 800, fontSize: 12, color: N.navy }}>{p.label}</div>
-                <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3 }}>KES {p.price.toLocaleString()}/month · up to {p.cap.toLocaleString()} MAU · {p.opportunities} active opportunities</div>
+                <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3 }}>KES {p.price.toLocaleString()}/month · up to {p.cap.toLocaleString()} MAU · {p.opportunities} active opportunities · {p.campaigns} sponsored campaign{p.campaigns === 1 ? '' : 's'}</div>
+                <div style={{ fontSize: 9, color: '#B0B6C2', marginTop: 3 }}>Candidate activity window: {p.window} · analytics retention: {p.retention}</div>
               </div>
               {current ? <span style={{ fontSize: 10, fontWeight: 800, color: ORG_COLORS.green }}>Active</span> : isOwner ? (
                 <button onClick={() => buyPlan(p.code)} disabled={!!billingBusy} style={{ background: ORG_COLORS.gold, color: ORG_COLORS.navy, border: 'none', borderRadius: 9, padding: '7px 11px', fontSize: 10, fontWeight: 800, cursor: billingBusy ? 'not-allowed' : 'pointer' }}>{billingBusy === p.code ? 'Opening…' : 'Choose'}</button>
