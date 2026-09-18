@@ -7051,7 +7051,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
               <div style={{ padding: '20px 0', textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Loading…</div>
             ) : mediaItems.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
-                <div style={{ fontSize: 44, marginBottom: 12 }}>🖼️</div>
+                <div style={{ color: T.textMuted, marginBottom: 12 }}>{Ic.image("w-10 h-10")}</div>
                 <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>Nothing shared yet</div>
                 <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>Files and images sent in this chat will show up here</div>
               </div>
@@ -7065,7 +7065,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
                       </div>
                     ) : (
                       <div style={{ aspectRatio: '1', borderRadius: 10, background: '#F3F4F6', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: 8 }}>
-                        <div style={{ fontSize: 22 }}>📎</div>
+                        <div style={{ color: T.textMuted }}>{Ic.paperclip("w-6 h-6")}</div>
                         <div style={{ fontSize: 9, color: T.textMuted, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{item.original_filename}</div>
                       </div>
                     )}
