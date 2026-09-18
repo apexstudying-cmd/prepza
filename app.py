@@ -12,7 +12,8 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_, and_, text
+from threading import Lock
 from sqlalchemy.exc import IntegrityError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -50,6 +51,44 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 db = SQLAlchemy(app)
+
+# Offline chat retries need a server-side idempotency record. The client keeps
+# one stable UUID for a queued send; this table lets a retry return the
+# already-created message instead of creating a second message when the first
+# response was lost during reconnect.
+_CHAT_IDEMPOTENCY_SCHEMA_READY = False
+_CHAT_IDEMPOTENCY_SCHEMA_LOCK = Lock()
+
+
+def _ensure_chat_idempotency_schema():
+    global _CHAT_IDEMPOTENCY_SCHEMA_READY
+    if _CHAT_IDEMPOTENCY_SCHEMA_READY:
+        return True
+    with _CHAT_IDEMPOTENCY_SCHEMA_LOCK:
+        if _CHAT_IDEMPOTENCY_SCHEMA_READY:
+            return True
+        try:
+            db.session.execute(text("""
+                CREATE TABLE IF NOT EXISTS chat_message_idempotency (
+                    conversation_id INTEGER NOT NULL,
+                    sender_id INTEGER NOT NULL,
+                    client_message_id VARCHAR(128) NOT NULL,
+                    message_id INTEGER NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (conversation_id, sender_id, client_message_id)
+                )
+            """))
+            db.session.execute(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ix_chat_message_idempotency_message
+                ON chat_message_idempotency (message_id)
+            """))
+            db.session.commit()
+            _CHAT_IDEMPOTENCY_SCHEMA_READY = True
+            return True
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Could not initialize chat idempotency schema")
+            return False
 
 EMAIL_REGEX = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 PHONE_NUMBER_REGEX = re.compile(r"^\+?\d{9,15}$")
@@ -9382,6 +9421,48 @@ def send_message(conversation_id):
     if not data:
         return jsonify({"error": "Request body must be valid JSON"}), 400
 
+    client_message_id = (data.get("client_message_id") or "").strip() or None
+    if client_message_id is not None:
+        if len(client_message_id) > 128 or not re.fullmatch(r"[A-Za-z0-9._:-]{8,128}", client_message_id):
+            return jsonify({"error": "client_message_id is invalid"}), 400
+        if _ensure_chat_idempotency_schema():
+            existing_message_id = db.session.execute(
+                text("""
+                    SELECT message_id
+                    FROM chat_message_idempotency
+                    WHERE conversation_id = :conversation_id
+                      AND sender_id = :sender_id
+                      AND client_message_id = :client_message_id
+                """),
+                {
+                    "conversation_id": conversation_id,
+                    "sender_id": user_id,
+                    "client_message_id": client_message_id,
+                },
+            ).scalar_one_or_none()
+            if existing_message_id:
+                existing_message = db.session.get(Message, int(existing_message_id))
+                if existing_message:
+                    existing_attachment = MessageAttachment.query.filter_by(
+                        message_id=existing_message.id,
+                        status="ready",
+                    ).first()
+                    return jsonify(_serialize_message(existing_message, existing_attachment)), 200
+                db.session.execute(
+                    text("""
+                        DELETE FROM chat_message_idempotency
+                        WHERE conversation_id = :conversation_id
+                          AND sender_id = :sender_id
+                          AND client_message_id = :client_message_id
+                    """),
+                    {
+                        "conversation_id": conversation_id,
+                        "sender_id": user_id,
+                        "client_message_id": client_message_id,
+                    },
+                )
+                db.session.commit()
+
     body = (data.get("body") or "").strip() or None
     nonce = (data.get("nonce") or "").strip() or None
     if body and len(body) > CHAT_MESSAGE_CIPHERTEXT_MAX:
@@ -9413,6 +9494,47 @@ def send_message(conversation_id):
 
     if attachment:
         attachment.message_id = message.id
+
+    if client_message_id and _ensure_chat_idempotency_schema():
+        db.session.execute(
+            text("""
+                INSERT INTO chat_message_idempotency
+                    (conversation_id, sender_id, client_message_id, message_id)
+                VALUES
+                    (:conversation_id, :sender_id, :client_message_id, :message_id)
+                ON CONFLICT (conversation_id, sender_id, client_message_id) DO NOTHING
+            """),
+            {
+                "conversation_id": conversation_id,
+                "sender_id": user_id,
+                "client_message_id": client_message_id,
+                "message_id": message.id,
+            },
+        )
+        mapped_message_id = db.session.execute(
+            text("""
+                SELECT message_id
+                FROM chat_message_idempotency
+                WHERE conversation_id = :conversation_id
+                  AND sender_id = :sender_id
+                  AND client_message_id = :client_message_id
+            """),
+            {
+                "conversation_id": conversation_id,
+                "sender_id": user_id,
+                "client_message_id": client_message_id,
+            },
+        ).scalar_one_or_none()
+        if mapped_message_id and int(mapped_message_id) != message.id:
+            db.session.rollback()
+            existing_message = db.session.get(Message, int(mapped_message_id))
+            if existing_message:
+                existing_attachment = MessageAttachment.query.filter_by(
+                    message_id=existing_message.id,
+                    status="ready",
+                ).first()
+                return jsonify(_serialize_message(existing_message, existing_attachment)), 200
+            return jsonify({"error": "Message idempotency conflict; retry"}), 409
 
     conversation = db.session.get(Conversation, conversation_id)
     if conversation:
