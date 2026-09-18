@@ -12869,14 +12869,14 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
   )
 
   if (loading) return (
-    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: ORG_COLORS.bg }}>
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <Header title="Organisation Portal" />
       <div style={{ padding: 40, textAlign: 'center', color: ORG_COLORS.gray, fontSize: 13 }}>Loading…</div>
     </div>
   )
 
   if (loadError && orgs.length === 0) return (
-    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: ORG_COLORS.bg }}>
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <Header title="Organisation Portal" />
       <div style={{ padding: 40, textAlign: 'center' }}>
         <div style={{ fontSize: 13, color: ORG_COLORS.gray, marginBottom: 14 }}>{loadError}</div>
@@ -12887,11 +12887,11 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
 
   if (!activeOrg) {
     return (
-      <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: ORG_COLORS.bg, overflow: 'hidden' }}>
+      <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: T.pageBg, overflow: 'hidden' }}>
         <Header title="Organisation Portal" />
         <div style={{ flex: 1, overflowY: 'auto', padding: 18 }}>
           <div style={{ background: `linear-gradient(135deg,${ORG_COLORS.navy},${ORG_COLORS.navy3})`, borderRadius: 20, padding: 22, marginBottom: 18, textAlign: 'center' }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🏢</div>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>{Ic.person('w-8 h-8')}</div>
             <div style={{ fontWeight: 800, fontSize: 18, color: '#fff', marginBottom: 6 }}>Post opportunities on Prepza</div>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>Register your organisation to submit jobs, internships, scholarships and events to Kenyan university students.</div>
           </div>
@@ -12899,25 +12899,25 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
           <div style={{ background: T.card, borderRadius: 16, padding: 18, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Organisation name *</div>
-              <input value={regName} onChange={e => setRegName(e.target.value)} placeholder="e.g. Safaricom PLC" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
+              <input value={regName} onChange={e => setRegName(e.target.value)} placeholder="e.g. Safaricom PLC" style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.pageBg }} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Contact email *</div>
-              <input value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="careers@company.com" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
+              <input value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="careers@company.com" style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.pageBg }} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Website</div>
-              <input value={regWebsite} onChange={e => setRegWebsite(e.target.value)} placeholder="https://company.com" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
+              <input value={regWebsite} onChange={e => setRegWebsite(e.target.value)} placeholder="https://company.com" style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.pageBg }} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Contact phone</div>
-              <input value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="+254 7XX XXX XXX" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy }} />
+              <input value={regPhone} onChange={e => setRegPhone(e.target.value)} placeholder="+254 7XX XXX XXX" style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.pageBg }} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Description</div>
-              <textarea value={regDesc} onChange={e => setRegDesc(e.target.value)} rows={3} placeholder="What does your organisation do?" style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy, resize: 'none', lineHeight: 1.6 }} />
+              <textarea value={regDesc} onChange={e => setRegDesc(e.target.value)} rows={3} placeholder="What does your organisation do?" style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: ORG_COLORS.navy, resize: 'none', lineHeight: 1.6 }} />
             </div>
-            <button onClick={register} disabled={!regName.trim() || !regEmail.trim() || registering} style={{ width: '100%', background: (!regName.trim() || !regEmail.trim()) ? '#E5E7EB' : `linear-gradient(135deg,${ORG_COLORS.gold},${ORG_COLORS.goldLight})`, color: (!regName.trim() || !regEmail.trim()) ? T.textMuted : ORG_COLORS.navy, border: 'none', borderRadius: 14, padding: '14px 0', fontWeight: 800, fontSize: 14, cursor: (!regName.trim() || !regEmail.trim()) ? 'not-allowed' : 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+            <button onClick={register} disabled={!regName.trim() || !regEmail.trim() || registering} style={{ width: '100%', background: (!regName.trim() || !regEmail.trim()) ? T.border : `linear-gradient(135deg,${ORG_COLORS.gold},${ORG_COLORS.goldLight})`, color: (!regName.trim() || !regEmail.trim()) ? T.textMuted : ORG_COLORS.navy, border: 'none', borderRadius: 14, padding: '14px 0', fontWeight: 800, fontSize: 14, cursor: (!regName.trim() || !regEmail.trim()) ? 'not-allowed' : 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
               {registering ? 'Registering…' : 'Register Organisation'}
             </button>
           </div>
@@ -12935,7 +12935,7 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
   const vm = verifMeta[activeOrg.verification_status] || verifMeta.pending
 
   return (
-    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: ORG_COLORS.bg, overflow: 'hidden' }}>
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: T.pageBg, overflow: 'hidden' }}>
       <div style={{ background: ORG_COLORS.navy, padding: '0 18px 14px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button onClick={onExit} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', color: '#fff', fontSize: 18, fontFamily: 'Plus Jakarta Sans' }}>‹</button>
