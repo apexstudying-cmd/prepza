@@ -118,7 +118,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
 
   const getCsrfToken = async (): Promise<string> => {
     if (csrfTokenRef.current) return csrfTokenRef.current
-    const me = await api<{ id: number; csrf_token: string }>('/me')
+    const me = await api<{ id: number; csrf_token: string; read_receipts_enabled?: boolean }>('/me')
     if (!me?.csrf_token) throw new Error('CSRF token is unavailable; please refresh the session')
     csrfTokenRef.current = me.csrf_token
     setMeId(me.id)
