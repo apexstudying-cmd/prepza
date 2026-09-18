@@ -3,7 +3,8 @@ import logoImg from './imports/logo.png'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
 import CallExperience from './crypto/CallExperience'
-import { saveStudyHubDocumentOffline } from './offline/studyHubOffline'
+import { getOfflineStudyDocumentUrl, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'
+import { setOfflineUserId } from './offline/generatedMaterials'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -350,10 +351,32 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
   const [tab, setTab] = useState<'documents' | 'materials'>('documents')
   const [documents, setDocuments] = useState<HomeDocument[]>([])
   const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; type: string }[]>([])
+  const [offlineDocuments, setOfflineDocuments] = useState<HomeDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   useEffect(() => {
     let cancelled = false
+    const loadOffline = async () => {
+      try {
+        const me = await api<{ id?: number }>('/me')
+        const userId = Number(me.id || 0)
+        if (Number.isInteger(userId) && userId > 0) setOfflineUserId(userId)
+        const saved = await listSavedStudyHubOffline(userId)
+        if (!cancelled) {
+          setOfflineDocuments(saved.map(row => ({
+            id: row.documentId,
+            title: row.title || 'Saved study document',
+            original_filename: row.title || 'Study document',
+            status: 'ready',
+            file_type: row.fileType || null,
+            file_size_bytes: null,
+            page_count: row.pageCount || null,
+            created_at: new Date(row.savedAt).toISOString(),
+          } as HomeDocument)))
+        }
+      } catch { /* offline: saved package lookup can still use the last local user id */ }
+    }
+    void loadOffline()
     api<{ documents: HomeDocument[] }>('/documents').then(async res => {
       if (cancelled) return
       const ready = res.documents.filter(d => d.status === 'ready')
@@ -362,7 +385,12 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
         try { const detail = await api<DocumentDetail>(`/documents/${d.id}`); return (detail.materials || []).filter(m => m.status === 'ready').map(m => ({ documentId: d.id, documentTitle: d.title, type: m.type })) } catch { return [] }
       }))
       if (!cancelled) setMaterials(rows.flat())
-    }).catch(e => { if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not load your study library.') }).finally(() => { if (!cancelled) setLoading(false) })
+    }).catch(e => {
+      if (!cancelled) {
+        setError(e instanceof ApiError ? e.message : 'Could not load your study library.')
+        void loadOffline()
+      }
+    }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
   const openDocument = (id: number) => { setActiveDocumentId(id); setScreen('document-study') }
@@ -379,7 +407,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       <div style={{display:'flex',gap:8}}>{([['documents','Documents'],['materials','Study Materials']] as const).map(([key,name])=><button key={key} onClick={()=>setTab(key)} style={{flex:1,padding:'8px 10px',borderRadius:11,background:tab===key?N.gold:'rgba(255,255,255,0.08)',color:tab===key?N.navy:'rgba(255,255,255,0.7)',border:'none',fontWeight:800,fontSize:11,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}>{name}</button>)}</div>
     </div>
     <div style={{flex:1,overflowY:'auto',padding:16}} className="scrollbar-hide">
-      {loading ? <GenerationLoading label="Loading your study library…"/> : error ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Ada about it, or create study materials.</div>{documents.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:documents.map(d=><button key={d.id} onClick={()=>openDocument(d.id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>▣</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{d.page_count?`${d.page_count} pages`:'Document'}{d.created_at?` · ${new Date(d.created_at).toLocaleDateString()}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:18}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
+      {loading ? <GenerationLoading label="Loading your study library…"/> : error ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Ada about it, or create study materials.</div>{documents.length===0 && offlineDocuments.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:Array.from(new Map([...documents, ...offlineDocuments].map(d=>[d.id,d])).values()).map(d=><button key={d.id} onClick={()=>openDocument(d.id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>▣</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{d.page_count?`${d.page_count} pages`:'Document'}{d.created_at?` · ${new Date(d.created_at).toLocaleDateString()}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:18}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
       <div style={{height:'calc(90px + env(safe-area-inset-bottom, 0px))'}}/>
     </div>
   </div>
@@ -1150,8 +1178,11 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
   }, [])
 
   useEffect(() => {
-    api<{ display_name: string | null }>('/me')
-      .then(me => { setDisplayName(me.display_name); HOME_CACHE.me = me })
+    api<{ id?: number; display_name: string | null }>('/me')
+      .then(me => {
+        if (Number.isInteger(Number(me.id)) && Number(me.id) > 0) setOfflineUserId(Number(me.id))
+        setDisplayName(me.display_name); HOME_CACHE.me = me
+      })
       .catch(() => {})
       .finally(() => setMeLoading(false))
     api<{ documents: HomeDocument[] }>('/documents')
