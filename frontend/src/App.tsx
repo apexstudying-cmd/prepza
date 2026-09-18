@@ -3271,7 +3271,11 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
       .catch(() => {})
   }, [])
 
-  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+  useEffect(() => {
+    api<{ id: number; csrf_token: string }>('/me')
+      .then(me => { setCsrfToken(me.csrf_token); setCurrentUserId(me.id) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (tab !== 'Requests' || requestsLoaded) return
