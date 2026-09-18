@@ -9029,6 +9029,20 @@ def list_chats():
                 if last_message and last_message.sender_id
                 else None
             ),
+            "last_message_sender_id": last_message.sender_id if last_message else None,
+            "last_message_read_by_all": (
+                bool(last_message)
+                and last_message.sender_id == user_id
+                and all(
+                    participant.last_read_at is not None
+                    and participant.last_read_at >= last_message.created_at
+                    for participant in ConversationParticipant.query.filter(
+                        ConversationParticipant.conversation_id == conversation.id,
+                        ConversationParticipant.user_id != user_id,
+                        ConversationParticipant.left_at.is_(None),
+                    ).all()
+                )
+            ) if last_message else False,
             "last_message_file_type": last_attachment.file_type if last_attachment else None,
             "last_message_filename": last_attachment.original_filename if last_attachment else None,
             "unread_count": unread_count,
