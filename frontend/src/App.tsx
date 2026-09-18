@@ -1120,6 +1120,8 @@ function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) => void; oauthError?: string }) {
   const { tokens: T } = useTheme()
+  // Keep the auth entry point keyboard/mobile friendly: native form semantics
+  // allow password managers and Enter-to-submit without adding another auth path.
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [showPass, setShowPass] = useState(false)
@@ -1154,13 +1156,13 @@ function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) =>
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Email</div>
-            <input type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', boxSizing: 'border-box' }} />
+            <input type="email" name="email" autoComplete="email" inputMode="email" aria-label="Email address" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', boxSizing: 'border-box' }} />
           </div>
           <div>
             <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Password</div>
             <div style={{ position: 'relative' }}>
-              <input type={showPass ? 'text' : 'password'} autoComplete="current-password" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} placeholder="••••••••" style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 44px 13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', boxSizing: 'border-box' }} />
-              <button onClick={() => setShowPass(v => !v)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)' }}>{Ic.eye()}</button>
+              <input type={showPass ? 'text' : 'password'} name="password" autoComplete="current-password" aria-label="Password" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} placeholder="••••••••" style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 44px 13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', boxSizing: 'border-box' }} />
+              <button type="button" aria-label={showPass ? 'Hide password' : 'Show password'} title={showPass ? 'Hide password' : 'Show password'} onClick={() => setShowPass(v => !v)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)' }}>{Ic.eye()}</button>
             </div>
           </div>
           <div style={{ textAlign: 'right' }}><span onClick={() => setScreen('forgot-password')} style={{ color: N.gold, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Forgot password?</span></div>
@@ -1190,7 +1192,7 @@ function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) =>
             <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
           </div>
 
-          <button onClick={() => { window.location.href = '/auth/google' }} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+          <button type="button" aria-label="Continue with Google" onClick={() => { window.location.href = '/auth/google' }} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
             <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21.35 12.2c0-.68-.06-1.33-.18-1.95H12v3.69h5.24a4.48 4.48 0 0 1-1.94 2.94v2.44h3.14c1.84-1.69 2.91-4.18 2.91-7.12Z" fill="#4285F4"/><path d="M12 21.5c2.64 0 4.85-.87 6.47-2.35l-3.14-2.44c-.87.58-1.98.92-3.33.92-2.56 0-4.73-1.73-5.5-4.06H3.25v2.52A9.77 9.77 0 0 0 12 21.5Z" fill="#34A853"/><path d="M6.5 13.57a5.87 5.87 0 0 1 0-3.74V7.31H3.25a9.5 9.5 0 0 0 0 8.78l3.25-2.52Z" fill="#FBBC05"/><path d="M12 5.77c1.44 0 2.73.5 3.75 1.48l2.81-2.81C16.85 2.85 14.64 2 12 2a9.77 9.77 0 0 0-8.75 5.31L6.5 9.83C7.27 7.5 9.44 5.77 12 5.77Z" fill="#EA4335"/></svg> Continue with Google
           </button>
         </div>
