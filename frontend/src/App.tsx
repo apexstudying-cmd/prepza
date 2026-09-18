@@ -3386,6 +3386,10 @@ function chatIsImage(fileType: string) {
   return /^(jpg|jpeg|png|gif|webp)$/i.test(fileType) || fileType.startsWith('image/')
 }
 
+function chatIsAudio(fileType: string) {
+  return /^(webm|ogg|mp3|m4a|wav|aac|mp4)$/i.test(fileType) || fileType.startsWith('audio/')
+}
+
 function chatTime(value: string | null) {
   return value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
 }
@@ -3416,11 +3420,28 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [typingUsers, setTypingUsers] = useState<Record<number, number>>({})
   const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set())
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [recordingVoice, setRecordingVoice] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null)
+  const voiceChunksRef = useRef<Blob[]>([])
+  const voiceTimerRef = useRef<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<number | null>(null)
   const typingTimeouts = useRef<Map<number, number>>(new Map())
   const meIdRef = useRef<number | null>(null)
+
+  useEffect(() => () => {
+    const recorder = voiceRecorderRef.current
+    voiceRecorderRef.current = null
+    if (recorder && recorder.state !== 'inactive') recorder.stop()
+    if (voiceTimerRef.current) {
+      window.clearInterval(voiceTimerRef.current)
+      voiceTimerRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     meIdRef.current = meId
@@ -3544,10 +3565,63 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
     } catch (e) { setError(e instanceof ApiError ? e.message : 'Could not update reaction.') } finally { setSending(false) }
   }
 
+  const startVoiceRecording = async () => {
+    if (conversationId == null || recordingVoice || sending || uploadingAttachment) return
+    if (!navigator.onLine) {
+      setAttachError('Voice notes require an internet connection.')
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setAttachError('Voice recording is not supported in this browser.')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+        .find(type => MediaRecorder.isTypeSupported(type)) || ''
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      voiceChunksRef.current = []
+      recorder.ondataavailable = event => {
+        if (event.data.size > 0) voiceChunksRef.current.push(event.data)
+      }
+      recorder.onstop = () => {
+        stream.getTracks().forEach(track => track.stop())
+        const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+        voiceChunksRef.current = []
+        setRecordingVoice(false)
+        if (voiceTimerRef.current) {
+          window.clearInterval(voiceTimerRef.current)
+          voiceTimerRef.current = null
+        }
+        setRecordingSeconds(0)
+        if (blob.size > 0) {
+          const ext = recorder.mimeType.includes('mp4') ? 'm4a' : recorder.mimeType.includes('ogg') ? 'ogg' : 'webm'
+          void sendAttachment(new File([blob], `voice-note-${Date.now()}.${ext}`, { type: blob.type }))
+        }
+      }
+      voiceRecorderRef.current = recorder
+      recorder.start(250)
+      setAttachError(null)
+      setRecordingVoice(true)
+      setRecordingSeconds(0)
+      voiceTimerRef.current = window.setInterval(() => setRecordingSeconds(value => value + 1), 1000)
+    } catch {
+      setAttachError('Microphone access was not granted.')
+      setRecordingVoice(false)
+    }
+  }
+
+  const stopVoiceRecording = () => {
+    const recorder = voiceRecorderRef.current
+    voiceRecorderRef.current = null
+    if (recorder && recorder.state !== 'inactive') recorder.stop()
+  }
+
   const sendAttachment = async (file: File) => {
     if (conversationId == null || uploadingAttachment) return
     const ext = getFileExtension(file.name)
-    if (!ext || !ALLOWED_UPLOAD_EXTENSIONS.includes(ext) || file.size > MAX_CHAT_ATTACHMENT_SIZE_BYTES) { setAttachError('Unsupported file or file exceeds the 20 MB limit.'); return }
+    const allowedChatAttachment = new Set([...ALLOWED_UPLOAD_EXTENSIONS, 'webm', 'ogg', 'mp3', 'm4a', 'wav', 'aac', 'mp4'])
+    if (!ext || !allowedChatAttachment.has(ext) || file.size > MAX_CHAT_ATTACHMENT_SIZE_BYTES) { setAttachError('Unsupported file or file exceeds the 20 MB limit.'); return }
     setUploadingAttachment(true); setAttachError(null); setShowAttach(false)
     try {
       const token = await getChatCsrfToken()
@@ -3594,32 +3668,31 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: T.pageBg, fontFamily: 'Plus Jakarta Sans' }}>
       {meId != null && <CallExperience userId={meId} />}
-      <div style={{ background: N.navy, padding: '10px 14px', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.12)', zIndex: 2 }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button onClick={() => window.history.back()} aria-label="Back" style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{Ic.back()}</button>
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            <Avi name={initials} size={40} />
-            {!headerIsGroup && onlineUsers.size > 0 && <span style={{ position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: '50%', background: '#46c46b', border: `2px solid ${N.navy}` }} />}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{headerName}</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.58)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {headerIsGroup ? `${Object.keys(senderNames).length || 0} members` : typingNames.length ? `${typingNames.join(', ')} ${typingNames.length === 1 ? 'is' : 'are'} typing…` : (onlineUsers.size ? 'online' : 'last seen recently')}
+      <div style={{ background: N.navy, padding: '8px 10px', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.12)', zIndex: 2 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', minHeight: 52 }}>
+          <button type="button" onClick={() => setScreen('chats')} aria-label="Back to chats" style={{ width: 40, height: 40, background: 'transparent', border: 0, borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>{Ic.back('w-6 h-6')}</button>
+          <button type="button" onClick={() => setScreen('chat-options')} aria-label="Open chat info" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', border: 0, padding: 0, color: '#fff', textAlign: 'left', cursor: 'pointer' }}>
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <Avi name={initials} size={42} />
+              {!headerIsGroup && onlineUsers.size > 0 && <span style={{ position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: '50%', background: '#46c46b', border: '2px solid ' + N.navy }} />}
             </div>
-          </div>
-          <button onClick={() => window.dispatchEvent(new CustomEvent('prepza-open-ada', { detail: { conversationId } }))} aria-label="Study with Ada" style={{ border: `1px solid rgba(201,168,76,0.45)`, background: 'rgba(201,168,76,0.12)', color: N.goldL, borderRadius: 11, padding: '7px 9px', fontWeight: 900, fontSize: 11, cursor: 'pointer' }}>@Ada</button>
-          {!headerIsGroup && callPeerId != null && meId != null && <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call', { detail: { conversationId, peerId: callPeerId, peerName: callPeerName, kind: 'voice' } }))} aria-label="Start voice call" title="Voice call" style={{ width: 38, height: 38, background: 'transparent', border: 0, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.8 19.8 0 0 1 3.1 5.18 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.72c.12.9.33 1.77.62 2.61a2 2 0 0 1-.45 2.11L9 10.71a16 16 0 0 0 4.29 4.29l1.27-1.27a2 2 0 0 1 2.11-.45c.84.29 1.71.5 2.61.62A2 2 0 0 1 22 16.92Z"/></svg>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{headerName}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.58)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {headerIsGroup ? `${Object.keys(senderNames).length || 0} members` : typingNames.length ? `${typingNames.join(', ')} ${typingNames.length === 1 ? 'is' : 'are'} typing…` : (onlineUsers.size ? 'online' : 'last seen recently')}
+              </div>
+            </div>
+          </button>
+          {!headerIsGroup && callPeerId != null && meId != null && <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call', { detail: { conversationId, peerId: callPeerId, peerName: callPeerName, kind: 'voice' } }))} aria-label="Start voice call" title="Voice call" style={{ width: 42, height: 42, background: 'transparent', border: 0, borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.8 19.8 0 0 1 3.1 5.18 2 2 0 0 1 5.1 3h3a2 2 0 0 1 2 1.72c.12.9.33 1.77.62 2.61a2 2 0 0 1-.45 2.11L9 10.71a16 16 0 0 0 4.29 4.29l1.27-1.27a2 2 0 0 1 2.11.45c.84.29 1.71.5 2.61.62A2 2 0 0 1 22 16.92Z"/></svg>
             </button>
-            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call', { detail: { conversationId, peerId: callPeerId, peerName: callPeerName, kind: 'video' } }))} aria-label="Start video call" title="Video call" style={{ width: 38, height: 38, background: 'transparent', border: 0, borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m16 13 5 3V8l-5 3Z"/><rect x="3" y="6" width="13" height="12" rx="2"/></svg>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('prepza-start-call', { detail: { conversationId, peerId: callPeerId, peerName: callPeerName, kind: 'video' } }))} aria-label="Start video call" title="Video call" style={{ width: 42, height: 42, background: 'transparent', border: 0, borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+              <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m16 13 5 3V8l-5 3Z"/><rect x="3" y="6" width="13" height="12" rx="2"/></svg>
             </button>
           </div>}
-          <button onClick={() => setMessageSearchOpen(v => !v)} aria-label="Search messages" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer' }}>{Ic.search('w-4 h-4')}</button>
-          <button onClick={() => setScreen('chat-options')} aria-label="Chat options" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, color: '#fff', cursor: 'pointer' }}>{Ic.dots('w-4 h-4')}</button>
+          <button type="button" onClick={() => setScreen('chat-options')} aria-label="Chat options" style={{ width: 40, height: 40, background: 'transparent', border: 0, borderRadius: 999, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{Ic.dots('w-5 h-5')}</button>
         </div>
-        {messageSearchOpen && <div style={{ marginTop: 10, display: 'flex', gap: 7 }}><input value={messageSearch} onChange={e => setMessageSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void runMessageSearch() }} autoFocus placeholder="Search this chat" style={{ flex: 1, border: 'none', outline: 'none', borderRadius: 10, padding: '9px 11px', fontSize: 12, background: '#fff', color: N.navy }} /><button onClick={() => void runMessageSearch()} style={{ border: 'none', borderRadius: 10, padding: '0 12px', background: N.gold, color: N.navy, fontWeight: 800 }}>Search</button></div>}
       </div>
 
       {messageSearchResults.length > 0 && <div style={{ maxHeight: 150, overflowY: 'auto', background: T.card, borderBottom: `1px solid ${T.border}`, padding: 8 }}>{messageSearchResults.map(result => <button key={result.id} onClick={() => { setMessageSearchResults([]); document.getElementById(`prepza-msg-${result.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'transparent', padding: 7, cursor: 'pointer', color: T.text, fontSize: 11 }}>{chatDisplayText(result)}</button>)}</div>}
@@ -3641,7 +3714,7 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
               <div style={{ maxWidth: '82%', position: 'relative', background: mine ? N.navy : T.card, color: mine ? '#fff' : T.text, borderRadius: mine ? '15px 4px 15px 15px' : '4px 15px 15px 15px', padding: '8px 10px 6px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: mine ? 'none' : `1px solid ${T.border}` }}>
                 <div style={{ position: 'absolute', top: 3, right: 4, display: 'flex', gap: 3 }}><button onClick={() => setReplyingTo(message)} title="Reply" style={{ border: 0, background: 'transparent', color: mine ? 'rgba(255,255,255,.45)' : T.textMuted, cursor: 'pointer', fontSize: 10 }}>↩</button><button onClick={() => setReactionPicker(reactionPicker === message.id ? null : message.id)} title="React" style={{ border: 0, background: 'transparent', color: mine ? 'rgba(255,255,255,.45)' : T.textMuted, cursor: 'pointer', fontSize: 11 }}>☺</button></div>
                 {quoted && <button onClick={() => document.getElementById(`prepza-msg-${quoted.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} style={{ width: '100%', textAlign: 'left', border: 0, borderLeft: `3px solid ${N.gold}`, background: mine ? 'rgba(255,255,255,.08)' : T.pageBg, color: mine ? 'rgba(255,255,255,.82)' : T.textMuted, padding: '5px 7px', borderRadius: 6, marginBottom: 6, cursor: 'pointer', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chatDisplayText(quoted)}</button>}
-                {message.attachment && <a href={message.attachment.view_url || undefined} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none', marginBottom: text ? 6 : 0 }}>{message.attachment.view_url && chatIsImage(message.attachment.file_type) ? <img src={message.attachment.view_url} alt={message.attachment.original_filename} style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 9, display: 'block' }} /> : <div style={{ background: mine ? 'rgba(255,255,255,.09)' : T.pageBg, borderRadius: 9, padding: 9, color: mine ? '#fff' : T.text }}><div style={{ fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{message.attachment.original_filename}</div><div style={{ fontSize: 10, opacity: .55, marginTop: 3 }}>{(message.attachment.file_size_bytes / 1048576).toFixed(1)} MB · tap to open</div></div>}</a>}
+                {message.attachment && <a href={message.attachment.view_url || undefined} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none', marginBottom: text ? 6 : 0 }}>{message.attachment.view_url && chatIsImage(message.attachment.file_type) ? <img src={message.attachment.view_url} alt={message.attachment.original_filename} style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 9, display: 'block' }} /> : message.attachment.view_url && chatIsAudio(message.attachment.file_type) ? <audio controls preload="metadata" src={message.attachment.view_url} style={{ width: 'min(320px,100%)', display: 'block' }} /> : <div style={{ background: mine ? 'rgba(255,255,255,.09)' : T.pageBg, borderRadius: 9, padding: 9, color: mine ? '#fff' : T.text }}><div style={{ fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{message.attachment.original_filename}</div><div style={{ fontSize: 10, opacity: .55, marginTop: 3 }}>{(message.attachment.file_size_bytes / 1048576).toFixed(1)} MB · tap to open</div></div>}</a>}
                 {message.is_deleted ? <i style={{ opacity: .55, fontSize: 12 }}>This message was deleted</i> : text && <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5, paddingRight: 24 }}>{text}</div>}
                 <div style={{ marginTop: 4, textAlign: 'right', fontSize: 9, opacity: .48 }}>{chatTime(message.created_at)} {mine && <span title={message.read_by_all ? 'Read by everyone' : message.read_by_count ? `Read by ${message.read_by_count}` : 'Sent'}>{message.read_by_count ? '✓✓' : '✓'}</span>}</div>
                 {Object.entries(reactions).filter(([, users]) => users.size > 0).length > 0 && <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>{Object.entries(reactions).filter(([, users]) => users.size > 0).map(([emoji, users]) => <button key={emoji} onClick={() => void react(message, emoji)} style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 12, padding: '2px 7px', fontSize: 11, cursor: 'pointer' }}>{emoji} {users.size}</button>)}</div>}
@@ -3653,19 +3726,42 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
         <div ref={bottomRef} />
       </div>
 
-      <div style={{ padding: '8px 10px 12px', background: T.card, borderTop: `1px solid ${T.border}`, position: 'relative' }}>
-        {replyingTo && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', marginBottom: 7, borderLeft: `3px solid ${N.gold}`, background: T.pageBg, borderRadius: 8 }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 10, color: N.gold, fontWeight: 800 }}>Replying to {senderNames[replyingTo.sender_id] || (replyingTo.sender_id === meId ? 'yourself' : 'student')}</div><div style={{ fontSize: 11, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chatDisplayText(replyingTo)}</div></div><button onClick={() => setReplyingTo(null)} style={{ border: 0, background: 'transparent', color: T.textMuted, cursor: 'pointer', fontSize: 16 }}>×</button></div>}
+      <div style={{ padding: '7px 10px max(10px, env(safe-area-inset-bottom))', background: T.pageBg, borderTop: `1px solid ${T.border}`, position: 'relative' }}>
+        {replyingTo && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', marginBottom: 7, borderLeft: `3px solid ${N.gold}`, background: T.card, borderRadius: 8 }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 10, color: N.gold, fontWeight: 800 }}>Replying to {senderNames[replyingTo.sender_id] || (replyingTo.sender_id === meId ? 'yourself' : 'student')}</div><div style={{ fontSize: 11, color: T.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chatDisplayText(replyingTo)}</div></div><button type="button" onClick={() => setReplyingTo(null)} style={{ border: 0, background: 'transparent', color: T.textMuted, cursor: 'pointer', fontSize: 16 }}>×</button></div>}
         {(attachError || uploadingAttachment) && <div style={{ color: attachError ? '#C94C4C' : T.textMuted, fontSize: 11, fontWeight: 600, marginBottom: 7, textAlign: 'center' }}>{attachError || 'Sending attachment…'}</div>}
-        {showAttach && <div style={{ position: 'absolute', bottom: '100%', left: 10, right: 10, background: T.card, borderRadius: 15, boxShadow: '0 -5px 24px rgba(0,0,0,.12)', padding: 13, border: `1px solid ${T.border}` }}><div style={{ fontSize: 12, fontWeight: 800, color: T.text, marginBottom: 10 }}>Share with this chat</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}><button onClick={() => fileInputRef.current?.click()} style={{ border: 0, background: T.pageBg, borderRadius: 11, padding: 11, color: T.text, fontWeight: 700, cursor: 'pointer' }}>{Ic.book('w-5 h-5')}<span style={{ marginLeft: 7 }}>Document / image</span></button><button onClick={() => setShowAttach(false)} style={{ border: 0, background: T.pageBg, borderRadius: 11, padding: 11, color: T.textMuted, fontWeight: 700, cursor: 'pointer' }}>Cancel</button></div></div>}
-        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void sendAttachment(file) }} />
-        <div style={{ display: 'flex', gap: 7, alignItems: 'flex-end' }}>
-          <button onClick={() => setShowAttach(v => !v)} disabled={uploadingAttachment} aria-label="Attach" style={{ width: 38, height: 38, border: 0, borderRadius: 12, background: T.pageBg, color: T.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{Ic.attach('w-5 h-5')}</button>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: T.pageBg, border: `1px solid ${T.border}`, borderRadius: 16, padding: '8px 11px' }}>
-            <input value={input} onChange={e => handleInputChange(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} placeholder={replyingTo ? 'Write a reply…' : 'Message…'} style={{ width: '100%', border: 0, outline: 0, background: 'transparent', color: T.text, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }} disabled={sending || uploadingAttachment} />
+        {showEmojiPicker && <div style={{ position: 'absolute', bottom: '100%', left: 10, right: 10, background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, boxShadow: '0 -8px 28px rgba(0,0,0,.18)', padding: 10, zIndex: 5 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8,1fr)', gap: 4 }}>
+            {['😀','😂','🤣','😊','😍','🥹','😎','😭','😅','😉','🙂','🙃','😏','😢','😮','😡','❤️','👍','🙏','🔥','🎉','💯','✨','🤝','👏','💀','🙌','🤔','😴','🥲','❤️‍🔥','😂'].map(emoji => <button type="button" key={emoji} onClick={() => { setInput(value => value + emoji); setShowEmojiPicker(false) }} style={{ border: 0, background: 'transparent', borderRadius: 9, padding: 7, fontSize: 21, cursor: 'pointer' }}>{emoji}</button>)}
           </div>
-          <button onClick={() => void send()} disabled={sending || !input.trim()} aria-label="Send" style={{ width: 40, height: 40, border: 0, borderRadius: 13, background: `linear-gradient(135deg, ${N.gold}, ${N.goldL})`, color: N.navy, cursor: sending || !input.trim() ? 'default' : 'pointer', opacity: sending || !input.trim() ? .55 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{Ic.send('w-4 h-4')}</button>
+        </div>}
+        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void sendAttachment(file) }} />
+        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void sendAttachment(file) }} />
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 5, background: T.card, border: `1px solid ${T.border}`, borderRadius: 22, padding: '3px 6px 3px 10px', minHeight: 42 }}>
+            <button type="button" onClick={() => setShowEmojiPicker(v => !v)} aria-label="Emoji" style={{ width: 34, height: 34, border: 0, background: 'transparent', color: T.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 10h.01M15.5 10h.01"/><path d="M8.5 14.2c1.2 1.4 5.8 1.4 7 0"/></svg>
+            </button>
+            <input value={input} onChange={e => handleInputChange(e.target.value)} onFocus={() => setShowEmojiPicker(false)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} placeholder={replyingTo ? 'Write a reply…' : 'Message'} style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: T.text, fontSize: 14, fontFamily: 'Plus Jakarta Sans' }} disabled={sending || uploadingAttachment || recordingVoice} />
+            <button type="button" onClick={() => setShowAttach(v => !v)} disabled={uploadingAttachment || recordingVoice} aria-label="Attach file" style={{ width: 32, height: 34, border: 0, background: 'transparent', color: T.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {Ic.attach('w-5 h-5')}
+            </button>
+            <button type="button" onClick={() => cameraInputRef.current?.click()} disabled={uploadingAttachment || recordingVoice} aria-label="Camera" style={{ width: 32, height: 34, border: 0, background: 'transparent', color: T.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            </button>
+          </div>
+          <button type="button" onClick={() => input.trim() ? void send() : (recordingVoice ? stopVoiceRecording() : void startVoiceRecording())} disabled={sending || uploadingAttachment} aria-label={input.trim() ? 'Send' : (recordingVoice ? 'Stop recording voice note' : 'Record voice note')} style={{ width: 48, height: 48, border: 0, borderRadius: 999, background: recordingVoice ? '#C94C4C' : N.gold, color: N.navy, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 3px 10px rgba(0,0,0,.18)' }}>
+            {input.trim() ? Ic.send('w-5 h-5') : recordingVoice ? <span style={{ fontSize: 11, fontWeight: 900 }}>{recordingSeconds}s</span> : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>}
+          </button>
         </div>
+        {showAttach && <div style={{ position: 'absolute', bottom: '100%', left: 10, right: 10, background: T.card, borderRadius: 15, boxShadow: '0 -5px 24px rgba(0,0,0,.12)', padding: 13, border: `1px solid ${T.border}`, zIndex: 4 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: T.text, marginBottom: 10 }}>Share with this chat</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8 }}>
+            <button type="button" onClick={() => fileInputRef.current?.click()} style={{ border: 0, background: T.pageBg, borderRadius: 11, padding: 11, color: T.text, fontWeight: 700, cursor: 'pointer' }}>{Ic.book('w-5 h-5')}<span style={{ marginLeft: 7 }}>Document / image</span></button>
+            <button type="button" onClick={() => setShowAttach(false)} style={{ border: 0, background: T.pageBg, borderRadius: 11, padding: 11, color: T.textMuted, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>}
       </div>
+
     </div>
   )
 }
@@ -6018,12 +6114,13 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
 // ─── CHAT OPTIONS ─────────────────────────────────────────────────────────────
 type SharedMediaItem = { id: number; message_id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null; uploaded_by_user_id: number; uploaded_by_name: string; created_at: string | null }
 
-function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Screen) => void; conversationId: number | null }) {
+function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; conversationId: number | null; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   const { tokens: T } = useTheme()
   const [detail, setDetail] = useState<ChatDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [csrfToken, setCsrfToken] = useState('')
+  const [viewerId, setViewerId] = useState<number | null>(null)
   const [showRename, setShowRename] = useState(false)
   const [renameVal, setRenameVal] = useState('')
   const [renaming, setRenaming] = useState(false)
@@ -6043,7 +6140,7 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
   const [mediaError, setMediaError] = useState<string | null>(null)
 
   useEffect(() => {
-    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
+    api<{ id: number; csrf_token: string }>('/me').then(me => { setCsrfToken(me.csrf_token); setViewerId(me.id) }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -6152,6 +6249,7 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
   }
 
   const initials = (detail?.name || '??').slice(0, 2).toUpperCase()
+  const directPeer = detail && !detail.is_group && viewerId != null ? detail.participants.find(p => p.user_id !== viewerId) : null
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg, position: 'relative' }} className="scrollbar-hide">
@@ -6178,6 +6276,11 @@ function ChatOptionsScreen({ setScreen, conversationId }: { setScreen: (s: Scree
             {Ic.chevR()}
           </div>
         )}
+        {directPeer && <div onClick={() => { setActiveProfileUserId?.(directPeer.user_id); setActiveProfileName?.(directPeer.display_name || detail?.name || 'Student'); setScreen('student-profile') }} style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+          <Avi name={(directPeer.display_name || detail?.name || '??').slice(0, 2).toUpperCase()} size={34} />
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>View profile</div><div style={{ fontSize: 11, color: T.textMuted }}>{directPeer.display_name || detail?.name}</div></div>
+          {Ic.chevR()}
+        </div>}
         <div onClick={() => { setMediaError(null); setShowMedia(true) }} style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
           <span style={{ fontSize: 20 }}>🖼️</span>
           <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>Shared Media</div><div style={{ fontSize: 11, color: T.textMuted }}>Files and images shared here</div></div>
@@ -13195,7 +13298,7 @@ export default function App() {
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
   if (orgPortalMode) return <OrganisationPortalScreen onExit={() => setOrgPortalMode(false)} />
 
-  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','upload-share-choice','payment','payment-success','payment-failure']
+  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','processing','upload-share-choice','payment','payment-success','payment-failure','chat-detail','chat-options']
   const darkHomeIndicator: Screen[] = ['processing','splash','login']
 
   const renderScreen = () => {
@@ -13239,7 +13342,7 @@ export default function App() {
       case 'study-materials':   return <StudyMaterialsScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'mind-map':          return <MindMapScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'new-chat':          return <NewChatScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
-      case 'chat-options':      return <ChatOptionsScreen setScreen={setScreen} conversationId={activeConversationId} />
+      case 'chat-options':      return <ChatOptionsScreen setScreen={setScreen} conversationId={activeConversationId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'edit-profile':      return <EditProfileScreen setScreen={setScreen} />
       case 'subscription':      return <SubscriptionScreen setScreen={setScreen} selectedPlan={selectedPlan} setSelectedPlan={setSelectedPlan} />
       case 'payment':           return <PaymentScreen setScreen={setScreen} selectedPlan={selectedPlan} />
