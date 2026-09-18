@@ -3170,7 +3170,56 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 }
 
 // ─── CHATS ────────────────────────────────────────────────────────────────────
-type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; unread_count: number }
+type ChatSummary = {
+  id: number
+  is_group: boolean
+  name: string
+  last_message: string | null
+  last_message_at: string | null
+  unread_count: number
+  peer_user_id?: number | null
+  last_message_sender_name?: string | null
+  last_message_file_type?: string | null
+  last_message_filename?: string | null
+}
+
+function chatListTime(value: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const now = new Date()
+  if (date.toDateString() === now.toDateString()) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  const days = Math.floor((now.getTime() - date.getTime()) / 86400000)
+  if (days >= 0 && days < 7) return date.toLocaleDateString([], { weekday: 'short' })
+  return date.toLocaleDateString([], { day: 'numeric', month: 'short' })
+}
+
+function chatListPreview(chat: ChatSummary): string {
+  const raw = (chat.last_message || '').trim()
+  const fileType = (chat.last_message_file_type || '').toLowerCase()
+  const filename = chat.last_message_filename || raw
+  if (!raw) return filename || 'No messages yet'
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed?.v === 1 && parsed?.type === 'text' && typeof parsed.text === 'string') {
+      const preview = parsed.text.trim() || 'Message'
+      return chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: ${preview}` : preview
+    }
+  } catch {}
+  if (/(voice-note|voice_note|audio)/i.test(raw) || /^(webm|ogg|mp3|m4a|wav|aac|mp4|mpeg)$/i.test(fileType)) {
+    return chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: 🎤 Voice message` : '🎤 Voice message'
+  }
+  if (/^(jpg|jpeg|png|gif|webp)$/i.test(fileType) || /^image\//.test(fileType)) {
+    return chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: 📷 Photo` : '📷 Photo'
+  }
+  if (/^(pdf|doc|docx|ppt|pptx)$/i.test(fileType) || /\.(pdf|docx?|pptx?)$/i.test(filename)) {
+    return chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: 📄 ${filename}` : `📄 ${filename}`
+  }
+  return chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: ${raw}` : raw
+}
 
 // Stale-while-revalidate cache for Chats: on repeat visits, render
 // instantly from cache while a fresh fetch runs quietly in the background.
@@ -3398,25 +3447,25 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
                   <>
                     <div style={{ padding: '14px 16px 6px', fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Group Chats</div>
                     {displayed.map(chat => {
-                      const initials = (chat.name || '??').slice(0, 2).toUpperCase()
+                      const initials = (chat.name || '??').trim().split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || '??'
+                      const unread = chat.unread_count > 0
                       return (
-                        <div key={chat.id} onClick={() => openChat(chat.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                          <div style={{ position: 'relative' }}>
-                            <Avi name={initials} size={46} />
+                        <div key={chat.id} onClick={() => openChat(chat.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)', background: unread ? 'rgba(201,168,76,0.035)' : 'transparent' }}>
+                          <div style={{ position: 'relative', flexShrink: 0 }}>
+                            <Avi name={initials} size={48} />
                             <div style={{ position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: N.navy, fontWeight: 800 }}>G</div>
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                              <span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{chat.name}</span>
-                              <span style={{ fontSize: 11, color: T.textMuted }}>{chat.last_message_at ? new Date(chat.last_message_at).toLocaleString() : ''}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 3 }}>
+                              <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.name}</span>
+                              <span style={{ fontSize: 10.5, color: unread ? N.gold : T.textMuted, fontWeight: unread ? 700 : 500, flexShrink: 0 }}>{chatListTime(chat.last_message_at)}</span>
                             </div>
-                            <div style={{ fontSize: 12, color: T.textMuted }} className="line-clamp-1">{chat.last_message || 'No messages yet'}</div>
+                            <div style={{ fontSize: 12, color: unread ? T.text : T.textMuted, fontWeight: unread ? 650 : 500 }} className="line-clamp-1">{chatListPreview(chat)}</div>
                           </div>
-                          {chat.unread_count > 0 && <div style={{ width: 22, height: 22, background: N.gold, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread_count}</div>}
+                          {unread && <div style={{ minWidth: 22, height: 22, padding: '0 6px', boxSizing: 'border-box', background: N.gold, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread_count > 99 ? '99+' : chat.unread_count}</div>}
                         </div>
                       )
-                    })}
-                  </>
+                    })}                  </>
                 )}
               </>
             )}
@@ -3428,21 +3477,29 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
             <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>Start a new chat to connect with classmates</div>
           </div>
         ) : displayed.map(chat => {
-          const initials = (chat.name || '??').slice(0, 2).toUpperCase()
+          const initials = (chat.name || '??').trim().split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || '??'
+          const unread = chat.unread_count > 0
+          const canOpenProfile = !chat.is_group && !!chat.peer_user_id
+          const openProfile = (event: React.MouseEvent) => {
+            event.stopPropagation()
+            if (!chat.peer_user_id) return
+            setActiveProfileUserId?.(chat.peer_user_id)
+            setActiveProfileName?.(chat.name)
+            setScreen('student-profile')
+          }
           return (
-            <div key={chat.id} onClick={() => openChat(chat.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-              <div style={{ position: 'relative' }}>
-                <Avi name={initials} size={46} />
-                {chat.is_group && <div style={{ position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: N.navy, fontWeight: 800 }}>G</div>}
-              </div>
+            <div key={chat.id} onClick={() => openChat(chat.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)', background: unread ? 'rgba(201,168,76,0.035)' : 'transparent' }}>
+              <button type="button" onClick={openProfile} disabled={!canOpenProfile} aria-label={canOpenProfile ? `Open ${chat.name}'s profile` : 'Chat avatar'} style={{ position: 'relative', flexShrink: 0, border: 0, background: 'transparent', padding: 0, cursor: canOpenProfile ? 'pointer' : 'default' }}>
+                <Avi name={initials} size={48} />
+              </button>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{chat.name}</span>
-                  <span style={{ fontSize: 11, color: T.textMuted }}>{chat.last_message_at ? new Date(chat.last_message_at).toLocaleString() : ''}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.name}</span>
+                  <span style={{ fontSize: 10.5, color: unread ? N.gold : T.textMuted, fontWeight: unread ? 700 : 500, flexShrink: 0 }}>{chatListTime(chat.last_message_at)}</span>
                 </div>
-                <div style={{ fontSize: 12, color: T.textMuted }} className="line-clamp-1">{chat.last_message || 'No messages yet'}</div>
+                <div style={{ fontSize: 12, color: unread ? T.text : T.textMuted, fontWeight: unread ? 650 : 500 }} className="line-clamp-1">{chatListPreview(chat)}</div>
               </div>
-              {chat.unread_count > 0 && <div style={{ width: 22, height: 22, background: N.gold, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread_count}</div>}
+              {unread && <div style={{ minWidth: 22, height: 22, padding: '0 6px', boxSizing: 'border-box', background: N.gold, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread_count > 99 ? '99+' : chat.unread_count}</div>}
             </div>
           )
         })}
