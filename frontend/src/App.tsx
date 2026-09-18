@@ -3401,6 +3401,7 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
   const [meId, setMeId] = useState<number | null>(null)
   const [callPeerId, setCallPeerId] = useState<number | null>(null)
   const [callPeerName, setCallPeerName] = useState('Student')
+  const [callParticipants, setCallParticipants] = useState<Participant[]>([])
   const [headerName, setHeaderName] = useState(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.headerName ?? 'Conversation') : 'Conversation')
   const [headerIsGroup, setHeaderIsGroup] = useState(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.headerIsGroup ?? false) : false)
   const [senderNames, setSenderNames] = useState<Record<number, string>>(() => conversationId != null ? (CHAT_DETAIL_CACHE[conversationId]?.senderNames ?? {}) : {})
@@ -3421,7 +3422,15 @@ function ChatDetailScreen({ setScreen, conversationId }: { setScreen: (s: Screen
   const typingTimeouts = useRef<Map<number, number>>(new Map())
   const meIdRef = useRef<number | null>(null)
 
-  useEffect(() => { meIdRef.current = meId }, [meId])
+  useEffect(() => {
+    meIdRef.current = meId
+    if (!headerIsGroup && meId != null) {
+      const peer = callParticipants.find(p => p.user_id !== meId)
+      setCallParticipants(detail.participants)
+      setCallPeerId(peer?.user_id ?? null)
+      setCallPeerName(peer?.display_name || 'Student')
+    }
+  }, [meId, headerIsGroup, callParticipants])
 
   useEffect(() => {
     api<{ id: number; csrf_token: string }>('/me').then(me => { setCsrfToken(me.csrf_token); setMeId(me.id) }).catch(() => {})
