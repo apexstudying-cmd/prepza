@@ -158,6 +158,7 @@ class User(db.Model):
     who_can_message = db.Column(db.String(10), nullable=False, default="everyone")
     # everyone | followers
     who_can_follow = db.Column(db.String(20), nullable=False, default="everyone")
+    read_receipts_enabled = db.Column(db.Boolean, nullable=False, default=True)
     # everyone | approval_required
     verification_token = db.Column(db.String(64), nullable=True)
     reset_token = db.Column(db.String(64), nullable=True)
@@ -2966,6 +2967,7 @@ def me():
         "profile_visibility": user.profile_visibility,
         "who_can_message": user.who_can_message,
         "who_can_follow": user.who_can_follow,
+        "read_receipts_enabled": bool(user.read_receipts_enabled),
         "email_verified": user.email_verified,
         "is_admin": user.is_admin,
         "university_id": user.university_id,
@@ -3084,6 +3086,11 @@ def update_profile():
         user.who_can_message = who_can_message
     if who_can_follow is not None:
         user.who_can_follow = who_can_follow
+    read_receipts_enabled = data.get("read_receipts_enabled", None)
+    if read_receipts_enabled is not None and not isinstance(read_receipts_enabled, bool):
+        return jsonify({"error": "read_receipts_enabled must be a boolean"}), 400
+    if read_receipts_enabled is not None:
+        user.read_receipts_enabled = read_receipts_enabled
     if university_id is not None:
         user.university_id = university_id
     if program_id is not None:
@@ -3101,6 +3108,7 @@ def update_profile():
         "profile_visibility": user.profile_visibility,
         "who_can_message": user.who_can_message,
         "who_can_follow": user.who_can_follow,
+        "read_receipts_enabled": bool(user.read_receipts_enabled),
         "university_id": user.university_id,
         "program_id": user.program_id,
     })
@@ -9799,6 +9807,10 @@ def mark_chat_read(conversation_id):
     participant = _active_participant(conversation_id, user_id)
     if not participant:
         return jsonify({"error": "Conversation not found"}), 404
+
+    user = db.session.get(User, user_id)
+    if user is not None and not bool(user.read_receipts_enabled):
+        return jsonify({"message": "Read receipts disabled", "marked": False})
 
     participant.last_read_at = datetime.utcnow()
     db.session.commit()
