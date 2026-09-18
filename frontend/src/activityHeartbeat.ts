@@ -21,9 +21,10 @@ async function csrfToken(): Promise<string | null> {
 }
 
 async function sendHeartbeat(force = false) {
-  if (document.visibilityState !== 'visible') return
+  const isVisible = document.visibilityState === 'visible'
+  if (!isVisible && !force) return
   const now = Date.now()
-  if (!visibleSince) visibleSince = now
+  if (!visibleSince && isVisible) visibleSince = now
   if (!force && lastHeartbeatAt && now - lastHeartbeatAt < 15000) return
 
   const csrf = await csrfToken()
