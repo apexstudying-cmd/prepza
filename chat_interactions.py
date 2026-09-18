@@ -44,6 +44,10 @@ def ensure_chat_metadata_schema():
                     CREATE INDEX IF NOT EXISTS ix_chat_message_meta_conversation_kind
                     ON chat_message_meta (conversation_id, kind)
                 """))
+                db.session.execute(text("""
+                    ALTER TABLE "user"
+                    ADD COLUMN IF NOT EXISTS read_receipts_enabled BOOLEAN NOT NULL DEFAULT TRUE
+                """))
                 db.session.commit()
             _SCHEMA_READY = True
         except Exception:
