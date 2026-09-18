@@ -9918,6 +9918,16 @@ def leave_chat(conversation_id):
         return jsonify({"error": "Conversation not found"}), 404
 
     participant.left_at = datetime.utcnow()
+    if getattr(conversation, "e2ee_mode", "legacy") == "group_v1":
+        current_epoch = db.session.execute(
+            text("SELECT key_epoch FROM conversation WHERE id = :conversation_id"),
+            {"conversation_id": conversation_id},
+        ).scalar_one_or_none()
+        current_epoch = int(current_epoch or 0)
+        db.session.execute(
+            text("UPDATE conversation SET key_epoch = :new_epoch WHERE id = :conversation_id AND key_epoch = :old_epoch"),
+            {"conversation_id": conversation_id, "old_epoch": current_epoch, "new_epoch": current_epoch + 1},
+        )
     db.session.commit()
     return jsonify({"message": "Left group"})
 
