@@ -374,10 +374,20 @@ def register_usage_billing(app, db):
         days = request.args.get("days", default=7, type=int)
         days = max(1, min(30, days))
         billing_row = db.session.execute(text("""
-            SELECT plan_code, active_user_cap
+            SELECT plan_code, active_user_cap, status, expires_at
             FROM organisation_billing
             WHERE organisation_id = :oid
         """), {"oid": organisation_id}).mappings().first()
+        if billing_row and billing_row["status"] == "active" and billing_row["expires_at"] and billing_row["expires_at"] <= datetime.utcnow():
+            db.session.execute(text("""
+                UPDATE organisation_billing
+                SET status = 'expired', updated_at = CURRENT_TIMESTAMP
+                WHERE organisation_id = :oid AND status = 'active'
+            """), {"oid": organisation_id})
+            db.session.commit()
+            return jsonify({"error": "Organisation plan has expired", "code": "organisation_plan_expired"}), 402
+        if billing_row and billing_row["status"] == "pending":
+            return jsonify({"error": "Complete organisation plan payment before accessing candidate discovery", "code": "organisation_plan_pending"}), 402
         plan_code = str((billing_row or {}).get("plan_code") or "launch")
         plan = ORGANISATION_PLANS.get(plan_code, ORGANISATION_PLANS["launch"])
         candidate_limit = int(plan["active_user_cap"] or 5000)
