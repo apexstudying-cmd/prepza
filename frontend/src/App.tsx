@@ -2267,6 +2267,7 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
   const [page, setPage] = useState(0)
   const [savedPage, setSavedPage] = useState(0)
+  const [zoom, setZoom] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
@@ -2363,6 +2364,11 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
           <div style={{ color: '#fff', fontWeight: 800, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.title}</div>
           <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 }}>Page {current + 1} of {count}</div>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <button onClick={() => setZoom(z => Math.max(0.75, Math.round((z - 0.1) * 10) / 10))} aria-label="Zoom out" style={{ width: 30, height: 30, border: 'none', borderRadius: 8, background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 17, cursor: 'pointer' }}>−</button>
+          <button onClick={() => setZoom(1)} aria-label="Fit width" style={{ minWidth: 42, height: 30, border: 'none', borderRadius: 8, background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>{Math.round(zoom * 100)}%</button>
+          <button onClick={() => setZoom(z => Math.min(2, Math.round((z + 0.1) * 10) / 10))} aria-label="Zoom in" style={{ width: 30, height: 30, border: 'none', borderRadius: 8, background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 17, cursor: 'pointer' }}>+</button>
+        </div>
         <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10, fontWeight: 800, flexShrink: 0 }}>{Math.round(progress)}%</div>
       </div>
       <div style={{ marginTop: 10, height: 3, background: 'rgba(255,255,255,0.12)', borderRadius: 99, overflow: 'hidden' }}>
@@ -2400,7 +2406,8 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
                 position: 'relative',
               }}
             >
-              <img
+              <div style={{ width: '100%', overflowX: zoom > 1 ? 'auto' : 'hidden' }}>
+                <img
                 src={pageUrl}
                 alt={`Page ${index + 1} of ${doc.title}`}
                 loading={index < 2 ? 'eager' : 'lazy'}
@@ -2413,7 +2420,8 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
                   boxShadow: '0 3px 18px rgba(0,0,0,0.28)',
                   outline: isCurrent ? `1px solid ${N.gold}55` : 'none',
                 }}
-              />
+                />
+              </div>
             </div>
           )
         })}
