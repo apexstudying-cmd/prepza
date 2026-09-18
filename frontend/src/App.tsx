@@ -3185,6 +3185,8 @@ type ChatSummary = {
   last_message_sender_name?: string | null
   last_message_file_type?: string | null
   last_message_filename?: string | null
+  last_message_sender_id?: number | null
+  last_message_read_by_all?: boolean
 }
 
 function chatListTime(value: string | null): string {
@@ -3527,7 +3529,14 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
                               <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.name}</span>
                               <span style={{ fontSize: 10.5, color: unread ? N.gold : T.textMuted, fontWeight: unread ? 700 : 500, flexShrink: 0 }}>{chatListTime(chat.last_message_at)}</span>
                             </div>
-                            <div style={{ fontSize: 12, color: unread ? T.text : T.textMuted, fontWeight: unread ? 650 : 500 }} className="line-clamp-1">{getChatDraft(chat.id) ? <><span style={{ color: '#C94C4C', fontWeight: 800 }}>Draft</span><span style={{ color: T.textMuted }}> · {getChatDraft(chat.id)}</span></> : chatListPreview(chat)}</div>
+                            <div style={{ display:'flex',alignItems:'center',gap:4,fontSize:12,color:unread?T.text:T.textMuted,fontWeight:unread?650:500 }} className="line-clamp-1">
+                  {getChatDraft(chat.id)
+                    ? <><span style={{ color:'#C94C4C',fontWeight:800 }}>Draft</span><span style={{ color:T.textMuted }}> · {getChatDraft(chat.id)}</span></>
+                    : <>
+                        {chat.last_message_sender_id === currentUserId && chat.last_message_at && <span title={chat.last_message_read_by_all ? 'Read' : 'Sent'} style={{ display:'inline-flex',color:chat.last_message_read_by_all?N.gold:T.textMuted,flexShrink:0 }}>{chat.last_message_read_by_all ? <>{Ic.check('w-3 h-3')}{Ic.check('w-3 h-3')}</> : Ic.check('w-3 h-3')}</span>}
+                        <span className="line-clamp-1">{chatListPreview(chat)}</span>
+                      </>}
+                </div>
                           </div>
                           {unread && <div style={{ minWidth: 22, height: 22, padding: '0 6px', boxSizing: 'border-box', background: N.gold, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: N.navy, flexShrink: 0 }}>{chat.unread_count > 99 ? '99+' : chat.unread_count}</div>}
                         </div>
