@@ -13648,13 +13648,17 @@ function OrgCreateOpportunityTab({ orgId, org, csrfToken, onDone }: { orgId: num
 
 function OrgAnalyticsTab({ orgId }: { orgId: number }) {
   const [items, setItems] = useState<OrgOpportunity[]>([])
+  const [audience, setAudience] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     setLoading(true); setError('')
-    api<{ opportunities: OrgOpportunity[] }>(`/organisations/${orgId}/opportunities`)
-      .then(res => setItems(res.opportunities))
+    Promise.all([
+      api<{ opportunities: OrgOpportunity[] }>(`/organisations/${orgId}/opportunities`),
+      api(`/api/organisations/${orgId}/audience`),
+    ])
+      .then(([oppRes, audienceRes]) => { setItems(oppRes.opportunities); setAudience(audienceRes) })
       .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load analytics.'))
       .finally(() => setLoading(false))
   }, [orgId])
@@ -13665,9 +13669,32 @@ function OrgAnalyticsTab({ orgId }: { orgId: number }) {
   const totalViews = items.reduce((sum, o) => sum + (o.view_count || 0), 0)
   const publishedCount = items.filter(o => o.status === 'published').length
   const sorted = [...items].sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
+  const plan = audience?.billing?.plan_code || 'launch'
+  const cap = audience?.billing?.active_user_cap
+  const mau = audience?.audience?.mau || 0
+  const capPct = cap ? Math.min(100, Math.round((mau / cap) * 100)) : 0
 
   return (
     <div style={{ padding: 16 }}>
+      <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>Prepza audience</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 10 }}>
+        {[['DAU', audience?.audience?.dau || 0], ['WAU', audience?.audience?.wau || 0], ['MAU', mau]].map(([label, val]) => (
+          <div key={label as string} style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{val as number}</div>
+            <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginTop: 2 }}>{label as string}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6B7280', marginBottom: 7 }}>
+          <span>{plan.charAt(0).toUpperCase() + plan.slice(1)} audience band</span>
+          <strong style={{ color: N.navy }}>{cap ? `${mau.toLocaleString()} / ${cap.toLocaleString()} MAU` : 'Custom'}</strong>
+        </div>
+        {cap && <div style={{ height: 6, background: '#EEF0F4', borderRadius: 99, overflow: 'hidden' }}><div style={{ width: `${capPct}%`, height: '100%', background: N.gold, borderRadius: 99 }} /></div>}
+        <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 7 }}>Active means at least 10 seconds of foreground engagement or a core action. A signup/login alone is not active.</div>
+      </div>
+
+      <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>Opportunity performance</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
         {[['Total Views', totalViews], ['Live', publishedCount], ['Total Postings', items.length]].map(([label, val]) => (
           <div key={label as string} style={{ background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
@@ -13677,7 +13704,7 @@ function OrgAnalyticsTab({ orgId }: { orgId: number }) {
         ))}
       </div>
       <div style={{ background: '#FEF9F0', border: `1px solid ${N.gold}30`, borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 11, color: '#92400E', lineHeight: 1.6 }}>
-        Views are tracked per opportunity. Click-through tracking on application links isn't available yet.
+        Audience size is measured separately from opportunity views. Sponsored campaigns use paid promotion inventory rather than treating every registered account as a reachable user.
       </div>
       <div style={{ fontWeight: 700, fontSize: 13, color: N.navy, marginBottom: 10 }}>By opportunity</div>
       {sorted.length === 0 ? (
@@ -13690,7 +13717,7 @@ function OrgAnalyticsTab({ orgId }: { orgId: number }) {
               <div style={{ fontWeight: 600, fontSize: 12, color: N.navy }} className="line-clamp-1">{o.title}</div>
               {orgPill(meta.label, meta.color)}
             </div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: N.gold, flexShrink: 0 }}>{o.view_count} 👁</div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: N.gold, flexShrink: 0 }}>{o.view_count} views</div>
           </div>
         )
       })}
