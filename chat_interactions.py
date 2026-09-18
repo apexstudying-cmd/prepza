@@ -50,11 +50,11 @@ def ensure_chat_metadata_schema():
                 """))
                 db.session.execute(text("""
                     ALTER TABLE message
-                    ADD COLUMN IF NOT EXISTS key_epoch INTEGER
+                    ADD COLUMN IF NOT EXISTS e2ee_key_epoch INTEGER NOT NULL DEFAULT 0
                 """))
                 db.session.execute(text("""
-                    CREATE INDEX IF NOT EXISTS ix_message_conversation_key_epoch
-                    ON message (conversation_id, key_epoch)
+                    CREATE INDEX IF NOT EXISTS ix_message_conversation_e2ee_epoch
+                    ON message (conversation_id, e2ee_key_epoch, created_at)
                 """))
                 db.session.commit()
             _SCHEMA_READY = True
