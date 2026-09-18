@@ -16,6 +16,7 @@ socketio = SocketIO(app, async_mode="threading", cors_allowed_origins=[], logger
 register_offline_activity_routes(app, db)
 register_e2ee_production_hardening(app, db, Conversation, ConversationParticipant)
 MESSAGE_PATH_RE = re.compile(r"^/chats/(\d+)/messages$")
+MESSAGE_ITEM_PATH_RE = re.compile(r"^/chats/(\d+)/messages/(\d+)$")
 _socket_rooms = {}
 _socket_users = {}
 _socket_state_lock = Lock()
@@ -225,6 +226,27 @@ def broadcast_message_response(response):
                 socketio.emit("chat:message", payload, to=room_for(conversation_id))
         except Exception:
             app.logger.exception("Realtime message broadcast failed")
+    return response
+
+
+@app.after_request
+def broadcast_message_update_response(response):
+    """Broadcast successful persisted message edits/deletes to other participants."""
+    match = MESSAGE_ITEM_PATH_RE.match(request.path)
+    if match and request.method in {"PATCH", "DELETE"} and 200 <= response.status_code < 300:
+        try:
+            conversation_id = int(match.group(1))
+            message_id = int(match.group(2))
+            payload = safe_message_payload(response.get_json(silent=True))
+            if payload and payload.get("id") == message_id and payload.get("conversation_id") == conversation_id:
+                socketio.emit(
+                    "chat:message-updated",
+                    {"conversation_id": conversation_id, "message_id": message_id, "deleted": request.method == "DELETE"},
+                    to=room_for(conversation_id),
+                    include_self=False,
+                )
+        except Exception:
+            app.logger.exception("Realtime message update broadcast failed")
     return response
 
 
