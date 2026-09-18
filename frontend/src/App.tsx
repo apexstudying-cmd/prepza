@@ -6760,6 +6760,17 @@ function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: 
 // ─── CHAT OPTIONS ─────────────────────────────────────────────────────────────
 type SharedMediaItem = { id: number; message_id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null; uploaded_by_user_id: number; uploaded_by_name: string; created_at: string | null }
 
+type SharedMediaTab = 'all' | 'images' | 'videos' | 'audio' | 'files'
+const SHARED_MEDIA_VIDEO_TYPES = new Set(['mp4', 'webm', 'mov', 'm4v', 'avi'])
+const SHARED_MEDIA_AUDIO_TYPES = new Set(['webm', 'ogg', 'mp3', 'm4a', 'wav', 'aac'])
+function sharedMediaCategory(item: SharedMediaItem): Exclude<SharedMediaTab, 'all'> {
+  const ext = getFileExtension(item.original_filename || '') || String(item.file_type || '').toLowerCase().replace(/^\./, '')
+  if (IMAGE_FILE_TYPES.includes(ext)) return 'images'
+  if (SHARED_MEDIA_VIDEO_TYPES.has(ext)) return 'videos'
+  if (SHARED_MEDIA_AUDIO_TYPES.has(ext)) return 'audio'
+  return 'files'
+}
+
 function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, setActiveProfileName, backScreen = 'chat-detail', setActiveProfileBackScreen }: { setScreen: (s: Screen) => void; conversationId: number | null; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void; backScreen?: Screen; setActiveProfileBackScreen?: (screen: Screen) => void }) {
   const { tokens: T } = useTheme()
   const [detail, setDetail] = useState<ChatDetail | null>(null)
@@ -6784,6 +6795,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
   const [mediaItems, setMediaItems] = useState<SharedMediaItem[]>([])
   const [mediaLoading, setMediaLoading] = useState(false)
   const [mediaError, setMediaError] = useState<string | null>(null)
+  const [mediaTab, setMediaTab] = useState<SharedMediaTab>('all')
 
   useEffect(() => {
     api<{ id: number; csrf_token: string }>('/me').then(me => { setCsrfToken(me.csrf_token); setViewerId(me.id) }).catch(() => {})
@@ -7046,6 +7058,11 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
             </div>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }} className="scrollbar-hide">
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10 }} role="tablist" aria-label="Shared media types">
+              {([['all','All'],['images','Images'],['videos','Videos'],['audio','Audio'],['files','Files']] as const).map(([key,label]) => (
+                <button key={key} type="button" role="tab" aria-selected={mediaTab === key} onClick={() => setMediaTab(key)} style={{ flexShrink: 0, border: mediaTab === key ? '1px solid '+N.gold : '1px solid '+T.border, borderRadius: 999, padding: '7px 11px', background: mediaTab === key ? N.gold+'18' : T.card, color: mediaTab === key ? N.gold : T.textMuted, fontSize: 11, fontWeight: 750, cursor: 'pointer' }}>{label}</button>
+              ))}
+            </div>
             {mediaError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{mediaError}</div>}
             {mediaLoading ? (
               <div style={{ padding: '20px 0', textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Loading…</div>
@@ -7055,9 +7072,11 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
                 <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>Nothing shared yet</div>
                 <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>Files and images sent in this chat will show up here</div>
               </div>
+            ) : mediaItems.filter(item => mediaTab === 'all' || sharedMediaCategory(item) === mediaTab).length === 0 ? (
+              <div style={{ padding: '50px 20px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Nothing in this category yet</div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
-                {mediaItems.map(item => (
+                {mediaItems.filter(item => mediaTab === 'all' || sharedMediaCategory(item) === mediaTab).map(item => (
                   <a key={item.id} href={item.view_url || undefined} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
                     {IMAGE_FILE_TYPES.includes(item.file_type) ? (
                       <div style={{ aspectRatio: '1', borderRadius: 10, overflow: 'hidden', background: '#F3F4F6' }}>
