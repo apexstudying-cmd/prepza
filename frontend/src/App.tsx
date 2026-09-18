@@ -2421,6 +2421,13 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
       const url = await getOfflineStudyDocumentUrl(activeDocumentId, userId)
       if (!url) throw new Error('The saved offline study copy is unavailable.')
       objectUrl = url
+      try {
+        const storedPage = Number(localStorage.getItem(`prepza-offline-reading:${userId}:${activeDocumentId}`) || 0)
+        if (Number.isInteger(storedPage) && storedPage >= 0) {
+          setPage(storedPage)
+          setSavedPage(storedPage)
+        }
+      } catch (_) {}
       return {
         id: activeDocumentId,
         title: meta.title || 'Saved study document',
@@ -2535,7 +2542,22 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
           <div style={{ color: N.gold, fontSize: 10, fontWeight: 800 }}>OFFLINE</div>
         </div>
       </div>
-      <div style={{ flex: 1, minHeight: 0 }}><PdfStudyCanvas src={offlineSrc} title={doc.title} onPageChange={p => setPage(Math.max(0, p - 1))} /></div>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <PdfStudyCanvas
+          src={offlineSrc}
+          title={doc.title}
+          onPageChange={p => {
+            const nextPage = Math.max(0, p - 1)
+            setPage(nextPage)
+            try {
+              const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
+              if (Number.isInteger(userId) && userId > 0 && activeDocumentId != null) {
+                localStorage.setItem(`prepza-offline-reading:${userId}:${activeDocumentId}`, String(nextPage))
+              }
+            } catch (_) {}
+          }}
+        />
+      </div>
     </div>
   }
 
