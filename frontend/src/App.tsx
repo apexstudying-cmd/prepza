@@ -4675,11 +4675,12 @@ function ShareSheetScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 // endpoint alone has both halves. fallbackName is whatever display name the
 // calling screen already had on hand (a follow-list row, a notification,
 // etc) - used only until public-profile's own display_name arrives.
-function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActiveConversationId, backScreen = 'chats' }: {
+function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActiveConversationId, activeConversationId, backScreen = 'chats' }: {
   setScreen: (s: Screen) => void
   targetUserId: number | null
   fallbackName?: string | null
   setActiveConversationId?: (id: number) => void
+  activeConversationId?: number | null
   backScreen?: Screen
 }) {
   const { tokens: T } = useTheme()
@@ -4804,6 +4805,16 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
           <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
             <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{formatStudyTime(profile.weekly_study_seconds)}</div>
             <div style={{ fontSize: 11, color: T.textMuted }}>Time</div>
+          </div>
+        </div>
+      )}
+      {activeConversationId != null && !loading && !error && profile && !profile.is_private && (
+        <div style={{ padding: '16px' }}>
+          <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,.05)' }}>
+            <div style={{ padding: '14px 16px 8px', fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: 'uppercase', letterSpacing: .5 }}>Chat</div>
+            <button type="button" onClick={() => setScreen('chat-options')} style={{ width:'100%',display:'flex',alignItems:'center',gap:12,padding:'13px 16px',border:0,borderTop:'1px solid rgba(0,0,0,.05)',background:'transparent',cursor:'pointer',textAlign:'left' }}>
+              <div style={{ color:T.textMuted }}>{Ic.message('w-5 h-5')}</div><div style={{flex:1}}><div style={{fontWeight:750,fontSize:13,color:T.text}}>Chat info & settings</div><div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Shared media, notifications and conversation settings</div></div>{Ic.chevR()}
+            </button>
           </div>
         </div>
       )}
@@ -13950,7 +13961,7 @@ export default function App() {
       case 'opportunities':     return <OpportunitiesScreen setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} opportunityId={activeOpportunityId} />
       case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
-      case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} backScreen={activeProfileBackScreen} />
+      case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} activeConversationId={activeConversationId} backScreen={activeProfileBackScreen} />
       case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} onOpenOrgPortal={() => setOrgPortalMode(true)} />
       case 'settings':          return <SettingsScreen setScreen={setScreen} />
       case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} />
