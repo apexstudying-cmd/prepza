@@ -44,7 +44,7 @@ export function getOfflineUserId(): string | null {
 }
 
 function supported(path: string) {
-  return path.includes('/documents/') && /(summarize|quiz|flashcards|podcast-script|podcast-audio|mind-map)/.test(path)
+  return path.includes('/documents/') && /(summarize|quiz|flashcards|podcast-script|podcast-audio|mind-map|mindmap)/.test(path)
 }
 
 export async function saveGeneratedMaterialOffline(path: string, requestBody: unknown, payload: unknown) {
