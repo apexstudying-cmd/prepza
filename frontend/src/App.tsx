@@ -6360,7 +6360,7 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
       })
       .then(res => setRaw(res.mindmap))
       .catch(async e => {
-        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/mind-map`)
+        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/mindmap`)
         if (cached) { setRaw(cached); setError('') }
         else if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
