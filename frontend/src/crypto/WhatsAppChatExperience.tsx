@@ -123,7 +123,37 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   useEffect(() => { const onStatus = (event: Event) => setRealtimeConnected(Boolean((event as CustomEvent<{ connected?: boolean }>).detail?.connected)); window.addEventListener('prepza-realtime-status', onStatus); return () => window.removeEventListener('prepza-realtime-status', onStatus) }, [])
   useEffect(() => { const timer = window.setInterval(() => { if (Date.now() - observedAt > 10000 || Date.now() < suppressObserverUntil) return; if (observedMode === 'detail' && observedConversationId && selectedId !== observedConversationId) { setSelectedId(observedConversationId); setView('detail'); setVisible(true) } else if (observedMode === 'list' && !visible) { setView('list'); setSelectedId(null); setVisible(true) } }, 150); return () => window.clearInterval(timer) }, [selectedId, visible])
 
-  const loadList = async () => { setListError(''); try { const result = await api<{ chats: ChatSummary[] }>('/chats'); setChats(Array.isArray(result.chats) ? result.chats : []) } catch (value) { setListError(friendlyError(value, 'Could not load your conversations.')) } }
+  const loadList = async () => {
+    setListError('')
+    try {
+      const result = await api<{ chats: ChatSummary[] }>('/chats')
+      const nextChats = Array.isArray(result.chats) ? result.chats : []
+      // The server intentionally stores only ciphertext, so its last_message
+      // cannot be used as a human-readable WhatsApp-style preview. Hydrate the
+      // latest message through the E2EE fetch bridge; failures keep the server
+      // row intact rather than making the whole chat list fail.
+      const hydrated = await Promise.all(nextChats.map(async chat => {
+        if (!chat.last_message) return chat
+        try {
+          const latest = await api<{ messages: Message[] }>(`/chats/${chat.id}/messages?preview=1`)
+          const message = latest.messages?.[0]
+          if (!message) return chat
+          const envelope = parseEnvelope(message.body)
+          let preview = displayText(message)
+          if (!preview && envelope?.type === 'reaction') preview = `${envelope.emoji} reaction`
+          if (!preview && message.attachment) preview = message.attachment.original_filename || 'Attachment'
+          if (!preview) return chat
+          const prefix = chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: ` : ''
+          return { ...chat, last_message: prefix + preview }
+        } catch {
+          return chat
+        }
+      }))
+      setChats(hydrated)
+    } catch (value) {
+      setListError(friendlyError(value, 'Could not load your conversations.'))
+    }
+  }
   useEffect(() => { if (!visible) return; void loadList(); void getCsrfToken().catch(() => {}) }, [visible])
 
   useEffect(() => {
