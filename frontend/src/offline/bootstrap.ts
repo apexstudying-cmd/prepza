@@ -1,4 +1,4 @@
-import { setOfflineUserId } from './generatedMaterials'
+import { setOfflineUserId, clearOfflineUserId } from './generatedMaterials'
 import { installOfflineChatQueue } from './chatOfflineQueue'
 import { setOfflineStudyUserId, syncOfflineStudyActivity } from './studyActivity'
 
@@ -21,7 +21,14 @@ export function installOfflineBootstrap(): void {
     if (!navigator.onLine) return
     try {
       const response = await fetch('/me', { credentials: 'include', cache: 'no-store' })
-      if (!response.ok) return
+      if (!response.ok) {
+        // A confirmed unauthenticated session must never keep exposing the
+        // previous account's offline namespace. The actual cached bytes stay
+        // intact but become inaccessible until a new authenticated /me sets
+        // a fresh account id.
+        if (response.status === 401 || response.status === 403) clearOfflineUserId()
+        return
+      }
       const me = await response.json()
       const userId = Number(me?.id)
       if (!Number.isInteger(userId) || userId <= 0) return
