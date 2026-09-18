@@ -7300,15 +7300,11 @@ def get_public_profile(target_user_id):
         return jsonify({"error": "User not found"}), 404
 
     if target.profile_visibility == "private" and target.id != user_id:
-        viewer_follows_target = Follow.query.filter_by(
-            follower_id=user_id, followed_id=target_user_id
-        ).first() is not None
-        if not viewer_follows_target:
-            return jsonify({
-                "user_id": target.id,
-                "display_name": _display_name(target),
-                "is_private": True,
-            })
+        return jsonify({
+            "user_id": target.id,
+            "display_name": _display_name(target),
+            "is_private": True,
+        })
 
     university = db.session.get(University, target.university_id) if target.university_id else None
     program = db.session.get(Program, target.program_id) if target.program_id else None
@@ -7316,6 +7312,16 @@ def get_public_profile(target_user_id):
     documents_count = Document.query.filter_by(user_id=target_user_id, is_removed=False).count()
     xp_total = db.session.query(func.coalesce(func.sum(XpEvent.xp_amount), 0)).filter(
         XpEvent.user_id == target_user_id
+    ).scalar()
+
+    today = datetime.utcnow().date()
+    week_start = today - timedelta(days=today.weekday())
+    weekly_study_seconds = db.session.query(
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+    ).filter(
+        StudyTimeLog.user_id == target_user_id,
+        StudyTimeLog.activity_date >= week_start,
+        StudyTimeLog.activity_date <= today,
     ).scalar()
 
     return jsonify({
@@ -7327,6 +7333,8 @@ def get_public_profile(target_user_id):
         "program_name": program.name if program else None,
         "documents_count": documents_count,
         "xp_total": int(xp_total),
+        "weekly_study_seconds": int(weekly_study_seconds or 0),
+        "is_private": False,
     })
 
 
