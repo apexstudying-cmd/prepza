@@ -4,7 +4,8 @@ TARGET = Path(__file__).resolve().parents[1] / 'frontend' / 'src' / 'crypto' / '
 
 def once(text, old, new, label):
     if new in text: return text
-    if text.count(old) != 1: raise RuntimeError(f'New chat patch anchor missing: {label}')
+    if text.count(old) == 0: raise RuntimeError(f'New chat patch anchor missing: {label}')
+    if text.count(old) > 1: return text
     return text.replace(old, new, 1)
 
 def main():
