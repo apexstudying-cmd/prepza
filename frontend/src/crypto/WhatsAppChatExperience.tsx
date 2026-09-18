@@ -58,7 +58,7 @@ function buildReactionState(messages: Message[]) { const state: ReactionState = 
 function isImage(fileType: string) { return /^(jpg|jpeg|png|gif|webp)$/i.test(fileType) || fileType.startsWith('image/') }
 function isAudio(fileType: string) { return /^(webm|ogg|mp3|m4a|wav|aac|mp4)$/i.test(fileType) || fileType.startsWith('audio/') }
 
-export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenOptions }: { onClose?: () => void; onOpenProfile?: (userId: number, displayName?: string) => void; onOpenOptions?: (conversationId: number) => void }) {
+export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenOptions }: { onClose?: () => void; onOpenProfile?: (userId: number, displayName?: string, conversationId?: number) => void; onOpenOptions?: (conversationId: number) => void }) {
   const [visible, setVisible] = useState(false)
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -213,7 +213,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const closeExperience = () => { suppressObserverUntil = Date.now() + 2500; if (selectedId != null) leaveRealtimeChat(selectedId); setVisible(false); setView('list'); setSelectedId(null); setDetail(null); setMessages([]); setTypingUsers({}); setReactionPicker(null); onClose?.() }
   const chooseChat = (id: number) => { setSelectedId(id); setView('detail'); setVisible(true); setMessageSearchOpen(false); setMessageSearch('') }
   const backToList = () => { if (selectedId != null) leaveRealtimeChat(selectedId); setView('list'); setSelectedId(null); setDetail(null); setMessages([]); setReactionPicker(null); void loadList() }
-  const openPeerProfile = () => { if (selectedId == null || !detail || isGroup) return; const peer = detail.participants.find(item => item.user_id !== meId); if (peer) onOpenProfile?.(peer.user_id, peer.display_name) }
+  const openPeerProfile = () => { if (selectedId == null || !detail || isGroup) return; const peer = detail.participants.find(item => item.user_id !== meId); if (peer) onOpenProfile?.(peer.user_id, peer.display_name, selectedId) }
   const openListPeerProfile = async (chat: ChatSummary) => {
     if (chat.is_group || !onOpenProfile) return
     try {
