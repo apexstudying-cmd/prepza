@@ -6995,7 +6995,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
         </div>
       )}
       {showSearch && (
-        <div style={{ position: 'absolute', inset: 0, background: T.pageBg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
+        <div onPointerDown={(event) => { if (event.target === event.currentTarget) { setShowSearch(false); setSearchQuery(''); setSearchResults([]) } }} style={{ position: 'absolute', inset: 0, background: T.pageBg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
           <div style={{ background: N.navy, padding: '0 18px 14px', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]) }} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
@@ -7038,7 +7038,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
         </div>
       )}
       {showMedia && (
-        <div style={{ position: 'absolute', inset: 0, background: T.pageBg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
+        <div onPointerDown={(event) => { if (event.target === event.currentTarget) setShowMedia(false) }} style={{ position: 'absolute', inset: 0, background: T.pageBg, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
           <div style={{ background: N.navy, padding: '0 18px 14px', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button onClick={() => setShowMedia(false)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
