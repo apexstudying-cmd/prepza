@@ -278,6 +278,17 @@ def _active_user_ids(db, since_date):
     return {int(row[0]) for row in rows}
 
 
+def _online_user_count(db):
+    row = db.session.execute(text("""
+        SELECT COUNT(*)
+        FROM product_activity_day
+        WHERE activity_date = CURRENT_DATE
+          AND last_seen_at >= CURRENT_TIMESTAMP - INTERVAL '2 minutes'
+          AND (engaged_seconds >= 30 OR core_actions > 0)
+    """)).scalar_one()
+    return int(row or 0)
+
+
 def register_usage_billing(app, db):
     _ensure_schema(db)
 
@@ -590,12 +601,13 @@ def register_usage_billing(app, db):
         dau = len(_active_user_ids(db, today))
         wau = len(_active_user_ids(db, today - timedelta(days=6)))
         mau = len(_active_user_ids(db, today - timedelta(days=29)))
+        online_now = _online_user_count(db)
         return jsonify({
             "dau": dau,
             "wau": wau,
             "mau": mau,
-            "online_now": None,
-            "online_note": "Live presence is not sold as a billing metric. Prepza bills organisations on audience bands and measures DAU/WAU/MAU from meaningful engagement.",
+            "online_now": online_now,
+            "online_note": "Online now is an aggregate count based on a recent foreground heartbeat; individual live presence is not exposed to organisations.",
             "active_definition": "At least 30 seconds of foreground engagement in a day or a core product action. Signup/login alone does not count.",
         })
 
