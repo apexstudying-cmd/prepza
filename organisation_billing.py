@@ -195,6 +195,20 @@ def register_organisation_billing(app, db):
         if not row or row["transaction_reference"] != reference:
             return jsonify({"ok": True})
 
+        # Paystack may retry a webhook. A successful reference is consumed
+        # exactly once; otherwise a duplicate delivery could extend a
+        # 30-day plan to 60 days.
+        if row["status"] == "active":
+            return jsonify({"ok": True})
+
+        expected_amount = int(plan["monthly_fee_kes"]) * 100
+        try:
+            paid_amount = int(data.get("amount"))
+        except (TypeError, ValueError):
+            return jsonify({"ok": True})
+        if paid_amount != expected_amount or str(data.get("currency") or "").upper() != "KES":
+            return jsonify({"ok": True})
+
         now = datetime.utcnow()
         current_expiry = row["expires_at"]
         base = current_expiry if current_expiry and current_expiry > now else now
