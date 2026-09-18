@@ -3,7 +3,7 @@ import logoImg from './imports/logo.png'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
 import CallExperience from './crypto/CallExperience'
-import { getOfflineStudyDocumentUrl, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'
+import { getOfflineStudyDocumentUrl, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'
 import { setOfflineUserId } from './offline/generatedMaterials'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
@@ -407,7 +407,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       <div style={{display:'flex',gap:8}}>{([['documents','Documents'],['materials','Study Materials']] as const).map(([key,name])=><button key={key} onClick={()=>setTab(key)} style={{flex:1,padding:'8px 10px',borderRadius:11,background:tab===key?N.gold:'rgba(255,255,255,0.08)',color:tab===key?N.navy:'rgba(255,255,255,0.7)',border:'none',fontWeight:800,fontSize:11,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}>{name}</button>)}</div>
     </div>
     <div style={{flex:1,overflowY:'auto',padding:16}} className="scrollbar-hide">
-      {loading ? <GenerationLoading label="Loading your study library…"/> : error ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Ada about it, or create study materials.</div>{documents.length===0 && offlineDocuments.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:Array.from(new Map([...documents, ...offlineDocuments].map(d=>[d.id,d])).values()).map(d=><button key={d.id} onClick={()=>openDocument(d.id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>▣</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{d.page_count?`${d.page_count} pages`:'Document'}{d.created_at?` · ${new Date(d.created_at).toLocaleDateString()}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:18}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
+      {loading ? <GenerationLoading label="Loading your study library…"/> : error && documents.length===0 && offlineDocuments.length===0 ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Ada about it, or create study materials.</div>{documents.length===0 && offlineDocuments.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:Array.from(new Map([...documents, ...offlineDocuments].map(d=>[d.id,d])).values()).map(d=><button key={d.id} onClick={()=>openDocument(d.id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>▣</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{d.page_count?`${d.page_count} pages`:'Document'}{d.created_at?` · ${new Date(d.created_at).toLocaleDateString()}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:18}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
       <div style={{height:'calc(90px + env(safe-area-inset-bottom, 0px))'}}/>
     </div>
   </div>
@@ -2059,11 +2059,50 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
 
   useEffect(() => {
     if (activeDocumentId == null) return
+    let cancelled = false
+    let offlineUrl: string | null = null
     const cached = DOC_CACHE[activeDocumentId]
     if (cached) { setDoc(cached); setRenameVal(cached.title) }
     api<DocumentDetail>(`/documents/${activeDocumentId}`)
-      .then(d => { setDoc(d); setRenameVal(d.title); DOC_CACHE[activeDocumentId] = d })
-      .catch(e => setDocLoadError(e instanceof ApiError ? e.message : 'Could not load this document.'))
+      .then(d => {
+        if (cancelled) return
+        setDoc(d); setRenameVal(d.title); setDocLoadError(''); DOC_CACHE[activeDocumentId] = d
+      })
+      .catch(async e => {
+        if (cancelled) return
+        const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
+        if (Number.isInteger(userId) && userId > 0) {
+          try {
+            const saved = await getSavedStudyHubOffline(activeDocumentId, userId)
+            const url = await getOfflineStudyDocumentUrl(activeDocumentId, userId)
+            if (!cancelled && saved && url) {
+              offlineUrl = url
+              setDoc({
+                id: activeDocumentId,
+                title: saved.title || 'Saved study document',
+                original_filename: saved.title || 'Study document',
+                status: 'ready',
+                file_type: saved.fileType || 'pdf',
+                file_size_bytes: null,
+                page_count: saved.pageCount || null,
+                error_message: null,
+                view_url: url,
+                materials: [],
+                created_at: new Date(saved.savedAt).toISOString(),
+              })
+              setRenameVal(saved.title || 'Saved study document')
+              setSavedToLib(true)
+              setDocLoadError('')
+              return
+            }
+          } catch { /* fall through to the normal error state */ }
+        }
+        if (!cancelled) setDocLoadError(e instanceof ApiError ? e.message : 'Could not load this document. It may not be saved for offline study yet.')
+      })
+    return () => {
+      cancelled = true
+      if (offlineUrl) URL.revokeObjectURL(offlineUrl)
+    }
   }, [activeDocumentId])
 
   useEffect(() => {
