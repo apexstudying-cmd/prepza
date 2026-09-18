@@ -4,7 +4,7 @@ const MAX_DAILY_SECONDS = 8 * 60 * 60
 
 type DayEntry = { seconds: number; syncedSeconds: number }
 type ScreenEntry = { documentId: number; feature: string; days: Record<string, DayEntry> }
-type ActivityState = { screens: Record<string, ScreenEntry> }
+type ActivityState = { screens: Record<string, ScreenEntry>; serverBaselines: Record<string, number> }
 
 function storageKey(): string {
   try { return `${KEY_PREFIX}:${localStorage.getItem(USER_KEY) || 'unknown'}` } catch { return `${KEY_PREFIX}:unknown` }
@@ -19,7 +19,7 @@ function load(): ActivityState {
     const parsed = JSON.parse(localStorage.getItem(storageKey()) || '{}')
     if (parsed && typeof parsed.screens === 'object') return parsed
   } catch {}
-  return { screens: {} }
+  return { screens: {}, serverBaselines: {} }
 }
 function save(state: ActivityState) { try { localStorage.setItem(storageKey(), JSON.stringify(state)) } catch {} }
 function notify() { window.dispatchEvent(new CustomEvent('prepza:offline-study-activity-changed')) }
@@ -104,7 +104,6 @@ export async function syncOfflineStudyActivity(csrfToken?: string) {
   const state = load()
   const pending: Array<{ screen: ScreenEntry; date: string; totalSeconds: number; syncedSeconds: number }> = []
   const unsyncedByDate: Record<string, number> = {}
-  const syncedByDate: Record<string, number> = {}
 
   for (const screen of Object.values(state.screens)) for (const [date, day] of Object.entries(screen.days || {})) {
     const totalSeconds = Math.min(MAX_DAILY_SECONDS, Math.max(0, Math.floor(Number(day.seconds) || 0)))
@@ -113,13 +112,48 @@ export async function syncOfflineStudyActivity(csrfToken?: string) {
       pending.push({ screen, date, totalSeconds, syncedSeconds })
       unsyncedByDate[date] = Math.min(MAX_DAILY_SECONDS, (unsyncedByDate[date] || 0) + (totalSeconds - syncedSeconds))
     }
-    syncedByDate[date] = (syncedByDate[date] || 0) + syncedSeconds
   }
   if (!pending.length) return
 
+  let token = csrfToken
+  if (!token) {
+    try {
+      const res = await fetch('/me', { credentials: 'include', cache: 'no-store' })
+      if (!res.ok) return
+      token = (await res.json()).csrf_token
+    } catch { return }
+  }
+
+  // Establish a per-date server baseline before sending any local offline
+  // delta. This preserves study time that existed before the device went
+  // offline and makes the absolute target replay-safe after a lost response.
+  const missingBaselineDates = Object.keys(unsyncedByDate).filter(date => !Number.isFinite(state.serverBaselines?.[date]))
+  if (missingBaselineDates.length) {
+    try {
+      const baselineResponse = await fetch(`/study-time/offline-baselines?dates=${encodeURIComponent(missingBaselineDates.join(','))}`, {
+        credentials: 'include',
+        headers: token ? { 'X-CSRF-Token': token } : {},
+      })
+      if (!baselineResponse.ok) return
+      const baselineBody = await baselineResponse.json()
+      const serverTotals = baselineBody.server_total_seconds_by_date || {}
+      for (const date of missingBaselineDates) {
+        const serverTotal = Math.min(MAX_DAILY_SECONDS, Math.max(0, Number(serverTotals[date]) || 0))
+        const alreadySynced = Math.min(
+          unsyncedByDate[date] || 0,
+          Object.values(state.screens)
+            .filter(screen => screen.days?.[date])
+            .reduce((sum, screen) => sum + Math.max(0, Number(screen.days[date].syncedSeconds) || 0), 0),
+        )
+        state.serverBaselines[date] = Math.max(0, serverTotal - alreadySynced)
+      }
+    } catch { return }
+  }
+  save(state)
+
   const entries = Object.entries(unsyncedByDate).map(([date, delta]) => ({
     date,
-    total_seconds: Math.min(MAX_DAILY_SECONDS, Math.max(0, (syncedByDate[date] || 0) + delta)),
+    total_seconds: Math.min(MAX_DAILY_SECONDS, Math.max(0, (state.serverBaselines[date] || 0) + delta)),
   }))
 
   let token = csrfToken
@@ -140,18 +174,39 @@ export async function syncOfflineStudyActivity(csrfToken?: string) {
     if (!res.ok) return
     const body = await res.json()
     const serverTotals: Record<string, number> = body.server_total_seconds_by_date || {}
+    const acceptedByDate: Record<string, number> = body.accepted_seconds_by_date || {}
 
     for (const date of Object.keys(unsyncedByDate)) {
-      let available = Math.max(0, Math.min(MAX_DAILY_SECONDS, Number(serverTotals[date]) || 0) - (syncedByDate[date] || 0))
-      if (available <= 0) continue
+      const serverTotal = Math.min(MAX_DAILY_SECONDS, Math.max(0, Number(serverTotals[date]) || 0))
+      const baseline = Math.max(0, Number(state.serverBaselines[date]) || 0)
+      const unsynced = Math.max(0, Number(unsyncedByDate[date]) || 0)
+      const target = Math.min(MAX_DAILY_SECONDS, baseline + unsynced)
+
+      if (serverTotal > target) {
+        // Another server-side study source advanced this date while the
+        // device was offline. Move the baseline forward but keep the local
+        // unsynced delta intact so it is still credited on the next pass.
+        state.serverBaselines[date] = serverTotal
+        continue
+      }
+
+      let credited = Math.min(unsynced, Math.max(0, Number(acceptedByDate[date]) || 0))
+      // If the server already equals our exact absolute target but reports
+      // zero accepted seconds, the previous identical request likely
+      // committed before its response was lost. Mark the local delta synced
+      // rather than replaying it into a second increment.
+      if (credited === 0 && serverTotal === target) credited = unsynced
+      if (credited <= 0) continue
+
+      let remaining = credited
       for (const item of pending) {
-        if (item.date !== date || available <= 0) continue
+        if (item.date !== date || remaining <= 0) continue
         const day = item.screen.days[date]
         if (!day) continue
-        const unsynced = Math.max(0, day.seconds - day.syncedSeconds)
-        const credited = Math.min(unsynced, available)
-        day.syncedSeconds += credited
-        available -= credited
+        const localUnsynced = Math.max(0, day.seconds - day.syncedSeconds)
+        const applied = Math.min(localUnsynced, remaining)
+        day.syncedSeconds += applied
+        remaining -= applied
       }
     }
     save(state); notify()
