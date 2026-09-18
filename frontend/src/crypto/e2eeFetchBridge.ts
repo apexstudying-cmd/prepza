@@ -449,6 +449,7 @@ export function installE2EEFetchBridge(): void {
           const encrypted = await encryptGroupText(state.key, metadata, conversationId, state.keyEpoch)
           payload.body = encrypted.body
           payload.nonce = encrypted.nonce
+          payload.key_epoch = state.keyEpoch
           pendingAttachmentMeta.delete(attachmentId)
           init = { ...init, body: JSON.stringify(payload) }
         }
