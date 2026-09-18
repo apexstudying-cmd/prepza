@@ -5059,6 +5059,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [notifs, setNotifs] = useState({ push: true, messages: true, opportunities: false, community: true, reminders: true })
   const [priv, setPriv] = useState({ profilePublic: true, whoMessages: false, whoFollows: true, readReceipts: true })
   const [privacyBusy, setPrivacyBusy] = useState(false)
+  const [opportunityDiscovery, setOpportunityDiscovery] = useState(false)
   const [showLogout, setShowLogout] = useState(false)
   const [showModal, setShowModal] = useState<string|null>(null)
 
@@ -5148,6 +5149,12 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }, [])
 
   useEffect(() => {
+    api<{ discoverable: boolean }>('/api/opportunity-discovery')
+      .then(value => setOpportunityDiscovery(!!value.discoverable))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     api<{ community_enabled: boolean; messages_enabled: boolean }>('/notification-preferences')
       .then(p => setNotifs(n => ({ ...n, community: p.community_enabled, messages: p.messages_enabled })))
       .catch(() => {})
@@ -5227,7 +5234,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
               }
             }}>{Ic.toggle(notifs[k])}</div>} />
           ))}
-          <Row label="Opportunities" sub="Coming soon" right={<Pill text="Soon" color="#9CA3AF" />} />
+          <Row label="Opportunities" sub="Relevant opportunities and discovery" right={<Pill text="Ready" color={N.gold} />} />
           <Row label="Study Reminders" sub="Coming soon" right={<Pill text="Soon" color="#9CA3AF" />} />
         </Section>
 
@@ -5258,6 +5265,17 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             } catch { /* keep previous value */ }
             finally { setPrivacyBusy(false) }
           }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.readReceipts)}</div>} />
+          <Row label="Opportunity discovery" sub={opportunityDiscovery ? 'Opted in to relevant opportunities' : 'Not discoverable by organisations'} right={<div onClick={async e => {
+            e.stopPropagation()
+            if (privacyBusy) return
+            const next = !opportunityDiscovery
+            setPrivacyBusy(true)
+            try {
+              const res = await api<{ discoverable: boolean }>('/api/opportunity-discovery', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ discoverable: next }) })
+              setOpportunityDiscovery(!!res.discoverable)
+            } catch { /* keep previous value */ }
+            finally { setPrivacyBusy(false) }
+          }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(opportunityDiscovery)}</div>} />
         </Section>
 
         <Section title="Security">
