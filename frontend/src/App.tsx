@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import logoImg from './imports/logo.png'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
@@ -3212,16 +3212,16 @@ function chatListPreview(chat: ChatSummary): string {
   // WhatsApp-style inbox previews: the latest message type determines the
   // compact preview, while text messages show their actual content.
   if (fileType.startsWith('audio/') || /^(webm|ogg|mp3|m4a|wav|aac|mp4|mpeg)$/i.test(fileType) || /(voice-note|voice_note|audio)/i.test(raw)) {
-    return prefix + '🎤 Voice message'
+    return prefix + 'Voice message'
   }
   if (fileType.startsWith('image/') || /^(jpg|jpeg|png|gif|webp)$/i.test(fileType)) {
-    return prefix + '📷 Photo'
+    return prefix + 'Photo'
   }
   if (fileType.startsWith('video/') || /^(mp4|mov|m4v|webm)$/i.test(fileType) && /video/i.test(fileType)) {
-    return prefix + '🎥 Video'
+    return prefix + 'Video'
   }
   if (/^(pdf|doc|docx|ppt|pptx)$/i.test(fileType) || /\.(pdf|docx?|pptx?)$/i.test(filename)) {
-    return prefix + `📄 ${filename || raw || 'Document'}`
+    return prefix + `Document · ${filename || raw || 'file'}`
   }
 
   if (raw) {
@@ -3634,6 +3634,76 @@ function chatTime(value: string | null) {
   return value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
 }
 
+function ChatVoiceBubble({ src, mine, filename }: { src: string; mine: boolean; filename: string }) {
+  const { tokens: T } = useTheme()
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const [current, setCurrent] = useState(0)
+  const [duration, setDuration] = useState(0)
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    const onTime = () => setCurrent(audio.currentTime || 0)
+    const onMeta = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+    const onEnded = () => { setPlaying(false); setCurrent(0) }
+    audio.addEventListener('timeupdate', onTime)
+    audio.addEventListener('loadedmetadata', onMeta)
+    audio.addEventListener('durationchange', onMeta)
+    audio.addEventListener('ended', onEnded)
+    return () => {
+      audio.removeEventListener('timeupdate', onTime)
+      audio.removeEventListener('loadedmetadata', onMeta)
+      audio.removeEventListener('durationchange', onMeta)
+      audio.removeEventListener('ended', onEnded)
+    }
+  }, [])
+
+  const toggle = async () => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (audio.paused) {
+      try { await audio.play(); setPlaying(true) } catch { setPlaying(false) }
+    } else {
+      audio.pause()
+      setPlaying(false)
+    }
+  }
+
+  const seek = (event: ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current
+    if (!audio) return
+    const next = Number(event.target.value)
+    audio.currentTime = next
+    setCurrent(next)
+  }
+
+  const formatTime = (value: number) => {
+    if (!Number.isFinite(value) || value <= 0) return '0:00'
+    const total = Math.floor(value)
+    return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0')
+  }
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:9, minWidth:'min(250px,100%)', maxWidth:320, padding:'2px 1px' }}>
+      <audio ref={audioRef} preload="metadata" src={src} aria-label={filename} />
+      <button type="button" onClick={() => void toggle()} aria-label={playing ? 'Pause voice message' : 'Play voice message'} title={playing ? 'Pause' : 'Play'} style={{ width:40,height:40,border:0,borderRadius:'50%',background:mine?'rgba(255,255,255,.16)':N.gold,color:mine?'#fff':N.navy,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+        {playing ? Ic.pause('w-4 h-4') : Ic.play('w-4 h-4')}
+      </button>
+      <div style={{ flex:1,minWidth:0 }}>
+        <div style={{ display:'flex',alignItems:'center',gap:7 }}>
+          <div style={{ flex:1,height:4,borderRadius:99,background:mine?'rgba(255,255,255,.22)':T.border,overflow:'hidden' }}>
+            <div style={{ width: duration ? `${Math.min(100,(current/duration)*100)}%` : '0%',height:'100%',background:mine?N.gold:N.navy,borderRadius:99 }} />
+          </div>
+          <span style={{ fontSize:9,opacity:.6,flexShrink:0 }}>{formatTime(playing ? current : duration)}</span>
+        </div>
+        <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(current,duration || current)} onChange={seek} aria-label="Voice message progress" style={{ position:'absolute',width:1,height:1,opacity:0,pointerEvents:'none' }} />
+        <div style={{ marginTop:5,fontSize:9,opacity:.52,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>Voice message</div>
+      </div>
+    </div>
+  )
+}
+
 function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; conversationId: number | null; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   const { tokens: T } = useTheme()
   const [input, setInput] = useState('')
@@ -3966,14 +4036,16 @@ function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, s
               <div style={{ maxWidth: '82%', position: 'relative', background: mine ? N.navy : T.card, color: mine ? '#fff' : T.text, borderRadius: mine ? '15px 4px 15px 15px' : '4px 15px 15px 15px', padding: '8px 10px 6px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: mine ? 'none' : `1px solid ${T.border}` }}>
                 <div style={{ position: 'absolute', top: 3, right: 4, display: 'flex', gap: 3 }}><button onClick={() => setReplyingTo(message)} title="Reply" style={{ border: 0, background: 'transparent', color: mine ? 'rgba(255,255,255,.45)' : T.textMuted, cursor: 'pointer', fontSize: 10 }}>↩</button><button onClick={() => setReactionPicker(reactionPicker === message.id ? null : message.id)} title="React" style={{ border: 0, background: 'transparent', color: mine ? 'rgba(255,255,255,.45)' : T.textMuted, cursor: 'pointer', fontSize: 11 }}>☺</button></div>
                 {quoted && <button onClick={() => document.getElementById(`prepza-msg-${quoted.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} style={{ width: '100%', textAlign: 'left', border: 0, borderLeft: `3px solid ${N.gold}`, background: mine ? 'rgba(255,255,255,.08)' : T.pageBg, color: mine ? 'rgba(255,255,255,.82)' : T.textMuted, padding: '5px 7px', borderRadius: 6, marginBottom: 6, cursor: 'pointer', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chatDisplayText(quoted)}</button>}
-                {message.attachment && <a href={message.attachment.view_url || undefined} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none', marginBottom: text ? 6 : 0 }}>{message.attachment.view_url && chatIsImage(message.attachment.file_type) ? <img src={message.attachment.view_url} alt={message.attachment.original_filename} style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 9, display: 'block' }} /> : message.attachment.view_url && chatIsAudio(message.attachment.file_type) ? <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 'min(260px,100%)', maxWidth: 320 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: mine ? 'rgba(255,255,255,.16)' : T.card, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: mine ? '#fff' : N.gold }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Zm-7 9a1 1 0 0 1 2 0 5 5 0 0 0 10 0 1 1 0 0 1 2 0 7 7 0 0 1-6 6.92V21h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.08A7 7 0 0 1 5 12Z"/></svg>
-                  </div>
-                  <audio controls preload="metadata" src={message.attachment.view_url} style={{ width: 'min(250px,calc(100% - 47px))', height: 38 }} aria-label={message.attachment.original_filename}>
-                    <source src={message.attachment.view_url} type={chatAudioMime(message.attachment.file_type)} />
-                  </audio>
-                </div> : <div style={{ background: mine ? 'rgba(255,255,255,.09)' : T.pageBg, borderRadius: 9, padding: 9, color: mine ? '#fff' : T.text }}><div style={{ fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{message.attachment.original_filename}</div><div style={{ fontSize: 10, opacity: .55, marginTop: 3 }}>{(message.attachment.file_size_bytes / 1048576).toFixed(1)} MB · tap to open</div></div>}</a>}
+                {message.attachment && (message.attachment.view_url && chatIsAudio(message.attachment.file_type)
+                  ? <ChatVoiceBubble src={message.attachment.view_url} mine={mine} filename={message.attachment.original_filename} />
+                  : <a href={message.attachment.view_url || undefined} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none', marginBottom: text ? 6 : 0 }}>
+                      {message.attachment.view_url && chatIsImage(message.attachment.file_type)
+                        ? <img src={message.attachment.view_url} alt={message.attachment.original_filename} style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 9, display: 'block' }} />
+                        : <div style={{ background: mine ? 'rgba(255,255,255,.09)' : T.pageBg, borderRadius: 9, padding: 9, color: mine ? '#fff' : T.text }}>
+                            <div style={{ fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{message.attachment.original_filename}</div>
+                            <div style={{ fontSize: 10, opacity: .55, marginTop: 3 }}>{(message.attachment.file_size_bytes / 1048576).toFixed(1)} MB · tap to open</div>
+                          </div>}
+                    </a>)}
                 {message.is_deleted ? <i style={{ opacity: .55, fontSize: 12 }}>This message was deleted</i> : text && <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5, paddingRight: 24 }}>{text}</div>}
                 <div style={{ marginTop: 4, textAlign: 'right', fontSize: 9, opacity: .48 }}>{chatTime(message.created_at)} {mine && <span title={message.read_by_all ? 'Read by everyone' : message.read_by_count ? `Read by ${message.read_by_count}` : 'Sent'}>{message.read_by_count ? '✓✓' : '✓'}</span>}</div>
                 {Object.entries(reactions).filter(([, users]) => users.size > 0).length > 0 && <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>{Object.entries(reactions).filter(([, users]) => users.size > 0).map(([emoji, users]) => <button key={emoji} onClick={() => void react(message, emoji)} style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 12, padding: '2px 7px', fontSize: 11, cursor: 'pointer' }}>{emoji} {users.size}</button>)}</div>}
@@ -3993,7 +4065,7 @@ function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, s
             {['😀','😂','🤣','😊','😍','🥹','😎','😭','😅','😉','🙂','🙃','😏','😢','😮','😡','❤️','👍','🙏','🔥','🎉','💯','✨','🤝','👏','💀','🙌','🤔','😴','🥲','❤️‍🔥','😂'].map(emoji => <button type="button" key={emoji} onClick={() => { setInput(value => value + emoji); setShowEmojiPicker(false) }} style={{ border: 0, background: 'transparent', borderRadius: 9, padding: 7, fontSize: 21, cursor: 'pointer' }}>{emoji}</button>)}
           </div>
         </div>}
-        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void sendAttachment(file) }} />
+        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.webm,.ogg,.mp3,.m4a,.wav,.aac,.mp4" style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void sendAttachment(file) }} />
         <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void sendAttachment(file) }} />
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 5, background: T.card, border: `1px solid ${T.border}`, borderRadius: 22, padding: '3px 6px 3px 10px', minHeight: 42 }}>
@@ -6555,7 +6627,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
       <div style={{ padding: 16 }}>
         {detail?.is_group && (
           <div onClick={() => { setRenameError(null); setShowRename(true) }} style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
-            <span style={{ fontSize: 20 }}>✏️</span>
+            <div style={{ color: T.textMuted }}>{Ic.edit('w-5 h-5')}</div>
             <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>Rename Group</div><div style={{ fontSize: 11, color: T.textMuted }}>{detail.name}</div></div>
             {Ic.chevR()}
           </div>
@@ -6566,17 +6638,17 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
           {Ic.chevR()}
         </div>}
         <div onClick={() => { setMediaError(null); setShowMedia(true) }} style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
-          <span style={{ fontSize: 20 }}>🖼️</span>
+          <div style={{ color: T.textMuted }}>{Ic.image('w-5 h-5')}</div>
           <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>Shared Media</div><div style={{ fontSize: 11, color: T.textMuted }}>Files and images shared here</div></div>
           {Ic.chevR()}
         </div>
         <div onClick={() => { setSearchError(null); setShowSearch(true) }} style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
-          <span style={{ fontSize: 20 }}>🔍</span>
+          <div style={{ color: T.textMuted }}>{Ic.search('w-5 h-5')}</div>
           <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>Search Messages</div><div style={{ fontSize: 11, color: T.textMuted }}>Find something in this chat</div></div>
           {Ic.chevR()}
         </div>
         <div style={{ background: T.card, borderRadius: 14, padding: '13px 16px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', opacity: mutingBusy ? 0.6 : 1 }}>
-          <span style={{ fontSize: 20 }}>🔔</span>
+          <div style={{ color: T.textMuted }}>{Ic.bell('w-5 h-5')}</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>Notifications</div>
             <div style={{ fontSize: 11, color: T.textMuted }}>{detail && !detail.viewer_muted ? 'On' : 'Muted'}</div>
