@@ -43,6 +43,11 @@ export function getOfflineUserId(): string | null {
   try { return localStorage.getItem(USER_KEY) } catch { return null }
 }
 
+/** Remove the remembered offline account after the server confirms that the session is no longer authenticated. */
+export function clearOfflineUserId(): void {
+  try { localStorage.removeItem(USER_KEY) } catch {}
+}
+
 function supported(path: string) {
   return path.includes('/documents/') && /(summarize|quiz|flashcards|podcast-script|podcast-audio|mind-map|mindmap)/.test(path)
 }
