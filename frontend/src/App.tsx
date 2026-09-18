@@ -3,6 +3,7 @@ import logoImg from './imports/logo.png'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
 import CallExperience from './crypto/CallExperience'
+import { saveStudyHubDocumentOffline } from './offline/studyHubOffline'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -2015,6 +2016,8 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const [reportSubmitted, setReportSubmitted] = useState(false)
   const [renameVal, setRenameVal] = useState('')
   const [savedToLib, setSavedToLib] = useState(false)
+  const [saveOfflineBusy, setSaveOfflineBusy] = useState(false)
+  const [saveOfflineError, setSaveOfflineError] = useState('')
   const [messages, setMessages] = useState([
     { role: 'ai', text: "I've read your document. I can explain concepts, quiz you, create flashcards, or summarise any section. What would you like to do?" },
   ])
@@ -2092,6 +2095,20 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
       </div>
     )
   }
+  const saveForOfflineStudy = async () => {
+    if (activeDocumentId == null || saveOfflineBusy) return
+    setSaveOfflineBusy(true)
+    setSaveOfflineError('')
+    try {
+      await saveStudyHubDocumentOffline(activeDocumentId)
+      setSavedToLib(true)
+    } catch (e) {
+      setSaveOfflineError(e instanceof Error ? e.message : 'Could not save this document for offline study.')
+    } finally {
+      setSaveOfflineBusy(false)
+    }
+  }
+
   const sendMsg = () => {
     if (!askInput.trim()) return
     const q = askInput; setAskInput('')
@@ -2122,9 +2139,9 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
             {showDots && (
               <div style={{ position: 'absolute', right: 0, top: 40, background: T.card, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, width: 160, overflow: 'hidden' }}>
                 <button onClick={() => { setShowDots(false); setShowRename(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Rename</button>
-                <button onClick={() => { setShowDots(false); setSavedToLib(true); setTimeout(() => setSavedToLib(false), 2000) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Download ↓</button>
+                <button onClick={() => { setShowDots(false); void saveForOfflineStudy() }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Download ↓</button>
                 <button onClick={() => { setShowDots(false); setScreen('share-sheet') }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Share</button>
-                <button onClick={() => { setShowDots(false); setSavedToLib(true); setTimeout(() => setSavedToLib(false), 2000) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Save to Library</button>
+                <button onClick={() => { setShowDots(false); setSavedToLib(true); setTimeout(() => setSavedToLib(false), 2000) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer' }}>Save for offline study</button>
                 <button onClick={() => { setShowDots(false); setShowDelete(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: '#C94C4C', cursor: 'pointer' }}>Delete</button>
                 <button onClick={() => { setShowDots(false); setReportSubmitted(false); setReportError(''); setShowReport(true) }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: '#C94C4C', cursor: 'pointer' }}>Report</button>
               </div>
@@ -2188,7 +2205,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
               { icon: '📝', title: 'Summary', sub: '2-page condensed notes', action: () => setScreen('summary'), color: '#4CC97B' },
               { icon: '🎙️', title: 'Study Podcast', sub: '9 min AI-generated episode', action: () => setScreen('podcast-player'), color: '#C94C4C' },
               { icon: '🗺️', title: 'Mind Map', sub: 'Visual concept overview', action: () => setScreen('mind-map'), color: '#9B59B6' },
-              { icon: '📚', title: 'Save to Library', sub: 'Access offline anytime', action: () => setSavedToLib(true), color: T.textMuted },
+              { icon: 'download', title: 'Save for offline study', sub: 'Keep this document in your Study Hub', action: () => void saveForOfflineStudy(), color: T.textMuted },
             ].map((t, i) => (
               <button key={i} onClick={t.action} style={{ display: 'flex', alignItems: 'center', gap: 12, background: T.card, border: '1px solid rgba(0,0,0,0.04)', borderRadius: 14, padding: '13px 15px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', fontFamily: 'Plus Jakarta Sans' }}>
                 <div style={{ width: 44, height: 44, background: t.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{t.icon}</div>
@@ -2204,7 +2221,9 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
       </div>
 
       <div style={{ padding: '10px 14px 14px', background: T.card, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-        {savedToLib && <div style={{ background: '#D1FAE5', color: '#065F46', fontSize: 12, fontWeight: 700, padding: '8px 14px', borderRadius: 10, marginBottom: 8, textAlign: 'center' }}>✓ Saved to Library</div>}
+        {savedToLib && <div style={{ background: '#D1FAE5', color: '#065F46', fontSize: 12, fontWeight: 700, padding: '8px 14px', borderRadius: 10, marginBottom: 8, textAlign: 'center' }}>Saved for offline study</div>}
+        {saveOfflineBusy && <div style={{ background: T.pageBg, color: T.textMuted, fontSize: 12, fontWeight: 700, padding: '8px 14px', borderRadius: 10, marginBottom: 8, textAlign: 'center' }}>Saving this study offline…</div>}
+        {saveOfflineError && <div style={{ background: '#FEE2E2', color: '#991B1B', fontSize: 12, fontWeight: 700, padding: '8px 14px', borderRadius: 10, marginBottom: 8, textAlign: 'center' }}>{saveOfflineError}</div>}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: T.pageBg, borderRadius: 14, padding: '8px 12px', border: '1px solid rgba(11,20,55,0.08)' }}>
           <input value={askInput} onChange={e => setAskInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMsg()} placeholder="Ask about this document…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: T.text, fontFamily: 'Plus Jakarta Sans' }} />
           <button onClick={sendMsg} style={{ width: 32, height: 32, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
