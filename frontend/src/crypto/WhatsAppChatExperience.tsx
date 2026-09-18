@@ -1,3 +1,5 @@
+import { getCachedChatMessages, cacheChatMessages } from '../offline/chatMessageCache'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './chatRealtime'
 import { ensureE2EEIdentityReady, fetchUserPublicKey, uploadGroupKeyEnvelopes } from './e2eeChatApi'
@@ -127,7 +129,28 @@ export default function WhatsAppChatExperience() {
     if (!visible || view !== 'detail' || selectedId == null) return
     let cancelled = false
     setLoading(true); setError(''); setMessageSearchResults([])
-    Promise.all([api<Detail>(`/chats/${selectedId}`), api<{ messages: Message[] }>(`/chats/${selectedId}/messages`)]).then(([nextDetail, nextMessages]) => { if (cancelled) return; setDetail(nextDetail); setMessages(nextMessages.messages || []); setOnlineUsers(new Set()); joinRealtimeChat(selectedId); sendReadRealtime(selectedId) }).catch(value => { if (!cancelled) setError(friendlyError(value, 'Could not load this conversation.')) }).finally(() => { if (!cancelled) setLoading(false) })
+    const cachedMessagesPromise = getCachedChatMessages(selectedId)
+    Promise.all([
+      api<Detail>(`/chats/${selectedId}`),
+      api<{ messages: Message[] }>(`/chats/${selectedId}/messages`),
+    ]).then(([nextDetail, nextMessages]) => {
+      if (cancelled) return
+      setDetail(nextDetail)
+      setMessages(nextMessages.messages || [])
+      void cacheChatMessages(selectedId, nextMessages.messages || [])
+      setOnlineUsers(new Set())
+      joinRealtimeChat(selectedId)
+      sendReadRealtime(selectedId)
+    }).catch(async value => {
+      const cached = await cachedMessagesPromise
+      if (cancelled) return
+      if (cached) {
+        setMessages(cached as Message[])
+        setError('')
+      } else {
+        setError(friendlyError(value, 'Could not load this conversation.'))
+      }
+    }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true; leaveRealtimeChat(selectedId) }
   }, [visible, view, selectedId])
 
@@ -138,7 +161,7 @@ export default function WhatsAppChatExperience() {
 
   useEffect(() => {
     if (!visible || view !== 'detail' || selectedId == null) return
-    const refresh = () => api<{ messages: Message[] }>(`/chats/${selectedId}/messages`).then(result => setMessages(result.messages || [])).catch(() => {})
+    const refresh = () => api<{ messages: Message[] }>(`/chats/${selectedId}/messages`).then(result => { setMessages(result.messages || []); void cacheChatMessages(selectedId, result.messages || []) }).catch(() => {})
     const onMessage = (event: Event) => { const message = (event as CustomEvent<Message>).detail; if (message?.conversation_id === selectedId) void refresh() }
     const onRead = (event: Event) => { const data = (event as CustomEvent<{ conversation_id?: number; user_id?: number }>).detail; if (data?.conversation_id === selectedId && data.user_id) setMessages(current => current.map(m => m.sender_id === meIdRef.current ? { ...m, read_by_count: Math.max(m.read_by_count || 0, 1) } : m)) }
     const onTyping = (event: Event) => { const data = (event as CustomEvent<{ conversation_id?: number; user_id?: number; typing?: boolean }>).detail; if (data?.conversation_id !== selectedId || !data.user_id || data.user_id === meIdRef.current) return; const id = data.user_id; if (data.typing) { setTypingUsers(current => ({ ...current, [id]: Date.now() })); const old = typingTimeouts.current.get(id); if (old) window.clearTimeout(old); typingTimeouts.current.set(id, window.setTimeout(() => setTypingUsers(current => { const next = { ...current }; delete next[id]; return next }), 2500)) } else { const old = typingTimeouts.current.get(id); if (old) window.clearTimeout(old); setTypingUsers(current => { const next = { ...current }; delete next[id]; return next }) } }
@@ -305,7 +328,7 @@ export default function WhatsAppChatExperience() {
     setUploading(true); setError(''); setAttachOpen(false)
     try { const token = await getCsrfToken(); const init = await api<{ attachment_id: number; upload_url: string }>(`/chats/${selectedId}/attachments`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }) }); const upload = await fetch(init.upload_url, { method: 'PUT', body: file }); if (!upload.ok) throw new Error('Upload failed'); await api(`/chats/${selectedId}/attachments/${init.attachment_id}/uploaded`, { method: 'POST', headers: { 'X-CSRF-Token': token } }); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ attachment_id: init.attachment_id, kind: 'text' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this attachment.')) } finally { setUploading(false) }
   }
-  const loadEarlier = async () => { if (selectedId == null || loadingEarlier || messages.length === 0) return; const firstId = messages[0].id; setLoadingEarlier(true); try { const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages?before_id=${firstId}`); const earlier = result.messages || []; setMessages(current => [...earlier, ...current.filter(message => !earlier.some(old => old.id === message.id))]) } catch (value) { setError(friendlyError(value, 'Could not load earlier messages.')) } finally { setLoadingEarlier(false) } }
+  const loadEarlier = async () => { if (selectedId == null || loadingEarlier || messages.length === 0) return; const firstId = messages[0].id; setLoadingEarlier(true); try { const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages?before_id=${firstId}`); const earlier = result.messages || []; setMessages(current => { const merged = [...earlier, ...current.filter(message => !earlier.some(old => old.id === message.id))]; void cacheChatMessages(selectedId, merged); return merged }) } catch (value) { setError(friendlyError(value, 'Could not load earlier messages.')) } finally { setLoadingEarlier(false) } }
   const runMessageSearch = async () => { if (selectedId == null) return; const q = messageSearch.trim(); if (!q) { setMessageSearchResults([]); return }; try { const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages/search?q=${encodeURIComponent(q)}`); setMessageSearchResults(result.messages || []) } catch (value) { setError(friendlyError(value, 'Could not search this chat.')) } }
   const openAda = () => window.dispatchEvent(new CustomEvent('prepza-open-ada', { detail: { conversationId: selectedId } }))
   if (!visible) return null
