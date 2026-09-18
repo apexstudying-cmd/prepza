@@ -146,9 +146,15 @@ def _ensure_schema(db):
     db.session.commit()
 
 
-def _period_start():
+def _period_start(plan):
+    """Return the quota period start for the student plan cadence."""
     now = datetime.utcnow()
-    return now.date().replace(day=1)
+    if plan.get("billing_period") == "semester":
+        month_index = ((now.month - 1) // 3) * 3 + 1
+        return date(now.year, month_index, 1)
+    if plan.get("billing_period") == "annual":
+        return date(now.year, 1, 1)
+    return date(now.year, now.month, 1)
 
 
 def _csrf_ok():
@@ -178,7 +184,7 @@ def _usage_row(db, user_id, feature):
         SELECT units, requests
         FROM student_ai_usage
         WHERE user_id = :uid AND period_start = :period AND feature = :feature
-    """), {"uid": user_id, "period": _period_start(), "feature": feature}).mappings().first()
+    """), {"uid": user_id, "period": _period_start(plan), "feature": feature}).mappings().first()
 
 
 def check_and_consume_ai_quota(db, user_id, feature, units):
@@ -208,7 +214,7 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
             "max_units": max_units,
         }
 
-    period = _period_start()
+    period = _period_start(plan)
     db.session.execute(text("""
         INSERT INTO student_ai_usage
             (user_id, period_start, feature, units, requests, updated_at)
@@ -355,6 +361,15 @@ def register_usage_billing(app, db):
         # exact online timestamps are never exposed.
         days = request.args.get("days", default=7, type=int)
         days = max(1, min(30, days))
+        billing_row = db.session.execute(text("""
+            SELECT plan_code, active_user_cap
+            FROM organisation_billing
+            WHERE organisation_id = :oid
+        """), {"oid": organisation_id}).mappings().first()
+        plan_code = str((billing_row or {}).get("plan_code") or "launch")
+        plan = ORGANISATION_PLANS.get(plan_code, ORGANISATION_PLANS["launch"])
+        candidate_limit = int(plan["active_user_cap"] or 5000)
+
         rows = db.session.execute(text("""
             SELECT
                 u.id,
@@ -381,11 +396,13 @@ def register_usage_billing(app, db):
                      u.program_id, p.name, u.year, u.semester
             HAVING COUNT(a.activity_date) > 0
             ORDER BY active_days DESC, sessions DESC, u.id DESC
-            LIMIT 500
-        """), {"days": days - 1}).mappings().all()
+            LIMIT :candidate_limit
+        """), {"days": days - 1, "candidate_limit": candidate_limit}).mappings().all()
 
         return jsonify({
             "window_days": days,
+            "plan": plan_code,
+            "candidate_limit": candidate_limit,
             "candidates": [
                 {
                     "id": int(row["id"]),
@@ -424,7 +441,7 @@ def register_usage_billing(app, db):
             "billing_period": plan["billing_period"],
             "limits": plan,
             "usage": usage,
-            "period_start": _period_start().isoformat(),
+            "period_start": _period_start(plan).isoformat(),
         })
 
     @app.get("/api/student-plans")
@@ -545,12 +562,17 @@ def register_usage_billing(app, db):
         if role not in ("owner", "manager"):
             return jsonify({"error": "Organisation membership required"}), 403
 
-        since = date.today() - timedelta(days=6)
-        count = len(_active_user_ids(db, since))
+        today = date.today()
+        dau = len(_active_user_ids(db, today))
+        wau = len(_active_user_ids(db, today - timedelta(days=6)))
+        mau = len(_active_user_ids(db, today - timedelta(days=29)))
         return jsonify({
-            "active_users_last_7_days": count,
+            "dau": dau,
+            "wau": wau,
+            "mau": mau,
             "online_now": None,
-            "online_note": "Prepza does not expose individual live presence to organisations; active audience is measured over rolling windows.",
+            "online_note": "Live presence is not sold as a billing metric. Prepza bills organisations on audience bands and measures DAU/WAU/MAU from meaningful engagement.",
+            "active_definition": "At least 10 seconds of foreground engagement in a day or a core product action. Signup/login alone does not count.",
         })
 
     @app.post("/api/organisations/<int:organisation_id>/plan")
