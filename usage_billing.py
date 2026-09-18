@@ -26,6 +26,7 @@ STUDENT_PLANS = {
     "free": {
         "price_kes": 0,
         "billing_period": "month",
+        "quota_period": "month",
         "summary_generations": 3,
         "summary_max_pages": 2,
         "podcast_generations": 1,
@@ -37,6 +38,7 @@ STUDENT_PLANS = {
     "premium": {
         "price_kes": 599,
         "billing_period": "semester",
+        "quota_period": "month",
         "summary_generations": 30,
         "summary_max_pages": 10,
         "podcast_generations": 4,
@@ -147,12 +149,9 @@ def _ensure_schema(db):
 
 
 def _period_start(plan):
-    """Return the quota period start for the student plan cadence."""
+    """Return the quota period start without tying usage to billing cadence."""
     now = datetime.utcnow()
-    if plan.get("billing_period") == "semester":
-        month_index = ((now.month - 1) // 3) * 3 + 1
-        return date(now.year, month_index, 1)
-    if plan.get("billing_period") == "annual":
+    if plan.get("quota_period") == "annual":
         return date(now.year, 1, 1)
     return date(now.year, now.month, 1)
 
