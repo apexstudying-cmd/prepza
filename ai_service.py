@@ -178,9 +178,9 @@ AI_TASKS = {
 
 _PRICING_SCHEDULE = {
     MODEL_SONNET_5: [
-        # (effective_from, input_per_mtok, output_per_mtok)
+        # Anthropic's current official price is $2/$10 per MTok. The
+        # previously announced Sep-2026 increase to $3/$15 was cancelled.
         (datetime(2000, 1, 1), Decimal("2.00"), Decimal("10.00")),
-        (datetime(2026, 8, 31), Decimal("3.00"), Decimal("15.00")),
     ],
     MODEL_HAIKU_4_5: [
         (datetime(2000, 1, 1), Decimal("1.00"), Decimal("5.00")),
