@@ -58,7 +58,7 @@ function buildReactionState(messages: Message[]) { const state: ReactionState = 
 function isImage(fileType: string) { return /^(jpg|jpeg|png|gif|webp)$/i.test(fileType) || fileType.startsWith('image/') }
 function isAudio(fileType: string) { return /^(webm|ogg|mp3|m4a|wav|aac|mp4)$/i.test(fileType) || fileType.startsWith('audio/') }
 
-export default function WhatsAppChatExperience() {
+export default function WhatsAppChatExperience({ onClose }: { onClose?: () => void }) {
   const [visible, setVisible] = useState(false)
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -180,7 +180,7 @@ export default function WhatsAppChatExperience() {
   const typingNames = Object.keys(typingUsers).map(id => detail?.participants.find(p => p.user_id === Number(id))?.display_name || 'Someone')
   const headerName = detail?.name || 'Conversation'
   const isGroup = Boolean(detail?.is_group)
-  const closeExperience = () => { suppressObserverUntil = Date.now() + 2500; if (selectedId != null) leaveRealtimeChat(selectedId); setVisible(false); setView('list'); setSelectedId(null); setDetail(null); setMessages([]); setTypingUsers({}); setReactionPicker(null) }
+  const closeExperience = () => { suppressObserverUntil = Date.now() + 2500; if (selectedId != null) leaveRealtimeChat(selectedId); setVisible(false); setView('list'); setSelectedId(null); setDetail(null); setMessages([]); setTypingUsers({}); setReactionPicker(null); onClose?.() }
   const chooseChat = (id: number) => { setSelectedId(id); setView('detail'); setVisible(true); setMessageSearchOpen(false); setMessageSearch('') }
   const backToList = () => { if (selectedId != null) leaveRealtimeChat(selectedId); setView('list'); setSelectedId(null); setDetail(null); setMessages([]); setReactionPicker(null); void loadList() }
 
