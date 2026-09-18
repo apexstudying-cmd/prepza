@@ -1112,7 +1112,8 @@ type FollowListUser = { user_id: number; display_name: string; is_following: boo
 type PublicProfile = {
   user_id: number; display_name: string; bio: string | null; year: number | null
   university_name: string | null; program_name: string | null
-  documents_count: number; xp_total: number
+  documents_count: number; xp_total: number; weekly_study_seconds: number
+  is_private?: boolean
 }
 
 type PodcastItem = { document_id: number; title: string; audio_status: string; duration_seconds: number | null; created_at: string | null }
@@ -4186,6 +4187,12 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>{error}</div>
           </div>
+        ) : profile?.is_private ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <div style={{ marginBottom: 14 }}><Avi name={initials} size={72} /></div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 4 }}>{displayName}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>This profile is private.</div>
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
             <div style={{ marginBottom: 14 }}><Avi name={initials} size={72} /></div>
@@ -4201,7 +4208,7 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
           </div>
         )}
       </div>
-      {!loading && !error && summary && profile && (
+      {!loading && !error && summary && profile && !profile.is_private && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, padding: '16px 16px 0' }}>
           <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
             <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{profile.xp_total.toLocaleString()}</div>
@@ -4218,6 +4225,10 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
           <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
             <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{profile.documents_count}</div>
             <div style={{ fontSize: 11, color: T.textMuted }}>Documents</div>
+          </div>
+          <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{formatStudyTime(profile.weekly_study_seconds)}</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Time</div>
           </div>
         </div>
       )}
@@ -4431,6 +4442,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
 function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [notifs, setNotifs] = useState({ push: true, messages: true, opportunities: false, community: true, reminders: true })
   const [priv, setPriv] = useState({ profilePublic: true, whoMessages: false, whoFollows: true })
+  const [privacyBusy, setPrivacyBusy] = useState(false)
   const [showLogout, setShowLogout] = useState(false)
   const [showModal, setShowModal] = useState<string|null>(null)
 
@@ -4500,10 +4512,11 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   useEffect(() => {
-    api<{ email: string; csrf_token: string; university_id: number | null; program_id: number | null }>('/me')
+    api<{ email: string; csrf_token: string; university_id: number | null; program_id: number | null; profile_visibility?: string; who_can_message?: string; who_can_follow?: string; year?: number; semester?: number }>('/me')
       .then(me => {
         setCsrfToken(me.csrf_token)
         setEmail(me.email)
+        setPriv({ profilePublic: me.profile_visibility !== 'private', whoMessages: me.who_can_message === 'everyone', whoFollows: me.who_can_follow === 'everyone' })
         if (me.university_id != null) {
           api<UniversityOption[]>('/universities')
             .then(list => setUniName(list.find(u => u.id === me.university_id)?.name ?? null))
@@ -4603,7 +4616,18 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </Section>
 
         <Section title="Privacy">
-          <Row label="Profile Visibility" right={<div onClick={() => setPriv(p => ({ ...p, profilePublic: !p.profilePublic }))}>{Ic.toggle(priv.profilePublic)}</div>} sub={priv.profilePublic ? 'Public' : 'Private'} />
+          <Row label="Profile Visibility" right={<div onClick={async e => {
+            e.stopPropagation()
+            if (privacyBusy) return
+            const next = !priv.profilePublic
+            setPrivacyBusy(true)
+            try {
+              const me = await api<{ year: number; semester: number }>('/me')
+              await api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ year: me.year, semester: me.semester, profile_visibility: next ? 'public' : 'private' }) })
+              setPriv(p => ({ ...p, profilePublic: next }))
+            } catch { /* keep the previous value if saving fails */ }
+            finally { setPrivacyBusy(false) }
+          }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.profilePublic)}</div>} sub={priv.profilePublic ? 'Public' : 'Private'} />
           <Row label="Who can message me" right={<div onClick={() => setPriv(p => ({ ...p, whoMessages: !p.whoMessages }))}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
           <Row label="Who can follow me" right={<div onClick={() => setPriv(p => ({ ...p, whoFollows: !p.whoFollows }))}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
         </Section>
