@@ -45,3 +45,9 @@ CREATE TABLE IF NOT EXISTS organisation_campaign_meter (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (organisation_id, period_start)
 );
+
+CREATE TABLE IF NOT EXISTS student_opportunity_discovery (
+    user_id INTEGER PRIMARY KEY,
+    discoverable BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
