@@ -2375,33 +2375,76 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
+  const [offlineSrc, setOfflineSrc] = useState<string | null>(null)
   const readerRef = useRef<HTMLDivElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
     let cancelled = false
-    Promise.all([
-      api<DocumentDetail>(`/documents/${activeDocumentId}`),
-      api<{page_num:number}>(`/documents/${activeDocumentId}/reading`),
-      api<{csrf_token:string}>('/me'),
-    ])
-      .then(([detail, progress, me]) => {
+    let objectUrl: string | null = null
+    setLoading(true); setError(''); setOfflineSrc(null); setDoc(null)
+    const loadLocal = async () => {
+      const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
+      if (!Number.isInteger(userId) || userId <= 0) throw new Error('No offline study account is available.')
+      const meta = await getSavedStudyHubOffline(activeDocumentId, userId)
+      if (!meta) throw new Error('This document has not been saved for offline study.')
+      const url = await getOfflineStudyDocumentUrl(activeDocumentId, userId)
+      if (!url) throw new Error('The saved offline study copy is unavailable.')
+      objectUrl = url
+      return {
+        id: activeDocumentId,
+        title: meta.title || 'Saved study document',
+        original_filename: meta.title || 'Study document',
+        status: 'ready',
+        file_type: meta.fileType || 'pdf',
+        file_size_bytes: null,
+        page_count: meta.pageCount || null,
+        error_message: null,
+        view_url: null,
+        materials: [],
+        created_at: new Date(meta.savedAt).toISOString(),
+      } as DocumentDetail
+    }
+    const load = async () => {
+      try {
+        if (!navigator.onLine) {
+          const localDoc = await loadLocal()
+          if (!cancelled) { setDoc(localDoc); setOfflineSrc(objectUrl) }
+          return
+        }
+        const [detail, progress, me] = await Promise.all([
+          api<DocumentDetail>(`/documents/${activeDocumentId}`),
+          api<{page_num:number}>(`/documents/${activeDocumentId}/reading`),
+          api<{csrf_token:string}>('/me'),
+        ])
         if (cancelled) return
         setDoc(detail)
         setPage(progress.page_num || 0)
         setSavedPage(progress.page_num || 0)
         setCsrfToken(me.csrf_token)
-      })
-      .catch(e => { if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not open this document.') })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
+      } catch (e) {
+        try {
+          const localDoc = await loadLocal()
+          if (!cancelled) { setDoc(localDoc); setOfflineSrc(objectUrl); setPage(0); setSavedPage(0) }
+        } catch (_) {
+          if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not open this document.')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
   }, [activeDocumentId])
 
   useEffect(() => {
     if (activeDocumentId == null || !csrfToken) return
     const ping = () => {
-      if (document.visibilityState !== 'visible') return
+      if (!navigator.onLine || document.visibilityState !== 'visible') return
       api('/study-time/heartbeat', {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
@@ -2414,9 +2457,10 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
   }, [activeDocumentId, csrfToken])
 
   useEffect(() => {
-    if (activeDocumentId == null || !csrfToken || page === savedPage) return
+    if (activeDocumentId == null || !csrfToken || offlineSrc || page === savedPage) return
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
+      if (!navigator.onLine) return
       api(`/documents/${activeDocumentId}/reading`, {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
@@ -2426,11 +2470,11 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [activeDocumentId, csrfToken, page, savedPage])
+  }, [activeDocumentId, csrfToken, page, savedPage, offlineSrc])
 
   useEffect(() => {
     const root = readerRef.current
-    if (!root || !doc?.page_count) return
+    if (!root || !doc?.page_count || offlineSrc) return
     const nodes = Array.from(root.querySelectorAll<HTMLElement>('[data-reader-page]'))
     if (!nodes.length) return
     const observer = new IntersectionObserver(entries => {
@@ -2443,12 +2487,28 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
     }, { root, threshold: [0.25, 0.5, 0.75] })
     nodes.forEach(node => observer.observe(node))
     return () => observer.disconnect()
-  }, [doc?.page_count, loading])
+  }, [doc?.page_count, loading, offlineSrc])
 
   if (loading) return <GenerationLoading label="Opening your document…" />
   if (error) return <GenerationError error={error} />
   if (!doc || activeDocumentId == null) return <GenerationError error="Document unavailable." />
   if (doc.file_type !== 'pdf') return <GenerationError error="Native reading currently supports PDF documents only." />
+
+  if (offlineSrc) {
+    return <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#111827' }}>
+      <div style={{ background: N.navy, padding: '10px 14px 12px', flexShrink: 0, zIndex: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => window.history.back()} aria-label="Back" style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#fff', fontWeight: 800, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.title}</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 }}>Offline study copy</div>
+          </div>
+          <div style={{ color: N.gold, fontSize: 10, fontWeight: 800 }}>OFFLINE</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}><PdfStudyCanvas src={offlineSrc} title={doc.title} onPageChange={p => setPage(Math.max(0, p - 1))} /></div>
+    </div>
+  }
 
   const count = Math.max(1, doc.page_count || 1)
   const current = Math.min(Math.max(page, 0), count - 1)
@@ -2457,13 +2517,7 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
   return <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#111827' }}>
     <div style={{ background: N.navy, padding: '10px 14px 12px', flexShrink: 0, zIndex: 5 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button
-          onClick={() => window.history.back()}
-          aria-label="Back"
-          style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-        >
-          <div style={{ color: '#fff' }}>{Ic.back()}</div>
-        </button>
+        <button onClick={() => window.history.back()} aria-label="Back" style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ color: '#fff', fontWeight: 800, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.title}</div>
           <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 }}>Page {current + 1} of {count}</div>
@@ -2475,59 +2529,18 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
         </div>
         <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10, fontWeight: 800, flexShrink: 0 }}>{Math.round(progress)}%</div>
       </div>
-      <div style={{ marginTop: 10, height: 3, background: 'rgba(255,255,255,0.12)', borderRadius: 99, overflow: 'hidden' }}>
-        <div style={{ width: `${progress}%`, height: '100%', background: N.gold, transition: 'width 0.15s ease-out' }} />
-      </div>
+      <div style={{ marginTop: 10, height: 3, background: 'rgba(255,255,255,0.12)', borderRadius: 99, overflow: 'hidden' }}><div style={{ width: `${progress}%`, height: '100%', background: N.gold, transition: 'width 0.15s ease-out' }} /></div>
     </div>
-
-    <div
-      ref={readerRef}
-      style={{
-        flex: 1,
-        minHeight: 0,
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        padding: '12px 8px 28px',
-        WebkitOverflowScrolling: 'touch',
-        overscrollBehaviorY: 'contain',
-      }}
-      className="scrollbar-hide"
-    >
+    <div ref={readerRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '12px 8px 28px', WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="scrollbar-hide">
       <div style={{ width: 'min(100%, 980px)', margin: '0 auto' }}>
         {Array.from({ length: count }, (_, index) => {
           const pageUrl = `/documents/${activeDocumentId}/reading/page/${index}`
           const isCurrent = index === current
-          return (
-            <div
-              key={pageUrl}
-              data-reader-page={index}
-              style={{
-                margin: '0 auto 12px',
-                width: '100%',
-                display: 'flex',
-                justifyContent: 'center',
-                scrollMarginTop: 12,
-                position: 'relative',
-              }}
-            >
-              <div style={{ width: '100%', overflowX: zoom > 1 ? 'auto' : 'hidden' }}>
-                <img
-                src={pageUrl}
-                alt={`Page ${index + 1} of ${doc.title}`}
-                loading={index < 2 ? 'eager' : 'lazy'}
-                decoding="async"
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  height: 'auto',
-                  background: '#fff',
-                  boxShadow: '0 3px 18px rgba(0,0,0,0.28)',
-                  outline: isCurrent ? `1px solid ${N.gold}55` : 'none',
-                }}
-                />
-              </div>
+          return <div key={pageUrl} data-reader-page={index} style={{ margin: '0 auto 12px', width: '100%', display: 'flex', justifyContent: 'center', scrollMarginTop: 12, position: 'relative' }}>
+            <div style={{ width: '100%', overflowX: zoom > 1 ? 'auto' : 'hidden' }}>
+              <img src={pageUrl} alt={`Page ${index + 1} of ${doc.title}`} loading={index < 2 ? 'eager' : 'lazy'} decoding="async" style={{ display: 'block', width: '100%', height: 'auto', background: '#fff', boxShadow: '0 3px 18px rgba(0,0,0,0.28)', outline: isCurrent ? `1px solid ${N.gold}55` : 'none' }} />
             </div>
-          )
+          </div>
         })}
       </div>
     </div>
