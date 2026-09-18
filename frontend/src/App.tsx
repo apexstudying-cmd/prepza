@@ -13973,6 +13973,57 @@ export default function App() {
     } catch { /* storage can be unavailable in private browsing */ }
   }, [screenStack, activeConversationId, activeDocumentId, activeGroupId, activeProfileUserId, activeOpportunityId])
 
+  // Product activity is measured separately from authentication. A signed-in
+  // user only becomes an active user after meaningful foreground engagement
+  // or a core action; this heartbeat feeds the organisation audience meter.
+  useEffect(() => {
+    let timer: number | null = null
+    let stopped = false
+    let engagedSeconds = 0
+    let lastTick = Date.now()
+    let csrfToken = ''
+
+    const sendHeartbeat = async (sessionStart = false) => {
+      if (stopped || document.visibilityState !== 'visible') return
+      const now = Date.now()
+      const elapsed = Math.max(0, Math.min(60, Math.round((now - lastTick) / 1000)))
+      lastTick = now
+      engagedSeconds = Math.min(120, engagedSeconds + elapsed)
+      try {
+        if (!csrfToken) {
+          const me = await api<{ csrf_token: string }>('/me')
+          csrfToken = me.csrf_token || ''
+        }
+        if (!csrfToken) return
+        await api('/api/analytics/heartbeat', {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': csrfToken },
+          body: JSON.stringify({
+            session_start: sessionStart,
+            engagement_seconds: sessionStart ? 0 : elapsed,
+            core_actions: 0,
+          }),
+        })
+      } catch {
+        // Activity metering is non-blocking; never interrupt study/chat flows.
+      }
+    }
+
+    const onVisibility = () => {
+      lastTick = Date.now()
+      if (document.visibilityState === 'visible') void sendHeartbeat(false)
+    }
+
+    void sendHeartbeat(true)
+    timer = window.setInterval(() => { void sendHeartbeat(false) }, 30_000)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      stopped = true
+      if (timer !== null) window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
+
   // Handles the round-trip back from /auth/google/callback, which appends
   // ?complete_profile=1 (new Google account, needs university/course/year/
   // semester) or ?auth_error=... (Google sign-in failed) to the redirect.
