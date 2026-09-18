@@ -453,17 +453,46 @@ function DocumentStudyHubScreen({
     }
     setLoading(true)
     setError('')
-    Promise.all([
-      api<DocumentDetail>(`/documents/${activeDocumentId}`),
-      api<{ page_num: number }>(`/documents/${activeDocumentId}/reading`),
-    ])
-      .then(([data, progress]) => {
+    const load = async () => {
+      try {
+        if (!navigator.onLine) throw new Error('offline')
+        const [data, progress] = await Promise.all([
+          api<DocumentDetail>(`/documents/${activeDocumentId}`),
+          api<{ page_num: number }>(`/documents/${activeDocumentId}/reading`),
+        ])
         if (cancelled) return
         setDocument(data)
         setReadingPage(Math.max(0, progress.page_num || 0))
-      })
-      .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Could not open this document.') })
-      .finally(() => { if (!cancelled) setLoading(false) })
+      } catch (err) {
+        try {
+          const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
+          if (!Number.isInteger(userId) || userId <= 0) throw new Error('No offline account')
+          const saved = await getSavedStudyHubOffline(activeDocumentId, userId)
+          if (!saved) throw new Error('Not saved offline')
+          if (cancelled) return
+          setDocument({
+            id: activeDocumentId,
+            title: saved.title || 'Saved study document',
+            original_filename: saved.title || 'Study document',
+            status: 'ready',
+            file_type: saved.fileType || 'pdf',
+            file_size_bytes: null,
+            page_count: saved.pageCount || null,
+            error_message: null,
+            view_url: null,
+            materials: [],
+            created_at: new Date(saved.savedAt).toISOString(),
+          })
+          setReadingPage(0)
+          return
+        } catch (_) {
+          if (!cancelled) setError(err instanceof ApiError ? err.message : 'Could not open this document.')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
     return () => { cancelled = true }
   }, [activeDocumentId])
 
