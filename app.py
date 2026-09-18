@@ -2001,6 +2001,10 @@ def sync_paystack_payment_status(reference):
             payment.status = "failed"
         else:
             payment.status = "success"
+            if payment.payment_type == "promotion" and payment.opportunity_promotion_id:
+                promo = db.session.get(OpportunityPromotion, payment.opportunity_promotion_id)
+                if promo:
+                    promo.payment_status = "success"
             if payment.payment_type == "subscription" and payment.plan:
                 payment.subscription_expires_at = compute_new_subscription_expiry(
                     payment.user_id, payment.plan
@@ -2008,6 +2012,10 @@ def sync_paystack_payment_status(reference):
             _maybe_award_referral_commission(payment)
     elif tx_status in ("failed", "abandoned", "reversed"):
         payment.status = "failed"
+        if payment.payment_type == "promotion" and payment.opportunity_promotion_id:
+            promo = db.session.get(OpportunityPromotion, payment.opportunity_promotion_id)
+            if promo and promo.payment_status != "success":
+                promo.payment_status = "failed"
     # else: still processing on Paystack's side, leave as pending
 
     db.session.commit()
@@ -13201,7 +13209,7 @@ def _get_active_promotions_map(opportunity_ids):
     rows = OpportunityPromotion.query.filter(
         OpportunityPromotion.opportunity_id.in_(opportunity_ids),
         OpportunityPromotion.approval_status == "approved",
-        db.or_(OpportunityPromotion.price == 0, OpportunityPromotion.payment_status == "success"),
+        or_(OpportunityPromotion.price == 0, OpportunityPromotion.payment_status == "success"),
         OpportunityPromotion.start_date <= now,
         OpportunityPromotion.end_date >= now,
     ).all()
