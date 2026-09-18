@@ -14,6 +14,38 @@ from flask import jsonify, request, session
 def register_offline_activity_routes(app, db):
     from app import StudyTimeLog, StudyActivityLog, StudyStreak, require_csrf
 
+    @app.route('/study-time/offline-baselines')
+    def offline_study_time_baselines():
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Not logged in'}), 401
+
+        raw_dates = (request.args.get('dates') or '').split(',')
+        dates = []
+        for raw_date in raw_dates[:31]:
+            value = (raw_date or '').strip()
+            try:
+                activity_date = datetime.strptime(value, '%Y-%m-%d').date()
+            except (TypeError, ValueError):
+                continue
+            if activity_date > datetime.utcnow().date() or activity_date < datetime.utcnow().date() - timedelta(days=366):
+                continue
+            dates.append(activity_date)
+        dates = sorted(set(dates))
+        if not dates:
+            return jsonify({'server_total_seconds_by_date': {}})
+
+        rows = db.session.query(
+            StudyTimeLog.activity_date,
+            db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0),
+        ).filter(
+            StudyTimeLog.user_id == user_id,
+            StudyTimeLog.activity_date.in_(dates),
+        ).group_by(StudyTimeLog.activity_date).all()
+
+        totals = {date.isoformat(): min(8 * 60 * 60, max(0, int(seconds or 0))) for date, seconds in rows}
+        return jsonify({'server_total_seconds_by_date': totals})
+
     @app.route('/study-time/offline-sync', methods=['POST'])
     @require_csrf
     def sync_offline_study_time():
