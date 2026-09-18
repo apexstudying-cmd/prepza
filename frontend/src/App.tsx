@@ -4164,7 +4164,7 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button type="button" onClick={() => setScreen('chat-options')} aria-label="Back to chat info" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
         </div>
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
@@ -6239,7 +6239,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
         <div style={{ background: N.navy, padding: '0 18px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+            <button type="button" onClick={() => setScreen('chat-detail')} aria-label="Back to chat" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
             <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Chat Info</span>
           </div>
         </div>
@@ -6255,7 +6255,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg, position: 'relative' }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button type="button" onClick={() => setScreen('chat-detail')} aria-label="Back to chat" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>{detail?.is_group ? 'Group Info' : 'Chat Info'}</span>
         </div>
         {error ? (
