@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'
-type Props = { src: string; title: string; onPageChange?: (page: number) => void; onTextSelection?: (text: string) => void }
+type Props = { src: string; title: string; storageKey?: string; onPageChange?: (page: number) => void; onTextSelection?: (text: string) => void }
 type Tool = 'select' | 'highlight' | 'underline' | 'strike' | 'pen' | 'eraser' | 'note' | 'rect' | 'arrow'
 type Annotation = { id: string; page: number; tool: Exclude<Tool, 'select'>; x: number; y: number; w: number; h: number; text?: string; points?: Array<[number, number]> }
 const MIN_ZOOM = 0.5, MAX_ZOOM = 3, ZOOM_STEP = 0.15
@@ -22,10 +22,14 @@ function saveAnnotations(key: string, value: Annotation[]): boolean {
 function loadBookmarks(key: string): number[] { try { const value = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(value) ? value.filter(v => Number.isInteger(v) && v > 0) : [] } catch { return [] } }
 function saveBookmarks(key: string, value: number[]) { try { localStorage.setItem(key, JSON.stringify(value)) } catch {} }
 function textStyle(item: PdfTextItem, pageHeight: number) { const fontSize = Math.max(6, Math.hypot(item.transform[2], item.transform[3]) || item.height); const x = item.transform[4]; const y = pageHeight - item.transform[5] - fontSize; return { left: x, top: y, width: Math.max(item.width, 1), height: Math.max(item.height, fontSize), fontSize } }
-export default function PdfStudyCanvas({ src, title, onPageChange, onTextSelection }: Props) {
+export default function PdfStudyCanvas({ src, title, storageKey, onPageChange, onTextSelection }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null), stageRef = useRef<HTMLDivElement | null>(null), overlayRef = useRef<HTMLDivElement | null>(null), documentRef = useRef<PdfDocument | null>(null), tokenRef = useRef(0), undoRef = useRef<Annotation[][]>([])
   const [page, setPage] = useState(1), [pages, setPages] = useState(0), [zoom, setZoom] = useState(1), [loading, setLoading] = useState(true), [error, setError] = useState(''), [text, setText] = useState<PdfTextItem[]>([]), [tool, setTool] = useState<Tool>('select'), [annotations, setAnnotations] = useState<Annotation[]>([]), [search, setSearch] = useState(''), [searchMatches, setSearchMatches] = useState<number[]>([]), [note, setNote] = useState(''), [bookmarks, setBookmarks] = useState<number[]>([]), [selectedRange, setSelectedRange] = useState<DOMRect[]>([]), [selectedText, setSelectedText] = useState('')
-  const annotationKey = `${STORE}:${src}`, bookmarkKey = `${BOOKMARKS}:${src}`
+  // Signed/blob URLs can change across refreshes and cold restarts. Use the
+  // stable document identity supplied by the caller whenever available so
+  // offline annotations and bookmarks survive a new object URL.
+  const stableStudyKey = storageKey || src
+  const annotationKey = `${STORE}:${stableStudyKey}`, bookmarkKey = `${BOOKMARKS}:${stableStudyKey}`
   useEffect(() => { setAnnotations(loadAnnotations(annotationKey)); undoRef.current = []; setBookmarks(loadBookmarks(bookmarkKey)) }, [annotationKey, bookmarkKey])
   const commitAnnotations = (next: Annotation[]) => {
     const bounded = next.length > MAX_ANNOTATIONS ? next.slice(-MAX_ANNOTATIONS) : next
