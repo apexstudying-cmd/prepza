@@ -483,7 +483,12 @@ function DocumentStudyHubScreen({
             materials: [],
             created_at: new Date(saved.savedAt).toISOString(),
           })
-          setReadingPage(0)
+          let offlinePage = 0
+          try {
+            const storedPage = Number(localStorage.getItem(`prepza-offline-reading:${userId}:${activeDocumentId}`) || 0)
+            if (Number.isInteger(storedPage) && storedPage >= 0) offlinePage = storedPage
+          } catch (_) {}
+          setReadingPage(offlinePage)
           return
         } catch (_) {
           if (!cancelled) setError(err instanceof ApiError ? err.message : 'Could not open this document.')
