@@ -474,7 +474,7 @@ function DocumentStudyHubScreen({
             ['summary', `/documents/${activeDocumentId}/summarize`],
             ['flashcards', `/documents/${activeDocumentId}/flashcards`],
             ['quiz', `/documents/${activeDocumentId}/quiz`],
-            ['mind_map', `/documents/${activeDocumentId}/mind-map`],
+            ['mind_map', `/documents/${activeDocumentId}/mindmap`],
             ['podcast', `/documents/${activeDocumentId}/podcast-audio`],
           ].map(async ([type, path]) => {
             const payload = await getLatestGeneratedMaterialForPath(path)
