@@ -125,13 +125,19 @@ async function getMeta(key: string): Promise<SavedStudyHubMeta | undefined> {
 }
 
 async function getAllMeta(userId?: number): Promise<SavedStudyHubMeta[]> {
+  const effectiveUserId = Number.isInteger(userId) && Number(userId) > 0
+    ? Number(userId)
+    : Number(localStorage.getItem('prepza-offline-user-id') || 0)
+  if (!Number.isInteger(effectiveUserId) || effectiveUserId <= 0) return []
   const db = await openMetaDb()
   try {
     return await new Promise<SavedStudyHubMeta[]>((resolve, reject) => {
       const tx = db.transaction(META_STORE, 'readonly')
       const request = tx.objectStore(META_STORE).getAll()
       request.onsuccess = () => {
-        const rows = (request.result as SavedStudyHubMeta[]).filter(row => !userId || row.userId === userId)
+        // Never expose another account's offline packages, even when a
+        // caller omits the optional user id.
+        const rows = (request.result as SavedStudyHubMeta[]).filter(row => row.userId === effectiveUserId)
         rows.sort((a, b) => b.savedAt - a.savedAt)
         resolve(rows)
       }
