@@ -3289,6 +3289,25 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
       .catch(() => {})
   }, [])
 
+  // Keep inbox previews, timestamps and unread badges fresh while the user
+  // remains on the Chats screen. Realtime already emits this event.
+  useEffect(() => {
+    let timer: number | null = null
+    const refresh = () => {
+      if (timer) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        api<{ chats: ChatSummary[] }>('/chats')
+          .then(data => { setChats(data.chats); CHATS_CACHE.chats = data.chats })
+          .catch(() => {})
+      }, 250)
+    }
+    window.addEventListener('prepza-realtime-message', refresh)
+    return () => {
+      window.removeEventListener('prepza-realtime-message', refresh)
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [])
+
   useEffect(() => {
     if (tab !== 'Requests' || requestsLoaded) return
     setRequestsLoading(true)
@@ -3503,9 +3522,21 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
           const canOpenProfile = !chat.is_group
           const openProfile = async (event: React.MouseEvent) => {
             event.stopPropagation()
-            if (chat.is_group || currentUserId == null) return
+            if (chat.is_group) return
+
+            // Direct chats now include the peer id in the inbox response,
+            // so a profile tap opens immediately without another request.
+            if (chat.peer_user_id != null) {
+              setActiveProfileUserId?.(chat.peer_user_id)
+              setActiveProfileName?.(chat.name)
+              setScreen('student-profile')
+              return
+            }
+
+            // Backward-compatible fallback for older API responses.
+            if (currentUserId == null) return
             try {
-              const detail = await api<ChatDetail>(`/chats/${chat.id}`)
+              const detail = await api<ChatDetail>('/chats/' + chat.id)
               const peer = detail.participants.find(p => p.user_id !== currentUserId)
               if (!peer) return
               setActiveProfileUserId?.(peer.user_id)
