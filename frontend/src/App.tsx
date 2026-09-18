@@ -13651,6 +13651,8 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
   const [items, setItems] = useState<OrgOpportunity[]>([])
   const [audience, setAudience] = useState<any>(null)
   const [billingBusy, setBillingBusy] = useState<string | null>(null)
+  const [candidates, setCandidates] = useState<any[]>([])
+  const [candidatesLoading, setCandidatesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -13659,8 +13661,13 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
     Promise.all([
       api<{ opportunities: OrgOpportunity[] }>(`/organisations/${orgId}/opportunities`),
       api(`/api/organisations/${orgId}/audience`),
+      api(`/api/organisations/${orgId}/candidates?days=7`),
     ])
-      .then(([oppRes, audienceRes]) => { setItems(oppRes.opportunities); setAudience(audienceRes) })
+      .then(([oppRes, audienceRes, candidateRes]) => {
+        setItems(oppRes.opportunities)
+        setAudience(audienceRes)
+        setCandidates(candidateRes.candidates || [])
+      })
       .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load analytics.'))
       .finally(() => setLoading(false))
   }, [orgId])
@@ -13715,7 +13722,7 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
           <strong style={{ color: N.navy }}>{cap ? `${mau.toLocaleString()} / ${cap.toLocaleString()} MAU` : 'Custom'}</strong>
         </div>
         {cap && <div style={{ height: 6, background: '#EEF0F4', borderRadius: 99, overflow: 'hidden' }}><div style={{ width: `${capPct}%`, height: '100%', background: N.gold, borderRadius: 99 }} /></div>}
-        <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 7 }}>Active means at least 10 seconds of foreground engagement or a core action. A signup/login alone is not active.</div>
+        <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 7 }}>Active means at least 30 seconds of foreground engagement or a core action. A signup/login alone is not active.</div>
       </div>
 
       <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>Organisation plan</div>
@@ -13735,6 +13742,26 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
           )
         })}
       </div>
+      <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>Active student discovery</div>
+      <div style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+        <div style={{ fontSize: 11, color: '#6B7280', lineHeight: 1.55, marginBottom: 10 }}>
+          Only students who explicitly opt in to opportunity discovery appear here. Results are based on meaningful activity over the last 7 days; signups and logins alone do not qualify.
+        </div>
+        {candidatesLoading ? <div style={{ fontSize: 11, color: '#9CA3AF' }}>Loading eligible students…</div> : candidates.length === 0 ? (
+          <div style={{ fontSize: 11, color: '#9CA3AF' }}>No opted-in active students matched the current window.</div>
+        ) : candidates.slice(0, 20).map((candidate: any) => (
+          <div key={candidate.id} style={{ padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: N.navy }}>{candidate.display_name}</div>
+            <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3 }}>
+              {[candidate.program_name, candidate.university_name, candidate.year ? `Year ${candidate.year}` : null].filter(Boolean).join(' · ')}
+            </div>
+            <div style={{ fontSize: 10, color: '#6B7280', marginTop: 3 }}>
+              Active {candidate.active_days} days · {candidate.sessions} sessions
+            </div>
+          </div>
+        ))}
+      </div>
+
       <div style={{ fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10 }}>Opportunity performance</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
         {[['Total Views', totalViews], ['Live', publishedCount], ['Total Postings', items.length]].map(([label, val]) => (
