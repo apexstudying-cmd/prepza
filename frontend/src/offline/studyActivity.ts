@@ -17,7 +17,14 @@ function screenKey(documentId: number, feature: string): string { return `${Numb
 function load(): ActivityState {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey()) || '{}')
-    if (parsed && typeof parsed.screens === 'object') return parsed
+    if (parsed && typeof parsed.screens === 'object') {
+      return {
+        screens: parsed.screens,
+        serverBaselines: parsed.serverBaselines && typeof parsed.serverBaselines === 'object'
+          ? parsed.serverBaselines
+          : {},
+      }
+    }
   } catch {}
   return { screens: {}, serverBaselines: {} }
 }
