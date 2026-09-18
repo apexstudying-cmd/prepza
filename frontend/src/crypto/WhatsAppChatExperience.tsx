@@ -186,12 +186,12 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
 
   useEffect(() => {
     if (!visible || view !== 'detail' || selectedId == null || !csrfToken) return
-    void api(`/chats/${selectedId}/read`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }).catch(() => {})
+    void api(`/chats/${selectedId}/read`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }).then(() => { void loadList() }).catch(() => {})
   }, [visible, view, selectedId, csrfToken])
 
   useEffect(() => {
     if (!visible || view !== 'detail' || selectedId == null) return
-    const refresh = () => api<{ messages: Message[] }>(`/chats/${selectedId}/messages`).then(result => { setMessages(result.messages || []); void cacheChatMessages(selectedId, result.messages || []) }).catch(() => {})
+    const refresh = () => api<{ messages: Message[] }>(`/chats/${selectedId}/messages`).then(result => { setMessages(result.messages || []); void cacheChatMessages(selectedId, result.messages || []); void loadList() }).catch(() => {})
     const onMessage = (event: Event) => { const message = (event as CustomEvent<Message>).detail; if (message?.conversation_id === selectedId) void refresh() }
     const onRead = (event: Event) => { const data = (event as CustomEvent<{ conversation_id?: number; user_id?: number }>).detail; if (data?.conversation_id === selectedId && data.user_id) setMessages(current => current.map(m => m.sender_id === meIdRef.current ? { ...m, read_by_count: Math.max(m.read_by_count || 0, 1) } : m)) }
     const onTyping = (event: Event) => { const data = (event as CustomEvent<{ conversation_id?: number; user_id?: number; typing?: boolean }>).detail; if (data?.conversation_id !== selectedId || !data.user_id || data.user_id === meIdRef.current) return; const id = data.user_id; if (data.typing) { setTypingUsers(current => ({ ...current, [id]: Date.now() })); const old = typingTimeouts.current.get(id); if (old) window.clearTimeout(old); typingTimeouts.current.set(id, window.setTimeout(() => setTypingUsers(current => { const next = { ...current }; delete next[id]; return next }), 2500)) } else { const old = typingTimeouts.current.get(id); if (old) window.clearTimeout(old); setTypingUsers(current => { const next = { ...current }; delete next[id]; return next }) } }
