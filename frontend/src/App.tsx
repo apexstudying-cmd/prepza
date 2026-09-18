@@ -8919,6 +8919,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
   const { tokens: T } = useTheme()
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
   const [status, setStatus] = useState<SubscriptionStatus | null>(null)
+  const [usage, setUsage] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -8927,8 +8928,9 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
     Promise.all([
       api<{ plans: SubscriptionPlan[] }>('/subscription/plans'),
       api<SubscriptionStatus>('/subscription/status'),
+      api('/api/usage/me'),
     ])
-      .then(([plansRes, statusRes]) => { setPlans(plansRes.plans); setStatus(statusRes) })
+      .then(([plansRes, statusRes, usageRes]) => { setPlans(plansRes.plans); setStatus(statusRes); setUsage(usageRes) })
       .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load subscription plans - check your connection and try again.'))
       .finally(() => setLoading(false))
   }, [])
@@ -9005,6 +9007,23 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
             </button>
           </>
         )}
+        {usage && (
+          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, marginTop: 8 }}>
+            <div style={{ fontWeight: 800, fontSize: 13, color: T.text, marginBottom: 10 }}>AI usage</div>
+            {(['summary', 'podcast', 'flashcards'] as const).map(feature => {
+              const limitKey = feature === 'summary' ? 'summary_generations' : feature === 'podcast' ? 'podcast_generations' : 'flashcard_generations'
+              const unitKey = feature === 'summary' ? 'summary_max_pages' : feature === 'podcast' ? 'podcast_max_minutes' : 'flashcard_max_cards'
+              const used = usage.usage?.[feature]?.requests || 0
+              const max = usage.limits?.[limitKey] || 0
+              const unit = usage.limits?.[unitKey] || 0
+              return <div key={feature} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, color: T.textMuted, marginTop: 7 }}>
+                <span style={{ textTransform: 'capitalize' }}>{feature}</span>
+                <span>{used}/{max} generations · max {unit} {feature === 'summary' ? 'pages' : feature === 'podcast' ? 'min' : 'cards'}</span>
+              </div>
+            })}
+          </div>
+        )}
+
         <button onClick={() => setScreen('payment-history')} style={{ width: '100%', background: 'transparent', color: T.textMuted, fontSize: 12, fontWeight: 600, border: 'none', padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View payment history</button>
         <div style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & card, powered by Pesapal.</div>
       </div>
