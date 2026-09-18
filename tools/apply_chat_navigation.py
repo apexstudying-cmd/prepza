@@ -25,15 +25,17 @@ def main():
         '<aside className="prepza-wa-list">',
         "navigation mount")
 
-    text = once(text,
-        "{message.attachment.view_url && isImage(message.attachment.file_type) ? <img",
-        "{localStorage.getItem('prepza-chat-media-visibility') !== 'off' && message.attachment.view_url && isImage(message.attachment.file_type) ? <img",
-        "media visibility")
+    if "localStorage.getItem('prepza-chat-media-visibility') !== 'off' && message.attachment.view_url && isImage(message.attachment.file_type)" not in text:
+        text = once(text,
+            "{message.attachment.view_url && isImage(message.attachment.file_type) ? <img",
+            "{localStorage.getItem('prepza-chat-media-visibility') !== 'off' && message.attachment.view_url && isImage(message.attachment.file_type) ? <img",
+            "media visibility")
 
-    text = once(text,
-        'placeholder="Message…" disabled={sending || uploading} rows={1}',
-        'placeholder="Message…" data-prepza-chat-composer="true" disabled={sending || uploading} rows={1}',
-        "composer marker")
+    if 'data-prepza-chat-composer="true"' not in text:
+        text = once(text,
+            'placeholder="Message…" disabled={sending || uploading} rows={1}',
+            'placeholder="Message…" data-prepza-chat-composer="true" disabled={sending || uploading} rows={1}',
+            "composer marker")
 
     TARGET.write_text(text, encoding="utf-8")
     ada = ADA_TARGET.read_text(encoding="utf-8")
