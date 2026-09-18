@@ -9405,6 +9405,9 @@ type AdminPlatformSettings = {
   price_qna: number
   price_plan_semester: number
   price_plan_annual: number
+  price_promotion_standard: number
+  price_promotion_featured: number
+  price_promotion_sponsored: number
   ai_daily_limit_free: number | null
   ai_daily_limit_plus: number | null
   ai_daily_limit_premium: number | null
@@ -11195,6 +11198,12 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               {numField('Q&A', 'price_qna', { prefix: 'KES' })}
               {numField('Semester Plan', 'price_plan_semester', { prefix: 'KES' })}
               {numField('Annual Plan', 'price_plan_annual', { prefix: 'KES' })}
+              {numField('Opportunity — Standard', 'price_promotion_standard', { prefix: 'KES' })}
+              {numField('Opportunity — Featured', 'price_promotion_featured', { prefix: 'KES' })}
+              {numField('Opportunity — Sponsored', 'price_promotion_sponsored', { prefix: 'KES' })}
+            </div>
+            <div style={{ padding: '0 18px 14px', fontSize: 11, color: T.textMuted }}>
+              Promotion prices are snapshotted when an organisation submits a request. Changing these prices affects new requests, not existing campaigns.
             </div>
           </AdminCard>
 
