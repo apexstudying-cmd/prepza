@@ -208,7 +208,8 @@ async function groupIsE2EE(conversationId: number): Promise<boolean> {
 
 async function decryptMessageWithEpoch(conversationId: number, message: any, currentState: { key: CryptoKey; keyEpoch: number }): Promise<any> {
   if (!message || !message.body || !message.nonce || message.is_deleted) return message
-  const epoch = Number.isInteger(Number(message.key_epoch)) ? Number(message.key_epoch) : currentState.keyEpoch
+  const messageEpoch = Number(message.key_epoch)
+  const epoch = Number.isInteger(messageEpoch) && messageEpoch >= 1 ? messageEpoch : currentState.keyEpoch
   try {
     const key = epoch === currentState.keyEpoch ? currentState.key : await loadGroupConversationKey(conversationId, epoch)
     if (!key) throw new Error('Historical group key is unavailable on this device')
