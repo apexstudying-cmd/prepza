@@ -3487,7 +3487,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
           const canOpenProfile = !chat.is_group
           const openProfile = async (event: React.MouseEvent) => {
             event.stopPropagation()
-            if (chat.is_group) return
+            if (chat.is_group || currentUserId == null) return
             try {
               const detail = await api<ChatDetail>(`/chats/${chat.id}`)
               const peer = detail.participants.find(p => p.user_id !== currentUserId)
