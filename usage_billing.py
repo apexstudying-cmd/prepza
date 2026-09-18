@@ -270,6 +270,7 @@ def register_usage_billing(app, db):
         try:
             engagement_seconds = max(0, min(120, int(data.get("engagement_seconds", 0))))
             core_actions = max(0, min(20, int(data.get("core_actions", 0))))
+            session_start = bool(data.get("session_start", False))
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid activity payload"}), 400
 
@@ -277,15 +278,16 @@ def register_usage_billing(app, db):
         db.session.execute(text("""
             INSERT INTO product_activity_day
                 (user_id, activity_date, sessions, engaged_seconds, core_actions, last_seen_at)
-            VALUES (:uid, :day, 1, :seconds, :actions, CURRENT_TIMESTAMP)
+            VALUES (:uid, :day, :sessions, :seconds, :actions, CURRENT_TIMESTAMP)
             ON CONFLICT (user_id, activity_date)
             DO UPDATE SET
-                sessions = product_activity_day.sessions + 1,
+                sessions = product_activity_day.sessions + EXCLUDED.sessions,
                 engaged_seconds = product_activity_day.engaged_seconds + EXCLUDED.engaged_seconds,
                 core_actions = product_activity_day.core_actions + EXCLUDED.core_actions,
                 last_seen_at = CURRENT_TIMESTAMP
         """), {
             "uid": user_id, "day": today,
+            "sessions": 1 if session_start else 0,
             "seconds": engagement_seconds, "actions": core_actions,
         })
         db.session.commit()
