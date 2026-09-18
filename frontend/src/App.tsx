@@ -6931,7 +6931,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
           <div style={{ background: T.card, borderRadius: 14, marginTop: 12, overflow: 'hidden' }}>
             {leaveError && <div style={{ padding: '10px 16px', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{leaveError}</div>}
             <button onClick={leaveGroup} disabled={leaving} style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', padding: '14px 16px', background: 'none', border: 'none', cursor: leaving ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: leaving ? 0.6 : 1 }}>
-              <span style={{ fontSize: 20 }}>🚪</span>
+              <span aria-hidden="true" style={{ width:20,height:20,display:'inline-flex',alignItems:'center',justifyContent:'center' }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-7"/></svg></span>
               <span style={{ fontWeight: 700, fontSize: 13, color: '#C94C4C' }}>{leaving ? 'Leaving…' : 'Leave Group'}</span>
             </button>
           </div>
