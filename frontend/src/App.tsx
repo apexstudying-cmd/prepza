@@ -4,7 +4,7 @@ import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
 import CallExperience from './crypto/CallExperience'
 import { getOfflineStudyDocumentUrl, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'
-import { setOfflineUserId } from './offline/generatedMaterials'
+import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -2770,8 +2770,10 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
         })
       })
       .then(res => { setMaterialId(res.material_id); setCards(normalizeCards(res.flashcards)) })
-      .catch(e => {
-        if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
+      .catch(async e => {
+        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/flashcards`)
+        if (cached) { setCards(normalizeCards(cached)); setError('') }
+        else if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
         else setError(e instanceof ApiError ? e.message : 'Could not generate flashcards. Please try again.')
       })
@@ -2915,8 +2917,10 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) =>
         })
       })
       .then(res => { setMaterialId(res.material_id); setQuestions(normalizeQuiz(res.quiz)) })
-      .catch(e => {
-        if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
+      .catch(async e => {
+        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/quiz`)
+        if (cached) { setQuestions(normalizeQuiz(cached)); setError('') }
+        else if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
         else setError(e instanceof ApiError ? e.message : 'Could not generate a quiz. Please try again.')
       })
@@ -3092,6 +3096,17 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
         await poll()
       } catch (e) {
         if (cancelled) return
+        const cachedScript = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/podcast-script`)
+        const cachedAudio = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/podcast-audio`)
+        const sourceAudioUrl = typeof cachedAudio?.audio_url === 'string' ? cachedAudio.audio_url : ''
+        const localAudioUrl = sourceAudioUrl ? await getCachedGeneratedAudioUrl(sourceAudioUrl) : null
+        if (localAudioUrl) {
+          if (cachedScript?.title) setTitle(cachedScript.title)
+          setAudioUrl(localAudioUrl)
+          setDuration(Number(cachedAudio?.duration_seconds || 0))
+          setStage('ready')
+          return
+        }
         if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
         else setError(e instanceof ApiError ? e.message : 'Could not generate this podcast. Please try again.')
@@ -3191,8 +3206,10 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
         })
       })
       .then(res => setSummary(res.summary))
-      .catch(e => {
-        if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
+      .catch(async e => {
+        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/summarize`)
+        if (cached) { setSummary(cached); setError('') }
+        else if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
         else setError(e instanceof ApiError ? e.message : 'Could not generate a summary. Please try again.')
       })
@@ -6342,8 +6359,10 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
         })
       })
       .then(res => setRaw(res.mindmap))
-      .catch(e => {
-        if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
+      .catch(async e => {
+        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/mind-map`)
+        if (cached) { setRaw(cached); setError('') }
+        else if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
         else setError(e instanceof ApiError ? e.message : 'Could not generate a mind map. Please try again.')
       })
