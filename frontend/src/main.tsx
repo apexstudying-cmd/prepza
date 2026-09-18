@@ -15,6 +15,7 @@ import { installChatDraftPersistence } from './crypto/chatDraftPersistence'
 import { installNavigationTransitions } from './crypto/navigationTransitions'
 import { installGlobalPullRefresh } from './crypto/globalPullRefresh'
 import { installOfflineBootstrap } from './offline/bootstrap'
+import { installActivityHeartbeat } from './activityHeartbeat'
 import App from './App'
 import './index.css'
 
@@ -97,5 +98,6 @@ installSafely('chat draft persistence', installChatDraftPersistence)
 installSafely('navigation transitions', installNavigationTransitions)
 installSafely('global pull refresh', installGlobalPullRefresh)
 installSafely('offline bootstrap', installOfflineBootstrap)
+installSafely('active-user heartbeat', installActivityHeartbeat)
 
 void ensureE2EEIdentityReady().catch((error) => console.warn('[Prepza] E2EE identity setup deferred', error))
