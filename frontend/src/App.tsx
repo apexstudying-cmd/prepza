@@ -4,7 +4,7 @@ import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
 import CallExperience from './crypto/CallExperience'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
-import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'
+import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline, saveUploadedFileOffline } from './offline/studyHubOffline'
 import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
 import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
@@ -1810,7 +1810,7 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
       const contentHash = await sha256Hex(file)
 
       setUploadStage('Registering upload...')
-      const me = await api<{ csrf_token: string }>('/me')
+      const me = await api<{ id: number; csrf_token: string }>('/me')
       const title = file.name.includes('.') ? file.name.slice(0, file.name.lastIndexOf('.')) : file.name
 
       const created = await api<{
@@ -1849,6 +1849,21 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
             throw e
           }
         }
+      }
+
+      // Keep the file the student just selected locally. This uses the
+      // original File object rather than downloading the canonical server copy.
+      // If the same content is already stored locally, saveUploadedFileOffline
+      // aliases it by content hash instead of storing another Blob.
+      try {
+        await saveUploadedFileOffline(created.document_id, file, {
+          userId: me.id,
+          title,
+          fileType: ext,
+          contentHash,
+        })
+      } catch {
+        // Upload success must not be blocked by local-storage limits.
       }
 
       setActiveDocumentId(created.document_id)
