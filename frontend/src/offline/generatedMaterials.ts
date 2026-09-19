@@ -8,6 +8,8 @@ const MAX_AUDIO_CACHE_BYTES = 80 * 1024 * 1024
 const MAX_SINGLE_AUDIO_BYTES = 25 * 1024 * 1024
 
 type StoredMaterial = { key: string; path: string; requestBody: unknown; payload: unknown; savedAt: number }
+
+type OfflineMaterialSummary = { key: string; path: string; savedAt: number; bytes: number; payload: any }
 type StoredAudio = { key: string; userId: string; sourceUrl: string; blob: Blob; savedAt: number }
 
 function openDb(): Promise<IDBDatabase> {
@@ -127,6 +129,16 @@ export async function listGeneratedMaterialsOffline(path: string, requestBody: u
   try { return (await readMatching(path, requestBody)).map(row => ({ payload: row.payload, savedAt: row.savedAt })) } catch (_) { return [] }
 }
 
+export async function listOfflineGeneratedMaterials(): Promise<OfflineMaterialSummary[]> {
+  try {
+    const userId = localStorage.getItem(USER_KEY) || 'unknown'
+    return (await readAll())
+      .filter(row => row.key.startsWith(`${userId}:`))
+      .map(row => ({ key: row.key, path: row.path, savedAt: row.savedAt, bytes: (() => { try { return new Blob([JSON.stringify(row.payload ?? null)]).size } catch { return 0 } })(), payload: row.payload }))
+      .sort((a, b) => b.savedAt - a.savedAt)
+  } catch (_) { return [] }
+}
+
 export async function deleteGeneratedMaterialOffline(path: string, requestBody: unknown, savedAt: number): Promise<void> {
   try {
     const rows = await readMatching(path, requestBody)
@@ -188,6 +200,31 @@ export async function getCachedGeneratedAudioUrl(url: string): Promise<string | 
     if (!audio?.blob || audio.userId !== (localStorage.getItem(USER_KEY) || 'unknown')) return null
     return URL.createObjectURL(audio.blob)
   } catch (_) { return null }
+}
+
+export async function removeGeneratedAudioOfflineByKey(key: string): Promise<void> {
+  try {
+    const db = await openDb()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite')
+      tx.objectStore(STORE).delete(key)
+      tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error)
+    })
+    db.close()
+  } catch (_) {}
+}
+
+export async function getGeneratedOfflineStorageUsage(): Promise<{ bytes: number; materials: number; audioBytes: number }> {
+  try {
+    const rows = await readAll()
+    const userId = localStorage.getItem(USER_KEY) || 'unknown'
+    const materials = rows.filter(row => row.key.startsWith(`${userId}:`))
+    const bytes = materials.reduce((sum, row) => { try { return sum + new Blob([JSON.stringify(row.payload ?? null)]).size } catch { return sum } }, 0)
+    const db = await openDb()
+    const audioRows = await new Promise<StoredAudio[]>((resolve, reject) => { const tx=db.transaction(AUDIO_STORE,'readonly'); const req=tx.objectStore(AUDIO_STORE).getAll(); req.onsuccess=()=>resolve((req.result as StoredAudio[]).filter(x=>x.userId===userId)); req.onerror=()=>reject(req.error) })
+    db.close()
+    return { bytes, materials: materials.length, audioBytes: audioRows.reduce((sum, x) => sum + (x.blob?.size || 0), 0) }
+  } catch (_) { return { bytes: 0, materials: 0, audioBytes: 0 } }
 }
 
 export async function clearGeneratedAudioCache(): Promise<void> {
