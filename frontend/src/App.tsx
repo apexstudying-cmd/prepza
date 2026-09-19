@@ -3134,6 +3134,18 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
 
   const positionKey = activeDocumentId == null ? '' : `prepza-podcast-position:${activeDocumentId}`
+  const selectedPodcastMaterialId = (() => {
+    try {
+      const raw = sessionStorage.getItem('prepza-open-material')
+      const selected = raw ? JSON.parse(raw) : null
+      return selected && String(selected.documentId) === String(activeDocumentId) && selected.type === 'podcast' && Number(selected.materialId) > 0
+        ? Number(selected.materialId)
+        : null
+    } catch { return null }
+  })()
+  const podcastAudioPath = selectedPodcastMaterialId
+    ? `/documents/${activeDocumentId}/podcast-audio?material_id=${selectedPodcastMaterialId}`
+    : podcastAudioPath
 
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
@@ -3159,7 +3171,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
     let cancelled = false
     const run = async () => {
       try {
-        const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(`/documents/${activeDocumentId}/podcast-audio`)
+        const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
         if (cancelled) return
         if (existing.audio_status === 'ready' && existing.audio_url) {
           setAudioUrl(existing.audio_url)
@@ -3167,6 +3179,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
           setGenerationPercent(100)
           setGenerationStage('ready')
           setStage('ready')
+          try { if (selectedPodcastMaterialId) sessionStorage.removeItem('prepza-open-material') } catch {}
           return
         }
         if (existing.audio_status === 'processing') {
@@ -3175,7 +3188,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
           setStage('audio')
           const pollExisting = async () => {
             if (cancelled) return
-            const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(`/documents/${activeDocumentId}/podcast-audio`)
+            const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
             if (cancelled) return
             setGenerationPercent(Math.max(0, Math.min(100, Number(status.progress_percent || 0))))
             setGenerationStage(status.progress_stage || 'Generating audio…')
@@ -3208,13 +3221,13 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
         setGenerationStage('Generating audio…')
         setStage('audio')
 
-        await api(`/documents/${activeDocumentId}/podcast-audio`, {
+        await api(podcastAudioPath, {
           method: 'POST', headers: { 'X-CSRF-Token': me.csrf_token },
         })
 
         const poll = async () => {
           if (cancelled) return
-          const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(`/documents/${activeDocumentId}/podcast-audio`)
+          const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
           if (cancelled) return
           setGenerationPercent(Math.max(0, Math.min(100, Number(status.progress_percent || 0))))
           setGenerationStage(status.progress_stage || 'Generating audio…')
@@ -3224,6 +3237,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
             setGenerationPercent(100)
             setGenerationStage('ready')
             setStage('ready')
+            try { if (selectedPodcastMaterialId) sessionStorage.removeItem('prepza-open-material') } catch {}
           } else if (status.audio_status === 'failed') {
             setError('Audio generation failed. Try again from the document study hub.')
           } else {
@@ -3233,7 +3247,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
         await poll()
       } catch (e) {
         if (cancelled) return
-        const cachedAudio = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/podcast-audio`)
+        const cachedAudio = await getLatestGeneratedMaterialForPath(podcastAudioPath)
         const sourceAudioUrl = typeof cachedAudio?.audio_url === 'string' ? cachedAudio.audio_url : ''
         const localAudioUrl = sourceAudioUrl ? await getCachedGeneratedAudioUrl(sourceAudioUrl) : null
         if (localAudioUrl) {
