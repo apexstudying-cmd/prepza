@@ -562,6 +562,7 @@ def register_discovery(app, db):
                         UPDATE discovery_campaign SET push_delivered=push_delivered+:sent, updated_at=CURRENT_TIMESTAMP WHERE id=:cid
                     """), {"cid": campaign_id, "sent": sent})
                 db.session.commit()
+                sync_org_invoice(organisation_id)
             except Exception:
                 # Queue remains intact; a worker can deliver later when VAPID is configured.
                 pass
