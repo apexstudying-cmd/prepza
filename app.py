@@ -458,7 +458,7 @@ def _start_async_material_generation(document_content_id, user_id, feature, para
                     "quiz": ai_service.generate_document_quiz,
                     "flashcards": ai_service.generate_document_flashcards,
                     "podcast": ai_service.generate_document_podcast_script,
-                    "mind_map": ai_service.generate_document_mind_map,
+                    "mind_map": ai_service.generate_document_mindmap,
                 }[feature]
                 local_job.progress_percent = 20
                 local_job.progress_stage = "generating with AI"
@@ -501,7 +501,7 @@ def get_ai_job_status(job_id):
     job = db.session.get(AiJob, job_id)
     if not job:
         return jsonify({"error": "Generation job not found"}), 404
-    document = db.session.get(Document, next((d.id for d in Document.query.filter_by(document_content_id=job.document_content_id, user_id=user_id, is_removed=False).all()), None))
+    document = Document.query.filter_by(document_content_id=job.document_content_id, user_id=user_id, is_removed=False).first()
     if not document:
         return jsonify({"error": "Generation job not found"}), 404
     return jsonify({
