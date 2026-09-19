@@ -359,6 +359,8 @@ export function SummaryGenerationScreen({ setScreen, activeDocumentId }: { setSc
   const [phase, setPhase] = useState<'config' | 'generating' | 'ready' | 'error'>('config')
   const [summary, setSummary] = useState<any>(null)
   const [error, setError] = useState('')
+  const [generationPercent, setGenerationPercent] = useState(0)
+  const [generationStage, setGenerationStage] = useState('preparing')
   const [usage, setUsage] = useState<PrepzaUsage | null>(null)
 
   useEffect(() => {
