@@ -5,7 +5,7 @@ plan automatically. The goal is to show measured usage, known free-tier
 ceilings, estimated spend, and explicit upgrade signals before a bill arrives.
 """
 from datetime import datetime, timedelta
-from flask import jsonify
+from flask import jsonify, session
 from sqlalchemy import func
 
 
@@ -179,4 +179,86 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
                 "automatic_billing": False,
                 "message": "Prepza never changes provider plans automatically. Upgrade only when a measured threshold is reached or the current tier blocks a required launch function.",
             },
+        })
+
+
+    @app.route("/documents/<int:document_id>/study-materials")
+    def document_study_materials(document_id):
+        """List all saved AI artifact variants for a document."""
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+
+        from app import Document, GeneratedMaterial, _can_study_document
+        document = db.session.get(Document, document_id)
+        if not document or not _can_study_document(user_id, document):
+            return jsonify({"error": "Document not found"}), 404
+        if not document.document_content_id:
+            return jsonify({"document_id": document_id, "materials": []})
+
+        rows = (
+            GeneratedMaterial.query
+            .filter(
+                GeneratedMaterial.document_content_id == document.document_content_id,
+                GeneratedMaterial.generation_version == "v2",
+                GeneratedMaterial.status.in_(["ready", "generating"]),
+            )
+            .order_by(GeneratedMaterial.updated_at.desc())
+            .all()
+        )
+        visible = []
+        for material in rows:
+            if material.scope == "private" and material.owner_user_id != user_id:
+                continue
+            if material.scope not in {"private", "shared"}:
+                continue
+            visible.append({
+                "material_id": material.id,
+                "material_type": material.material_type,
+                "status": material.status,
+                "parameters": material.generation_parameters or {},
+                "generation_version": material.generation_version,
+                "generation_fingerprint": material.generation_fingerprint,
+                "created_at": material.created_at.isoformat() if material.created_at else None,
+                "updated_at": material.updated_at.isoformat() if material.updated_at else None,
+            })
+        return jsonify({"document_id": document_id, "materials": visible})
+
+    @app.route("/documents/<int:document_id>/study-materials/<int:material_id>")
+    def document_study_material(document_id, material_id):
+        """Return one exact saved artifact variant for replay/viewing."""
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+
+        from app import Document, GeneratedMaterial, _can_study_document
+        document = db.session.get(Document, document_id)
+        if not document or not _can_study_document(user_id, document):
+            return jsonify({"error": "Document not found"}), 404
+        material = db.session.get(GeneratedMaterial, material_id)
+        if not material or material.document_content_id != document.document_content_id:
+            return jsonify({"error": "Study material not found"}), 404
+        if material.status != "ready" or not material.payload:
+            return jsonify({"error": "Study material is not ready yet"}), 409
+        if material.scope == "private" and material.owner_user_id != user_id:
+            return jsonify({"error": "Study material not found"}), 404
+        if material.scope not in {"private", "shared"}:
+            return jsonify({"error": "Study material not found"}), 404
+
+        import json
+        try:
+            payload = json.loads(material.payload)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Study material payload is invalid"}), 500
+
+        return jsonify({
+            "document_id": document_id,
+            "material_id": material.id,
+            "material_type": material.material_type,
+            "status": material.status,
+            "parameters": material.generation_parameters or {},
+            "generation_fingerprint": material.generation_fingerprint,
+            "created_at": material.created_at.isoformat() if material.created_at else None,
+            "updated_at": material.updated_at.isoformat() if material.updated_at else None,
+            "payload": payload,
         })
