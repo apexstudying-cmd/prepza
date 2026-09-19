@@ -33,6 +33,7 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props) {
   const [years,setYears]=useState<number[]>([])
   const [audience,setAudience]=useState<number|null>(null)
   const [summary,setSummary]=useState<any>(null)
+  const [billing,setBilling]=useState<any>(null)
   const [loading,setLoading]=useState(true)
   const [creating,setCreating]=useState(false)
   const [error,setError]=useState('')
@@ -44,15 +45,17 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props) {
   const load=async()=>{
     setLoading(true); setError('')
     try {
-      const [me,c,u,p,s]=await Promise.all([
+      const [me,c,u,p,s,b]=await Promise.all([
         req<{csrf_token:string}>('/me'),
         req<{campaigns:Campaign[]}>(`/api/organisations/${orgId}/discovery/campaigns`),
         req<Option[]>('/universities'),
         req<any>('/api/organisations/'+orgId+'/discovery/pricing'),
         req<any>('/api/organisations/'+orgId+'/discovery/summary'),
+        req<any>('/api/organisations/'+orgId+'/discovery/billing-preview'),
       ])
       setCsrf(me.csrf_token); setCampaigns(c.campaigns); setUniversities(u)
       setSummary(s)
+      setBilling(b)
       void p
     } catch(e){setError(e instanceof Error?e.message:'Could not load Discovery.')}
     finally{setLoading(false)}
@@ -152,6 +155,12 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props) {
       <Metric label="Push delivered" value={summary?.campaigns?.reduce((s:number,c:Campaign)=>s+c.push_delivered,0)||0}/>
     </div>
 
+    <div style={{background:'#fff',borderRadius:14,padding:14,boxShadow:'0 2px 7px rgba(0,0,0,.04)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{fontWeight:800,fontSize:13,color:navy}}>Current invoice</div><span style={{fontSize:11,color:'#16A34A',fontWeight:700}}>{billing?.invoice_locked?'Locked':'Metered'}</span></div>
+      <div style={{fontSize:22,fontWeight:800,color:navy,marginTop:7}}>KES {Number(billing?.current_invoice_kes||0).toLocaleString()}</div>
+      <div style={{fontSize:10,color:'#9CA3AF',marginTop:3}}>Base plan KES {Number(billing?.base_plan_kes||0).toLocaleString()} · Discovery usage KES {Number(billing?.discovery_usage_kes||0).toLocaleString()}</div>
+      <div style={{fontSize:10,color:'#6B7280',marginTop:7}}>The invoice amount updates from verified campaign delivery. The campaign budget is the hard spend cap.</div>
+    </div>
     <div style={{fontWeight:800,fontSize:14,color:navy}}>Campaigns</div>
     {campaigns.map(c=><div key={c.id} style={{background:'#fff',borderRadius:14,padding:14,boxShadow:'0 2px 7px rgba(0,0,0,.04)'}}>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
