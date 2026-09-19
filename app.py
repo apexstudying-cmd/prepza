@@ -3539,6 +3539,19 @@ def create_document():
     existing_content = DocumentContent.query.filter_by(content_hash=content_hash).first()
 
     if existing_content:
+        existing_user_document = Document.query.filter_by(
+            user_id=user_id,
+            document_content_id=existing_content.id,
+            is_removed=False,
+        ).order_by(Document.id.asc()).first()
+        if existing_user_document:
+            return jsonify({
+                "document_id": existing_user_document.id,
+                "status": existing_content.status,
+                "duplicate": True,
+                "already_in_studyhub": True,
+            }), 200
+
         doc_status = "processing" if existing_content.status in ("pending", "processing") else existing_content.status
         new_document = Document(
             user_id=user_id,
