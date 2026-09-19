@@ -80,7 +80,9 @@ export default function StudyActivityScreen({ setScreen }: Props) {
     start.setDate(start.getDate() - 181)
     while (start.getDay() !== 0) start.setDate(start.getDate() - 1)
     const cells: {date:string; seconds:number; future:boolean}[] = []
-    for (let d = new Date(start); d <= end || d.getDay() !== 0; d.setDate(d.getDate()+1)) {
+    const paddedEnd = new Date(end)
+    while (paddedEnd.getDay() !== 6) paddedEnd.setDate(paddedEnd.getDate()+1)
+    for (let d = new Date(start); d <= paddedEnd; d.setDate(d.getDate()+1)) {
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
       cells.push({ date:key, seconds:map.get(key)||0, future:d>end })
     }
