@@ -298,6 +298,14 @@ export async function getOfflineStudyDocumentUrl(documentId: number, userId: num
   return blob ? URL.createObjectURL(blob) : null
 }
 
+export async function getOfflineStudyDocumentUrlByContentHash(contentHash: string, userId: number): Promise<string | null> {
+  if (!contentHash || !Number.isInteger(userId) || userId <= 0) return null
+  try {
+    const local = await findLocalDocumentByContentHash(userId, contentHash)
+    return local?.asset?.blob instanceof Blob ? URL.createObjectURL(local.asset.blob) : null
+  } catch (_) { return null }
+}
+
 export async function listSavedStudyHubOffline(userId?: number): Promise<SavedStudyHubMeta[]> {
   try {
     const rows = await getAllMeta(userId)
