@@ -44,6 +44,22 @@ const C = {
 const headerStyle = { background: C.navy, padding: '0 18px 16px', color: '#fff' }
 const buttonBase = { fontFamily: 'Plus Jakarta Sans', fontWeight: 800, cursor: 'pointer' }
 
+
+async function subscribeForGenerationNotifications(csrfToken: string): Promise<void> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) throw new Error('Push notifications are not supported on this device.')
+  if (Notification.permission !== 'granted') {
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') throw new Error('Notification permission was not granted.')
+  }
+  const registration = await navigator.serviceWorker.ready
+  const response = await generationApi<{ public_key: string }>('/push/vapid-public-key')
+  const padding = '='.repeat((4 - (response.public_key.length % 4)) % 4)
+  const raw = window.atob((response.public_key + padding).replace(/-/g, '+').replace(/_/g, '/'))
+  const key = Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
+  const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key as BufferSource })
+  const json = subscription.toJSON()
+  await generationApi('/push/subscribe', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }) })
+}
 function GenerationHeader({ title, subtitle, onBack }: { title: string; subtitle?: string; onBack: () => void }) {
   return (
     <div style={headerStyle}>
@@ -117,6 +133,8 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
   const [audioDuration, setAudioDuration] = useState(0)
   const [progress, setProgress] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [notificationChoice, setNotificationChoice] = useState(false)
+  const [notificationBusy, setNotificationBusy] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
@@ -189,7 +207,23 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
   const selected = PODCAST_OPTIONS.find(o => o.minutes === minutes) || PODCAST_OPTIONS[2]
   const podcastLimit = usage?.limits.podcast_max_minutes ?? 0
   const podcastAvailable = (n: number) => canGenerate(usage, 'podcast', n)
-  return <div style={{ flex: 1, background: C.page, overflowY: 'auto' }}><GenerationHeader title="Create your podcast" subtitle={title} onBack={() => setScreen('document-study')} /><div style={{ padding: 18 }}><div style={{ color: C.text, fontWeight: 800, fontSize: 18 }}>Choose how you want to study</div><div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, margin: '5px 0 18px' }}>{pages != null ? `${pages} pages · ` : ''}Your choices become part of the generation fingerprint, so each distinct configuration can be reused safely.</div><div style={{ color: C.text, fontWeight: 800, fontSize: 12, marginBottom: 9 }}>Duration</div><div style={{ color: C.muted, fontSize: 11, marginBottom: 9 }}>{usageLabel(usage)}{usage ? ` · ${usage.usage.podcast?.requests || 0}/${usage.limits.podcast_generations} podcast generations used` : ''}</div>{PODCAST_OPTIONS.map(o => <ChoiceCard key={o.minutes} disabled={o.minutes > podcastLimit || !podcastAvailable(o.minutes)} selected={minutes === o.minutes} title={`${o.minutes} minutes · ${o.label}`} description={o.description} badge={o.minutes === 50 ? 'DEEPEST' : undefined} onClick={() => setMinutes(o.minutes)} />)}<div style={{ color: C.text, fontWeight: 800, fontSize: 12, margin: '17px 0 9px' }}>Teaching style</div>{PODCAST_OPTIONS.map(o => <ChoiceCard key={o.style} selected={style === o.style} title={o.label} description={o.description} onClick={() => setStyle(o.style)} />)}<div style={{ background: 'rgba(201,168,76,0.08)', border: `1px solid ${C.gold}33`, borderRadius: 14, padding: 12, margin: '14px 0 16px', color: C.text, fontSize: 11, lineHeight: 1.55 }}><strong>{selected.minutes}-minute {selected.label}</strong> — {selected.minutes === 50 ? 'the deepest option, combining explanation, deep study and exam focus.' : selected.description}</div><GenerateButton disabled={!csrf || !podcastAvailable(minutes)} onClick={generate}>Generate {minutes}-minute podcast</GenerateButton></div></div>
+  return <div style={{ flex: 1, background: C.page, overflowY: 'auto' }}><GenerationHeader title="Create your podcast" subtitle={title} onBack={() => setScreen('document-study')} /><div style={{ padding: 18 }}><div style={{ color: C.text, fontWeight: 800, fontSize: 18 }}>Choose how you want to study</div><div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, margin: '5px 0 18px' }}>{pages != null ? `${pages} pages · ` : ''}Your choices become part of the generation fingerprint, so each distinct configuration can be reused safely.</div><div style={{ color: C.text, fontWeight: 800, fontSize: 12, marginBottom: 9 }}>Duration</div><div style={{ color: C.muted, fontSize: 11, marginBottom: 9 }}>{usageLabel(usage)}{usage ? ` · ${usage.usage.podcast?.requests || 0}/${usage.limits.podcast_generations} podcast generations used` : ''}</div>{PODCAST_OPTIONS.map(o => <ChoiceCard key={o.minutes} disabled={o.minutes > podcastLimit || !podcastAvailable(o.minutes)} selected={minutes === o.minutes} title={`${o.minutes} minutes · ${o.label}`} description={o.description} badge={o.minutes === 50 ? 'DEEPEST' : undefined} onClick={() => setMinutes(o.minutes)} />)}<div style={{ color: C.text, fontWeight: 800, fontSize: 12, margin: '17px 0 9px' }}>Teaching style</div>{PODCAST_OPTIONS.map(o => <ChoiceCard key={o.style} selected={style === o.style} title={o.label} description={o.description} onClick={() => setStyle(o.style)} />)}<div style={{ background: 'rgba(201,168,76,0.08)', border: `1px solid ${C.gold}33`, borderRadius: 14, padding: 12, margin: '14px 0 16px', color: C.text, fontSize: 11, lineHeight: 1.55 }}><strong>{selected.minutes}-minute {selected.label}</strong> — {selected.minutes === 50 ? 'the deepest option, combining explanation, deep study and exam focus.' : selected.description}</div><GenerateButton disabled={!csrf || !podcastAvailable(minutes) || notificationBusy} onClick={() => {
+        if (Notification.permission === 'granted') { void generate(); return }
+        setNotificationChoice(true)
+      }}>{notificationBusy ? 'Enabling notifications…' : 'Generate ' + minutes + '-minute podcast'}</GenerateButton>
+      {notificationChoice && (
+        <div style={{ marginTop: 12, background: C.card, border: '1px solid ' + C.border, borderRadius: 16, padding: 15 }}>
+          <div style={{ color: C.text, fontWeight: 800, fontSize: 13 }}>Want a notification when it’s ready?</div>
+          <div style={{ color: C.muted, fontSize: 11, lineHeight: 1.5, marginTop: 4 }}>You can leave this screen while Prepza creates the podcast. We’ll notify you when the finished episode is ready.</div>
+          <button disabled={notificationBusy} onClick={async () => {
+            setNotificationBusy(true)
+            try { await subscribeForGenerationNotifications(csrf); setNotificationChoice(false); await generate() }
+            catch (e) { setError(e instanceof Error ? e.message : 'Could not enable notifications. The podcast will still be generated.'); setNotificationChoice(false); await generate() }
+            finally { setNotificationBusy(false) }
+          }} style={{ width: '100%', marginTop: 12, border: 'none', borderRadius: 12, padding: 12, background: C.navy, color: C.gold, ...buttonBase }}>Yes, notify me</button>
+          <button disabled={notificationBusy} onClick={() => { setNotificationChoice(false); void generate() }} style={{ width: '100%', marginTop: 7, border: '1px solid ' + C.border, borderRadius: 12, padding: 12, background: C.card, color: C.text, ...buttonBase }}>Not now</button>
+        </div>
+      )}</div></div>
 }
 
 const FLASHCARD_COUNTS = [10, 20, 30, 50]
