@@ -3051,6 +3051,8 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
 
         const me = await api<{ csrf_token: string }>('/me')
         if (cancelled) return
+        setGenerationPercent(2)
+        setGenerationStage('Generating podcast script…')
         const scriptRes = await api<{ material_id: number; reused: boolean; podcast: any }>(`/documents/${activeDocumentId}/podcast-script`, {
           method: 'POST', headers: { 'X-CSRF-Token': me.csrf_token },
         })
