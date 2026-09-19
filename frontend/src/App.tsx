@@ -2716,7 +2716,7 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
     api<{ csrf_token: string }>('/me')
       .then(me => {
         setCsrfToken(me.csrf_token)
-        return api<{ material_id: number; reused: boolean; flashcards: any }>(`/documents/${activeDocumentId}/flashcards`, {
+        return generationRequest<{ material_id: number; reused: boolean; flashcards: any }>(`/documents/${activeDocumentId}/flashcards`, {
           method: 'POST',
           headers: { 'X-CSRF-Token': me.csrf_token },
         })
@@ -2863,7 +2863,7 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) =>
     api<{ csrf_token: string }>('/me')
       .then(me => {
         setCsrfToken(me.csrf_token)
-        return api<{ material_id: number; reused: boolean; quiz: any }>(`/documents/${activeDocumentId}/quiz`, {
+        return generationRequest<{ material_id: number; reused: boolean; quiz: any }>(`/documents/${activeDocumentId}/quiz`, {
           method: 'POST',
           headers: { 'X-CSRF-Token': me.csrf_token },
         })
@@ -3053,7 +3053,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
         if (cancelled) return
         setGenerationPercent(2)
         setGenerationStage('Generating podcast script…')
-        const scriptRes = await api<{ material_id: number; reused: boolean; podcast: any }>(`/documents/${activeDocumentId}/podcast-script`, {
+        const scriptRes = await generationRequest<{ material_id: number; reused: boolean; podcast: any }>(`/documents/${activeDocumentId}/podcast-script`, {
           method: 'POST', headers: { 'X-CSRF-Token': me.csrf_token },
         })
         if (scriptRes.podcast?.title) setTitle(scriptRes.podcast.title)
@@ -3267,7 +3267,7 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
     api<{ csrf_token: string }>('/me')
       .then(me => {
         setHeartbeatCsrf(me.csrf_token)
-        return api<{ material_id: number; reused: boolean; summary: any }>(`/documents/${activeDocumentId}/summarize`, {
+        return generationRequest<{ material_id: number; reused: boolean; summary: any }>(`/documents/${activeDocumentId}/summarize`, {
           method: 'POST',
           headers: { 'X-CSRF-Token': me.csrf_token },
         })
@@ -6423,7 +6423,7 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
     api<{ csrf_token: string }>('/me')
       .then(me => {
         setHeartbeatCsrf(me.csrf_token)
-        return api<{ material_id: number; reused: boolean; mindmap: any }>(`/documents/${activeDocumentId}/mindmap`, {
+        return generationRequest<{ material_id: number; reused: boolean; mindmap: any }>(`/documents/${activeDocumentId}/mindmap`, {
           method: 'POST',
           headers: { 'X-CSRF-Token': me.csrf_token },
         })
