@@ -4570,30 +4570,23 @@ def mindmap_document(document_id):
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
 
-    try:
-        result = ai_service.generate_document_mindmap(
-            document_content_id=content.id,
-            triggering_user_id=user_id,
-            plan_tier=get_ai_plan_tier(user_id),
-            parameters=_ai_generation_parameters_from_request(),
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except ai_service.AIBudgetExceededError as e:
-        return jsonify({"error": str(e)}), 503
-    except ai_service.AIRateLimitExceededError as e:
-        return jsonify({"error": str(e)}), 429
-    except ai_service.AIProviderError as e:
-        return jsonify({"error": str(e)}), 502
-
-    record_document_studied(user_id, content.id)
-    db.session.commit()
-
-    return jsonify({
-        "material_id": result["material_id"],
-        "reused": result["reused"],
-        "mindmap": result["payload"],
-    }), 200
+    parameters = _ai_generation_parameters_from_request()
+    if request.headers.get("X-Prepza-Resolve-Generation") == "1":
+        result = _resolve_material_generation("mind_map", content, user_id, parameters)
+        record_document_studied(user_id, content.id)
+        db.session.commit()
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": result["reused"],
+            "mindmap": result["payload"],
+        }), 200
+    job_id = _start_async_material_generation(
+        document_content_id=content.id,
+        user_id=user_id,
+        feature="mind_map",
+        parameters=parameters,
+    )
+    return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
 
 
 
