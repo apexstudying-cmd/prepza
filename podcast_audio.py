@@ -62,7 +62,7 @@ TURN_GAP_MS = 400  # silence stitched between speaker turns
 PODCAST_AUDIO_BUCKET = "podcast-audio"
 
 
-def start_podcast_audio_processing(material_id, flask_app):
+def start_podcast_audio_processing(material_id, flask_app, notification_id=None):
     """
     Fire-and-forget: spawns a background thread that synthesizes audio
     for one GeneratedMaterial(material_type='podcast') row. `flask_app`
@@ -72,16 +72,16 @@ def start_podcast_audio_processing(material_id, flask_app):
     """
     thread = threading.Thread(
         target=_process_in_background,
-        args=(material_id, flask_app),
+        args=(material_id, flask_app, notification_id),
         daemon=True,
     )
     thread.start()
 
 
-def _process_in_background(material_id, flask_app):
+def _process_in_background(material_id, flask_app, notification_id=None):
     with flask_app.app_context():
         try:
-            process_podcast_audio(material_id)
+            process_podcast_audio(material_id, notification_id=notification_id)
         except Exception as e:  # noqa: BLE001 - last-resort safety net, thread has no caller to raise to
             print(f"ERROR: podcast audio synthesis crashed for material {material_id}: {e}")
 
