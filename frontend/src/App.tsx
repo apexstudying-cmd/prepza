@@ -13936,6 +13936,25 @@ export default function App() {
   // screens themselves, which unmount on navigation.
   const [activeConversationId, setActiveConversationId] = useState<number | null>(() => storedNavigation?.activeConversationId ?? null)
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(() => storedNavigation?.activeDocumentId ?? null)
+
+  useEffect(() => {
+    const onServiceWorkerMessage = (event: MessageEvent) => {
+      const data = event.data
+      if (!data || data.type !== 'OPEN_PREPZA_NOTIFICATION') return
+      if (data.screen === 'podcast-player' && data.document_id) {
+        setActiveDocumentId(Number(data.document_id))
+        setScreen('podcast-player')
+      } else if (data.screen) {
+        setScreen(data.screen as Screen)
+      } else {
+        setScreen('notifications')
+      }
+    }
+    if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', onServiceWorkerMessage)
+    return () => {
+      if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', onServiceWorkerMessage)
+    }
+  }, [])
   const [activeGroupId, setActiveGroupId] = useState<number | null>(() => storedNavigation?.activeGroupId ?? null)
   // Which subscription plan the user picked on SubscriptionScreen, carried
   // over to PaymentScreen the same way activeDocumentId etc. are - these
