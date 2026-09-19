@@ -212,8 +212,18 @@ def generate_document_material(*, material_type, document_content_id, triggering
         allowed, used, limit = ai_service.check_daily_limit(triggering_user_id, plan_tier=plan_tier)
         if not allowed:
             raise ai_service.AIRateLimitExceededError(f"You've used {used}/{limit} AI generations today - try again tomorrow.")
-        job = AiJob(document_content_id=document_content_id, feature=material_type, status="processing", started_at=datetime.utcnow())
+        job = AiJob(
+            document_content_id=document_content_id,
+            feature=material_type,
+            status="processing",
+            started_at=datetime.utcnow(),
+            progress_percent=5,
+            progress_stage="preparing",
+        )
         db.session.add(job)
+        db.session.commit()
+        job.progress_percent = 12
+        job.progress_stage = "building generation request"
         db.session.commit()
         system_prompt, parser, task = _generator(material_type, params)
         user_message = f"Document text ({content.page_count or '?'} pages):\n\n{content.extracted_text}"
@@ -234,13 +244,24 @@ def generate_document_material(*, material_type, document_content_id, triggering
             user_message=user_message,
             max_tokens=max_tokens,
         )
+        job.progress_percent = 20
+        job.progress_stage = "AI is generating your material"
+        db.session.commit()
         ai_response = ai_service.route_and_generate(ai_request)
+        job.progress_percent = 82
+        job.progress_stage = "checking and formatting the result"
+        db.session.commit()
         parsed = parser(ai_response.text)
         payload = _podcast_payload(parsed) if material_type == "podcast" else parsed
         mark_generation_ready(lookup.artifact_id, payload, lookup.lease_token)
         artifact_ready = True
+        job.progress_percent = 96
+        job.progress_stage = "saving your study material"
+        db.session.commit()
         ai_service.log_usage(triggering_user_id, request_type=material_type, model=ai_response.model_used, provider=ai_response.provider, usage=ai_response.usage)
         job.status, job.completed_at = "completed", datetime.utcnow()
+        job.progress_percent = 100
+        job.progress_stage = "ready"
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
