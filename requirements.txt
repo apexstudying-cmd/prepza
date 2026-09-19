@@ -28,4 +28,5 @@ typing_extensions==4.16.0
 urllib3==2.7.0
 audioop-lts
 pywebpush
+qrcode==8.2
 simple-websocket==1.1.0
