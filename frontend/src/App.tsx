@@ -2972,7 +2972,7 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) =>
 }
 
 // ─── PODCAST PLAYER ───────────────────────────────────────────────────────────
-function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunityId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null; setActiveOpportunityId: (id: number | null) => void }) {
   const { tokens: T } = useTheme()
   const audioRef = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
@@ -3157,7 +3157,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
             const meta = oppTypeMeta(opp.opportunity_type)
             return (
               <button
-                onClick={() => setScreen('opportunity-detail')}
+                onClick={() => { setActiveOpportunityId(opp.id); setScreen('opportunity-detail') }}
                 aria-label={'View opportunity: ' + opp.title}
                 style={{
                   width: '100%', maxWidth: 520, textAlign: 'left', border: '1px solid ' + T.border,
@@ -14213,7 +14213,7 @@ export default function App() {
       case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} activeDocumentId={activeDocumentId} setActiveDocumentId={setActiveDocumentId} />
       case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'quiz':              return <QuizScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
+      case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} setActiveOpportunityId={setActiveOpportunityId} />
       case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'chats':             return <WhatsAppChatExperience onClose={() => setScreen('home')} onOpenProfile={(userId, name, conversationId) => { setActiveProfileBackScreen('chats'); if (conversationId != null) setActiveConversationId(conversationId); setActiveProfileUserId(userId); setActiveProfileName(name || null); setScreen('student-profile') }} onOpenOptions={(conversationId) => { setActiveConversationId(conversationId); setScreen('chat-options') }} />
