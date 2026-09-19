@@ -9130,6 +9130,19 @@ type AdminLibraryReportItem = {
   created_at: string | null
 }
 
+type AdminInfrastructure = {
+  generated_at: string
+  active_users: { today: number; last_7d: number; last_30d: number }
+  study: { students_today: number; study_seconds_today: number; study_minutes_today: number }
+  database: { used_bytes: number; limit_bytes: number; percent: number; status: string }
+  storage: { used_bytes: number; limit_bytes: number; percent: number; status: string }
+  supabase_limits: { egress_gb: number; realtime_messages: number; realtime_peak_connections: number }
+  ai: { requests_mtd: number; input_tokens_mtd: number; output_tokens_mtd: number; spend_mtd_usd: number; projected_month_end_usd: number; budget_usd: number | null; budget_percent: number | null; status: string; by_feature: { feature: string; requests: number; cost_usd: number }[] }
+  payments: { revenue_mtd_kes: number; estimated_paystack_fees_mtd_kes: number; estimated_net_after_paystack_kes: number; note: string }
+  known_limits: { render_hobby_build_minutes: number; render_hobby_bandwidth_gb: number; render_runtime_metrics: string; brevo_free_daily_emails: number; supabase_free_egress_gb: number; supabase_free_cached_egress_gb: number; supabase_free_realtime_messages: number; supabase_free_realtime_peak_connections: number }
+  upgrade_policy: { automatic_billing: boolean; message: string }
+}
+
 type AdminSystemCapacity = {
   tier: string
   available_tiers: string[]
@@ -9841,6 +9854,10 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     api<AdminUserRow[]>('/admin/users').then(res => setDashRecentUsers(res.slice(0, 5))).catch(() => {})
   }, [section])
 
+  const [infrastructure, setInfrastructure] = useState<AdminInfrastructure | null>(null)
+  const [infrastructureLoading, setInfrastructureLoading] = useState(true)
+  const [infrastructureError, setInfrastructureError] = useState('')
+
   const [systemCapacity, setSystemCapacity] = useState<AdminSystemCapacity | null>(null)
   const [systemCapacityLoading, setSystemCapacityLoading] = useState(true)
   const [systemCapacityError, setSystemCapacityError] = useState('')
@@ -9877,6 +9894,17 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     if (section !== 'system') return
     loadAuditLogs(1)
   }, [section, auditDays, auditActionFilter, auditTargetTypeFilter])
+
+  useEffect(() => {
+    if (section !== 'system') return
+    setInfrastructureLoading(true)
+    setInfrastructureError('')
+    api<AdminInfrastructure>('/admin/infrastructure')
+      .then(setInfrastructure)
+      .catch(e => setInfrastructureError(e instanceof ApiError ? e.message : 'Could not load infrastructure telemetry.'))
+      .finally(() => setInfrastructureLoading(false))
+  }, [section])
+
 
   const loadSystemCapacity = () => {
     setSystemCapacityLoading(true)
@@ -10776,6 +10804,32 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
         Tracks whether the current infrastructure can handle real usage, and what it's costing — not third-party uptime (that would need a separate monitoring integration, not built yet).
       </div>
 
+      {infrastructureLoading ? (
+        <AdminCard title="Pay-as-you-grow infrastructure"><div style={{ padding: '18px', color: T.textMuted, fontSize: 12 }}>Loading live usage…</div></AdminCard>
+      ) : infrastructureError ? (
+        <AdminCard title="Pay-as-you-grow infrastructure"><div style={{ padding: '18px', color: '#DC2626', fontSize: 12 }}>{infrastructureError}</div></AdminCard>
+      ) : infrastructure && (
+        <AdminCard title="Pay-as-you-grow infrastructure">
+          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 10 }}>
+              {[[ 'Active today', String(infrastructure.active_users.today) ], [ 'Active 7d', String(infrastructure.active_users.last_7d) ], [ 'Studying today', String(infrastructure.study.students_today) ]].map(([label, value]) => (
+                <div key={label} style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: '11px 12px' }}><div style={{ fontSize: 10, color: T.textMuted }}>{label}</div><div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginTop: 4 }}>{value}</div></div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {[{ label: 'Database', used: infrastructure.database.used_bytes, limit: infrastructure.database.limit_bytes, pct: infrastructure.database.percent }, { label: 'File storage', used: infrastructure.storage.used_bytes, limit: infrastructure.storage.limit_bytes, pct: infrastructure.storage.percent }].map(item => (
+                <div key={item.label}><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}><span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{item.label}</span><span style={{ fontSize: 11, color: item.pct >= 90 ? '#DC2626' : T.textMuted }}>{fmtBytesSys(item.used)} / {fmtBytesSys(item.limit)}</span></div><div style={{ height: 7, borderRadius: 99, background: mode === 'dark' ? 'rgba(255,255,255,.08)' : '#F0F1F4' }}><div style={{ height: 7, width: Math.min(item.pct, 100) + '%', borderRadius: 99, background: barColor(item.pct) }} /></div><div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{Math.round(item.pct)}% used · {item.pct >= 90 ? 'action soon' : item.pct >= 75 ? 'watch' : 'comfortable'}</div></div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 10, color: T.textMuted }}>AI spend this month</div><div style={{ fontSize: 21, fontWeight: 800, color: T.text, marginTop: 4 }}>${infrastructure.ai.spend_mtd_usd.toFixed(2)}</div><div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>Projected ${infrastructure.ai.projected_month_end_usd.toFixed(2)} · {infrastructure.ai.requests_mtd} requests</div></div>
+              <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 10, color: T.textMuted }}>Revenue this month</div><div style={{ fontSize: 21, fontWeight: 800, color: N.gold, marginTop: 4 }}>KES {infrastructure.payments.revenue_mtd_kes.toLocaleString()}</div><div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>Est. Paystack fees KES {infrastructure.payments.estimated_paystack_fees_mtd_kes.toLocaleString()}</div></div>
+            </div>
+            <div style={{ background: 'rgba(201,168,76,.08)', border: '1px solid rgba(201,168,76,.2)', borderRadius: 11, padding: '10px 12px', fontSize: 11, color: T.text, lineHeight: 1.55 }}><strong>Upgrade rule:</strong> Prepza does not upgrade anything automatically. Use this screen to decide when a measured limit is getting close. Render build minutes/bandwidth and Brevo sends are known ceilings but require their provider dashboards for live usage.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 10, color: T.textMuted }}><div>Render Hobby: {infrastructure.known_limits.render_hobby_build_minutes} build min · {infrastructure.known_limits.render_hobby_bandwidth_gb} GB bandwidth</div><div>Supabase Free: {infrastructure.known_limits.supabase_free_egress_gb} GB egress · 2M realtime</div><div>Brevo Free: {infrastructure.known_limits.brevo_free_daily_emails} emails/day</div><div>Podcast TTS: generated once per artifact; no per-play generation cost</div></div>
+          </div>
+        </AdminCard>
+      )}
       {systemCapacityLoading ? (
         <div style={{ padding: '24px 0', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading capacity data…</div>
       ) : systemCapacityError ? (
