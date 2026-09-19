@@ -201,7 +201,17 @@ def register_discovery(app, db):
         rows = db.session.execute(text(
             f"SELECT {selected} FROM {table} WHERE {user_col} = ANY(:ids)"
         ), {"ids": user_ids}).all()
-        return [{"user_id": int(r[0]), "endpoint": r[1], "keys": (r[2] if len(r) > 2 else None)} for r in rows if r[1]]
+        out=[]
+        for r in rows:
+            if not r[1]:
+                continue
+            keys = None
+            if key_col and len(r) > 2:
+                keys = r[2]
+            elif p256dh_col and auth_col and len(r) > 3:
+                keys = {"p256dh": r[2], "auth": r[3]}
+            out.append({"user_id": int(r[0]), "endpoint": r[1], "keys": keys})
+        return out
 
     @app.get("/api/organisations/<int:organisation_id>/discovery/pricing")
     def discovery_pricing(organisation_id):
@@ -490,8 +500,6 @@ def register_discovery(app, db):
                         if isinstance(keys, str):
                             try: keys = json.loads(keys)
                             except Exception: keys = {}
-                        if not keys and len(item) > 3:
-                            keys = {"p256dh": item[2], "auth": item[3]}
                         webpush(subscription_info={"endpoint": item["subscription_endpoint"], "keys": keys}, data=payload,
                                 vapid_private_key=vapid_private, vapid_claims={"sub": vapid_email})
                     except Exception:
