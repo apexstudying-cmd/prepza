@@ -256,8 +256,14 @@ def _complete_generation_notification(notification_id, material_id, *, success, 
             notification.type = "podcast_failed"
             notification.title = "Podcast generation couldn't finish"
             notification.body = "Your podcast could not be completed. You can try again from the study hub."
+        from app import Document
+        document = Document.query.filter_by(
+            document_content_id=db.session.get(__import__("app").GeneratedMaterial, material_id).document_content_id,
+            user_id=notification.user_id,
+            is_removed=False,
+        ).first()
         notification.related_type = "document"
-        notification.related_id = material_id
+        notification.related_id = document.id if document else None
         notification.is_read = False
         db.session.commit()
         send_push_notification(
