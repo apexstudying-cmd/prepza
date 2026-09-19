@@ -3691,7 +3691,12 @@ def get_document(document_id):
         if document.user_id != user_id:
             material_query = material_query.filter_by(status="ready", scope="shared", owner_user_id=None)
         materials = [
-            {"type": m.material_type, "status": m.status}
+            {
+                "id": m.id,
+                "type": m.material_type,
+                "status": m.status,
+                "parameters": m.generation_parameters or {},
+            }
             for m in material_query.all()
         ]
 
@@ -3942,6 +3947,27 @@ def _published_material_response(user_id, content, material):
         "payload": json.loads(material.payload),
     }
 
+def _requested_generated_material(user_id, document, material_id, material_type):
+    """Resolve one exact ready artifact without falling back to another variant."""
+    try:
+        requested_id = int(material_id)
+    except (TypeError, ValueError):
+        return None
+    material = db.session.get(GeneratedMaterial, requested_id)
+    if not material or material.document_content_id != document.document_content_id:
+        return None
+    if material.material_type != material_type or material.status != "ready" or not material.payload:
+        return None
+    if document.user_id == user_id:
+        if material.scope == "private" and material.owner_user_id != user_id:
+            return None
+        if material.scope not in ("private", "shared"):
+            return None
+    elif not (material.scope == "shared" and material.owner_user_id is None):
+        return None
+    return material
+
+
 def _ai_generation_parameters_from_request():
     """Return an AI generation parameter object without coercing invalid JSON shapes."""
     data = request.get_json(silent=True)
@@ -3979,6 +4005,12 @@ def summarize_document(document_id):
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
+    requested_material_id = request.headers.get("X-Prepza-Material-ID")
+    if requested_material_id:
+        exact = _requested_generated_material(user_id, document, requested_material_id, "summary")
+        if not exact:
+            return jsonify({"error": "The selected study material is no longer available"}), 404
+        return jsonify({"material_id": exact.id, "reused": True, "summary": json.loads(exact.payload)}), 200
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
         result = _resolve_material_generation("summary", content, user_id, parameters)
@@ -4015,6 +4047,12 @@ def quiz_document(document_id):
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
+    requested_material_id = request.headers.get("X-Prepza-Material-ID")
+    if requested_material_id:
+        exact = _requested_generated_material(user_id, document, requested_material_id, "quiz")
+        if not exact:
+            return jsonify({"error": "The selected study material is no longer available"}), 404
+        return jsonify({"material_id": exact.id, "reused": True, "quiz": json.loads(exact.payload)}), 200
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
         result = _resolve_material_generation("quiz", content, user_id, parameters)
@@ -4115,6 +4153,12 @@ def flashcards_document(document_id):
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
+    requested_material_id = request.headers.get("X-Prepza-Material-ID")
+    if requested_material_id:
+        exact = _requested_generated_material(user_id, document, requested_material_id, "flashcards")
+        if not exact:
+            return jsonify({"error": "The selected study material is no longer available"}), 404
+        return jsonify({"material_id": exact.id, "reused": True, "flashcards": json.loads(exact.payload)}), 200
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
         result = _resolve_material_generation("flashcards", content, user_id, parameters)
@@ -4207,6 +4251,12 @@ def mind_map_document(document_id):
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
+    requested_material_id = request.headers.get("X-Prepza-Material-ID")
+    if requested_material_id:
+        exact = _requested_generated_material(user_id, document, requested_material_id, "mind_map")
+        if not exact:
+            return jsonify({"error": "The selected study material is no longer available"}), 404
+        return jsonify({"material_id": exact.id, "reused": True, "mind_map": json.loads(exact.payload)}), 200
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
         result = _resolve_material_generation("mind_map", content, user_id, parameters)
@@ -4288,6 +4338,12 @@ def podcast_script_document(document_id):
         if not material or not material.payload:
             return jsonify({"error": "Podcast has not been published yet"}), 404
         return jsonify({"material_id": material.id, "reused": True, "podcast": json.loads(material.payload)}), 200
+    requested_material_id = request.headers.get("X-Prepza-Material-ID")
+    if requested_material_id:
+        exact = _requested_generated_material(user_id, document, requested_material_id, "podcast")
+        if not exact:
+            return jsonify({"error": "The selected study material is no longer available"}), 404
+        return jsonify({"material_id": exact.id, "reused": True, "podcast": json.loads(exact.payload)}), 200
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
         result = _resolve_material_generation("podcast", content, user_id, parameters)
