@@ -139,6 +139,13 @@ def register_discovery(app, db):
         rows = db.session.execute(text(query), params).all()
         return [int(r[0]) for r in rows]
 
+    def campaign_usage(row):
+        if row["bid_type"] == "cpc":
+            return int(row["delivered_clicks"] or 0) * int(row["bid_kes"])
+        if row["placement"] == "push":
+            return (int(row["push_delivered"] or 0) * int(row["bid_kes"]) + 999) // 1000
+        return (int(row["delivered_impressions"] or 0) * int(row["bid_kes"]) + 999) // 1000
+
     def campaign_row(campaign_id):
         return db.session.execute(text("""
             SELECT * FROM discovery_campaign WHERE id = :id
@@ -344,6 +351,8 @@ def register_discovery(app, db):
         row = campaign_row(campaign_id)
         if not row or row["status"] != "active":
             return jsonify({"error": "Campaign unavailable"}), 404
+        if campaign_usage(row) >= int(row["budget_kes"]):
+            return jsonify({"eligible": False, "code": "campaign_budget_exhausted"}), 200
         target = row["target_json"] or {}
         if not target_matches(uid, target):
             return jsonify({"eligible": False}), 200
@@ -376,6 +385,8 @@ def register_discovery(app, db):
             return jsonify({"error": "Campaign unavailable"}), 404
         if not target_matches(uid, row["target_json"] or {}):
             return jsonify({"eligible": False}), 200
+        if campaign_usage(row) >= int(row["budget_kes"]):
+            return jsonify({"eligible": False, "code": "campaign_budget_exhausted"}), 200
         key = f"click:{campaign_id}:{uid}:{secrets.token_hex(8)}"
         amount = int(row["bid_kes"]) if row["bid_type"] == "cpc" else 0
         db.session.execute(text("""
@@ -426,12 +437,7 @@ def register_discovery(app, db):
         impressions = int(row["delivered_impressions"] or 0)
         clicks = int(row["delivered_clicks"] or 0)
         push = int(row["push_delivered"] or 0)
-        if row["bid_type"] == "cpc":
-            usage = clicks * int(row["bid_kes"])
-        elif row["placement"] == "push":
-            usage = (push * int(row["bid_kes"])) // 1000
-        else:
-            usage = (impressions * int(row["bid_kes"])) // 1000
+        usage = campaign_usage(row)
         return jsonify({
             "currency": "KES", "usage_charge_kes": min(max(0, usage), int(row["budget_kes"])),
             "budget_kes": int(row["budget_kes"]),
@@ -569,12 +575,7 @@ def register_discovery(app, db):
         """), {"oid": organisation_id}).mappings().all()
         total_spend = 0
         for r in rows:
-            if r["bid_type"] == "cpc":
-                charge = int(r["delivered_clicks"]) * int(r["bid_kes"])
-            elif r["placement"] == "push":
-                charge = int(r["push_delivered"]) * int(r["bid_kes"]) // 1000
-            else:
-                charge = int(r["delivered_impressions"]) * int(r["bid_kes"]) // 1000
+            charge = campaign_usage(r)
             total_spend += min(charge, int(r["budget_kes"]))
         return jsonify({"currency": "KES", "pricing": DISCOVERY_PRICING,
                         "campaigns": [dict(r) for r in rows], "estimated_usage_spend_kes": total_spend})
