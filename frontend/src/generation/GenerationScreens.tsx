@@ -150,6 +150,23 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
   }, [minutes, phase])
 
   useEffect(() => {
+    if (activeDocumentId == null || !csrf || phase !== 'config') return
+    let cancelled = false
+    generationApi<{ audio_status: string; audio_url: string | null; duration_seconds: number | null }>('/documents/' + activeDocumentId + '/podcast-audio')
+      .then(res => {
+        if (cancelled) return
+        if (res.audio_status === 'processing') setPhase('audio')
+        else if (res.audio_status === 'ready' && res.audio_url) {
+          setAudioUrl(res.audio_url)
+          setAudioDuration(res.duration_seconds || 0)
+          setPhase('ready')
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [activeDocumentId, csrf, phase])
+
+  useEffect(() => {
     if (phase !== 'audio' || activeDocumentId == null) return
     let cancelled = false
     const poll = async () => {
