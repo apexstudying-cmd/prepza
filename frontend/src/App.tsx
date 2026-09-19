@@ -2962,13 +2962,14 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
-
-  const [stage, setStage] = useState<'script' | 'audio' | 'ready'>('script')
+  const [speed, setSpeed] = useState(1)
+  const [stage, setStage] = useState<'loading' | 'audio' | 'ready'>('loading')
   const [title, setTitle] = useState('Study Podcast')
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [csrfToken, setCsrfToken] = useState('')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
+
+  const positionKey = activeDocumentId == null ? '' : `prepza-podcast-position:${activeDocumentId}`
 
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
@@ -2981,41 +2982,40 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
       api('/study-time/heartbeat', {
         method: 'POST',
         headers: { 'X-CSRF-Token': heartbeatCsrf },
-        body: JSON.stringify({ feature: 'podcast' }),
+        body: JSON.stringify({ feature: 'podcast', document_id: activeDocumentId }),
       }).catch(() => {})
     }
+    ping()
     const interval = setInterval(ping, 20000)
     return () => clearInterval(interval)
-  }, [playing, heartbeatCsrf])
+  }, [playing, heartbeatCsrf, activeDocumentId])
 
   useEffect(() => {
     if (activeDocumentId == null) { setError('No document selected.'); return }
     let cancelled = false
-
     const run = async () => {
       try {
-        const me = await api<{ csrf_token: string }>('/me')
+        const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null }>(`/documents/${activeDocumentId}/podcast-audio`)
         if (cancelled) return
-        setCsrfToken(me.csrf_token)
-
-        const scriptRes = await api<{ material_id: number; reused: boolean; podcast: any }>(`/documents/${activeDocumentId}/podcast-script`, {
-          method: 'POST',
-          headers: { 'X-CSRF-Token': me.csrf_token },
-        })
-        if (cancelled) return
-        if (scriptRes.podcast?.title) setTitle(scriptRes.podcast.title)
-
-        setStage('audio')
-        const audioKickoff = await api<{ audio_status: string; material_id: number }>(`/documents/${activeDocumentId}/podcast-audio`, {
-          method: 'POST',
-          headers: { 'X-CSRF-Token': me.csrf_token },
-        })
-        if (cancelled) return
-
-        if (audioKickoff.audio_status === 'ready') {
-          await pollAudio()
+        if (existing.audio_status === 'ready' && existing.audio_url) {
+          setAudioUrl(existing.audio_url)
+          setDuration(existing.duration_seconds || 0)
+          setStage('ready')
           return
         }
+
+        const me = await api<{ csrf_token: string }>('/me')
+        if (cancelled) return
+        const scriptRes = await api<{ material_id: number; reused: boolean; podcast: any }>(`/documents/${activeDocumentId}/podcast-script`, {
+          method: 'POST', headers: { 'X-CSRF-Token': me.csrf_token },
+        })
+        if (scriptRes.podcast?.title) setTitle(scriptRes.podcast.title)
+        if (cancelled) return
+        setStage('audio')
+
+        await api(`/documents/${activeDocumentId}/podcast-audio`, {
+          method: 'POST', headers: { 'X-CSRF-Token': me.csrf_token },
+        })
 
         const poll = async () => {
           if (cancelled) return
@@ -3025,96 +3025,131 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
             setAudioUrl(status.audio_url)
             setDuration(status.duration_seconds || 0)
             setStage('ready')
+          } else if (status.audio_status === 'failed') {
+            setError('Audio generation failed. Try again from the document study hub.')
           } else {
-            setTimeout(poll, 3000)
+            setTimeout(poll, 2500)
           }
         }
         await poll()
       } catch (e) {
         if (cancelled) return
-        const cachedScript = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/podcast-script`)
         const cachedAudio = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/podcast-audio`)
         const sourceAudioUrl = typeof cachedAudio?.audio_url === 'string' ? cachedAudio.audio_url : ''
         const localAudioUrl = sourceAudioUrl ? await getCachedGeneratedAudioUrl(sourceAudioUrl) : null
         if (localAudioUrl) {
-          if (cachedScript?.title) setTitle(cachedScript.title)
           setAudioUrl(localAudioUrl)
           setDuration(Number(cachedAudio?.duration_seconds || 0))
           setStage('ready')
           return
         }
-        if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
-        else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
-        else setError(e instanceof ApiError ? e.message : 'Could not generate this podcast. Please try again.')
+        setError(e instanceof ApiError ? e.message : 'Could not open this podcast.')
       }
     }
-
-    const pollAudio = async () => {
-      const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null }>(`/documents/${activeDocumentId}/podcast-audio`)
-      if (status.audio_status === 'ready' && status.audio_url) {
-        setAudioUrl(status.audio_url)
-        setDuration(status.duration_seconds || 0)
-        setStage('ready')
-      }
-    }
-
-    run()
+    void run()
     return () => { cancelled = true }
   }, [activeDocumentId])
 
-  const togglePlay = () => {
-    const el = audioRef.current
-    if (!el) return
-    if (playing) { el.pause() } else { el.play() }
-    setPlaying(!playing)
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !audioUrl) return
+    const saved = positionKey ? Number(localStorage.getItem(positionKey) || 0) : 0
+    const restore = () => {
+      if (Number.isFinite(saved) && saved > 0 && saved < (audio.duration || Infinity)) audio.currentTime = saved
+    }
+    const onTime = () => {
+      setProgress(audio.currentTime)
+      if (positionKey) localStorage.setItem(positionKey, String(Math.floor(audio.currentTime)))
+    }
+    const onPlay = () => setPlaying(true)
+    const onPause = () => setPlaying(false)
+    const onEnded = () => {
+      setPlaying(false)
+      if (positionKey) localStorage.removeItem(positionKey)
+    }
+    audio.addEventListener('loadedmetadata', restore)
+    audio.addEventListener('timeupdate', onTime)
+    audio.addEventListener('play', onPlay)
+    audio.addEventListener('pause', onPause)
+    audio.addEventListener('ended', onEnded)
+    return () => {
+      audio.removeEventListener('loadedmetadata', restore)
+      audio.removeEventListener('timeupdate', onTime)
+      audio.removeEventListener('play', onPlay)
+      audio.removeEventListener('pause', onPause)
+      audio.removeEventListener('ended', onEnded)
+    }
+  }, [audioUrl, positionKey])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.playbackRate = speed
+  }, [speed, audioUrl])
+
+  useEffect(() => {
+    const media = navigator.mediaSession
+    if (!media || !audioUrl) return
+    media.metadata = new MediaMetadata({ title, artist: 'Prepza', album: 'Prepza Study Podcast' })
+    media.setActionHandler('play', () => { void audioRef.current?.play() })
+    media.setActionHandler('pause', () => audioRef.current?.pause())
+    media.setActionHandler('seekbackward', () => seek(-15))
+    media.setActionHandler('seekforward', () => seek(15))
+    media.setActionHandler('stop', () => {
+      const audio = audioRef.current
+      if (audio) { audio.pause(); audio.currentTime = 0 }
+      setPlaying(false)
+    })
+    return () => {
+      for (const action of ['play','pause','seekbackward','seekforward','stop'] as MediaSessionAction[]) {
+        try { media.setActionHandler(action, null) } catch {}
+      }
+    }
+  }, [audioUrl, title])
+
+  const togglePlay = async () => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (audio.paused) await audio.play()
+    else audio.pause()
   }
 
-  const seek = (delta: number) => {
-    const el = audioRef.current
-    if (!el) return
-    el.currentTime = Math.max(0, Math.min(el.duration || duration, el.currentTime + delta))
+  function seek(delta: number) {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.currentTime = Math.max(0, Math.min(audio.duration || duration, audio.currentTime + delta))
+    setProgress(audio.currentTime)
   }
 
-  const fmt = (s: number) => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`
+  const cycleSpeed = () => {
+    const values = [0.5, 0.75, 1, 1.25, 1.5, 2]
+    setSpeed(values[(values.indexOf(speed) + 1) % values.length])
+  }
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
-        <TopBar title="Study Podcast" onBack={() => window.history.back()} />
-      </div>
+      <div style={{ background: N.navy, padding: '0 18px 20px' }}><TopBar title="Study Podcast" onBack={() => setScreen('document-study')} /></div>
       {error ? <GenerationError error={error} /> : stage !== 'ready' ? (
-        <GenerationLoading label={stage === 'script' ? 'Writing your podcast script…' : 'Generating audio — this can take a minute…'} />
+        <GenerationLoading label={stage === 'loading' ? 'Opening your podcast…' : 'Generating audio — this can take a minute…'} />
       ) : (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 28px', gap: 28 }}>
-          {audioUrl && (
-            <audio
-              ref={audioRef}
-              src={audioUrl}
-              onTimeUpdate={e => setProgress(e.currentTarget.currentTime)}
-              onLoadedMetadata={e => setDuration(e.currentTarget.duration)}
-              onEnded={() => setPlaying(false)}
-            />
-          )}
-          {/* Album art */}
-          <div style={{ width: 200, height: 200, borderRadius: 28, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 16px 48px rgba(201,168,76,0.35)`, fontSize: 80, fontWeight: 800, color: N.navy, fontFamily: 'Plus Jakarta Sans' }}>🎙️</div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 4 }}>{title}</div>
-            <Pill text="AI Generated" color={N.gold} />
-          </div>
-          {/* Progress */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 28px', gap: 24 }}>
+          {audioUrl && <audio ref={audioRef} src={audioUrl} preload="metadata" />}
+          <div style={{ width: 200, height: 200, borderRadius: 28, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 16px 48px rgba(201,168,76,0.35)`, fontSize: 28, fontWeight: 900, color: N.navy, fontFamily: 'Plus Jakarta Sans' }}>PREPZA</div>
+          <div style={{ textAlign: 'center' }}><div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 4 }}>{title}</div><Pill text="AI Generated" color={N.gold} /></div>
           <div style={{ width: '100%' }}>
-            <input type="range" min={0} max={duration || 1} step={0.5} value={progress} onChange={e => { const v = +e.target.value; setProgress(v); if (audioRef.current) audioRef.current.currentTime = v }} style={{ width: '100%', accentColor: N.gold, cursor: 'pointer' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.textMuted, marginTop: 4 }}>
-              <span>{fmt(progress)}</span><span>{fmt(duration)}</span>
-            </div>
+            <input aria-label="Podcast progress" type="range" min={0} max={duration || 1} step={0.5} value={progress} onChange={e => { const v = +e.target.value; setProgress(v); if (audioRef.current) audioRef.current.currentTime = v }} style={{ width: '100%', accentColor: N.gold, cursor: 'pointer' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.textMuted, marginTop: 4 }}><span>{fmt(progress)}</span><span>{fmt(duration)}</span></div>
           </div>
-          {/* Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-            <button onClick={() => seek(-15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.text }}>{Ic.rewind()}</button>
-            <button onClick={togglePlay} style={{ width: 64, height: 64, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 20px rgba(201,168,76,0.4)` }}>
-              <div style={{ color: T.text }}>{playing ? Ic.pause() : Ic.play()}</div>
-            </button>
-            <button onClick={() => seek(15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.text }}>{Ic.skip()}</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 26 }}>
+            <button aria-label="Rewind 15 seconds" onClick={() => seek(-15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.text }}>{Ic.rewind()}</button>
+            <button aria-label={playing ? 'Pause' : 'Play'} onClick={togglePlay} style={{ width: 64, height: 64, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 20px rgba(201,168,76,0.4)` }}><div style={{ color: T.text }}>{playing ? Ic.pause() : Ic.play()}</div></button>
+            <button aria-label="Forward 15 seconds" onClick={() => seek(15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.text }}>{Ic.skip()}</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={cycleSpeed} style={{ border: `1px solid ${T.border}`, background: T.card, color: T.text, borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>{speed}×</button>
+            <span style={{ fontSize: 11, color: T.textMuted }}>Speed</span>
           </div>
         </div>
       )}
