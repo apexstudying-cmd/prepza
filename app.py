@@ -13,7 +13,7 @@ from functools import wraps
 from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, or_, and_, text
-from threading import Lock
+from threading import Lock, Thread
 from sqlalchemy.exc import IntegrityError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -429,6 +429,89 @@ def get_generated_material_for_user(document_content_id, material_type, user_id)
     if public:
         return query.filter(GeneratedMaterial.scope == "shared").first()
     return None
+
+
+def _start_async_material_generation(document_content_id, user_id, feature, parameters):
+    """Create a user-visible generation job and run the existing generator off-request."""
+    job = AiJob(
+        document_content_id=document_content_id,
+        feature=feature,
+        status="processing",
+        progress_percent=5,
+        progress_stage="queued",
+        started_at=datetime.utcnow(),
+    )
+    db.session.add(job)
+    db.session.commit()
+    job_id = job.id
+    app_obj = app
+
+    def worker():
+        with app_obj.app_context():
+            local_job = db.session.get(AiJob, job_id)
+            try:
+                local_job.progress_percent = 12
+                local_job.progress_stage = "preparing"
+                db.session.commit()
+                generator = {
+                    "summary": ai_service.generate_document_summary,
+                    "quiz": ai_service.generate_document_quiz,
+                    "flashcards": ai_service.generate_document_flashcards,
+                    "podcast": ai_service.generate_document_podcast_script,
+                    "mind_map": ai_service.generate_document_mind_map,
+                }[feature]
+                local_job.progress_percent = 20
+                local_job.progress_stage = "generating with AI"
+                db.session.commit()
+                result = generator(
+                    document_content_id=document_content_id,
+                    triggering_user_id=user_id,
+                    plan_tier=get_ai_plan_tier(user_id),
+                    parameters=parameters,
+                )
+                local_job.progress_percent = 92
+                local_job.progress_stage = "saving generated material"
+                db.session.commit()
+                local_job.status = "completed"
+                local_job.progress_percent = 100
+                local_job.progress_stage = "ready"
+                local_job.completed_at = datetime.utcnow()
+                db.session.commit()
+                return result
+            except Exception as exc:
+                db.session.rollback()
+                local_job = db.session.get(AiJob, job_id)
+                if local_job:
+                    local_job.status = "failed"
+                    local_job.progress_stage = "failed"
+                    local_job.error_message = str(exc)[:500]
+                    local_job.completed_at = datetime.utcnow()
+                    db.session.commit()
+                print(f"ERROR: async {feature} generation job {job_id} failed: {exc}")
+
+    Thread(target=worker, daemon=True).start()
+    return job_id
+
+
+@app.route("/ai-jobs/<int:job_id>")
+def get_ai_job_status(job_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    job = db.session.get(AiJob, job_id)
+    if not job:
+        return jsonify({"error": "Generation job not found"}), 404
+    document = db.session.get(Document, next((d.id for d in Document.query.filter_by(document_content_id=job.document_content_id, user_id=user_id, is_removed=False).all()), None))
+    if not document:
+        return jsonify({"error": "Generation job not found"}), 404
+    return jsonify({
+        "job_id": job.id,
+        "status": job.status,
+        "progress_percent": int(job.progress_percent or 0),
+        "progress_stage": job.progress_stage or "working",
+        "error": job.error_message,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+    })
 
 
 class AiJob(db.Model):
