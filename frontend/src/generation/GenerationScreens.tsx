@@ -96,7 +96,6 @@ function GenerationFailure({ error, onBack, onRetry }: { error: string; onBack: 
 }
 
 const PODCAST_OPTIONS = [
-  { minutes: 5, label: 'Quick Revision', description: 'Key points and essentials.', style: 'quick_revision' },
   { minutes: 10, label: 'Focused Revision', description: 'Core concepts with useful context.', style: 'focused_revision' },
   { minutes: 20, label: 'Deeper Explanation', description: 'Teaching, examples, and connections.', style: 'deep_explanation' },
   { minutes: 30, label: 'Deep Study', description: 'A proper guided study session.', style: 'deep_study' },
@@ -105,7 +104,7 @@ const PODCAST_OPTIONS = [
 ] as const
 
 export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setScreen: SetScreen; activeDocumentId: number | null }) {
-  const [minutes, setMinutes] = useState(5)
+  const [minutes, setMinutes] = useState(10)
   const [style, setStyle] = useState('quick_revision')
   const [csrf, setCsrf] = useState('')
   const [title, setTitle] = useState('Study Podcast')
