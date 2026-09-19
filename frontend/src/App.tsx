@@ -4648,9 +4648,8 @@ type ProfileMe = { id: number; display_name: string | null; bio: string | null; 
 const PROFILE_CACHE: { me?: ProfileMe; uniName?: string | null; programName?: string | null; summary?: GamificationSummary | null; achievementsList?: Achievement[]; weeklyStudySeconds?: number | null } = {}
 function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId, setActiveOpportunityId, onOpenOrgPortal }: { setScreen: (s: Screen) => void; setActiveProfileUserId?: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveOpportunityId: (id: number | null) => void; onOpenOrgPortal?: () => void }) {
   const { tokens: T } = useTheme()
-  const [tab, setTab] = useState<'posts'|'saved'|'activity'|'materials'>('posts')
+  const [tab, setTab] = useState<'saved'|'activity'|'materials'>('activity')
   const [showMenu, setShowMenu] = useState(false)
-  const [showAvatarPicker, setShowAvatarPicker] = useState(false)
 
   const [me, setMe] = useState<ProfileMe | null>(PROFILE_CACHE.me ?? null)
   const [meLoading, setMeLoading] = useState(PROFILE_CACHE.me === undefined)
@@ -4691,10 +4690,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId,
     setProfileTabError('')
     const load = async () => {
       try {
-        if (tab === 'posts') {
-          // There is no social post composer/model yet; keep the real profile empty instead of demo content.
-          if (!cancelled) setProfilePosts([])
-        } else if (tab === 'saved') {
+        if (tab === 'saved') {
           const res = await api<{ saved: any[] }>('/opportunities/saved')
           if (!cancelled) setProfileSaved(res.saved || [])
         } else if (tab === 'activity') {
@@ -4747,18 +4743,11 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId,
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ position: 'relative', marginBottom: 14 }}>
             <div style={{ width: 76, height: 76, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy, border: `3px solid rgba(201,168,76,0.4)` }}>{initials}</div>
-            <button onClick={() => setShowAvatarPicker(true)} style={{ position: 'absolute', bottom: 0, right: 0, width: 22, height: 22, background: N.gold, borderRadius: '50%', border: `2px solid ${N.navy}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <div style={{ color: T.text }}>{Ic.edit('w-3 h-3')}</div>
-            </button>
           </div>
           <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>{displayName}</div>
           {programName && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{programName}</div>}
           {uniName && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2, marginBottom: 14 }}>{uniName}</div>}
           {!programName && !uniName && <div style={{ marginBottom: 14 }} />}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Pill text="Top Learner" color={N.gold} />
-            <Pill text="Creator" color="#4C7BC9" />
-          </div>
         </div>
       </div>
 
@@ -4803,16 +4792,15 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId,
 
       <div style={{ margin: '14px 14px 0', background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-          {(['posts','saved','activity','materials'] as const).map(t => (
+          {(['saved','activity','materials'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '11px 0', background: 'none', border: 'none', fontWeight: tab === t ? 800 : 500, fontSize: 11, color: tab === t ? N.navy : '#9CA3AF', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', borderBottom: tab === t ? `2px solid ${N.gold}` : '2px solid transparent' }}>
-              {t === 'posts' ? 'Posts' : t === 'saved' ? 'Saved' : t === 'activity' ? 'Activity' : 'Materials'}
+              {t === 'saved' ? 'Saved' : t === 'activity' ? 'Activity' : 'Materials'}
             </button>
           ))}
         </div>
         <div style={{ padding: 14 }}>
           {profileTabLoading ? <div style={{ padding: '18px 0', textAlign: 'center', color: T.textMuted, fontSize: 12 }}>Loading…</div> : profileTabError ? <div style={{ padding: '18px 0', textAlign: 'center', color: '#B91C1C', fontSize: 12 }}>{profileTabError}</div> : (
             <>
-              {tab === 'posts' && <div style={{ padding: '18px 0', textAlign: 'center', color: T.textMuted, fontSize: 12 }}>{profilePosts.length ? 'Posts are available here.' : 'No posts yet.'}</div>}
               {tab === 'saved' && (profileSaved.length === 0 ? <div style={{ padding: '18px 0', textAlign:'center', color:T.textMuted, fontSize:12 }}>No saved opportunities yet.</div> : <div style={{display:'flex',flexDirection:'column',gap:8}}>{profileSaved.map((o:any)=><button key={o.id} onClick={()=>{setActiveOpportunityId(o.id);setScreen('opportunity-detail')}} style={{display:'flex',gap:10,alignItems:'center',width:'100%',background:'none',border:'none',padding:'8px 0',textAlign:'left',cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{width:34,height:34,borderRadius:10,background:`${N.gold}18`,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,color:N.gold}}>{(o.title||'O').slice(0,1).toUpperCase()}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:T.text}} className="line-clamp-1">{o.title}</div><div style={{fontSize:10,color:T.textMuted}}>{o.organisation?.name || 'Opportunity'}</div></div>{Ic.chevR('w-4 h-4')}</button>)}</div>)}
               {tab === 'activity' && <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}><div style={{background:'#F8F9FC',borderRadius:12,padding:12}}><div style={{fontSize:9,color:T.textMuted}}>THIS WEEK</div><div style={{fontSize:20,fontWeight:800,color:N.navy,marginTop:5}}>{formatStudyTime(profileActivity?.week_seconds || 0)}</div></div><div style={{background:'#F8F9FC',borderRadius:12,padding:12}}><div style={{fontSize:9,color:T.textMuted}}>THIS MONTH</div><div style={{fontSize:20,fontWeight:800,color:N.navy,marginTop:5}}>{formatStudyTime(profileActivity?.month_seconds || 0)}</div></div><button onClick={()=>setScreen('study-activity')} style={{gridColumn:'1 / -1',marginTop:2,padding:11,border:`1px solid ${N.navy}18`,borderRadius:12,background:T.card,color:N.navy,fontWeight:800,fontSize:11,cursor:'pointer'}}>View full study activity</button></div>}
               {tab === 'materials' && (profileMaterials.length === 0 ? <div style={{padding:'18px 0',textAlign:'center',color:T.textMuted,fontSize:12}}>No study materials yet.</div> : <div style={{display:'flex',flexDirection:'column',gap:8}}>{profileMaterials.slice(0,8).map(d=><button key={d.id} onClick={()=>{setActiveDocumentId(d.id);setScreen('document-study')}} style={{display:'flex',gap:10,alignItems:'center',width:'100%',background:'none',border:'none',padding:'7px 0',textAlign:'left',cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{width:34,height:34,borderRadius:10,background:'#F3F4F6',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:11,color:N.navy}}>{(d.file_type||'DOC').toUpperCase().slice(0,3)}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:10,color:T.textMuted}}>{d.status}</div></div>{Ic.chevR('w-4 h-4')}</button>)}</div>)}
@@ -4822,21 +4810,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId,
       </div>
       <div style={{ height: 24 }} />
 
-      {showAvatarPicker && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }}>
-          <div style={{ background: T.card, borderRadius: '24px 24px 0 0', padding: '24px 20px 36px', width: '100%' }}>
-            <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
-            <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 16 }}>Change Profile Photo</div>
-            {[['📷','Take Photo'],['🖼️','Choose from Library'],['🔗','Enter Avatar URL']].map(([icon,label],i) => (
-              <button key={i} onClick={() => setShowAvatarPicker(false)} style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', background: '#F8F9FC', border: 'none', borderRadius: 12, padding: '13px 16px', marginBottom: 8, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-                <span style={{ fontSize: 22 }}>{icon}</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{label}</span>
-              </button>
-            ))}
-            <button onClick={() => setShowAvatarPicker(false)} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 12, padding: '12px 0', marginTop: 4, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 13, color: '#374151' }}>Cancel</button>
-          </div>
-        </div>
-      )}
+}
     </div>
   )
 }
