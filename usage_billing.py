@@ -756,7 +756,7 @@ def register_usage_billing(app, db):
             },
         })
 
-    @app.post("/api/organisations/<int:organisation_id>/billing/checkout")
+    @app.post("/api/organisations/<int:organisation_id>/billing/manual-checkout")
     def organisation_billing_checkout(organisation_id):
         user_id = session.get("user_id")
         if not user_id:
@@ -872,6 +872,12 @@ def register_usage_billing(app, db):
         """), {"oid": organisation_id}).mappings().first()
         if not row:
             return jsonify({"error": "Organisation billing record not found"}), 404
+        existing_event = db.session.execute(text("""
+            SELECT id FROM organisation_billing_event
+            WHERE event_key = :event_key LIMIT 1
+        """), {"event_key": f"payment:{organisation_id}:{reference}"}).scalar_one_or_none()
+        if existing_event:
+            return jsonify({"ok": True, "idempotent": True, "billing": _org_plan(organisation_id)})
         now = datetime.utcnow()
         expires = now + timedelta(days=31)
         db.session.execute(text("""
@@ -890,6 +896,7 @@ def register_usage_billing(app, db):
             INSERT INTO organisation_billing_event
                 (organisation_id, event_key, event_type, amount_kes, status, metadata)
             VALUES (:oid, :event_key, 'payment_recorded', :amount, 'paid', CAST(:metadata AS jsonb))
+            ON CONFLICT (event_key) DO NOTHING
         """), {"oid": organisation_id, "event_key": f"payment:{organisation_id}:{reference}",
                "amount": int(row["monthly_fee_kes"] or 0), "metadata": json.dumps({"payment_reference": reference})})
         db.session.commit()
