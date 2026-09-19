@@ -3950,7 +3950,7 @@ def summarize_document(document_id):
         return jsonify({"error": "Document not found"}), 404
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to summarize"}), 400
-        if document.user_id != user_id:
+    if document.user_id != user_id:
         shared = _published_ready_material_for_viewer(user_id, document, "summary", _ai_generation_parameters_from_request())
         if not shared:
             return jsonify({"error": "Published summary has not been generated yet"}), 404
@@ -3963,7 +3963,7 @@ def summarize_document(document_id):
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
-        result = _resolve_material_generation(summary, content, user_id, parameters)
+        result = _resolve_material_generation("summary", content, user_id, parameters)
         record_document_studied(user_id, content.id)
         db.session.commit()
         return jsonify({"material_id": result["material_id"], "reused": result["reused"], "summary": result["payload"]}), 200
@@ -3988,7 +3988,7 @@ def quiz_document(document_id):
         return jsonify({"error": "Document not found"}), 404
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to quiz"}), 400
-        if document.user_id != user_id:
+    if document.user_id != user_id:
         shared = _published_ready_material_for_viewer(user_id, document, "quiz", _ai_generation_parameters_from_request())
         if not shared:
             return jsonify({"error": "Published quiz has not been generated yet"}), 404
@@ -4001,7 +4001,7 @@ def quiz_document(document_id):
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
-        result = _resolve_material_generation(quiz, content, user_id, parameters)
+        result = _resolve_material_generation("quiz", content, user_id, parameters)
         record_document_studied(user_id, content.id)
         db.session.commit()
         return jsonify({"material_id": result["material_id"], "reused": result["reused"], "quiz": result["payload"]}), 200
@@ -4090,7 +4090,7 @@ def flashcards_document(document_id):
         return jsonify({"error": "Document not found"}), 404
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate flashcards from"}), 400
-        if document.user_id != user_id:
+    if document.user_id != user_id:
         shared = _published_ready_material_for_viewer(user_id, document, "flashcards", _ai_generation_parameters_from_request())
         if not shared:
             return jsonify({"error": "Published flashcards has not been generated yet"}), 404
@@ -4103,7 +4103,7 @@ def flashcards_document(document_id):
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
-        result = _resolve_material_generation(flashcards, content, user_id, parameters)
+        result = _resolve_material_generation("flashcards", content, user_id, parameters)
         record_document_studied(user_id, content.id)
         db.session.commit()
         return jsonify({"material_id": result["material_id"], "reused": result["reused"], "flashcards": result["payload"]}), 200
@@ -4170,6 +4170,41 @@ def complete_flashcards(document_id, material_id):
     }), 201
 
 
+@app.route("/documents/<int:document_id>/mind-map", methods=["POST"])
+@limiter.limit(
+    "20 per hour",
+    key_func=lambda: f"mind-map:{session.get('user_id', get_remote_address())}",
+)
+@require_csrf
+def mind_map_document(document_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    document = db.session.get(Document, document_id)
+    if not _can_study_document(user_id, document):
+        return jsonify({"error": "Document not found"}), 404
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no content to generate a mind map from"}), 400
+    if document.user_id != user_id:
+        shared = _published_ready_material_for_viewer(user_id, document, "mind_map", _ai_generation_parameters_from_request())
+        if not shared:
+            return jsonify({"error": "Published mind map has not been generated yet"}), 404
+        content, material = shared
+        result = _published_material_response(user_id, content, material)
+        return jsonify({"material_id": result["material_id"], "reused": True, "mind_map": result["payload"]}), 200
+    content = db.session.get(DocumentContent, document.document_content_id)
+    if not content or content.status != "ready":
+        return jsonify({"error": "Document is still processing - try again shortly"}), 400
+    parameters = _ai_generation_parameters_from_request()
+    if request.headers.get("X-Prepza-Resolve-Generation") == "1":
+        result = _resolve_material_generation("mind_map", content, user_id, parameters)
+        return jsonify({"material_id": result["material_id"], "reused": result["reused"], "mind_map": result["payload"]}), 200
+    job_id = _start_async_material_generation(
+        document_content_id=content.id, user_id=user_id, feature="mind_map", parameters=parameters
+    )
+    return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
+
+
 @app.route("/documents/<int:document_id>/generation-progress", methods=["GET"])
 @login_required
 def generation_progress(document_id):
@@ -4211,6 +4246,7 @@ def generation_progress(document_id):
         "progress_percent": max(0, min(100, int(job.progress_percent or 0))),
         "progress_stage": job.progress_stage or "working",
         "error_message": job.error_message if job.status == "failed" else None,
+        "material_id": job.material_id,
     }), 200
 
 
