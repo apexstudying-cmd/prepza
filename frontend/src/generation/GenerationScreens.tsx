@@ -225,7 +225,7 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
 
   const generate = async () => {
     if (activeDocumentId == null || !csrf) return
-    setError(''); setPhase('script')
+    setError(''); setGenerationPercent(0); setGenerationStage('preparing'); setPhase('script')
     try {
       const scriptJob = await generationApi<{ job_id: number }>(`/documents/${activeDocumentId}/podcast-script?async=1`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ duration_minutes: minutes, style, language: 'en' }) })
       const scriptResult = await pollGenerationJob<{ script?: any; audio_status?: string }>(scriptJob.job_id, (p, s) => { setGenerationPercent(Math.min(65, Math.round(p * 0.65))); setGenerationStage(s) })
@@ -312,7 +312,7 @@ export function FlashcardsGenerationScreen({ setScreen, activeDocumentId }: { se
 
   const generate = async () => {
     if (activeDocumentId == null || !csrf || !canGenerate(usage, 'flashcards', count)) return
-    setError(''); setPhase('generating')
+    setError(''); setGenerationPercent(0); setGenerationStage('preparing'); setPhase('generating')
     try {
       const started = await generationApi<{ job_id: number }>(`/documents/${activeDocumentId}/flashcards?async=1`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ card_count: count, difficulty, language: 'en' }) })
       const result = await pollGenerationJob<any>(started.job_id, (p, s) => { setGenerationPercent(p); setGenerationStage(s) })
