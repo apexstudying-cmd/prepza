@@ -675,8 +675,15 @@ function DocumentStudyHubScreen({
     podcast: { label: 'Podcast', icon: '◉', screen: 'podcast-player' },
   }
 
-  const openMaterial = (type: string) => {
-    const key = type.toLowerCase().replace(/-/g, '_')
+  const openMaterial = (material: { id: number; type: string }) => {
+    const key = material.type.toLowerCase().replace(/-/g, '_')
+    try {
+      sessionStorage.setItem('prepza-open-material', JSON.stringify({
+        documentId: activeDocumentId,
+        materialId: material.id,
+        type: key,
+      }))
+    } catch {}
     setScreen(materialMeta[key]?.screen || 'document-reader')
   }
 
@@ -742,7 +749,7 @@ function DocumentStudyHubScreen({
           </div>
         ) : readyMaterials.map((m, i) => {
           const meta = materialMeta[m.type.toLowerCase().replace(/-/g, '_')] || { label: m.type.replace(/_/g, ' '), icon: '•', screen: 'document-reader' as Screen }
-          return <button key={`${m.type}-${i}`} onClick={() => openMaterial(m.type)} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, marginBottom: 9, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+          return <button key={`${m.type}-${i}`} onClick={() => openMaterial(m)} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, marginBottom: 9, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
             <div style={{ width: 42, height: 42, borderRadius: 12, background: `${N.navy}0D`, color: N.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900 }}>{meta.icon}</div>
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13, textTransform: 'capitalize' }}>{meta.label}</div><div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>Ready to replay</div></div>
             <span style={{ color: T.textMuted }}>›</span>
