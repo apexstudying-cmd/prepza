@@ -4843,14 +4843,27 @@ def publish_document():
                      "materials has been flagged for review"
         }), 400
 
-    existing_active = LibraryPublication.query.filter(
-        LibraryPublication.document_id == document_id,
-        LibraryPublication.status.in_(LIBRARY_ACTIVE_STATUSES),
-    ).first()
+    # Library publishing is content-addressed, not name/document-row addressed.
+    # Multiple student Document rows may point at the same DocumentContent, but
+    # the same underlying bytes must never become multiple active library copies.
+    existing_active = (
+        LibraryPublication.query
+        .join(Document, LibraryPublication.document_id == Document.id)
+        .filter(
+            Document.document_content_id == document.document_content_id,
+            LibraryPublication.status.in_(LIBRARY_ACTIVE_STATUSES),
+        )
+        .first()
+    )
     if existing_active:
+        # The content is already represented in the Library. Do not create
+        # another publication row or duplicate storage. A duplicate publish
+        # attempt is a successful no-op from the student's perspective.
         return jsonify({
-            "error": f"This document already has an active library submission (status: {existing_active.status})"
-        }), 409
+            "published": False,
+            "duplicate": True,
+            "message": "Thank you for publishing. This document is already in the Library.",
+        }), 200
 
     publication = LibraryPublication(
         document_id=document_id,
