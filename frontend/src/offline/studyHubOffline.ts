@@ -289,7 +289,12 @@ export async function getOfflineStudyDocumentBlob(documentId: number, userId: nu
     const meta = await getMeta(`${userId}:${documentId}`)
     if (!meta) return null
     const asset = await getStudyAsset(`${userId}:${documentId}`)
-    return asset?.blob instanceof Blob ? asset.blob : null
+    if (asset?.blob instanceof Blob) return asset.blob
+    if (meta.contentHash) {
+      const local = await findLocalDocumentByContentHash(userId, meta.contentHash)
+      return local?.asset?.blob instanceof Blob ? local.asset.blob : null
+    }
+    return null
   } catch (_) { return null }
 }
 
