@@ -7,7 +7,8 @@ from datetime import datetime
 from ai_artifact_fingerprint import GENERATION_VERSION, build_generation_fingerprint
 from ai_generation_store import claim_or_get_generation, mark_generation_failed, mark_generation_ready, wait_for_generation
 
-PROMPT_VERSIONS = {key: f"{key}-v2" for key in ("summary", "quiz", "flashcards", "podcast", "mind_map")}
+PROMPT_VERSIONS = {key: f"{key}-v2" for key in ("summary", "quiz", "flashcards", "mind_map")}
+PROMPT_VERSIONS["podcast"] = "podcast-v3"
 SCHEMA_VERSIONS = {key: "schema-v2" for key in PROMPT_VERSIONS}
 PARAMETER_KEYS = {
     "summary": {"max_pages", "style", "language"},
@@ -84,13 +85,20 @@ def _parameter_instruction(params: dict) -> str:
     )
 
 
-def _generator(material_type):
+def _generator(material_type, parameters=None):
     import ai_service
     specs = {
         "summary": (ai_service.SUMMARY_JSON_SYSTEM_PROMPT, ai_service._parse_summary_json, "SUMMARIZATION"),
         "quiz": (ai_service.QUIZ_JSON_SYSTEM_PROMPT, ai_service._parse_quiz_json, "QUIZZES"),
         "flashcards": (ai_service.FLASHCARDS_JSON_SYSTEM_PROMPT, ai_service._parse_flashcards_json, "FLASHCARDS"),
-        "podcast": (ai_service.PODCAST_SCRIPT_JSON_SYSTEM_PROMPT, ai_service._parse_podcast_script_json, "PODCAST_SCRIPT"),
+        "podcast": (
+            ai_service.build_podcast_script_system_prompt(
+                (parameters or {}).get("duration_minutes"),
+                (parameters or {}).get("style"),
+            ),
+            ai_service._parse_podcast_script_json,
+            "PODCAST_SCRIPT",
+        ),
         "mind_map": (ai_service.MIND_MAP_JSON_SYSTEM_PROMPT, ai_service._parse_mindmap_json, "MIND_MAP"),
     }
     return specs[material_type]
@@ -207,13 +215,25 @@ def generate_document_material(*, material_type, document_content_id, triggering
         job = AiJob(document_content_id=document_content_id, feature=material_type, status="processing", started_at=datetime.utcnow())
         db.session.add(job)
         db.session.commit()
-        system_prompt, parser, task = _generator(material_type)
+        system_prompt, parser, task = _generator(material_type, params)
         user_message = f"Document text ({content.page_count or '?'} pages):\n\n{content.extracted_text}"
         constraint = _parameter_instruction(params)
         if constraint:
             user_message = constraint + "\n\n" + user_message
         task_config = ai_service.AI_TASKS[task]
-        ai_request = ai_service.AIRequest(task=task, system_prompt=system_prompt, user_message=user_message, max_tokens=task_config["max_tokens"])
+        max_tokens = task_config["max_tokens"]
+        if material_type == "podcast":
+            # 135 spoken words/minute is the planning pace. Reserve enough
+            # output tokens for the requested episode instead of truncating
+            # long episodes at the old 3072-token ceiling.
+            target_words = int(params.get("duration_minutes", 10) * 135)
+            max_tokens = min(16000, max(3072, int(target_words * 1.8)))
+        ai_request = ai_service.AIRequest(
+            task=task,
+            system_prompt=system_prompt,
+            user_message=user_message,
+            max_tokens=max_tokens,
+        )
         ai_response = ai_service.route_and_generate(ai_request)
         parsed = parser(ai_response.text)
         payload = _podcast_payload(parsed) if material_type == "podcast" else parsed
