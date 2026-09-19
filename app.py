@@ -8349,6 +8349,27 @@ def ambassador_dashboard():
     })
 
 
+@app.route("/ambassador/referral-qr")
+def ambassador_referral_qr():
+    """Return the logged-in active ambassador's referral link as a self-contained SVG QR."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    ambassador = Ambassador.query.filter_by(user_id=user_id).first()
+    if not ambassador or ambassador.status not in ("active", "suspended"):
+        return jsonify({"error": "You are not an active ambassador"}), 403
+
+    referral_link = f"{BASE_URL}/signup?ref={ambassador.referral_code}&via=qr"
+    import qrcode
+    from qrcode.image.svg import SvgPathImage
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=4)
+    qr.add_data(referral_link)
+    qr.make(fit=True)
+    image = qr.make_image(image_factory=SvgPathImage)
+    svg = image.to_string()
+    return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control": "private, max-age=300"})
+
+
 @app.route("/ambassador/referrals")
 def ambassador_referrals():
     user_id = session.get("user_id")
