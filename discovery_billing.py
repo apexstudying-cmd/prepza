@@ -107,7 +107,6 @@ def register_discovery(app, db):
         return str(row["plan_code"]), str(row["status"]), row["expires_at"]
 
     def eligible_users(target):
-        clauses = ["COALESCE(u.is_active, TRUE) = TRUE"]
         params = {}
         if target.get("university_ids"):
             clauses.append("u.university_id = ANY(:university_ids)")
@@ -137,18 +136,8 @@ def register_discovery(app, db):
             LEFT JOIN student_opportunity_discovery sd ON sd.user_id = u.id
             WHERE {' AND '.join(clauses)}
         """
-        try:
-            rows = db.session.execute(text(query), params).all()
-            return [int(r[0]) for r in rows]
-        except Exception:
-            # Some installations may not have is_active on user; retry without it.
-            clauses = [c for c in clauses if "u.is_active" not in c]
-            rows = db.session.execute(text(f"""
-                SELECT u.id FROM "user" u
-                LEFT JOIN student_opportunity_discovery sd ON sd.user_id = u.id
-                WHERE {' AND '.join(clauses)}
-            """), params).all()
-            return [int(r[0]) for r in rows]
+        rows = db.session.execute(text(query), params).all()
+        return [int(r[0]) for r in rows]
 
     def campaign_row(campaign_id):
         return db.session.execute(text("""
@@ -203,10 +192,16 @@ def register_discovery(app, db):
         endpoint_col = "endpoint" if "endpoint" in cols else None
         if not user_col or not endpoint_col:
             return []
+        key_col = "keys" if "keys" in cols else None
+        p256dh_col = "p256dh" if "p256dh" in cols else None
+        auth_col = "auth" if "auth" in cols else None
+        selected = f"{user_col}, {endpoint_col}"
+        if key_col: selected += f", {key_col}"
+        elif p256dh_col and auth_col: selected += f", {p256dh_col}, {auth_col}"
         rows = db.session.execute(text(
-            f"SELECT {user_col}, {endpoint_col} FROM {table} WHERE {user_col} = ANY(:ids)"
+            f"SELECT {selected} FROM {table} WHERE {user_col} = ANY(:ids)"
         ), {"ids": user_ids}).all()
-        return [{"user_id": int(r[0]), "endpoint": r[1]} for r in rows if r[1]]
+        return [{"user_id": int(r[0]), "endpoint": r[1], "keys": (r[2] if len(r) > 2 else None)} for r in rows if r[1]]
 
     @app.get("/api/organisations/<int:organisation_id>/discovery/pricing")
     def discovery_pricing(organisation_id):
@@ -491,7 +486,13 @@ def register_discovery(app, db):
                 payload = json.dumps({"title": row["name"], "body": "A new opportunity matched your Prepza interests.", "campaign_id": campaign_id})
                 for item in pending:
                     try:
-                        webpush(subscription_info={"endpoint": item["subscription_endpoint"], "keys": {}}, data=payload,
+                        keys = item.get("keys") or {}
+                        if isinstance(keys, str):
+                            try: keys = json.loads(keys)
+                            except Exception: keys = {}
+                        if not keys and len(item) > 3:
+                            keys = {"p256dh": item[2], "auth": item[3]}
+                        webpush(subscription_info={"endpoint": item["subscription_endpoint"], "keys": keys}, data=payload,
                                 vapid_private_key=vapid_private, vapid_claims={"sub": vapid_email})
                     except Exception:
                         continue
