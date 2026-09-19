@@ -3707,6 +3707,7 @@ def get_document(document_id):
         "status": effective_status,
         "file_type": content.file_type if content else None,
         "file_size_bytes": content.file_size_bytes if content else None,
+        "content_hash": content.content_hash if content else None,
         "page_count": content.page_count if content else None,
         "error_message": content.error_message if (content and effective_status == "failed") else None,
         "view_url": view_url,
