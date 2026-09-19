@@ -464,8 +464,76 @@ def register_discovery(app, db):
             if inserted:
                 queued += 1
         db.session.commit()
+        sent = 0
+        vapid_private = os.environ.get("VAPID_PRIVATE_KEY")
+        vapid_public = os.environ.get("VAPID_PUBLIC_KEY")
+        vapid_email = os.environ.get("VAPID_CLAIMS_EMAIL")
+        if vapid_private and vapid_public and vapid_email and queued:
+            try:
+                from pywebpush import webpush
+                pending = db.session.execute(text("""
+                    SELECT id,user_id,subscription_endpoint FROM discovery_push_delivery
+                    WHERE campaign_id=:cid AND status='queued' LIMIT 500
+                """), {"cid": campaign_id}).mappings().all()
+                payload = json.dumps({"title": row["name"], "body": "A new opportunity matched your Prepza interests.", "campaign_id": campaign_id})
+                for item in pending:
+                    try:
+                        webpush(subscription_info={"endpoint": item["subscription_endpoint"], "keys": {}}, data=payload,
+                                vapid_private_key=vapid_private, vapid_claims={"sub": vapid_email})
+                    except Exception:
+                        continue
+                    db.session.execute(text("""
+                        UPDATE discovery_push_delivery SET status='sent', sent_at=CURRENT_TIMESTAMP WHERE id=:id
+                    """), {"id": item["id"]})
+                    sent += 1
+                if sent:
+                    db.session.execute(text("""
+                        UPDATE discovery_campaign SET push_delivered=push_delivered+:sent, updated_at=CURRENT_TIMESTAMP WHERE id=:cid
+                    """), {"cid": campaign_id, "sent": sent})
+                db.session.commit()
+            except Exception:
+                # Queue remains intact; a worker can deliver later when VAPID is configured.
+                pass
         return jsonify({"ok": True, "eligible_recipients": len(allowed_ids),
-                        "queued": queued, "note": "Delivery is frequency-capped and billed by delivered recipient."})
+                        "queued": queued, "sent": sent, "note": "Delivery is frequency-capped and billed by delivered recipient."})
+
+    @app.get("/api/discovery/feed")
+    def discovery_feed():
+        uid = session.get("user_id")
+        if not uid:
+            return jsonify({"error": "Not logged in"}), 401
+        rows = db.session.execute(text("""
+            SELECT id, organisation_id, opportunity_id, name, objective, placement,
+                   bid_type, bid_kes, target_json
+            FROM discovery_campaign
+            WHERE status='active'
+              AND placement IN ('feed','feed_push')
+              AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
+              AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
+              AND delivered_impressions < GREATEST(1, budget_kes * 1000 / GREATEST(1,bid_kes))
+            ORDER BY updated_at DESC LIMIT 50
+        """)).mappings().all()
+        feed=[]
+        for r in rows:
+            if not target_matches(uid, r["target_json"] or {}):
+                continue
+            feed.append({
+                "campaign_id": int(r["id"]), "organisation_id": int(r["organisation_id"]),
+                "opportunity_id": int(r["opportunity_id"]) if r["opportunity_id"] else None,
+                "name": r["name"], "objective": r["objective"], "placement": r["placement"],
+            })
+            if len(feed) >= 10:
+                break
+        return jsonify({"campaigns": feed})
+
+    @app.get("/api/admin/discovery/pricing")
+    def admin_discovery_pricing():
+        uid = session.get("user_id")
+        allowed = session.get("is_admin") is True or session.get("role") in ("admin","superadmin")
+        configured = {int(x.strip()) for x in os.environ.get("PREPZA_ADMIN_USER_IDS","").split(",") if x.strip().isdigit()}
+        if not uid or not (allowed or int(uid) in configured):
+            return jsonify({"error":"Admin access required"}), 403
+        return jsonify({"pricing": DISCOVERY_PRICING, "push_caps": {"48h": PUSH_CAP_PER_48_HOURS, "7d": PUSH_CAP_PER_7_DAYS}})
 
     @app.get("/api/organisations/<int:organisation_id>/discovery/summary")
     def discovery_summary(organisation_id):
