@@ -107,6 +107,7 @@ def register_discovery(app, db):
         return str(row["plan_code"]), str(row["status"]), row["expires_at"]
 
     def eligible_users(target):
+        clauses = []
         params = {}
         if target.get("university_ids"):
             clauses.append("u.university_id = ANY(:university_ids)")
