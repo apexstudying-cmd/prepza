@@ -4348,6 +4348,8 @@ def get_podcast_audio(document_id):
         "audio_status": audio_status,
         "audio_url": audio_url,
         "duration_seconds": envelope.get("duration_seconds"),
+        "requested_duration_seconds": envelope.get("requested_duration_seconds"),
+        "duration_verified": envelope.get("duration_verified", False),
     })
 
 @app.route("/podcasts")
