@@ -542,6 +542,8 @@ class AiJob(db.Model):
     feature = db.Column(db.String(30), nullable=False)
     # text_extraction | summary | quiz | flashcards | podcast | podcast_audio | mind_map
     status = db.Column(db.String(20), nullable=False, default="pending")
+    progress_percent = db.Column(db.Integer, nullable=False, default=0)
+    progress_stage = db.Column(db.String(80), nullable=True)
     # pending -> processing -> completed | failed
     started_at = db.Column(db.DateTime, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
