@@ -1957,6 +1957,8 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
   const [docLoadError, setDocLoadError] = useState('')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
+  const [playerOpportunities, setPlayerOpportunities] = useState<OpportunityPublic[]>([])
+  const [playerOppIndex, setPlayerOppIndex] = useState(0)
 
   useEffect(() => {
     if (activeDocumentId == null) return
@@ -2009,6 +2011,20 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (stage !== 'ready') return
+    let cancelled = false
+    api<{ opportunities: OpportunityPublic[] }>('/podcast-opportunities')
+      .then(res => {
+        if (!cancelled) {
+          setPlayerOpportunities(res.opportunities || [])
+          setPlayerOppIndex(0)
+        }
+      })
+      .catch(() => { if (!cancelled) setPlayerOpportunities([]) })
+    return () => { cancelled = true }
+  }, [stage])
 
   // Study-time heartbeat: only while actually reading the document
   // (tab === 'doc') and the browser tab is visible - backgrounding
@@ -3136,6 +3152,36 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 28px', gap: 24 }}>
           {audioUrl && <audio ref={audioRef} src={audioUrl} preload="metadata" />}
+          {playerOpportunities.length > 0 && (() => {
+            const opp = playerOpportunities[playerOppIndex % playerOpportunities.length]
+            const meta = oppTypeMeta(opp.opportunity_type)
+            return (
+              <button
+                onClick={() => setScreen('opportunity-detail')}
+                aria-label={'View opportunity: ' + opp.title}
+                style={{
+                  width: '100%', maxWidth: 520, textAlign: 'left', border: '1px solid ' + T.border,
+                  background: T.card, borderRadius: 16, padding: 12, cursor: 'pointer',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.06)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: 0.8, color: N.gold }}>OPPORTUNITY</span>
+                  {opp.promotion_type && <span style={{ fontSize: 9, color: T.textMuted }}>{opp.promotion_type}</span>}
+                  <span style={{ marginLeft: 'auto', fontSize: 10, color: T.textMuted }}>{meta.label}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 10, background: N.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                    {opp.organisation?.logo_url ? <img src={opp.organisation.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: N.gold, fontWeight: 900, fontSize: 13 }}>{(opp.organisation?.name || 'P').slice(0,1).toUpperCase()}</span>}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: T.text, fontWeight: 850, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.title}</div>
+                    <div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>{opp.organisation?.name || 'Organisation'} · Tap to view</div>
+                  </div>
+                </div>
+              </button>
+            )
+          })()}
           <div style={{ width: 200, height: 200, borderRadius: 28, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 16px 48px rgba(201,168,76,0.35)`, fontSize: 28, fontWeight: 900, color: N.navy, fontFamily: 'Plus Jakarta Sans' }}>PREPZA</div>
           <div style={{ textAlign: 'center' }}><div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 4 }}>{title}</div><Pill text="AI Generated" color={N.gold} /></div>
           <div style={{ width: '100%' }}>
