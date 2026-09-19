@@ -487,7 +487,6 @@ def _start_async_material_generation(document_content_id, user_id, feature, para
                     parameters=parameters,
                 )
                 local_job.material_id = result.get("material_id")
-                record_document_studied(user_id, document_content_id)
                 local_job.progress_percent = 92
                 local_job.progress_stage = "saving generated material"
                 db.session.commit()
@@ -4514,8 +4513,6 @@ def mindmap_document(document_id):
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
         result = _resolve_material_generation(mind_map, content, user_id, parameters)
-        record_document_studied(user_id, content.id)
-        db.session.commit()
         return jsonify({"material_id": result["material_id"], "reused": result["reused"], "mindmap": result["payload"]}), 200
     job_id = _start_async_material_generation(
         document_content_id=content.id, user_id=user_id, feature="mind_map", parameters=parameters
