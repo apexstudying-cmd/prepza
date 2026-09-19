@@ -299,14 +299,9 @@ def register_discovery(app, db):
             return jsonify({"error": "Invalid billing type"}), 400
         if budget < DISCOVERY_PRICING["minimum_campaign_kes"]:
             return jsonify({"error": f"Minimum campaign budget is KES {DISCOVERY_PRICING['minimum_campaign_kes']:,}"}), 400
-        if placement == "push" and bid_type != "cpm":
-            return jsonify({"error": "Push campaigns use delivered-recipient CPM"}), 400
-        if placement == "feed_push" and bid_type == "cpc":
-            bid = DISCOVERY_PRICING["click_cpc_kes"]
-        else:
-            bid = DISCOVERY_PRICING["push_cpm_kes"] if placement == "push" else DISCOVERY_PRICING["feed_cpm_kes"]
-        if placement == "feed_push":
-            bid = DISCOVERY_PRICING["feed_cpm_kes"]
+        if placement in ("push", "feed_push") and bid_type != "cpm":
+            return jsonify({"error": "Push inventory uses delivered-recipient CPM"}), 400
+        bid = DISCOVERY_PRICING["push_cpm_kes"] if placement == "push" else DISCOVERY_PRICING["feed_cpm_kes"]
         start = data.get("starts_at")
         end = data.get("ends_at")
         plan_code, status, expires_at = org_plan(organisation_id)
