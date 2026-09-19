@@ -15,6 +15,7 @@ type SavedStudyHubMeta = {
   title?: string
   fileType?: string
   pageCount?: number
+  contentHash?: string
   savedAt: number
   assetUrls: string[]
 }
@@ -24,6 +25,7 @@ type StoredStudyAsset = {
   userId: number
   documentId: number
   blob: Blob
+  contentHash?: string
   savedAt: number
 }
 
@@ -180,6 +182,17 @@ async function cacheResponse(cache: Cache, url: string, response: Response): Pro
  * materials already attached to the document are also copied into the local
  * generated-material store so reopening the study never needs their API.
  */
+async function findLocalDocumentByContentHash(userId: number, contentHash?: string): Promise<{ meta: SavedStudyHubMeta; asset: StoredStudyAsset } | null> {
+  if (!contentHash) return null
+  const rows = await getAllMeta(userId)
+  for (const meta of rows) {
+    if (meta.contentHash !== contentHash) continue
+    const asset = await getStudyAsset(meta.key)
+    if (asset?.blob instanceof Blob && asset.blob.size > 0) return { meta, asset }
+  }
+  return null
+}
+
 export async function saveStudyHubDocumentOffline(documentId: number): Promise<SavedStudyHubMeta> {
   if (!('indexedDB' in window)) throw new Error('Offline storage is unavailable in this browser.')
   const [meResponse, detailResponse] = await Promise.all([
@@ -196,7 +209,25 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
 
   if (navigator.storage?.persist) { try { await navigator.storage.persist() } catch (_) {} }
 
+  const contentHash = typeof detail.content_hash === 'string' ? detail.content_hash : undefined
+  const existingLocal = await findLocalDocumentByContentHash(userId, contentHash)
   const assetKey = `${userId}:${documentId}`
+  if (existingLocal) {
+    const meta: SavedStudyHubMeta = {
+      key: assetKey,
+      userId,
+      documentId,
+      title: detail.title || existingLocal.meta.title,
+      fileType: detail.file_type || existingLocal.meta.fileType,
+      pageCount: Number(detail.page_count || existingLocal.meta.pageCount || 0) || undefined,
+      contentHash,
+      savedAt: Date.now(),
+      assetUrls: existingLocal.meta.assetUrls || [],
+    }
+    await putMeta(meta)
+    window.dispatchEvent(new CustomEvent('prepza:studyhub-offline-changed', { detail: meta }))
+    return meta
+  }
   const cache = 'caches' in window ? await caches.open(STUDY_CACHE) : null
   const assetUrls: string[] = []
   let storedNewAsset = false
@@ -217,7 +248,7 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     previousAsset = await getStudyAsset(assetKey)
     const currentStoredBytes = await getStoredAssetUsage(userId, assetKey)
     if (currentStoredBytes + blob.size > MAX_TOTAL_ASSET_BYTES) throw new Error('Offline study storage is full. Remove an older saved document before downloading another.')
-    await putStudyAsset({ key: assetKey, userId, documentId, blob, savedAt: Date.now() })
+    await putStudyAsset({ key: assetKey, userId, documentId, blob, contentHash, savedAt: Date.now() })
     storedNewAsset = true
     assetUrls.push(url)
     if (cache) { try { await cacheResponse(cache, url, new Response(blob, { headers: { 'Content-Type': blob.type || 'application/pdf' } })) } catch (_) {} }
@@ -235,7 +266,7 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
       } catch (_) {}
     }))
 
-    const meta: SavedStudyHubMeta = { key: assetKey, userId, documentId, title: detail.title, fileType: detail.file_type, pageCount: Number(detail.page_count || 0) || undefined, savedAt: Date.now(), assetUrls }
+    const meta: SavedStudyHubMeta = { key: assetKey, userId, documentId, title: detail.title, fileType: detail.file_type, pageCount: Number(detail.page_count || 0) || undefined, contentHash, savedAt: Date.now(), assetUrls }
     await putMeta(meta)
     window.dispatchEvent(new CustomEvent('prepza:studyhub-offline-changed', { detail: meta }))
     return meta
