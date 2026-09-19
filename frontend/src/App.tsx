@@ -9,6 +9,7 @@ import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOffli
 import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
 import StudyShareSheet from './share/StudyShareSheet'
+import StudyActivityScreen from './StudyActivityScreen'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -4915,18 +4916,14 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
           <Pill text={pendingRequestCount.toString()} color={N.gold} />
         </button>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8, padding: '14px 14px 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, padding: '14px 14px 0' }}>
         {[
-          { label: 'Streak', value: summary ? `${summary.current_streak}🔥` : '—', color: N.gold, dest: 'study-streak' as Screen },
+          { label: 'Study', value: summary ? `${summary.current_streak}d` : '—', color: N.gold, dest: 'study-activity' as Screen },
           { label: 'XP', value: summary ? summary.xp_total.toLocaleString() : '—', color: '#4CC97B', dest: 'xp-progress' as Screen },
           { label: 'Docs', value: summary ? String(summary.documents_count) : '—', color: '#4C7BC9', dest: 'study-materials' as Screen },
           { label: 'Followers', value: summary ? String(summary.followers_count) : '—', color: '#9B59B6', dest: 'followers' as Screen },
-          { label: 'Time', value: weeklyStudySeconds != null ? formatStudyTime(weeklyStudySeconds) : '—', color: '#E67E22', dest: 'time-studied' as Screen },
         ].map(s => (
           <button key={s.label} onClick={() => {
-            // Followers list is always scoped to a specific user id on the
-            // backend (GET /users/:id/followers) - carry the viewer's own
-            // id along so FollowListScreen knows whose list to fetch.
             if (s.dest === 'followers' && me && setActiveProfileUserId) setActiveProfileUserId(me.id)
             setScreen(s.dest)
           }} style={{ background: T.card, borderRadius: 14, padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
@@ -14273,9 +14270,10 @@ export default function App() {
       case 'payment-history':   return <PaymentHistoryScreen setScreen={setScreen} />
       case 'publish-library':   return <PublishLibraryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'xp-progress':       return <XPProgressScreen setScreen={setScreen} />
-      case 'study-streak':      return <StudyStreakScreen setScreen={setScreen} />
+      case 'study-streak':      return <StudyActivityScreen setScreen={setScreen} />
+      case 'study-activity':    return <StudyActivityScreen setScreen={setScreen} />
       case 'achievements':      return <AchievementsScreen setScreen={setScreen} />
-      case 'time-studied':      return <TimeStudiedScreen setScreen={setScreen} />
+      case 'time-studied':      return <StudyActivityScreen setScreen={setScreen} />
       case 'followers':         return <FollowListScreen mode="followers" setScreen={setScreen} targetUserId={activeProfileUserId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'following':         return <FollowListScreen mode="following" setScreen={setScreen} targetUserId={activeProfileUserId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'follow-requests':  return <FollowRequestsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
