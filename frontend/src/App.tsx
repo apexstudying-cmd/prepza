@@ -14091,7 +14091,7 @@ export default function App() {
       case 'follow-requests':  return <FollowRequestsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'group-detail':      return <GroupDetailScreen setScreen={setScreen} groupId={activeGroupId} />
       case 'group-create':      return <GroupCreateScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} />
-      default:                  return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
+      default:                  return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} />
     }
   }
 
