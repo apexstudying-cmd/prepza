@@ -250,6 +250,8 @@ const podcasts = [
 
 // ─── Shared atoms ─────────────────────────────────────────────────────────────
 const N = { navy: '#0B1437', navy2: '#132046', navy3: '#1A2A5E', gold: '#C9A84C', goldL: '#E8C97E', bg: '#F8F9FC' }
+const PREPZA_VISION = 'Study smarter together.'
+const PREPZA_MISSION = 'Bring personalized study tools, trusted academic resources, and students together in one place.'
 
 // ─── Theme (light/dark) ─────────────────────────────────────────────────────
 // N above stays constant in both modes - it's brand color (navy header/hero
@@ -619,40 +621,11 @@ function DocumentStudyHubScreen({
   </div>
 }
 
-function BottomNav({ active, setScreen }: { active: Screen; setScreen: (s: Screen) => void }) {
-  const isHome  = ['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map','document-reader'].includes(active)
-  const isExp   = active === 'explore' || active === 'student-profile'
-  const isChat  = active === 'chats' || active === 'chat-detail' || active === 'new-chat' || active === 'chat-options'
-  const isProf  = active === 'profile' || active === 'settings' || active === 'edit-profile'
-  const tabs = [
-    { key: 'home' as Screen, icon: Ic.home, label: 'Home', hit: isHome },
-    { key: 'explore' as Screen, icon: Ic.explore, label: 'Explore', hit: isExp },
-    { key: 'create-modal' as Screen, icon: Ic.plus, label: '', hit: false },
-    { key: 'chats' as Screen, icon: Ic.chat, label: 'Chats', hit: isChat },
-    { key: 'profile' as Screen, icon: Ic.person, label: 'Profile', hit: isProf },
-  ]
-  return (
-    <div style={{ background: N.navy, borderTop: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', paddingBottom: 6, flexShrink: 0 }}>
-      {tabs.map(t => {
-        const isCta = t.key === 'create-modal'
-        return (
-          <button key={t.key} onClick={() => setScreen(t.key)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: isCta ? '0 0 4px' : '8px 0 4px', position: 'relative' }}>
-            {isCta ? (
-              <div style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: `0 4px 18px rgba(201,168,76,0.55)` }}>
-                <div style={{ color: N.navy }}>{Ic.plus()}</div>
-              </div>
-            ) : (
-              <>
-                {t.hit && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 18, height: 2, background: N.gold, borderRadius: 2 }} />}
-                <div style={{ color: t.hit ? N.gold : 'rgba(255,255,255,0.38)' }}>{t.icon()}</div>
-                <span style={{ fontSize: 10, fontWeight: t.hit ? 800 : 500, color: t.hit ? N.gold : 'rgba(255,255,255,0.38)', fontFamily: 'Plus Jakarta Sans' }}>{t.label}</span>
-              </>
-            )}
-          </button>
-        )
-      })}
-    </div>
-  )
+function BottomNav({ active, setScreen, unreadChats = 0, exploreAttention = false }: { active: Screen; setScreen: (s: Screen) => void; unreadChats?: number; exploreAttention?: boolean }) {
+  const isHome=['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map','document-reader'].includes(active)
+  const isExp=active==='explore'||active==='student-profile', isChat=active==='chats'||active==='chat-detail'||active==='new-chat'||active==='chat-options', isProf=active==='profile'||active==='settings'||active==='edit-profile'
+  const tabs=[{key:'home' as Screen,icon:Ic.home,label:'Home',hit:isHome},{key:'explore' as Screen,icon:Ic.explore,label:'Explore',hit:isExp},{key:'create-modal' as Screen,icon:Ic.plus,label:'',hit:false},{key:'chats' as Screen,icon:Ic.chat,label:'Chats',hit:isChat},{key:'profile' as Screen,icon:Ic.person,label:'Profile',hit:isProf}]
+  return <div style={{background:N.navy,borderTop:'1px solid rgba(255,255,255,.07)',display:'flex',alignItems:'center',paddingBottom:6,flexShrink:0}}>{tabs.map(t=>{const isCta=t.key==='create-modal',badge=t.key==='chats'?unreadChats:0,attention=t.key==='explore'&&exploreAttention;return <button key={t.key} onClick={()=>setScreen(t.key)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',padding:isCta?'0 0 4px':'8px 0 4px',position:'relative'}}>{isCta?<div style={{width:50,height:50,borderRadius:'50%',background:`linear-gradient(135deg,${N.gold},${N.goldL})`,display:'flex',alignItems:'center',justifyContent:'center',marginTop:-22,boxShadow:'0 4px 18px rgba(201,168,76,.55)'}}><div style={{color:N.navy}}>{Ic.plus()}</div></div>:<>{t.hit&&<div style={{position:'absolute',top:0,left:'50%',transform:'translateX(-50%)',width:18,height:2,background:N.gold,borderRadius:2}}/><div style={{position:'relative',color:t.hit?N.gold:'rgba(255,255,255,.38)'}}>{t.icon()}{badge>0&&<span aria-label={`${badge} unread messages`} style={{position:'absolute',top:-7,right:-10,minWidth:17,height:17,padding:'0 4px',borderRadius:99,background:'#C94C4C',color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',border:`2px solid ${N.navy}`}}>{badge>99?'99+':badge}</span>}{attention&&<span aria-label="New opportunities" style={{position:'absolute',top:-5,right:-5,width:8,height:8,borderRadius:'50%',background:N.goldL,border:`2px solid ${N.navy}`,boxShadow:'0 0 0 4px rgba(232,201,126,.12)'}}/>}</div><span style={{fontSize:10,fontWeight:t.hit?800:500,color:t.hit?N.gold:'rgba(255,255,255,.38)',fontFamily:'Plus Jakarta Sans'}}>{t.label}</span></>}</button>})}</div>
 }
 
 // ─── LOADING SYSTEM ───────────────────────────────────────────────────────────
@@ -1104,9 +1077,9 @@ function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(160deg, ${N.navy} 0%, ${N.navy2} 60%, ${N.navy3} 100%)` }}>
       <div style={{ position: 'absolute', top: '18%', width: 220, height: 220, background: 'rgba(201,168,76,0.06)', borderRadius: '50%', filter: 'blur(50px)' }} />
-      <img src={logoImg} alt="Prepza" style={{ width: 100, height: 100, borderRadius: 28, marginBottom: 20, boxShadow: '0 12px 48px rgba(201,168,76,0.3)' }} />
-      <div style={{ fontWeight: 800, fontSize: 30, color: '#fff', letterSpacing: '-1px' }}>PREPZA</div>
-      <div style={{ color: N.gold, fontSize: 13, fontWeight: 600, letterSpacing: 2, marginTop: 4, textTransform: 'uppercase' }}>Study Smarter. Together.</div>
+      <img src={logoImg} alt="Prepza" width={192} height={192} style={{ width: 192, height: 192, borderRadius: 42, marginBottom: 24, boxShadow: '0 18px 60px rgba(201,168,76,0.3)' }} />
+      <div style={{ fontWeight: 800, fontSize: 30, color: '#fff', letterSpacing: '-1px' }}>Prepza</div>
+      <div style={{ color: N.goldL, fontSize: 13, fontWeight: 700, letterSpacing: .3, marginTop: 7 }}>{PREPZA_VISION}</div>
       {state === 'checking' ? (
         <div style={{ marginTop: 60, display: 'flex', gap: 6 }}>
           {[0,1,2].map(i => <div key={i} style={{ width: i === 0 ? 20 : 6, height: 6, background: i === 0 ? N.gold : 'rgba(255,255,255,0.2)', borderRadius: 99, transition: 'all 0.3s' }} />)}
@@ -4842,6 +4815,12 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
   const [achievementsList, setAchievementsList] = useState<Achievement[]>(PROFILE_CACHE.achievementsList ?? [])
   const [weeklyStudySeconds, setWeeklyStudySeconds] = useState<number | null>(PROFILE_CACHE.weeklyStudySeconds ?? null)
   const [pendingRequestCount, setPendingRequestCount] = useState(0)
+  const [profileTabLoading, setProfileTabLoading] = useState(false)
+  const [profileSaved, setProfileSaved] = useState<any[]>([])
+  const [profileActivity, setProfileActivity] = useState<any | null>(null)
+  const [profileMaterials, setProfileMaterials] = useState<HomeDocument[]>([])
+  const [profilePosts, setProfilePosts] = useState<any[]>([])
+  const [profileTabError, setProfileTabError] = useState('')
 
   useEffect(() => {
     if (!showMenu) return
@@ -4860,6 +4839,35 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
     api<StudyTimeResponse>('/study-time?period=week').then(res => { setWeeklyStudySeconds(res.total_seconds); PROFILE_CACHE.weeklyStudySeconds = res.total_seconds }).catch(() => {})
     api<{ requests: unknown[] }>('/follow-requests').then(res => setPendingRequestCount(res.requests.length)).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setProfileTabLoading(true)
+    setProfileTabError('')
+    const load = async () => {
+      try {
+        if (tab === 'posts') {
+          // There is no social post composer/model yet; keep the real profile empty instead of demo content.
+          if (!cancelled) setProfilePosts([])
+        } else if (tab === 'saved') {
+          const res = await api<{ saved: any[] }>('/opportunities/saved')
+          if (!cancelled) setProfileSaved(res.saved || [])
+        } else if (tab === 'activity') {
+          const [week, month] = await Promise.all([api<any>('/study-time?period=week'), api<any>('/study-time?period=month')])
+          if (!cancelled) setProfileActivity({ week_seconds: week.total_seconds || 0, month_seconds: month.total_seconds || 0 })
+        } else {
+          const res = await api<{ documents: HomeDocument[] }>('/documents')
+          if (!cancelled) setProfileMaterials(res.documents || [])
+        }
+      } catch (e) {
+        if (!cancelled) setProfileTabError(e instanceof ApiError ? e.message : 'Could not load this profile section.')
+      } finally {
+        if (!cancelled) setProfileTabLoading(false)
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [tab])
 
   useEffect(() => {
     if (me?.university_id == null) return
@@ -4903,8 +4911,8 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
           {uniName && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2, marginBottom: 14 }}>{uniName}</div>}
           {!programName && !uniName && <div style={{ marginBottom: 14 }} />}
           <div style={{ display: 'flex', gap: 8 }}>
-            <Pill text="🏅 Top Learner" />
-            <Pill text="📚 Creator" />
+            <Pill text="Top Learner" color={N.gold} />
+            <Pill text="Creator" color="#4C7BC9" />
           </div>
         </div>
       </div>
@@ -4957,55 +4965,13 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: {
           ))}
         </div>
         <div style={{ padding: 14 }}>
-          {tab === 'posts' && (
-            <div style={{ fontSize: 13, color: '#374151' }}>
-              {[{ text: 'Just started my ACT 101 journey on Prepza! First flashcard set generated 🎉', likes: 14, time: '1d ago' }].map((p, i) => (
-                <div key={i} style={{ paddingBottom: 12 }}>
-                  <div style={{ marginBottom: 6, lineHeight: 1.6 }}>{p.text}</div>
-                  <div style={{ display: 'flex', gap: 12, fontSize: 11, color: T.textMuted }}>
-                    <span style={{ color: '#C94C4C' }}>❤️ {p.likes}</span><span>{p.time}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {tab === 'saved' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {['ACT 101 Lecture Notes – Week 1-6', 'Equity Leaders Programme', 'STA 101 Flashcards'].map((item, i) => (
-                <button key={i} onClick={() => setScreen(i === 0 ? 'document-study' : i === 1 ? 'opportunity-detail' : 'flashcards')} style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: '6px 0', borderBottom: i < 2 ? '1px solid rgba(0,0,0,0.05)' : 'none', fontFamily: 'Plus Jakarta Sans' }}>
-                  <div style={{ width: 32, height: 32, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{i === 0 ? '📄' : i === 1 ? '🚀' : '🃏'}</div>
-                  <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{item}</div>
-                  <div style={{ marginLeft: 'auto', color: T.textMuted }}>{Ic.chevR('w-4 h-4')}</div>
-                </button>
-              ))}
-            </div>
-          )}
-          {tab === 'activity' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[
-                { icon: '⚗️', action: 'Studied ACT 101 – Interest Theory', time: '2h ago', screen: 'document-study' as Screen },
-                { icon: '🃏', action: 'Completed 15 flashcards', time: '4h ago', screen: 'flashcards' as Screen },
-                { icon: '🎙️', action: 'Listened to Interest Theory Podcast', time: 'Yesterday', screen: 'podcast-player' as Screen },
-                { icon: '📤', action: 'Uploaded ACT 101 Notes – Week 1-6', time: '2d ago', screen: 'upload' as Screen },
-              ].map((a, i) => (
-                <button key={i} onClick={() => setScreen(a.screen)} style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, fontFamily: 'Plus Jakarta Sans' }}>
-                  <span style={{ fontSize: 18 }}>{a.icon}</span>
-                  <div style={{ flex: 1, fontSize: 13, color: T.text, fontWeight: 500 }}>{a.action}</div>
-                  <span style={{ fontSize: 11, color: T.textMuted, flexShrink: 0 }}>{a.time}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {tab === 'materials' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {['ACT 101 Notes – Week 1-6.pdf', 'MAT 101 Past Papers 2023.pdf', 'STA 101 Flashcard Set'].map((m, i) => (
-                <button key={i} onClick={() => setScreen(i < 2 ? 'document-study' : 'flashcards')} style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#F8F9FC', border: 'none', borderRadius: 12, padding: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-                  <div style={{ width: 36, height: 36, background: T.card, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{i < 2 ? '📕' : '🃏'}</div>
-                  <div style={{ flex: 1, fontSize: 12, color: T.text, fontWeight: 600, textAlign: 'left' }}>{m}</div>
-                  <div style={{ color: T.textMuted }}>{Ic.chevR('w-4 h-4')}</div>
-                </button>
-              ))}
-            </div>
+          {profileTabLoading ? <div style={{ padding: '18px 0', textAlign: 'center', color: T.textMuted, fontSize: 12 }}>Loading…</div> : profileTabError ? <div style={{ padding: '18px 0', textAlign: 'center', color: '#B91C1C', fontSize: 12 }}>{profileTabError}</div> : (
+            <>
+              {tab === 'posts' && <div style={{ padding: '18px 0', textAlign: 'center', color: T.textMuted, fontSize: 12 }}>{profilePosts.length ? 'Posts are available here.' : 'No posts yet.'}</div>}
+              {tab === 'saved' && (profileSaved.length === 0 ? <div style={{ padding: '18px 0', textAlign:'center', color:T.textMuted, fontSize:12 }}>No saved opportunities yet.</div> : <div style={{display:'flex',flexDirection:'column',gap:8}}>{profileSaved.map((o:any)=><button key={o.id} onClick={()=>{setActiveOpportunityId(o.id);setScreen('opportunity-detail')}} style={{display:'flex',gap:10,alignItems:'center',width:'100%',background:'none',border:'none',padding:'8px 0',textAlign:'left',cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{width:34,height:34,borderRadius:10,background:`${N.gold}18`,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,color:N.gold}}>{(o.title||'O').slice(0,1).toUpperCase()}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:T.text}} className="line-clamp-1">{o.title}</div><div style={{fontSize:10,color:T.textMuted}}>{o.organisation?.name || 'Opportunity'}</div></div>{Ic.chevR('w-4 h-4')}</button>)}</div>)}
+              {tab === 'activity' && <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}><div style={{background:'#F8F9FC',borderRadius:12,padding:12}}><div style={{fontSize:9,color:T.textMuted}}>THIS WEEK</div><div style={{fontSize:20,fontWeight:800,color:N.navy,marginTop:5}}>{formatStudyTime(profileActivity?.week_seconds || 0)}</div></div><div style={{background:'#F8F9FC',borderRadius:12,padding:12}}><div style={{fontSize:9,color:T.textMuted}}>THIS MONTH</div><div style={{fontSize:20,fontWeight:800,color:N.navy,marginTop:5}}>{formatStudyTime(profileActivity?.month_seconds || 0)}</div></div><button onClick={()=>setScreen('study-activity')} style={{gridColumn:'1 / -1',marginTop:2,padding:11,border:`1px solid ${N.navy}18`,borderRadius:12,background:T.card,color:N.navy,fontWeight:800,fontSize:11,cursor:'pointer'}}>View full study activity</button></div>}
+              {tab === 'materials' && (profileMaterials.length === 0 ? <div style={{padding:'18px 0',textAlign:'center',color:T.textMuted,fontSize:12}}>No study materials yet.</div> : <div style={{display:'flex',flexDirection:'column',gap:8}}>{profileMaterials.slice(0,8).map(d=><button key={d.id} onClick={()=>{setActiveDocumentId(d.id);setScreen('document-study')}} style={{display:'flex',gap:10,alignItems:'center',width:'100%',background:'none',border:'none',padding:'7px 0',textAlign:'left',cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{width:34,height:34,borderRadius:10,background:'#F3F4F6',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:11,color:N.navy}}>{(d.file_type||'DOC').toUpperCase().slice(0,3)}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:10,color:T.textMuted}}>{d.status}</div></div>{Ic.chevR('w-4 h-4')}</button>)}</div>)}
+            </>
           )}
         </div>
       </div>
@@ -14078,6 +14044,19 @@ export default function App() {
   // ref/via, same lift-to-App() reasoning as the activeXxx ids above.
   const [referralCode, setReferralCode] = useState<string | null>(null)
   const [referralChannel, setReferralChannel] = useState<string | null>(null)
+  const [unreadChats, setUnreadChats] = useState(0)
+  const [exploreAttention, setExploreAttention] = useState(false)
+  useEffect(() => {
+    let timer: number | null = null, cancelled = false
+    const refreshSignals = () => {
+      api<{ chats: ChatSummary[] }>('/chats').then(res => { if (!cancelled) setUnreadChats((res.chats || []).reduce((sum, chat) => sum + Math.max(0, chat.unread_count || 0), 0)) }).catch(() => {})
+      api<{ opportunities: OpportunityPublic[] }>('/opportunities?page=1').then(res => { if (!cancelled) setExploreAttention((res.opportunities || []).length > 0) }).catch(() => {})
+    }
+    refreshSignals()
+    timer=window.setInterval(refreshSignals,30000)
+    window.addEventListener('prepza-realtime-message',refreshSignals)
+    return()=>{cancelled=true;if(timer!==null)window.clearInterval(timer);window.removeEventListener('prepza-realtime-message',refreshSignals)}
+  }, [])
 
   useEffect(() => {
     try {
@@ -14292,7 +14271,7 @@ export default function App() {
         {renderScreen()}
       </div>
       {/* Bottom nav */}
-      {!noNav.includes(screen) && <BottomNav active={screen} setScreen={setScreen} />}
+      {!noNav.includes(screen) && <BottomNav active={screen} setScreen={setScreen} unreadChats={unreadChats} exploreAttention={exploreAttention} />}
       {/* Real admins only - hidden for everyone else, on top of every
           /admin/* route already being server-side gated via @require_admin. */}
       {isAdmin && (
