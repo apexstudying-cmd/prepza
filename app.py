@@ -523,6 +523,14 @@ def get_ai_job_status(job_id):
     document = Document.query.filter_by(document_content_id=job.document_content_id, user_id=user_id, is_removed=False).first()
     if not document:
         return jsonify({"error": "Generation job not found"}), 404
+    payload = None
+    if job.status == "completed" and job.material_id:
+        material = db.session.get(GeneratedMaterial, job.material_id)
+        if material and material.payload:
+            try:
+                payload = json.loads(material.payload)
+            except (TypeError, ValueError):
+                payload = None
     return jsonify({
         "job_id": job.id,
         "status": job.status,
@@ -530,6 +538,7 @@ def get_ai_job_status(job_id):
         "progress_stage": job.progress_stage or "working",
         "error": job.error_message,
         "material_id": job.material_id,
+        "payload": payload,
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
     })
 
