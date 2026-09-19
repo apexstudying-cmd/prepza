@@ -17,6 +17,7 @@ Product rules:
 from __future__ import annotations
 
 import re
+import os
 from datetime import datetime, timedelta, date
 from flask import jsonify, request, session
 from sqlalchemy import text
@@ -154,6 +155,33 @@ def _ensure_schema(db):
             applications INTEGER NOT NULL DEFAULT 0,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (organisation_id, period_start)
+        )
+    """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS organisation_billing_event (
+            id BIGSERIAL PRIMARY KEY,
+            organisation_id INTEGER NOT NULL,
+            event_key VARCHAR(120) NOT NULL UNIQUE,
+            event_type VARCHAR(40) NOT NULL,
+            amount_kes INTEGER NOT NULL DEFAULT 0,
+            status VARCHAR(30) NOT NULL DEFAULT 'recorded',
+            metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS organisation_invoice (
+            id BIGSERIAL PRIMARY KEY,
+            organisation_id INTEGER NOT NULL,
+            period_start DATE NOT NULL,
+            period_end DATE NOT NULL,
+            plan_code VARCHAR(30) NOT NULL,
+            amount_kes INTEGER NOT NULL,
+            status VARCHAR(30) NOT NULL DEFAULT 'pending',
+            payment_reference VARCHAR(120),
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            paid_at TIMESTAMP,
+            UNIQUE (organisation_id, period_start, period_end)
         )
     """))
     db.session.execute(text("""
@@ -530,8 +558,8 @@ def register_usage_billing(app, db):
     # an AI call starts, and the existing route then remains responsible for
     # generation/persistence.
     # Generation quotas are enforced inside ai_reusable_generation.py
-    # after artifact reuse has been ruled out, so cached/shared material
-    # never consumes a student's allowance.
+    # before artifact reuse is returned, so reuse saves AI cost but still
+    # consumes the student's allowance.
 
     def _org_member(org_id, user_id):
         return db.session.execute(text("""
@@ -609,5 +637,262 @@ def register_usage_billing(app, db):
             "active_definition": "At least 30 seconds of foreground engagement in a day or a core product action. Signup/login alone does not count.",
         })
 
+
+    
+    def _admin_allowed():
+        uid = session.get("user_id")
+        if not uid:
+            return False
+        if session.get("is_admin") is True or session.get("role") in ("admin", "superadmin"):
+            return True
+        configured = {
+            int(x.strip()) for x in os.environ.get("PREPZA_ADMIN_USER_IDS", "").split(",")
+            if x.strip().isdigit()
+        }
+        return int(uid) in configured
+
+    def _org_plan(organisation_id):
+        row = db.session.execute(text("""
+            SELECT plan_code, status, monthly_fee_kes, active_user_cap,
+                   started_at, expires_at, updated_at
+            FROM organisation_billing
+            WHERE organisation_id = :oid
+        """), {"oid": organisation_id}).mappings().first()
+        if not row:
+            plan_code = "launch"
+            plan = ORGANISATION_PLANS[plan_code]
+            return {
+                "organisation_id": organisation_id,
+                "plan_code": plan_code,
+                "status": "trial",
+                "monthly_fee_kes": plan["monthly_fee_kes"],
+                "active_user_cap": plan["active_user_cap"],
+                "active_opportunities": plan["active_opportunities"],
+                "sponsored_campaigns": plan["sponsored_campaigns"],
+                "candidate_search_window_days": plan["candidate_search_window_days"],
+                "analytics_retention_days": plan["analytics_retention_days"],
+            }
+        plan = ORGANISATION_PLANS.get(str(row["plan_code"]), ORGANISATION_PLANS["launch"])
+        return {
+            "organisation_id": organisation_id,
+            "plan_code": str(row["plan_code"]),
+            "status": row["status"],
+            "monthly_fee_kes": int(row["monthly_fee_kes"] or plan["monthly_fee_kes"]),
+            "active_user_cap": int(row["active_user_cap"] or plan["active_user_cap"]),
+            "active_opportunities": plan["active_opportunities"],
+            "sponsored_campaigns": plan["sponsored_campaigns"],
+            "candidate_search_window_days": plan["candidate_search_window_days"],
+            "analytics_retention_days": plan["analytics_retention_days"],
+            "started_at": row["started_at"].isoformat() if row["started_at"] else None,
+            "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
+        }
+
+    @app.get("/api/organisations/<int:organisation_id>/billing")
+    def organisation_billing(organisation_id):
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        role = _org_member(organisation_id, user_id)
+        if role not in ("owner", "manager"):
+            return jsonify({"error": "Organisation membership required"}), 403
+        current = _org_plan(organisation_id)
+        invoices = db.session.execute(text("""
+            SELECT id, period_start, period_end, plan_code, amount_kes,
+                   status, payment_reference, created_at, paid_at
+            FROM organisation_invoice
+            WHERE organisation_id = :oid
+            ORDER BY period_start DESC
+            LIMIT 24
+        """), {"oid": organisation_id}).mappings().all()
+        return jsonify({
+            "billing": current,
+            "currency": "KES",
+            "plans": ORGANISATION_PLANS,
+            "invoices": [
+                {
+                    "id": int(x["id"]),
+                    "period_start": x["period_start"].isoformat(),
+                    "period_end": x["period_end"].isoformat(),
+                    "plan_code": x["plan_code"],
+                    "amount_kes": int(x["amount_kes"]),
+                    "status": x["status"],
+                    "payment_reference": x["payment_reference"],
+                    "created_at": x["created_at"].isoformat(),
+                    "paid_at": x["paid_at"].isoformat() if x["paid_at"] else None,
+                } for x in invoices
+            ],
+        })
+
+    @app.get("/api/organisations/<int:organisation_id>/analytics")
+    def organisation_analytics(organisation_id):
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        role = _org_member(organisation_id, user_id)
+        if role not in ("owner", "manager"):
+            return jsonify({"error": "Organisation membership required"}), 403
+        billing = _org_plan(organisation_id)
+        meter = db.session.execute(text("""
+            SELECT period_start, impressions, clicks, applications
+            FROM organisation_campaign_meter
+            WHERE organisation_id = :oid
+            ORDER BY period_start DESC LIMIT 1
+        """), {"oid": organisation_id}).mappings().first()
+        today = date.today()
+        return jsonify({
+            "billing": billing,
+            "audience": {
+                "dau": len(_active_user_ids(db, today)),
+                "wau": len(_active_user_ids(db, today - timedelta(days=6))),
+                "mau": len(_active_user_ids(db, today - timedelta(days=29))),
+            },
+            "campaign": {
+                "period_start": meter["period_start"].isoformat() if meter else today.replace(day=1).isoformat(),
+                "impressions": int(meter["impressions"]) if meter else 0,
+                "clicks": int(meter["clicks"]) if meter else 0,
+                "applications": int(meter["applications"]) if meter else 0,
+                "sponsored_spend_basis": "verified impressions",
+                "cpm_kes": SPONSORED_CPM_KES,
+            },
+        })
+
+    @app.post("/api/organisations/<int:organisation_id>/billing/checkout")
+    def organisation_billing_checkout(organisation_id):
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        if not _csrf_ok():
+            return jsonify({"error": "Invalid CSRF token"}), 403
+        if _org_member(organisation_id, user_id) != "owner":
+            return jsonify({"error": "Organisation owner required"}), 403
+        data = request.get_json(silent=True) or {}
+        plan_code = str(data.get("plan_code") or "").strip().lower()
+        if plan_code not in ORGANISATION_PLANS:
+            return jsonify({"error": "Unknown organisation plan"}), 400
+        plan = ORGANISATION_PLANS[plan_code]
+        now = datetime.utcnow()
+        period_start = date(now.year, now.month, 1)
+        next_month = date(now.year + (1 if now.month == 12 else 0), 1 if now.month == 12 else now.month + 1, 1)
+        period_end = next_month - timedelta(days=1)
+        db.session.execute(text("""
+            INSERT INTO organisation_invoice
+                (organisation_id, period_start, period_end, plan_code, amount_kes, status)
+            VALUES (:oid, :start, :end, :plan, :amount, 'pending')
+            ON CONFLICT (organisation_id, period_start, period_end)
+            DO UPDATE SET plan_code = EXCLUDED.plan_code, amount_kes = EXCLUDED.amount_kes
+        """), {"oid": organisation_id, "start": period_start, "end": period_end,
+               "plan": plan_code, "amount": plan["monthly_fee_kes"]})
+        db.session.execute(text("""
+            INSERT INTO organisation_billing
+                (organisation_id, plan_code, status, monthly_fee_kes, active_user_cap, updated_at)
+            VALUES (:oid, :plan, 'pending', :amount, :cap, CURRENT_TIMESTAMP)
+            ON CONFLICT (organisation_id)
+            DO UPDATE SET plan_code = EXCLUDED.plan_code,
+                          status = 'pending',
+                          monthly_fee_kes = EXCLUDED.monthly_fee_kes,
+                          active_user_cap = EXCLUDED.active_user_cap,
+                          updated_at = CURRENT_TIMESTAMP
+        """), {"oid": organisation_id, "plan": plan_code, "amount": plan["monthly_fee_kes"],
+               "cap": plan["active_user_cap"]})
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "status": "pending",
+            "plan_code": plan_code,
+            "amount_kes": plan["monthly_fee_kes"],
+            "next_step": "Attach this invoice to the configured organisation payment provider before activating access.",
+        }), 202
+
+    @app.get("/api/admin/organisation-billing")
+    def admin_organisation_billing():
+        if not _admin_allowed():
+            return jsonify({"error": "Admin access required"}), 403
+        rows = db.session.execute(text("""
+            SELECT organisation_id, plan_code, status, monthly_fee_kes,
+                   active_user_cap, started_at, expires_at, updated_at
+            FROM organisation_billing
+            ORDER BY updated_at DESC
+        """)).mappings().all()
+        return jsonify({"plans": ORGANISATION_PLANS, "organisations": [dict(r) for r in rows]})
+
+    @app.patch("/api/admin/organisation-billing/<int:organisation_id>")
+    def admin_update_organisation_billing(organisation_id):
+        if not _admin_allowed():
+            return jsonify({"error": "Admin access required"}), 403
+        if not _csrf_ok():
+            return jsonify({"error": "Invalid CSRF token"}), 403
+        data = request.get_json(silent=True) or {}
+        plan_code = str(data.get("plan_code") or "").strip().lower()
+        status = str(data.get("status") or "").strip().lower()
+        if plan_code not in ORGANISATION_PLANS:
+            return jsonify({"error": "Unknown organisation plan"}), 400
+        allowed_status = {"trial", "pending", "active", "past_due", "expired", "suspended"}
+        if status not in allowed_status:
+            return jsonify({"error": "Invalid billing status"}), 400
+        plan = ORGANISATION_PLANS[plan_code]
+        expires_at = data.get("expires_at")
+        db.session.execute(text("""
+            INSERT INTO organisation_billing
+                (organisation_id, plan_code, status, monthly_fee_kes, active_user_cap,
+                 started_at, expires_at, updated_at)
+            VALUES (:oid, :plan, :status, :fee, :cap, CURRENT_TIMESTAMP, :expires, CURRENT_TIMESTAMP)
+            ON CONFLICT (organisation_id)
+            DO UPDATE SET plan_code = EXCLUDED.plan_code,
+                          status = EXCLUDED.status,
+                          monthly_fee_kes = EXCLUDED.monthly_fee_kes,
+                          active_user_cap = EXCLUDED.active_user_cap,
+                          expires_at = EXCLUDED.expires_at,
+                          updated_at = CURRENT_TIMESTAMP
+        """), {"oid": organisation_id, "plan": plan_code, "status": status,
+               "fee": plan["monthly_fee_kes"], "cap": plan["active_user_cap"],
+               "expires": expires_at})
+        db.session.execute(text("""
+            INSERT INTO organisation_billing_event
+                (organisation_id, event_key, event_type, amount_kes, status, metadata)
+            VALUES (:oid, :event_key, 'admin_status_change', :amount, :status, CAST(:metadata AS jsonb))
+        """), {"oid": organisation_id, "event_key": f"admin:{organisation_id}:{datetime.utcnow().isoformat()}",
+               "amount": plan["monthly_fee_kes"], "status": status,
+               "metadata": json.dumps({"plan_code": plan_code, "admin_user_id": session.get("user_id")})})
+        db.session.commit()
+        return jsonify({"ok": True, "billing": _org_plan(organisation_id)})
+
+    @app.post("/api/admin/organisation-billing/<int:organisation_id>/record-payment")
+    def admin_record_organisation_payment(organisation_id):
+        if not _admin_allowed():
+            return jsonify({"error": "Admin access required"}), 403
+        if not _csrf_ok():
+            return jsonify({"error": "Invalid CSRF token"}), 403
+        data = request.get_json(silent=True) or {}
+        reference = str(data.get("payment_reference") or "").strip()
+        if not reference:
+            return jsonify({"error": "Payment reference required"}), 400
+        row = db.session.execute(text("""
+            SELECT plan_code, monthly_fee_kes FROM organisation_billing
+            WHERE organisation_id = :oid
+        """), {"oid": organisation_id}).mappings().first()
+        if not row:
+            return jsonify({"error": "Organisation billing record not found"}), 404
+        now = datetime.utcnow()
+        expires = now + timedelta(days=31)
+        db.session.execute(text("""
+            UPDATE organisation_billing
+            SET status = 'active', started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+                expires_at = :expires, updated_at = CURRENT_TIMESTAMP
+            WHERE organisation_id = :oid
+        """), {"oid": organisation_id, "expires": expires})
+        db.session.execute(text("""
+            UPDATE organisation_invoice
+            SET status = 'paid', payment_reference = :reference, paid_at = CURRENT_TIMESTAMP
+            WHERE organisation_id = :oid AND status = 'pending'
+              AND period_start = :period
+        """), {"oid": organisation_id, "reference": reference, "period": date(now.year, now.month, 1)})
+        db.session.execute(text("""
+            INSERT INTO organisation_billing_event
+                (organisation_id, event_key, event_type, amount_kes, status, metadata)
+            VALUES (:oid, :event_key, 'payment_recorded', :amount, 'paid', CAST(:metadata AS jsonb))
+        """), {"oid": organisation_id, "event_key": f"payment:{organisation_id}:{reference}",
+               "amount": int(row["monthly_fee_kes"] or 0), "metadata": json.dumps({"payment_reference": reference})})
+        db.session.commit()
+        return jsonify({"ok": True, "billing": _org_plan(organisation_id)})
 
     return None
