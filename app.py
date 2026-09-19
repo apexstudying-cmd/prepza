@@ -4344,12 +4344,18 @@ def get_podcast_audio(document_id):
     if audio_status == "ready" and envelope.get("audio_storage_path"):
         audio_url = get_signed_url(envelope["audio_storage_path"], bucket="podcast-audio")
 
+    latest_job = AiJob.query.filter_by(
+        document_content_id=document.document_content_id,
+        feature="podcast_audio",
+    ).order_by(AiJob.created_at.desc()).first()
     return jsonify({
         "audio_status": audio_status,
         "audio_url": audio_url,
         "duration_seconds": envelope.get("duration_seconds"),
         "requested_duration_seconds": envelope.get("requested_duration_seconds"),
         "duration_verified": envelope.get("duration_verified", False),
+        "progress_percent": int((latest_job.progress_percent if latest_job else (100 if audio_status == "ready" else 0)) or 0),
+        "progress_stage": latest_job.progress_stage if latest_job else ("ready" if audio_status == "ready" else "queued"),
     })
 
 @app.route("/podcasts")
