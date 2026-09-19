@@ -4380,7 +4380,10 @@ def trigger_podcast_audio(document_id):
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate a podcast from"}), 400
 
-    if document.user_id == user_id:
+    requested_material_id = request.args.get("material_id")
+    if requested_material_id:
+        material = _requested_generated_material(user_id, document, requested_material_id, "podcast")
+    elif document.user_id == user_id:
         material = get_generated_material_for_user(
             document.document_content_id, "podcast", session.get("user_id")
         )
@@ -4392,6 +4395,13 @@ def trigger_podcast_audio(document_id):
             scope="shared",
             owner_user_id=None,
         ).first()
+    requested_material_id = request.args.get("material_id")
+    if requested_material_id:
+        exact = _requested_generated_material(user_id, document, requested_material_id, "podcast")
+        if not exact:
+            return jsonify({"error": "The selected podcast is no longer available"}), 404
+        material = exact
+
     if not material or material.status != "ready" or not material.payload:
         return jsonify({"error": "Generate the podcast script first"}), 400
 
