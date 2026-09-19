@@ -25,6 +25,32 @@ async function generationApi<T = any>(path: string, options: RequestInit = {}): 
   if (!res.ok) throw new GenerationApiError(body?.error || body?.message || `Request failed (${res.status})`, res.status)
   return body as T
 }
+async function pollGenerationJob<T = any>(jobId: number, onProgress?: (percent: number, stage: string) => void): Promise<T> {
+  for (;;) {
+    const job = await generationApi<{ status: string; progress_percent: number; progress_stage: string; error?: string; payload?: T }>(`/ai-jobs/${jobId}`)
+    onProgress?.(Math.max(0, Math.min(100, Number(job.progress_percent || 0))), job.progress_stage || 'working')
+    if (job.status === 'completed') return (job.payload ?? {}) as T
+    if (job.status === 'failed') throw new Error(job.error || 'Generation failed. Please try again.')
+    await new Promise(resolve => window.setTimeout(resolve, 1800))
+  }
+}
+
+function GenerationProgressCard({ title, subtitle, percent, stage }: { title: string; subtitle?: string; percent: number; stage: string }) {
+  const safe = Math.max(0, Math.min(100, Math.round(percent)))
+  return <div style={{ background: C.card, borderRadius: 22, padding: 22, boxShadow: '0 8px 30px rgba(0,0,0,0.07)' }}>
+    <div style={{ color: C.gold, fontSize: 10, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase' }}>Prepza · Generating</div>
+    <div style={{ color: C.text, fontSize: 19, fontWeight: 850, marginTop: 7 }}>{title}</div>
+    {subtitle && <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>{subtitle}</div>}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 22, marginBottom: 8 }}>
+      <span style={{ color: C.muted, fontSize: 11 }}>{stage}</span>
+      <strong style={{ color: C.text, fontSize: 15 }}>{safe}%</strong>
+    </div>
+    <div style={{ height: 9, background: C.border, borderRadius: 99, overflow: 'hidden' }}>
+      <div style={{ width: `${safe}%`, height: '100%', background: `linear-gradient(90deg,${C.gold},${C.goldLight})`, borderRadius: 99, transition: 'width .45s ease' }} />
+    </div>
+    <div style={{ color: C.muted, fontSize: 11, lineHeight: 1.5, marginTop: 13 }}>You can leave this screen. Prepza keeps the generation running and will notify you when it is ready.</div>
+  </div>
+}
 
 const C = {
   navy: '#0B1437',
@@ -177,7 +203,8 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
           setAudioUrl(res.audio_url); setAudioDuration(res.duration_seconds || 0); setPhase('ready'); return
         }
         if (res.audio_status === 'failed') { setError('Audio generation failed. You can retry it without regenerating the script.'); setPhase('error'); return }
-        window.setTimeout(poll, 2500)
+        generationApi<{ progress_percent: number; progress_stage: string }>(`/documents/${activeDocumentId}/generation-progress?feature=podcast_audio`).then(p => { setGenerationPercent(Math.max(65, Number(p.progress_percent || 0))); setGenerationStage(p.progress_stage || 'creating audio') }).catch(() => {})
+        window.setTimeout(poll, 1800)
       } catch (e) { if (!cancelled) { setError(e instanceof Error ? e.message : 'Could not check audio progress.'); setPhase('error') } }
     }
     poll()
@@ -198,8 +225,9 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
     if (activeDocumentId == null || !csrf) return
     setError(''); setPhase('script')
     try {
-      const script = await generationApi<{ material_id: number }>(`/documents/${activeDocumentId}/podcast-script`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ duration_minutes: minutes, style, language: 'en' }) })
-      setMaterialId(script.material_id)
+      const scriptJob = await generationApi<{ job_id: number }>(`/documents/${activeDocumentId}/podcast-script?async=1`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ duration_minutes: minutes, style, language: 'en' }) })
+      const script = await pollGenerationJob<{ script?: any; audio_status?: string }>(scriptJob.job_id, (p, s) => { setGenerationPercent(Math.min(65, Math.round(p * 0.65))); setGenerationStage(s) })
+      setGenerationPercent(65); setGenerationStage('starting audio synthesis')
       setPhase('audio')
       await generationApi(`/documents/${activeDocumentId}/podcast-audio`, { method: 'POST', headers: { 'X-CSRF-Token': csrf } })
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not generate this podcast.'); setPhase('error') }
@@ -215,7 +243,7 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
   if (activeDocumentId == null) return <GenerationFailure error="No document selected." onBack={() => setScreen('document-study')} onRetry={() => setScreen('document-study')} />
   if (phase === 'error') return <GenerationFailure error={error} onBack={() => setPhase('config')} onRetry={materialId ? retryAudio : generate} />
   if (phase === 'script' || phase === 'audio') {
-    return <div style={{ flex: 1, background: C.page }}><GenerationHeader title="Creating your podcast" subtitle={`${minutes} minutes · ${PODCAST_OPTIONS.find(o => o.minutes === minutes)?.label}`} onBack={() => setPhase('config')} /><div style={{ padding: 22, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 380 }}><div style={{ background: C.card, borderRadius: 22, padding: 22, boxShadow: '0 8px 30px rgba(0,0,0,0.07)' }}><div style={{ color: C.gold, fontSize: 10, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase' }}>Prepza Podcast</div><div style={{ color: C.text, fontSize: 18, fontWeight: 800, marginTop: 7 }}>{title}</div><div style={{ color: C.muted, fontSize: 12, marginTop: 4, marginBottom: 18 }}>{pages != null ? `${pages} pages · ` : ''}{minutes} minutes</div>{[['Document ready', true], ['Creating podcast script', phase === 'audio'], ['Creating audio', phase === 'audio'], ['Finalising', false]].map(([label, done]) => <div key={String(label)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 0', borderBottom: `1px solid ${C.border}` }}><div style={{ width: 22, height: 22, borderRadius: '50%', background: done === true ? 'rgba(76,201,123,0.14)' : C.page, color: done === true ? C.green : C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900 }}>{done === true ? '✓' : ''}</div><div style={{ flex: 1, color: C.text, fontSize: 13, fontWeight: done === true ? 700 : 600 }}>{label}</div></div>)}</div><div style={{ textAlign: 'center', color: C.muted, fontSize: 11, marginTop: 14 }}>{phase === 'audio' ? 'Audio is being assembled from the generated speaker turns.' : 'Writing a study-focused script from your document…'}</div></div></div>
+    return <div style={{ flex: 1, background: C.page }}><GenerationHeader title="Creating your podcast" subtitle={`${minutes} minutes · ${PODCAST_OPTIONS.find(o => o.minutes === minutes)?.label}`} onBack={() => setPhase('config')} /><div style={{ padding: 22, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 380 }}><GenerationProgressCard title="Generating your podcast" subtitle={`${minutes} minutes · ${PODCAST_OPTIONS.find(o => o.minutes === minutes)?.label || ''}`} percent={generationPercent} stage={generationStage} /><div style={{ display: 'none' }}><div style={{ color: C.gold, fontSize: 10, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase' }}>Prepza Podcast</div><div style={{ color: C.text, fontSize: 18, fontWeight: 800, marginTop: 7 }}>{title}</div><div style={{ color: C.muted, fontSize: 12, marginTop: 4, marginBottom: 18 }}>{pages != null ? `${pages} pages · ` : ''}{minutes} minutes</div>{[['Document ready', true], ['Creating podcast script', phase === 'audio'], ['Creating audio', phase === 'audio'], ['Finalising', false]].map(([label, done]) => <div key={String(label)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 0', borderBottom: `1px solid ${C.border}` }}><div style={{ width: 22, height: 22, borderRadius: '50%', background: done === true ? 'rgba(76,201,123,0.14)' : C.page, color: done === true ? C.green : C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900 }}>{done === true ? '✓' : ''}</div><div style={{ flex: 1, color: C.text, fontSize: 13, fontWeight: done === true ? 700 : 600 }}>{label}</div></div>)}</div><div style={{ textAlign: 'center', color: C.muted, fontSize: 11, marginTop: 14 }}>{phase === 'audio' ? 'Audio is being assembled from the generated speaker turns.' : 'Writing a study-focused script from your document…'}</div></div></div>
   }
   if (phase === 'ready' && audioUrl) {
     const pct = audioDuration ? Math.min(100, (progress / audioDuration) * 100) : 0
