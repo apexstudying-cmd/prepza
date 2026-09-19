@@ -569,6 +569,28 @@ def register_discovery(app, db):
         return jsonify({"ok": True, "eligible_recipients": len(allowed_ids),
                         "queued": queued, "sent": sent, "note": "Delivery is frequency-capped and billed by delivered recipient."})
 
+    @app.get("/api/discovery/preferences")
+    def discovery_preferences():
+        uid = session.get("user_id")
+        if not uid: return jsonify({"error":"Not logged in"}), 401
+        value = db.session.execute(text("SELECT COALESCE(discoverable,FALSE) FROM student_opportunity_discovery WHERE user_id=:uid"), {"uid":uid}).scalar_one_or_none()
+        return jsonify({"discoverable": bool(value)})
+
+    @app.patch("/api/discovery/preferences")
+    def update_discovery_preferences():
+        uid = session.get("user_id")
+        if not uid: return jsonify({"error":"Not logged in"}), 401
+        if not csrf_ok(): return jsonify({"error":"Invalid CSRF token"}), 403
+        data=request.get_json(silent=True) or {}
+        discoverable=bool(data.get("discoverable"))
+        db.session.execute(text("""
+            INSERT INTO student_opportunity_discovery(user_id,discoverable,updated_at)
+            VALUES(:uid,:value,CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id) DO UPDATE SET discoverable=:value,updated_at=CURRENT_TIMESTAMP
+        """), {"uid":uid,"value":discoverable})
+        db.session.commit()
+        return jsonify({"ok":True,"discoverable":discoverable})
+
     @app.get("/api/discovery/feed")
     def discovery_feed():
         uid = session.get("user_id")
