@@ -194,6 +194,78 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
     return () => { cancelled = true }
   }, [activeDocumentId, csrf, phase])
 
+  // Recover a script job that is still running after the student leaves and
+  // returns to this screen. Generation is server-owned; the screen must not
+  // lose the job merely because its local React state was unmounted.
+  useEffect(() => {
+    if (activeDocumentId == null || !csrf || phase !== 'config') return
+    let cancelled = false
+    const recover = async () => {
+      try {
+        const status = await generationApi<{
+          found: boolean
+          status: string
+          job_id?: number
+          material_id?: number | null
+          progress_percent?: number
+          progress_stage?: string
+        }>(`/documents/${activeDocumentId}/generation-progress?feature=podcast`)
+        if (cancelled || !status.found) return
+
+        if (status.status === 'processing' && status.job_id) {
+          setGenerationPercent(Math.min(65, Math.round(Number(status.progress_percent || 0) * 0.65)))
+          setGenerationStage(status.progress_stage || 'generating with AI')
+          setPhase('script')
+          const result = await pollGenerationJob<{ script?: any; audio_status?: string }>(
+            status.job_id,
+            (p, s) => {
+              if (cancelled) return
+              setGenerationPercent(Math.min(65, Math.round(p * 0.65)))
+              setGenerationStage(s)
+            },
+          )
+          if (cancelled) return
+          setMaterialId(result.materialId ?? status.material_id ?? null)
+          setGenerationPercent(65)
+          setGenerationStage('starting audio synthesis')
+          setPhase('audio')
+          await generationApi(`/documents/${activeDocumentId}/podcast-audio`, {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': csrf },
+          })
+          return
+        }
+
+        if (status.status === 'completed' && status.material_id) {
+          setMaterialId(status.material_id)
+          const audio = await generationApi<{
+            audio_status: string
+            audio_url: string | null
+            duration_seconds: number | null
+            progress_percent?: number
+            progress_stage?: string
+          }>(`/documents/${activeDocumentId}/podcast-audio`)
+          if (cancelled) return
+          if (audio.audio_status === 'ready' && audio.audio_url) {
+            setAudioUrl(audio.audio_url)
+            setAudioDuration(audio.duration_seconds || 0)
+            setGenerationPercent(100)
+            setGenerationStage('ready')
+            setPhase('ready')
+          } else {
+            setGenerationPercent(Math.max(65, Number(audio.progress_percent || 0)))
+            setGenerationStage(audio.progress_stage || 'creating audio')
+            setPhase('audio')
+          }
+        }
+      } catch {
+        // A normal config screen remains usable if there is no recoverable job.
+      }
+    }
+    recover()
+    return () => { cancelled = true }
+  }, [activeDocumentId, csrf, phase])
+
   useEffect(() => {
     if (phase !== 'audio' || activeDocumentId == null) return
     let cancelled = false
