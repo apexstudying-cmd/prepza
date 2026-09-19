@@ -196,7 +196,7 @@ type Screen =
   | 'notifications' | 'library' | 'mind-map' | 'new-chat' | 'chat-options' | 'edit-profile'
   | 'subscription' | 'payment' | 'payment-success' | 'payment-failure' | 'payment-history'
   | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements' | 'study-materials' | 'document-reader'
-  | 'followers' | 'following' | 'follow-requests' | 'group-detail' | 'group-create' | 'ambassador' | 'time-studied'
+  | 'followers' | 'following' | 'follow-requests' | 'group-detail' | 'group-create' | 'ambassador' | 'time-studied' | 'study-activity'
 
 // ─── Kenyan Data ──────────────────────────────────────────────────────────────
 // USER mock constant removed (Chunk 14 sweep) - screens now derive display name/initials from GET /me
