@@ -194,18 +194,6 @@ def generate_document_material(*, material_type, document_content_id, triggering
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
 
-    if not lookup.owner:
-        waited = wait_for_generation(fingerprint)
-        if waited.status == "ready" and waited.payload:
-            material = _material_from_payload(
-                document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
-                payload=waited.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
-            )
-            return {"payload": waited.payload, "material_id": material.id, "reused": True, "model_used": None}
-        if waited.status == "failed":
-            raise ai_service.AIProviderError("AI generation failed - please try again.")
-        raise ai_service.AIProviderError("This material is still being prepared - please try again shortly.")
-
     job = None
     artifact_ready = False
     try:
