@@ -12760,6 +12760,15 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ flex: 1, fontSize: 12, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dashboard.referral_link}</div>
             <button onClick={copyLink} style={{ color: AMB_COLORS.gold, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>{copied ? 'Copied ✓' : 'Copy'}</button>
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '112px 1fr', gap: 12, alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ background:'#fff', borderRadius:14, padding:7, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <img src="/ambassador/referral-qr" alt="Your Prepza ambassador QR code" style={{ width:98, height:98, display:'block' }} />
+            </div>
+            <div>
+              <div style={{ fontSize:11, color:'rgba(255,255,255,.62)', lineHeight:1.5 }}>Print this QR code or place it on posters. Every scan opens your referral link.</div>
+              <a href="/ambassador/referral-qr" download={`prepza-ambassador-${dashboard.referral_code}.svg`} style={{ display:'inline-block', marginTop:9, color:AMB_COLORS.gold, fontSize:11, fontWeight:800, textDecoration:'none' }}>Save QR code</a>
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={shareLink} style={{ flex: 1, background: `linear-gradient(135deg,${AMB_COLORS.gold},${AMB_COLORS.goldLight})`, color: AMB_COLORS.navy, border: 'none', borderRadius: 12, padding: '11px 0', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>Share link</button>
             <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
