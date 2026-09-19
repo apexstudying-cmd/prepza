@@ -431,6 +431,22 @@ def get_generated_material_for_user(document_content_id, material_type, user_id)
     return None
 
 
+def _resolve_material_generation(feature, content, user_id, parameters):
+    generator = {
+        "summary": ai_service.generate_document_summary,
+        "quiz": ai_service.generate_document_quiz,
+        "flashcards": ai_service.generate_document_flashcards,
+        "podcast": ai_service.generate_document_podcast_script,
+        "mind_map": ai_service.generate_document_mindmap,
+    }[feature]
+    return generator(
+        document_content_id=content.id,
+        triggering_user_id=user_id,
+        plan_tier=get_ai_plan_tier(user_id),
+        parameters=parameters,
+    )
+
+
 def _start_async_material_generation(document_content_id, user_id, feature, parameters):
     """Create a user-visible generation job and run the existing generator off-request."""
     job = AiJob(
@@ -3955,7 +3971,17 @@ def summarize_document(document_id):
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
 
     parameters = _ai_generation_parameters_from_request()
-    job_id = _start_async_material_generation(
+    if request.headers.get("X-Prepza-Resolve-Generation") == "1":
+        result = _resolve_material_generation("summary", content, user_id, parameters)
+        record_document_studied(user_id, content.id)
+        db.session.commit()
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": result["reused"],
+            "summary": result["payload"],
+        }), 200
+
+
         document_content_id=content.id,
         user_id=user_id,
         feature="summary",
@@ -4016,7 +4042,17 @@ def quiz_document(document_id):
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
 
     parameters = _ai_generation_parameters_from_request()
-    job_id = _start_async_material_generation(
+    if request.headers.get("X-Prepza-Resolve-Generation") == "1":
+        result = _resolve_material_generation("quiz", content, user_id, parameters)
+        record_document_studied(user_id, content.id)
+        db.session.commit()
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": result["reused"],
+            "quiz": result["payload"],
+        }), 200
+
+
         document_content_id=content.id,
         user_id=user_id,
         feature="quiz",
@@ -4142,7 +4178,17 @@ def flashcards_document(document_id):
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
 
     parameters = _ai_generation_parameters_from_request()
-    job_id = _start_async_material_generation(
+    if request.headers.get("X-Prepza-Resolve-Generation") == "1":
+        result = _resolve_material_generation("flashcards", content, user_id, parameters)
+        record_document_studied(user_id, content.id)
+        db.session.commit()
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": result["reused"],
+            "flashcards": result["payload"],
+        }), 200
+
+
         document_content_id=content.id,
         user_id=user_id,
         feature="flashcards",
@@ -4267,7 +4313,17 @@ def podcast_script_document(document_id):
         }), 200
 
     parameters = _ai_generation_parameters_from_request()
-    job_id = _start_async_material_generation(
+    if request.headers.get("X-Prepza-Resolve-Generation") == "1":
+        result = _resolve_material_generation("podcast", content, user_id, parameters)
+        record_document_studied(user_id, content.id)
+        db.session.commit()
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": result["reused"],
+            "podcast": result["payload"],
+        }), 200
+
+
         document_content_id=content.id,
         user_id=user_id,
         feature="podcast",
