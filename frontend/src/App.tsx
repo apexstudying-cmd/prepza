@@ -1211,7 +1211,7 @@ const podcastDuration = (seconds: number | null) => seconds == null ? '—' : `$
 // the same session, render instantly from cache while a fresh fetch runs
 // quietly in the background — no skeleton flash on data you already have.
 const HOME_CACHE: { me?: { display_name: string | null }; documents?: HomeDocument[] } = {}
-function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
+function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void; setActiveOpportunityId: (id: number | null) => void }) {
   const { tokens: T } = useTheme()
   const [notifCount, setNotifCount] = useState(0)
 
