@@ -3954,21 +3954,14 @@ def summarize_document(document_id):
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
 
-    try:
-        result = ai_service.generate_document_summary(
-            document_content_id=content.id,
-            triggering_user_id=user_id,
-            plan_tier=get_ai_plan_tier(user_id),
-            parameters=_ai_generation_parameters_from_request(),
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except ai_service.AIBudgetExceededError as e:
-        return jsonify({"error": str(e)}), 503
-    except ai_service.AIRateLimitExceededError as e:
-        return jsonify({"error": str(e)}), 429
-    except ai_service.AIProviderError as e:
-        return jsonify({"error": str(e)}), 502
+    parameters = _ai_generation_parameters_from_request()
+    job_id = _start_async_material_generation(
+        document_content_id=content.id,
+        user_id=user_id,
+        feature="summary",
+        parameters=parameters,
+    )
+    return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
 
     record_document_studied(user_id, content.id)
     db.session.commit()
@@ -4022,21 +4015,14 @@ def quiz_document(document_id):
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
 
-    try:
-        result = ai_service.generate_document_quiz(
-            document_content_id=content.id,
-            triggering_user_id=user_id,
-            plan_tier=get_ai_plan_tier(user_id),
-            parameters=_ai_generation_parameters_from_request(),
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except ai_service.AIBudgetExceededError as e:
-        return jsonify({"error": str(e)}), 503
-    except ai_service.AIRateLimitExceededError as e:
-        return jsonify({"error": str(e)}), 429
-    except ai_service.AIProviderError as e:
-        return jsonify({"error": str(e)}), 502
+    parameters = _ai_generation_parameters_from_request()
+    job_id = _start_async_material_generation(
+        document_content_id=content.id,
+        user_id=user_id,
+        feature="quiz",
+        parameters=parameters,
+    )
+    return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
 
     record_document_studied(user_id, content.id)
     db.session.commit()
@@ -4155,21 +4141,14 @@ def flashcards_document(document_id):
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
 
-    try:
-        result = ai_service.generate_document_flashcards(
-            document_content_id=content.id,
-            triggering_user_id=user_id,
-            plan_tier=get_ai_plan_tier(user_id),
-            parameters=_ai_generation_parameters_from_request(),
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except ai_service.AIBudgetExceededError as e:
-        return jsonify({"error": str(e)}), 503
-    except ai_service.AIRateLimitExceededError as e:
-        return jsonify({"error": str(e)}), 429
-    except ai_service.AIProviderError as e:
-        return jsonify({"error": str(e)}), 502
+    parameters = _ai_generation_parameters_from_request()
+    job_id = _start_async_material_generation(
+        document_content_id=content.id,
+        user_id=user_id,
+        feature="flashcards",
+        parameters=parameters,
+    )
+    return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
 
     record_document_studied(user_id, content.id)
     db.session.commit()
@@ -4287,21 +4266,14 @@ def podcast_script_document(document_id):
             "podcast": json.loads(material.payload),
         }), 200
 
-    try:
-        result = ai_service.generate_document_podcast_script(
-            document_content_id=content.id,
-            triggering_user_id=user_id,
-            plan_tier=get_ai_plan_tier(user_id),
-            parameters=_ai_generation_parameters_from_request(),
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except ai_service.AIBudgetExceededError as e:
-        return jsonify({"error": str(e)}), 503
-    except ai_service.AIRateLimitExceededError as e:
-        return jsonify({"error": str(e)}), 429
-    except ai_service.AIProviderError as e:
-        return jsonify({"error": str(e)}), 502
+    parameters = _ai_generation_parameters_from_request()
+    job_id = _start_async_material_generation(
+        document_content_id=content.id,
+        user_id=user_id,
+        feature="podcast",
+        parameters=parameters,
+    )
+    return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
 
     record_document_studied(user_id, content.id)
     db.session.commit()
