@@ -4265,6 +4265,50 @@ def complete_flashcards(document_id, material_id):
     }), 201
 
 
+@app.route("/documents/<int:document_id>/generation-progress", methods=["GET"])
+@login_required
+def generation_progress(document_id):
+    """Return the latest generation job progress for a document.
+
+    This is deliberately a read-only polling endpoint. The frontend can
+    keep the generation request itself running while polling this endpoint,
+    so the student gets live stage/percentage updates instead of a blank
+    screen.
+    """
+    user_id = session.get("user_id")
+    document = db.session.get(Document, document_id)
+    if not user_id or not _can_study_document(user_id, document):
+        return jsonify({"error": "Document not found"}), 404
+
+    feature = (request.args.get("feature") or "").strip().lower()
+    allowed_features = {"summary", "quiz", "flashcards", "mind_map", "podcast", "podcast_audio"}
+    if feature not in allowed_features:
+        return jsonify({"error": "Unsupported generation feature"}), 400
+
+    job = (
+        AiJob.query
+        .filter_by(document_content_id=document.document_content_id, feature=feature)
+        .order_by(AiJob.id.desc())
+        .first()
+    )
+    if not job:
+        return jsonify({
+            "found": False,
+            "status": "idle",
+            "progress_percent": 0,
+            "progress_stage": "waiting",
+        }), 200
+
+    return jsonify({
+        "found": True,
+        "job_id": job.id,
+        "status": job.status,
+        "progress_percent": max(0, min(100, int(job.progress_percent or 0))),
+        "progress_stage": job.progress_stage or "working",
+        "error_message": job.error_message if job.status == "failed" else None,
+    }), 200
+
+
 @app.route("/documents/<int:document_id>/podcast-script", methods=["POST"])
 @limiter.limit(
     "20 per hour",
