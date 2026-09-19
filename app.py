@@ -3974,19 +3974,18 @@ def summarize_document(document_id):
 
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
-        result = _resolve_material_generation("summary", content, user_id, parameters)
+        result = _resolve_material_generation("podcast", content, user_id, parameters)
         record_document_studied(user_id, content.id)
         db.session.commit()
         return jsonify({
             "material_id": result["material_id"],
             "reused": result["reused"],
-            "summary": result["payload"],
+            "podcast": result["payload"],
         }), 200
-
-
+    job_id = _start_async_material_generation(
         document_content_id=content.id,
         user_id=user_id,
-        feature="summary",
+        feature="podcast",
         parameters=parameters,
     )
     return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
