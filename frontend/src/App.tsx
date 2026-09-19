@@ -758,9 +758,10 @@ function DocumentStudyHubScreen({
           </div>
         ) : readyMaterials.map((m, i) => {
           const meta = materialMeta[m.type.toLowerCase().replace(/-/g, '_')] || { label: m.type.replace(/_/g, ' '), icon: '•', screen: 'document-reader' as Screen }
-          return <button key={`${m.type}-${i}`} onClick={() => openMaterial(m)} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, marginBottom: 9, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
+          const variantLabel = label(m.type, m.parameters)
+          return <button key={m.id} onClick={() => openMaterial(m)} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, marginBottom: 9, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
             <div style={{ width: 42, height: 42, borderRadius: 12, background: `${N.navy}0D`, color: N.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900 }}>{meta.icon}</div>
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13, textTransform: 'capitalize' }}>{meta.label}</div><div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>Ready to replay</div></div>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13, textTransform: 'capitalize' }}>{variantLabel}</div><div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>Ready to replay</div></div>
             <span style={{ color: T.textMuted }}>›</span>
           </button>
         })}
