@@ -32,6 +32,7 @@ from decimal import Decimal
 from typing import Optional
 
 import anthropic
+import requests
 
 
 # ============================================================
@@ -99,6 +100,14 @@ class AIRateLimitExceededError(Exception):
 MODEL_SONNET_5 = "claude-sonnet-5"
 MODEL_HAIKU_4_5 = "claude-haiku-4-5-20251001"
 
+MODEL_GEMINI_FLASH_LITE = "gemini:gemini-2.5-flash-lite"
+MODEL_GEMINI_FLASH = "gemini:gemini-2.5-flash"
+MODEL_OPENAI_LUNA = "openai:gpt-5.6-luna"
+
+def _configured_model(task_name, default):
+    """Allow provider/model swaps through environment without code changes."""
+    return os.environ.get(f"PREPZA_AI_MODEL_{task_name.upper()}", default)
+
 AI_TASKS = {
     # Wired and in use this chunk:
     "FORUM_ANSWER": {
@@ -131,22 +140,22 @@ AI_TASKS = {
         "notes": "AI Tutor chat, grounded in a student's document once extraction exists.",
     },
     "SUMMARIZATION": {
-        "primary": MODEL_HAIKU_4_5,
+        "primary": _configured_model("summarization", MODEL_HAIKU_4_5),
         "fallback": MODEL_SONNET_5,
         "max_tokens": 1536,
-        "notes": "Condensed notes from a document.",
+        "notes": "Condensed notes from a document; provider can be switched after quality benchmarking.",
     },
     "FLASHCARDS": {
-        "primary": MODEL_HAIKU_4_5,
+        "primary": _configured_model("flashcards", MODEL_HAIKU_4_5),
         "fallback": MODEL_SONNET_5,
         "max_tokens": 2048,
-        "notes": "Mechanical extraction of Q/A pairs from source text.",
+        "notes": "Structured Q/A generation; provider can be switched after quality benchmarking.",
     },
     "QUIZZES": {
-        "primary": MODEL_SONNET_5,
-        "fallback": None,
+        "primary": _configured_model("quizzes", MODEL_SONNET_5),
+        "fallback": MODEL_SONNET_5,
         "max_tokens": 2048,
-        "notes": "Needs correct distractors/answers, not just plausible-looking ones.",
+        "notes": "Needs correct distractors/answers; use a cheaper model only after quality validation.",
     },
     "DOCUMENT_ANALYSIS": {
         "primary": MODEL_SONNET_5,
@@ -161,10 +170,10 @@ AI_TASKS = {
         "notes": "Longer-form generation, benefits from a stronger model.",
     },
     "MIND_MAP": {
-        "primary": MODEL_HAIKU_4_5,
+        "primary": _configured_model("mind_map", MODEL_HAIKU_4_5),
         "fallback": MODEL_SONNET_5,
         "max_tokens": 1536,
-        "notes": "Structural extraction (nodes/edges), not deep reasoning.",
+        "notes": "Structural generation; provider can be switched after quality benchmarking.",
     },
 }
 
@@ -177,6 +186,9 @@ AI_TASKS = {
 # ============================================================
 
 _PRICING_SCHEDULE = {
+    MODEL_GEMINI_FLASH_LITE: [(datetime(2000, 1, 1), Decimal("0.10"), Decimal("0.40"))],
+    MODEL_GEMINI_FLASH: [(datetime(2000, 1, 1), Decimal("0.30"), Decimal("2.50"))],
+    MODEL_OPENAI_LUNA: [(datetime(2000, 1, 1), Decimal("0.20"), Decimal("1.20"))],
     MODEL_SONNET_5: [
         # Anthropic's current official price is $2/$10 per MTok. The
         # previously announced Sep-2026 increase to $3/$15 was cancelled.
@@ -294,9 +306,110 @@ class AnthropicProvider:
         )
 
 
+
+class MultiProvider:
+    """Provider adapter for Anthropic, Gemini REST, and OpenAI REST.
+
+    Keys are read only from the server environment. They must never be
+    committed to the repository or sent through chat.
+    """
+
+    def __init__(self):
+        self._anthropic = AnthropicProvider(os.environ.get("ANTHROPIC_API_KEY")) if os.environ.get("ANTHROPIC_API_KEY") else None
+
+    @staticmethod
+    def _gemini(model, system_prompt, user_message, max_tokens):
+        key = os.environ.get("GEMINI_API_KEY")
+        if not key:
+            raise AIProviderError("GEMINI_API_KEY is not configured")
+        model_id = model.split(":", 1)[1]
+        response = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent",
+            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+            json={
+                "system_instruction": {"parts": [{"text": system_prompt}]},
+                "contents": [{"parts": [{"text": user_message}]}],
+                "generationConfig": {"maxOutputTokens": max_tokens},
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
+        data = response.json()
+        parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []
+        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+        if not text:
+            raise AIProviderError("Gemini returned no text")
+        meta = data.get("usageMetadata") or {}
+        return text, AIUsage(
+            input_tokens=int(meta.get("promptTokenCount", 0) or 0),
+            output_tokens=int(meta.get("candidatesTokenCount", 0) or 0),
+        )
+
+    @staticmethod
+    def _openai(model, system_prompt, user_message, max_tokens):
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key:
+            raise AIProviderError("OPENAI_API_KEY is not configured")
+        model_id = model.split(":", 1)[1]
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": model_id,
+                "instructions": system_prompt,
+                "input": user_message,
+                "max_output_tokens": max_tokens,
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
+        data = response.json()
+        text = data.get("output_text") or ""
+        if not text:
+            # Defensive fallback for response shapes that expose content blocks.
+            chunks = []
+            for item in data.get("output", []) or []:
+                for block in item.get("content", []) or []:
+                    if isinstance(block, dict) and block.get("type") in ("output_text", "text"):
+                        chunks.append(block.get("text", ""))
+            text = "".join(chunks)
+        if not text:
+            raise AIProviderError("OpenAI returned no text")
+        usage = data.get("usage") or {}
+        return text, AIUsage(
+            input_tokens=int(usage.get("input_tokens", 0) or 0),
+            output_tokens=int(usage.get("output_tokens", 0) or 0),
+        )
+
+    def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False,
+             image_b64=None, image_media_type=None):
+        if model.startswith("gemini:"):
+            if image_b64:
+                raise AIProviderError("Gemini adapter currently supports text-only generation")
+            return self._gemini(model, system_prompt, user_message, max_tokens)
+        if model.startswith("openai:"):
+            if image_b64:
+                raise AIProviderError("OpenAI adapter currently supports text-only generation")
+            return self._openai(model, system_prompt, user_message, max_tokens)
+        if not self._anthropic:
+            raise AIProviderError("ANTHROPIC_API_KEY is not configured")
+        return self._anthropic.call(
+            model, system_prompt, user_message, max_tokens,
+            cacheable_system=cacheable_system,
+            image_b64=image_b64, image_media_type=image_media_type,
+        )
+
+    @staticmethod
+    def provider_name(model):
+        if model.startswith("gemini:"):
+            return "google"
+        if model.startswith("openai:"):
+            return "openai"
+        return "anthropic"
+
+
 def _get_provider():
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    return AnthropicProvider(api_key), "anthropic"
+    return MultiProvider(), "multi"
 
 
 def route_and_generate(ai_request: AIRequest) -> AIResponse:
@@ -339,10 +452,11 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
                 model, usage.input_tokens, usage.output_tokens,
                 usage.cache_read_tokens, usage.cache_creation_tokens,
             )
+            actual_provider = provider.provider_name(model) if hasattr(provider, "provider_name") else provider_name
             return AIResponse(
                 text=text,
                 model_used=model,
-                provider=provider_name,
+                provider=actual_provider,
                 usage=usage,
                 latency_ms=latency_ms,
                 escalated=(attempt > 0),
