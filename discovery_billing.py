@@ -69,6 +69,21 @@ def register_discovery(app, db):
         ON discovery_event (user_id, event_type, created_at)
     """))
     db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS organisation_usage_invoice (
+            id BIGSERIAL PRIMARY KEY,
+            organisation_id INTEGER NOT NULL,
+            period_start DATE NOT NULL,
+            period_end DATE NOT NULL,
+            usage_type VARCHAR(40) NOT NULL DEFAULT 'discovery',
+            amount_kes INTEGER NOT NULL DEFAULT 0,
+            status VARCHAR(30) NOT NULL DEFAULT 'pending',
+            payment_reference VARCHAR(120),
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            paid_at TIMESTAMP,
+            UNIQUE (organisation_id, period_start, period_end, usage_type)
+        )
+    """))
+    db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS discovery_push_delivery (
             id BIGSERIAL PRIMARY KEY,
             campaign_id BIGINT NOT NULL,
@@ -166,7 +181,17 @@ def register_discovery(app, db):
             WHERE organisation_id=:oid AND period_start=:start AND period_end=:end
         """), {"oid":organisation_id,"start":period_start,"end":period_end}).scalar_one_or_none()
         if existing == "paid":
-            return total, usage, True
+            db.session.execute(text("""
+                INSERT INTO organisation_usage_invoice
+                    (organisation_id,period_start,period_end,usage_type,amount_kes,status)
+                VALUES (:oid,:start,:end,'discovery',:usage,'pending')
+                ON CONFLICT (organisation_id,period_start,period_end,usage_type)
+                DO UPDATE SET amount_kes=:usage,
+                    status=CASE WHEN organisation_usage_invoice.status='paid' THEN 'paid' ELSE 'pending' END
+            """), {"oid":organisation_id,"start":period_start,"end":period_end,"usage":int(usage)})
+            db.session.commit()
+            usage_status = db.session.execute(text("""SELECT status FROM organisation_usage_invoice WHERE organisation_id=:oid AND period_start=:start AND period_end=:end AND usage_type='discovery'"""), {"oid":organisation_id,"start":period_start,"end":period_end}).scalar_one_or_none()
+            return total, usage, usage_status == "paid"
         db.session.execute(text("""
             INSERT INTO organisation_invoice
                 (organisation_id,period_start,period_end,plan_code,amount_kes,status)
