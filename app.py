@@ -3935,8 +3935,8 @@ def _published_ready_material_for_viewer(user_id, document, material_type, param
     return content, material
 
 def _published_material_response(user_id, content, material):
-    record_document_studied(user_id, content.id)
-    db.session.commit()
+    # Opening or replaying a generated material is not itself study time.
+    # Actual study activity is recorded by the reading/review/audio flows.
     return {
         "material_id": material.id,
         "reused": True,
@@ -3983,8 +3983,6 @@ def summarize_document(document_id):
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
         result = _resolve_material_generation("summary", content, user_id, parameters)
-        record_document_studied(user_id, content.id)
-        db.session.commit()
         return jsonify({"material_id": result["material_id"], "reused": result["reused"], "summary": result["payload"]}), 200
     job_id = _start_async_material_generation(
         document_content_id=content.id, user_id=user_id, feature="summary", parameters=parameters
@@ -4021,8 +4019,6 @@ def quiz_document(document_id):
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
         result = _resolve_material_generation("quiz", content, user_id, parameters)
-        record_document_studied(user_id, content.id)
-        db.session.commit()
         return jsonify({"material_id": result["material_id"], "reused": result["reused"], "quiz": result["payload"]}), 200
     job_id = _start_async_material_generation(
         document_content_id=content.id, user_id=user_id, feature="quiz", parameters=parameters
@@ -4123,8 +4119,6 @@ def flashcards_document(document_id):
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
         result = _resolve_material_generation("flashcards", content, user_id, parameters)
-        record_document_studied(user_id, content.id)
-        db.session.commit()
         return jsonify({"material_id": result["material_id"], "reused": result["reused"], "flashcards": result["payload"]}), 200
     job_id = _start_async_material_generation(
         document_content_id=content.id, user_id=user_id, feature="flashcards", parameters=parameters
