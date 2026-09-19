@@ -8,6 +8,7 @@ import { getOfflineStudyDocumentUrl, getSavedStudyHubOffline, listSavedStudyHubO
 import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
 import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
+import StudyShareSheet from './share/StudyShareSheet'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -4663,53 +4664,7 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
 // navigator.share()/clipboard - it does not know or claim to know the
 // specific document/post/opportunity that triggered it.
 function ShareSheetScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const { tokens: T } = useTheme()
-  const [copied, setCopied] = useState(false)
-  const shareUrl = typeof window !== 'undefined' ? window.location.origin : 'https://prepza.app'
-  const shareText = 'Check this out on Prepza — the AI study companion for Kenyan university students.'
-
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1800)
-    } catch { /* clipboard permission denied - link still visible below */ }
-  }
-
-  const nativeShare = async () => {
-    if (navigator.share) {
-      try { await navigator.share({ title: 'Prepza', text: shareText, url: shareUrl }) } catch { /* user cancelled */ }
-    } else {
-      copyLink()
-    }
-  }
-
-  const actions: { icon: string; label: string; onClick: () => void }[] = [
-    { icon: '💬', label: 'Chats', onClick: () => setScreen('new-chat') },
-    { icon: '📲', label: 'WhatsApp', onClick: () => window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`, '_blank') },
-    { icon: '📧', label: 'Email', onClick: () => window.open(`mailto:?subject=${encodeURIComponent('Check out Prepza')}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`, '_blank') },
-    { icon: '🔗', label: copied ? 'Copied!' : 'Copy Link', onClick: copyLink },
-    { icon: '📤', label: 'More', onClick: nativeShare },
-  ]
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#00000055', justifyContent: 'flex-end' }}>
-      <div style={{ background: T.card, borderRadius: '24px 24px 0 0', padding: '20px 20px 32px' }}>
-        <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
-        <div style={{ fontWeight: 800, fontSize: 16, color: T.text, marginBottom: 6 }}>Share</div>
-        <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 20, wordBreak: 'break-all' }}>{shareUrl}</div>
-        <div style={{ display: 'flex', gap: 16, marginBottom: 24, overflowX: 'auto' }} className="scrollbar-hide">
-          {actions.map((s, i) => (
-            <button key={i} onClick={s.onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
-              <div style={{ width: 52, height: 52, background: '#F3F4F6', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{s.icon}</div>
-              <span style={{ fontSize: 11, color: T.textMuted, fontFamily: 'Plus Jakarta Sans', fontWeight: 600 }}>{s.label}</span>
-            </button>
-          ))}
-        </div>
-        <button onClick={() => setScreen('home')} style={{ width: '100%', background: '#F3F4F6', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
-      </div>
-    </div>
-  )
+  return <StudyShareSheet onClose={() => setScreen('profile')} />
 }
 
 // ─── STUDENT PROFILE ──────────────────────────────────────────────────────────
