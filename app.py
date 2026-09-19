@@ -5070,6 +5070,13 @@ def save_library_item(publication_id):
     if _document_content_has_flagged_material(source.document_content_id):
         return jsonify({"error": "Library item is currently unavailable"}), 404
 
+    existing_studyhub_document = Document.query.filter_by(
+        user_id=user_id,
+        document_content_id=source.document_content_id,
+        is_removed=False,
+    ).order_by(Document.id.asc()).first()
+    already_in_studyhub = existing_studyhub_document is not None
+
     studyhub_document = _ensure_studyhub_document_for_publication(user_id, publication)
     if not studyhub_document:
         return jsonify({"error": "Library document is not ready"}), 409
@@ -5086,9 +5093,10 @@ def save_library_item(publication_id):
             db.session.flush()
         db.session.commit()
         return jsonify({
-            "message": "Already saved",
+            "message": "This document is already in your Study Hub. No download was needed.",
             "document_id": studyhub_document.id,
             "in_studyhub": True,
+            "already_in_studyhub": True,
             "save_count": publication.save_count,
         }), 200
 
@@ -5126,11 +5134,16 @@ def save_library_item(publication_id):
         }), 200
 
     return jsonify({
-        "message": "Saved",
+        "message": (
+            "This document is already in your Study Hub. No download was needed."
+            if already_in_studyhub
+            else "Saved to your Study Hub."
+        ),
         "document_id": studyhub_document.id,
         "in_studyhub": True,
+        "already_in_studyhub": already_in_studyhub,
         "save_count": publication.save_count,
-    }), 201
+    }), 200 if already_in_studyhub else 201
 
 @app.route("/library/<int:publication_id>/save", methods=["DELETE"])
 @require_csrf
