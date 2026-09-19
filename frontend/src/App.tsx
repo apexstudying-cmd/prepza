@@ -8845,8 +8845,7 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
         headers: { 'X-CSRF-Token': me.csrf_token },
         body: JSON.stringify({ plan: selectedPlan, phone_number: phone.trim() || undefined }),
       })
-      alert(`Plan selected: ${res.status}. Payment is pending confirmation.`)
-      setBilling(await api(`/api/organisations/${orgId}/billing`))
+      window.location.href = res.redirect_url
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not start checkout - please try again.')
       setRedirecting(false)
@@ -13483,10 +13482,10 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
     if (!isOwner || billingBusy) return
     setBillingBusy(code)
     try {
-      const res = await api<{ status: string; amount_kes: number }>(`/api/organisations/${orgId}/billing/checkout`, {
+      const res = await api<{ status: string; amount_kes: number }>(`/api/organisations/${orgId}/plan/checkout`, {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ plan_code: code }),
+        body: JSON.stringify({ plan: code }),
       })
       window.location.href = res.redirect_url
     } catch (e) {
