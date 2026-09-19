@@ -142,9 +142,34 @@ def generate_document_material(*, material_type, document_content_id, triggering
         prompt_version=prompt_version, schema_version=schema_version,
         scope=scope, owner_user_id=owner_user_id,
     )
-    # Every requested generation consumes the student's allowance, including
-    # a reused artifact. Reuse saves Prepza AI cost; it does not create free
-    # unlimited generations for the student.
+    # Resolve the exact variant first. An identical request is a replay of
+    # an existing artifact and must not consume fresh-generation quota because
+    # it does not create another AI call. A changed configuration produces a
+    # different fingerprint and therefore becomes a real new generation.
+    lookup = claim_or_get_generation(
+        fingerprint=fingerprint, content_hash=content.content_hash, feature=material_type,
+        parameters=params, prompt_version=prompt_version, schema_version=schema_version,
+        scope=scope, owner_user_id=owner_user_id,
+    )
+    if lookup.status == "ready" and lookup.payload:
+        material = _material_from_payload(
+            document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
+            payload=lookup.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
+        )
+        return {"payload": lookup.payload, "material_id": material.id, "reused": True, "model_used": None}
+
+    if not lookup.owner:
+        waited = wait_for_generation(fingerprint)
+        if waited.status == "ready" and waited.payload:
+            material = _material_from_payload(
+                document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
+                payload=waited.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
+            )
+            return {"payload": waited.payload, "material_id": material.id, "reused": True, "model_used": None}
+        if waited.status == "failed":
+            raise ai_service.AIProviderError("AI generation failed - please try again.")
+        raise ai_service.AIProviderError("This material is still being prepared - please try again shortly.")
+
     quota_reserved = False
     quota_feature = material_type
     quota_units = 0
@@ -169,17 +194,6 @@ def generate_document_material(*, material_type, document_content_id, triggering
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
 
-    lookup = claim_or_get_generation(
-        fingerprint=fingerprint, content_hash=content.content_hash, feature=material_type,
-        parameters=params, prompt_version=prompt_version, schema_version=schema_version,
-        scope=scope, owner_user_id=owner_user_id,
-    )
-    if lookup.status == "ready" and lookup.payload:
-        material = _material_from_payload(
-            document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
-            payload=lookup.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
-        )
-        return {"payload": lookup.payload, "material_id": material.id, "reused": True, "model_used": None}
     if not lookup.owner:
         waited = wait_for_generation(fingerprint)
         if waited.status == "ready" and waited.payload:
