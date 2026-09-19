@@ -30,13 +30,13 @@ STUDENT_PLANS = {
         "summary_generations": 3,
         "summary_max_pages": 2,
         "podcast_generations": 1,
-        "podcast_max_minutes": 5,
+        "podcast_max_minutes": 10,
         "flashcard_generations": 3,
         "flashcard_max_cards": 10,
         "quiz_generations": 2,
         "quiz_max_questions": 10,
         "mind_map_generations": 2,
-        "mind_map_max_nodes": 6,
+        "mind_map_max_nodes": 10,
         "tutor_messages": 20,
     },
     "premium": {
@@ -46,7 +46,7 @@ STUDENT_PLANS = {
         "summary_generations": 30,
         "summary_max_pages": 10,
         "podcast_generations": 4,
-        "podcast_max_minutes": 30,
+        "podcast_max_minutes": 50,
         "flashcard_generations": 30,
         "flashcard_max_cards": 50,
         "quiz_generations": 20,
@@ -99,10 +99,10 @@ FEATURES = {
 
 DEFAULT_GENERATION_UNITS = {
     "summary": 2,
-    "podcast": 5,
+    "podcast": 10,
     "flashcards": 10,
     "quiz": 10,
-    "mind_map": 6,
+    "mind_map": 10,
 }
 
 
