@@ -3,7 +3,7 @@
 // older application shell alive on installed Android clients after uninstall /
 // reinstall. Network is authoritative for navigations; cached data is only a
 // fallback for genuine offline use.
-const SW_VERSION = 'v16';
+const SW_VERSION = 'v17';
 const SHELL_CACHE = `prepza-shell-${SW_VERSION}`;
 const RUNTIME_CACHE = `prepza-runtime-${SW_VERSION}`;
 const NAV_TIMEOUT_MS = 30000;
@@ -126,13 +126,29 @@ self.addEventListener('push', (event) => {
   let payload = { title: 'Prepza', body: '' };
   try { if (event.data) payload = event.data.json(); }
   catch (_) { payload.body = event.data ? event.data.text() : ''; }
-  event.waitUntil(self.registration.showNotification(payload.title || 'Prepza', { body: payload.body || '' }));
+  event.waitUntil(self.registration.showNotification(payload.title || 'Prepza', {
+    body: payload.body || '',
+    data: payload.data || {},
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+  }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const data = event.notification.data || {};
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {
-    for (const client of clientsList) { if ('focus' in client) return client.focus(); }
+    const message = {
+      type: 'OPEN_PREPZA_NOTIFICATION',
+      screen: data.screen || null,
+      document_id: data.document_id || null,
+      related_type: data.related_type || null,
+      related_id: data.related_id || null,
+    };
+    for (const client of clientsList) {
+      if ('postMessage' in client) client.postMessage(message);
+      if ('focus' in client) return client.focus();
+    }
     if (self.clients.openWindow) return self.clients.openWindow('/');
   }));
 });
