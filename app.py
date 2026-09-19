@@ -450,6 +450,8 @@ class AiJob(db.Model):
     retry_count = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     batch_id = db.Column(db.String(100), nullable=True)
+    # Notification row to finalize when a background generation completes.
+    notification_id = db.Column(db.Integer, db.ForeignKey("notification.id"), nullable=True)
     # Anthropic Message Batch id, when this job's AI call(s) went through
     # the Batch API instead of a synchronous call - lets an admin look up
     # the batch directly in the Anthropic Console if a job seems stuck.
@@ -4280,11 +4282,26 @@ def trigger_podcast_audio(document_id):
     if document.user_id != user_id:
         return jsonify({"error": "Podcast audio is not ready yet"}), 409
 
-    podcast_audio.start_podcast_audio_processing(material.id, app)
+    # Create a hidden pending notification now. It is marked read so it
+    # does not appear in the student's feed while generation is running.
+    # podcast_audio finalizes this same row when the background job completes.
+    notification = Notification(
+        user_id=user_id,
+        type="podcast_pending",
+        title="Preparing your podcast",
+        body="We'll let you know when your study podcast is ready.",
+        related_type="document",
+        related_id=material.id,
+        is_read=True,
+    )
+    db.session.add(notification)
+    db.session.flush()
 
     envelope["audio_status"] = "processing"
     material.payload = json.dumps(envelope)
     db.session.commit()
+
+    podcast_audio.start_podcast_audio_processing(material.id, app, notification.id)
 
     return jsonify({"audio_status": "processing", "material_id": material.id}), 202
 
@@ -13660,7 +13677,7 @@ class UserKey(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-def send_push_notification(user_id, title, body):
+def send_push_notification(user_id, title, body, data=None):
     """
     Sends a Web Push notification to every subscribed device for a user.
     Best-effort: never raises - a push failure must not break the calling
@@ -13681,7 +13698,7 @@ def send_push_notification(user_id, title, body):
                     "endpoint": sub.endpoint,
                     "keys": {"p256dh": sub.p256dh_key, "auth": sub.auth_key},
                 },
-                data=json.dumps({"title": title, "body": body}),
+                data=json.dumps({"title": title, "body": body, "data": data or {}}),
                 vapid_private_key=vapid_private_key,
                 vapid_claims={"sub": vapid_claims_email},
             )
