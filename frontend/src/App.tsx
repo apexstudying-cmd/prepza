@@ -4,7 +4,7 @@ import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
 import CallExperience from './crypto/CallExperience'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
-import { getOfflineStudyDocumentUrl, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'
+import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'
 import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
 import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
@@ -2130,7 +2130,18 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
     api<DocumentDetail>(`/documents/${activeDocumentId}`)
       .then(d => {
         if (cancelled) return
-        setDoc(d); setRenameVal(d.title); setDocLoadError(''); DOC_CACHE[activeDocumentId] = d
+        const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
+        let localUrl: string | null = null
+        if (Number.isInteger(userId) && userId > 0 && d.content_hash) {
+          localUrl = await getOfflineStudyDocumentUrlByContentHash(d.content_hash, userId)
+        }
+        if (localUrl) {
+          offlineUrl = localUrl
+          const localDoc = { ...d, view_url: localUrl }
+          setDoc(localDoc); setRenameVal(d.title); setSavedToLib(true); setDocLoadError(''); DOC_CACHE[activeDocumentId] = localDoc
+        } else {
+          setDoc(d); setRenameVal(d.title); setDocLoadError(''); DOC_CACHE[activeDocumentId] = d
+        }
       })
       .catch(async e => {
         if (cancelled) return
@@ -2148,6 +2159,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
                 status: 'ready',
                 file_type: saved.fileType || 'pdf',
                 file_size_bytes: null,
+                content_hash: saved.contentHash || null,
                 page_count: saved.pageCount || null,
                 error_message: null,
                 view_url: url,
@@ -5711,7 +5723,7 @@ type GroupPostDetail = GroupPostData & { comments: GroupPostCommentData[] }
 type GroupMemberData = { user_id: number; display_name: string; role: 'admin' | 'member'; joined_at: string | null }
 type GroupFileData = {
   id: number; group_id: number; document_id: number; title: string | null; file_type: string | null
-  file_size_bytes: number | null; page_count: number | null; view_url: string | null
+  file_size_bytes: number | null; content_hash?: string | null; page_count: number | null; view_url: string | null
   shared_by: string; shared_by_user_id: number; created_at: string | null
 }
 // Note: UserSearchResult is declared once already (NewChatScreen), reused here for the
