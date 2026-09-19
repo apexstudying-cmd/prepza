@@ -20,6 +20,8 @@ from usage_billing import register_usage_billing
 register_usage_billing(app, db)
 from organisation_billing import register_organisation_billing
 register_organisation_billing(app, db)
+from discovery_billing import register_discovery
+register_discovery(app, db)
 
 # Offline chat retries need a server-side idempotency record. The client keeps
 # one stable UUID for a queued send; this table lets a retry return the
