@@ -5655,17 +5655,21 @@ def record_study_activity(user_id, document_content_id=None):
 
 def record_document_studied(user_id, document_content_id):
     """
-    Called from the AI-action routes (summarize/quiz/flashcards/podcast)
-    on success. Awards document_studied XP at most once per document per
-    calendar day, and always updates the study streak regardless of
-    whether XP was capped.
+    Rewards a document-study action only when the student has already
+    accumulated meaningful study time on that document today. Generation
+    itself is not enough to create or renew a streak.
     """
-    first_today = record_study_activity(user_id, document_content_id=document_content_id)
-    if first_today:
-        event_related_id = _document_study_event_id(user_id, document_content_id)
-        award_xp(user_id, "document_studied", XP_DOCUMENT_STUDIED, related_id=event_related_id)
-    check_and_unlock_achievements(user_id)
+    today = datetime.utcnow().date()
+    activity = StudyActivityLog.query.filter_by(
+        user_id=user_id, document_content_id=document_content_id, activity_date=today,
+    ).first()
+    if not activity:
+        return False
 
+    event_related_id = activity.id
+    award_xp(user_id, "document_studied", XP_DOCUMENT_STUDIED, related_id=event_related_id)
+    check_and_unlock_achievements(user_id)
+    return True
 
 def _document_study_event_id(user_id, document_content_id):
     """
@@ -6010,11 +6014,43 @@ def study_time_heartbeat():
         if not pair: return jsonify({"error": "Document not found"}), 404
         document_content_id = pair[1].id
 
-    seconds_today = record_study_time_heartbeat(user_id, feature=feature)
-    record_study_activity(user_id, document_content_id=document_content_id)
-    db.session.commit()
+    before_feature_seconds = int(db.session.query(
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+    ).filter(
+        StudyTimeLog.user_id == user_id,
+        StudyTimeLog.activity_date == datetime.utcnow().date(),
+        StudyTimeLog.feature == feature,
+    ).scalar() or 0)
 
-    return jsonify({"study_time_seconds_today": seconds_today})
+    seconds_today = record_study_time_heartbeat(user_id, feature=feature)
+
+    after_feature_seconds = int(db.session.query(
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+    ).filter(
+        StudyTimeLog.user_id == user_id,
+        StudyTimeLog.activity_date == datetime.utcnow().date(),
+        StudyTimeLog.feature == feature,
+    ).scalar() or 0)
+
+    credited_this_heartbeat = max(0, after_feature_seconds - before_feature_seconds)
+    # A visible session must accumulate at least one minute before it can
+    # create/renew a study day. This prevents opening the app/document from
+    # immediately starting a streak.
+    if credited_this_heartbeat > 0 and document_content_id is not None:
+        today = datetime.utcnow().date()
+        existing = StudyActivityLog.query.filter_by(
+            user_id=user_id, document_content_id=document_content_id, activity_date=today,
+        ).first()
+        feature_session_seconds = after_feature_seconds
+        if existing is None and feature_session_seconds >= 60:
+            record_study_activity(user_id, document_content_id=document_content_id)
+
+    db.session.commit()
+    return jsonify({
+        "study_time_seconds_today": seconds_today,
+        "credited_this_heartbeat": credited_this_heartbeat,
+        "study_day_active": bool(document_content_id is not None and feature_session_seconds >= 60) if 'feature_session_seconds' in locals() else False,
+    })
 
 
 @app.route("/study-time")
