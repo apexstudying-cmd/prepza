@@ -129,7 +129,7 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props) {
         <select value={form.objective} onChange={e=>setForm(f=>({...f,objective:e.target.value}))} style={input}><option value="reach">Reach</option><option value="traffic">Traffic</option><option value="applications">Applications</option></select>
         <select value={form.placement} onChange={e=>setForm(f=>({...f,placement:e.target.value}))} style={input}><option value="feed">Discovery Feed</option><option value="push">Targeted Push</option><option value="feed_push">Feed + Push</option></select>
       </div>
-      {form.placement!=='push'&&<select value={form.bid_type} onChange={e=>setForm(f=>({...f,bid_type:e.target.value}))} style={input}><option value="cpm">Pay per 1,000 impressions · KES 350 CPM</option><option value="cpc">Pay per click · KES 20 CPC</option></select>}
+      {form.placement==='feed'&&<select value={form.bid_type} onChange={e=>setForm(f=>({...f,bid_type:e.target.value}))} style={input}><option value="cpm">Pay per 1,000 impressions · KES 350 CPM</option><option value="cpc">Pay per click · KES 20 CPC</option></select>}
       <div style={grid}>
         <input type="number" min="5000" step="500" value={form.budget_kes} onChange={e=>setForm(f=>({...f,budget_kes:e.target.value}))} style={input} placeholder="Budget (KES)"/>
         <select value={form.active_days} onChange={e=>setForm(f=>({...f,active_days:e.target.value}))} style={input}><option value="7">Active students · 7 days</option><option value="30">Active students · 30 days</option><option value="90">Active students · 90 days</option></select>
