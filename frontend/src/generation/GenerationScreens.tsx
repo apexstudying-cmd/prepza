@@ -25,11 +25,11 @@ async function generationApi<T = any>(path: string, options: RequestInit = {}): 
   if (!res.ok) throw new GenerationApiError(body?.error || body?.message || `Request failed (${res.status})`, res.status)
   return body as T
 }
-async function pollGenerationJob<T = any>(jobId: number, onProgress?: (percent: number, stage: string) => void): Promise<T> {
+async function pollGenerationJob<T = any>(jobId: number, onProgress?: (percent: number, stage: string) => void): Promise<{ payload: T; materialId: number | null }> {
   for (;;) {
     const job = await generationApi<{ status: string; progress_percent: number; progress_stage: string; error?: string; payload?: T }>(`/ai-jobs/${jobId}`)
     onProgress?.(Math.max(0, Math.min(100, Number(job.progress_percent || 0))), job.progress_stage || 'working')
-    if (job.status === 'completed') return (job.payload ?? {}) as T
+    if (job.status === 'completed') return { payload: (job.payload ?? {}) as T, materialId: job.material_id ?? null }
     if (job.status === 'failed') throw new Error(job.error || 'Generation failed. Please try again.')
     await new Promise(resolve => window.setTimeout(resolve, 1800))
   }
@@ -153,6 +153,8 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
   const [pages, setPages] = useState<number | null>(null)
   const [phase, setPhase] = useState<'config' | 'script' | 'audio' | 'ready' | 'error'>('config')
   const [error, setError] = useState('')
+  const [generationPercent, setGenerationPercent] = useState(0)
+  const [generationStage, setGenerationStage] = useState('preparing')
   const [usage, setUsage] = useState<PrepzaUsage | null>(null)
   const [materialId, setMaterialId] = useState<number | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
@@ -226,7 +228,8 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
     setError(''); setPhase('script')
     try {
       const scriptJob = await generationApi<{ job_id: number }>(`/documents/${activeDocumentId}/podcast-script?async=1`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ duration_minutes: minutes, style, language: 'en' }) })
-      const script = await pollGenerationJob<{ script?: any; audio_status?: string }>(scriptJob.job_id, (p, s) => { setGenerationPercent(Math.min(65, Math.round(p * 0.65))); setGenerationStage(s) })
+      const scriptResult = await pollGenerationJob<{ script?: any; audio_status?: string }>(scriptJob.job_id, (p, s) => { setGenerationPercent(Math.min(65, Math.round(p * 0.65))); setGenerationStage(s) })
+      setMaterialId(scriptResult.materialId)
       setGenerationPercent(65); setGenerationStage('starting audio synthesis')
       setPhase('audio')
       await generationApi(`/documents/${activeDocumentId}/podcast-audio`, { method: 'POST', headers: { 'X-CSRF-Token': csrf } })
@@ -291,6 +294,8 @@ export function FlashcardsGenerationScreen({ setScreen, activeDocumentId }: { se
   const [materialId, setMaterialId] = useState<number | null>(null)
   const [completion, setCompletion] = useState<any>(null)
   const [error, setError] = useState('')
+  const [generationPercent, setGenerationPercent] = useState(0)
+  const [generationStage, setGenerationStage] = useState('preparing')
   const [usage, setUsage] = useState<PrepzaUsage | null>(null)
 
   useEffect(() => {
@@ -309,10 +314,11 @@ export function FlashcardsGenerationScreen({ setScreen, activeDocumentId }: { se
     if (activeDocumentId == null || !csrf || !canGenerate(usage, 'flashcards', count)) return
     setError(''); setPhase('generating')
     try {
-      const res = await generationApi<{ material_id: number; flashcards: any }>(`/documents/${activeDocumentId}/flashcards`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ card_count: count, difficulty, language: 'en' }) })
-      const next = normalize(res.flashcards)
+      const started = await generationApi<{ job_id: number }>(`/documents/${activeDocumentId}/flashcards?async=1`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ card_count: count, difficulty, language: 'en' }) })
+      const result = await pollGenerationJob<any>(started.job_id, (p, s) => { setGenerationPercent(p); setGenerationStage(s) })
+      const next = normalize(result.payload.flashcards)
       if (!next.length) throw new Error('No flashcards were returned.')
-      setMaterialId(res.material_id); setCards(next); setIdx(0); setFlipped(false); setKnown([]); setPhase('review')
+      setMaterialId(result.materialId); setCards(next); setIdx(0); setFlipped(false); setKnown([]); setPhase('review')
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not generate flashcards.'); setPhase('error') }
   }
 
@@ -329,7 +335,7 @@ export function FlashcardsGenerationScreen({ setScreen, activeDocumentId }: { se
   }
 
   if (phase === 'error') return <GenerationFailure error={error} onBack={() => setPhase('config')} onRetry={generate} />
-  if (phase === 'generating') return <div style={{ flex: 1, background: C.page }}><GenerationHeader title="Generating flashcards" subtitle={title} onBack={() => setPhase('config')} /><div style={{ minHeight: 380, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 13 }}><div style={{ width: 38, height: 38, border: `3px solid ${C.gold}30`, borderTopColor: C.gold, borderRadius: '50%', animation: 'spin-slow 0.8s linear infinite', marginBottom: 14 }} />Creating {count} flashcards…</div></div>
+  if (phase === 'generating') return <div style={{ flex: 1, background: C.page }}><GenerationHeader title="Generating flashcards" subtitle={title} onBack={() => setPhase('config')} /><div style={{ padding: 22, minHeight: 380, display: 'flex', alignItems: 'center' }}><div style={{ width: '100%' }}><GenerationProgressCard title="Generating your flashcards" subtitle={`${count} cards · ${difficulty}`} percent={generationPercent} stage={generationStage} /></div></div></div>
   if (phase === 'done') return <div style={{ flex: 1, background: C.page }}><GenerationHeader title="Review complete" onBack={() => setScreen('document-study')} /><div style={{ minHeight: 380, padding: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}><div style={{ fontSize: 42, marginBottom: 12 }}>✓</div><div style={{ color: C.text, fontSize: 21, fontWeight: 800 }}>Review complete</div><div style={{ color: C.muted, fontSize: 13, marginTop: 6 }}>{known.length}/{cards.length} marked as known</div>{completion?.xp_awarded > 0 && <div style={{ color: C.gold, fontWeight: 800, fontSize: 13, marginTop: 10 }}>+{completion.xp_awarded} XP</div>}<button onClick={() => setScreen('document-study')} style={{ marginTop: 20, border: 'none', borderRadius: 14, padding: '12px 22px', background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, color: C.navy, ...buttonBase }}>Back to Notes</button></div></div>
   if (phase === 'review') {
     const card = cards[idx]
@@ -366,8 +372,9 @@ export function SummaryGenerationScreen({ setScreen, activeDocumentId }: { setSc
     if (activeDocumentId == null || !csrf || !canGenerate(usage, 'summary', maxPages)) return
     setError(''); setPhase('generating')
     try {
-      const res = await generationApi<{ summary: any }>(`/documents/${activeDocumentId}/summarize`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ max_pages: maxPages, style, language: 'en' }) })
-      setSummary(res.summary); setPhase('ready')
+      const started = await generationApi<{ job_id: number }>(`/documents/${activeDocumentId}/summarize?async=1`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ max_pages: maxPages, style, language: 'en' }) })
+      const result = await pollGenerationJob<any>(started.job_id, (p, s) => { setGenerationPercent(p); setGenerationStage(s) })
+      setSummary(result.payload.summary); setPhase('ready')
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not generate the summary.'); setPhase('error') }
   }
 
@@ -379,7 +386,7 @@ export function SummaryGenerationScreen({ setScreen, activeDocumentId }: { setSc
   }
 
   if (phase === 'error') return <GenerationFailure error={error} onBack={() => setPhase('config')} onRetry={generate} />
-  if (phase === 'generating') return <div style={{ flex: 1, background: C.page }}><GenerationHeader title="Generating summary" subtitle={title} onBack={() => setPhase('config')} /><div style={{ minHeight: 380, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 13 }}><div style={{ width: 38, height: 38, border: `3px solid ${C.gold}30`, borderTopColor: C.gold, borderRadius: '50%', animation: 'spin-slow 0.8s linear infinite', marginBottom: 14 }} />Creating your {maxPages}-page summary…</div></div>
+  if (phase === 'generating') return <div style={{ flex: 1, background: C.page }}><GenerationHeader title="Generating summary" subtitle={title} onBack={() => setPhase('config')} /><div style={{ padding: 22, minHeight: 380, display: 'flex', alignItems: 'center' }}><div style={{ width: '100%' }}><GenerationProgressCard title="Generating your summary" subtitle={`${maxPages}-page · ${style}`} percent={generationPercent} stage={generationStage} /></div></div></div>
   if (phase === 'ready') return <div style={{ flex: 1, background: C.page, overflowY: 'auto' }}><GenerationHeader title="AI Summary" subtitle={`${title} · ${maxPages}-page format`} onBack={() => setPhase('config')} /><div style={{ padding: 18 }}><div style={{ background: C.card, borderRadius: 18, padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', color: C.text, fontSize: 13, lineHeight: 1.8 }}><div style={{ color: C.gold, fontSize: 10, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 }}>AI Generated</div>{renderSummary()}</div><button onClick={() => setPhase('config')} style={{ width: '100%', marginTop: 12, border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, background: C.card, color: C.text, ...buttonBase }}>Create another version</button></div></div>
   return <div style={{ flex: 1, background: C.page, overflowY: 'auto' }}><GenerationHeader title="Create a summary" subtitle={title} onBack={() => setScreen('document-study')} /><div style={{ padding: 18 }}><div style={{ color: C.text, fontWeight: 800, fontSize: 18 }}>Choose the depth</div><div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, margin: '5px 0 18px' }}>The selected output length and style are passed directly to the generation backend.</div><div style={{ color: C.text, fontWeight: 800, fontSize: 12, marginBottom: 9 }}>Length</div><div style={{ color: C.muted, fontSize: 11, marginBottom: 9 }}>{usageLabel(usage)}{usage ? ` · ${usage.usage.summary?.requests || 0}/${usage.limits.summary_generations} summaries used` : ''}</div>{SUMMARY_OPTIONS.map(o => <ChoiceCard key={o.pages} disabled={!canGenerate(usage, 'summary', o.pages)} selected={maxPages === o.pages} title={o.label} description={o.description} onClick={() => setMaxPages(o.pages)} />)}<div style={{ color: C.text, fontWeight: 800, fontSize: 12, margin: '17px 0 9px' }}>Style</div>{[['concise', 'Concise', 'High-signal revision notes.'], ['balanced', 'Balanced', 'Clear explanation without unnecessary length.'], ['exam_focus', 'Exam focus', 'Prioritises examinable concepts and recall points.']].map(([v, label, description]) => <ChoiceCard key={v} selected={style === v} title={label} description={description} onClick={() => setStyle(v)} />)}<GenerateButton disabled={!csrf || !canGenerate(usage, 'summary', maxPages)} onClick={generate}>Generate {maxPages}-page summary</GenerateButton></div></div>
 }
