@@ -1,0 +1,1 @@
+ALTER TABLE ai_job ADD COLUMN IF NOT EXISTS material_id INTEGER REFERENCES generated_material(id);
