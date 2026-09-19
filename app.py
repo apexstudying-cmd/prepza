@@ -5867,6 +5867,17 @@ def xp_progress():
 STREAK_MILESTONE_LABELS = {7: "7-Day Scholar", 14: "14-Day Achiever", 21: "21-Day Legend", 30: "30-Day Master"}
 
 
+@app.route("/profile/posts")
+def profile_posts():
+    """Return the authenticated student's real profile posts.
+    The social-post composer is not enabled yet, so an empty result is
+    preferable to fabricated demo content in a production profile."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    return jsonify({"posts": [], "composer_enabled": False})
+
+
 @app.route("/streak")
 def streak_detail():
     """Powers StudyStreakScreen: current/longest streak, a
