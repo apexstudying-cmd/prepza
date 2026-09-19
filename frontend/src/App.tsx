@@ -39,6 +39,59 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
   return body as T
 }
 
+type GenerationProgress = { progress_percent: number; progress_stage: string; status: string; found?: boolean; error_message?: string | null }
+
+function generationRequest<T = any>(
+  path: string,
+  options: RequestInit = {},
+  onProgress?: (progress: GenerationProgress) => void,
+): Promise<T> {
+  const match = path.match(/^\/documents\/(\d+)\/(summarize|quiz|flashcards|mindmap|podcast-script)$/)
+  const documentId = match?.[1]
+  const feature = match?.[2] === 'podcast-script' ? 'podcast'
+    : match?.[2] === 'mindmap' ? 'mind_map'
+    : match?.[2]
+
+  let stopped = false
+  let timer: ReturnType<typeof setTimeout> | null = null
+
+  const poll = async () => {
+    if (stopped || !documentId || !feature) return
+    try {
+      const progress = await api<GenerationProgress>(`/documents/${documentId}/generation-progress?feature=${feature}`)
+      if (stopped) return
+      if (progress.found) onProgress?.(progress)
+      if (!stopped && progress.status === 'processing') {
+        timer = setTimeout(poll, 700)
+      }
+    } catch {
+      if (!stopped) timer = setTimeout(poll, 1200)
+    }
+  }
+
+  if (documentId && feature) {
+    onProgress?.({ found: false, status: 'starting', progress_percent: 3, progress_stage: 'Preparing your study material' })
+    void poll()
+  }
+
+  return api<T>(path, options).then(result => {
+    stopped = true
+    if (timer) clearTimeout(timer)
+    const reused = Boolean((result as any)?.reused)
+    onProgress?.({
+      found: true,
+      status: 'completed',
+      progress_percent: 100,
+      progress_stage: reused ? 'Found your saved material' : 'Ready',
+    })
+    return result
+  }).catch(error => {
+    stopped = true
+    if (timer) clearTimeout(timer)
+    throw error
+  })
+}
+
 // ─── Document upload helpers ───────────────────────────────────────────────
 const ALLOWED_UPLOAD_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png']
 const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024 // 50 MB - matches backend MAX_DOCUMENT_SIZE_BYTES
