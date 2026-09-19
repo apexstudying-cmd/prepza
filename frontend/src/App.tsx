@@ -4383,8 +4383,19 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
   const [togglingId, setTogglingId] = useState<number | null>(null)
+  const [sponsored, setSponsored] = useState<{campaign_id:number;organisation_id:number;opportunity_id:number|null;name:string;objective:string;placement:string}[]>([])
 
   useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    api<{ campaigns: {campaign_id:number;organisation_id:number;opportunity_id:number|null;name:string;objective:string;placement:string}[] }>('/api/discovery/feed')
+      .then(res => setSponsored(res.campaigns || []))
+      .catch(() => setSponsored([]))
+  }, [])
+
+  useEffect(() => {
+    sponsored.forEach(c => { void api('/api/discovery/campaigns/' + c.campaign_id + '/impression', { method:'POST' }).catch(() => {}) })
+  }, [sponsored])
 
   useEffect(() => {
     let cancelled = false
@@ -4455,6 +4466,18 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
         </div>
       </div>
       <div style={{ padding: 16 }}>
+        {sponsored.length > 0 && filter !== 'Saved' && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: .5 }}>For you</div>
+            {sponsored.slice(0,2).map(c => (
+              <div key={c.campaign_id} onClick={async () => { try { await api('/api/discovery/campaigns/' + c.campaign_id + '/click', {method:'POST'}) } catch {} ; if (c.opportunity_id) openDetail(c.opportunity_id) }} style={{ background:T.card, border:`1px solid ${N.gold}35`, borderRadius:16, padding:14, marginBottom:10, cursor:c.opportunity_id?'pointer':'default', boxShadow:'0 3px 12px rgba(0,0,0,.05)' }}>
+                <div style={{display:'flex',justifyContent:'space-between',gap:10,marginBottom:5}}><div style={{fontSize:10,fontWeight:800,color:N.gold}}>SPONSORED</div><span style={{fontSize:10,color:T.textMuted}}>Recommended</span></div>
+                <div style={{fontWeight:800,fontSize:14,color:T.text}}>{c.name}</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Relevant to your Prepza profile and discovery preferences.</div>
+              </div>
+            ))}
+          </div>
+        )}
         {loading ? (
           [1,2,3].map(i => <SkOppCard key={i} />)
         ) : error ? (
