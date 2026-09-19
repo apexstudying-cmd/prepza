@@ -216,7 +216,7 @@ type DocumentDetail = {
   id: number; title: string; original_filename: string; status: string
   file_type: string | null; file_size_bytes: number | null; page_count: number | null
   error_message: string | null; view_url: string | null
-  materials: { type: string; status: string }[]; created_at: string | null
+  materials: { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]; created_at: string | null
 }
 
 // Payload shape inside `summary`/`quiz`/`flashcards`/`mindmap` below is
