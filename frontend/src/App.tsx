@@ -1384,180 +1384,24 @@ function HomeScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen)
 
         {/* Opportunities */}
         {previewOpps.length > 0 && (
-          <section style={{ padding: '0 18px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontWeight: 800, fontSize: 15, color: T.text }}>Opportunities 🚀</span>
-              <span onClick={() => setScreen('opportunities')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
+          <section style={{ padding:'0 18px' }}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+              <span style={{fontWeight:800,fontSize:15,color:T.text}}>Opportunities</span>
+              <button onClick={()=>setScreen('opportunities')} style={{background:'none',border:'none',padding:0,color:N.gold,fontWeight:800,fontSize:12,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}>See all</button>
             </div>
-            {previewOpps.map(o => {
-              const meta = oppTypeMeta(o.opportunity_type)
-              const deadline = fmtDeadline(o.application_deadline)
-              return (
-                <div key={o.id} onClick={() => setScreen('opportunities')} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
-                  <div style={{ width: 44, height: 44, background: meta.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{meta.icon}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: T.text }} className="line-clamp-1">{o.title}</div>
-                    <div style={{ fontSize: 11, color: T.textMuted }}>{o.organisation?.name || 'Unknown organisation'}</div>
-                    {(o.location || deadline) && (
-                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{o.location ? `📍 ${o.location}` : ''}{o.location && deadline ? ' · ' : ''}{deadline ? `⏰ ${deadline}` : ''}</div>
-                    )}
-                  </div>
-                  <Pill text={meta.label} color={meta.color} />
-                </div>
-              )
-            })}
+            <div style={{display:'flex',gap:12,overflowX:'auto',paddingBottom:4}} className="scrollbar-hide">
+              {previewOpps.map(o=>{
+                const meta=oppTypeMeta(o.opportunity_type)
+                return <button key={o.id} onClick={()=>{setActiveOpportunityId(o.id);setScreen('opportunity-detail')}} style={{flex:'0 0 250px',background:T.card,border:'1px solid rgba(0,0,0,.05)',borderRadius:16,padding:14,textAlign:'left',cursor:'pointer',fontFamily:'Plus Jakarta Sans',boxShadow:'0 2px 10px rgba(0,0,0,.05)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:9}}><div style={{width:36,height:36,borderRadius:10,background:meta.color+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:meta.color}}>{meta.label.slice(0,1)}</div><span style={{fontSize:10,fontWeight:800,color:meta.color,textTransform:'uppercase'}}>{meta.label}</span></div>
+                  <div style={{fontSize:13,fontWeight:800,color:T.text,marginTop:12}} className="line-clamp-2">{o.title}</div>
+                  <div style={{fontSize:10,color:T.textMuted,marginTop:5}}>{o.organisation?.name || 'Organisation'}</div>
+                  {o.application_deadline && <div style={{fontSize:10,color:T.textMuted,marginTop:5}}>Deadline {fmtDeadline(o.application_deadline)}</div>}
+                </button>
+              })}
+            </div>
           </section>
         )}
-      </div>
-    </div>
-  )
-}
-
-// ─── EXPLORE ──────────────────────────────────────────────────────────────────
-type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean; is_pending?: boolean }
-
-// Stale-while-revalidate cache for Explore's default ('All') view: on
-// repeat visits, render instantly from cache while a fresh fetch runs
-// quietly in the background.
-const EXPLORE_CACHE: { groups?: GroupSummary[]; students?: ExploreStudent[]; docs?: LibraryPublicationSummary[]; trending?: LibraryPublicationSummary[] } = {}
-function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
-  const { tokens: T } = useTheme()
-  const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState('All')
-  const [csrfToken2, setCsrfToken2] = useState('')
-  // True until the first pass of every section that loads on mount (filter
-  // starts 'All', so groups/students/docs all fire) has resolved at least
-  // once. Locked false permanently after that so later tab switches only
-  // show their own inline "Loading…" text, not a full-page skeleton again.
-  const [initialLoading, setInitialLoading] = useState(EXPLORE_CACHE.groups === undefined || EXPLORE_CACHE.students === undefined || EXPLORE_CACHE.docs === undefined)
-  const filters = ['All','Notes','Past Papers','AI Content','Groups','Opportunities','Students']
-
-  const [groups, setGroups] = useState<GroupSummary[]>(EXPLORE_CACHE.groups ?? [])
-  const [loadingGroups, setLoadingGroups] = useState(EXPLORE_CACHE.groups === undefined)
-  const [groupsError, setGroupsError] = useState('')
-  const [joiningGroupId, setJoiningGroupId] = useState<number | null>(null)
-  const [csrfToken, setCsrfToken] = useState('')
-
-  useEffect(() => {
-    api<{ id: number; csrf_token: string }>('/me')
-      .then(me => { setCsrfToken(me.csrf_token); setCurrentUserId(me.id) })
-      .catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    if (filter !== 'All' && filter !== 'Groups') return
-    setLoadingGroups(true); setGroupsError('')
-    const params = new URLSearchParams()
-    if (query.trim()) params.set('q', query.trim())
-    api<{ page: number; groups: GroupSummary[] }>(`/groups?${params.toString()}`)
-      .then(res => { setGroups(res.groups); if (filter === 'All') EXPLORE_CACHE.groups = res.groups })
-      .catch(() => setGroupsError('Could not load groups.'))
-      .finally(() => setLoadingGroups(false))
-  }, [filter, query])
-
-  const quickJoin = async (g: GroupSummary) => {
-    if (joiningGroupId != null) return
-    setJoiningGroupId(g.id)
-    try {
-      await api(`/groups/${g.id}/join`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
-      setGroups(gs => gs.map(x => x.id === g.id ? { ...x, is_member: true, member_count: x.is_member ? x.member_count : x.member_count + 1 } : x))
-    } catch { /* surfaced inline is overkill for a quick-join button; card still lets them open the group */ }
-    finally { setJoiningGroupId(null) }
-  }
-
-  const openGroup = (id: number) => { setActiveGroupId(id); setScreen('group-detail') }
-  const [students, setStudents] = useState<ExploreStudent[]>(EXPLORE_CACHE.students ?? [])
-  const [loadingStudents, setLoadingStudents] = useState(EXPLORE_CACHE.students === undefined)
-  const [studentsError, setStudentsError] = useState('')
-  const [followBusy, setFollowBusy] = useState<Record<number, boolean>>({})
-
-  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken2(me.csrf_token)).catch(() => {}) }, [])
-
-  useEffect(() => {
-    if (filter !== 'All' && filter !== 'Students') return
-    setLoadingStudents(true); setStudentsError('')
-    const params = new URLSearchParams()
-    if (query.trim()) params.set('q', query.trim())
-    api<{ page: number; students: ExploreStudent[] }>(`/students?${params.toString()}`)
-      .then(res => { setStudents(res.students); if (filter === 'All') EXPLORE_CACHE.students = res.students })
-      .catch(() => setStudentsError('Could not load students.'))
-      .finally(() => setLoadingStudents(false))
-  }, [filter, query])
-
-  const toggleFollow = async (s: ExploreStudent) => {
-    if (followBusy[s.user_id]) return
-    setFollowBusy(b => ({ ...b, [s.user_id]: true }))
-    const wasFollowing = s.is_following
-    try {
-      if (wasFollowing) {
-        await api(`/users/${s.user_id}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken2 } })
-        setStudents(list => list.map(x => x.user_id === s.user_id ? { ...x, is_following: false, is_pending: false } : x))
-      } else {
-        const res = await api<{ status?: string }>(`/users/${s.user_id}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken2 } })
-        const nowPending = res.status === 'pending'
-        setStudents(list => list.map(x => x.user_id === s.user_id ? { ...x, is_following: !nowPending, is_pending: nowPending } : x))
-      }
-    } catch { /* leave state as-is on failure */ }
-    setFollowBusy(b => ({ ...b, [s.user_id]: false }))
-  }
-
-  const openStudentProfile = (s: ExploreStudent) => {
-    setActiveProfileUserId?.(s.user_id)
-    setActiveProfileName?.(s.display_name)
-    setScreen('student-profile')
-  }
-  const [docs, setDocs] = useState<LibraryPublicationSummary[]>(EXPLORE_CACHE.docs ?? [])
-  const [loadingDocs, setLoadingDocs] = useState(EXPLORE_CACHE.docs === undefined)
-  const [docsError, setDocsError] = useState('')
-
-  useEffect(() => {
-    if (filter === 'Students' || filter === 'Opportunities' || filter === 'Groups') return
-    setLoadingDocs(true); setDocsError('')
-    const params = new URLSearchParams()
-    if (query.trim()) params.set('q', query.trim())
-    if (filter === 'Past Papers') params.set('material_type', 'past_paper')
-    api<{ page: number; publications: LibraryPublicationSummary[] }>(`/library?${params.toString()}`)
-      .then(res => { const d = filter === 'Notes' ? res.publications.filter(d => d.material_type !== 'past_paper') : res.publications; setDocs(d); if (filter === 'All') EXPLORE_CACHE.docs = d })
-      .catch(() => setDocsError('Could not load documents.'))
-      .finally(() => setLoadingDocs(false))
-  }, [filter, query])
-
-  // Locks the full-page skeleton off permanently once the sections that
-  // load on mount (filter starts 'All') have all settled once. After
-  // that, switching tabs only re-triggers loadingGroups/loadingStudents/
-  // loadingDocs individually, which each already render their own inline
-  // "Loading…" text without wiping the whole screen.
-  useEffect(() => {
-    if (!initialLoading) return
-    if (!loadingGroups && !loadingStudents && !loadingDocs) setInitialLoading(false)
-  }, [initialLoading, loadingGroups, loadingStudents, loadingDocs])
-
-  const filtered = docs
-
-  const [trending, setTrending] = useState<LibraryPublicationSummary[]>(EXPLORE_CACHE.trending ?? [])
-  useEffect(() => {
-    if (filter !== 'All' && filter !== 'Notes' && filter !== 'Past Papers') return
-    api<{ page: number; publications: LibraryPublicationSummary[] }>('/library?sort=trending')
-      .then(res => { const t = res.publications.slice(0, 6); setTrending(t); if (filter === 'All') EXPLORE_CACHE.trending = t })
-      .catch(() => setTrending([]))
-  }, [filter])
-  if (initialLoading) return <SkeletonExplore />
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 12 }}>Explore</div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(255,255,255,0.09)', borderRadius: 13, padding: '10px 14px', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <div style={{ color: 'rgba(255,255,255,0.4)' }}>{Ic.search()}</div>
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search notes, papers, students..." style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }} />
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto', paddingBottom: 2 }} className="scrollbar-hide">
-          {filters.map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, background: filter === f ? N.gold : 'rgba(255,255,255,0.1)', color: filter === f ? N.navy : 'rgba(255,255,255,0.65)', fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{f}</button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 24 }}>
         {/* Trending */}
         {(filter === 'All' || filter === 'Notes' || filter === 'Past Papers') && (
           <div>
