@@ -510,7 +510,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       if (cancelled) return
       const ready = res.documents.filter(d => d.status === 'ready')
       setDocuments(ready)
-      const rows = await Promise.all(ready.slice(0, 30).map(async d => {
+      const rows = await Promise.all(ready.map(async d => {
         try { const detail = await api<DocumentDetail>(`/documents/${d.id}`); return (detail.materials || []).filter(m => m.status === 'ready').map(m => ({ documentId: d.id, documentTitle: d.title, type: m.type })) } catch { return [] }
       }))
       if (!cancelled) setMaterials(rows.flat())
