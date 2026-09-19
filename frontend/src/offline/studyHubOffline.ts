@@ -299,6 +299,10 @@ export async function getOfflineStudyStorageUsage(userId?: number): Promise<{ by
   } catch (_) { return { bytes: 0, documents: 0 } }
 }
 
+export async function getOfflineStudyStorageSummary(userId?: number): Promise<{ bytes: number; documents: number }> {
+  return getOfflineStudyStorageUsage(userId)
+}
+
 export async function removeStudyHubOfflineCopy(documentId: number, userId: number): Promise<void> {
   const key = `${userId}:${documentId}`
   const meta = await getSavedStudyHubOffline(documentId, userId)
