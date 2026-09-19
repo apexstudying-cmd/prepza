@@ -45,6 +45,7 @@ export default function StudyActivityScreen({ setScreen }: Props) {
   const [monthTotal, setMonthTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [selectedDay, setSelectedDay] = useState<{date:string; seconds:number} | null>(null)
 
   useEffect(() => {
     let dead = false
@@ -160,10 +161,11 @@ export default function StudyActivityScreen({ setScreen }: Props) {
                 {monthLabels.map(m=><span key={m.label+m.col} style={{position:'absolute',left:`${m.col*13}px`,fontSize:9,color:'#9AA1B0'}}>{m.label}</span>)}
               </div>
               <div style={{display:'grid',gridTemplateColumns:`repeat(${weeks.length},10px)`,gridTemplateRows:'repeat(7,10px)',gridAutoFlow:'column',gap:3}}>
-                {weeks.flatMap((w,wi)=>w.map((d,di)=><div key={d.date} title={d.future?'':d.date} style={{gridColumn:wi+1,gridRow:di+1,width:10,height:10,borderRadius:2,background:d.future?'transparent':(['#F0F1F4',`${N.gold}35`,`${N.gold}70`,`${N.gold}A8`,N.gold][level(d.seconds)]),border:d.future?'none':level(d.seconds)===0?'1px solid #E3E6EC':'none'}}/>))}
+                {weeks.flatMap((w,wi)=>w.map((d,di)=><button key={d.date} onClick={()=>!d.future&&setSelectedDay({date:d.date,seconds:d.seconds})} aria-label={d.future?'Future day':`${d.date}: ${fmt(d.seconds)} studied`} style={{gridColumn:wi+1,gridRow:di+1,width:10,height:10,padding:0,borderRadius:2,background:d.future?'transparent':(['#F0F1F4',`${N.gold}35`,`${N.gold}70`,`${N.gold}A8`,N.gold][level(d.seconds)]),border:d.future?'none':level(d.seconds)===0?'1px solid #E3E6EC':'none',cursor:d.future?'default':'pointer'}}/>))}
               </div>
             </div>
           </div>
+          {selectedDay && <div style={{marginTop:10,padding:'10px 12px',borderRadius:11,background:'#F8F9FC',display:'flex',justifyContent:'space-between',alignItems:'center'}}><div><div style={{fontSize:10,fontWeight:800,color:N.navy}}>{new Date(selectedDay.date+'T00:00:00').toLocaleDateString('en-KE',{weekday:'short',month:'short',day:'numeric'})}</div><div style={{fontSize:11,color:'#9299A9',marginTop:2}}>Study time</div></div><div style={{fontSize:14,fontWeight:800,color:N.gold}}>{fmt(selectedDay.seconds)}</div></div>}
           <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:5,marginTop:12,fontSize:9,color:'#969DAE'}}>
             Less
             {[0,1,2,3,4].map(l=><span key={l} style={{width:10,height:10,borderRadius:2,background:['#F0F1F4',`${N.gold}35`,`${N.gold}70`,`${N.gold}A8`,N.gold][l],border:l===0?'1px solid #E3E6EC':'none'}}/>)} More
