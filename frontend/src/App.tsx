@@ -3145,7 +3145,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   })()
   const podcastAudioPath = selectedPodcastMaterialId
     ? `/documents/${activeDocumentId}/podcast-audio?material_id=${selectedPodcastMaterialId}`
-    : podcastAudioPath
+    : `/documents/${activeDocumentId}/podcast-audio`
 
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
