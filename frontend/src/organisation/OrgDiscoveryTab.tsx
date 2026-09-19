@@ -71,13 +71,10 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props) {
     setError('')
     try{
       const target={university_ids:selectedUniversities,program_ids:selectedPrograms,years,active_days:Number(form.active_days),discoverable:true}
-      const r=await req<any>(`/api/organisations/${orgId}/discovery/campaigns`,{
-        method:'POST',headers:{'X-CSRF-Token':csrf},
-        body:JSON.stringify({name:form.name.trim()||'Audience estimate',objective:form.objective,placement:form.placement,bid_type:form.placement==='push'?'cpm':form.bid_type,budget_kes:Math.max(5000,Number(form.budget_kes)||5000),target})
+      const r=await req<any>(`/api/organisations/${orgId}/discovery/audience-estimate`,{
+        method:'POST',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({target})
       })
       setAudience(r.audience_estimate)
-      // Keep it as a draft; the same endpoint intentionally creates the campaign.
-      await load()
     }catch(e){setError(e instanceof Error?e.message:'Could not estimate audience.')}
   }
 
