@@ -193,6 +193,49 @@ async function findLocalDocumentByContentHash(userId: number, contentHash?: stri
   return null
 }
 
+export async function saveUploadedFileOffline(documentId: number, file: Blob, metadata: { userId: number; title?: string; fileType?: string; pageCount?: number; contentHash?: string }): Promise<SavedStudyHubMeta> {
+  if (!('indexedDB' in window)) throw new Error('Offline storage is unavailable in this browser.')
+  const userId = Number(metadata.userId)
+  if (!Number.isInteger(userId) || userId <= 0) throw new Error('Could not identify the signed-in student.')
+  if (!(file instanceof Blob) || file.size <= 0) throw new Error('The uploaded study document is empty.')
+  if (file.size > MAX_SINGLE_ASSET_BYTES) throw new Error('This document is too large to save for offline study.')
+  setOfflineUserId(userId)
+
+  const existingLocal = await findLocalDocumentByContentHash(userId, metadata.contentHash)
+  const assetKey = `${userId}:${documentId}`
+  if (existingLocal) {
+    const meta: SavedStudyHubMeta = {
+      key: assetKey, userId, documentId,
+      title: metadata.title || existingLocal.meta.title,
+      fileType: metadata.fileType || existingLocal.meta.fileType,
+      pageCount: metadata.pageCount || existingLocal.meta.pageCount,
+      contentHash: metadata.contentHash,
+      savedAt: Date.now(),
+      assetUrls: existingLocal.meta.assetUrls || [],
+    }
+    await putMeta(meta)
+    window.dispatchEvent(new CustomEvent('prepza:studyhub-offline-changed', { detail: meta }))
+    return meta
+  }
+
+  const used = await getStoredAssetUsage(userId, assetKey)
+  if (used + file.size > MAX_TOTAL_ASSET_BYTES) throw new Error('Offline study storage is full. Remove an older saved document before uploading another.')
+  const blob = file instanceof File ? file.slice(0, file.size, file.type) : file
+  await putStudyAsset({ key: assetKey, userId, documentId, blob, contentHash: metadata.contentHash, savedAt: Date.now() })
+  const meta: SavedStudyHubMeta = {
+    key: assetKey, userId, documentId,
+    title: metadata.title,
+    fileType: metadata.fileType || blob.type || 'pdf',
+    pageCount: metadata.pageCount,
+    contentHash: metadata.contentHash,
+    savedAt: Date.now(),
+    assetUrls: [],
+  }
+  await putMeta(meta)
+  window.dispatchEvent(new CustomEvent('prepza:studyhub-offline-changed', { detail: meta }))
+  return meta
+}
+
 export async function saveStudyHubDocumentOffline(documentId: number): Promise<SavedStudyHubMeta> {
   if (!('indexedDB' in window)) throw new Error('Offline storage is unavailable in this browser.')
   const [meResponse, detailResponse] = await Promise.all([
