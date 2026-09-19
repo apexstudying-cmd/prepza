@@ -9085,7 +9085,8 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
         headers: { 'X-CSRF-Token': me.csrf_token },
         body: JSON.stringify({ plan: selectedPlan, phone_number: phone.trim() || undefined }),
       })
-      window.location.href = res.redirect_url
+      alert(`Plan selected: ${res.status}. Payment is pending confirmation.`)
+      setBilling(await api(`/api/organisations/${orgId}/billing`))
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not start checkout - please try again.')
       setRedirecting(false)
@@ -13670,6 +13671,7 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
   const [audience, setAudience] = useState<any>(null)
   const [billingBusy, setBillingBusy] = useState<string | null>(null)
   const [candidates, setCandidates] = useState<any[]>([])
+  const [billing, setBilling] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -13679,11 +13681,13 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
       api<{ opportunities: OrgOpportunity[] }>(`/organisations/${orgId}/opportunities`),
       api(`/api/organisations/${orgId}/audience`),
       api(`/api/organisations/${orgId}/candidates?days=7`),
+      api(`/api/organisations/${orgId}/billing`),
     ])
-      .then(([oppRes, audienceRes, candidateRes]) => {
+      .then(([oppRes, audienceRes, candidateRes, billingRes]) => {
         setItems(oppRes.opportunities)
         setAudience(audienceRes)
         setCandidates(candidateRes.candidates || [])
+        setBilling(billingRes)
       })
       .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load analytics.'))
       .finally(() => setLoading(false))
@@ -13709,10 +13713,10 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
     if (!isOwner || billingBusy) return
     setBillingBusy(code)
     try {
-      const res = await api<{ redirect_url: string }>(`/api/organisations/${orgId}/plan/checkout`, {
+      const res = await api<{ status: string; amount_kes: number }>(`/api/organisations/${orgId}/billing/checkout`, {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ plan: code }),
+        body: JSON.stringify({ plan_code: code }),
       })
       window.location.href = res.redirect_url
     } catch (e) {
