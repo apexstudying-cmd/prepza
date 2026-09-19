@@ -529,6 +529,7 @@ def get_ai_job_status(job_id):
         "progress_percent": int(job.progress_percent or 0),
         "progress_stage": job.progress_stage or "working",
         "error": job.error_message,
+        "material_id": job.material_id,
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
     })
 
@@ -552,6 +553,7 @@ class AiJob(db.Model):
     completed_at = db.Column(db.DateTime, nullable=True)
     error_message = db.Column(db.String(500), nullable=True)
     retry_count = db.Column(db.Integer, nullable=False, default=0)
+    material_id = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     batch_id = db.Column(db.String(100), nullable=True)
     # Notification row to finalize when a background generation completes.
