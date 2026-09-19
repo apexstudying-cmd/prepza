@@ -60,6 +60,23 @@ function generationRequest<T = any>(
 
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | null = null
+  let selectedMaterialId: number | null = null
+  try {
+    const raw = sessionStorage.getItem('prepza-open-material')
+    if (raw) {
+      const selected = JSON.parse(raw)
+      const selectedFeature = selected?.type === 'practice_questions' ? 'quiz' : selected?.type === 'mindmap' ? 'mind_map' : selected?.type
+      if (String(selected?.documentId) === String(documentId) && selectedFeature === feature && Number(selected?.materialId) > 0) {
+        selectedMaterialId = Number(selected.materialId)
+      }
+    }
+  } catch { /* malformed session state is non-fatal */ }
+
+  const requestOptions = () => {
+    const nextHeaders = new Headers(options.headers || {})
+    if (selectedMaterialId) nextHeaders.set('X-Prepza-Material-ID', String(selectedMaterialId))
+    return { ...options, headers: nextHeaders }
+  }
 
   const pollUntilReady = async (jobId?: number): Promise<GenerationProgress> => {
     for (;;) {
@@ -78,7 +95,10 @@ function generationRequest<T = any>(
 
   publish({ found: false, status: 'starting', progress_percent: 3, progress_stage: 'Preparing your study material' })
 
-  return api<any>(path, options).then(async result => {
+  return api<any>(path, requestOptions()).then(async result => {
+    if (selectedMaterialId) {
+      try { sessionStorage.removeItem('prepza-open-material') } catch {}
+    }
     if (!result?.async || !result?.job_id) {
       publish({
         found: true,
@@ -112,6 +132,9 @@ function generationRequest<T = any>(
     })
     return resolved
   }).catch(error => {
+    if (selectedMaterialId) {
+      try { sessionStorage.removeItem('prepza-open-material') } catch {}
+    }
     stopped = true
     if (timer) clearTimeout(timer)
     publish({
@@ -467,7 +490,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
   const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'documents' | 'materials'>('documents')
   const [documents, setDocuments] = useState<HomeDocument[]>([])
-  const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; type: string }[]>([])
+  const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; materialId: number; type: string; parameters?: Record<string, unknown> }[]>([])
   const [offlineDocuments, setOfflineDocuments] = useState<HomeDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -511,7 +534,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       const ready = res.documents.filter(d => d.status === 'ready')
       setDocuments(ready)
       const rows = await Promise.all(ready.map(async d => {
-        try { const detail = await api<DocumentDetail>(`/documents/${d.id}`); return (detail.materials || []).filter(m => m.status === 'ready').map(m => ({ documentId: d.id, documentTitle: d.title, type: m.type })) } catch { return [] }
+        try { const detail = await api<DocumentDetail>(`/documents/${d.id}`); return (detail.materials || []).filter(m => m.status === 'ready').map(m => ({ documentId: d.id, documentTitle: d.title, materialId: m.id, type: m.type, parameters: m.parameters })) } catch { return [] }
       }))
       if (!cancelled) setMaterials(rows.flat())
     }).catch(e => {
@@ -523,8 +546,15 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
     return () => { cancelled = true }
   }, [])
   const openDocument = (id: number) => { setActiveDocumentId(id); setScreen('document-study') }
-  const openMaterial = (row: { documentId: number; type: string }) => {
+  const openMaterial = (row: { documentId: number; materialId: number; type: string }) => {
     setActiveDocumentId(row.documentId)
+    try {
+      sessionStorage.setItem('prepza-open-material', JSON.stringify({
+        documentId: row.documentId,
+        materialId: row.materialId,
+        type: row.type.toLowerCase().replace(/-/g, '_'),
+      }))
+    } catch {}
     const type = row.type.toLowerCase().replace(/-/g, '_')
     setScreen(type === 'summary' ? 'summary' : type === 'flashcards' ? 'flashcards' : type === 'quiz' || type === 'practice_questions' ? 'quiz' : type === 'mind_map' || type === 'mindmap' ? 'mind-map' : type === 'podcast' ? 'podcast-player' : 'document-study')
   }
