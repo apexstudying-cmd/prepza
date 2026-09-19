@@ -7,6 +7,7 @@ import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrl, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'
 import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
 import { installActivityHeartbeat } from './activityHeartbeat'
+import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -13150,7 +13151,7 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
   const [loadError, setLoadError] = useState('')
   const [orgs, setOrgs] = useState<OrgSummary[]>([])
   const [activeOrgId, setActiveOrgId] = useState<number | null>(null)
-  const [tab, setTab] = useState<'opportunities' | 'create' | 'analytics' | 'team' | 'profile'>('opportunities')
+  const [tab, setTab] = useState<'opportunities' | 'create' | 'analytics' | 'discovery' | 'team' | 'profile'>('opportunities')
 
   const [regName, setRegName] = useState('')
   const [regEmail, setRegEmail] = useState('')
@@ -13291,9 +13292,9 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
           <div style={{ background: 'rgba(201,68,68,0.15)', border: '1px solid rgba(201,68,68,0.3)', borderRadius: 10, padding: '8px 12px', marginBottom: 10, fontSize: 11, color: '#ffb4bd' }}>{activeOrg.verification_notes}</div>
         )}
         <div style={{ display: 'flex', gap: 0, overflowX: 'auto' }} className="scrollbar-hide">
-          {(['opportunities', 'create', 'analytics', 'team', 'profile'] as const).map(t => (
+          {(['opportunities', 'create', 'analytics', 'discovery', 'team', 'profile'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ flexShrink: 0, flex: '1 0 auto', minWidth: 66, background: 'none', border: 'none', borderBottom: `2px solid ${tab === t ? ORG_COLORS.gold : 'transparent'}`, color: tab === t ? ORG_COLORS.gold : 'rgba(255,255,255,0.5)', fontWeight: tab === t ? 700 : 500, fontSize: 12, padding: '9px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-              {t === 'opportunities' ? 'Opportunities' : t === 'create' ? '+ Create' : t === 'analytics' ? 'Analytics' : t === 'team' ? 'Team' : 'Profile'}
+              {t === 'opportunities' ? 'Opportunities' : t === 'create' ? '+ Create' : t === 'analytics' ? 'Analytics' : t === 'discovery' ? 'Discovery' : t === 'team' ? 'Team' : 'Profile'}
             </button>
           ))}
         </div>
@@ -13302,6 +13303,7 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
         {tab === 'opportunities' && <OrgOpportunitiesTab orgId={activeOrg.id} isOwner={activeOrg.role === 'owner'} csrfToken={csrfToken} onCreate={() => setTab('create')} />}
         {tab === 'create' && <OrgCreateOpportunityTab orgId={activeOrg.id} org={activeOrg} csrfToken={csrfToken} onDone={() => setTab('opportunities')} />}
         {tab === 'analytics' && <OrgAnalyticsTab orgId={activeOrg.id} isOwner={activeOrg.role === 'owner'} csrfToken={csrfToken} />}
+        {tab === 'discovery' && <OrgDiscoveryTab orgId={activeOrg.id} isOwner={activeOrg.role === 'owner'} />}
         {tab === 'team' && <OrgTeamTab orgId={activeOrg.id} isOwner={activeOrg.role === 'owner'} csrfToken={csrfToken} />}
         {tab === 'profile' && <OrgProfileTab org={activeOrg} csrfToken={csrfToken} onSaved={loadOrgs} />}
       </div>
