@@ -4663,7 +4663,6 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId,
   const [profileSaved, setProfileSaved] = useState<any[]>([])
   const [profileActivity, setProfileActivity] = useState<any | null>(null)
   const [profileMaterials, setProfileMaterials] = useState<HomeDocument[]>([])
-  const [profilePosts, setProfilePosts] = useState<any[]>([])
   const [profileTabError, setProfileTabError] = useState('')
 
   useEffect(() => {
