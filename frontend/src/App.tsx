@@ -3075,7 +3075,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
         setGenerationStage('Generating podcast script…')
         const scriptRes = await generationRequest<{ material_id: number; reused: boolean; podcast: any }>(`/documents/${activeDocumentId}/podcast-script`, {
           method: 'POST', headers: { 'X-CSRF-Token': me.csrf_token },
-        })
+        }, (p) => { setGenerationPercent(p.progress_percent); setGenerationStage(p.progress_stage) })
         if (scriptRes.podcast?.title) setTitle(scriptRes.podcast.title)
         if (cancelled) return
         setGenerationPercent(5)
