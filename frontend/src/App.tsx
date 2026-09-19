@@ -133,10 +133,30 @@ function GenerationError({ error }: { error: string }) {
 
 function GenerationLoading({ label }: { label: string }) {
   const { tokens: T } = useTheme()
+  const [percent, setPercent] = useState(5)
+  const [stage, setStage] = useState(label)
+  useEffect(() => {
+    const onProgress = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {}
+      setPercent(Math.max(0, Math.min(100, Number(detail.progress_percent || 0))))
+      setStage(detail.progress_stage || label)
+    }
+    window.addEventListener('prepza:generation-progress', onProgress)
+    return () => window.removeEventListener('prepza:generation-progress', onProgress)
+  }, [label])
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
-      <div style={{ width: 40, height: 40, border: `3px solid rgba(201,168,76,0.2)`, borderTopColor: N.gold, borderRadius: '50%', animation: 'spin-slow 0.8s linear infinite', marginBottom: 16 }} />
-      <div style={{ color: T.textMuted, fontSize: 13 }}>{label}</div>
+      <div style={{ width: '100%', maxWidth: 380, background: T.card, borderRadius: 22, padding: 24, boxShadow: '0 8px 30px rgba(0,0,0,0.07)' }}>
+        <div style={{ color: N.gold, fontSize: 10, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase' }}>Prepza AI</div>
+        <div style={{ color: T.text, fontSize: 18, fontWeight: 800, marginTop: 7 }}>{label}</div>
+        <div style={{ color: T.textMuted, fontSize: 12, marginTop: 5 }}>{stage}</div>
+        <div style={{ height: 8, background: T.border, borderRadius: 99, overflow: 'hidden', marginTop: 20 }}>
+          <div style={{ width: `${percent}%`, height: '100%', background: `linear-gradient(90deg,${N.gold},${N.goldL})`, transition: 'width .45s ease' }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 7, color: T.textMuted, fontSize: 11 }}>
+          <span>{percent}%</span><span>Please wait</span>
+        </div>
+      </div>
     </div>
   )
 }
