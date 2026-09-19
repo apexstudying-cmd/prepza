@@ -313,6 +313,7 @@ class DocumentContent(db.Model):
     status = db.Column(db.String(20), nullable=False, default="pending")
     # pending -> processing -> ready | failed
     error_message = db.Column(db.String(500), nullable=True)
+    material_id = db.Column(db.Integer, db.ForeignKey("generated_material.id"), nullable=True)
     extracted_text = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -485,6 +486,8 @@ def _start_async_material_generation(document_content_id, user_id, feature, para
                     plan_tier=get_ai_plan_tier(user_id),
                     parameters=parameters,
                 )
+                local_job.material_id = result.get("material_id")
+                record_document_studied(user_id, document_content_id)
                 local_job.progress_percent = 92
                 local_job.progress_stage = "saving generated material"
                 db.session.commit()
@@ -3937,67 +3940,35 @@ def _ai_generation_parameters_from_request():
 
 
 def summarize_document(document_id):
-    """
-    Generates (or returns the cached) AI summary for a student's
-    document. Mirrors /forum/posts/<id>/ask-ai's error-handling shape -
-    ai_service enforces the spend cap / rate limit / cache-reuse logic,
-    this route just translates its exceptions to HTTP responses.
-    """
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
-
     document = db.session.get(Document, document_id)
     if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
-
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to summarize"}), 400
-
-    if document.user_id != user_id:
-        shared = _published_ready_material_for_viewer(
-            user_id, document, "summary", _ai_generation_parameters_from_request()
-        )
+        if document.user_id != user_id:
+        shared = _published_ready_material_for_viewer(user_id, document, "summary", _ai_generation_parameters_from_request())
         if not shared:
             return jsonify({"error": "Published summary has not been generated yet"}), 404
         content, material = shared
         result = _published_material_response(user_id, content, material)
-        return jsonify({
-            "material_id": result["material_id"],
-            "reused": True,
-            "summary": result["payload"],
-        }), 200
+        return jsonify({"material_id": result["material_id"], "reused": True, "summary": result["payload"]}), 200
 
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
-
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
-        result = _resolve_material_generation("podcast", content, user_id, parameters)
+        result = _resolve_material_generation(summary, content, user_id, parameters)
         record_document_studied(user_id, content.id)
         db.session.commit()
-        return jsonify({
-            "material_id": result["material_id"],
-            "reused": result["reused"],
-            "podcast": result["payload"],
-        }), 200
+        return jsonify({"material_id": result["material_id"], "reused": result["reused"], "summary": result["payload"]}), 200
     job_id = _start_async_material_generation(
-        document_content_id=content.id,
-        user_id=user_id,
-        feature="podcast",
-        parameters=parameters,
+        document_content_id=content.id, user_id=user_id, feature="summary", parameters=parameters
     )
     return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
-
-    record_document_studied(user_id, content.id)
-    db.session.commit()
-
-    return jsonify({
-        "material_id": result["material_id"],
-        "reused": result["reused"],
-        "summary": result["payload"],
-    }), 200
 
 
 @app.route("/documents/<int:document_id>/quiz", methods=["POST"])
@@ -4007,68 +3978,35 @@ def summarize_document(document_id):
 )
 @require_csrf
 def quiz_document(document_id):
-    """
-    Generates (or returns the cached) AI practice quiz for a student's
-    document. Same shape as summarize_document() above - ai_service
-    enforces the spend cap / rate limit / cache-reuse logic, this route
-    just translates its exceptions to HTTP responses.
-    """
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
-
     document = db.session.get(Document, document_id)
     if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
-
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to quiz"}), 400
-
-    if document.user_id != user_id:
-        shared = _published_ready_material_for_viewer(
-            user_id, document, "quiz", _ai_generation_parameters_from_request()
-        )
+        if document.user_id != user_id:
+        shared = _published_ready_material_for_viewer(user_id, document, "quiz", _ai_generation_parameters_from_request())
         if not shared:
             return jsonify({"error": "Published quiz has not been generated yet"}), 404
         content, material = shared
         result = _published_material_response(user_id, content, material)
-        return jsonify({
-            "material_id": result["material_id"],
-            "reused": True,
-            "quiz": result["payload"],
-        }), 200
+        return jsonify({"material_id": result["material_id"], "reused": True, "quiz": result["payload"]}), 200
 
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
-
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
-        result = _resolve_material_generation("quiz", content, user_id, parameters)
+        result = _resolve_material_generation(quiz, content, user_id, parameters)
         record_document_studied(user_id, content.id)
         db.session.commit()
-        return jsonify({
-            "material_id": result["material_id"],
-            "reused": result["reused"],
-            "quiz": result["payload"],
-        }), 200
-
-
-        document_content_id=content.id,
-        user_id=user_id,
-        feature="quiz",
-        parameters=parameters,
+        return jsonify({"material_id": result["material_id"], "reused": result["reused"], "quiz": result["payload"]}), 200
+    job_id = _start_async_material_generation(
+        document_content_id=content.id, user_id=user_id, feature="quiz", parameters=parameters
     )
     return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
-
-    record_document_studied(user_id, content.id)
-    db.session.commit()
-
-    return jsonify({
-        "material_id": result["material_id"],
-        "reused": result["reused"],
-        "quiz": result["payload"],
-    }), 200
 
 
 @app.route("/documents/<int:document_id>/quiz/<int:material_id>/complete", methods=["POST"])
@@ -4142,69 +4080,35 @@ def complete_quiz(document_id, material_id):
 )
 @require_csrf
 def flashcards_document(document_id):
-    """
-    Generates (or returns the cached) AI flashcard set for a student's
-    document. Same shape as quiz_document()/summarize_document() above
-    - ai_service enforces the spend cap / rate limit / cache-reuse
-    logic, this route just translates its exceptions to HTTP
-    responses.
-    """
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
-
     document = db.session.get(Document, document_id)
-    if not document or not _can_study_document(user_id, document):
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
-
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate flashcards from"}), 400
-
-    if document.user_id != user_id:
-        shared = _published_ready_material_for_viewer(
-            user_id, document, "flashcards", _ai_generation_parameters_from_request()
-        )
+        if document.user_id != user_id:
+        shared = _published_ready_material_for_viewer(user_id, document, "flashcards", _ai_generation_parameters_from_request())
         if not shared:
             return jsonify({"error": "Published flashcards has not been generated yet"}), 404
         content, material = shared
         result = _published_material_response(user_id, content, material)
-        return jsonify({
-            "material_id": result["material_id"],
-            "reused": True,
-            "flashcards": result["payload"],
-        }), 200
+        return jsonify({"material_id": result["material_id"], "reused": True, "flashcards": result["payload"]}), 200
 
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
-
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
-        result = _resolve_material_generation("flashcards", content, user_id, parameters)
+        result = _resolve_material_generation(flashcards, content, user_id, parameters)
         record_document_studied(user_id, content.id)
         db.session.commit()
-        return jsonify({
-            "material_id": result["material_id"],
-            "reused": result["reused"],
-            "flashcards": result["payload"],
-        }), 200
-
-
-        document_content_id=content.id,
-        user_id=user_id,
-        feature="flashcards",
-        parameters=parameters,
+        return jsonify({"material_id": result["material_id"], "reused": result["reused"], "flashcards": result["payload"]}), 200
+    job_id = _start_async_material_generation(
+        document_content_id=content.id, user_id=user_id, feature="flashcards", parameters=parameters
     )
     return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
-
-    record_document_studied(user_id, content.id)
-    db.session.commit()
-
-    return jsonify({
-        "material_id": result["material_id"],
-        "reused": result["reused"],
-        "flashcards": result["payload"],
-    }), 200
 
 
 @app.route("/documents/<int:document_id>/flashcards/<int:material_id>/complete", methods=["POST"])
@@ -4315,75 +4219,33 @@ def generation_progress(document_id):
 )
 @require_csrf
 def podcast_script_document(document_id):
-    """
-    Generates (or returns the cached) AI podcast SCRIPT for a student's
-    document - Phase 1 only, text only, no audio yet (audio synthesis
-    is a separate follow-up route once a TTS provider is wired up).
-    Same shape as flashcards_document()/quiz_document()/
-    summarize_document() above - ai_service enforces the spend cap /
-    rate limit / cache-reuse logic, this route just translates its
-    exceptions to HTTP responses.
-    """
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
-
     document = db.session.get(Document, document_id)
     if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
-
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate a podcast from"}), 400
-
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
-
     if document.user_id != user_id:
         material = GeneratedMaterial.query.filter_by(
-            document_content_id=document.document_content_id,
-            material_type="podcast",
-            status="ready",
-            scope="shared",
-            owner_user_id=None,
+            document_content_id=document.document_content_id, material_type="podcast",
+            status="ready", scope="shared", owner_user_id=None
         ).first()
         if not material or not material.payload:
             return jsonify({"error": "Podcast has not been published yet"}), 404
-        record_document_studied(user_id, content.id)
-        db.session.commit()
-        return jsonify({
-            "material_id": material.id,
-            "reused": True,
-            "podcast": json.loads(material.payload),
-        }), 200
-
+        return jsonify({"material_id": material.id, "reused": True, "podcast": json.loads(material.payload)}), 200
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
         result = _resolve_material_generation("podcast", content, user_id, parameters)
-        record_document_studied(user_id, content.id)
-        db.session.commit()
-        return jsonify({
-            "material_id": result["material_id"],
-            "reused": result["reused"],
-            "podcast": result["payload"],
-        }), 200
-
-
-        document_content_id=content.id,
-        user_id=user_id,
-        feature="podcast",
-        parameters=parameters,
+        return jsonify({"material_id": result["material_id"], "reused": result["reused"], "podcast": result["payload"]}), 200
+    job_id = _start_async_material_generation(
+        document_content_id=content.id, user_id=user_id, feature="podcast", parameters=parameters
     )
     return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
-
-    record_document_studied(user_id, content.id)
-    db.session.commit()
-
-    return jsonify({
-        "material_id": result["material_id"],
-        "reused": result["reused"],
-        "podcast": result["payload"],
-    }), 200
 
 
 @app.route("/documents/<int:document_id>/podcast-audio", methods=["POST"])
@@ -4579,80 +4441,35 @@ def list_podcasts():
 )
 @require_csrf
 def mindmap_document(document_id):
-    """
-    Generates (or returns the cached) AI mind map for a student's
-    document. Same shape as flashcards_document()/quiz_document()/
-    summarize_document() above - ai_service enforces the spend cap /
-    rate limit / cache-reuse logic, this route just translates its
-    exceptions to HTTP responses.
-    """
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
-
     document = db.session.get(Document, document_id)
-    if not document or not _can_study_document(user_id, document):
+    if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
-
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate a mind map from"}), 400
-
-    if document.user_id != user_id:
-        shared = _published_ready_material_for_viewer(
-            user_id, document, "mind_map", _ai_generation_parameters_from_request()
-        )
+        if document.user_id != user_id:
+        shared = _published_ready_material_for_viewer(user_id, document, "mind_map", _ai_generation_parameters_from_request())
         if not shared:
             return jsonify({"error": "Published mindmap has not been generated yet"}), 404
         content, material = shared
         result = _published_material_response(user_id, content, material)
-        return jsonify({
-            "material_id": result["material_id"],
-            "reused": True,
-            "mindmap": result["payload"],
-        }), 200
+        return jsonify({"material_id": result["material_id"], "reused": True, "mindmap": result["payload"]}), 200
 
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
-
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
-        result = _resolve_material_generation("mind_map", content, user_id, parameters)
+        result = _resolve_material_generation(mind_map, content, user_id, parameters)
         record_document_studied(user_id, content.id)
         db.session.commit()
-        return jsonify({
-            "material_id": result["material_id"],
-            "reused": result["reused"],
-            "mindmap": result["payload"],
-        }), 200
+        return jsonify({"material_id": result["material_id"], "reused": result["reused"], "mindmap": result["payload"]}), 200
     job_id = _start_async_material_generation(
-        document_content_id=content.id,
-        user_id=user_id,
-        feature="mind_map",
-        parameters=parameters,
+        document_content_id=content.id, user_id=user_id, feature="mind_map", parameters=parameters
     )
     return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
-
-
-
-
-
-
-
-
-
-# ---------- AI Tutor (Ada Phase 1) ----------
-
-TUTOR_MESSAGE_MAX = 3000
-
-
-def _serialize_tutor_message(message):
-    return {
-        "id": message.id,
-        "role": message.role,
-        "content": message.content,
-        "created_at": message.created_at.isoformat() if message.created_at else None,
-    }
 
 
 @app.route("/documents/<int:document_id>/tutor")
