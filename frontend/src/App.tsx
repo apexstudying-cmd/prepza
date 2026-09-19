@@ -943,6 +943,11 @@ function SkeletonExplore() {
   const { tokens: T } = useTheme()
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
+      {saveNotice && (
+        <div style={{ position: 'fixed', left: 16, right: 16, bottom: 18, zIndex: 80, background: T.card, border: `1px solid ${N.gold}55`, borderRadius: 14, padding: '12px 14px', boxShadow: '0 8px 30px rgba(0,0,0,0.18)', color: T.text, fontSize: 12, fontWeight: 700, textAlign: 'center' }}>
+          {saveNotice}
+        </div>
+      )}
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <Sk w={80} h={20} dark style={{ marginBottom: 12 }} />
         <Sk h={44} r={13} dark style={{ marginBottom: 12 }} />
@@ -6263,6 +6268,7 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
   const [savedLoading, setSavedLoading] = useState(true)
   const [savedError, setSavedError] = useState('')
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set())
+  const [saveNotice, setSaveNotice] = useState('')
 
   const [submissions, setSubmissions] = useState<MySubmission[]>([])
   const [submissionsLoading, setSubmissionsLoading] = useState(true)
@@ -6362,6 +6368,7 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
   const toggleSave = async (pub: LibraryPublicationSummary) => {
     if (!csrfToken) return
     const isSaved = savedIds.has(pub.id)
+    setSaveNotice('')
     setSavedIds(prev => { const next = new Set(prev); isSaved ? next.delete(pub.id) : next.add(pub.id); return next })
     setBrowseItems(items => items.map(it => it.id === pub.id ? { ...it, save_count: it.save_count + (isSaved ? -1 : 1) } : it))
     try {
@@ -6369,7 +6376,14 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
         await api(`/library/${pub.id}/save`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
         setSavedItems(items => items.filter(it => it.id !== pub.id))
       } else {
-        await api(`/library/${pub.id}/save`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+        const result = await api<{ message: string; document_id?: number; in_studyhub?: boolean; already_in_studyhub?: boolean }>(`/library/${pub.id}/save`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+        if (result.already_in_studyhub) {
+          setSaveNotice('This document is already in your Study Hub. No download was needed.')
+          setTimeout(() => setSaveNotice(''), 4500)
+        } else {
+          setSaveNotice('Saved to your Study Hub.')
+          setTimeout(() => setSaveNotice(''), 3000)
+        }
         loadSaved()
       }
     } catch {
