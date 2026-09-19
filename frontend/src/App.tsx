@@ -56,43 +56,75 @@ function generationRequest<T = any>(
     : match?.[2] === 'mindmap' ? 'mind_map'
     : match?.[2]
 
+  if (!documentId || !feature) return api<T>(path, options)
+
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | null = null
 
-  const poll = async () => {
-    if (stopped || !documentId || !feature) return
-    try {
-      const progress = await api<GenerationProgress>(`/documents/${documentId}/generation-progress?feature=${feature}`)
-      if (stopped) return
-      if (progress.found) publish(progress)
-      if (!stopped && progress.status === 'processing') {
-        timer = setTimeout(poll, 700)
+  const pollUntilReady = async (jobId?: number): Promise<GenerationProgress> => {
+    for (;;) {
+      if (stopped) throw new Error('Generation cancelled')
+      const progress = jobId
+        ? await api<GenerationProgress>(`/ai-jobs/${jobId}`)
+        : await api<GenerationProgress>(`/documents/${documentId}/generation-progress?feature=${feature}`)
+      if (progress.found !== false) publish(progress)
+      if (progress.status === 'completed') return progress
+      if (progress.status === 'failed') {
+        throw new ApiError(progress.error_message || progress.error || 'Generation failed. Please try again.', 500)
       }
-    } catch {
-      if (!stopped) timer = setTimeout(poll, 1200)
+      await new Promise(resolve => { timer = setTimeout(resolve, 700) })
     }
   }
 
-  if (documentId && feature) {
-    publish({ found: false, status: 'starting', progress_percent: 3, progress_stage: 'Preparing your study material' })
-    void poll()
-  }
+  publish({ found: false, status: 'starting', progress_percent: 3, progress_stage: 'Preparing your study material' })
 
-  return api<T>(path, options).then(result => {
-    stopped = true
-    if (timer) clearTimeout(timer)
-    const reused = Boolean((result as any)?.reused)
+  return api<any>(path, options).then(async result => {
+    if (!result?.async || !result?.job_id) {
+      publish({
+        found: true,
+        status: 'completed',
+        progress_percent: 100,
+        progress_stage: result?.reused ? 'Found your saved material' : 'Ready',
+      })
+      return result as T
+    }
+
+    publish({
+      found: true,
+      status: 'processing',
+      progress_percent: Number(result.progress_percent || 5),
+      progress_stage: 'Queued',
+    })
+
+    await pollUntilReady(Number(result.job_id))
+
+    // The worker has finished and the exact fingerprint is now persisted.
+    // Resolve the artifact through the normal route; this is a cache hit and
+    // returns the saved payload without another model call.
+    const resolveHeaders = new Headers(options.headers || {})
+    resolveHeaders.set('X-Prepza-Resolve-Generation', '1')
+    const resolved = await api<T>(path, { ...options, headers: resolveHeaders })
     publish({
       found: true,
       status: 'completed',
       progress_percent: 100,
-      progress_stage: reused ? 'Found your saved material' : 'Ready',
+      progress_stage: resolved && (resolved as any).reused ? 'Found your saved material' : 'Ready',
     })
-    return result
+    return resolved
   }).catch(error => {
     stopped = true
     if (timer) clearTimeout(timer)
+    publish({
+      found: true,
+      status: 'failed',
+      progress_percent: 100,
+      progress_stage: 'Generation failed',
+      error_message: error instanceof ApiError ? error.message : String(error),
+    })
     throw error
+  }).finally(() => {
+    stopped = true
+    if (timer) clearTimeout(timer)
   })
 }
 
