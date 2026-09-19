@@ -150,6 +150,7 @@ def process_podcast_audio(material_id, notification_id=None):
     db.session.commit()
 
     try:
+        _update_job_progress(job, 5, "preparing")
         if not KOKORO_TTS_BASE_URL:
             raise RuntimeError("KOKORO_TTS_BASE_URL is not configured")
 
@@ -159,6 +160,7 @@ def process_podcast_audio(material_id, notification_id=None):
         combined = AudioSegment.empty()
         gap = AudioSegment.silent(duration=TURN_GAP_MS)
 
+        total_turns = max(1, len(turns))
         for i, turn in enumerate(turns):
             speaker = turn["speaker"]
             voice_id = PODCAST_VOICE_MAP.get(speaker)
@@ -170,8 +172,11 @@ def process_podcast_audio(material_id, notification_id=None):
             combined += clip
             if i < len(turns) - 1:
                 combined += gap
+            _update_job_progress(job, 10 + int(((i + 1) / total_turns) * 70), f"synthesizing speaker turns ({i + 1}/{total_turns})")
 
+        _update_job_progress(job, 82, "fitting audio to requested duration")
         combined, correction_ratio = _fit_audio_to_duration(combined, target_duration_seconds)
+        _update_job_progress(job, 90, "exporting final audio")
 
         buffer = io.BytesIO()
         combined.export(buffer, format="mp3", bitrate="128k")
@@ -187,6 +192,7 @@ def process_podcast_audio(material_id, notification_id=None):
         if not _upload_podcast_audio(storage_path, audio_bytes):
             raise RuntimeError("Failed to upload synthesized audio to storage")
 
+        _update_job_progress(job, 98, "verifying final duration")
         envelope["audio_status"] = "ready"
         envelope["audio_storage_path"] = storage_path
         envelope["duration_seconds"] = round(duration_seconds, 3)
@@ -197,6 +203,9 @@ def process_podcast_audio(material_id, notification_id=None):
         db.session.commit()
 
         _complete_job(job, success=True)
+        job.progress_percent = 100
+        job.progress_stage = "ready"
+        db.session.commit()
         _complete_generation_notification(notification_id, material.id, success=True, duration_seconds=duration_seconds)
 
     except Exception as e:
@@ -204,6 +213,11 @@ def process_podcast_audio(material_id, notification_id=None):
         material.payload = json.dumps(envelope)
         db.session.commit()
         _complete_job(job, success=False, error_message=str(e))
+        try:
+            job.progress_stage = "failed"
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
         _complete_generation_notification(notification_id, material.id, success=False, error_message=str(e))
         raise
 
@@ -308,6 +322,13 @@ def _upload_podcast_audio(storage_path, audio_bytes, bucket=PODCAST_AUDIO_BUCKET
         return False
 
 
+def _update_job_progress(job, percent, stage):
+    from app import db
+    job.progress_percent = max(0, min(100, int(percent)))
+    job.progress_stage = stage
+    db.session.commit()
+
+
 def _create_job(document_content_id, feature, notification_id=None):
     from app import db, AiJob
     job = AiJob(
@@ -316,6 +337,8 @@ def _create_job(document_content_id, feature, notification_id=None):
         status="processing",
         notification_id=notification_id,
         started_at=datetime.utcnow(),
+        progress_percent=0,
+        progress_stage="queued",
     )
     db.session.add(job)
     db.session.commit()
