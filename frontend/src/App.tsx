@@ -5893,7 +5893,7 @@ type NotificationItem = {
 }
 
 const NOTIFS_CACHE: { notifs?: NotificationItem[] } = {}
-function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfileUserId }: { setScreen: (s: Screen) => void; setActiveForumPostId?: (id: number) => void; setActiveProfileUserId?: (id: number) => void }) {
+function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfileUserId, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveForumPostId?: (id: number) => void; setActiveProfileUserId?: (id: number) => void; setActiveDocumentId?: (id: number) => void }) {
   const { tokens: T } = useTheme()
   const [notifs, setNotifs] = useState<NotificationItem[]>(NOTIFS_CACHE.notifs ?? [])
   const [loading, setLoading] = useState(NOTIFS_CACHE.notifs === undefined)
@@ -5925,13 +5925,16 @@ function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfile
   }
   const openNotif = (n: NotificationItem) => {
     markRead(n)
-    if (n.related_type === 'group' || n.related_type === 'group_post') setScreen('group-detail')
+    if ((n.type === 'podcast_ready' || n.type === 'podcast_failed') && n.related_id && setActiveDocumentId) {
+      setActiveDocumentId(n.related_id)
+      setScreen('podcast-player')
+    } else if (n.related_type === 'group' || n.related_type === 'group_post') setScreen('group-detail')
     else if (n.related_type === 'user' && n.related_id && setActiveProfileUserId) { setActiveProfileUserId(n.related_id); setScreen('student-profile') }
   }
   const iconFor = (type: string) => ({
     group_post: '\ud83d\udcac', group_comment: '\ud83d\udcac', group_join_request: '\ud83d\udc65', new_follower: '\u2795',
     forum_ai_reply: '\u2726', study_reminder: '\ud83d\udcda', opportunity: '\ud83d\ude80', achievement: '\ud83c\udfc6',
-    announcement: '\ud83d\udce3', group_like: '\u2764\ufe0f', group_vote: '\u2b06\ufe0f', group_promoted: '\u2b50', moderation_warning: '\u26a0\ufe0f',
+    announcement: '\ud83d\udce3', group_like: '\u2764\ufe0f', group_vote: '\u2b06\ufe0f', group_promoted: '\u2b50', podcast_ready: '◉', podcast_failed: '!', moderation_warning: '\u26a0\ufe0f',
   } as Record<string,string>)[type] || '\ud83d\udd14'
 
   if (loading) return <SkeletonNotifications />
@@ -14175,7 +14178,7 @@ export default function App() {
       case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} activeConversationId={activeConversationId} backScreen={activeProfileBackScreen} />
       case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} onOpenOrgPortal={() => setOrgPortalMode(true)} />
       case 'settings':          return <SettingsScreen setScreen={setScreen} />
-      case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} />
+      case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} setActiveDocumentId={setActiveDocumentId} />
       case 'library':           return <LibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'study-materials':   return <StudyMaterialsScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'mind-map':          return <MindMapScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
