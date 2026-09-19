@@ -13764,5 +13764,12 @@ register_control_routes(
     limiter,
 )
 
+from infrastructure_monitoring import register_infrastructure_monitoring
+
+register_infrastructure_monitoring(
+    app, db, require_admin, SystemSetting, User, DocumentContent,
+    AiUsageLog, Payment, StudyActivityLog, StudyTimeLog,
+)
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
