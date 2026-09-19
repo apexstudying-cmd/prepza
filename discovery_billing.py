@@ -217,6 +217,19 @@ def register_discovery(app, db):
                         "push_frequency": {"max_per_48_hours": PUSH_CAP_PER_48_HOURS,
                                            "max_per_7_days": PUSH_CAP_PER_7_DAYS}})
 
+    @app.post("/api/organisations/<int:organisation_id>/discovery/audience-estimate")
+    def discovery_audience_estimate(organisation_id):
+        uid = session.get("user_id")
+        if not uid or not org_access(organisation_id, uid):
+            return jsonify({"error":"Organisation membership required"}), 403
+        data = request.get_json(silent=True) or {}
+        target = data.get("target") if isinstance(data.get("target"), dict) else {}
+        try:
+            count = len(eligible_users(target))
+        except Exception:
+            count = 0
+        return jsonify({"audience_estimate": count, "target": target})
+
     @app.post("/api/organisations/<int:organisation_id>/discovery/campaigns")
     def create_discovery_campaign(organisation_id):
         uid = session.get("user_id")
