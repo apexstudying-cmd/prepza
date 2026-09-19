@@ -146,6 +146,38 @@ def register_discovery(app, db):
             return (int(row["push_delivered"] or 0) * int(row["bid_kes"]) + 999) // 1000
         return (int(row["delivered_impressions"] or 0) * int(row["bid_kes"]) + 999) // 1000
 
+    def sync_org_invoice(organisation_id):
+        now = datetime.utcnow()
+        period_start = date(now.year, now.month, 1)
+        next_month = date(now.year + (1 if now.month == 12 else 0), 1 if now.month == 12 else now.month + 1, 1)
+        period_end = next_month - timedelta(days=1)
+        base = db.session.execute(text("""
+            SELECT COALESCE(monthly_fee_kes, 0) FROM organisation_billing WHERE organisation_id=:oid
+        """), {"oid": organisation_id}).scalar_one_or_none() or 0
+        rows = db.session.execute(text("""
+            SELECT id,bid_type,bid_kes,placement,budget_kes,delivered_impressions,delivered_clicks,push_delivered
+            FROM discovery_campaign WHERE organisation_id=:oid AND created_at >= :period
+        """), {"oid": organisation_id, "period": datetime.combine(period_start, datetime.min.time())}).mappings().all()
+        usage = sum(min(campaign_usage(r), int(r["budget_kes"])) for r in rows)
+        total = int(base) + int(usage)
+        existing = db.session.execute(text("""
+            SELECT status FROM organisation_invoice
+            WHERE organisation_id=:oid AND period_start=:start AND period_end=:end
+        """), {"oid":organisation_id,"start":period_start,"end":period_end}).scalar_one_or_none()
+        if existing == "paid":
+            return total, usage, True
+        db.session.execute(text("""
+            INSERT INTO organisation_invoice
+                (organisation_id,period_start,period_end,plan_code,amount_kes,status)
+            VALUES (:oid,:start,:end,
+                    COALESCE((SELECT plan_code FROM organisation_billing WHERE organisation_id=:oid),'launch'),
+                    :amount,'pending')
+            ON CONFLICT (organisation_id,period_start,period_end)
+            DO UPDATE SET amount_kes=:amount, status=CASE WHEN organisation_invoice.status='paid' THEN 'paid' ELSE 'pending' END
+        """), {"oid":organisation_id,"start":period_start,"end":period_end,"amount":total})
+        db.session.commit()
+        return total, usage, False
+
     def campaign_row(campaign_id):
         return db.session.execute(text("""
             SELECT * FROM discovery_campaign WHERE id = :id
@@ -373,6 +405,7 @@ def register_discovery(app, db):
                 WHERE id=:cid
             """), {"cid": campaign_id})
             db.session.commit()
+            sync_org_invoice(int(row["organisation_id"]))
         return jsonify({"eligible": True, "recorded": bool(inserted)})
 
     @app.post("/api/discovery/campaigns/<int:campaign_id>/click")
@@ -400,6 +433,7 @@ def register_discovery(app, db):
               updated_at=CURRENT_TIMESTAMP WHERE id=:cid
         """), {"cid": campaign_id})
         db.session.commit()
+        sync_org_invoice(int(row["organisation_id"]))
         return jsonify({"eligible": True, "recorded": True})
 
     @app.post("/api/discovery/campaigns/<int:campaign_id>/application")
@@ -425,6 +459,15 @@ def register_discovery(app, db):
         """), {"cid": campaign_id})
         db.session.commit()
         return jsonify({"eligible": True, "recorded": True})
+
+    @app.get("/api/organisations/<int:organisation_id>/discovery/billing-preview")
+    def discovery_billing_preview(organisation_id):
+        uid = session.get("user_id")
+        if not uid or not org_access(organisation_id, uid):
+            return jsonify({"error":"Organisation membership required"}), 403
+        total, usage, paid = sync_org_invoice(organisation_id)
+        base = db.session.execute(text("""SELECT COALESCE(monthly_fee_kes,0) FROM organisation_billing WHERE organisation_id=:oid"""), {"oid":organisation_id}).scalar_one_or_none() or 0
+        return jsonify({"currency":"KES","base_plan_kes":int(base),"discovery_usage_kes":int(usage),"current_invoice_kes":int(total),"invoice_locked":bool(paid)})
 
     @app.get("/api/organisations/<int:organisation_id>/discovery/campaigns/<int:campaign_id>/invoice-preview")
     def discovery_invoice_preview(organisation_id, campaign_id):
