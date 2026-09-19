@@ -2983,6 +2983,8 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   const [title, setTitle] = useState('Study Podcast')
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [generationPercent, setGenerationPercent] = useState(0)
+  const [generationStage, setGenerationStage] = useState('Preparing your podcast…')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
 
   const positionKey = activeDocumentId == null ? '' : `prepza-podcast-position:${activeDocumentId}`
@@ -3011,11 +3013,13 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
     let cancelled = false
     const run = async () => {
       try {
-        const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null }>(`/documents/${activeDocumentId}/podcast-audio`)
+        const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(`/documents/${activeDocumentId}/podcast-audio`)
         if (cancelled) return
         if (existing.audio_status === 'ready' && existing.audio_url) {
           setAudioUrl(existing.audio_url)
           setDuration(existing.duration_seconds || 0)
+          setGenerationPercent(100)
+          setGenerationStage('ready')
           setStage('ready')
           return
         }
@@ -3027,6 +3031,8 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
         })
         if (scriptRes.podcast?.title) setTitle(scriptRes.podcast.title)
         if (cancelled) return
+        setGenerationPercent(5)
+        setGenerationStage('Generating audio…')
         setStage('audio')
 
         await api(`/documents/${activeDocumentId}/podcast-audio`, {
@@ -3035,11 +3041,15 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
 
         const poll = async () => {
           if (cancelled) return
-          const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null }>(`/documents/${activeDocumentId}/podcast-audio`)
+          const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(`/documents/${activeDocumentId}/podcast-audio`)
           if (cancelled) return
+          setGenerationPercent(Math.max(0, Math.min(100, Number(status.progress_percent || 0))))
+          setGenerationStage(status.progress_stage || 'Generating audio…')
           if (status.audio_status === 'ready' && status.audio_url) {
             setAudioUrl(status.audio_url)
             setDuration(status.duration_seconds || 0)
+            setGenerationPercent(100)
+            setGenerationStage('ready')
             setStage('ready')
           } else if (status.audio_status === 'failed') {
             setError('Audio generation failed. Try again from the document study hub.')
@@ -3148,7 +3158,20 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 20px' }}><TopBar title="Study Podcast" onBack={() => setScreen('document-study')} /></div>
       {error ? <GenerationError error={error} /> : stage !== 'ready' ? (
-        <GenerationLoading label={stage === 'loading' ? 'Opening your podcast…' : 'Generating audio — this can take a minute…'} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28 }}>
+          <div style={{ width: '100%', maxWidth: 380, background: T.card, borderRadius: 22, padding: 24, boxShadow: '0 8px 30px rgba(0,0,0,0.07)' }}>
+            <div style={{ color: N.gold, fontSize: 10, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase' }}>Prepza Podcast</div>
+            <div style={{ color: T.text, fontSize: 19, fontWeight: 800, marginTop: 8 }}>{stage === 'loading' ? 'Opening your podcast' : 'Generating your podcast'}</div>
+            <div style={{ color: T.textMuted, fontSize: 12, lineHeight: 1.55, marginTop: 5 }}>{generationStage}</div>
+            <div style={{ height: 9, background: T.border, borderRadius: 99, overflow: 'hidden', marginTop: 22 }}>
+              <div style={{ width: `${generationPercent}%`, height: '100%', background: `linear-gradient(90deg,${N.gold},${N.goldL})`, transition: 'width .5s ease' }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, color: T.textMuted, fontSize: 11 }}>
+              <span>{generationPercent}%</span>
+              <span>{stage === 'loading' ? 'Checking saved material' : 'Please keep this screen open or enable notifications'}</span>
+            </div>
+          </div>
+        </div>
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 28px', gap: 24 }}>
           {audioUrl && <audio ref={audioRef} src={audioUrl} preload="metadata" />}
