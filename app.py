@@ -13454,6 +13454,48 @@ def browse_opportunities():
     })
 
 
+@app.route("/podcast-opportunities")
+def podcast_opportunities():
+    """Small, low-cost opportunity feed for the podcast player.
+    Uses the same verified/published/expiry rules as the main opportunities
+    feed, with active paid promotions ranked first. This is placement, not
+    a separate opportunity database.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    query = _opportunity_publicly_visible_query()
+    all_matching = query.order_by(Opportunity.created_at.desc()).all()
+    promo_map = _get_active_promotions_map([o.id for o in all_matching])
+    all_matching.sort(key=lambda o: (
+        _PROMOTION_TYPE_RANK.get(promo_map.get(o.id), 99),
+        -(o.published_at.timestamp() if o.published_at else 0),
+    ))
+
+    items = all_matching[:3]
+    saved_ids = set()
+    if items:
+        saved_ids = {
+            row.opportunity_id
+            for row in SavedOpportunity.query.filter(
+                SavedOpportunity.user_id == user_id,
+                SavedOpportunity.opportunity_id.in_([o.id for o in items]),
+            ).all()
+        }
+
+    return jsonify({
+        "opportunities": [
+            _serialize_opportunity_public(
+                o,
+                promotion_type=promo_map.get(o.id),
+                viewer_saved=o.id in saved_ids,
+            )
+            for o in items
+        ]
+    })
+
+
 @app.route("/opportunities/<int:opportunity_id>")
 def get_opportunity_public(opportunity_id):
     """
