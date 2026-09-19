@@ -251,6 +251,7 @@ const podcasts = [
 // ─── Shared atoms ─────────────────────────────────────────────────────────────
 const N = { navy: '#0B1437', navy2: '#132046', navy3: '#1A2A5E', gold: '#C9A84C', goldL: '#E8C97E', bg: '#F8F9FC' }
 const PREPZA_VISION = 'Study smarter together.'
+const PREPZA_BRANDLINE = 'Prepza: Study smarter together.'
 const PREPZA_MISSION = 'Bring personalized study tools, trusted academic resources, and students together in one place.'
 
 // ─── Theme (light/dark) ─────────────────────────────────────────────────────
@@ -1078,8 +1079,8 @@ function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(160deg, ${N.navy} 0%, ${N.navy2} 60%, ${N.navy3} 100%)` }}>
       <div style={{ position: 'absolute', top: '18%', width: 220, height: 220, background: 'rgba(201,168,76,0.06)', borderRadius: '50%', filter: 'blur(50px)' }} />
       <img src={logoImg} alt="Prepza" width={192} height={192} style={{ width: 192, height: 192, borderRadius: 42, marginBottom: 24, boxShadow: '0 18px 60px rgba(201,168,76,0.3)' }} />
-      <div style={{ fontWeight: 800, fontSize: 30, color: '#fff', letterSpacing: '-1px' }}>Prepza</div>
-      <div style={{ color: N.goldL, fontSize: 13, fontWeight: 700, letterSpacing: .3, marginTop: 7 }}>{PREPZA_VISION}</div>
+      <div style={{ fontWeight: 800, fontSize: 30, color: '#fff', letterSpacing: '-1px' }}>{PREPZA_BRANDLINE}</div>
+      <div style={{ color: 'rgba(255,255,255,0.52)', fontSize: 11, fontWeight: 600, letterSpacing: .2, marginTop: 9 }}>Our vision</div>
       {state === 'checking' ? (
         <div style={{ marginTop: 60, display: 'flex', gap: 6 }}>
           {[0,1,2].map(i => <div key={i} style={{ width: i === 0 ? 20 : 6, height: 6, background: i === 0 ? N.gold : 'rgba(255,255,255,0.2)', borderRadius: 99, transition: 'all 0.3s' }} />)}
