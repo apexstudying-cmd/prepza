@@ -3023,6 +3023,31 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
           setStage('ready')
           return
         }
+        if (existing.audio_status === 'processing') {
+          setGenerationPercent(Number(existing.progress_percent || 0))
+          setGenerationStage(existing.progress_stage || 'Generating audio…')
+          setStage('audio')
+          const pollExisting = async () => {
+            if (cancelled) return
+            const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(`/documents/${activeDocumentId}/podcast-audio`)
+            if (cancelled) return
+            setGenerationPercent(Math.max(0, Math.min(100, Number(status.progress_percent || 0))))
+            setGenerationStage(status.progress_stage || 'Generating audio…')
+            if (status.audio_status === 'ready' && status.audio_url) {
+              setAudioUrl(status.audio_url)
+              setDuration(status.duration_seconds || 0)
+              setGenerationPercent(100)
+              setGenerationStage('ready')
+              setStage('ready')
+            } else if (status.audio_status === 'failed') {
+              setError('Audio generation failed. Try again from the document study hub.')
+            } else {
+              setTimeout(pollExisting, 2500)
+            }
+          }
+          await pollExisting()
+          return
+        }
 
         const me = await api<{ csrf_token: string }>('/me')
         if (cancelled) return
