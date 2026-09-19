@@ -4801,7 +4801,7 @@ function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActive
 type ProfileMe = { id: number; display_name: string | null; bio: string | null; university_id: number | null; program_id: number | null }
 
 const PROFILE_CACHE: { me?: ProfileMe; uniName?: string | null; programName?: string | null; summary?: GamificationSummary | null; achievementsList?: Achievement[]; weeklyStudySeconds?: number | null } = {}
-function ProfileScreen({ setScreen, setActiveProfileUserId, onOpenOrgPortal }: { setScreen: (s: Screen) => void; setActiveProfileUserId?: (id: number) => void; onOpenOrgPortal?: () => void }) {
+function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId, setActiveOpportunityId, onOpenOrgPortal }: { setScreen: (s: Screen) => void; setActiveProfileUserId?: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveOpportunityId: (id: number | null) => void; onOpenOrgPortal?: () => void }) {
   const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'posts'|'saved'|'activity'|'materials'>('posts')
   const [showMenu, setShowMenu] = useState(false)
@@ -5298,7 +5298,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                     <div style={{ maxHeight: '50vh', overflowY: 'auto', whiteSpace: 'pre-wrap' }} className="scrollbar-hide">
                       {showModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
                     </div>
-                  ) : showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? 'Prepza v1.0.0 — Kenyatta University Launch\n\nBuilt for Kenyan university students to study smarter with AI.' : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
+                  ) : showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? `Prepza v1.0.0 — Kenyatta University Launch\\n\\nVision: ${PREPZA_VISION}\\n\\nMission: ${PREPZA_MISSION}` : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
                 </div>
                 <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
               </>
