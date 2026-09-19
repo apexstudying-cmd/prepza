@@ -46,6 +46,10 @@ function generationRequest<T = any>(
   options: RequestInit = {},
   onProgress?: (progress: GenerationProgress) => void,
 ): Promise<T> {
+  const publish = (progress: GenerationProgress) => {
+    onProgress?.(progress)
+    window.dispatchEvent(new CustomEvent('prepza:generation-progress', { detail: progress }))
+  }
   const match = path.match(/^\/documents\/(\d+)\/(summarize|quiz|flashcards|mindmap|podcast-script)$/)
   const documentId = match?.[1]
   const feature = match?.[2] === 'podcast-script' ? 'podcast'
@@ -60,7 +64,7 @@ function generationRequest<T = any>(
     try {
       const progress = await api<GenerationProgress>(`/documents/${documentId}/generation-progress?feature=${feature}`)
       if (stopped) return
-      if (progress.found) onProgress?.(progress)
+      if (progress.found) publish(progress)
       if (!stopped && progress.status === 'processing') {
         timer = setTimeout(poll, 700)
       }
@@ -70,7 +74,7 @@ function generationRequest<T = any>(
   }
 
   if (documentId && feature) {
-    onProgress?.({ found: false, status: 'starting', progress_percent: 3, progress_stage: 'Preparing your study material' })
+    publish({ found: false, status: 'starting', progress_percent: 3, progress_stage: 'Preparing your study material' })
     void poll()
   }
 
@@ -78,7 +82,7 @@ function generationRequest<T = any>(
     stopped = true
     if (timer) clearTimeout(timer)
     const reused = Boolean((result as any)?.reused)
-    onProgress?.({
+    publish({
       found: true,
       status: 'completed',
       progress_percent: 100,
