@@ -6728,6 +6728,12 @@ def like_group_post(group_id, post_id):
                 related_type="group_post",
                 related_id=post.id,
             ))
+            send_push_notification(
+                post.user_id,
+                "New like",
+                f"{_display_name(liker)} liked your post",
+                data={"screen": "notifications", "related_type": "group_post", "related_id": post.id},
+            )
         db.session.commit()
 
     return jsonify({
@@ -6786,6 +6792,12 @@ def vote_group_post(group_id, post_id):
                 related_type="group_post",
                 related_id=post.id,
             ))
+            send_push_notification(
+                post.user_id,
+                "New vote",
+                f"{_display_name(voter)} voted on your question",
+                data={"screen": "notifications", "related_type": "group_post", "related_id": post.id},
+            )
         db.session.commit()
 
     return jsonify({
