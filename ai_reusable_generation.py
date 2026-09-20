@@ -158,7 +158,14 @@ def generate_document_material(*, material_type, document_content_id, triggering
     quota_feature = material_type
     quota_units = 0
     quota_period = None
-    from usage_billing import FEATURES, check_and_consume_ai_quota, reserve_generation_variant, refund_ai_quota
+    from usage_billing import (
+        FEATURES,
+        check_and_consume_ai_quota,
+        reserve_generation_variant,
+        mark_generation_variant_ready,
+        release_generation_variant,
+        refund_ai_quota,
+    )
 
     unit_keys = {
         "summary": "max_pages",
@@ -224,6 +231,10 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 )
             quota_reserved = True
             quota_period = quota_meta.get("period_start")
+        if variant_pool_feature:
+            mark_generation_variant_ready(
+                db, triggering_user_id, base_fingerprint, variant, lookup.artifact_id
+            )
         material = _material_from_payload(
             document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
             payload=lookup.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
@@ -233,15 +244,23 @@ def generate_document_material(*, material_type, document_content_id, triggering
     if not lookup.owner:
         waited = wait_for_generation(fingerprint)
         if waited.status == "ready" and waited.payload:
+            if variant_pool_feature:
+                mark_generation_variant_ready(
+                    db, triggering_user_id, base_fingerprint, variant, waited.artifact_id
+                )
             material = _material_from_payload(
                 document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
                 payload=waited.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
             )
             return {"payload": waited.payload, "material_id": material.id, "reused": True, "model_used": None}
         if waited.status == "failed":
+            if variant_pool_feature:
+                release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
             if quota_reserved:
                 refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period)
             raise ai_service.AIProviderError("AI generation failed - please try again.")
+        if variant_pool_feature:
+            release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
         if quota_reserved:
             refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period)
         raise ai_service.AIProviderError("This material is still being prepared - please try again shortly.")
@@ -316,6 +335,10 @@ def generate_document_material(*, material_type, document_content_id, triggering
         parsed = parser(ai_response.text)
         payload = _podcast_payload(parsed) if material_type == "podcast" else parsed
         mark_generation_ready(lookup.artifact_id, payload, lookup.lease_token)
+        if variant_pool_feature:
+            mark_generation_variant_ready(
+                db, triggering_user_id, base_fingerprint, variant, lookup.artifact_id
+            )
         artifact_ready = True
         job.progress_percent = 96
         job.progress_stage = "saving your study material"
@@ -327,9 +350,15 @@ def generate_document_material(*, material_type, document_content_id, triggering
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
+        if variant_pool_feature and variant is not None and not artifact_ready:
+            try:
+                release_generation_variant(
+                    db, triggering_user_id, base_fingerprint, variant
+                )
+            except Exception:
+                db.session.rollback()
         if quota_reserved and not artifact_ready:
             try:
-                from usage_billing import refund_ai_quota
                 refund_ai_quota(
                     db,
                     triggering_user_id,
