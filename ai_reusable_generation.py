@@ -192,7 +192,8 @@ def generate_document_material(*, material_type, document_content_id, triggering
 
     if variant_pool_feature:
         variant = reserve_generation_variant(
-            db, triggering_user_id, base_fingerprint, material_type, pool_size=4
+            db, triggering_user_id, base_fingerprint, material_type,
+            base_parameters=base_parameters, pool_size=4
         )
         params = {**params, "variant": variant}
 
