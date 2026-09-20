@@ -210,7 +210,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
         # Pooled requests are deliberately charged even when the selected
         # variant already exists: the student asked for another deck/set,
         # while Prepza avoids paying the provider a second time.
-        if material_type in FEATURES and not quota_reserved:
+        if variant_pool_feature and not quota_reserved:
             quota_units = params.get(unit_keys[material_type])
             allowed, quota_meta = check_and_consume_ai_quota(
                 db, triggering_user_id, material_type, quota_units
