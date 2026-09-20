@@ -120,6 +120,16 @@ def _ensure_schema(db):
         )
     """))
     db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS ai_generation_variant_cursor (
+            user_id INTEGER NOT NULL,
+            base_fingerprint VARCHAR(64) NOT NULL,
+            feature VARCHAR(40) NOT NULL,
+            next_variant SMALLINT NOT NULL DEFAULT 1,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, base_fingerprint)
+        )
+    """))
+    db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS product_activity_day (
             user_id INTEGER NOT NULL,
             activity_date DATE NOT NULL,
@@ -278,12 +288,15 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
 
     used_requests = int(row["requests"] or 0)
     used_units = int(row["units"] or 0)
+    # Requests are telemetry, not a second hard quota. The allowance is a
+    # spendable unit wallet derived from the plan's maximum generation size.
     total_unit_limit = max_units * max_requests
+    remaining_units = max(0, total_unit_limit - used_units)
 
-    if used_requests >= max_requests or used_units + units > total_unit_limit:
+    if used_units + units > total_unit_limit:
         db.session.rollback()
         return False, {
-            "error": "You have reached this plan's generation allowance.",
+            "error": "You have used up this plan's generation allowance.",
             "code": "generation_quota_exhausted",
             "feature": feature,
             "plan": plan_code,
@@ -291,6 +304,7 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
             "request_limit": max_requests,
             "used_units": used_units,
             "unit_limit": total_unit_limit,
+            "remaining_units": remaining_units,
         }
 
     db.session.execute(text("""
@@ -311,9 +325,40 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
         "request_limit": max_requests,
         "used_units": used_units + units,
         "unit_limit": total_unit_limit,
+        "remaining_units": max(0, total_unit_limit - (used_units + units)),
         "max_units_per_generation": max_units,
         "period_start": period,
     }
+
+def reserve_generation_variant(db, user_id, base_fingerprint, feature, pool_size=4):
+    """Assign the next variant for repeated flashcard/quiz requests."""
+    pool_size = max(1, min(5, int(pool_size)))
+    db.session.execute(text("""
+        INSERT INTO ai_generation_variant_cursor
+            (user_id, base_fingerprint, feature, next_variant, updated_at)
+        VALUES (:uid, :fingerprint, :feature, 1, CURRENT_TIMESTAMP)
+        ON CONFLICT (user_id, base_fingerprint) DO NOTHING
+    """), {
+        "uid": user_id, "fingerprint": base_fingerprint, "feature": feature,
+    })
+    row = db.session.execute(text("""
+        SELECT next_variant
+        FROM ai_generation_variant_cursor
+        WHERE user_id = :uid AND base_fingerprint = :fingerprint
+        FOR UPDATE
+    """), {"uid": user_id, "fingerprint": base_fingerprint}).mappings().first()
+    variant = int(row["next_variant"] or 1)
+    next_variant = 1 if variant >= pool_size else variant + 1
+    db.session.execute(text("""
+        UPDATE ai_generation_variant_cursor
+        SET next_variant = :next_variant, updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = :uid AND base_fingerprint = :fingerprint
+    """), {
+        "uid": user_id, "fingerprint": base_fingerprint, "next_variant": next_variant,
+    })
+    db.session.commit()
+    return variant
+
 
 def refund_ai_quota(db, user_id, feature, units, period_start=None):
     """Return a previously reserved generation allowance after a failed call."""
