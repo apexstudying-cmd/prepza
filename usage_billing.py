@@ -120,13 +120,22 @@ def _ensure_schema(db):
         )
     """))
     db.session.execute(text("""
-        CREATE TABLE IF NOT EXISTS ai_generation_variant_cursor (
+        CREATE TABLE IF NOT EXISTS ai_generation_variant_family (
+            base_fingerprint VARCHAR(64) PRIMARY KEY,
+            next_variant SMALLINT NOT NULL DEFAULT 1,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS ai_generation_variant_access (
             user_id INTEGER NOT NULL,
             base_fingerprint VARCHAR(64) NOT NULL,
-            feature VARCHAR(40) NOT NULL,
-            next_variant SMALLINT NOT NULL DEFAULT 1,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, base_fingerprint)
+            variant SMALLINT NOT NULL,
+            artifact_id BIGINT,
+            status VARCHAR(20) NOT NULL DEFAULT 'reserved',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, base_fingerprint, variant),
+            UNIQUE (base_fingerprint, variant, user_id)
         )
     """))
     db.session.execute(text("""
@@ -331,33 +340,66 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
     }
 
 def reserve_generation_variant(db, user_id, base_fingerprint, feature, pool_size=4):
-    """Assign the next variant for repeated flashcard/quiz requests."""
+    """Reserve the first globally reusable variant not yet seen by this user.
+
+    Variants belong to the shared artifact family, not to a user. The first
+    student creates/uses variant 1, the same student then gets variant 2,
+    while a different student asking for the same material gets variant 1.
+    """
     pool_size = max(1, min(5, int(pool_size)))
     db.session.execute(text("""
-        INSERT INTO ai_generation_variant_cursor
-            (user_id, base_fingerprint, feature, next_variant, updated_at)
-        VALUES (:uid, :fingerprint, :feature, 1, CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id, base_fingerprint) DO NOTHING
-    """), {
-        "uid": user_id, "fingerprint": base_fingerprint, "feature": feature,
-    })
-    row = db.session.execute(text("""
-        SELECT next_variant
-        FROM ai_generation_variant_cursor
-        WHERE user_id = :uid AND base_fingerprint = :fingerprint
-        FOR UPDATE
-    """), {"uid": user_id, "fingerprint": base_fingerprint}).mappings().first()
-    variant = int(row["next_variant"] or 1)
-    next_variant = 1 if variant >= pool_size else variant + 1
+        INSERT INTO ai_generation_variant_family
+            (base_fingerprint, next_variant, updated_at)
+        VALUES (:fingerprint, 1, CURRENT_TIMESTAMP)
+        ON CONFLICT (base_fingerprint) DO NOTHING
+    """), {"fingerprint": base_fingerprint})
+
     db.session.execute(text("""
-        UPDATE ai_generation_variant_cursor
-        SET next_variant = :next_variant, updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND base_fingerprint = :fingerprint
+        SELECT base_fingerprint
+        FROM ai_generation_variant_family
+        WHERE base_fingerprint = :fingerprint
+        FOR UPDATE
+    """), {"fingerprint": base_fingerprint}).first()
+
+    seen = {
+        int(r["variant"])
+        for r in db.session.execute(text("""
+            SELECT variant
+            FROM ai_generation_variant_access
+            WHERE user_id = :uid AND base_fingerprint = :fingerprint
+              AND status IN ('reserved', 'ready')
+        """), {"uid": user_id, "fingerprint": base_fingerprint}).mappings()
+    }
+
+    existing = db.session.execute(text("""
+        SELECT (parameters->>'variant')::integer AS variant
+        FROM ai_generation_artifact
+        WHERE feature = :feature
+          AND fingerprint LIKE :prefix
+          AND status = 'ready'
+          AND (parameters->>'variant') ~ '^[1-9][0-9]*$'
+          AND (parameters->>'variant')::integer BETWEEN 1 AND :pool_size
+        ORDER BY (parameters->>'variant')::integer
     """), {
-        "uid": user_id, "fingerprint": base_fingerprint, "next_variant": next_variant,
-    })
-    db.session.commit()
-    return variant
+        "feature": feature,
+        "prefix": base_fingerprint[:0] + "%",
+        "pool_size": pool_size,
+    }).mappings().all()
+
+    existing_variants = {int(r["variant"]) for r in existing if r["variant"] is not None}
+    for variant in range(1, pool_size + 1):
+        if variant not in seen:
+            db.session.execute(text("""
+                INSERT INTO ai_generation_variant_access
+                    (user_id, base_fingerprint, variant, status)
+                VALUES (:uid, :fingerprint, :variant, 'reserved')
+                ON CONFLICT (user_id, base_fingerprint, variant) DO NOTHING
+            """), {"uid": user_id, "fingerprint": base_fingerprint, "variant": variant})
+            db.session.commit()
+            return variant
+
+    db.session.rollback()
+    return 1
 
 
 def refund_ai_quota(db, user_id, feature, units, period_start=None):
