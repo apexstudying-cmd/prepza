@@ -182,8 +182,10 @@ def generate_document_material(*, material_type, document_content_id, triggering
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
 
+    base_parameters = dict(params)
+    base_parameters.pop("variant", None)
     base_fingerprint = build_generation_fingerprint(
-        content_hash=content.content_hash, material_type=material_type, parameters=params,
+        content_hash=content.content_hash, material_type=material_type, parameters=base_parameters,
         prompt_version=prompt_version, schema_version=schema_version,
         scope=scope, owner_user_id=owner_user_id,
     )
