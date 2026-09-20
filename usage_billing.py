@@ -361,13 +361,17 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
     }
 
 def reserve_generation_variant(db, user_id, base_fingerprint, feature, base_parameters=None, pool_size=4):
-    """Reserve the first globally reusable variant not yet seen by this user.
+    """Reserve the first shared variant this student has not seen.
 
-    Variants belong to the shared artifact family, not to a user. The first
-    student creates/uses variant 1, the same student then gets variant 2,
-    while a different student asking for the same material gets variant 1.
+    The family is global, while access is per student:
+      - first student -> variant 1
+      - same student -> variant 2, then 3, then 4
+      - another student -> variant 1 if it already exists
+      - after variant 4 -> cycle back to variant 1
     """
-    pool_size = max(1, min(5, int(pool_size)))
+    pool_size = max(1, min(4, int(pool_size)))
+    import json
+
     db.session.execute(text("""
         INSERT INTO ai_generation_variant_family
             (base_fingerprint, feature, base_parameters, next_variant, updated_at)
@@ -376,9 +380,13 @@ def reserve_generation_variant(db, user_id, base_fingerprint, feature, base_para
     """), {
         "fingerprint": base_fingerprint,
         "feature": feature,
-        "base_parameters": __import__("json").dumps(base_parameters or {}, sort_keys=True, separators=(",", ":")),
+        "base_parameters": json.dumps(
+            base_parameters or {}, sort_keys=True, separators=(",", ":")
+        ),
     })
 
+    # One family lock serializes variant assignment across students, preventing
+    # two concurrent requests from both claiming the same unseen variant.
     db.session.execute(text("""
         SELECT base_fingerprint
         FROM ai_generation_variant_family
@@ -387,35 +395,38 @@ def reserve_generation_variant(db, user_id, base_fingerprint, feature, base_para
     """), {"fingerprint": base_fingerprint}).first()
 
     seen = {
-        int(r["variant"])
-        for r in db.session.execute(text("""
+        int(row["variant"])
+        for row in db.session.execute(text("""
             SELECT variant
             FROM ai_generation_variant_access
-            WHERE user_id = :uid AND base_fingerprint = :fingerprint
+            WHERE user_id = :uid
+              AND base_fingerprint = :fingerprint
               AND status IN ('reserved', 'ready')
-        """), {"uid": user_id, "fingerprint": base_fingerprint}).mappings()
+        """), {
+            "uid": user_id,
+            "fingerprint": base_fingerprint,
+        }).mappings()
     }
 
-    existing = db.session.execute(text("""
-        SELECT (a.parameters->>'variant')::integer AS variant
-        FROM ai_generation_artifact a
-        JOIN ai_generation_variant_family f ON f.base_fingerprint = :fingerprint
-        WHERE a.feature = :feature
-          AND (a.parameters - 'variant') = f.base_parameters
-          AND a.status = 'ready'
-          AND (a.parameters->>'variant') ~ '^[1-9][0-9]*
-    existing_variants = {int(r["variant"]) for r in existing if r["variant"] is not None}
     for variant in range(1, pool_size + 1):
-        if variant not in seen:
-            db.session.execute(text("""
-                INSERT INTO ai_generation_variant_access
-                    (user_id, base_fingerprint, variant, status)
-                VALUES (:uid, :fingerprint, :variant, 'reserved')
-                ON CONFLICT (user_id, base_fingerprint, variant) DO NOTHING
-            """), {"uid": user_id, "fingerprint": base_fingerprint, "variant": variant})
-            db.session.commit()
-            return variant
+        if variant in seen:
+            continue
+        db.session.execute(text("""
+            INSERT INTO ai_generation_variant_access
+                (user_id, base_fingerprint, variant, status)
+            VALUES (:uid, :fingerprint, :variant, 'reserved')
+            ON CONFLICT (user_id, base_fingerprint, variant) DO NOTHING
+        """), {
+            "uid": user_id,
+            "fingerprint": base_fingerprint,
+            "variant": variant,
+        })
+        db.session.commit()
+        return variant
 
+    # The student has seen all four variants. Reuse variant 1 instead of
+    # creating a fifth artifact; the artifact fingerprint will collapse this
+    # request onto the existing shared V1 if it is ready.
     db.session.rollback()
     return 1
 
