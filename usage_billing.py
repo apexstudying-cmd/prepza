@@ -948,6 +948,129 @@ def register_usage_billing(app, db):
             "next_step": "Attach this invoice to the configured organisation payment provider before activating access.",
         }), 202
 
+    @app.get("/api/admin/ai-generations")
+    def admin_ai_generations():
+        """List generated AI artifacts so an admin can identify bad/corrupt material."""
+        if not _admin_allowed():
+            return jsonify({"error": "Admin access required"}), 403
+        feature = str(request.args.get("feature") or "").strip().lower()
+        status = str(request.args.get("status") or "").strip().lower()
+        try:
+            limit = min(100, max(1, int(request.args.get("limit", 50))))
+        except (TypeError, ValueError):
+            limit = 50
+        clauses = []
+        params = {"limit": limit}
+        if feature:
+            clauses.append("feature = :feature")
+            params["feature"] = feature
+        if status:
+            clauses.append("status = :status")
+            params["status"] = status
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        rows = db.session.execute(text(f"""
+            SELECT id, fingerprint, feature, parameters, scope, owner_user_id,
+                   status, error_message, created_at, updated_at, completed_at
+            FROM ai_generation_artifact
+            {where}
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """), params).mappings().all()
+        return jsonify({
+            "artifacts": [
+                {
+                    "id": int(row["id"]),
+                    "fingerprint": row["fingerprint"],
+                    "feature": row["feature"],
+                    "parameters": row["parameters"] or {},
+                    "scope": row["scope"],
+                    "owner_user_id": row["owner_user_id"],
+                    "status": row["status"],
+                    "error_message": row["error_message"],
+                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                    "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+                    "completed_at": row["completed_at"].isoformat() if row["completed_at"] else None,
+                }
+                for row in rows
+            ]
+        })
+
+
+    @app.post("/api/admin/ai-generations/<string:fingerprint>/takedown")
+    def admin_ai_generation_takedown(fingerprint):
+        """Remove one reusable AI artifact from circulation and allow regeneration."""
+        if not _admin_allowed():
+            return jsonify({"error": "Admin access required"}), 403
+        if not _csrf_ok():
+            return jsonify({"error": "Invalid CSRF token"}), 403
+
+        row = db.session.execute(text("""
+            SELECT id, feature, parameters, status
+            FROM ai_generation_artifact
+            WHERE fingerprint = :fingerprint
+            FOR UPDATE
+        """), {"fingerprint": fingerprint}).mappings().first()
+        if not row:
+            return jsonify({"error": "AI generation artifact not found"}), 404
+
+        variant = None
+        parameters = row["parameters"] or {}
+        if isinstance(parameters, dict) and parameters.get("variant") is not None:
+            try:
+                variant = int(parameters["variant"])
+            except (TypeError, ValueError):
+                variant = None
+
+        family = db.session.execute(text("""
+            SELECT base_fingerprint
+            FROM ai_generation_variant_family
+            WHERE feature = :feature
+              AND base_parameters = (:parameters::jsonb - 'variant')
+            LIMIT 1
+        """), {
+            "feature": row["feature"],
+            "parameters": json.dumps(parameters, sort_keys=True, separators=(",", ":")),
+        }).scalar_one_or_none()
+
+        # Delete the public/shared material row as well. This prevents a
+        # previously cached payload from continuing to be served after the
+        # admin has taken the artifact down.
+        db.session.execute(text("""
+            DELETE FROM generated_material
+            WHERE generation_fingerprint = :fingerprint
+        """), {"fingerprint": fingerprint})
+
+        # Mark rather than delete the artifact row so its fingerprint remains
+        # auditable. A later request can reclaim this failed artifact and
+        # regenerate the same variant.
+        db.session.execute(text("""
+            UPDATE ai_generation_artifact
+            SET status = 'failed',
+                payload = NULL,
+                error_message = 'Admin takedown: artifact removed from circulation',
+                updated_at = CURRENT_TIMESTAMP,
+                completed_at = CURRENT_TIMESTAMP,
+                lease_token = NULL
+            WHERE fingerprint = :fingerprint
+        """), {"fingerprint": fingerprint})
+
+        if family and variant is not None:
+            db.session.execute(text("""
+                DELETE FROM ai_generation_variant_access
+                WHERE base_fingerprint = :family AND variant = :variant
+            """), {"family": family, "variant": variant})
+
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "fingerprint": fingerprint,
+            "feature": row["feature"],
+            "variant": variant,
+            "status": "taken_down",
+            "next_generation": "The affected variant can be regenerated on the next request.",
+        })
+
+
     @app.get("/api/admin/organisation-billing")
     def admin_organisation_billing():
         if not _admin_allowed():
