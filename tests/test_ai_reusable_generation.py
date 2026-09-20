@@ -279,3 +279,16 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
 
     assert seen_variants == [1, 2, 3, 4, 1]
     assert len(provider_calls) == 4
+
+
+def test_all_document_materials_use_the_shared_four_variant_pool():
+    import inspect
+
+    assert set(reusable.PROMPT_VERSIONS) == {
+        "summary", "quiz", "flashcards", "podcast", "mind_map"
+    }
+    source = inspect.getsource(reusable.generate_document_material)
+    assert "variant_pool_feature = material_type in PROMPT_VERSIONS" in source
+    assert "reserve_generation_variant" in source
+    assert "mark_generation_variant_ready" in source
+    assert "release_generation_variant" in source
