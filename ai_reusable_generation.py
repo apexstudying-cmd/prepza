@@ -79,11 +79,11 @@ def _parameter_instruction(params: dict) -> str:
         "card_count": "number of flashcards", "duration_minutes": "target podcast duration in minutes",
         "node_count": "number of mind-map nodes/branches", "difficulty": "difficulty",
         "style": "style", "language": "language",
+        "variant": "variation number; produce a meaningfully different set from other variations",
     }
     return "Generation constraints (follow these exactly):\n" + "\n".join(
         f"- {labels.get(k, k)}: {params[k]}"
         for k in sorted(params)
-        if k != "variant"
     )
 
 
