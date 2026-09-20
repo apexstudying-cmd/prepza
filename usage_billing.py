@@ -566,9 +566,16 @@ def register_usage_billing(app, db):
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
+            request_key, unit_key = FEATURES[feature]
+            max_units_per_generation = int(plan[unit_key])
+            wallet_limit = max_units_per_generation * int(plan[request_key])
+            used_units = int(row["units"]) if row else 0
             usage[feature] = {
                 "requests": int(row["requests"]) if row else 0,
-                "units": int(row["units"]) if row else 0,
+                "units": used_units,
+                "remaining_units": max(0, wallet_limit - used_units),
+                "unit_limit": wallet_limit,
+                "max_units_per_generation": max_units_per_generation,
             }
         return jsonify({
             "plan": plan_code,
