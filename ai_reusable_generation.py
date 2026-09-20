@@ -148,10 +148,12 @@ def generate_document_material(*, material_type, document_content_id, triggering
     prompt_version = PROMPT_VERSIONS[material_type]
     schema_version = SCHEMA_VERSIONS[material_type]
 
-    # Flashcards and quizzes are intentionally variant-pooled. A repeated
-    # request for the same document/configuration gets variants 1-4 before
-    # the pool cycles. The artifacts remain globally reusable across students.
-    variant_pool_feature = material_type in {"flashcards", "quiz"}
+    # Every reusable document material is intentionally variant-pooled.
+    # A repeated request for the same document/configuration gets variants
+    # 1-4 before the pool cycles. Artifacts are shared globally within the
+    # same generation family, so another student can reuse an existing
+    # variant instead of causing another provider generation.
+    variant_pool_feature = material_type in PROMPT_VERSIONS
     variant = None
 
     quota_reserved = False
