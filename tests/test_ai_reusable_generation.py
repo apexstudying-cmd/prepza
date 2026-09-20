@@ -202,3 +202,80 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
     assert result["reused"] is True
     assert result["material_id"] == 100
     assert limit_called == []
+
+
+def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
+    content = types.SimpleNamespace(content_hash="hash-flash", extracted_text="course notes", page_count=4)
+    session = _FakeSession(content)
+    fake_app = types.SimpleNamespace(
+        db=types.SimpleNamespace(session=session), DocumentContent=object, AiJob=_FakeAiJob
+    )
+
+    class FakeProviderError(Exception):
+        pass
+    class FakeBudgetError(Exception):
+        pass
+    class FakeRateError(Exception):
+        pass
+
+    seen_variants = []
+    provider_calls = []
+    variant_state = {"next": 1}
+    claim_count = {"value": 0}
+
+    fake_usage = types.SimpleNamespace(
+        FEATURES={"flashcards": ("flashcard_generations", "flashcard_max_cards")},
+        check_and_consume_ai_quota=lambda *args, **kwargs: (True, {"period_start": "2026-09-01"}),
+        reserve_generation_variant=lambda *args, **kwargs: (
+            seen_variants.append(variant_state["next"]) or
+            variant_state.update(next=1 if variant_state["next"] == 4 else variant_state["next"] + 1) or
+            seen_variants[-1]
+        ),
+        refund_ai_quota=lambda *args, **kwargs: None,
+    )
+
+    fake_ai = types.SimpleNamespace(
+        AIRequest=lambda **kwargs: kwargs,
+        AI_TASKS={"FLASHCARDS": {"max_tokens": 1536}},
+        AIBudgetExceededError=FakeBudgetError,
+        AIRateLimitExceededError=FakeRateError,
+        AIProviderError=FakeProviderError,
+        is_spend_cap_reached=lambda: False,
+        check_daily_limit=lambda *args, **kwargs: (True, 0, 20),
+        route_and_generate=lambda request: (provider_calls.append(request) or _FakeResponse(
+            text='{"cards":[{"q":"Q","a":"A"}]}'
+        )),
+        log_usage=lambda *args, **kwargs: None,
+        FLASHCARDS_JSON_SYSTEM_PROMPT="system",
+        _parse_flashcards_json=lambda raw: {"cards": [{"q": "Q", "a": "A"}]},
+    )
+
+    monkeypatch.setitem(sys.modules, "app", fake_app)
+    monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
+    monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
+    monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
+    monkeypatch.setattr(reusable, "_generator", lambda *args, **kwargs: ("system", lambda raw: {"cards": [{"q": "Q", "a": "A"}]}, "FLASHCARDS"))
+    monkeypatch.setattr(
+        reusable,
+        "build_generation_fingerprint",
+        lambda **kwargs: f"base-{kwargs['parameters'].get('variant', 'none')}",
+    )
+    def fake_claim(**kwargs):
+        claim_count["value"] += 1
+        if claim_count["value"] == 5:
+            return GenerationLookup(44, "ready", {"cards": [{"q": "Q4", "a": "A4"}]}, False)
+        return GenerationLookup(40 + claim_count["value"], "generating", None, True, f"lease-{claim_count['value']}")
+    monkeypatch.setattr(reusable, "claim_or_get_generation", fake_claim)
+    monkeypatch.setattr(reusable, "mark_generation_ready", lambda *args: None)
+    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: types.SimpleNamespace(id=kwargs.get("material_id", 1)))
+
+    for _ in range(5):
+        reusable.generate_document_material(
+            material_type="flashcards",
+            document_content_id=7,
+            triggering_user_id=101,
+            parameters={"card_count": 20, "difficulty": "balanced", "language": "en"},
+        )
+
+    assert seen_variants == [1, 2, 3, 4, 1]
+    assert len(provider_calls) == 4
