@@ -1025,7 +1025,7 @@ def register_usage_billing(app, db):
             SELECT base_fingerprint
             FROM ai_generation_variant_family
             WHERE feature = :feature
-              AND base_parameters = (:parameters::jsonb - 'variant')
+              AND base_parameters = (CAST(:parameters AS jsonb) - 'variant')
             LIMIT 1
         """), {
             "feature": row["feature"],
