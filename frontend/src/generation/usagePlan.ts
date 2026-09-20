@@ -1,5 +1,5 @@
 export type PrepzaUsage = {
-  plan: 'free' | 'premium'
+  plan: 'free' | 'premium' | 'plus' | 'pro'
   price_kes: number
   billing_period: string
   limits: {
@@ -15,7 +15,7 @@ export type PrepzaUsage = {
     mind_map_max_nodes: number
     tutor_messages: number
   }
-  usage: Record<string, { requests: number; units: number }>
+  usage: Record<string, { requests: number; units: number; remaining_units?: number; unit_limit?: number }>
   period_start: string
 }
 
@@ -49,16 +49,19 @@ export function canGenerate(
     feature === 'quiz' ? limits.quiz_max_questions :
     limits.mind_map_max_nodes
 
-  return (
-    units <= unitLimit &&
-    current.requests < requestLimit &&
-    current.units + units <= unitLimit * requestLimit
-  )
+  // Requests are telemetry now. The actual quota is a spendable unit
+  // wallet, while unitLimit remains the maximum size of one generation.
+  const walletLimit = current.unit_limit ?? unitLimit * requestLimit
+  return units <= unitLimit && current.units + units <= walletLimit
 }
 
 export function usageLabel(usage: PrepzaUsage | null) {
   if (!usage) return ''
-  return usage.plan === 'premium'
-    ? 'Premium · full generation limits'
-    : 'Free · limited generation'
+  return usage.plan === 'pro'
+    ? 'Pro · full generation limits'
+    : usage.plan === 'plus'
+      ? 'Plus · expanded generation limits'
+      : usage.plan === 'premium'
+        ? 'Premium · full generation limits'
+        : 'Free · limited generation'
 }
