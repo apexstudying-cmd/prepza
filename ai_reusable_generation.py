@@ -81,7 +81,9 @@ def _parameter_instruction(params: dict) -> str:
         "style": "style", "language": "language",
     }
     return "Generation constraints (follow these exactly):\n" + "\n".join(
-        f"- {labels.get(k, k)}: {params[k]}" for k in sorted(params)
+        f"- {labels.get(k, k)}: {params[k]}"
+        for k in sorted(params)
+        if k != "variant"
     )
 
 
@@ -145,21 +147,80 @@ def generate_document_material(*, material_type, document_content_id, triggering
     scope, owner_user_id = _content_scope(document_content_id, triggering_user_id)
     prompt_version = PROMPT_VERSIONS[material_type]
     schema_version = SCHEMA_VERSIONS[material_type]
+
+    # Flashcards and quizzes are intentionally variant-pooled. A repeated
+    # request for the same document/configuration gets variants 1-4 before
+    # the pool cycles. The artifacts remain globally reusable across students.
+    variant_pool_feature = material_type in {"flashcards", "quiz"}
+    variant = None
+
+    quota_reserved = False
+    quota_feature = material_type
+    quota_units = 0
+    quota_period = None
+    from usage_billing import FEATURES, check_and_consume_ai_quota, reserve_generation_variant, refund_ai_quota
+
+    unit_keys = {
+        "summary": "max_pages",
+        "podcast": "duration_minutes",
+        "flashcards": "card_count",
+        "quiz": "question_count",
+        "mind_map": "node_count",
+    }
+
+    if material_type in FEATURES and variant_pool_feature:
+        quota_units = params.get(unit_keys[material_type])
+        if quota_units is None:
+            raise ValueError(f"Missing required generation size for {material_type}")
+        allowed, quota_meta = check_and_consume_ai_quota(
+            db, triggering_user_id, material_type, quota_units
+        )
+        if not allowed:
+            raise ai_service.AIRateLimitExceededError(
+                quota_meta.get("error", "Generation quota exhausted.")
+            )
+        quota_reserved = True
+        quota_period = quota_meta.get("period_start")
+
+    base_fingerprint = build_generation_fingerprint(
+        content_hash=content.content_hash, material_type=material_type, parameters=params,
+        prompt_version=prompt_version, schema_version=schema_version,
+        scope=scope, owner_user_id=owner_user_id,
+    )
+
+    if variant_pool_feature:
+        variant = reserve_generation_variant(
+            db, triggering_user_id, base_fingerprint, material_type, pool_size=4
+        )
+        params = {**params, "variant": variant}
+
     fingerprint = build_generation_fingerprint(
         content_hash=content.content_hash, material_type=material_type, parameters=params,
         prompt_version=prompt_version, schema_version=schema_version,
         scope=scope, owner_user_id=owner_user_id,
     )
-    # Resolve the exact variant first. An identical request is a replay of
-    # an existing artifact and must not consume fresh-generation quota because
-    # it does not create another AI call. A changed configuration produces a
-    # different fingerprint and therefore becomes a real new generation.
+
     lookup = claim_or_get_generation(
         fingerprint=fingerprint, content_hash=content.content_hash, feature=material_type,
         parameters=params, prompt_version=prompt_version, schema_version=schema_version,
         scope=scope, owner_user_id=owner_user_id,
     )
+
     if lookup.status == "ready" and lookup.payload:
+        # Pooled requests are deliberately charged even when the selected
+        # variant already exists: the student asked for another deck/set,
+        # while Prepza avoids paying the provider a second time.
+        if material_type in FEATURES and not quota_reserved:
+            quota_units = params.get(unit_keys[material_type])
+            allowed, quota_meta = check_and_consume_ai_quota(
+                db, triggering_user_id, material_type, quota_units
+            )
+            if not allowed:
+                raise ai_service.AIRateLimitExceededError(
+                    quota_meta.get("error", "Generation quota exhausted.")
+                )
+            quota_reserved = True
+            quota_period = quota_meta.get("period_start")
         material = _material_from_payload(
             document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
             payload=lookup.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
@@ -175,22 +236,14 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
             return {"payload": waited.payload, "material_id": material.id, "reused": True, "model_used": None}
         if waited.status == "failed":
+            if quota_reserved:
+                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period)
             raise ai_service.AIProviderError("AI generation failed - please try again.")
+        if quota_reserved:
+            refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period)
         raise ai_service.AIProviderError("This material is still being prepared - please try again shortly.")
 
-    quota_reserved = False
-    quota_feature = material_type
-    quota_units = 0
-    quota_period = None
-    from usage_billing import FEATURES, check_and_consume_ai_quota
-    if material_type in FEATURES:
-        unit_keys = {
-            "summary": "max_pages",
-            "podcast": "duration_minutes",
-            "flashcards": "card_count",
-            "quiz": "question_count",
-            "mind_map": "node_count",
-        }
+    if material_type in FEATURES and not quota_reserved:
         quota_units = params.get(unit_keys[material_type])
         if quota_units is None:
             raise ValueError(f"Missing required generation size for {material_type}")
@@ -198,7 +251,13 @@ def generate_document_material(*, material_type, document_content_id, triggering
             db, triggering_user_id, material_type, quota_units
         )
         if not allowed:
-            raise ai_service.AIRateLimitExceededError(quota_meta.get("error", "Generation quota exhausted."))
+            try:
+                mark_generation_failed(lookup.artifact_id, "Generation quota exhausted.", lookup.lease_token)
+            except Exception:
+                db.session.rollback()
+            raise ai_service.AIRateLimitExceededError(
+                quota_meta.get("error", "Generation quota exhausted.")
+            )
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
 
