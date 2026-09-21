@@ -46,11 +46,7 @@ def order_payment_matches_snapshot(order_row, payment):
         or payment_plan != expected_plan
         or (
             order_type == "subscription"
-            and plan not in ("semester", "annual")
-        )
-        or (
-            order_type == "subscription"
-            and plan not in ("semester", "annual")
+            and plan not in ("plus", "pro")
         )
         or (
             order_row["order_type"] == "content"
@@ -92,11 +88,11 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
             plan = None
             quantity = 1
         elif payment.payment_type == "subscription":
-            if payment.plan not in ("semester", "annual"):
+            if payment.plan not in ("plus", "pro"):
                 raise ValueError("Cannot create order for an unsupported subscription plan")
             order_type = "subscription"
             item_id = None
-            title_snapshot = item_title or ("Plus Plan" if payment.plan == "semester" else "Pro Plan")
+            title_snapshot = item_title or ("Plus Plan" if payment.plan == "plus" else "Pro Plan")
             plan = payment.plan
             quantity = 1
         else:
