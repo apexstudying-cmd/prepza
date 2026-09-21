@@ -33,3 +33,6 @@ CREATE INDEX IF NOT EXISTS ix_student_order_status
 
 CREATE INDEX IF NOT EXISTS ix_student_order_item
     ON student_order (item_id);
+
+ALTER TABLE student_order
+ADD COLUMN IF NOT EXISTS checkout_url TEXT;
