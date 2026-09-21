@@ -455,15 +455,21 @@ def handle_recurring_charge(db, payload):
     return True
 
 
+def _refund_transaction_reference(data):
+    """Extract the canonical Paystack transaction reference from refund webhooks."""
+    transaction_reference = data.get("transaction_reference")
+    if transaction_reference:
+        return transaction_reference
+    transaction = data.get("transaction") or {}
+    if isinstance(transaction, dict) and transaction.get("reference"):
+        return transaction["reference"]
+    return data.get("reference")
+
+
 def handle_refund_webhook(db, event, payload):
     data = payload.get("data") or {}
     refund_id = data.get("id")
-    transaction = data.get("transaction") or {}
-    reference = data.get("transaction_reference")
-    if not reference:
-        reference = transaction.get("reference") if isinstance(transaction, dict) else None
-    if not reference:
-        reference = data.get("reference")
+    reference = _refund_transaction_reference(data)
     if not reference:
         return False
 
