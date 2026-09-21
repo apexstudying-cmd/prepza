@@ -54,9 +54,10 @@ function theme(dark: boolean) {
 function QuotaNotice({ usage, feature, unit }: { usage: PrepzaUsage | null; feature: 'quiz' | 'mind_map'; unit: string }) {
   const remaining = Number(usage?.usage?.[feature]?.remaining_units ?? 0)
   if (!usage || remaining > 0) return null
-  return <div style={{ margin: '10px 0 14px', padding: 12, borderRadius: 14, background: 'rgba(201,76,76,0.08)', border: '1px solid rgba(201,76,76,0.22)', color: '#172033', fontSize: 11, lineHeight: 1.5 }}>
+  const planName = usage.plan === 'free' ? 'Free' : usage.plan === 'plus' ? 'Plus' : 'Pro'
+  return <div style={{ margin: '10px 0 14px', padding: 12, borderRadius: 14, background: 'rgba(201,76,76,0.08)', border: '1px solid rgba(201,76,76,0.22)', color: T.text, fontSize: 11, lineHeight: 1.5 }}>
     <strong>Allowance used</strong><br />
-    You have no ${unit} remaining on your ${usage.plan === "free" ? "Free" : usage.plan === "plus" ? "Plus" : "Pro"} plan for this period. Upgrade your plan to continue generating.
+    You have no {unit} remaining on your {planName} plan for this period. Upgrade your plan to continue generating.
   </div>
 }
 
@@ -64,8 +65,8 @@ function Header({ title, subtitle, onBack, T }: { title: string; subtitle?: stri
   return <div style={{ background: T.navy, color: '#fff', padding: '0 18px 16px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><button onClick={onBack} aria-label="Back" style={{ width: 34, height: 34, border: 0, borderRadius: 10, background: 'rgba(255,255,255,.1)', color: '#fff', fontSize: 21 }}>‹</button><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 800 }}>{title}</div>{subtitle && <div style={{ fontSize: 11, marginTop: 2, color: 'rgba(255,255,255,.55)' }}>{subtitle}</div>}</div></div></div>
 }
 
-function Choice({ selected, title, description, onClick, T }: { selected: boolean; title: string; description: string; onClick: () => void; T: Theme }) {
-  return <button onClick={onClick} style={{ width: '100%', textAlign: 'left', border: `1.5px solid ${selected ? T.gold : T.border}`, background: selected ? T.goldSoft : T.card, color: T.text, borderRadius: 15, padding: '13px 14px', marginBottom: 8, fontFamily: 'Plus Jakarta Sans', fontWeight: 800 }}><div style={{ display: 'flex', gap: 11, alignItems: 'center' }}><div style={{ width: 19, height: 19, borderRadius: '50%', border: `2px solid ${selected ? T.gold : T.muted}`, background: selected ? T.gold : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{selected && <div style={{ width: 7, height: 7, borderRadius: '50%', background: T.navy }} />}</div><div><div style={{ fontSize: 13 }}>{title}</div><div style={{ color: T.muted, fontSize: 11, lineHeight: 1.45, marginTop: 2 }}>{description}</div></div></div></button>
+function Choice({ selected, title, description, onClick, T, disabled }: { selected: boolean; title: string; description: string; onClick: () => void; T: Theme; disabled?: boolean }) {
+  return <button disabled={disabled} onClick={onClick} style={{ width: '100%', textAlign: 'left', border: '1.5px solid ' + (selected ? T.gold : T.border), background: disabled ? T.card2 : selected ? T.goldSoft : T.card, color: disabled ? T.muted : T.text, borderRadius: 15, padding: '13px 14px', marginBottom: 8, fontFamily: 'Plus Jakarta Sans', fontWeight: 800, opacity: disabled ? 0.65 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}><div style={{ display: 'flex', gap: 11, alignItems: 'center' }}><div style={{ width: 19, height: 19, borderRadius: '50%', border: '2px solid ' + (selected ? T.gold : T.muted), background: selected ? T.gold : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{selected && <div style={{ width: 7, height: 7, borderRadius: '50%', background: T.navy }} />}</div><div><div style={{ fontSize: 13 }}>{title}</div><div style={{ color: T.muted, fontSize: 11, lineHeight: 1.45, marginTop: 2 }}>{description}</div></div></div></button>
 }
 
 function Generate({ disabled, onClick, T, children }: { disabled: boolean; onClick: () => void; T: Theme; children: React.ReactNode }) {
