@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS student_order (
     checkout_url TEXT
 );
 
+ALTER TABLE student_order
+    ADD COLUMN IF NOT EXISTS item_file_url_snapshot VARCHAR(500) NULL;
+
 CREATE INDEX IF NOT EXISTS ix_student_order_user_created
     ON student_order (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS ix_student_order_status
@@ -45,6 +48,7 @@ INSERT INTO student_order (
     order_type,
     item_id,
     item_title_snapshot,
+    item_file_url_snapshot,
     plan,
     quantity,
     unit_amount,
