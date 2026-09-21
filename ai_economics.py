@@ -176,8 +176,9 @@ def refund_ada_budget(db, user_id, units):
     db.session.commit()
 
 def record_ada_usage(db, user_id, plan_code, model, provider, input_tokens, cached_tokens,
-                     cache_write_tokens, output_tokens, cost_usd=0, request_key=None):
+                     cache_write_tokens, output_tokens, cost_usd=0, request_key=None, reserved_units=0):
     units = calculate_ada_units(input_tokens, cached_tokens, cache_write_tokens, output_tokens)
+    delta = units - max(0, int(reserved_units or 0))
     month, today = _period_start(), date.today()
     db.session.execute(text("""
         INSERT INTO ada_request_usage (
@@ -191,16 +192,16 @@ def record_ada_usage(db, user_id, plan_code, model, provider, input_tokens, cach
         INSERT INTO ada_usage_day (user_id, usage_date, ada_units, requests)
         VALUES (:uid,:day,:units,1)
         ON CONFLICT (user_id, usage_date) DO UPDATE SET
-            ada_units=ada_usage_day.ada_units+EXCLUDED.ada_units,
+            ada_units=GREATEST(0, ada_usage_day.ada_units+EXCLUDED.ada_units),
             requests=ada_usage_day.requests+1, updated_at=CURRENT_TIMESTAMP
-    """), {"uid":user_id,"day":today,"units":units})
+    """), {"uid":user_id,"day":today,"units":delta})
     db.session.execute(text("""
         INSERT INTO ada_usage_month (user_id, period_start, ada_units, requests)
         VALUES (:uid,:period,:units,1)
         ON CONFLICT (user_id, period_start) DO UPDATE SET
-            ada_units=ada_usage_month.ada_units+EXCLUDED.ada_units,
+            ada_units=GREATEST(0, ada_usage_month.ada_units+EXCLUDED.ada_units),
             requests=ada_usage_month.requests+1, updated_at=CURRENT_TIMESTAMP
-    """), {"uid":user_id,"period":month,"units":units})
+    """), {"uid":user_id,"period":month,"units":delta})
     db.session.commit()
     return units
 
