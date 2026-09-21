@@ -9078,8 +9078,8 @@ type SubscriptionStatus = { plan: string; is_active: boolean; expires_at: string
 // actually returns.
 const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: string; color: string; features: string[] }> = {
   free: { color: '#6B7280', features: ['Limited Ada', '3 Library documents', '10-minute podcast allowance', '10 summary pages', '20 questions', '30 mind-map nodes', '100 flashcards'] },
-  semester: { badge: 'Plus', badgeColor: N.gold, color: N.gold, features: ['Ada — 5× more usage', '120 podcast minutes', '40 summary pages', '100 questions', '150 mind-map nodes', '300 flashcards', 'Offline study', 'Premium library'] },
-  annual: { badge: 'Pro', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Ada — 12× more usage', '350 podcast minutes', '100 summary pages', '210 questions', '350 mind-map nodes', '600 flashcards', 'Offline study', 'Premium library'] },
+  plus: { badge: 'Plus', badgeColor: N.gold, color: N.gold, features: ['Ada — 5× more usage', '120 podcast minutes', '40 summary pages', '100 questions', '150 mind-map nodes', '300 flashcards', 'Offline study', 'Premium library'] },
+  pro: { badge: 'Pro', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Ada — 12× more usage', '350 podcast minutes', '100 summary pages', '210 questions', '350 mind-map nodes', '600 flashcards', 'Offline study', 'Premium library'] },
 }
 
 function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setScreen: (s: Screen) => void; selectedPlan: string; setSelectedPlan: (p: string) => void }) {
@@ -9116,7 +9116,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
           <span style={{ fontSize: 20 }}>🎓</span>
           <div style={{ flex: 1 }}>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>
-              {status ? `Current Plan: ${status.plan === 'semester' ? 'Plus' : status.plan === 'annual' ? 'Pro' : 'Free'}` : 'Loading plan…'}
+              {status ? `Current Plan: ${status.plan === 'plus' ? 'Plus' : status.plan === 'pro' ? 'Pro' : 'Free'}` : 'Loading plan…'}
             </div>
             <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
               {status?.is_active && status.expires_at
@@ -9142,7 +9142,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
               return (
                 <div key={p.id} onClick={() => isSelectable && setSelectedPlan(p.id)}
                   style={{ background: T.card, borderRadius: 18, padding: 18, marginBottom: 12, border: `2px solid ${isSelectable && isSelected ? meta.color : 'rgba(0,0,0,0.06)'}`, cursor: isSelectable ? 'pointer' : 'default', position: 'relative', boxShadow: isSelectable && isSelected ? `0 4px 20px ${meta.color}25` : '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
-                  {meta.badge && <div style={{ position: 'absolute', top: -11, right: 16, background: meta.badgeColor, color: p.id === 'semester' ? N.navy : '#fff', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>{meta.badge}</div>}
+                  {meta.badge && <div style={{ position: 'absolute', top: -11, right: 16, background: meta.badgeColor, color: p.id === 'plus' ? N.navy : '#fff', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>{meta.badge}</div>}
                   {isCurrent && <div style={{ position: 'absolute', top: -11, left: 16, background: '#E5E7EB', color: T.textMuted, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>Current</div>}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                     <div>
@@ -9154,7 +9154,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
                     </div>
                     {isSelectable && (
                       <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${isSelected ? meta.color : T.textMuted}`, background: isSelected ? meta.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {isSelected && <div style={{ color: p.id === 'semester' ? N.navy : '#fff' }}>{Ic.check('w-3 h-3')}</div>}
+                        {isSelected && <div style={{ color: p.id === 'plus' ? N.navy : '#fff' }}>{Ic.check('w-3 h-3')}</div>}
                       </div>
                     )}
                   </div>
@@ -9305,7 +9305,7 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
   }, [])
 
   const itemLabel = payment
-    ? (payment.plan === 'semester' ? 'Plus Plan' : payment.plan === 'annual' ? 'Pro Plan' : 'Prepza Subscription')
+    ? (payment.plan === 'plus' ? 'Plus Plan' : payment.plan === 'pro' ? 'Pro Plan' : 'Prepza Subscription')
     : null
 
   const detailRows: [string, string][] = payment
@@ -9442,8 +9442,8 @@ function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void })
           <EmptyState icon="💳" title="No payments yet" sub="Your Prepza subscription payments will show up here." />
         ) : payments.map(p => {
           const meta = PAYMENT_STATUS_META[p.status] || { icon: '•', color: T.textMuted, label: p.status }
-          const label = p.plan === 'semester' ? 'Plus Plan'
-            : p.plan === 'annual' ? 'Pro Plan'
+          const label = p.plan === 'plus' ? 'Plus Plan'
+            : p.plan === 'pro' ? 'Pro Plan'
             : p.payment_type === 'addon' ? 'Usage add-on'
             : 'Prepza Subscription'
           return (
@@ -9597,8 +9597,6 @@ type AdminPlatformSettings = {
   price_notes: number
   price_past_paper: number
   price_qna: number
-  price_plan_semester: number
-  price_plan_annual: number
   price_promotion_standard: number
   price_promotion_featured: number
   price_promotion_sponsored: number
@@ -11415,8 +11413,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               {numField('Notes', 'price_notes', { prefix: 'KES' })}
               {numField('Past Paper', 'price_past_paper', { prefix: 'KES' })}
               {numField('Q&A', 'price_qna', { prefix: 'KES' })}
-              {numField('Semester Plan', 'price_plan_semester', { prefix: 'KES' })}
-              {numField('Annual Plan', 'price_plan_annual', { prefix: 'KES' })}
               {numField('Opportunity — Standard', 'price_promotion_standard', { prefix: 'KES' })}
               {numField('Opportunity — Featured', 'price_promotion_featured', { prefix: 'KES' })}
               {numField('Opportunity — Sponsored', 'price_promotion_sponsored', { prefix: 'KES' })}
