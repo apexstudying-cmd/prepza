@@ -292,9 +292,9 @@ def generate_document_material(*, material_type, document_content_id, triggering
             raise ai_service.AIBudgetExceededError(
                 f"Prepza AI has reached its monthly budget - fresh {material_type} generation is paused, but existing material is still available."
             )
-        allowed, used, limit = ai_service.check_daily_limit(triggering_user_id, plan_tier=plan_tier)
-        if not allowed:
-            raise ai_service.AIRateLimitExceededError(f"You've used {used}/{limit} AI generations today - try again tomorrow.")
+        # Student artifact allowances are enforced by the admin-configured
+        # feature wallet above. There is intentionally no second hard-coded
+        # per-day student generation cap here.
         job = AiJob(
             document_content_id=document_content_id,
             feature=material_type,
