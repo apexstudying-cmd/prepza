@@ -49,6 +49,10 @@ def order_payment_matches_snapshot(order_row, payment):
             and plan not in ("semester", "annual")
         )
         or (
+            order_type == "subscription"
+            and plan not in ("semester", "annual")
+        )
+        or (
             order_row["order_type"] == "content"
             and (expected_item_id is None or payment.payment_type != "content")
         )
@@ -164,6 +168,9 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
                       AND o.currency = 'KES'
                       AND o.status = 'pending'
                       AND p.status = 'pending'
+                      AND p.user_id = o.user_id
+                      AND p.payment_type = 'content'
+                      AND p.content_item_id = o.item_id
                       AND p.user_id = o.user_id
                       AND p.payment_type = 'content'
                       AND p.content_item_id = o.item_id
