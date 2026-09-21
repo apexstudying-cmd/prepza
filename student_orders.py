@@ -195,6 +195,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
 
     def mark_order_paid_and_fulfilled(payment):
         if not payment or payment.status != "success":
+
             # This helper is the final entitlement gate. It must never
             # fulfill a pending/failed/refunded provider payment if called
             # accidentally from another code path.
@@ -241,19 +242,28 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
             "quantity": row["quantity"],
             "fulfilled_exactly_as_requested": True,
         }
-        db.session.execute(
+        updated = db.session.execute(
             text("""
                 UPDATE student_order
                 SET status = 'fulfilled',
                     paid_at = COALESCE(paid_at, CURRENT_TIMESTAMP),
                     fulfilled_at = COALESCE(fulfilled_at, CURRENT_TIMESTAMP),
-                    fulfillment_payload = CAST(:payload AS jsonb),
+                    fulfillment_payload = COALESCE(fulfillment_payload, CAST(:payload AS jsonb)),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :order_id
-                  AND status IN ('pending', 'paid', 'fulfilled')
+                  AND status IN ('pending', 'paid')
             """),
             {"order_id": row["id"], "payload": json.dumps(fulfillment)},
         )
+        # If another worker already fulfilled this exact order, treat the
+        # operation as an idempotent success only if the persisted snapshot
+        # already says it was fulfilled. Never rewrite a fulfilled order.
+        if updated.rowcount == 0:
+            latest = db.session.execute(
+                text("SELECT status FROM student_order WHERE id = :order_id"),
+                {"order_id": row["id"]},
+            ).scalar()
+            return latest == "fulfilled"
         return True
 
     def mark_order_failed(payment_id):
