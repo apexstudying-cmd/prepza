@@ -435,7 +435,10 @@ def handle_recurring_charge(db, payload):
     )
     # Renewal starts a new paid entitlement month after the current expiry.
     from app import compute_new_subscription_expiry
-    payment.subscription_expires_at = compute_new_subscription_expiry(local["user_id"], local["plan"])
+    from app import compute_new_subscription_period
+    starts_at, expires_at = compute_new_subscription_period(local["user_id"], local["plan"])
+    payment.subscription_starts_at = starts_at
+    payment.subscription_expires_at = expires_at
     fulfilled = helpers["mark_paid_and_fulfilled"](payment)
     if not fulfilled:
         # A successful Paystack charge without a valid local order snapshot
