@@ -2296,6 +2296,26 @@ def get_price_for_type(content_type):
     return get_content_prices().get(content_type, 0)
 
 
+def get_fulfilled_content_file_path(user_id, content_item_id):
+    """Return the immutable file path captured by the student's fulfilled order."""
+    row = db.session.execute(
+        text("""
+            SELECT item_file_url_snapshot
+            FROM student_order
+            WHERE user_id = :user_id
+              AND item_id = :item_id
+              AND order_type = 'content'
+              AND status = 'fulfilled'
+              AND quantity = 1
+              AND item_file_url_snapshot IS NOT NULL
+            ORDER BY fulfilled_at DESC NULLS LAST, id DESC
+            LIMIT 1
+        """),
+        {"user_id": user_id, "item_id": content_item_id},
+    ).mappings().first()
+    return row["item_file_url_snapshot"] if row else None
+
+
 def has_access(user_id, content_item):
     if get_price_for_type(content_item.content_type) == 0:
         return True
@@ -8171,7 +8191,10 @@ def my_library():
             "paper_year": item.paper_year,
             "unit_id": item.unit_id,
             "unit_code": unit.code if unit else None,
-            "file_url": get_signed_url(item.file_url) if item.is_downloadable else None,
+            "file_url": (
+                get_signed_url(get_fulfilled_content_file_path(user_id, item.id))
+                if item.is_downloadable else None
+            ),
             "unlocked_at": item_unlocked_at.isoformat() if item_unlocked_at else None,
         })
 
@@ -8203,7 +8226,11 @@ def content_view_info(content_id):
     if not has_access(user_id, content_item):
         return jsonify({"error": "You don't have access to this content"}), 403
 
-    pdf_bytes = fetch_private_file_bytes(content_item.file_url)
+    purchased_file_path = get_fulfilled_content_file_path(user_id, content_item.id)
+    if not purchased_file_path:
+        return jsonify({"error": "Purchased file is unavailable"}), 404
+
+    pdf_bytes = fetch_private_file_bytes(purchased_file_path)
     if pdf_bytes is None:
         return jsonify({"error": "Content file could not be loaded"}), 500
 
@@ -8254,7 +8281,11 @@ def content_view_page(content_id, page_num):
     user = db.session.get(User, user_id)
     watermark_text = user.email
 
-    pdf_bytes = fetch_private_file_bytes(content_item.file_url)
+    purchased_file_path = get_fulfilled_content_file_path(user_id, content_item.id)
+    if not purchased_file_path:
+        return jsonify({"error": "Purchased file is unavailable"}), 404
+
+    pdf_bytes = fetch_private_file_bytes(purchased_file_path)
     if pdf_bytes is None:
         return jsonify({"error": "Content file could not be loaded"}), 500
 
