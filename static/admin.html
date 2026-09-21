@@ -389,6 +389,7 @@
     <div class="tab" data-panel="units">Units</div>
     <div class="tab" data-panel="content">Content</div>
     <div class="tab" data-panel="payments">Payments</div>
+    <div class="tab" data-panel="ai">AI</div>
     <div class="tab" data-panel="settings">Settings</div>
   </div>
 
@@ -491,6 +492,41 @@
           <select id="content-filter-unit" onchange="loadContent()"></select>
         </div>
         <div id="content-table"></div>
+      </div>
+    </section>
+
+    <!-- AI ECONOMICS / ARTIFACTS PANEL -->
+    <section class="panel" id="panel-ai">
+      <div class="card">
+        <h2>AI economics</h2>
+        <p class="hint">These are server-side plan limits. Students see plan features and usage, not token economics.</p>
+        <div id="ai-plan-table"></div>
+      </div>
+      <div class="card">
+        <h2>AI cost monitor · last 30 days</h2>
+        <div class="stats-grid" id="ai-usage-stats"></div>
+      </div>
+      <div class="card">
+        <h2>Generated artifacts</h2>
+        <p class="hint">Inspect reusable variants here. If a student reports a corrupt or incorrect variant, take it down. The canonical record is retained for audit and the variant can regenerate.</p>
+        <div class="toolbar">
+          <select id="ai-artifact-feature" onchange="loadAiArtifacts()">
+            <option value="">All features</option>
+            <option value="summary">Summary</option>
+            <option value="quiz">Quiz</option>
+            <option value="flashcards">Flashcards</option>
+            <option value="podcast">Podcast</option>
+            <option value="mind_map">Mind map</option>
+          </select>
+          <select id="ai-artifact-status" onchange="loadAiArtifacts()">
+            <option value="">All statuses</option>
+            <option value="ready">Ready</option>
+            <option value="generating">Generating</option>
+            <option value="failed">Failed</option>
+          </select>
+          <button class="btn-outline" onclick="loadAiArtifacts()">Refresh</button>
+        </div>
+        <div id="ai-artifacts-table"></div>
       </div>
     </section>
 
@@ -609,6 +645,8 @@ function initApp() {
   loadUnits();
   loadContent();
   loadPayments();
+  loadAiEconomics();
+  loadAiArtifacts();
   loadSettings();
 }
 
@@ -1041,6 +1079,121 @@ async function refundPayment(paymentId) {
     const data = await api(`/admin/payments/${paymentId}/refund`, { method: "POST" });
     toast(data.message, "success");
     loadPayments();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+
+// ---------- AI economics / artifact controls ----------
+async function loadAiEconomics() {
+  try {
+    const [data, usage] = await Promise.all([
+      api("/api/admin/ai-economics/plans"),
+      api("/api/admin/ai-economics/usage"),
+    ]);
+    renderAiPlans(data.plans || []);
+    document.getElementById("ai-usage-stats").innerHTML = [
+      ["Requests", usage.requests],
+      ["Input tokens", Number(usage.input_tokens || 0).toLocaleString("en-KE")],
+      ["Cached input", Number(usage.cached_tokens || 0).toLocaleString("en-KE")],
+      ["Cache writes", Number(usage.cache_write_tokens || 0).toLocaleString("en-KE")],
+      ["Output tokens", Number(usage.output_tokens || 0).toLocaleString("en-KE")],
+      ["Ada units", Number(usage.ada_units || 0).toLocaleString("en-KE")],
+      ["Provider cost", "$" + Number(usage.cost_usd || 0).toFixed(4)],
+    ].map(([label,value]) => `<div class="stat-box"><div class="stat-label">${escapeHtml(label)}</div><div class="stat-value">${escapeHtml(value)}</div></div>`).join("");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+function renderAiPlans(plans) {
+  const fields = [
+    ["price_kes","Price KES"], ["ada_monthly_units","Ada monthly units"],
+    ["ada_daily_units","Ada daily soft ceiling"], ["ada_max_output_tokens","Ada max output"],
+    ["podcast_minutes","Podcast minutes"], ["summary_pages","Summary pages"],
+    ["questions","Questions"], ["mind_map_nodes","Mind-map nodes"], ["flashcards","Flashcards"]
+  ];
+  document.getElementById("ai-plan-table").innerHTML = `
+    <table>
+      <thead><tr><th>Plan</th>${fields.map(f => `<th>${f[1]}</th>`).join("")}<th>Access</th><th></th></tr></thead>
+      <tbody>
+        ${plans.map(plan => `
+          <tr data-plan-code="${escapeHtml(plan.plan_code)}">
+            <td><strong>${escapeHtml(plan.display_name)}</strong><br><span class="mono">${escapeHtml(plan.plan_code)}</span></td>
+            ${fields.map(([key]) => `<td><input class="mini-input" style="width:96px !important" type="number" min="0" data-field="${key}" value="${Number(plan[key] || 0)}"></td>`).join("")}
+            <td class="mono">${plan.offline_study ? "Offline" : "—"} · ${plan.premium_library ? "Premium library" : "—"}</td>
+            <td><button class="btn-gold" onclick="saveAiPlan('${escapeHtml(plan.plan_code)}')">Save</button></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    <p class="hint" style="margin-top:12px">Changes apply to new quota checks immediately. Existing usage remains recorded.</p>`;
+}
+
+async function saveAiPlan(planCode) {
+  const row = document.querySelector(`tr[data-plan-code="${CSS.escape(planCode)}"]`);
+  if (!row) return;
+  const patch = {};
+  row.querySelectorAll("[data-field]").forEach(input => { patch[input.dataset.field] = parseInt(input.value || "0", 10); });
+  try {
+    await api(`/api/admin/ai-economics/plans/${encodeURIComponent(planCode)}`, {
+      method: "PATCH", body: JSON.stringify(patch)
+    });
+    toast(planCode + " plan saved.", "success");
+    loadAiEconomics();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+async function loadAiArtifacts() {
+  const feature = document.getElementById("ai-artifact-feature").value;
+  const status = document.getElementById("ai-artifact-status").value;
+  const params = new URLSearchParams({limit:"100"});
+  if (feature) params.set("feature", feature);
+  if (status) params.set("status", status);
+  try {
+    const data = await api("/api/admin/ai-generations?" + params.toString());
+    renderAiArtifacts(data.artifacts || []);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+function renderAiArtifacts(items) {
+  const el = document.getElementById("ai-artifacts-table");
+  if (!items.length) {
+    el.innerHTML = `<div class="empty-state">No AI artifacts match this filter.</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <table>
+      <thead><tr><th>ID</th><th>Feature</th><th>Variant</th><th>Source</th><th>Parameters</th><th>Status</th><th>Created</th><th></th></tr></thead>
+      <tbody>
+        ${items.map(item => `
+          <tr>
+            <td class="mono">${item.id}</td>
+            <td>${escapeHtml(item.feature)}</td>
+            <td class="mono">${item.variant ?? "—"}</td>
+            <td>${escapeHtml(item.source_title || item.content_hash || "—")}</td>
+            <td class="mono" style="max-width:280px;overflow-wrap:anywhere">${escapeHtml(JSON.stringify(item.parameters || {}))}</td>
+            <td><span class="stamp ${item.status === "ready" ? "success" : item.status === "failed" ? "failed" : "pending"}">${escapeHtml(item.status)}</span></td>
+            <td class="mono">${formatDate(item.created_at)}</td>
+            <td>${item.status === "ready" ? `<button class="btn-danger-outline" onclick="takedownAiArtifact('${escapeHtml(item.fingerprint)}', '${escapeHtml(item.feature)}', ${item.variant ?? "null"})">Take down</button>` : ""}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function takedownAiArtifact(fingerprint, feature, variant) {
+  const label = variant ? ` variant ${variant}` : "";
+  if (!confirm(`Take down ${feature}${label}? It will stop being served and can regenerate later.`)) return;
+  try {
+    const result = await api(`/api/admin/ai-generations/${encodeURIComponent(fingerprint)}/takedown`, {method:"POST"});
+    toast(`${result.feature}${result.variant ? " variant " + result.variant : ""} taken down.`, "success");
+    loadAiArtifacts();
   } catch (e) {
     toast(e.message, "error");
   }
