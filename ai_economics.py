@@ -365,9 +365,10 @@ def register_ai_economics(app, db):
             "premium_library": bool(plan["premium_library"]),
             "study_hub_uploads": bool(plan["study_hub_uploads"]),
         }
+        usage = get_ada_usage(db, uid, plan_code)
         return jsonify({"plan": public_plan, "ada_usage": {
-            "daily_used": get_ada_usage(db, uid, plan_code)["daily_used"],
-            "monthly_used": get_ada_usage(db, uid, plan_code)["monthly_used"],
+            "daily_used": usage["daily_used"],
+            "monthly_used": usage["monthly_used"],
         }})
 
     @app.get("/api/admin/ai-economics/usage")
