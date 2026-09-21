@@ -153,13 +153,13 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
         material_type="summary",
         document_content_id=7,
         triggering_user_id=101,
-        parameters={"language": " English "},
+        parameters={"max_pages": 10, "language": " English "},
     )
     second = reusable.generate_document_material(
         material_type="summary",
         document_content_id=7,
         triggering_user_id=101,
-        parameters={"language": "English"},
+        parameters={"max_pages": 10, "language": "English"},
     )
 
     assert first["reused"] is False
