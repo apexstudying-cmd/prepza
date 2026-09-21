@@ -92,6 +92,8 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
             plan = None
             quantity = 1
         elif payment.payment_type == "subscription":
+            if payment.plan not in ("semester", "annual"):
+                raise ValueError("Cannot create order for an unsupported subscription plan")
             order_type = "subscription"
             item_id = None
             title_snapshot = item_title or ("Plus Plan" if payment.plan == "semester" else "Pro Plan")
