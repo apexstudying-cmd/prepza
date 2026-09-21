@@ -159,9 +159,12 @@ def reserve_ada_budget(db, user_id, plan_code, estimated_units):
     # usage, stop additional requests at the ceiling. The monthly wallet is
     # the hard entitlement.
     daily_limit = int(plan["ada_daily_units"])
-    if int(day) > 0 and int(day) >= daily_limit:
+    if int(day) > 0 and int(day) + estimated_units > daily_limit:
         db.session.rollback()
-        return False, {"code": "ada_daily_limit", "remaining_units": 0}
+        return False, {
+            "code": "ada_daily_limit",
+            "remaining_units": max(0, daily_limit - int(day)),
+        }
     if int(month_used) + estimated_units > int(plan["ada_monthly_units"]):
         db.session.rollback()
         return False, {"code": "ada_monthly_limit", "remaining_units": max(0, int(plan["ada_monthly_units"]) - int(month_used))}
