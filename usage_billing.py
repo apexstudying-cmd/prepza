@@ -23,40 +23,11 @@ from flask import jsonify, request, session
 from sqlalchemy import text
 
 
-STUDENT_PLANS = {
-    "free": {
-        "price_kes": 0,
-        "billing_period": "month",
-        "quota_period": "month",
-        "summary_generations": 3,
-        "summary_max_pages": 2,
-        "podcast_generations": 1,
-        "podcast_max_minutes": 10,
-        "flashcard_generations": 3,
-        "flashcard_max_cards": 10,
-        "quiz_generations": 2,
-        "quiz_max_questions": 10,
-        "mind_map_generations": 2,
-        "mind_map_max_nodes": 10,
-        "tutor_messages": 20,
-    },
-    "premium": {
-        "price_kes": 599,
-        "billing_period": "semester",
-        "quota_period": "month",
-        "summary_generations": 30,
-        "summary_max_pages": 10,
-        "podcast_generations": 4,
-        "podcast_max_minutes": 50,
-        "flashcard_generations": 30,
-        "flashcard_max_cards": 50,
-        "quiz_generations": 20,
-        "quiz_max_questions": 50,
-        "mind_map_generations": 20,
-        "mind_map_max_nodes": 50,
-        "tutor_messages": 300,
-    },
-}
+# Legacy plan constants are retained only for non-AI organisation/accounting
+# code elsewhere in this module. Student AI quotas are sourced from
+# student_plan_config so admins can change them without a deploy.
+STUDENT_PLANS = {}
+
 
 # Organisation subscription is audience-access pricing, not ad RPM.
 # Sponsored inventory is separately priced on a CPM basis.
@@ -249,36 +220,25 @@ def _csrf_ok():
 
 
 def _current_student_plan(db, user_id):
-    row = db.session.execute(text("""
-        SELECT plan, subscription_expires_at
-        FROM payment
-        WHERE user_id = :uid
-          AND payment_type = 'subscription'
-          AND status = 'success'
-          AND subscription_expires_at IS NOT NULL
-        ORDER BY subscription_expires_at DESC
-        LIMIT 1
-    """), {"uid": user_id}).mappings().first()
-    if row and row["subscription_expires_at"] and row["subscription_expires_at"] > datetime.utcnow():
-        return "premium"
-    return "free"
-
+    from ai_economics import get_user_plan_code
+    return get_user_plan_code(db, user_id)
 
 def _usage_row(db, user_id, feature):
+    from ai_economics import get_plan
     plan_code = _current_student_plan(db, user_id)
-    plan = STUDENT_PLANS[plan_code]
+    plan = get_plan(db, plan_code)
+    if not plan:
+        return None
     return db.session.execute(text("""
         SELECT units, requests
         FROM student_ai_usage
         WHERE user_id = :uid AND period_start = :period AND feature = :feature
     """), {"uid": user_id, "period": _period_start(plan), "feature": feature}).mappings().first()
 
-
 def check_and_consume_ai_quota(db, user_id, feature, units):
-    """Atomically consume a generation allowance before an AI call."""
+    """Consume the admin-configured monthly artifact allowance before generation."""
     if feature not in FEATURES:
         return True, {"feature": feature}
-
     try:
         units = int(units)
     except (TypeError, ValueError):
@@ -286,19 +246,29 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
     if units <= 0:
         return False, {"error": "Generation amount must be positive"}
 
+    from ai_economics import get_plan
     plan_code = _current_student_plan(db, user_id)
-    plan = STUDENT_PLANS[plan_code]
-    request_limit_key, unit_limit_key = FEATURES[feature]
-    max_requests = int(plan[request_limit_key])
-    max_units = int(plan[unit_limit_key])
+    plan = get_plan(db, plan_code)
+    if not plan:
+        return False, {"error": "Student plan configuration is unavailable"}
 
+    unit_key = {
+        "summary": "summary_pages",
+        "podcast": "podcast_minutes",
+        "flashcards": "flashcards",
+        "quiz": "questions",
+        "mind_map": "mind_map_nodes",
+    }[feature]
+    max_units = int(plan[unit_key] or 0)
     if units > max_units:
+        label = {
+            "summary": "pages", "podcast": "minutes", "flashcards": "cards",
+            "quiz": "questions", "mind_map": "nodes",
+        }[feature]
         return False, {
-            "error": f"This plan supports at most {max_units} {('pages' if feature == 'summary' else 'minutes' if feature == 'podcast' else 'cards' if feature == 'flashcards' else 'questions' if feature == 'quiz' else 'nodes')} per generation.",
-            "code": "generation_size_limit",
-            "feature": feature,
-            "plan": plan_code,
-            "max_units": max_units,
+            "error": f"This plan supports at most {max_units} {label} per generation.",
+            "code": "generation_size_limit", "feature": feature,
+            "plan": plan_code, "max_units": max_units,
         }
 
     period = _period_start(plan)
@@ -316,48 +286,30 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
         FOR UPDATE
     """), {"uid": user_id, "period": period, "feature": feature}).mappings().first()
 
-    used_requests = int(row["requests"] or 0)
     used_units = int(row["units"] or 0)
-    # Requests are telemetry, not a second hard quota. The allowance is a
-    # spendable unit wallet derived from the plan's maximum generation size.
-    total_unit_limit = max_units * max_requests
-    remaining_units = max(0, total_unit_limit - used_units)
-
+    total_unit_limit = max_units
     if used_units + units > total_unit_limit:
         db.session.rollback()
         return False, {
             "error": "You have used up this plan's generation allowance.",
-            "code": "generation_quota_exhausted",
-            "feature": feature,
-            "plan": plan_code,
-            "used_requests": used_requests,
-            "request_limit": max_requests,
-            "used_units": used_units,
+            "code": "generation_quota_exhausted", "feature": feature,
+            "plan": plan_code, "used_units": used_units,
             "unit_limit": total_unit_limit,
-            "remaining_units": remaining_units,
+            "remaining_units": max(0, total_unit_limit - used_units),
         }
 
     db.session.execute(text("""
         UPDATE student_ai_usage
-        SET units = units + :units,
-            requests = requests + 1,
+        SET units = units + :units, requests = requests + 1,
             updated_at = CURRENT_TIMESTAMP
         WHERE user_id = :uid AND period_start = :period AND feature = :feature
-    """), {
-        "uid": user_id, "period": period, "feature": feature, "units": units,
-    })
+    """), {"uid": user_id, "period": period, "feature": feature, "units": units})
     db.session.commit()
-
     return True, {
-        "feature": feature,
-        "plan": plan_code,
-        "used_requests": used_requests + 1,
-        "request_limit": max_requests,
-        "used_units": used_units + units,
-        "unit_limit": total_unit_limit,
+        "feature": feature, "plan": plan_code,
+        "used_units": used_units + units, "unit_limit": total_unit_limit,
         "remaining_units": max(0, total_unit_limit - (used_units + units)),
-        "max_units_per_generation": max_units,
-        "period_start": period,
+        "max_units_per_generation": max_units, "period_start": period,
     }
 
 def reserve_generation_variant(db, user_id, base_fingerprint, feature, base_parameters=None, pool_size=4):
