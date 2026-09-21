@@ -71,8 +71,8 @@ SELECT
     p.content_item_id,
     CASE
         WHEN p.payment_type = 'content' THEN COALESCE(ci.title, 'Purchased content')
-        WHEN p.plan = 'semester' THEN 'Plus Plan'
-        WHEN p.plan = 'annual' THEN 'Pro Plan'
+        WHEN p.plan = 'plus' THEN 'Plus Plan'
+        WHEN p.plan = 'pro' THEN 'Pro Plan'
         ELSE 'Subscription'
     END,
     CASE WHEN p.payment_type = 'content' THEN ci.file_url ELSE NULL END,
@@ -115,7 +115,7 @@ WHERE p.user_id IS NOT NULL
   AND (
       (p.payment_type = 'content' AND p.content_item_id IS NOT NULL AND ci.id IS NOT NULL)
       OR
-      (p.payment_type = 'subscription' AND p.plan IN ('semester', 'annual'))
+      (p.payment_type = 'subscription' AND p.plan IN ('plus', 'pro'))
   )
   AND NOT EXISTS (
       SELECT 1 FROM student_order existing WHERE existing.payment_id = p.id
@@ -163,7 +163,7 @@ BEGIN
         ALTER TABLE student_order
         ADD CONSTRAINT ck_student_order_type_snapshot
         CHECK (
-            (order_type = 'subscription' AND item_id IS NULL AND plan IN ('semester', 'annual'))
+            (order_type = 'subscription' AND item_id IS NULL AND plan IN ('plus', 'pro'))
             OR
             (order_type = 'content' AND item_id IS NOT NULL AND plan IS NULL)
         );
@@ -176,7 +176,7 @@ BEGIN
         ALTER TABLE student_order
         ADD CONSTRAINT ck_student_order_plan_allowed
         CHECK (
-            (order_type = 'subscription' AND plan IN ('semester', 'annual'))
+            (order_type = 'subscription' AND plan IN ('plus', 'pro'))
             OR
             (order_type = 'content' AND plan IS NULL)
         );
@@ -198,6 +198,5 @@ BEGIN
         ALTER TABLE student_order
         ADD CONSTRAINT ck_student_order_status_allowed
         CHECK (status IN ('pending', 'paid', 'fulfilled', 'failed', 'refunded', 'cancelled'));
-    END IF;
-    END IF;
-END $$;
+END IF;
+END $;
