@@ -3752,6 +3752,43 @@ def get_document(document_id):
     })
 
 
+@app.route("/documents/<int:document_id>/materials/<int:material_id>", methods=["GET"])
+@login_required
+def get_generated_material(document_id, material_id):
+    """Return one exact ready artifact the current student is allowed to replay."""
+    user_id = session.get("user_id")
+    document = db.session.get(Document, document_id)
+    if not user_id or not _can_study_document(user_id, document):
+        return jsonify({"error": "Document not found"}), 404
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no generated material"}), 404
+
+    material = db.session.get(GeneratedMaterial, material_id)
+    if not material or material.status != "ready" or not material.payload:
+        return jsonify({"error": "Study material not found"}), 404
+    if material.document_content_id != document.document_content_id:
+        return jsonify({"error": "Study material not found"}), 404
+
+    if material.scope == "private":
+        if material.owner_user_id != user_id or document.user_id != user_id:
+            return jsonify({"error": "Study material not found"}), 404
+    elif material.scope == "shared":
+        if material.owner_user_id is not None:
+            return jsonify({"error": "Study material not found"}), 404
+        if not _can_study_document(user_id, document):
+            return jsonify({"error": "Study material not found"}), 404
+    else:
+        return jsonify({"error": "Study material not found"}), 404
+
+    return jsonify({
+        "material_id": material.id,
+        "type": material.material_type,
+        "status": material.status,
+        "parameters": material.generation_parameters or {},
+        "payload": json.loads(material.payload),
+    }), 200
+
+
 def _approved_library_publication(document):
     """Return the approved Library publication for a document, if public."""
     if not document or document.is_removed:
