@@ -5,7 +5,7 @@ import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealti
 import CallExperience from './crypto/CallExperience'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline, saveUploadedFileOffline } from './offline/studyHubOffline'
-import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
+import { getCachedGeneratedAudioUrl, getGeneratedMaterialOffline, getLatestGeneratedMaterialForPath, listOfflineGeneratedMaterials, saveGeneratedMaterialOffline, setOfflineUserId } from './offline/generatedMaterials'
 import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
 import StudyShareSheet from './share/StudyShareSheet'
@@ -58,6 +58,21 @@ function generationRequest<T = any>(
 
   if (!documentId || !feature) return api<T>(path, options)
 
+  if (!navigator.onLine && selectedMaterialId) {
+    const cached = await getGeneratedMaterialOffline(
+      `/documents/${documentId}/materials/${selectedMaterialId}`,
+      null,
+    )
+    if (cached?.payload && cached?.type) {
+      const payloadKey = feature === 'mind_map' ? 'mindmap' : feature
+      return {
+        material_id: cached.material_id,
+        reused: true,
+        [payloadKey]: cached.payload,
+      } as T
+    }
+  }
+
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | null = null
   let selectedMaterialId: number | null = null
@@ -100,6 +115,15 @@ function generationRequest<T = any>(
       try { sessionStorage.removeItem('prepza-open-material') } catch {}
     }
     if (!result?.async || !result?.job_id) {
+      if (result?.material_id) {
+        try {
+          await saveGeneratedMaterialOffline(
+            `/documents/${documentId}/materials/${result.material_id}`,
+            null,
+            result,
+          )
+        } catch { /* offline cache is best-effort */ }
+      }
       publish({
         found: true,
         status: 'completed',
@@ -515,7 +539,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
         if (userId <= 0) return
         const saved = await listSavedStudyHubOffline(userId)
         if (!cancelled) {
-          setOfflineDocuments(saved.map(row => ({
+          const offlineDocs = saved.map(row => ({
             id: row.documentId,
             title: row.title || 'Saved study document',
             original_filename: row.title || 'Study document',
@@ -524,7 +548,26 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
             file_size_bytes: null,
             page_count: row.pageCount || null,
             created_at: new Date(row.savedAt).toISOString(),
-          } as HomeDocument)))
+          } as HomeDocument))
+          setOfflineDocuments(offlineDocs)
+          const cached = await listOfflineGeneratedMaterials()
+          const cachedMaterials = cached.flatMap(row => {
+            const match = row.path.match(/^\/documents\/(\d+)\/materials\/(\d+)$/)
+            if (!match) return []
+            const payload = row.payload as any
+            const documentId = Number(match[1])
+            const materialId = Number(match[2])
+            const doc = offlineDocs.find(d => d.id === documentId)
+            if (!payload?.type || !Number.isInteger(materialId) || materialId <= 0) return []
+            return [{
+              documentId,
+              documentTitle: doc?.title || payload?.payload?._prepza?.document_title || 'Study document',
+              materialId,
+              type: payload.type,
+              parameters: payload.parameters || {},
+            }]
+          })
+          if (!cancelled) setMaterials(cachedMaterials)
         }
       } catch { /* offline package lookup is non-fatal */ }
     }
