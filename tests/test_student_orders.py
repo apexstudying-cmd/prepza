@@ -9,6 +9,8 @@ def _order(**overrides):
         "item_id": 42,
         "plan": None,
         "total_amount": 250,
+        "unit_amount": 250,
+        "quantity": 1,
         "currency": "KES",
         "order_type": "content",
     }
@@ -72,6 +74,28 @@ def test_subscription_order_rejects_content_payment():
 
 def test_order_payment_match_rejects_currency_change():
     assert not order_payment_matches_snapshot(_order(currency="USD"), _payment())
+
+
+def test_order_payment_match_rejects_quantity_or_total_inconsistency():
+    assert not order_payment_matches_snapshot(_order(quantity=2), _payment())
+    assert not order_payment_matches_snapshot(_order(unit_amount=249), _payment())
+
+
+def test_subscription_order_rejects_unknown_plan():
+    order = _order(
+        order_type="subscription",
+        item_id=None,
+        plan="gold",
+        total_amount=499,
+        unit_amount=499,
+    )
+    payment = _payment(
+        content_item_id=None,
+        plan="gold",
+        amount=499,
+        payment_type="subscription",
+    )
+    assert not order_payment_matches_snapshot(order, payment)
 
 
 def test_subscription_order_rejects_plan_change():
