@@ -1,11 +1,8 @@
-export type PrepzaFeature = 'summary' | 'podcast' | 'flashcards' | 'quiz' | 'mind_map'
-
 export type PrepzaUsage = {
-  plan: 'free' | 'plus' | 'pro'
+  plan: 'free' | 'plus' | 'pro' | 'premium'
   price_kes: number
   billing_period: string
   limits: {
-    display_name: string
     podcast_minutes: number
     summary_pages: number
     questions: number
@@ -15,41 +12,43 @@ export type PrepzaUsage = {
     premium_library: boolean
     study_hub_uploads: boolean
   }
-  usage: Record<PrepzaFeature, {
-    requests: number
-    units: number
-    remaining_units?: number
-    unit_limit?: number
-    max_units_per_generation?: number
-  }>
+  usage: Record<string, { requests: number; units: number; remaining_units?: number; unit_limit?: number; max_units_per_generation?: number }>
   period_start: string
 }
 
 export async function fetchPrepzaUsage(): Promise<PrepzaUsage> {
   const response = await fetch('/api/usage/me', { credentials: 'include' })
   const body = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(body?.error || 'Could not load your study allowance.')
+  if (!response.ok) throw new Error(body?.error || 'Could not load usage limits.')
   return body as PrepzaUsage
 }
 
-export function featureLimit(usage: PrepzaUsage | null, feature: PrepzaFeature): number {
-  if (!usage) return 0
-  const key = feature === 'summary' ? 'summary_pages'
-    : feature === 'podcast' ? 'podcast_minutes'
-    : feature === 'flashcards' ? 'flashcards'
-    : feature === 'quiz' ? 'questions'
-    : 'mind_map_nodes'
-  return Number(usage.limits[key] || 0)
-}
-
-export function remainingUnits(usage: PrepzaUsage | null, feature: PrepzaFeature): number {
-  return Number(usage?.usage?.[feature]?.remaining_units ?? 0)
-}
-
-export function canGenerate(usage: PrepzaUsage | null, feature: PrepzaFeature, units: number): boolean {
+export function canGenerate(
+  usage: PrepzaUsage | null,
+  feature: 'summary' | 'podcast' | 'flashcards' | 'quiz' | 'mind_map',
+  units: number,
+) {
   if (!usage || !Number.isFinite(units) || units <= 0) return false
-  const limit = featureLimit(usage, feature)
-  return units <= limit && units <= remainingUnits(usage, feature)
+  const limitKey = {
+    summary: 'summary_pages',
+    podcast: 'podcast_minutes',
+    flashcards: 'flashcards',
+    quiz: 'questions',
+    mind_map: 'mind_map_nodes',
+  } as const
+  const limit = Number(usage.limits[limitKey[feature]] || 0)
+  const current = usage.usage[feature] || { requests: 0, units: 0, remaining_units: limit }
+  // The plan allowance is a monthly spendable wallet. The same feature limit
+  // also caps one generation. Reused artifacts still consume this wallet.
+  return units <= limit && units <= Number(current.remaining_units ?? Math.max(0, limit - Number(current.units || 0)))
+}
+
+export function remainingUnits(usage: PrepzaUsage | null, feature: 'summary' | 'podcast' | 'flashcards' | 'quiz' | 'mind_map') {
+  return Math.max(0, Number(usage?.usage?.[feature]?.remaining_units ?? 0))
+}
+
+export function usageExhausted(usage: PrepzaUsage | null, feature: 'summary' | 'podcast' | 'flashcards' | 'quiz' | 'mind_map') {
+  return usage != null && remainingUnits(usage, feature) <= 0
 }
 
 export function usageLabel(usage: PrepzaUsage | null) {
@@ -58,5 +57,7 @@ export function usageLabel(usage: PrepzaUsage | null) {
     ? 'Pro · expanded generation allowance'
     : usage.plan === 'plus'
       ? 'Plus · expanded generation allowance'
-      : 'Free · limited generation allowance'
+      : usage.plan === 'premium'
+        ? 'Premium · expanded generation allowance'
+        : 'Free · limited generation allowance'
 }
