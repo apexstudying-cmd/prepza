@@ -168,6 +168,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
         release_generation_variant,
         refund_ai_quota,
     )
+    from ai_economics import get_plan, get_user_plan_code
 
     unit_keys = {
         "summary": "max_pages",
@@ -180,7 +181,21 @@ def generate_document_material(*, material_type, document_content_id, triggering
     if material_type in FEATURES and variant_pool_feature:
         quota_units = params.get(unit_keys[material_type])
         if quota_units is None:
-            raise ValueError(f"Missing required generation size for {material_type}")
+            # If the client does not specify a generation size, default to
+            # the current admin-configured plan allowance for that feature.
+            # The resolved size becomes part of the fingerprint, so changing
+            # the admin limit creates a new generation family rather than
+            # silently reusing an artifact built for the old size.
+            plan_code = get_user_plan_code(db, triggering_user_id)
+            plan = get_plan(db, plan_code)
+            if not plan:
+                raise ai_service.AIRateLimitExceededError("Student plan configuration is unavailable.")
+            quota_units = int(plan[unit_keys[material_type]] or 0)
+            if quota_units <= 0:
+                raise ai_service.AIRateLimitExceededError(
+                    f"{material_type.replace('_', ' ').title()} generation is unavailable on this plan."
+                )
+            params = {**params, unit_keys[material_type]: quota_units}
         allowed, quota_meta = check_and_consume_ai_quota(
             db, triggering_user_id, material_type, quota_units
         )
