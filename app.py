@@ -2166,12 +2166,22 @@ def sync_paystack_payment_status(reference):
                 promo = db.session.get(OpportunityPromotion, payment.opportunity_promotion_id)
                 if promo:
                     promo.payment_status = "success"
-            if payment.payment_type == "subscription" and payment.plan:
-                payment.subscription_expires_at = compute_new_subscription_expiry(
-                    payment.user_id, payment.plan
-                )
-            _maybe_award_referral_commission(payment)
-            _student_order_helpers["mark_paid_and_fulfilled"](payment)
+
+            # Student subscriptions are only activated after the durable order
+            # ledger confirms that the payment matches the exact checkout
+            # snapshot. A successful provider transaction without a valid
+            # order must never grant plan access.
+            if payment.payment_type in ("subscription", "content"):
+                fulfilled = _student_order_helpers["mark_paid_and_fulfilled"](payment)
+                if not fulfilled:
+                    payment.status = "failed"
+                elif payment.payment_type == "subscription" and payment.plan:
+                    payment.subscription_expires_at = compute_new_subscription_expiry(
+                        payment.user_id, payment.plan
+                    )
+
+            if payment.status == "success":
+                _maybe_award_referral_commission(payment)
     elif tx_status in ("failed", "abandoned", "reversed"):
         # A payment that definitively failed cannot fulfill the order.
         _student_order_helpers["mark_failed"](payment.id)
@@ -3464,19 +3474,25 @@ def payment_history():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
+    # Student billing is subscription-first. Individual content purchases are
+    # legacy and must not appear as current student transactions. Keep the
+    # endpoint ready for future usage/add-on payments without reviving content
+    # ownership as a product model.
     payments = (
-        Payment.query.filter_by(user_id=user_id)
+        Payment.query.filter(
+            Payment.user_id == user_id,
+            Payment.payment_type.in_(( "subscription", "addon" )),
+        )
         .order_by(Payment.created_at.desc())
         .all()
     )
 
     result = []
     for p in payments:
-        content_item = db.session.get(ContentItem, p.content_item_id) if p.content_item_id else None
         result.append({
             "id": p.id,
             "payment_type": p.payment_type,
-            "content_title": content_item.title if content_item else None,
+            "content_title": None,
             "plan": p.plan,
             "amount": p.amount,
             "status": p.status,
@@ -8157,6 +8173,13 @@ def _display_name(user):
 
 @app.route("/library/my-purchases")
 def my_library():
+    # Legacy endpoint retained for compatibility with old clients only.
+    # Current Library access is subscription/plan based and does not create
+    # per-content ownership records.
+    return jsonify({
+        "error": "Individual content purchases are no longer part of Prepza."
+    }), 410
+
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -8349,6 +8372,13 @@ def content_view_progress(content_id):
 )
 @require_csrf
 def pay_for_content(content_id):
+    # Individual content checkout is legacy. The current student product uses
+    # Free / Plus / Pro subscriptions; future one-off purchases are usage/add-on
+    # credits, not ownership of Library content.
+    return jsonify({
+        "error": "Individual content purchases are no longer available. Choose a Prepza subscription."
+    }), 410
+
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
