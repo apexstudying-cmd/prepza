@@ -2040,12 +2040,28 @@ def get_user_subscription_status(user_id):
     Payment row rather than a separate table - mirrors how content access
     already works off the Payment table.
     """
+    # A successful Payment row alone is not enough to grant a plan.
+    # The immutable student_order ledger must also say that this exact
+    # subscription checkout was fulfilled. This prevents orphaned/tampered
+    # payment rows from becoming entitlements.
     latest = (
-        Payment.query.filter(
+        Payment.query
+        .join(
+            StudentOrder,
+            StudentOrder.payment_id == Payment.id,
+        )
+        .filter(
             Payment.user_id == user_id,
             Payment.payment_type == "subscription",
             Payment.status == "success",
             Payment.subscription_expires_at.isnot(None),
+            StudentOrder.user_id == user_id,
+            StudentOrder.order_type == "subscription",
+            StudentOrder.status == "fulfilled",
+            StudentOrder.plan == Payment.plan,
+            StudentOrder.item_id.is_(None),
+            StudentOrder.quantity == 1,
+            StudentOrder.currency == "KES",
         )
         .order_by(Payment.subscription_expires_at.desc())
         .first()
@@ -2135,7 +2151,14 @@ def sync_paystack_payment_status(reference):
     (best-effort, user is waiting) and the webhook (authoritative,
     server-to-server) - either can be first, both are safe to call.
     """
-    payment = Payment.query.filter_by(reference=reference).first()
+    # Serialize verification for a single payment. Callback + webhook can
+    # legitimately arrive at the same time; without a row lock both requests
+    # could observe "pending" and a subscription could be extended twice.
+    payment = (
+        Payment.query.filter_by(reference=reference)
+        .with_for_update()
+        .first()
+    )
     if not payment or payment.status != "pending":
         return payment
 
