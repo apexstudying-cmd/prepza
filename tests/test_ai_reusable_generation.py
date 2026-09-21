@@ -256,6 +256,8 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
             seen_variants[-1]
         ),
         refund_ai_quota=lambda *args, **kwargs: None,
+        mark_generation_variant_ready=lambda *args, **kwargs: None,
+        release_generation_variant=lambda *args, **kwargs: None,
     )
 
     fake_ai = types.SimpleNamespace(
