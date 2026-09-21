@@ -112,7 +112,11 @@ SELECT
 FROM payment p
 LEFT JOIN content_item ci ON ci.id = p.content_item_id
 WHERE p.user_id IS NOT NULL
-  AND p.payment_type IN ('content', 'subscription')
+  AND (
+      (p.payment_type = 'content' AND p.content_item_id IS NOT NULL AND ci.id IS NOT NULL)
+      OR
+      (p.payment_type = 'subscription' AND p.plan IN ('semester', 'annual'))
+  )
   AND NOT EXISTS (
       SELECT 1 FROM student_order existing WHERE existing.payment_id = p.id
   );
