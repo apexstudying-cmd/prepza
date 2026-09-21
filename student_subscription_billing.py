@@ -281,14 +281,25 @@ def handle_recurring_charge(db, payload):
     customer = data.get("customer") or {}
     subscription_code = subscription.get("subscription_code") or data.get("subscription_code")
     reference = data.get("reference") or (data.get("transaction") or {}).get("reference")
-    if not subscription_code or not reference:
+    if not reference:
         return False
 
-    local = db.session.execute(text("""
-        SELECT * FROM student_subscription
-        WHERE paystack_subscription_code=:code
-        LIMIT 1
-    """), {"code": subscription_code}).mappings().first()
+    local = None
+    if subscription_code:
+        local = db.session.execute(text("""
+            SELECT * FROM student_subscription
+            WHERE paystack_subscription_code=:code
+            LIMIT 1
+        """), {"code": subscription_code}).mappings().first()
+    if not local:
+        customer_code = customer.get("customer_code")
+        if customer_code:
+            local = db.session.execute(text("""
+                SELECT * FROM student_subscription
+                WHERE paystack_customer_code=:customer_code
+                  AND status IN ('active','non-renewing','attention')
+                ORDER BY id DESC LIMIT 1
+            """), {"customer_code": customer_code}).mappings().first()
     if not local:
         return False
 
