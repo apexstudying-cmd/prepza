@@ -51,22 +51,22 @@ def test_order_payment_match_rejects_payment_type_change():
     assert not order_payment_matches_snapshot(_order(), _payment(payment_type="subscription"))
 
 
-def test_subscription_order_requires_subscription_payment():
-    order = _order(order_type="subscription", item_id=None, plan="semester", total_amount=499)
+def test_plus_subscription_order_requires_subscription_payment():
+    order = _order(order_type="subscription", item_id=None, plan="plus", total_amount=499)
     payment = _payment(
         content_item_id=None,
-        plan="semester",
+        plan="plus",
         amount=499,
         payment_type="subscription",
     )
     assert order_payment_matches_snapshot(order, payment)
 
 
-def test_subscription_order_rejects_content_payment():
-    order = _order(order_type="subscription", item_id=None, plan="semester", total_amount=499)
+def test_plus_subscription_order_rejects_content_payment():
+    order = _order(order_type="subscription", item_id=None, plan="plus", total_amount=499)
     payment = _payment(
         content_item_id=None,
-        plan="semester",
+        plan="plus",
         amount=499,
         payment_type="content",
     )
@@ -100,10 +100,10 @@ def test_subscription_order_rejects_unknown_plan():
 
 
 def test_subscription_order_rejects_plan_change():
-    order = _order(order_type="subscription", item_id=None, plan="semester", total_amount=499)
+    order = _order(order_type="subscription", item_id=None, plan="plus", total_amount=499)
     payment = _payment(
         content_item_id=None,
-        plan="annual",
+        plan="pro",
         amount=499,
         payment_type="subscription",
     )
@@ -115,10 +115,10 @@ def test_content_order_rejects_missing_content_item_on_payment():
 
 
 def test_subscription_order_rejects_content_item_on_payment():
-    order = _order(order_type="subscription", item_id=None, plan="semester", total_amount=499)
+    order = _order(order_type="subscription", item_id=None, plan="plus", total_amount=499)
     payment = _payment(
         content_item_id=42,
-        plan="semester",
+        plan="plus",
         amount=499,
         payment_type="subscription",
     )
@@ -127,3 +127,15 @@ def test_subscription_order_rejects_content_item_on_payment():
 
 def test_order_payment_match_requires_successful_payment():
     assert not order_payment_matches_snapshot(_order(), _payment(status="pending"))
+
+
+def test_free_is_not_a_paid_subscription_order():
+    order = _order(order_type="subscription", item_id=None, plan="free", total_amount=0, unit_amount=0)
+    payment = _payment(content_item_id=None, plan="free", amount=0, payment_type="subscription")
+    assert not order_payment_matches_snapshot(order, payment)
+
+
+def test_plus_and_pro_are_distinct_plans():
+    plus_order = _order(order_type="subscription", item_id=None, plan="plus", total_amount=499, unit_amount=499)
+    pro_payment = _payment(content_item_id=None, plan="pro", amount=999, payment_type="subscription")
+    assert not order_payment_matches_snapshot(plus_order, pro_payment)
