@@ -119,3 +119,49 @@ WHERE p.user_id IS NOT NULL
 
 -- After the backfill, a new paid content payment without an order is an
 -- invariant violation and must not be allowed to unlock content.
+
+
+-- Database-level invariants: even if application code is bypassed or
+-- regresses later, an order cannot represent an impossible fulfillment.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_student_order_quantity_positive'
+    ) THEN
+        ALTER TABLE student_order
+        ADD CONSTRAINT ck_student_order_quantity_positive
+        CHECK (quantity = 1);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_student_order_total_matches_unit'
+    ) THEN
+        ALTER TABLE student_order
+        ADD CONSTRAINT ck_student_order_total_matches_unit
+        CHECK (total_amount = unit_amount * quantity);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_student_order_currency_kes'
+    ) THEN
+        ALTER TABLE student_order
+        ADD CONSTRAINT ck_student_order_currency_kes
+        CHECK (currency = 'KES');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_student_order_type_snapshot'
+    ) THEN
+        ALTER TABLE student_order
+        ADD CONSTRAINT ck_student_order_type_snapshot
+        CHECK (
+            (order_type = 'subscription' AND item_id IS NULL AND plan IS NOT NULL)
+            OR
+            (order_type = 'content' AND item_id IS NOT NULL AND plan IS NULL)
+        );
+    END IF;
+END $$;
