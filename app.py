@@ -1869,7 +1869,7 @@ def get_plan_prices():
             return default
 
     return {
-        "semester": parse("price_plan_semester", 599),
+        "semester": parse("price_plan_semester", 499),
         "annual": parse("price_plan_annual", 999),
     }
 
@@ -8334,8 +8334,8 @@ def subscription_plans():
     return jsonify({
         "plans": [
             {"id": "free", "name": "Free", "price": 0, "period": None},
-            {"id": "semester", "name": "Semester", "price": prices["semester"], "period": "semester"},
-            {"id": "annual", "name": "Annual", "price": prices["annual"], "period": "year"},
+            {"id": "semester", "name": "Plus", "price": prices["semester"], "period": "month"},
+            {"id": "annual", "name": "Pro", "price": prices["annual"], "period": "month"},
         ]
     })
 
@@ -8373,7 +8373,7 @@ def subscription_upgrade():
 
     try:
         provider_reference, authorization_url = create_paystack_transaction(
-            reference, price, f"Prepza {plan.title()} Plan", user
+            reference, price, f"Prepza {"Plus" if plan == "semester" else "Pro"} Plan", user
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 502
