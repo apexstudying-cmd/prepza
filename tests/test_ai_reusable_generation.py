@@ -370,3 +370,50 @@ def test_internal_artifact_claim_failure_refunds_quota_and_releases_variant(monk
     assert calls["refund"][0][0][1:4] == (303, "summary", 10)
     assert calls["refund"][0][1]["period_start"] == "2026-09-21"
     assert len(calls["release"]) == 1
+
+
+def test_wait_timeout_does_not_refund_live_generation(monkeypatch):
+    content = types.SimpleNamespace(content_hash="hash-timeout", extracted_text="notes", page_count=2)
+    session = _FakeSession(content)
+    fake_app = types.SimpleNamespace(
+        db=types.SimpleNamespace(session=session), DocumentContent=object, AiJob=_FakeAiJob
+    )
+    refunds, releases = [], []
+    fake_usage = types.SimpleNamespace(
+        FEATURES={"summary": ("summary_generations", "summary_max_pages")},
+        check_and_consume_ai_quota=lambda *args, **kwargs: (True, {"period_start": "2026-09-21"}),
+        reserve_generation_variant=lambda *args, **kwargs: 1,
+        refund_ai_quota=lambda *args, **kwargs: refunds.append(True),
+        release_generation_variant=lambda *args, **kwargs: releases.append(True),
+        mark_generation_variant_ready=lambda *args, **kwargs: None,
+    )
+    fake_ai = types.SimpleNamespace(
+        AIProviderError=RuntimeError,
+        AIRateLimitExceededError=RuntimeError,
+        AIBudgetExceededError=RuntimeError,
+    )
+    monkeypatch.setitem(sys.modules, "app", fake_app)
+    monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
+    monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
+    monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
+    monkeypatch.setattr(
+        reusable, "claim_or_get_generation",
+        lambda **kwargs: GenerationLookup(55, "generating", None, False),
+    )
+    monkeypatch.setattr(
+        reusable, "wait_for_generation",
+        lambda *args, **kwargs: GenerationLookup(55, "generating", None, False),
+    )
+    try:
+        reusable.generate_document_material(
+            material_type="summary",
+            document_content_id=10,
+            triggering_user_id=404,
+            parameters={"max_pages": 2},
+        )
+    except RuntimeError as exc:
+        assert "still being prepared" in str(exc)
+    else:
+        raise AssertionError("Expected in-flight timeout")
+    assert refunds == []
+    assert releases == []
