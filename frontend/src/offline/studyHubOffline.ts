@@ -296,14 +296,42 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     assetUrls.push(url)
     if (cache) { try { await cacheResponse(cache, url, new Response(blob, { headers: { 'Content-Type': blob.type || 'application/pdf' } })) } catch (_) {} }
 
-    const generatedPaths = ['summarize', 'quiz', 'flashcards', 'podcast-script', 'podcast-audio', 'mindmap']
-    await Promise.all(generatedPaths.map(async feature => {
+    // Copy every READY generated material by its exact material ID. The
+    // replay endpoint is GET-only, so this is safe to perform while building
+    // an offline package and never starts a new AI generation.
+    const generatedMaterials = Array.isArray(detail.materials) ? detail.materials : []
+    await Promise.all(generatedMaterials.map(async (material: any) => {
       try {
-        const materialResponse = await fetch(`/documents/${documentId}/${feature}`, { credentials: 'include', cache: 'no-store' })
+        const materialId = Number(material?.id)
+        if (!Number.isInteger(materialId) || materialId <= 0 || material?.status !== 'ready') return
+        const materialResponse = await fetch(
+          `/documents/${documentId}/materials/${materialId}`,
+          { credentials: 'include', cache: 'no-store' },
+        )
         if (!materialResponse.ok) return
         const payload = await materialResponse.json()
-        await saveGeneratedMaterialOffline(`/documents/${documentId}/${feature}`, null, payload)
-        if (feature === 'podcast-audio' && payload?.audio_status === 'ready' && payload?.audio_url) {
+        await saveGeneratedMaterialOffline(
+          `/documents/${documentId}/materials/${materialId}`,
+          null,
+          payload,
+        )
+      } catch (_) {}
+    }))
+
+    // Podcast audio is a separate binary asset. Fetch its signed URL only
+    // when the server says that this exact podcast material is ready.
+    const podcastMaterials = generatedMaterials.filter((m: any) => String(m?.type || '').toLowerCase() === 'podcast')
+    await Promise.all(podcastMaterials.map(async (material: any) => {
+      try {
+        const materialId = Number(material?.id)
+        if (!Number.isInteger(materialId) || materialId <= 0) return
+        const statusResponse = await fetch(
+          `/documents/${documentId}/podcast-audio?material_id=${materialId}`,
+          { credentials: 'include', cache: 'no-store' },
+        )
+        if (!statusResponse.ok) return
+        const payload = await statusResponse.json()
+        if (payload?.audio_status === 'ready' && payload?.audio_url) {
           await cacheGeneratedAudioOffline(String(payload.audio_url))
         }
       } catch (_) {}
