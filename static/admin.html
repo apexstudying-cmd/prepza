@@ -1180,11 +1180,40 @@ function renderAiArtifacts(items) {
             <td class="mono" style="max-width:280px;overflow-wrap:anywhere">${escapeHtml(JSON.stringify(item.parameters || {}))}</td>
             <td><span class="stamp ${item.status === "ready" ? "success" : item.status === "failed" ? "failed" : "pending"}">${escapeHtml(item.status)}</span></td>
             <td class="mono">${formatDate(item.created_at)}</td>
-            <td>${item.status === "ready" ? `<button class="btn-danger-outline" onclick="takedownAiArtifact('${escapeHtml(item.fingerprint)}', '${escapeHtml(item.feature)}', ${item.variant ?? "null"})">Take down</button>` : ""}</td>
+            <td style="white-space:nowrap">
+              <button class="btn-outline" onclick="viewAiArtifact('${escapeHtml(item.fingerprint)}')">View</button>
+              ${item.status === "ready" ? `<button class="btn-danger-outline" onclick="takedownAiArtifact('${escapeHtml(item.fingerprint)}', '${escapeHtml(item.feature)}', ${item.variant ?? "null"})">Take down</button>` : ""}
+            </td>
           </tr>
         `).join("")}
       </tbody>
     </table>`;
+}
+
+async function viewAiArtifact(fingerprint) {
+  try {
+    const data = await api(`/api/admin/ai-generations/${encodeURIComponent(fingerprint)}`);
+    const artifact = data.artifact || {};
+    const payload = artifact.payload == null
+      ? "(no stored payload)"
+      : (typeof artifact.payload === "string" ? artifact.payload : JSON.stringify(artifact.payload, null, 2));
+    const overlay = document.createElement("div");
+    overlay.id = "ai-artifact-viewer";
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;padding:24px;display:flex;align-items:center;justify-content:center";
+    overlay.innerHTML = `
+      <div style="background:var(--card,#111);color:inherit;width:min(1000px,96vw);max-height:90vh;overflow:auto;border-radius:12px;padding:20px">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+          <h2 style="margin:0">AI artifact #${artifact.id ?? "—"} · ${escapeHtml(artifact.feature || "")} ${artifact.variant ? "· variant " + artifact.variant : ""}</h2>
+          <button class="btn-outline" onclick="document.getElementById('ai-artifact-viewer')?.remove()">Close</button>
+        </div>
+        <p class="hint">Status: ${escapeHtml(artifact.status || "—")} · Source hash: ${escapeHtml(artifact.content_hash || "—")}</p>
+        <pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:68vh;overflow:auto;padding:14px;border:1px solid rgba(255,255,255,.12);border-radius:8px">${escapeHtml(payload)}</pre>
+      </div>`;
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  } catch (e) {
+    toast(e.message, "error");
+  }
 }
 
 async function takedownAiArtifact(fingerprint, feature, variant) {
