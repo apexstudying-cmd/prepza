@@ -16,6 +16,34 @@ ORDER_STATUSES = (
 )
 
 
+def order_payment_matches_snapshot(order_row, payment):
+    """Return True only when a successful payment still matches its order."""
+    expected_item_id = order_row["item_id"]
+    payment_item_id = payment.content_item_id
+    expected_plan = order_row["plan"]
+    payment_plan = payment.plan
+    expected_total = int(order_row["total_amount"])
+    payment_amount = int(payment.amount or 0)
+    expected_user_id = int(order_row["user_id"])
+    payment_user_id = int(payment.user_id or 0)
+
+    return not (
+        expected_user_id != payment_user_id
+        or expected_total != payment_amount
+        or order_row["currency"] != "KES"
+        or payment_item_id != expected_item_id
+        or payment_plan != expected_plan
+        or (
+            order_row["order_type"] == "content"
+            and (expected_item_id is None or payment.payment_type != "content")
+        )
+        or (
+            order_row["order_type"] == "subscription"
+            and (payment.payment_type != "subscription" or expected_item_id is not None)
+        )
+    )
+
+
 def _order_number():
     # Human-readable support reference; database UNIQUE constraint is the
     # final collision guard.
@@ -161,32 +189,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
         # The order snapshot is the fulfillment authority. Never let mutable
         # Payment fields silently redirect a successful payment to a different
         # student, content item, plan, amount, or currency.
-        expected_item_id = row["item_id"]
-        payment_item_id = payment.content_item_id
-        expected_plan = row["plan"]
-        payment_plan = payment.plan
-        expected_total = int(row["total_amount"])
-        payment_amount = int(payment.amount or 0)
-        expected_user_id = int(row["user_id"])
-        payment_user_id = int(payment.user_id or 0)
-
-        mismatch = (
-            expected_user_id != payment_user_id
-            or expected_total != payment_amount
-            or row["currency"] != "KES"
-            or payment_item_id != expected_item_id
-            or payment_plan != expected_plan
-            or (
-                row["order_type"] == "content"
-                and (expected_item_id is None or payment.payment_type != "content")
-            )
-            or (
-                row["order_type"] == "subscription"
-                and (payment.payment_type != "subscription" or expected_item_id is not None)
-            )
-        )
-
-        if mismatch:
+        if not order_payment_matches_snapshot(row, payment):
             payment.status = "failed"
             db.session.execute(
                 text("""
