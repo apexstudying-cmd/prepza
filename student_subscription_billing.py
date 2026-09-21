@@ -17,6 +17,13 @@ from sqlalchemy import text
 
 def ensure_subscription_schema(db):
     """Idempotent safety net; the migration remains the deploy/audit artifact."""
+    # Payment period boundaries are part of the entitlement contract. Keep
+    # this additive safety-net in sync with the deploy migration so an older
+    # database cannot boot into code that references a missing column.
+    db.session.execute(text("""
+        ALTER TABLE payment
+        ADD COLUMN IF NOT EXISTS subscription_starts_at TIMESTAMP NULL
+    """))
     db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS student_subscription (
             id BIGSERIAL PRIMARY KEY,
