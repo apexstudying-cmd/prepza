@@ -8575,9 +8575,10 @@ def subscription_upgrade():
     user = db.session.get(User, user_id)
     reference = f"PZA-sub-{plan}-{secrets.token_hex(6)}"
 
+    plan_name = "Plus" if plan == "semester" else "Pro"
     try:
         provider_reference, authorization_url = create_paystack_transaction(
-            reference, price, f"Prepza {"Plus" if plan == "semester" else "Pro"} Plan", user
+            reference, price, f"Prepza {plan_name} Plan", user
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 502
