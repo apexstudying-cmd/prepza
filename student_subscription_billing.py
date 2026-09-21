@@ -520,6 +520,23 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
     ensure_subscription_schema(db)
     from ai_economics import get_plan
 
+    @app.get("/subscription/refund-policy")
+    def subscription_refund_policy():
+        window_hours, retention_pct, full_zero_usage = _policy(db)
+        return jsonify({
+            "standard_window_hours": window_hours,
+            "full_refund_if_zero_usage": full_zero_usage,
+            "retention_percent_after_usage": float(retention_pct),
+            "currency": "KES",
+            "summary": (
+                "Within the standard refund window, zero paid entitlement consumed "
+                "qualifies for a full refund. If paid entitlement was consumed, the "
+                "standard refund deducts the calculated consumed value plus the "
+                "published service-retention component. Statutory or exceptional "
+                "refund rights are not removed by this standard policy."
+            ),
+        })
+
     @app.get("/subscription/refund-quote")
     def subscription_refund_quote():
         user_id = session.get("user_id")
