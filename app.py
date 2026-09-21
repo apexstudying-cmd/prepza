@@ -8141,12 +8141,22 @@ def my_library():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    payments = Payment.query.filter_by(user_id=user_id, status="success").all()
-    unlocked_at = {}
-    for p in payments:
-        existing = unlocked_at.get(p.content_item_id)
-        if existing is None or (p.created_at and p.created_at > existing):
-            unlocked_at[p.content_item_id] = p.created_at
+    # Only fulfilled order-ledger purchases are eligible for the paid
+    # library. Do not build the entitlement set from Payment rows alone.
+    fulfilled_orders = db.session.execute(
+        text("""
+            SELECT item_id, MAX(COALESCE(fulfilled_at, paid_at, created_at)) AS unlocked_at
+            FROM student_order
+            WHERE user_id = :user_id
+              AND order_type = 'content'
+              AND status = 'fulfilled'
+              AND quantity = 1
+              AND item_id IS NOT NULL
+            GROUP BY item_id
+        """),
+        {"user_id": user_id},
+    ).mappings().all()
+    unlocked_at = {row["item_id"]: row["unlocked_at"] for row in fulfilled_orders}
 
     items = ContentItem.query.all()
     grouped = {"past_paper": [], "notes": [], "qna": []}
