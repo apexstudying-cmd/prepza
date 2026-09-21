@@ -68,3 +68,33 @@ def test_subscription_order_rejects_content_payment():
         payment_type="content",
     )
     assert not order_payment_matches_snapshot(order, payment)
+
+
+def test_order_payment_match_rejects_currency_change():
+    assert not order_payment_matches_snapshot(_order(currency="USD"), _payment())
+
+
+def test_subscription_order_rejects_plan_change():
+    order = _order(order_type="subscription", item_id=None, plan="semester", total_amount=499)
+    payment = _payment(
+        content_item_id=None,
+        plan="annual",
+        amount=499,
+        payment_type="subscription",
+    )
+    assert not order_payment_matches_snapshot(order, payment)
+
+
+def test_content_order_rejects_missing_content_item_on_payment():
+    assert not order_payment_matches_snapshot(_order(), _payment(content_item_id=None))
+
+
+def test_subscription_order_rejects_content_item_on_payment():
+    order = _order(order_type="subscription", item_id=None, plan="semester", total_amount=499)
+    payment = _payment(
+        content_item_id=42,
+        plan="semester",
+        amount=499,
+        payment_type="subscription",
+    )
+    assert not order_payment_matches_snapshot(order, payment)
