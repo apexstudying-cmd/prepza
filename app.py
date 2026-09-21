@@ -8555,8 +8555,8 @@ def subscription_plans():
     return jsonify({
         "plans": [
             {"id": "free", "name": "Free", "price": 0, "period": None},
-            {"id": "semester", "name": "Plus", "price": prices["semester"], "period": "month"},
-            {"id": "annual", "name": "Pro", "price": prices["annual"], "period": "month"},
+            {"id": "semester", "name": "Plus", "price": prices["semester"], "period": "semester"},
+            {"id": "annual", "name": "Pro", "price": prices["annual"], "period": "year"},
         ]
     })
 
