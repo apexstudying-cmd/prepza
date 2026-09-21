@@ -8284,6 +8284,17 @@ def pay_for_content(content_id):
     if has_access(user_id, content_item):
         return jsonify({"message": "You already have access to this content"}), 200
 
+    # If checkout was interrupted or the callback response was lost, recover
+    # the exact same pending checkout instead of creating a second charge/order.
+    pending = _student_order_helpers["find_pending_checkout"](user_id, content_item_id=content_id)
+    if pending and pending.get("checkout_url"):
+        return jsonify({
+            "redirect_url": pending["checkout_url"],
+            "reference": pending["reference"],
+            "order_number": pending["order_number"],
+            "recovered": True,
+        })
+
     user = db.session.get(User, user_id)
     data = request.get_json(silent=True) or {}
     phone_number = data.get("phone_number")  # optional - Paystack collects payment details itself
@@ -8309,7 +8320,7 @@ def pay_for_content(content_id):
     )
     db.session.add(payment)
     db.session.flush()
-    _student_order_helpers["create"](payment, item_title=content_item.title, requested_payload={
+    _student_order_helpers["create"](payment, item_title=content_item.title, checkout_url=authorization_url, requested_payload={
         "payment_type": "content",
         "content_item_id": content_item.id,
         "content_title": content_item.title,
@@ -8442,6 +8453,15 @@ def subscription_upgrade():
     if price <= 0:
         return jsonify({"error": "This plan is not currently available"}), 400
 
+    pending = _student_order_helpers["find_pending_checkout"](user_id, plan=plan)
+    if pending and pending.get("checkout_url"):
+        return jsonify({
+            "redirect_url": pending["checkout_url"],
+            "reference": pending["reference"],
+            "order_number": pending["order_number"],
+            "recovered": True,
+        })
+
     user = db.session.get(User, user_id)
     reference = f"PZA-sub-{plan}-{secrets.token_hex(6)}"
 
@@ -8466,7 +8486,7 @@ def subscription_upgrade():
     )
     db.session.add(payment)
     db.session.flush()
-    _student_order_helpers["create"](payment, item_title=("Plus Plan" if plan == "semester" else "Pro Plan"), requested_payload={
+    _student_order_helpers["create"](payment, item_title=("Plus Plan" if plan == "semester" else "Pro Plan"), checkout_url=authorization_url, requested_payload={
         "payment_type": "subscription",
         "plan": plan,
         "plan_name": "Plus" if plan == "semester" else "Pro",
