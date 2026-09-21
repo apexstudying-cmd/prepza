@@ -230,6 +230,38 @@ def record_ada_usage(db, user_id, plan_code, model, provider, input_tokens, cach
             ada_units=GREATEST(0, ada_usage_month.ada_units+EXCLUDED.ada_units),
             requests=ada_usage_month.requests+1, updated_at=CURRENT_TIMESTAMP
     """), {"uid":user_id,"period":month,"units":delta})
+
+    # Record the final, successful Ada consumption against the exact paid
+    # subscription payment. This is separate from the monthly wallet because
+    # the wallet resets and cannot prove which subscription payment was used.
+    if plan_code in ("plus", "pro") and units > 0:
+        payment_id = db.session.execute(text("""
+            SELECT p.id
+            FROM payment p
+            JOIN student_order so ON so.payment_id=p.id
+            WHERE p.user_id=:uid AND p.payment_type='subscription'
+              AND p.plan=:plan AND p.status='success'
+              AND so.status='fulfilled'
+              AND p.subscription_expires_at > CURRENT_TIMESTAMP
+            ORDER BY p.subscription_expires_at DESC, p.id DESC
+            LIMIT 1
+        """), {"uid":user_id,"plan":plan_code}).scalar_one_or_none()
+        if payment_id:
+            db.session.execute(text("""
+                INSERT INTO student_entitlement_usage
+                    (user_id,payment_id,feature,units,request_count,metadata)
+                VALUES (:uid,:pid,'ada',:units,1,CAST(:metadata AS jsonb))
+            """), {
+                "uid": user_id, "pid": payment_id, "units": units,
+                "metadata": __import__("json").dumps({
+                    "model": model, "provider": provider, "request_key": request_key,
+                    "input_tokens": int(input_tokens or 0),
+                    "cached_tokens": int(cached_tokens or 0),
+                    "cache_write_tokens": int(cache_write_tokens or 0),
+                    "output_tokens": int(output_tokens or 0),
+                    "provisional": False,
+                }),
+            })
     db.session.commit()
     return units
 
