@@ -11299,32 +11299,6 @@ def admin_analytics():
         for day, amount in revenue_raw
     ]
 
-    top_content_raw = (
-        db.session.query(
-            ContentItem.id,
-            ContentItem.title,
-            ContentItem.content_type,
-            func.coalesce(func.sum(Payment.amount), 0).label("revenue"),
-            func.count(Payment.id).label("purchases"),
-        )
-        .join(Payment, Payment.content_item_id == ContentItem.id)
-        .filter(Payment.status == "success")
-        .group_by(ContentItem.id, ContentItem.title, ContentItem.content_type)
-        .order_by(func.coalesce(func.sum(Payment.amount), 0).desc())
-        .limit(10)
-        .all()
-    )
-    top_performing_content = [
-        {
-            "id": cid,
-            "title": title,
-            "content_type": content_type,
-            "revenue": revenue,
-            "purchases": purchases,
-        }
-        for cid, title, content_type, revenue, purchases in top_content_raw
-    ]
-
     return jsonify({
         "total_revenue": total_revenue,
         "revenue_last_30d": revenue_30d,
@@ -11337,7 +11311,6 @@ def admin_analytics():
         "payments_by_status": payments_by_status,
         "signups_per_day": signups_per_day,
         "revenue_per_day": revenue_per_day,
-        "top_performing_content": top_performing_content,
     })
 
 
