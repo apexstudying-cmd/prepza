@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS student_order (
     order_type VARCHAR(30) NOT NULL,
     item_id INTEGER NULL REFERENCES content_item(id),
     item_title_snapshot VARCHAR(200) NOT NULL,
+    item_file_url_snapshot VARCHAR(500) NULL,
     plan VARCHAR(20) NULL,
     quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
     unit_amount INTEGER NOT NULL CHECK (unit_amount >= 0),
@@ -70,6 +71,7 @@ SELECT
         WHEN p.plan = 'annual' THEN 'Pro Plan'
         ELSE 'Subscription'
     END,
+    CASE WHEN p.payment_type = 'content' THEN ci.file_url ELSE NULL END,
     p.plan,
     1,
     p.amount,
