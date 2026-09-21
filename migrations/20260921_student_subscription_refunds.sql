@@ -71,3 +71,13 @@ VALUES
     ('student_refund_retention_percent', '20'),
     ('student_refund_full_zero_usage', 'true')
 ON CONFLICT (key) DO NOTHING;
+
+-- Provider reconciliation fields: retain the exact Paystack references and
+-- provider message so failed/needs-attention refunds can be investigated
+-- and retried without guessing.
+ALTER TABLE student_refund_request
+    ADD COLUMN IF NOT EXISTS paystack_transaction_reference VARCHAR(120);
+ALTER TABLE student_refund_request
+    ADD COLUMN IF NOT EXISTS paystack_refund_reference VARCHAR(120);
+ALTER TABLE student_refund_request
+    ADD COLUMN IF NOT EXISTS provider_message VARCHAR(500);
