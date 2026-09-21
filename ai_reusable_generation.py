@@ -335,6 +335,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
         # per-day student generation cap here.
         job = AiJob(
             document_content_id=document_content_id,
+            user_id=triggering_user_id,
             feature=material_type,
             status="processing",
             started_at=datetime.utcnow(),
