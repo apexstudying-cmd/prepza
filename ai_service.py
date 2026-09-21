@@ -2307,7 +2307,17 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
         db, triggering_user_id, plan_code, estimated_units
     )
     if not reserved_ok:
-        raise AIRateLimitExceededError("Ada usage limit reached for this period.")
+        if reserve_info.get("code") == "ada_daily_limit":
+            raise AIRateLimitExceededError(
+                "You've reached Ada's safety limit for today. Your monthly allowance is still available; please try again later."
+            )
+        if reserve_info.get("code") == "ada_monthly_limit":
+            raise AIRateLimitExceededError(
+                "You've used your Ada allowance for this month. Upgrade your plan for more Ada usage, or wait for the monthly reset."
+            )
+        raise AIRateLimitExceededError(
+            "Ada is temporarily unavailable for your plan. Please try again shortly."
+        )
 
     prompt_cache_key = f"prepza-ada-doc-{getattr(content, 'content_hash', content.id)}"
     start = time.monotonic()
