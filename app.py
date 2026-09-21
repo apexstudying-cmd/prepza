@@ -274,7 +274,7 @@ class Payment(db.Model):
     # 'content' (one-off document/item purchase) or 'subscription' (plan purchase)
     payment_type = db.Column(db.String(20), nullable=False, default="content")
     plan = db.Column(db.String(20), nullable=True)  # 'plus' | 'pro' - subscription only
-    subscription_expires_at = db.Column(db.DateTime, nullable=True)  # subscription only
+    subscription_starts_at = db.Column(db.DateTime, nullable=True)  # subscription entitlement period start\n    subscription_expires_at = db.Column(db.DateTime, nullable=True)  # subscription only
     # Organisation promotion billing. Nullable so existing student/content/subscription
     # payments remain unchanged.
     organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id"), nullable=True)
@@ -2056,21 +2056,23 @@ def _maybe_award_referral_commission(payment):
 
 def get_user_subscription_status(user_id):
     """
-    A user's plan is derived from their most recent successful subscription
-    Payment row rather than a separate table - mirrors how content access
-    already works off the Payment table.
+    Return the paid subscription period that contains *now*.
+
+    A payment may be paid today but represent a future stacked period (for
+    example, buying Pro while an existing Plus period still has 20 days
+    remaining). Future paid periods must not grant their plan early.
     """
-    # A successful Payment row alone is not enough to grant a plan.
-    # The immutable student_order ledger must also say that this exact
-    # subscription checkout was fulfilled. This prevents orphaned/tampered
-    # payment rows from becoming entitlements.
+    now = datetime.utcnow()
     latest = (
         Payment.query
         .filter(
             Payment.user_id == user_id,
             Payment.payment_type == "subscription",
             Payment.status == "success",
+            Payment.subscription_starts_at.isnot(None),
             Payment.subscription_expires_at.isnot(None),
+            Payment.subscription_starts_at <= now,
+            Payment.subscription_expires_at > now,
             text("""
                 payment.id IN (
                     SELECT so.payment_id
@@ -2086,16 +2088,15 @@ def get_user_subscription_status(user_id):
             """),
         )
         .params(subscription_user_id=user_id)
-        .order_by(Payment.subscription_expires_at.desc())
+        .order_by(Payment.subscription_starts_at.desc(), Payment.id.desc())
         .first()
     )
     if not latest:
         return {
             "plan": "free", "is_active": False, "expires_at": None,
-            "cancel_at_period_end": False, "recurring": False,
+            "starts_at": None, "cancel_at_period_end": False, "recurring": False,
         }
 
-    is_active = latest.subscription_expires_at > datetime.utcnow()
     recurring = db.session.execute(text("""
         SELECT cancel_at_period_end
         FROM student_subscription
@@ -2103,8 +2104,9 @@ def get_user_subscription_status(user_id):
         ORDER BY id DESC LIMIT 1
     """), {"uid": user_id, "plan": latest.plan}).scalar_one_or_none()
     return {
-        "plan": latest.plan if is_active else "free",
-        "is_active": is_active,
+        "plan": latest.plan,
+        "is_active": True,
+        "starts_at": latest.subscription_starts_at.isoformat(),
         "expires_at": latest.subscription_expires_at.isoformat(),
         "cancel_at_period_end": bool(recurring),
         "recurring": True,
@@ -2125,17 +2127,29 @@ def get_ai_plan_tier(user_id):
     return "premium" if status["is_active"] else "free"
 
 
-def compute_new_subscription_expiry(user_id, plan):
-    """Stacks on top of an unexpired plan rather than resetting it."""
+def compute_new_subscription_period(user_id, plan):
+    """
+    Return (start, end) for the new paid period.
+
+    If another paid period is active, the new period starts exactly when that
+    period ends. This prevents an early upgrade/renewal payment from silently
+    granting the new plan before its paid period begins.
+    """
+    now = datetime.utcnow()
     if plan not in SUBSCRIPTION_PLAN_DURATIONS_MONTHS:
-        return datetime.utcnow()
+        return now, now
     current = get_user_subscription_status(user_id)
-    base = datetime.utcnow()
+    start = now
     if current["is_active"] and current["expires_at"]:
         current_expiry = datetime.fromisoformat(current["expires_at"])
-        if current_expiry > base:
-            base = current_expiry
-    return _add_subscription_month(base)
+        if current_expiry > start:
+            start = current_expiry
+    return start, _add_subscription_month(start)
+
+
+def compute_new_subscription_expiry(user_id, plan):
+    """Compatibility wrapper returning only the new period's end."""
+    return compute_new_subscription_period(user_id, plan)[1]
 
 
 def recompute_subscription_expiries(user_id):
@@ -2171,6 +2185,7 @@ def recompute_subscription_expiries(user_id):
         base = p.created_at or datetime.utcnow()
         if running_expiry and running_expiry > base:
             base = running_expiry
+        p.subscription_starts_at = base
         running_expiry = _add_subscription_month(base)
         p.subscription_expires_at = running_expiry
 
@@ -2231,9 +2246,11 @@ def sync_paystack_payment_status(reference):
                 if not fulfilled:
                     payment.status = "failed"
                 elif payment.payment_type == "subscription" and payment.plan:
-                    payment.subscription_expires_at = compute_new_subscription_expiry(
+                    starts_at, expires_at = compute_new_subscription_period(
                         payment.user_id, payment.plan
                     )
+                    payment.subscription_starts_at = starts_at
+                    payment.subscription_expires_at = expires_at
 
             if payment.status == "success":
                 _maybe_award_referral_commission(payment)
