@@ -24,6 +24,34 @@ def ensure_subscription_schema(db):
         ALTER TABLE payment
         ADD COLUMN IF NOT EXISTS subscription_starts_at TIMESTAMP NULL
     """))
+    # Backfill legacy successful subscription rows once. New rows receive
+    # an explicit start boundary when their payment is fulfilled.
+    db.session.execute(text("""
+        WITH ordered AS (
+            SELECT
+                id,
+                user_id,
+                created_at,
+                LAG(subscription_expires_at) OVER (
+                    PARTITION BY user_id
+                    ORDER BY created_at ASC, id ASC
+                ) AS previous_expiry
+            FROM payment
+            WHERE payment_type = 'subscription'
+              AND status = 'success'
+              AND subscription_expires_at IS NOT NULL
+        )
+        UPDATE payment AS p
+        SET subscription_starts_at = CASE
+            WHEN o.previous_expiry IS NOT NULL
+                 AND o.previous_expiry > COALESCE(o.created_at, CURRENT_TIMESTAMP)
+                THEN o.previous_expiry
+            ELSE COALESCE(o.created_at, CURRENT_TIMESTAMP)
+        END
+        FROM ordered AS o
+        WHERE p.id = o.id
+          AND p.subscription_starts_at IS NULL
+    """))
     db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS student_subscription (
             id BIGSERIAL PRIMARY KEY,
