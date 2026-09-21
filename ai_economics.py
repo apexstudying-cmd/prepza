@@ -109,12 +109,27 @@ def get_plan(db, plan_code):
     return dict(row) if row else None
 
 def get_user_plan_code(db, user_id):
+    """Return only the plan whose paid entitlement period contains now."""
     row = db.session.execute(text("""
-        SELECT plan FROM payment
-        WHERE user_id = :uid AND payment_type = 'subscription'
-          AND status = 'success' AND subscription_expires_at IS NOT NULL
-          AND subscription_expires_at > CURRENT_TIMESTAMP
-        ORDER BY subscription_expires_at DESC LIMIT 1
+        SELECT p.plan
+        FROM payment p
+        JOIN student_order so ON so.payment_id = p.id
+        WHERE p.user_id = :uid
+          AND p.payment_type = 'subscription'
+          AND p.status = 'success'
+          AND p.subscription_starts_at IS NOT NULL
+          AND p.subscription_expires_at IS NOT NULL
+          AND p.subscription_starts_at <= CURRENT_TIMESTAMP
+          AND p.subscription_expires_at > CURRENT_TIMESTAMP
+          AND so.user_id = p.user_id
+          AND so.order_type = 'subscription'
+          AND so.status = 'fulfilled'
+          AND so.plan = p.plan
+          AND so.item_id IS NULL
+          AND so.quantity = 1
+          AND so.currency = 'KES'
+        ORDER BY p.subscription_starts_at DESC, p.id DESC
+        LIMIT 1
     """), {"uid": user_id}).scalar_one_or_none()
     return {"plus": "plus", "pro": "pro"}.get(row, "free")
 
@@ -373,14 +388,7 @@ def register_ai_economics(app, db):
         uid = session.get("user_id")
         if not uid:
             return jsonify({"error": "Not logged in"}), 401
-        row = db.session.execute(text("""
-            SELECT plan FROM payment
-            WHERE user_id = :uid AND payment_type = 'subscription'
-              AND status = 'success' AND subscription_expires_at IS NOT NULL
-              AND subscription_expires_at > CURRENT_TIMESTAMP
-            ORDER BY subscription_expires_at DESC LIMIT 1
-        """), {"uid": uid}).scalar_one_or_none()
-        plan_code = {"plus": "plus", "pro": "pro"}.get(row, "free")
+        plan_code = get_user_plan_code(db, uid)
         plan = get_plan(db, plan_code)
         public_plan = {
             "plan_code": plan["plan_code"],
