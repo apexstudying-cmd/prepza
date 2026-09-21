@@ -47,27 +47,29 @@ def normalize_parameters(material_type: str, parameters: dict | None) -> dict:
 
 def _content_scope(document_content_id: int, triggering_user_id: int) -> tuple[str, int | None]:
     from app import db, Document, LibraryPublication
+    # Sharing follows the deduplicated source content. If this exact
+    # DocumentContent has an approved Study Hub/library publication, every
+    # student generating that same SHA-backed content uses the shared family.
+    public = db.session.query(LibraryPublication.id).join(
+        Document, LibraryPublication.document_id == Document.id
+    ).filter(
+        Document.document_content_id == document_content_id,
+        LibraryPublication.status == "approved",
+        Document.is_removed.is_(False),
+    ).first()
+    if public:
+        return "shared", None
+
+    # Without an approved library publication, the student's generated
+    # material remains private and owner-scoped.
     owned = db.session.query(Document.id).filter(
         Document.user_id == triggering_user_id,
         Document.document_content_id == document_content_id,
         Document.is_removed.is_(False),
     ).first()
     if owned:
-        approved = db.session.query(LibraryPublication.id).filter(
-            LibraryPublication.document_id == owned.id,
-            LibraryPublication.status == "approved",
-        ).first()
-        if approved:
-            return "shared", None
         return "private", int(triggering_user_id)
-    public = db.session.query(LibraryPublication.id).join(
-        Document, LibraryPublication.document_id == Document.id
-    ).filter(
-        Document.document_content_id == document_content_id,
-        LibraryPublication.status == "approved",
-    ).first()
-    if public:
-        return "shared", None
+
     raise PermissionError("You do not have access to this document")
 
 
