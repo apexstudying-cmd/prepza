@@ -256,7 +256,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
             payload=lookup.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
         )
-        return {"payload": lookup.payload, "material_id": material.id, "reused": True, "model_used": None}
+        return {"payload": json.loads(material.payload), "material_id": material.id, "reused": True, "model_used": None}
 
     if not lookup.owner:
         waited = wait_for_generation(fingerprint)
@@ -269,7 +269,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
                 payload=waited.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
             )
-            return {"payload": waited.payload, "material_id": material.id, "reused": True, "model_used": None}
+            return {"payload": json.loads(material.payload), "material_id": material.id, "reused": True, "model_used": None}
         if waited.status == "failed":
             if variant_pool_feature:
                 release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
@@ -404,4 +404,4 @@ def generate_document_material(*, material_type, document_content_id, triggering
         document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
         payload=payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
     )
-    return {"payload": payload, "material_id": material.id, "reused": False, "model_used": ai_response.model_used}
+    return {"payload": json.loads(material.payload), "material_id": material.id, "reused": False, "model_used": ai_response.model_used}
