@@ -187,6 +187,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
         )
 
         if mismatch:
+            payment.status = "failed"
             db.session.execute(
                 text("""
                     UPDATE student_order
