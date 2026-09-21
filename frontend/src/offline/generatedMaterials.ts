@@ -34,6 +34,10 @@ function keyPrefix(path: string, body: unknown) {
 }
 
 function keyFor(path: string, body: unknown) {
+  const userId = localStorage.getItem(USER_KEY) || 'unknown'
+  // Exact material IDs are durable identities. Re-saving the same artifact
+  // should replace its local copy rather than create duplicate replay entries.
+  if (/^\/documents\/\d+\/materials\/\d+$/.test(path)) return `${userId}:${path}`
   return `${keyPrefix(path, body)}${Date.now()}:${Math.random().toString(36).slice(2)}`
 }
 
