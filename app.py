@@ -2314,17 +2314,19 @@ def has_access(user_id, content_item):
         {"payment_id": successful_payment.id},
     ).mappings().first()
 
-    if order_row:
-        return bool(
-            order_row["status"] == "fulfilled"
-            and order_row["user_id"] == user_id
-            and order_row["item_id"] == content_item.id
-            and order_row["payment_id"] == successful_payment.id
-            and order_row["order_type"] == "content"
-            and int(order_row["quantity"] or 0) == 1
-        )
+    if not order_row:
+        # New entitlement flow: a successful payment without a durable order
+        # is an invariant failure, not a reason to grant access.
+        return False
 
-    return True
+    return bool(
+        order_row["status"] == "fulfilled"
+        and order_row["user_id"] == user_id
+        and order_row["item_id"] == content_item.id
+        and order_row["payment_id"] == successful_payment.id
+        and order_row["order_type"] == "content"
+        and int(order_row["quantity"] or 0) == 1
+    )
 
 
 def get_signed_url(bucket_path, expires_in=60, bucket="content"):
