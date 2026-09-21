@@ -434,14 +434,16 @@ def get_generated_material_for_user(document_content_id, material_type, user_id)
 
 
 def _resolve_material_generation(feature, content, user_id, parameters):
-    generator = {
-        "summary": ai_service.generate_document_summary,
-        "quiz": ai_service.generate_document_quiz,
-        "flashcards": ai_service.generate_document_flashcards,
-        "podcast": ai_service.generate_document_podcast_script,
-        "mind_map": ai_service.generate_document_mindmap,
-    }[feature]
-    return generator(
+    """Resolve generation through the reusable fingerprinted path.
+
+    This is deliberately the same path used by async jobs so the requested
+    configuration, variant, quota reservation, artifact identity, and
+    privacy scope cannot diverge between sync and async generation.
+    """
+    from ai_reusable_generation import generate_document_material
+
+    return generate_document_material(
+        material_type=feature,
         document_content_id=content.id,
         triggering_user_id=user_id,
         plan_tier=get_ai_plan_tier(user_id),
@@ -450,11 +452,14 @@ def _resolve_material_generation(feature, content, user_id, parameters):
 
 
 def _start_async_material_generation(document_content_id, user_id, feature, parameters):
-    """Create a user-visible generation job and run the existing generator off-request."""
+    """Create a user-visible job and run the exact requested generation off-request."""
+    if not isinstance(parameters, dict):
+        raise ValueError("AI generation parameters must be an object")
     job = AiJob(
         document_content_id=document_content_id,
         user_id=user_id,
         feature=feature,
+        generation_parameters=dict(parameters),
         status="processing",
         progress_percent=5,
         progress_stage="queued",
@@ -472,21 +477,17 @@ def _start_async_material_generation(document_content_id, user_id, feature, para
                 local_job.progress_percent = 12
                 local_job.progress_stage = "preparing"
                 db.session.commit()
-                generator = {
-                    "summary": ai_service.generate_document_summary,
-                    "quiz": ai_service.generate_document_quiz,
-                    "flashcards": ai_service.generate_document_flashcards,
-                    "podcast": ai_service.generate_document_podcast_script,
-                    "mind_map": ai_service.generate_document_mindmap,
-                }[feature]
+                from ai_reusable_generation import generate_document_material
+                requested_parameters = dict(local_job.generation_parameters or {})
                 local_job.progress_percent = 20
                 local_job.progress_stage = "generating with AI"
                 db.session.commit()
-                result = generator(
+                result = generate_document_material(
+                    material_type=feature,
                     document_content_id=document_content_id,
                     triggering_user_id=user_id,
                     plan_tier=get_ai_plan_tier(user_id),
-                    parameters=parameters,
+                    parameters=requested_parameters,
                 )
                 local_job.material_id = result.get("material_id")
                 local_job.progress_percent = 92
@@ -578,6 +579,10 @@ class AiJob(db.Model):
     material_id = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     batch_id = db.Column(db.String(100), nullable=True)
+    # Immutable request configuration used by the generation worker. Keeping
+    # it on the job makes the requested generation auditable and prevents a
+    # future retry worker from reconstructing a different request.
+    generation_parameters = db.Column(db.JSON, nullable=False, default=dict)
     # Notification row to finalize when a background generation completes.
     notification_id = db.Column(db.Integer, db.ForeignKey("notification.id"), nullable=True)
     # Anthropic Message Batch id, when this job's AI call(s) went through
@@ -5953,53 +5958,85 @@ def _get_or_create_streak(user_id):
     return streak
 
 
+def _refresh_streak_from_study_time(user_id, today=None):
+    """Rebuild the streak from the real 10-minute daily study threshold."""
+    today = today or datetime.utcnow().date()
+    rows = db.session.query(
+        StudyTimeLog.activity_date,
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0),
+    ).filter(
+        StudyTimeLog.user_id == user_id,
+        StudyTimeLog.activity_date <= today,
+    ).group_by(StudyTimeLog.activity_date).all()
+
+    qualifying_dates = {
+        activity_date for activity_date, seconds in rows
+        if int(seconds or 0) >= MIN_QUALIFYING_STUDY_SECONDS
+    }
+
+    streak = _get_or_create_streak(user_id)
+    current = 0
+    cursor = today
+    while cursor in qualifying_dates:
+        current += 1
+        cursor -= timedelta(days=1)
+
+    longest = 0
+    run = 0
+    previous = None
+    for activity_date in sorted(qualifying_dates):
+        if previous is not None and activity_date == previous + timedelta(days=1):
+            run += 1
+        else:
+            run = 1
+        longest = max(longest, run)
+        previous = activity_date
+
+    old_current = streak.current_streak
+    streak.current_streak = current
+    streak.longest_streak = max(streak.longest_streak, longest)
+    streak.last_study_date = max(qualifying_dates) if qualifying_dates else None
+
+    # Milestones are awarded only when a newly-qualified streak reaches the
+    # milestone. The XP ledger remains idempotent through its unique key.
+    if current != old_current:
+        milestone_xp = XP_STREAK_MILESTONES.get(current)
+        if milestone_xp:
+            award_xp(user_id, "streak_milestone", milestone_xp, related_id=current)
+
+    return streak
+
+
 def record_study_activity(user_id, document_content_id=None):
     """
-    Marks today as a study day for this user (and optionally this
-    document), updates the running streak, and awards any newly-crossed
-    streak milestone. Safe to call multiple times per day - the
-    StudyActivityLog unique constraint no-ops repeats for the same
-    (user, document, day), and the streak/milestone logic only advances
-    on the FIRST qualifying activity of a new calendar day.
-    Returns True if this was the first study activity logged today.
+    Records document activity only after the student has accumulated the
+    minimum 10 active study minutes today. Generation/completion alone can
+    never create a streak day.
     """
     today = datetime.utcnow().date()
+    total_seconds = db.session.query(
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+    ).filter(
+        StudyTimeLog.user_id == user_id,
+        StudyTimeLog.activity_date == today,
+    ).scalar() or 0
+    if int(total_seconds) < MIN_QUALIFYING_STUDY_SECONDS:
+        _refresh_streak_from_study_time(user_id, today)
+        return False
 
-    log_row = StudyActivityLog(user_id=user_id, document_content_id=document_content_id, activity_date=today)
+    log_row = StudyActivityLog(
+        user_id=user_id,
+        document_content_id=document_content_id,
+        activity_date=today,
+    )
     db.session.add(log_row)
     try:
         db.session.flush()
     except IntegrityError:
         db.session.rollback()
-        return False  # already logged this exact (user, document, day)
+        return False
 
-    # Was ANY activity already logged today (possibly for a different
-    # document, or with document_content_id=None)? If so, the streak
-    # itself was already advanced today - only the per-document XP cap
-    # above needed the fresh row.
-    already_active_today = StudyActivityLog.query.filter(
-        StudyActivityLog.user_id == user_id,
-        StudyActivityLog.activity_date == today,
-        StudyActivityLog.id != log_row.id,
-    ).first() is not None
-    if already_active_today:
-        return True
-
-    streak = _get_or_create_streak(user_id)
-    yesterday = today - timedelta(days=1)
-    if streak.last_study_date == yesterday:
-        streak.current_streak += 1
-    elif streak.last_study_date == today:
-        pass
-    else:
-        streak.current_streak = 1
-    streak.longest_streak = max(streak.longest_streak, streak.current_streak)
-    streak.last_study_date = today
-
-    milestone_xp = XP_STREAK_MILESTONES.get(streak.current_streak)
-    if milestone_xp:
-        award_xp(user_id, "streak_milestone", milestone_xp, related_id=streak.current_streak)
-
+    _refresh_streak_from_study_time(user_id, today)
     return True
 
 
@@ -6039,6 +6076,7 @@ def _document_study_event_id(user_id, document_content_id):
 
 MAX_HEARTBEAT_INTERVAL_SECONDS = 30
 MAX_STUDY_TIME_SECONDS_PER_DAY = 8 * 60 * 60  # anti-gaming ceiling, 8h/day
+MIN_QUALIFYING_STUDY_SECONDS = 10 * 60  # 10 cumulative active minutes/day
 
 
 def record_study_time_heartbeat(user_id, feature="reading"):
@@ -6383,23 +6421,35 @@ def study_time_heartbeat():
     ).scalar() or 0)
 
     credited_this_heartbeat = max(0, after_feature_seconds - before_feature_seconds)
-    # A visible session must accumulate at least one minute before it can
-    # create/renew a study day. This prevents opening the app/document from
-    # immediately starting a streak.
-    if credited_this_heartbeat > 0 and document_content_id is not None:
-        today = datetime.utcnow().date()
+    # A study day requires 10 cumulative active minutes across all study
+    # features. Opening a document or completing a generation is not enough.
+    feature_session_seconds = after_feature_seconds
+    today = datetime.utcnow().date()
+    total_today = int(db.session.query(
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+    ).filter(
+        StudyTimeLog.user_id == user_id,
+        StudyTimeLog.activity_date == today,
+    ).scalar() or 0)
+    study_day_active = total_today >= MIN_QUALIFYING_STUDY_SECONDS
+
+    if credited_this_heartbeat > 0 and document_content_id is not None and study_day_active:
         existing = StudyActivityLog.query.filter_by(
             user_id=user_id, document_content_id=document_content_id, activity_date=today,
         ).first()
-        feature_session_seconds = after_feature_seconds
-        if existing is None and feature_session_seconds >= 60:
+        if existing is None:
             record_study_activity(user_id, document_content_id=document_content_id)
+    else:
+        # Also clears a stale streak immediately after a missed day once the
+        # student next interacts with the study-time system.
+        _refresh_streak_from_study_time(user_id, today)
 
     db.session.commit()
     return jsonify({
-        "study_time_seconds_today": seconds_today,
+        "study_time_seconds_today": total_today,
         "credited_this_heartbeat": credited_this_heartbeat,
-        "study_day_active": bool(document_content_id is not None and feature_session_seconds >= 60) if 'feature_session_seconds' in locals() else False,
+        "qualifying_study_seconds": MIN_QUALIFYING_STUDY_SECONDS,
+        "study_day_active": study_day_active,
     })
 
 
