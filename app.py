@@ -8509,7 +8509,7 @@ def paystack_webhook():
         except Exception as e:
             print("Paystack subscription webhook error:", str(e))
             return jsonify({"status": "error"}), 500
-    elif event in ("refund.pending", "refund.processing", "refund.processed", "refund.failed"):
+    elif event in ("refund.pending", "refund.processing", "refund.needs-attention", "refund.processed", "refund.failed"):
         try:
             _student_subscription_billing["refund_webhook"](db, event, payload)
         except Exception as e:
