@@ -5449,7 +5449,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                     <div style={{ maxHeight: '50vh', overflowY: 'auto', whiteSpace: 'pre-wrap' }} className="scrollbar-hide">
                       {showModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
                     </div>
-                  ) : showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? `Prepza v1.0.0 — Kenyatta University Launch\n\nVision: ${PREPZA_VISION}\n\nMission: ${PREPZA_MISSION}` : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
+                  ) : showModal === 'upgrade' ? 'Paid plans provide larger study-generation allowances, offline study, and additional premium features. Your allowance is shown before you generate.' : showModal === 'about' ? `Prepza v1.0.0 — Kenyatta University Launch\n\nVision: ${PREPZA_VISION}\n\nMission: ${PREPZA_MISSION}` : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
                 </div>
                 <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
               </>
@@ -14531,4 +14531,25 @@ export default function App() {
       )}
     </div>
   )
+function friendlyGenerationError(error: unknown): string {
+  const message = error instanceof ApiError ? error.message : error instanceof Error ? error.message : String(error || '')
+  const lower = message.toLowerCase()
+  if (lower.includes('generation quota exhausted') || lower.includes('used up this plan')) {
+    return `You've used your plan's monthly allowance for this study material. Upgrade your plan for a larger allowance, or wait for your allowance to reset.`
+  }
+  if (lower.includes('supports at most') || lower.includes('generation amount')) {
+    return message + ' You can choose a smaller generation or upgrade your plan for a larger one.'
+  }
+  if (lower.includes('student plan configuration is unavailable')) {
+    return 'Your study allowance is temporarily unavailable. Please try again shortly.'
+  }
+  if (error instanceof ApiError && error.status === 429) {
+    return 'Too many generation requests in a short time. Please wait a little and try again.'
+  }
+  if (error instanceof ApiError && error.status === 503) {
+    return 'Prepza has temporarily paused fresh AI generation. Your existing study materials are still available. Please try again later.'
+  }
+  return message || 'We could not generate this study material. Please try again.'
+}
+
 }
