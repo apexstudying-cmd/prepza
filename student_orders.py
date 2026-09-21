@@ -140,6 +140,17 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
             {"payment_id": payment.id, "payload": json.dumps(fulfillment)},
         )
 
+    def mark_order_failed(payment_id):
+        db.session.execute(
+            text("""
+                UPDATE student_order
+                SET status = 'failed', updated_at = CURRENT_TIMESTAMP
+                WHERE payment_id = :payment_id
+                  AND status = 'pending'
+            """),
+            {"payment_id": payment_id},
+        )
+
     def mark_order_refunded(payment_id):
         db.session.execute(
             text("""
@@ -224,6 +235,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
     app.extensions["prepza_student_orders"] = {
         "create": create_order_for_payment,
         "mark_paid_and_fulfilled": mark_order_paid_and_fulfilled,
+        "mark_failed": mark_order_failed,
         "mark_refunded": mark_order_refunded,
     }
 
