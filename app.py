@@ -5268,6 +5268,17 @@ def save_library_item(publication_id):
     existing = SavedLibraryMaterial.query.filter_by(
         user_id=user_id, library_publication_id=publication_id
     ).first()
+    if not existing:
+        # Free students may save up to 3 Library documents. Plus/Pro get the
+        # premium Library entitlement. Enforce this server-side; never trust
+        # the frontend's plan display for an access decision.
+        subscription = get_user_subscription_status(user_id)
+        if not subscription["is_active"]:
+            saved_count = SavedLibraryMaterial.query.filter_by(user_id=user_id).count()
+            if saved_count >= 3:
+                return jsonify({
+                    "error": "Free plan Library limit reached. Upgrade to Plus or Pro for premium Library access."
+                }), 403
     if existing:
         # A legacy SavedLibraryMaterial row may predate the StudyHub-document
         # guarantee. In that case _ensure_studyhub_document_for_publication
