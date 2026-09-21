@@ -154,9 +154,14 @@ def reserve_ada_budget(db, user_id, plan_code, estimated_units):
     month_used = db.session.execute(text("""
         SELECT ada_units FROM ada_usage_month WHERE user_id=:uid AND period_start=:period FOR UPDATE
     """), {"uid": user_id, "period": month}).scalar_one()
-    if int(day) + estimated_units > int(plan["ada_daily_units"]):
+    # Daily is a safety valve, not the student's entitlement. A first request
+    # may exceed the soft daily ceiling; once the day has already accumulated
+    # usage, stop additional requests at the ceiling. The monthly wallet is
+    # the hard entitlement.
+    daily_limit = int(plan["ada_daily_units"])
+    if int(day) > 0 and int(day) >= daily_limit:
         db.session.rollback()
-        return False, {"code": "ada_daily_limit", "remaining_units": max(0, int(plan["ada_daily_units"]) - int(day))}
+        return False, {"code": "ada_daily_limit", "remaining_units": 0}
     if int(month_used) + estimated_units > int(plan["ada_monthly_units"]):
         db.session.rollback()
         return False, {"code": "ada_monthly_limit", "remaining_units": max(0, int(plan["ada_monthly_units"]) - int(month_used))}
@@ -306,6 +311,14 @@ def register_ai_economics(app, db):
             SET {assignments}, updated_at = CURRENT_TIMESTAMP
             WHERE plan_code = :plan_code
         """), {"plan_code": plan_code, **cleaned})
+        db.session.execute(text("""
+            INSERT INTO ai_economics_change_log (admin_user_id, plan_code, changes)
+            VALUES (:admin_user_id, :plan_code, CAST(:changes AS jsonb))
+        """), {
+            "admin_user_id": int(session.get("user_id")),
+            "plan_code": plan_code,
+            "changes": __import__("json").dumps(cleaned),
+        })
         db.session.commit()
         return jsonify({"ok": True, "plan": get_plan(db, plan_code)})
 
