@@ -2296,8 +2296,35 @@ def has_access(user_id, content_item):
         content_item_id=content_item.id,
         status="success",
     ).first()
+    if not successful_payment:
+        return False
 
-    return successful_payment is not None
+    # New purchases are entitled through the durable student-order ledger.
+    # The payment alone proves money was recorded; the fulfilled order proves
+    # the exact requested item was fulfilled for this student. Legacy
+    # successful content payments created before the order ledger existed are
+    # retained as a compatibility fallback only when no order row exists.
+    order_row = db.session.execute(
+        text("""
+            SELECT status, user_id, item_id, payment_id, order_type, quantity
+            FROM student_order
+            WHERE payment_id = :payment_id
+            LIMIT 1
+        """),
+        {"payment_id": successful_payment.id},
+    ).mappings().first()
+
+    if order_row:
+        return bool(
+            order_row["status"] == "fulfilled"
+            and order_row["user_id"] == user_id
+            and order_row["item_id"] == content_item.id
+            and order_row["payment_id"] == successful_payment.id
+            and order_row["order_type"] == "content"
+            and int(order_row["quantity"] or 0) == 1
+        )
+
+    return True
 
 
 def get_signed_url(bucket_path, expires_in=60, bucket="content"):
