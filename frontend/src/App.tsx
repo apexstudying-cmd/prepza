@@ -9193,21 +9193,17 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
         )}
 
         <button onClick={() => setScreen('payment-history')} style={{ width: '100%', background: 'transparent', color: T.textMuted, fontSize: 12, fontWeight: 600, border: 'none', padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View payment history</button>
-        <div style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & card, powered by Pesapal.</div>
+        <div style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & card, powered by Paystack.</div>
       </div>
     </div>
   )
 }
 
 // ─── PAYMENT ──────────────────────────────────────────────────────────────────
-// Real Pesapal checkout: POST /subscription/upgrade returns a redirect_url
-// to Pesapal's own hosted payment page (which handles M-Pesa/card itself),
-// so this screen no longer simulates a method picker or an STK push - it
-// just collects an optional phone number, kicks off the order, and does a
-// full-page redirect. Success/failure are decided on Pesapal's side and
-// land on /payment/pesapal/callback, which today renders a plain HTML page
-// outside the SPA rather than routing back here - see payment-history for
-// how a student confirms status after returning to the app.
+// Paystack checkout: POST /subscription/upgrade returns a redirect_url
+// to Paystack's hosted payment page. The current student purchase model is
+// subscription-only; future one-off purchases are reserved for usage/add-on
+// credits rather than ownership of individual Library content.
 function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => void; selectedPlan: string }) {
   const { tokens: T } = useTheme()
   const [phone, setPhone] = useState('')
@@ -9265,7 +9261,7 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
           <div style={{ width: 72, height: 72, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, animation: 'pulse-gold 2s infinite' }}>🔒</div>
           <div>
             <div style={{ fontWeight: 800, fontSize: 17, color: T.text, marginBottom: 8 }}>Taking you to secure checkout…</div>
-            <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65 }}>You'll complete payment on Pesapal's secure page, then return to Prepza.</div>
+            <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65 }}>You'll complete payment on Paystack's secure page, then return to Prepza.</div>
           </div>
         </div>
       ) : (
@@ -9276,14 +9272,14 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
           <div style={{ background: T.card, borderRadius: 16, padding: 18, marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <div style={{ width: 40, height: 40, background: '#4CC97B20', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>📱</div>
-              <div><div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>M-Pesa number</div><div style={{ fontSize: 11, color: T.textMuted }}>Optional - speeds up checkout on Pesapal's page</div></div>
+              <div><div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>M-Pesa number</div><div style={{ fontSize: 11, color: T.textMuted }}>Optional - helps prefill checkout where supported</div></div>
             </div>
             <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XX XXX XXX" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 15, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box', letterSpacing: 0.5 }} />
           </div>
           <button onClick={pay} disabled={loadingPlan || !plan} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: (loadingPlan || !plan) ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)', opacity: (loadingPlan || !plan) ? 0.6 : 1 }}>
             {plan ? `Continue to Payment — KES ${plan.price.toLocaleString()}` : 'Loading…'}
           </button>
-          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: T.textMuted }}>🔒 Secured by Pesapal (M-Pesa & card)</div>
+          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: T.textMuted }}>🔒 Secured by Paystack (M-Pesa & card)</div>
         </div>
       )}
     </div>
@@ -9309,9 +9305,7 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
   }, [])
 
   const itemLabel = payment
-    ? (payment.payment_type === 'subscription'
-        ? `${(payment.plan || 'Subscription').charAt(0).toUpperCase()}${(payment.plan || 'Subscription').slice(1)} Plan`
-        : (payment.content_title || 'Content purchase'))
+    ? (payment.plan === 'semester' ? 'Plus Plan' : payment.plan === 'annual' ? 'Pro Plan' : 'Prepza Subscription')
     : null
 
   const detailRows: [string, string][] = payment
@@ -9332,8 +9326,8 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
         <div style={{ fontWeight: 800, fontSize: 22, color: T.text, marginBottom: 8 }}>Payment Successful! 🎉</div>
         <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.7 }}>
           {itemLabel
-            ? `Your ${itemLabel} payment has gone through${payment?.payment_type === 'subscription' ? ' — enjoy unlimited AI sessions and all learning tools.' : '.'}`
-            : 'Your payment has gone through. Welcome to Prepza Premium.'}
+            ? `Your ${itemLabel} payment has gone through — your plan entitlements are now active.`
+            : 'Your payment has gone through. Welcome to Prepza.'}
         </div>
       </div>
       {loading ? (
@@ -9402,7 +9396,7 @@ function PaymentFailureScreen({ setScreen }: { setScreen: (s: Screen) => void })
 type PaymentHistoryItem = {
   id: number
   payment_type: string
-  content_title: string | null
+  content_title?: string | null
   plan: string | null
   amount: number
   status: string
@@ -9445,12 +9439,13 @@ function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void })
         ) : error ? (
           <ErrorState />
         ) : payments.length === 0 ? (
-          <EmptyState icon="💳" title="No payments yet" sub="Your subscription and content purchases will show up here." />
+          <EmptyState icon="💳" title="No payments yet" sub="Your Prepza subscription payments will show up here." />
         ) : payments.map(p => {
           const meta = PAYMENT_STATUS_META[p.status] || { icon: '•', color: T.textMuted, label: p.status }
-          const label = p.payment_type === 'subscription'
-            ? `${(p.plan || 'Subscription').charAt(0).toUpperCase()}${(p.plan || 'Subscription').slice(1)} Plan`
-            : (p.content_title || 'Content purchase')
+          const label = p.plan === 'semester' ? 'Plus Plan'
+            : p.plan === 'annual' ? 'Pro Plan'
+            : p.payment_type === 'addon' ? 'Usage add-on'
+            : 'Prepza Subscription'
           return (
             <div key={p.id} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
               <div style={{ width: 44, height: 44, background: `${meta.color}18`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{meta.icon}</div>
