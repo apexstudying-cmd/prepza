@@ -1868,6 +1868,17 @@ def create_paystack_transaction(reference, amount, description, user, paystack_p
     # subscription. Paystack's subscription plans are card-only in Kenya;
     # M-PESA/Airtel Money remain available for non-recurring checkout flows.
     if paystack_plan_code:
+        plan_result = paystack_request("GET", f"/plan/{paystack_plan_code}")
+        paystack_plan = plan_result.get("data") or {}
+        expected_amount = int(amount) * 100
+        actual_amount = int(paystack_plan.get("amount") or 0)
+        interval = str(paystack_plan.get("interval") or "").lower()
+        currency = str(paystack_plan.get("currency") or "").upper()
+        if actual_amount != expected_amount or interval != "monthly" or currency != "KES":
+            raise RuntimeError(
+                "Paystack recurring plan does not exactly match Prepza's configured "
+                "price, monthly interval, and KES currency"
+            )
         payload["plan"] = paystack_plan_code
     data = paystack_request("POST", "/transaction/initialize", json=payload)
     tx = data.get("data") or {}
