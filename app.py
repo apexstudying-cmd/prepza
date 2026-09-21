@@ -453,6 +453,7 @@ def _start_async_material_generation(document_content_id, user_id, feature, para
     """Create a user-visible generation job and run the existing generator off-request."""
     job = AiJob(
         document_content_id=document_content_id,
+        user_id=user_id,
         feature=feature,
         status="processing",
         progress_percent=5,
@@ -562,6 +563,8 @@ class AiJob(db.Model):
     """
     id = db.Column(db.Integer, primary_key=True)
     document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=False)
+    # Nullable for legacy text-extraction jobs; required on all student generation jobs.
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
     feature = db.Column(db.String(30), nullable=False)
     # text_extraction | summary | quiz | flashcards | podcast | podcast_audio | mind_map
     status = db.Column(db.String(20), nullable=False, default="pending")
@@ -4323,7 +4326,7 @@ def generation_progress(document_id):
 
     job = (
         AiJob.query
-        .filter_by(document_content_id=document.document_content_id, feature=feature)
+        .filter_by(document_content_id=document.document_content_id, feature=feature, user_id=user_id)
         .order_by(AiJob.id.desc())
         .first()
     )
