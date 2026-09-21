@@ -103,6 +103,22 @@ def register_offline_activity_routes(app, db):
                 row.study_time_seconds += delta
                 row.last_heartbeat_at = None
 
+            server_totals[raw_date] = new_total
+            # This is the amount by which the server advanced during this
+            # request. The client uses server_totals for replay-safe marking.
+            accepted[raw_date] = delta
+
+        # Offline study counts toward a streak only after the same
+        # 10-minute cumulative daily threshold as online study.
+        qualifying_seconds = 10 * 60
+        for activity_date in set(datetime.strptime(d, '%Y-%m-%d').date() for d in server_totals):
+            total = db.session.query(
+                db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+            ).filter(
+                StudyTimeLog.user_id == user_id,
+                StudyTimeLog.activity_date == activity_date,
+            ).scalar() or 0
+            if int(total) >= qualifying_seconds:
                 activity = StudyActivityLog.query.filter_by(
                     user_id=user_id, document_content_id=None, activity_date=activity_date
                 ).first()
@@ -113,36 +129,10 @@ def register_offline_activity_routes(app, db):
                         activity_date=activity_date,
                     ))
 
-            server_totals[raw_date] = new_total
-            # This is the amount by which the server advanced during this
-            # request. The client uses server_totals for replay-safe marking.
-            accepted[raw_date] = delta
-
-        activity_dates = {
-            row.activity_date
-            for row in StudyActivityLog.query.filter_by(user_id=user_id).all()
-        }
-        streak = StudyStreak.query.filter_by(user_id=user_id).first()
-        if not streak:
-            streak = StudyStreak(user_id=user_id)
-            db.session.add(streak)
-            db.session.flush()
-
-        current = 0
-        cursor = today
-        while cursor in activity_dates:
-            current += 1
-            cursor -= timedelta(days=1)
-        longest = streak.longest_streak or 0
-        cursor = today
-        run = 0
-        while cursor in activity_dates:
-            run += 1
-            longest = max(longest, run)
-            cursor -= timedelta(days=1)
-        streak.current_streak = current
-        streak.longest_streak = longest
-        streak.last_study_date = max(activity_dates) if activity_dates else None
+        # Rebuild the running streak from actual study-time totals, not from
+        # "opened/completed something" activity rows.
+        from app import _refresh_streak_from_study_time
+        streak = _refresh_streak_from_study_time(user_id, today)
 
         db.session.commit()
         return jsonify({
