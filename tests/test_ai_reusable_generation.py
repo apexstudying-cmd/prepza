@@ -318,3 +318,55 @@ def test_all_document_materials_use_the_shared_four_variant_pool():
     assert "reserve_generation_variant" in source
     assert "mark_generation_variant_ready" in source
     assert "release_generation_variant" in source
+
+
+def test_internal_artifact_claim_failure_refunds_quota_and_releases_variant(monkeypatch):
+    content = types.SimpleNamespace(content_hash="hash-claim-failure", extracted_text="notes", page_count=2)
+    session = _FakeSession(content)
+    fake_app = types.SimpleNamespace(
+        db=types.SimpleNamespace(session=session), DocumentContent=object, AiJob=_FakeAiJob
+    )
+
+    class FakeRateError(Exception):
+        pass
+
+    calls = {"refund": [], "release": []}
+    fake_usage = types.SimpleNamespace(
+        FEATURES={"summary": ("summary_generations", "summary_max_pages")},
+        check_and_consume_ai_quota=lambda *args, **kwargs: (True, {"period_start": "2026-09-21"}),
+        refund_ai_quota=lambda *args, **kwargs: calls["refund"].append((args, kwargs)),
+        reserve_generation_variant=lambda *args, **kwargs: 2,
+        mark_generation_variant_ready=lambda *args, **kwargs: None,
+        release_generation_variant=lambda *args, **kwargs: calls["release"].append((args, kwargs)),
+    )
+    fake_ai = types.SimpleNamespace(
+        AIProviderError=FakeRateError,
+        AIRateLimitExceededError=FakeRateError,
+        AIBudgetExceededError=FakeRateError,
+    )
+
+    monkeypatch.setitem(sys.modules, "app", fake_app)
+    monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
+    monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
+    monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
+    monkeypatch.setattr(
+        reusable, "claim_or_get_generation",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("database claim failed")),
+    )
+
+    try:
+        reusable.generate_document_material(
+            material_type="summary",
+            document_content_id=9,
+            triggering_user_id=303,
+            parameters={"max_pages": 10},
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "database claim failed"
+    else:
+        raise AssertionError("Expected the internal claim failure")
+
+    assert len(calls["refund"]) == 1
+    assert calls["refund"][0][0][1:4] == (303, "summary", 10)
+    assert calls["refund"][0][1]["period_start"] == "2026-09-21"
+    assert len(calls["release"]) == 1
