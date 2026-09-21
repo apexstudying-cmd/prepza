@@ -530,8 +530,17 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
         active_expiry = db.session.execute(text("""
             SELECT subscription_expires_at
             FROM payment
-            WHERE id=:pid
-        """), {"pid": row["latest_payment_id"]}).scalar_one_or_none()
+            WHERE id=COALESCE(
+                :pid,
+                (
+                    SELECT p.id FROM payment p
+                    WHERE p.user_id=:uid AND p.payment_type='subscription'
+                      AND p.status='success'
+                    ORDER BY p.subscription_expires_at DESC NULLS LAST, p.id DESC
+                    LIMIT 1
+                )
+            )
+        """), {"pid": row["latest_payment_id"], "uid": user_id}).scalar_one_or_none()
         db.session.execute(text("""
             UPDATE student_subscription
             SET cancel_at_period_end=TRUE,status='non-renewing',
