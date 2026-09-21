@@ -6189,7 +6189,7 @@ def gamification_summary():
         XpEvent.user_id == user_id
     ).scalar()
     level_info = get_level_info(xp_total)
-    streak = _get_or_create_streak(user_id)
+    streak = _refresh_streak_from_study_time(user_id)
     db.session.commit()  # persist a lazily-created StudyStreak row, if any
 
     documents_count = Document.query.filter_by(user_id=user_id, is_removed=False).count()
@@ -6279,10 +6279,9 @@ def streak_detail():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    streak = _get_or_create_streak(user_id)
-    db.session.commit()
-
     today = datetime.utcnow().date()
+    streak = _refresh_streak_from_study_time(user_id, today)
+    db.session.commit()
 
     month_param = request.args.get("month")
     view_first_day = None
