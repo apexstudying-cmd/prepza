@@ -3,13 +3,17 @@ import { canGenerate, fetchPrepzaUsage, type PrepzaUsage, usageLabel } from './u
 
 type SetScreen = (screen: any) => void
 
-type ApiErrorShape = { message?: string; error?: string; status?: number }
+type ApiErrorShape = { message?: string; error?: string; status?: number; code?: string; remaining_units?: number; unit_limit?: number; feature?: string }
 
 class GenerationApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  code?: string
+  remainingUnits?: number
+  constructor(message: string, status: number, code?: string, remainingUnits?: number) {
     super(message)
     this.status = status
+    this.code = code
+    this.remainingUnits = remainingUnits
   }
 }
 
@@ -22,7 +26,7 @@ async function generationApi<T = any>(path: string, options: RequestInit = {}): 
   })
   let body: ApiErrorShape & T = {} as ApiErrorShape & T
   try { body = await res.json() } catch { /* empty response */ }
-  if (!res.ok) throw new GenerationApiError(body?.error || body?.message || `Request failed (${res.status})`, res.status)
+  if (!res.ok) throw new GenerationApiError(body?.error || body?.message || `Request failed (${res.status})`, res.status, body?.code, body?.remaining_units)
   return body as T
 }
 async function pollGenerationJob<T = any>(jobId: number, onProgress?: (percent: number, stage: string) => void): Promise<{ payload: T; materialId: number | null }> {
@@ -33,6 +37,19 @@ async function pollGenerationJob<T = any>(jobId: number, onProgress?: (percent: 
     if (job.status === 'failed') throw new Error(job.error || 'Generation failed. Please try again.')
     await new Promise(resolve => window.setTimeout(resolve, 1800))
   }
+}
+
+function friendlyGenerationError(error: unknown): string {
+  if (!(error instanceof GenerationApiError)) return error instanceof Error ? error.message : 'Generation could not be completed. Please try again.'
+  if (error.code === 'generation_quota_exhausted') {
+    return 'You have used all of this feature’s allowance for your current plan. Upgrade your plan to continue generating.'
+  }
+  if (error.code === 'generation_size_limit') {
+    return error.message
+  }
+  if (error.status === 429) return 'Prepza has temporarily limited this request. Please wait a moment and try again.'
+  if (error.status === 402) return 'Fresh AI generation is temporarily unavailable. Existing study material is still available.'
+  return error.message
 }
 
 function GenerationProgressCard({ title, subtitle, percent, stage }: { title: string; subtitle?: string; percent: number; stage: string }) {
@@ -305,7 +322,7 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
       setGenerationPercent(65); setGenerationStage('starting audio synthesis')
       setPhase('audio')
       await generationApi(`/documents/${activeDocumentId}/podcast-audio`, { method: 'POST', headers: { 'X-CSRF-Token': csrf } })
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not generate this podcast.'); setPhase('error') }
+    } catch (e) { setError(friendlyGenerationError(e) ? friendlyGenerationError(e) : 'Could not generate this podcast.'); setPhase('error') }
   }
 
   const retryAudio = async () => {
@@ -391,7 +408,7 @@ export function FlashcardsGenerationScreen({ setScreen, activeDocumentId }: { se
       const next = normalize(result.payload.flashcards)
       if (!next.length) throw new Error('No flashcards were returned.')
       setMaterialId(result.materialId); setCards(next); setIdx(0); setFlipped(false); setKnown([]); setPhase('review')
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not generate flashcards.'); setPhase('error') }
+    } catch (e) { setError(friendlyGenerationError(e)); setPhase('error') }
   }
 
   const finish = async (reviewed: number) => {
@@ -449,7 +466,7 @@ export function SummaryGenerationScreen({ setScreen, activeDocumentId }: { setSc
       const started = await generationApi<{ job_id: number }>(`/documents/${activeDocumentId}/summarize?async=1`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ max_pages: maxPages, style, language: 'en' }) })
       const result = await pollGenerationJob<any>(started.job_id, (p, s) => { setGenerationPercent(p); setGenerationStage(s) })
       setSummary(result.payload.summary); setPhase('ready')
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not generate the summary.'); setPhase('error') }
+    } catch (e) { setError(friendlyGenerationError(e)); setPhase('error') }
   }
 
   const renderSummary = () => {
