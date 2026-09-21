@@ -1803,6 +1803,12 @@ class AmbassadorPayout(db.Model):
     paid_at = db.Column(db.DateTime, nullable=True)
 
 
+# ---------- Student orders / exact fulfillment ----------
+from student_orders import register_student_orders
+
+_student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
+
+
 # ---------- Paystack (Chunk 8, migrated from Pesapal) ----------
 # Docs: paystack.com/docs/payments/accept-payments /
 # paystack.com/docs/api/transaction. PAYSTACK_SECRET_KEY's own prefix
@@ -2155,7 +2161,10 @@ def sync_paystack_payment_status(reference):
                     payment.user_id, payment.plan
                 )
             _maybe_award_referral_commission(payment)
+            _student_order_helpers["mark_paid_and_fulfilled"](payment)
     elif tx_status in ("failed", "abandoned", "reversed"):
+        # A payment that definitively failed cannot fulfill the order. Keep
+        # the order pending/failed rather than ever granting access.
         payment.status = "failed"
         if payment.payment_type == "promotion" and payment.opportunity_promotion_id:
             promo = db.session.get(OpportunityPromotion, payment.opportunity_promotion_id)
@@ -8299,6 +8308,13 @@ def pay_for_content(content_id):
         status="pending",
     )
     db.session.add(payment)
+    db.session.flush()
+    _student_order_helpers["create"](payment, item_title=content_item.title, requested_payload={
+        "payment_type": "content",
+        "content_item_id": content_item.id,
+        "content_title": content_item.title,
+        "quantity": 1,
+    })
     db.session.commit()
 
     return jsonify({
@@ -8449,6 +8465,13 @@ def subscription_upgrade():
         status="pending",
     )
     db.session.add(payment)
+    db.session.flush()
+    _student_order_helpers["create"](payment, item_title=("Plus Plan" if plan == "semester" else "Pro Plan"), requested_payload={
+        "payment_type": "subscription",
+        "plan": plan,
+        "plan_name": "Plus" if plan == "semester" else "Pro",
+        "quantity": 1,
+    })
     db.session.commit()
 
     return jsonify({
@@ -11405,6 +11428,7 @@ def admin_refund_payment(payment_id):
         }), 400
 
     payment.status = "refunded"
+    _student_order_helpers["mark_refunded"](payment.id)
 
     if payment.payment_type == "subscription" and payment.user_id is not None:
         recompute_subscription_expiries(payment.user_id)
