@@ -27,12 +27,27 @@ def order_payment_matches_snapshot(order_row, payment):
     expected_user_id = int(order_row["user_id"])
     payment_user_id = int(payment.user_id or 0)
 
+    # The database constraints cover the normal shape of an order; these
+    # checks also protect fulfillment if an older/malformed row reaches this
+    # function before the schema has been fully migrated.
+    order_type = order_row["order_type"]
+    quantity = int(order_row.get("quantity") or 0)
+    unit_amount = int(order_row.get("unit_amount") or 0)
+    plan = order_row["plan"]
+
     return not (
-        expected_user_id != payment_user_id
+        order_type not in ("subscription", "content")
+        or quantity != 1
+        or expected_total != unit_amount * quantity
         or expected_total != payment_amount
+        or expected_user_id != payment_user_id
         or order_row["currency"] != "KES"
         or payment_item_id != expected_item_id
         or payment_plan != expected_plan
+        or (
+            order_type == "subscription"
+            and plan not in ("semester", "annual")
+        )
         or (
             order_row["order_type"] == "content"
             and (expected_item_id is None or payment.payment_type != "content")
@@ -149,6 +164,9 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
                       AND o.currency = 'KES'
                       AND o.status = 'pending'
                       AND p.status = 'pending'
+                      AND p.user_id = o.user_id
+                      AND p.payment_type = 'content'
+                      AND p.content_item_id = o.item_id
                     ORDER BY o.created_at DESC
                     LIMIT 1
                 """), {"user_id": user_id, "item_id": content_item_id}
@@ -171,7 +189,10 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
         return dict(row) if row else None
 
     def mark_order_paid_and_fulfilled(payment):
-        if not payment:
+        if not payment or payment.status != "success":
+            # This helper is the final entitlement gate. It must never
+            # fulfill a pending/failed/refunded provider payment if called
+            # accidentally from another code path.
             return False
 
         row = db.session.execute(
