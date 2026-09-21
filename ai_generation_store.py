@@ -161,7 +161,8 @@ def claim_or_get_generation(
     existing = db.session.execute(
         text(
             """
-            SELECT id, status, payload, scope, owner_user_id, updated_at, lease_token
+            SELECT id, status, payload, scope, owner_user_id, updated_at, lease_token,
+                   content_hash, feature, parameters, prompt_version, schema_version
             FROM ai_generation_artifact
             WHERE fingerprint = :fingerprint
             """
@@ -180,6 +181,21 @@ def claim_or_get_generation(
 
     if existing["scope"] != normalized_scope or existing["owner_user_id"] != owner_user_id:
         raise RuntimeError("AI artifact fingerprint ownership mismatch")
+
+    # A fingerprint collision or caller bug must never silently reuse an
+    # artifact generated from a different request. The fingerprint is the
+    # primary key, but these persisted inputs are the defense-in-depth check.
+    persisted_parameters = existing["parameters"] or {}
+    if isinstance(persisted_parameters, str):
+        persisted_parameters = json.loads(persisted_parameters)
+    if (
+        existing["content_hash"] != content_hash
+        or existing["feature"] != feature
+        or persisted_parameters != (parameters or {})
+        or existing["prompt_version"] != prompt_version
+        or existing["schema_version"] != schema_version
+    ):
+        raise RuntimeError("AI artifact fingerprint/input mismatch")
 
     if existing["status"] == "failed":
         reclaimed = db.session.execute(
