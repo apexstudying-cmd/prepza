@@ -35,6 +35,12 @@ def order_payment_matches_snapshot(order_row, payment):
     unit_amount = int(order_row.get("unit_amount") or 0)
     plan = order_row["plan"]
 
+    # This helper is itself an entitlement boundary. Even if a caller forgets
+    # the outer status check, a pending/failed/refunded provider payment must
+    # never match an order for fulfillment.
+    if getattr(payment, "status", None) != "success":
+        return False
+
     return not (
         order_type not in ("subscription", "content")
         or quantity != 1
