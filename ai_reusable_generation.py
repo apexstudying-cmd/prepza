@@ -106,15 +106,27 @@ def _generator(material_type, parameters=None):
     return specs[material_type]
 
 
-def _material_from_payload(*, document_content_id, material_type, fingerprint, payload, scope, owner_user_id, parameters):
+def _material_display_payload(payload, document_title):
+    """Attach the student's document name to the replayable material envelope."""
+    if not isinstance(payload, dict):
+        return payload
+    enriched = dict(payload)
+    meta = dict(enriched.get("_prepza") or {})
+    meta["document_title"] = document_title or "Study document"
+    enriched["_prepza"] = meta
+    return enriched
+
+
+def _material_from_payload(*, document_content_id, material_type, fingerprint, payload, scope, owner_user_id, parameters, document_title=None):
     from app import db, GeneratedMaterial
     from sqlalchemy.exc import IntegrityError
     material = GeneratedMaterial.query.filter_by(generation_fingerprint=fingerprint).first()
     if material:
         return material
+    stored_payload = _material_display_payload(payload, document_title)
     material = GeneratedMaterial(
         document_content_id=document_content_id, material_type=material_type, status="ready",
-        payload=json.dumps(payload, ensure_ascii=False), generation_fingerprint=fingerprint,
+        payload=json.dumps(stored_payload, ensure_ascii=False), generation_fingerprint=fingerprint,
         generation_parameters=parameters, generation_version=GENERATION_VERSION,
         scope=scope, owner_user_id=owner_user_id,
     )
@@ -135,7 +147,7 @@ def _podcast_payload(parsed):
 
 def generate_document_material(*, material_type, document_content_id, triggering_user_id, plan_tier="free", parameters=None):
     import ai_service
-    from app import db, DocumentContent, AiJob
+    from app import db, DocumentContent, AiJob, Document
     if material_type not in PROMPT_VERSIONS:
         raise ValueError(f"Unsupported AI material type: {material_type}")
     params = normalize_parameters(material_type, parameters)
@@ -145,6 +157,17 @@ def generate_document_material(*, material_type, document_content_id, triggering
     if not content.extracted_text:
         raise ai_service.AIProviderError("This document's text hasn't finished processing yet - try again shortly.")
     scope, owner_user_id = _content_scope(document_content_id, triggering_user_id)
+    source_document = (
+        db.session.query(Document)
+        .filter(
+            Document.user_id == triggering_user_id,
+            Document.document_content_id == document_content_id,
+            Document.is_removed.is_(False),
+        )
+        .order_by(Document.id.desc())
+        .first()
+    )
+    document_title = source_document.title if source_document else "Study document"
     prompt_version = PROMPT_VERSIONS[material_type]
     schema_version = SCHEMA_VERSIONS[material_type]
 
@@ -254,7 +277,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         material = _material_from_payload(
             document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
-            payload=lookup.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
+            payload=lookup.payload, scope=scope, owner_user_id=owner_user_id, parameters=params, document_title=document_title,
         )
         return {"payload": json.loads(material.payload), "material_id": material.id, "reused": True, "model_used": None}
 
@@ -267,7 +290,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 )
             material = _material_from_payload(
                 document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
-                payload=waited.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
+                payload=waited.payload, scope=scope, owner_user_id=owner_user_id, parameters=params, document_title=document_title,
             )
             return {"payload": json.loads(material.payload), "material_id": material.id, "reused": True, "model_used": None}
         if waited.status == "failed":
@@ -402,6 +425,6 @@ def generate_document_material(*, material_type, document_content_id, triggering
 
     material = _material_from_payload(
         document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
-        payload=payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
+        payload=payload, scope=scope, owner_user_id=owner_user_id, parameters=params, document_title=document_title,
     )
     return {"payload": json.loads(material.payload), "material_id": material.id, "reused": False, "model_used": ai_response.model_used}
