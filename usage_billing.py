@@ -1009,6 +1009,18 @@ def register_usage_billing(app, db):
                 WHERE base_fingerprint = :family AND variant = :variant
             """), {"family": family, "variant": variant})
 
+        try:
+            from app import log_admin_action
+            log_admin_action(
+                session.get("user_id"),
+                "ai_generation_takedown",
+                target_type="ai_generation_artifact",
+                target_id=int(row["id"]),
+                details={"fingerprint": fingerprint, "feature": row["feature"], "variant": variant},
+            )
+        except Exception:
+            pass
+
         db.session.commit()
         return jsonify({
             "ok": True,
