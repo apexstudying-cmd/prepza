@@ -134,9 +134,9 @@ AI_TASKS = {
     # must land first) - present now so routes/features can be added
     # later without another routing-config change.
     "TUTORING": {
-        "primary": MODEL_SONNET_5,
+        "primary": MODEL_OPENAI_LUNA,
         "fallback": None,
-        "max_tokens": 1024,
+        "max_tokens": 1600,
         "notes": "AI Tutor chat, grounded in a student's document once extraction exists.",
     },
     "SUMMARIZATION": {
@@ -379,6 +379,60 @@ class MultiProvider:
         return text, AIUsage(
             input_tokens=int(usage.get("input_tokens", 0) or 0),
             output_tokens=int(usage.get("output_tokens", 0) or 0),
+        )
+
+    @staticmethod
+    def _openai_responses_messages(model, system_blocks, messages, max_tokens, prompt_cache_key=None):
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key:
+            raise AIProviderError("OPENAI_API_KEY is not configured")
+        model_id = model.split(":", 1)[1]
+        input_items = []
+        for index, block in enumerate(system_blocks):
+            content = [{"type": "input_text", "text": block.get("text", "")}]
+            if index == 0:
+                content[0]["prompt_cache_breakpoint"] = {"mode": "explicit"}
+            input_items.append({"role": "developer", "content": content})
+        for message in messages:
+            input_items.append({"role": message["role"], "content": message["content"]})
+        payload = {
+            "model": model_id,
+            "input": input_items,
+            "max_output_tokens": max_tokens,
+            "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
+            "store": False,
+        }
+        if prompt_cache_key:
+            payload["prompt_cache_key"] = prompt_cache_key[:64]
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=120,
+        )
+        response.raise_for_status()
+        data = response.json()
+        text_value = data.get("output_text") or ""
+        if not text_value:
+            chunks = []
+            for item in data.get("output", []) or []:
+                for block in item.get("content", []) or []:
+                    if isinstance(block, dict) and block.get("type") == "output_text":
+                        chunks.append(block.get("text", ""))
+            text_value = "".join(chunks)
+        if not text_value:
+            raise AIProviderError("OpenAI returned no text")
+        usage = data.get("usage") or {}
+        details = usage.get("input_tokens_details") or usage.get("prompt_tokens_details") or {}
+        cached = int(details.get("cached_tokens", 0) or 0)
+        cache_write = int(details.get("cache_write_tokens", 0) or details.get("cache_creation_tokens", 0) or 0)
+        total_input = int(usage.get("input_tokens", 0) or 0)
+        normal_input = max(0, total_input - cached - cache_write)
+        return text_value, AIUsage(
+            input_tokens=normal_input,
+            output_tokens=int(usage.get("output_tokens", 0) or 0),
+            cache_read_tokens=cached,
+            cache_creation_tokens=cache_write,
         )
 
     def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False,
@@ -2235,31 +2289,54 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             "text": _format_spaced_review_instruction(review_due),
         })
 
-    provider, provider_name = _get_provider()
+    from ai_economics import (
+        get_user_plan_code, get_plan, calculate_ada_units,
+        reserve_ada_budget, refund_ada_budget, record_ada_usage,
+    )
 
+    plan_code = get_user_plan_code(db, triggering_user_id)
+    plan_config = get_plan(db, plan_code)
+    max_tokens = min(max_tokens, int(plan_config["ada_max_output_tokens"]))
+
+    estimated_input_tokens = max(
+        1, (len(system_prompt) + sum(len(str(m["content"])) for m in messages)) // 4
+    )
+    estimated_units = calculate_ada_units(
+        input_tokens=estimated_input_tokens,
+        output_tokens=max_tokens,
+    )
+    reserved_ok, reserve_info = reserve_ada_budget(
+        db, triggering_user_id, plan_code, estimated_units
+    )
+    if not reserved_ok:
+        raise AIRateLimitExceededError("Ada usage limit reached for this period.")
+
+    prompt_cache_key = f"prepza-ada-doc-{getattr(content, 'content_hash', content.id)}"
     start = time.monotonic()
     try:
-        response = provider._client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=messages,
+        provider, provider_name = _get_provider()
+        if not model.startswith("openai:"):
+            raise AIProviderError("Ada tutoring is configured for the OpenAI Responses provider")
+        raw_text, ai_usage = provider._openai_responses_messages(
+            model=model, system_blocks=system, messages=messages,
+            max_tokens=max_tokens, prompt_cache_key=prompt_cache_key,
         )
-    except Exception as e:  # noqa: BLE001 - genuinely want to catch any provider failure
+    except Exception as e:
+        refund_ada_budget(db, triggering_user_id, estimated_units)
+        if isinstance(e, AIProviderError):
+            raise
         raise AIProviderError(f"Tutor reply generation failed: {e}")
-    latency_ms = int((time.monotonic() - start) * 1000)  # noqa: F841 - kept for future observability wiring
+    latency_ms = int((time.monotonic() - start) * 1000)
 
-    raw_text = "".join(block.text for block in response.content if block.type == "text")
-    usage = response.usage
-    ai_usage = AIUsage(
-        input_tokens=usage.input_tokens,
-        output_tokens=usage.output_tokens,
-        cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
-        cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
-    )
     ai_usage.cost_usd = compute_cost_usd(
         model, ai_usage.input_tokens, ai_usage.output_tokens,
         ai_usage.cache_read_tokens, ai_usage.cache_creation_tokens,
+    )
+    record_ada_usage(
+        db, triggering_user_id, plan_code, model, provider_name,
+        ai_usage.input_tokens, ai_usage.cache_read_tokens,
+        ai_usage.cache_creation_tokens, ai_usage.output_tokens,
+        cost_usd=ai_usage.cost_usd, reserved_units=estimated_units,
     )
 
     reply_text, concept_name, prerequisite_name = _parse_tutor_reply(raw_text)
