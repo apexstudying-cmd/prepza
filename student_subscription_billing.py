@@ -709,6 +709,35 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
         """)).mappings().all()
         return jsonify({"refunds": [dict(r) for r in rows]})
 
+    def _reconcile_paystack_refund(refund_row):
+        """Reconcile a provider refund before any retry so a delayed webhook cannot cause a second refund."""
+        provider_refund_id = refund_row.get("paystack_refund_id")
+        if not provider_refund_id:
+            return None
+        provider = paystack_request("GET", f"/refund/{provider_refund_id}")
+        data = provider.get("data") or {}
+        status = str(data.get("status") or "").lower()
+        event = {
+            "pending": "refund.pending",
+            "processing": "refund.processing",
+            "needs-attention": "refund.needs-attention",
+            "failed": "refund.failed",
+            "processed": "refund.processed",
+        }.get(status)
+        if not event:
+            return status or None
+        payload = {
+            "data": {
+                **data,
+                "id": data.get("id") or provider_refund_id,
+                "transaction_reference": refund_row.get("reference"),
+                "refund_reference": data.get("refund_reference") or data.get("reference"),
+            }
+        }
+        handle_refund_webhook(db, event, payload)
+        return status
+
+
     @app.post("/admin/subscription-refunds/<int:refund_id>/execute")
     @require_csrf
     @require_admin
@@ -725,6 +754,15 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
             return jsonify({"error": "Refund request not found"}), 404
         if row["status"] not in ("requested", "approved", "failed"):
             return jsonify({"error": f"Refund is not executable from status {row['status']}"}), 400
+        if row["status"] == "failed" and row["paystack_refund_id"]:
+            try:
+                provider_status = _reconcile_paystack_refund(row)
+            except Exception as exc:
+                db.session.rollback()
+                return jsonify({"error": "Could not reconcile the previous Paystack refund before retry", "detail": str(exc)}), 502
+            if provider_status and provider_status != "failed":
+                db.session.commit()
+                return jsonify({"ok": True, "status": provider_status, "message": "Provider status was reconciled; no new refund was created."}), 200
         if row["payment_status"] != "success":
             return jsonify({"error": "Underlying payment is no longer refundable"}), 400
 
