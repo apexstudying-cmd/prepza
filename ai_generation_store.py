@@ -112,7 +112,6 @@ def claim_or_get_generation(
 ) -> GenerationLookup:
     """Atomically claim a fingerprint, with a fenced lease for its owner."""
     _ensure_schema()
-laim a fingerprint, with a fenced lease for its owner."""
     from sqlalchemy import text
     from app import db
 
