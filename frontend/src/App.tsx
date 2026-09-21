@@ -14535,6 +14535,9 @@ export default function App() {
 function friendlyGenerationError(error: unknown): string {
   const message = error instanceof ApiError ? error.message : error instanceof Error ? error.message : String(error || '')
   const lower = message.toLowerCase()
+  if (lower.includes("ada's safety limit") || lower.includes("used your ada allowance")) {
+    return message
+  }
   if (lower.includes('generation quota exhausted') || lower.includes('used up this plan')) {
     return `You've used your plan's monthly allowance for this study material. Upgrade your plan for a larger allowance, or wait for your allowance to reset.`
   }
