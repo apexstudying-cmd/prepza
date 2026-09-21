@@ -282,6 +282,31 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
                updated_at=CURRENT_TIMESTAMP
         WHERE user_id=:uid AND period_start=:period AND feature=:feature
     """), {"uid":user_id,"period":period,"feature":feature,"units":units})
+
+    # The quota deduction is also the student's entitlement consumption
+    # evidence. Link it to the exact paid subscription payment so refunds
+    # cannot be calculated from a mutable aggregate wallet alone.
+    if plan_code in ("plus", "pro"):
+        payment_id = db.session.execute(text("""
+            SELECT p.id
+            FROM payment p
+            JOIN student_order so ON so.payment_id=p.id
+            WHERE p.user_id=:uid AND p.payment_type='subscription'
+              AND p.plan=:plan AND p.status='success'
+              AND so.status='fulfilled'
+              AND p.subscription_expires_at > CURRENT_TIMESTAMP
+            ORDER BY p.subscription_expires_at DESC, p.id DESC
+            LIMIT 1
+        """), {"uid":user_id,"plan":plan_code}).scalar_one_or_none()
+        if payment_id:
+            db.session.execute(text("""
+                INSERT INTO student_entitlement_usage
+                    (user_id,payment_id,feature,units,request_count,metadata)
+                VALUES (:uid,:pid,:feature,:units,1,CAST(:metadata AS jsonb))
+            """), {
+                "uid": user_id, "pid": payment_id, "feature": feature,
+                "units": units, "metadata": __import__("json").dumps({"provisional": True}),
+            })
     db.session.commit()
     return True, {"feature":feature,"plan":plan_code,"used_units":used+units,
                   "unit_limit":max_units,"remaining_units":max(0,max_units-used-units),
@@ -409,6 +434,23 @@ def refund_ai_quota(db, user_id, feature, units, period_start=None):
             updated_at=CURRENT_TIMESTAMP
         WHERE user_id=:uid AND period_start=:period AND feature=:feature
     """), {"uid":user_id,"period":period,"feature":feature,"units":units})
+    # A failed generation must not make the refund ledger say the student
+    # consumed an entitlement. Remove the most recent matching provisional
+    # reservation for this feature/payment.
+    db.session.execute(text("""
+        DELETE FROM student_entitlement_usage
+        WHERE id = (
+            SELECT seu.id
+            FROM student_entitlement_usage seu
+            WHERE seu.user_id=:uid
+              AND seu.feature=:feature
+              AND seu.units=:units
+              AND seu.payment_id IS NOT NULL
+              AND COALESCE(seu.metadata->>'provisional','false')='true'
+            ORDER BY seu.id DESC
+            LIMIT 1
+        )
+    """), {"uid":user_id,"feature":feature,"units":units})
     db.session.commit()
 
 def _active_user_ids(db, since_date):
