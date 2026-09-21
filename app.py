@@ -2146,9 +2146,18 @@ def sync_paystack_payment_status(reference):
 
     if tx_status == "success":
         paid_amount_kobo = tx.get("amount")
-        if paid_amount_kobo is not None and round(float(paid_amount_kobo) / 100) != payment.amount:
-            print(f"Paystack amount mismatch on payment {payment.id}: "
-                  f"expected {payment.amount}, got {paid_amount_kobo}")
+        paid_currency = (tx.get("currency") or "").upper()
+        amount_matches = (
+            paid_amount_kobo is not None
+            and int(paid_amount_kobo) == int(payment.amount) * 100
+        )
+        currency_matches = paid_currency == "KES"
+        if not amount_matches or not currency_matches:
+            print(
+                f"Paystack payment mismatch on payment {payment.id}: "
+                f"expected {payment.amount * 100} KES kobo, "
+                f"got {paid_amount_kobo} {paid_currency or 'UNKNOWN'}"
+            )
             payment.status = "failed"
             _student_order_helpers["mark_failed"](payment.id)
         else:
