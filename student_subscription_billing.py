@@ -405,17 +405,25 @@ def handle_subscription_webhook(db, event, payload):
     code = data.get("subscription_code")
     if not code and isinstance(data.get("subscription"), dict):
         code = data["subscription"].get("subscription_code")
+    if event == "invoice.payment_failed":
+        subscription = data.get("subscription") or {}
+        code = code or subscription.get("subscription_code")
+        if not code:
+            return False
+        db.session.execute(text("""
+            UPDATE student_subscription
+            SET status='attention', updated_at=CURRENT_TIMESTAMP
+            WHERE paystack_subscription_code=:code
+        """), {"code": code})
+        db.session.commit()
+        return True
+
     if not code:
         return False
     status = {
         "subscription.not_renew": "non-renewing",
         "subscription.disable": "disabled",
     }.get(event)
-    if event == "invoice.payment_failed":
-        subscription = data.get("subscription") or {}
-        code = code or subscription.get("subscription_code")
-        if not code:
-            return False
         db.session.execute(text("""
             UPDATE student_subscription
             SET status='attention', updated_at=CURRENT_TIMESTAMP
