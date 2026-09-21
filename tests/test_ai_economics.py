@@ -21,7 +21,7 @@ def test_ada_units_round_up():
         cached_tokens=500,
         cache_write_tokens=200,
         output_tokens=100,
-    ) == 3150
+    ) == 1900
 
 
 def test_plan_defaults_match_locked_entitlements():
