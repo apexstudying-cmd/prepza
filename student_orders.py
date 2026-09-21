@@ -143,22 +143,71 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
 
     def mark_order_paid_and_fulfilled(payment):
         if not payment:
-            return
+            return False
+
         row = db.session.execute(
             text("SELECT * FROM student_order WHERE payment_id = :payment_id FOR UPDATE"),
             {"payment_id": payment.id},
         ).mappings().first()
         if not row:
-            return
+            # A successful payment without an order is deliberately NOT
+            # fulfilled. New checkouts must always have an order ledger row.
+            return False
 
-        if row["status"] in ("refunded", "cancelled"):
-            # Never resurrect an order after a refund/cancellation.
-            return
+        if row["status"] in ("refunded", "cancelled", "failed"):
+            # Never resurrect an order after a terminal state.
+            return False
 
+        # The order snapshot is the fulfillment authority. Never let mutable
+        # Payment fields silently redirect a successful payment to a different
+        # student, content item, plan, amount, or currency.
+        expected_item_id = row["item_id"]
+        payment_item_id = payment.content_item_id
+        expected_plan = row["plan"]
+        payment_plan = payment.plan
+        expected_total = int(row["total_amount"])
+        payment_amount = int(payment.amount or 0)
+        expected_user_id = int(row["user_id"])
+        payment_user_id = int(payment.user_id or 0)
+
+        mismatch = (
+            expected_user_id != payment_user_id
+            or expected_total != payment_amount
+            or row["currency"] != "KES"
+            or payment_item_id != expected_item_id
+            or payment_plan != expected_plan
+            or (
+                row["order_type"] == "content"
+                and (expected_item_id is None or payment.payment_type != "content")
+            )
+            or (
+                row["order_type"] == "subscription"
+                and (payment.payment_type != "subscription" or expected_item_id is not None)
+            )
+        )
+
+        if mismatch:
+            db.session.execute(
+                text("""
+                    UPDATE student_order
+                    SET status = 'failed',
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :order_id
+                      AND status IN ('pending', 'paid', 'fulfilled')
+                """),
+                {"order_id": row["id"]},
+            )
+            return False
+
+        # Fulfillment references the immutable order snapshot, not mutable
+        # payment fields. This prevents later payment-row changes from
+        # changing what the student actually purchased.
         fulfillment = {
             "payment_id": payment.id,
-            "content_item_id": payment.content_item_id,
-            "plan": payment.plan,
+            "content_item_id": row["item_id"],
+            "plan": row["plan"],
+            "user_id": row["user_id"],
+            "quantity": row["quantity"],
             "fulfilled_exactly_as_requested": True,
         }
         db.session.execute(
@@ -169,11 +218,12 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
                     fulfilled_at = COALESCE(fulfilled_at, CURRENT_TIMESTAMP),
                     fulfillment_payload = CAST(:payload AS jsonb),
                     updated_at = CURRENT_TIMESTAMP
-                WHERE payment_id = :payment_id
+                WHERE id = :order_id
                   AND status IN ('pending', 'paid', 'fulfilled')
             """),
-            {"payment_id": payment.id, "payload": json.dumps(fulfillment)},
+            {"order_id": row["id"], "payload": json.dumps(fulfillment)},
         )
+        return True
 
     def mark_order_failed(payment_id):
         db.session.execute(
