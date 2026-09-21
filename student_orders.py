@@ -117,6 +117,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
                     WHERE o.user_id = :user_id
                       AND o.item_id = :item_id
                       AND o.order_type = 'content'
+                      AND o.currency = 'KES'
                       AND o.status = 'pending'
                       AND p.status = 'pending'
                     ORDER BY o.created_at DESC
