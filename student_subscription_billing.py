@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from flask import jsonify, request, session
 from sqlalchemy import text
@@ -380,9 +380,24 @@ def handle_recurring_charge(db, payload):
     if existing:
         return True
 
-    amount_kes = int(data.get("amount") or (data.get("transaction") or {}).get("amount") or 0) // 100
+    raw_amount = data.get("amount") or (data.get("transaction") or {}).get("amount")
     currency = (data.get("currency") or (data.get("transaction") or {}).get("currency") or "").upper()
-    if currency != "KES" or amount_kes <= 0:
+    if currency != "KES" or raw_amount is None:
+        return False
+    try:
+        amount_kobo = int(raw_amount)
+    except (TypeError, ValueError):
+        return False
+    if amount_kobo <= 0 or amount_kobo % 100 != 0:
+        return False
+    amount_kes = amount_kobo // 100
+
+    # Never let a signed provider webhook silently create a subscription at
+    # the wrong price. The local economics config and the Paystack plan must
+    # agree before a renewal can extend access.
+    plan = _plan(db, local["plan"])
+    expected_amount = int((plan or {}).get("price_kes") or 0)
+    if expected_amount <= 0 or amount_kes != expected_amount:
         return False
 
     from app import Payment
@@ -415,7 +430,13 @@ def handle_recurring_charge(db, payload):
     # Renewal starts a new paid entitlement month after the current expiry.
     from app import compute_new_subscription_expiry
     payment.subscription_expires_at = compute_new_subscription_expiry(local["user_id"], local["plan"])
-    helpers["mark_paid_and_fulfilled"](payment)
+    fulfilled = helpers["mark_paid_and_fulfilled"](payment)
+    if not fulfilled:
+        # A successful Paystack charge without a valid local order snapshot
+        # must never grant entitlement. Leave the provider charge for manual
+        # reconciliation instead of pretending the renewal succeeded locally.
+        db.session.rollback()
+        return False
 
     _upsert_subscription(
         db, user_id=local["user_id"], plan=local["plan"],
@@ -477,6 +498,15 @@ def handle_refund_webhook(db, event, payload):
                 updated_at=CURRENT_TIMESTAMP
             WHERE payment_id=:pid AND status <> 'cancelled'
         """), {"pid": payment_id})
+        # If this was an earlier stacked subscription payment, rebuild the
+        # remaining paid periods so the refunded month cannot keep extending
+        # access after the money has been returned.
+        from app import recompute_subscription_expiries
+        payment_type_user = db.session.execute(text("""
+            SELECT payment_type,user_id FROM payment WHERE id=:pid
+        """), {"pid": payment_id}).mappings().first()
+        if payment_type_user and payment_type_user["payment_type"] == "subscription":
+            recompute_subscription_expiries(payment_type_user["user_id"])
     db.session.commit()
     return True
 
