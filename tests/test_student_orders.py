@@ -20,6 +20,7 @@ def _order(**overrides):
 
 def _payment(**overrides):
     payment = {
+        "status": "success",
         "user_id": 7,
         "content_item_id": 42,
         "plan": None,
@@ -122,3 +123,7 @@ def test_subscription_order_rejects_content_item_on_payment():
         payment_type="subscription",
     )
     assert not order_payment_matches_snapshot(order, payment)
+
+
+def test_order_payment_match_requires_successful_payment():
+    assert not order_payment_matches_snapshot(_order(), _payment(status="pending"))
