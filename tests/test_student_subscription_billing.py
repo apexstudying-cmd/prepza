@@ -60,3 +60,16 @@ def test_refund_after_standard_window_is_not_standard_eligible(monkeypatch):
     assert quote["within_window"] is False
     assert quote["eligible_standard"] is False
     assert quote["refund_amount_kes"] == 0
+
+
+def test_refund_webhook_uses_paystack_transaction_reference():
+    payload = {
+        "transaction_reference": "pza-sub-123",
+        "reference": "fallback-ref",
+    }
+    assert billing._refund_transaction_reference(payload) == "pza-sub-123"
+
+
+def test_refund_webhook_accepts_nested_transaction_reference_fallback():
+    payload = {"transaction": {"reference": "nested-ref"}}
+    assert billing._refund_transaction_reference(payload) == "nested-ref"
