@@ -143,7 +143,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     monkeypatch.setattr(
         reusable,
         "_generator",
-        lambda material_type: ("system", lambda raw: {"title": "Reusable"}, "SUMMARIZATION"),
+        lambda *args, **kwargs: ("system", lambda raw: {"title": "Reusable"}, "SUMMARIZATION"),
     )
     monkeypatch.setattr(reusable, "claim_or_get_generation", lambda **kwargs: claim_results.pop(0))
     monkeypatch.setattr(reusable, "mark_generation_ready", lambda *args: None)
@@ -219,7 +219,7 @@ def test_reused_ready_artifact_still_consumes_student_allowance(monkeypatch):
         material_type="summary",
         document_content_id=8,
         triggering_user_id=202,
-        parameters={},
+        parameters={"max_pages": 10},
     )
 
     assert result["reused"] is True
