@@ -99,6 +99,17 @@ def get_plan(db, plan_code):
     """), {"plan_code": plan_code}).mappings().first()
     return dict(row) if row else None
 
+def get_user_plan_code(db, user_id):
+    row = db.session.execute(text("""
+        SELECT plan FROM payment
+        WHERE user_id = :uid AND payment_type = 'subscription'
+          AND status = 'success' AND subscription_expires_at IS NOT NULL
+          AND subscription_expires_at > CURRENT_TIMESTAMP
+        ORDER BY subscription_expires_at DESC LIMIT 1
+    """), {"uid": user_id}).scalar_one_or_none()
+    return {"semester": "plus", "annual": "pro", "plus": "plus", "pro": "pro"}.get(row, "free")
+
+
 def get_plans(db):
     rows = db.session.execute(text("""
         SELECT * FROM student_plan_config WHERE is_active = TRUE
