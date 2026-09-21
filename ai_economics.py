@@ -366,9 +366,20 @@ def register_ai_economics(app, db):
             "study_hub_uploads": bool(plan["study_hub_uploads"]),
         }
         usage = get_ada_usage(db, uid, plan_code)
-        return jsonify({"plan": public_plan, "ada_usage": {
-            "daily_used": usage["daily_used"],
-            "monthly_used": usage["monthly_used"],
+        if usage["monthly_used"] >= usage["monthly_limit"]:
+            ada_status = "monthly_exhausted"
+        elif usage["daily_used"] >= usage["daily_limit"]:
+            ada_status = "daily_pause"
+        else:
+            ada_status = "available"
+        ada_label = {
+            "free": "Ada — Limited",
+            "plus": "Ada — 5× more usage",
+            "pro": "Ada — 12× more usage",
+        }[plan_code]
+        return jsonify({"plan": public_plan, "ada": {
+            "label": ada_label,
+            "status": ada_status,
         }})
 
     @app.get("/api/admin/ai-economics/usage")
