@@ -9034,9 +9034,9 @@ type SubscriptionStatus = { plan: string; is_active: boolean; expires_at: string
 // client-side and is merged onto whatever plans GET /subscription/plans
 // actually returns.
 const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: string; color: string; features: string[] }> = {
-  free: { color: '#6B7280', features: ['5 AI sessions/month', '3 document uploads', 'Basic flashcards', 'Forum browsing'] },
-  semester: { badge: 'Popular', badgeColor: N.gold, color: N.gold, features: ['Unlimited AI sessions', 'Unlimited uploads', 'All learning tools', 'Priority processing', 'Offline access', 'Full forum access'] },
-  annual: { badge: 'Best Value', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Everything in Semester', '2 months free', 'Early feature access', 'Group study tools', 'Priority support'] },
+  free: { color: '#6B7280', features: ['Limited Ada', '10-minute podcast allowance', '10 summary pages', '20 questions', '30 mind-map nodes', '100 flashcards'] },
+  semester: { badge: 'Plus', badgeColor: N.gold, color: N.gold, features: ['Ada — 5× more usage', '120 podcast minutes', '40 summary pages', '100 questions', '150 mind-map nodes', '300 flashcards', 'Offline study', 'Premium library'] },
+  annual: { badge: 'Pro', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Ada — 12× more usage', '350 podcast minutes', '100 summary pages', '210 questions', '350 mind-map nodes', '600 flashcards', 'Offline study', 'Premium library'] },
 }
 
 function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setScreen: (s: Screen) => void; selectedPlan: string; setSelectedPlan: (p: string) => void }) {
@@ -9133,16 +9133,17 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
         )}
         {usage && (
           <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, marginTop: 8 }}>
-            <div style={{ fontWeight: 800, fontSize: 13, color: T.text, marginBottom: 10 }}>AI usage</div>
-            {(['summary', 'podcast', 'flashcards'] as const).map(feature => {
-              const limitKey = feature === 'summary' ? 'summary_generations' : feature === 'podcast' ? 'podcast_generations' : 'flashcard_generations'
-              const unitKey = feature === 'summary' ? 'summary_max_pages' : feature === 'podcast' ? 'podcast_max_minutes' : 'flashcard_max_cards'
-              const used = usage.usage?.[feature]?.requests || 0
-              const max = usage.limits?.[limitKey] || 0
-              const unit = usage.limits?.[unitKey] || 0
+            <div style={{ fontWeight: 800, fontSize: 13, color: T.text, marginBottom: 10 }}>{usage.plan === 'free' ? 'Free allowance' : usage.plan === 'plus' ? 'Plus allowance' : 'Pro allowance'}</div>
+            {(['summary', 'podcast', 'flashcards', 'quiz', 'mind_map'] as const).map(feature => {
+              const labels: Record<string, string> = { summary: 'Summary', podcast: 'Podcast', flashcards: 'Flashcards', quiz: 'Questions', mind_map: 'Mind map' }
+              const units: Record<string, string> = { summary: 'pages', podcast: 'min', flashcards: 'cards', quiz: 'questions', mind_map: 'nodes' }
+              const item = usage.usage?.[feature]
+              const used = Number(item?.units || 0)
+              const remaining = Number(item?.remaining_units || 0)
+              const max = Number(item?.unit_limit || 0)
               return <div key={feature} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, color: T.textMuted, marginTop: 7 }}>
-                <span style={{ textTransform: 'capitalize' }}>{feature}</span>
-                <span>{used}/{max} generations · max {unit} {feature === 'summary' ? 'pages' : feature === 'podcast' ? 'min' : 'cards'}</span>
+                <span>{labels[feature]}</span>
+                <span>{remaining}/{max} {units[feature]} remaining</span>
               </div>
             })}
           </div>
