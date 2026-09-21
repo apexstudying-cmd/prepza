@@ -9077,7 +9077,7 @@ type SubscriptionStatus = { plan: string; is_active: boolean; expires_at: string
 // client-side and is merged onto whatever plans GET /subscription/plans
 // actually returns.
 const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: string; color: string; features: string[] }> = {
-  free: { color: '#6B7280', features: ['Limited Ada', '10-minute podcast allowance', '10 summary pages', '20 questions', '30 mind-map nodes', '100 flashcards'] },
+  free: { color: '#6B7280', features: ['Limited Ada', '3 Library documents', '10-minute podcast allowance', '10 summary pages', '20 questions', '30 mind-map nodes', '100 flashcards'] },
   semester: { badge: 'Plus', badgeColor: N.gold, color: N.gold, features: ['Ada — 5× more usage', '120 podcast minutes', '40 summary pages', '100 questions', '150 mind-map nodes', '300 flashcards', 'Offline study', 'Premium library'] },
   annual: { badge: 'Pro', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Ada — 12× more usage', '350 podcast minutes', '100 summary pages', '210 questions', '350 mind-map nodes', '600 flashcards', 'Offline study', 'Premium library'] },
 }
