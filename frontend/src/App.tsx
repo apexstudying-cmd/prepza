@@ -669,20 +669,20 @@ function DocumentStudyHubScreen({
           const saved = await getSavedStudyHubOffline(activeDocumentId, userId)
           if (!saved) throw new Error('Not saved offline')
           if (cancelled) return
-          const cachedMaterialTypes = await Promise.all([
-            ['summary', `/documents/${activeDocumentId}/summarize`],
-            ['flashcards', `/documents/${activeDocumentId}/flashcards`],
-            ['quiz', `/documents/${activeDocumentId}/quiz`],
-            ['mind_map', `/documents/${activeDocumentId}/mindmap`],
-            ['podcast', `/documents/${activeDocumentId}/podcast-audio`],
-          ].map(async ([type, path]) => {
-            const payload = await getLatestGeneratedMaterialForPath(path)
-            if (!payload) return null
-            if (type === 'podcast' && payload?.audio_status !== 'ready') return null
-            return { type, status: 'ready' }
-          }))
-          const offlineMaterials = cachedMaterialTypes.filter(Boolean) as { type: string; status: string }[]
-          setDocument({
+          const cached = await listOfflineGeneratedMaterials()
+          const offlineMaterials = cached.flatMap(row => {
+            const match = row.path.match(/^\/documents\/(\d+)\/materials\/(\d+)$/)
+            if (!match || Number(match[1]) !== activeDocumentId) return []
+            const payload = row.payload as any
+            if (!payload?.type || payload?.status !== 'ready') return []
+            return [{
+              id: Number(match[2]),
+              type: payload.type,
+              status: 'ready',
+              parameters: payload.parameters || {},
+            }]
+          })
+setDocument({
             id: activeDocumentId,
             title: saved.title || 'Saved study document',
             original_filename: saved.title || 'Study document',
