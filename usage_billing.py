@@ -621,7 +621,10 @@ def register_usage_billing(app, db):
             return jsonify({"error": "Not logged in"}), 401
 
         plan_code = _current_student_plan(db, user_id)
-        plan = STUDENT_PLANS[plan_code]
+        from ai_economics import get_plan
+    plan = get_plan(db, plan_code)
+    if not plan:
+        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
@@ -1158,7 +1161,10 @@ def refund_ai_quota(db, user_id, feature, units, period_start=None):
     except (TypeError, ValueError):
         return
     plan_code = _current_student_plan(db, user_id)
-    plan = STUDENT_PLANS[plan_code]
+    from ai_economics import get_plan
+    plan = get_plan(db, plan_code)
+    if not plan:
+        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
     period = period_start or _period_start(plan)
     db.session.execute(text("""
         UPDATE student_ai_usage
@@ -1351,7 +1357,10 @@ def register_usage_billing(app, db):
             return jsonify({"error": "Not logged in"}), 401
 
         plan_code = _current_student_plan(db, user_id)
-        plan = STUDENT_PLANS[plan_code]
+        from ai_economics import get_plan
+    plan = get_plan(db, plan_code)
+    if not plan:
+        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
@@ -1776,7 +1785,10 @@ def refund_ai_quota(db, user_id, feature, units, period_start=None):
     except (TypeError, ValueError):
         return
     plan_code = _current_student_plan(db, user_id)
-    plan = STUDENT_PLANS[plan_code]
+    from ai_economics import get_plan
+    plan = get_plan(db, plan_code)
+    if not plan:
+        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
     period = period_start or _period_start(plan)
     db.session.execute(text("""
         UPDATE student_ai_usage
@@ -1969,7 +1981,10 @@ def register_usage_billing(app, db):
             return jsonify({"error": "Not logged in"}), 401
 
         plan_code = _current_student_plan(db, user_id)
-        plan = STUDENT_PLANS[plan_code]
+        from ai_economics import get_plan
+    plan = get_plan(db, plan_code)
+    if not plan:
+        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
@@ -2396,7 +2411,10 @@ def refund_ai_quota(db, user_id, feature, units, period_start=None):
     except (TypeError, ValueError):
         return
     plan_code = _current_student_plan(db, user_id)
-    plan = STUDENT_PLANS[plan_code]
+    from ai_economics import get_plan
+    plan = get_plan(db, plan_code)
+    if not plan:
+        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
     period = period_start or _period_start(plan)
     db.session.execute(text("""
         UPDATE student_ai_usage
@@ -2589,7 +2607,10 @@ def register_usage_billing(app, db):
             return jsonify({"error": "Not logged in"}), 401
 
         plan_code = _current_student_plan(db, user_id)
-        plan = STUDENT_PLANS[plan_code]
+        from ai_economics import get_plan
+    plan = get_plan(db, plan_code)
+    if not plan:
+        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
