@@ -159,9 +159,28 @@ BEGIN
         ALTER TABLE student_order
         ADD CONSTRAINT ck_student_order_type_snapshot
         CHECK (
-            (order_type = 'subscription' AND item_id IS NULL AND plan IS NOT NULL)
+            (order_type = 'subscription' AND item_id IS NULL AND plan IN ('semester', 'annual'))
             OR
             (order_type = 'content' AND item_id IS NOT NULL AND plan IS NULL)
         );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_student_order_type_allowed'
+    ) THEN
+        ALTER TABLE student_order
+        ADD CONSTRAINT ck_student_order_type_allowed
+        CHECK (order_type IN ('subscription', 'content'));
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_student_order_status_allowed'
+    ) THEN
+        ALTER TABLE student_order
+        ADD CONSTRAINT ck_student_order_status_allowed
+        CHECK (status IN ('pending', 'paid', 'fulfilled', 'failed', 'refunded', 'cancelled'));
+    END IF;
     END IF;
 END $$;
