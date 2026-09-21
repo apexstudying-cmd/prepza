@@ -2213,7 +2213,10 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             "but your existing conversation is still here."
         )
 
-    # Ada is now metered by real token economics below; the legacy message-count cap\n    # is intentionally no longer a student entitlement.\n\n    # Persist the student's message now, before the AI call, so it
+    # Ada is now metered by real token economics below; the legacy message-count cap
+    # is intentionally no longer a student entitlement.
+
+    # Persist the student's message now, before the AI call, so it
     # survives even if generation below fails.
     user_row = TutorMessage(conversation_id=conversation_id, role="user", content=user_message_text)
     db.session.add(user_row)
