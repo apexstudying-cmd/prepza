@@ -308,6 +308,8 @@ def register_ai_economics(app, db):
     def admin_update_ai_economics_plan(plan_code):
         if not _admin_allowed():
             return jsonify({"error": "Admin access required"}), 403
+        if not (session.get("csrf_token") and request.headers.get("X-CSRF-Token") == session.get("csrf_token")):
+            return jsonify({"error": "Invalid CSRF token"}), 403
         payload = request.get_json(silent=True) or {}
         cleaned, errors = validate_plan_patch(payload)
         if errors:
