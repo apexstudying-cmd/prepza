@@ -77,6 +77,15 @@ def ensure_economics_schema(db):
         CREATE INDEX IF NOT EXISTS ix_ada_request_usage_user_created
         ON ada_request_usage (user_id, created_at)
     """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS ai_economics_change_log (
+            id BIGSERIAL PRIMARY KEY,
+            admin_user_id INTEGER NOT NULL,
+            plan_code VARCHAR(20) NOT NULL,
+            changes JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
     for code, cfg in PLAN_DEFAULTS.items():
         db.session.execute(text("""
             INSERT INTO student_plan_config (
