@@ -3729,7 +3729,6 @@ def get_document(document_id):
                 "type": m.material_type,
                 "status": m.status,
                 "parameters": m.generation_parameters or {},
-                "payload": json.loads(m.payload) if m.payload else None,
             }
             for m in material_query.order_by(GeneratedMaterial.updated_at.desc()).all()
         ]
