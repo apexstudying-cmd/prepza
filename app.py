@@ -409,19 +409,18 @@ def get_generated_material_for_user(document_content_id, material_type, user_id)
         document_content_id=document_content_id, material_type=material_type, status="ready", generation_version="v2"
     )
     if owned:
-        approved = (
-            db.session.query(LibraryPublication.id)
-            .filter(
-                LibraryPublication.document_id == owned.id,
-                LibraryPublication.status == "approved",
-            )
-            .first()
-        )
-        if approved:
-            return query.filter(GeneratedMaterial.scope == "shared").first()
+        # An owner can replay both their own private generations and any
+        # shared/published generation. Publishing a document must never make
+        # the student's previously generated private material disappear.
         return query.filter(
-            GeneratedMaterial.scope == "private", GeneratedMaterial.owner_user_id == user_id
-        ).first()
+            db.or_(
+                GeneratedMaterial.scope == "shared",
+                db.and_(
+                    GeneratedMaterial.scope == "private",
+                    GeneratedMaterial.owner_user_id == user_id,
+                ),
+            )
+        ).order_by(GeneratedMaterial.updated_at.desc()).first()
 
     public = (
         db.session.query(LibraryPublication.id)
@@ -3702,17 +3701,37 @@ def get_document(document_id):
 
     materials = []
     if content:
-        material_query = GeneratedMaterial.query.filter_by(document_content_id=content.id)
-        if document.user_id != user_id:
-            material_query = material_query.filter_by(status="ready", scope="shared", owner_user_id=None)
+        material_query = GeneratedMaterial.query.filter_by(
+            document_content_id=content.id,
+            status="ready",
+            generation_version="v2",
+        )
+        if document.user_id == user_id:
+            # Never expose another student's private artifact just because
+            # DocumentContent is deduplicated across identical uploads.
+            material_query = material_query.filter(
+                db.or_(
+                    GeneratedMaterial.scope == "shared",
+                    db.and_(
+                        GeneratedMaterial.scope == "private",
+                        GeneratedMaterial.owner_user_id == user_id,
+                    ),
+                )
+            )
+        else:
+            material_query = material_query.filter(
+                GeneratedMaterial.scope == "shared",
+                GeneratedMaterial.owner_user_id.is_(None),
+            )
         materials = [
             {
                 "id": m.id,
                 "type": m.material_type,
                 "status": m.status,
                 "parameters": m.generation_parameters or {},
+                "payload": json.loads(m.payload) if m.payload else None,
             }
-            for m in material_query.all()
+            for m in material_query.order_by(GeneratedMaterial.updated_at.desc()).all()
         ]
 
     return jsonify({
