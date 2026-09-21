@@ -8481,7 +8481,7 @@ def paystack_webhook():
         except Exception as e:
             print("Paystack subscription.create webhook error:", str(e))
             return jsonify({"status": "error"}), 500
-    elif event in ("subscription.not_renew", "subscription.disable"):
+    elif event in ("subscription.not_renew", "subscription.disable", "invoice.payment_failed"):
         try:
             _student_subscription_billing["subscription_webhook"](db, event, payload)
         except Exception as e:
