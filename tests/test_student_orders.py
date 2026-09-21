@@ -1,4 +1,5 @@
-import pytest\nfrom types import SimpleNamespace
+import pytest
+from types import SimpleNamespace
 
 from student_orders import order_payment_matches_snapshot
 
