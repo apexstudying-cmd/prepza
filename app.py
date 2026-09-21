@@ -11524,36 +11524,16 @@ def admin_set_supabase_tier():
 @require_csrf
 @require_admin
 def admin_refund_payment(payment_id):
-    payment = db.session.get(Payment, payment_id)
-    if not payment:
-        return jsonify({"error": "Payment not found"}), 404
-
-    if payment.status != "success":
-        return jsonify({
-            "error": f"Only successful payments can be refunded (current status: {payment.status})"
-        }), 400
-
-    payment.status = "refunded"
-    _student_order_helpers["mark_refunded"](payment.id)
-
-    if payment.payment_type == "subscription" and payment.user_id is not None:
-        recompute_subscription_expiries(payment.user_id)
-
-    referral = Referral.query.filter_by(first_payment_id=payment.id).first()
-    referral_commission_voided = False
-    if referral and referral.payout_id is None and referral.voided_at is None:
-        referral.voided_at = datetime.utcnow()
-        referral.void_reason = "Underlying payment refunded"
-        referral_commission_voided = True
-
-    db.session.commit()
-
+    # Legacy refund endpoint deliberately disabled. It used to mutate the
+    # local Payment row without contacting Paystack and without checking
+    # entitlement consumption. Money-changing refunds must now go through
+    # /admin/subscription-refunds/<refund_id>/execute so the policy quote,
+    # audit record, Paystack refund, and webhook confirmation stay aligned.
     return jsonify({
-        "message": "Payment marked as refunded. Access to this content has been revoked.",
-        "referral_commission_voided": referral_commission_voided,
-        "payment_id": payment.id,
-        "note": "This only updates records in Prepza. You must still send the actual M-Pesa refund manually.",
-    })
+        "error": "Legacy refund endpoint disabled",
+        "use": "/admin/subscription-refunds",
+        "payment_id": payment_id,
+    }), 410
 
 
 # ---------- Admin: user management ----------
