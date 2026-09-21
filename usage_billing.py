@@ -966,6 +966,47 @@ def register_usage_billing(app, db):
         })
 
 
+    @app.get("/api/admin/ai-generations/<string:fingerprint>")
+    def admin_ai_generation_detail(fingerprint):
+        """Return one artifact's stored payload and metadata for admin inspection."""
+        if not _admin_allowed():
+            return jsonify({"error": "Admin access required"}), 403
+        row = db.session.execute(text("""
+            SELECT a.id, a.fingerprint, a.content_hash, a.feature, a.parameters,
+                   a.scope, a.owner_user_id, a.status, a.payload, a.error_message,
+                   a.prompt_version, a.schema_version,
+                   a.created_at, a.updated_at, a.completed_at,
+                   (SELECT gm.id FROM generated_material gm
+                    WHERE gm.generation_fingerprint = a.fingerprint
+                    LIMIT 1) AS material_id
+            FROM ai_generation_artifact a
+            WHERE a.fingerprint = :fingerprint
+        """), {"fingerprint": fingerprint}).mappings().first()
+        if not row:
+            return jsonify({"error": "AI generation artifact not found"}), 404
+        return jsonify({
+            "artifact": {
+                "id": int(row["id"]),
+                "fingerprint": row["fingerprint"],
+                "content_hash": row["content_hash"],
+                "feature": row["feature"],
+                "variant": (row["parameters"] or {}).get("variant") if isinstance(row["parameters"], dict) else None,
+                "parameters": row["parameters"] or {},
+                "scope": row["scope"],
+                "owner_user_id": row["owner_user_id"],
+                "status": row["status"],
+                "payload": row["payload"],
+                "error_message": row["error_message"],
+                "prompt_version": row["prompt_version"],
+                "schema_version": row["schema_version"],
+                "material_id": int(row["material_id"]) if row["material_id"] else None,
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+                "completed_at": row["completed_at"].isoformat() if row["completed_at"] else None,
+            }
+        })
+
+
     @app.post("/api/admin/ai-generations/<string:fingerprint>/takedown")
     def admin_ai_generation_takedown(fingerprint):
         """Remove one reusable AI artifact from circulation and allow regeneration."""
