@@ -1845,7 +1845,7 @@ def paystack_request(method, path, **kwargs):
     return data
 
 
-def create_paystack_transaction(reference, amount, description, user):
+def create_paystack_transaction(reference, amount, description, user, paystack_plan_code=None):
     """
     Initializes a Paystack transaction. amount is in whole KES (same unit
     the rest of this file uses) - Paystack expects the lowest currency
@@ -1864,6 +1864,11 @@ def create_paystack_transaction(reference, amount, description, user):
         "callback_url": f"{BASE_URL}/payment/paystack/callback",
         "metadata": {"description": description[:100]},
     }
+    # Passing a Paystack plan code turns the first checkout into a recurring
+    # subscription. Paystack's subscription plans are card-only in Kenya;
+    # M-PESA/Airtel Money remain available for non-recurring checkout flows.
+    if paystack_plan_code:
+        payload["plan"] = paystack_plan_code
     data = paystack_request("POST", "/transaction/initialize", json=payload)
     tx = data.get("data") or {}
     authorization_url = tx.get("authorization_url")
@@ -8464,9 +8469,29 @@ def paystack_webhook():
 
     if event == "charge.success" and reference:
         try:
-            sync_paystack_payment_status(reference)
+            payment = sync_paystack_payment_status(reference)
+            if payment is None:
+                _student_subscription_billing["recurring_charge"](db, payload)
         except Exception as e:
             print("Paystack webhook sync error:", str(e))
+            return jsonify({"status": "error"}), 500
+    elif event == "subscription.create":
+        try:
+            _student_subscription_billing["subscription_created"](db, payload)
+        except Exception as e:
+            print("Paystack subscription.create webhook error:", str(e))
+            return jsonify({"status": "error"}), 500
+    elif event in ("subscription.not_renew", "subscription.disable"):
+        try:
+            _student_subscription_billing["subscription_webhook"](db, event, payload)
+        except Exception as e:
+            print("Paystack subscription webhook error:", str(e))
+            return jsonify({"status": "error"}), 500
+    elif event in ("refund.pending", "refund.processing", "refund.processed", "refund.failed"):
+        try:
+            _student_subscription_billing["refund_webhook"](db, event, payload)
+        except Exception as e:
+            print("Paystack refund webhook error:", str(e))
             return jsonify({"status": "error"}), 500
     elif event in ("transfer.success", "transfer.failed", "transfer.reversed") and reference:
         # Ambassador payout confirmation - shares this route with checkout
@@ -8530,6 +8555,15 @@ def subscription_upgrade():
     if price <= 0:
         return jsonify({"error": "This plan is not currently available"}), 400
 
+    paystack_plan_code = os.environ.get(
+        "PAYSTACK_PLUS_PLAN_CODE" if plan == "plus" else "PAYSTACK_PRO_PLAN_CODE"
+    )
+    if not paystack_plan_code:
+        return jsonify({
+            "error": "Recurring billing is not configured for this plan yet. "
+                     "Admin must add the matching Paystack plan code."
+        }), 503
+
     pending = _student_order_helpers["find_pending_checkout"](user_id, plan=plan)
     if pending and pending.get("checkout_url"):
         return jsonify({
@@ -8545,7 +8579,8 @@ def subscription_upgrade():
     plan_name = "Plus" if plan == "plus" else "Pro"
     try:
         provider_reference, authorization_url = create_paystack_transaction(
-            reference, price, f"Prepza {plan_name} Plan", user
+            reference, price, f"Prepza {plan_name} Plan", user,
+            paystack_plan_code=paystack_plan_code,
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -14159,6 +14194,12 @@ from infrastructure_monitoring import register_infrastructure_monitoring
 register_infrastructure_monitoring(
     app, db, require_admin, SystemSetting, User, DocumentContent,
     AiUsageLog, Payment, StudyActivityLog, StudyTimeLog,
+)
+
+from student_subscription_billing import register_student_subscription_billing
+
+_student_subscription_billing = register_student_subscription_billing(
+    app, db, Payment, User, require_csrf, require_admin, paystack_request,
 )
 
 if __name__ == "__main__":
