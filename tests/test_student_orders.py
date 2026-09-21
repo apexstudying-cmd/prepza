@@ -1,4 +1,4 @@
-from types import SimpleNamespace
+import pytest\nfrom types import SimpleNamespace
 
 from student_orders import order_payment_matches_snapshot
 
@@ -127,6 +127,11 @@ def test_subscription_order_rejects_content_item_on_payment():
 
 def test_order_payment_match_requires_successful_payment():
     assert not order_payment_matches_snapshot(_order(), _payment(status="pending"))
+
+
+@pytest.mark.parametrize("status", ["failed", "refunded", "cancelled"])
+def test_order_payment_match_rejects_terminal_payment_statuses(status):
+    assert not order_payment_matches_snapshot(_order(), _payment(status=status))
 
 
 def test_free_is_not_a_paid_subscription_order():
