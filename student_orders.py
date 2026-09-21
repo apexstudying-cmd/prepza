@@ -31,7 +31,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
     fulfillment state.
     """
 
-    def create_order_for_payment(payment, *, item_title=None, requested_payload=None):
+    def create_order_for_payment(payment, *, item_title=None, requested_payload=None, checkout_url=None):
         if not payment or not payment.user_id:
             raise ValueError("A student order requires a user-owned payment")
 
@@ -72,12 +72,12 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
                 INSERT INTO student_order
                     (order_number, user_id, payment_id, order_type, item_id,
                      item_title_snapshot, plan, quantity, unit_amount,
-                     total_amount, currency, requested_payload, status,
+                     total_amount, currency, requested_payload, checkout_url, status,
                      created_at, updated_at)
                 VALUES
                     (:order_number, :user_id, :payment_id, :order_type, :item_id,
                      :title, :plan, :quantity, :unit_amount,
-                     :total_amount, 'KES', CAST(:requested_payload AS jsonb), 'pending',
+                     :total_amount, 'KES', CAST(:requested_payload AS jsonb), :checkout_url, 'pending',
                      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT (payment_id) DO NOTHING
                 RETURNING id, order_number
@@ -94,6 +94,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
                 "unit_amount": payment.amount,
                 "total_amount": payment.amount * quantity,
                 "requested_payload": json.dumps(payload),
+                "checkout_url": checkout_url,
             },
         ).mappings().first()
 
@@ -105,6 +106,39 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
             {"payment_id": payment.id},
         ).mappings().first()
         return dict(existing) if existing else None
+
+    def find_pending_checkout(user_id, *, content_item_id=None, plan=None):
+        if content_item_id is not None:
+            row = db.session.execute(
+                text("""
+                    SELECT o.order_number, o.checkout_url, p.reference
+                    FROM student_order o
+                    JOIN payment p ON p.id = o.payment_id
+                    WHERE o.user_id = :user_id
+                      AND o.item_id = :item_id
+                      AND o.order_type = 'content'
+                      AND o.status = 'pending'
+                      AND p.status = 'pending'
+                    ORDER BY o.created_at DESC
+                    LIMIT 1
+                """), {"user_id": user_id, "item_id": content_item_id}
+            ).mappings().first()
+        else:
+            row = db.session.execute(
+                text("""
+                    SELECT o.order_number, o.checkout_url, p.reference
+                    FROM student_order o
+                    JOIN payment p ON p.id = o.payment_id
+                    WHERE o.user_id = :user_id
+                      AND o.plan = :plan
+                      AND o.order_type = 'subscription'
+                      AND o.status = 'pending'
+                      AND p.status = 'pending'
+                    ORDER BY o.created_at DESC
+                    LIMIT 1
+                """), {"user_id": user_id, "plan": plan}
+            ).mappings().first()
+        return dict(row) if row else None
 
     def mark_order_paid_and_fulfilled(payment):
         if not payment:
@@ -186,6 +220,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
             "unit_amount": row["unit_amount"],
             "total_amount": row["total_amount"],
             "currency": row["currency"],
+            "checkout_url": row["checkout_url"],
             "status": row["status"],
             "requested": decode(row["requested_payload"]),
             "fulfillment": decode(row["fulfillment_payload"]),
@@ -234,6 +269,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
     # module-level global API.
     app.extensions["prepza_student_orders"] = {
         "create": create_order_for_payment,
+        "find_pending_checkout": find_pending_checkout,
         "mark_paid_and_fulfilled": mark_order_paid_and_fulfilled,
         "mark_failed": mark_order_failed,
         "mark_refunded": mark_order_refunded,
