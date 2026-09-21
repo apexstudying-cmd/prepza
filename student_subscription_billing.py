@@ -683,6 +683,34 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
         if amount <= 0 or amount > int(payment["amount"]):
             return jsonify({"error": "Calculated refund amount is invalid", "quote": quote}), 400
 
+        # A refund must never leave a recurring subscription capable of
+        # charging the student again. Disable renewal before initiating the
+        # refund; current paid access is separately revoked only when the
+        # refund is actually processed.
+        recurring = db.session.execute(text("""
+            SELECT * FROM student_subscription
+            WHERE user_id=:uid AND status IN ('active','attention')
+            ORDER BY id DESC LIMIT 1
+        """), {"uid": payment["user_id"]}).mappings().first()
+        if recurring and recurring["paystack_subscription_code"]:
+            try:
+                paystack_request("POST", "/subscription/disable", json={
+                    "code": recurring["paystack_subscription_code"],
+                    "token": recurring["paystack_email_token"],
+                })
+            except Exception as exc:
+                db.session.rollback()
+                return jsonify({
+                    "error": "Could not stop recurring renewal before refund",
+                    "detail": str(exc),
+                }), 502
+            db.session.execute(text("""
+                UPDATE student_subscription
+                SET cancel_at_period_end=TRUE,status='non-renewing',
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=:id
+            """), {"id": recurring["id"]})
+
         try:
             result = paystack_request("POST", "/refund", json={
                 "transaction": payment["reference"] or payment["provider_reference"],
