@@ -50,13 +50,23 @@ def _content_scope(document_content_id: int, triggering_user_id: int) -> tuple[s
     # Sharing follows the deduplicated source content. If this exact
     # DocumentContent has an approved Study Hub/library publication, every
     # student generating that same SHA-backed content uses the shared family.
-    public = db.session.query(LibraryPublication.id).join(
-        Document, LibraryPublication.document_id == Document.id
-    ).filter(
-        Document.document_content_id == document_content_id,
-        LibraryPublication.status == "approved",
-        Document.is_removed.is_(False),
-    ).first()
+    # Publication is a property of the underlying SHA-256 content, not
+    # merely one DocumentContent row. Identical uploads can therefore resolve
+    # to the same public Study Hub artifact even when they were not deduplicated.
+    content_hash = db.session.query(DocumentContent.content_hash).filter(
+        DocumentContent.id == document_content_id,
+    ).scalar()
+    public = None
+    if content_hash:
+        public = db.session.query(LibraryPublication.id).join(
+            Document, LibraryPublication.document_id == Document.id
+        ).join(
+            DocumentContent, Document.document_content_id == DocumentContent.id
+        ).filter(
+            DocumentContent.content_hash == content_hash,
+            LibraryPublication.status == "approved",
+            Document.is_removed.is_(False),
+        ).first()
     if public:
         return "shared", None
 
