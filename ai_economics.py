@@ -349,7 +349,26 @@ def register_ai_economics(app, db):
             ORDER BY subscription_expires_at DESC LIMIT 1
         """), {"uid": uid}).scalar_one_or_none()
         plan_code = {"semester": "plus", "annual": "pro", "plus": "plus", "pro": "pro"}.get(row, "free")
-        return jsonify({"plan": get_plan(db, plan_code), "ada_usage": get_ada_usage(db, uid, plan_code)})
+        plan = get_plan(db, plan_code)
+        public_plan = {
+            "plan_code": plan["plan_code"],
+            "display_name": plan["display_name"],
+            "price_kes": int(plan["price_kes"]),
+            "billing_period": plan["billing_period"],
+            "quota_period": plan["quota_period"],
+            "podcast_minutes": int(plan["podcast_minutes"]),
+            "summary_pages": int(plan["summary_pages"]),
+            "questions": int(plan["questions"]),
+            "mind_map_nodes": int(plan["mind_map_nodes"]),
+            "flashcards": int(plan["flashcards"]),
+            "offline_study": bool(plan["offline_study"]),
+            "premium_library": bool(plan["premium_library"]),
+            "study_hub_uploads": bool(plan["study_hub_uploads"]),
+        }
+        return jsonify({"plan": public_plan, "ada_usage": {
+            "daily_used": get_ada_usage(db, uid, plan_code)["daily_used"],
+            "monthly_used": get_ada_usage(db, uid, plan_code)["monthly_used"],
+        }})
 
     @app.get("/api/admin/ai-economics/usage")
     def admin_ai_economics_usage():
