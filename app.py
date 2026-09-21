@@ -2045,24 +2045,25 @@ def get_user_subscription_status(user_id):
     # subscription checkout was fulfilled. This prevents orphaned/tampered
     # payment rows from becoming entitlements.
     latest = (
-        Payment.query
+        db.session.query(Payment)
         .join(
-            StudentOrder,
-            StudentOrder.payment_id == Payment.id,
+            text("student_order"),
+            text("student_order.payment_id = payment.id"),
         )
         .filter(
             Payment.user_id == user_id,
             Payment.payment_type == "subscription",
             Payment.status == "success",
             Payment.subscription_expires_at.isnot(None),
-            StudentOrder.user_id == user_id,
-            StudentOrder.order_type == "subscription",
-            StudentOrder.status == "fulfilled",
-            StudentOrder.plan == Payment.plan,
-            StudentOrder.item_id.is_(None),
-            StudentOrder.quantity == 1,
-            StudentOrder.currency == "KES",
+            text("student_order.user_id = :subscription_user_id"),
+            text("student_order.order_type = 'subscription'"),
+            text("student_order.status = 'fulfilled'"),
+            text("student_order.plan = payment.plan"),
+            text("student_order.item_id IS NULL"),
+            text("student_order.quantity = 1"),
+            text("student_order.currency = 'KES'"),
         )
+        .params(subscription_user_id=user_id)
         .order_by(Payment.subscription_expires_at.desc())
         .first()
     )
