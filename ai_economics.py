@@ -348,7 +348,7 @@ def register_ai_economics(app, db):
               AND subscription_expires_at > CURRENT_TIMESTAMP
             ORDER BY subscription_expires_at DESC LIMIT 1
         """), {"uid": uid}).scalar_one_or_none()
-        plan_code = {"semester": "plus", "annual": "pro", "plus": "plus", "pro": "pro"}.get(row, "free")
+        plan_code = {"plus": "plus", "pro": "pro"}.get(row, "free")
         plan = get_plan(db, plan_code)
         public_plan = {
             "plan_code": plan["plan_code"],
