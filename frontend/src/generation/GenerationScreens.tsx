@@ -41,7 +41,7 @@ async function pollGenerationJob<T = any>(jobId: number, onProgress?: (percent: 
 
 function friendlyGenerationError(error: unknown): string {
   if (!(error instanceof GenerationApiError)) return error instanceof Error ? error.message : 'Generation could not be completed. Please try again.'
-  if (error.code === 'generation_quota_exhausted') {
+  if (error.code === 'generation_quota_exhausted' || /used up this plan.?s generation allowance|generation quota exhausted/i.test(error.message)) {
     return 'You have used all of this feature’s allowance for your current plan. Upgrade your plan to continue generating.'
   }
   if (error.code === 'generation_size_limit') {
@@ -322,7 +322,7 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
       setGenerationPercent(65); setGenerationStage('starting audio synthesis')
       setPhase('audio')
       await generationApi(`/documents/${activeDocumentId}/podcast-audio`, { method: 'POST', headers: { 'X-CSRF-Token': csrf } })
-    } catch (e) { setError(friendlyGenerationError(e) ? friendlyGenerationError(e) : 'Could not generate this podcast.'); setPhase('error') }
+    } catch (e) { setError(friendlyGenerationError(e)); setPhase('error') }
   }
 
   const retryAudio = async () => {
