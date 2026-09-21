@@ -331,10 +331,11 @@ def generate_document_material(*, material_type, document_content_id, triggering
             if quota_reserved:
                 refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period)
             raise ai_service.AIProviderError("AI generation failed - please try again.")
-        if variant_pool_feature:
-            release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
-        if quota_reserved:
-            refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period)
+        # A timeout is not a generation failure. The other worker may still
+        # be running (the durable artifact lease is 15 minutes), so do NOT
+        # refund quota or release the variant here. Doing either would let a
+        # student retry and receive a second allowance while the first job
+        # can still complete successfully.
         raise ai_service.AIProviderError("This material is still being prepared - please try again shortly.")
 
     if material_type in FEATURES and not quota_reserved:
