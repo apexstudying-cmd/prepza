@@ -66,6 +66,9 @@ def ensure_subscription_schema(db):
             admin_reason VARCHAR(500),
             paystack_refund_id VARCHAR(100),
             paystack_status VARCHAR(30),
+            paystack_transaction_reference VARCHAR(120),
+            paystack_refund_reference VARCHAR(120),
+            provider_message VARCHAR(500),
             processed_at TIMESTAMP NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -74,6 +77,9 @@ def ensure_subscription_schema(db):
     db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_student_subscription_user_status ON student_subscription(user_id,status)"))
     db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_student_entitlement_usage_payment ON student_entitlement_usage(payment_id,created_at)"))
     db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_student_entitlement_usage_user_created ON student_entitlement_usage(user_id,created_at)"))
+    db.session.execute(text("ALTER TABLE student_refund_request ADD COLUMN IF NOT EXISTS paystack_transaction_reference VARCHAR(120)"))
+    db.session.execute(text("ALTER TABLE student_refund_request ADD COLUMN IF NOT EXISTS paystack_refund_reference VARCHAR(120)"))
+    db.session.execute(text("ALTER TABLE student_refund_request ADD COLUMN IF NOT EXISTS provider_message VARCHAR(500)"))
     db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_student_refund_request_user ON student_refund_request(user_id,requested_at)"))
     db.session.execute(text("""
         INSERT INTO system_setting(key,value) VALUES
@@ -86,7 +92,7 @@ def ensure_subscription_schema(db):
 
 
 STANDARD_REFUND_STATUS = ("requested", "approved", "rejected", "paystack_pending",
-                          "paystack_processing", "processed", "failed")
+                          "paystack_processing", "needs_attention", "processed", "failed")
 FEATURE_WEIGHTS = {
     "ada": Decimal("0.50"),
     "podcast": Decimal("0.15"),
@@ -469,6 +475,7 @@ def handle_refund_webhook(db, event, payload):
     mapping = {
         "refund.pending": "paystack_pending",
         "refund.processing": "paystack_processing",
+        "refund.needs-attention": "needs_attention",
         "refund.processed": "processed",
         "refund.failed": "failed",
     }
@@ -481,12 +488,20 @@ def handle_refund_webhook(db, event, payload):
         SET status=:status,
             paystack_refund_id=COALESCE(:refund_id,paystack_refund_id),
             paystack_status=:paystack_status,
+            paystack_transaction_reference=COALESCE(:transaction_reference,paystack_transaction_reference),
+            paystack_refund_reference=COALESCE(:refund_reference,paystack_refund_reference),
+            provider_message=COALESCE(:provider_message,provider_message),
             processed_at=CASE WHEN :status='processed' THEN CURRENT_TIMESTAMP ELSE processed_at END,
             updated_at=CURRENT_TIMESTAMP
         WHERE payment_id=:payment_id
     """), {
-        "status": status, "refund_id": str(refund_id) if refund_id else None,
-        "paystack_status": data.get("status"), "payment_id": payment_id,
+        "status": status,
+        "refund_id": str(refund_id) if refund_id else None,
+        "paystack_status": data.get("status"),
+        "transaction_reference": reference,
+        "refund_reference": data.get("refund_reference") || data.get("reference"),
+        "provider_message": data.get("message") || data.get("failure_reason"),
+        "payment_id": payment_id,
     })
     if event == "refund.processed":
         db.session.execute(text("""
@@ -700,7 +715,7 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
         """), {"id": refund_id}).mappings().first()
         if not row:
             return jsonify({"error": "Refund request not found"}), 404
-        if row["status"] not in ("requested", "approved"):
+        if row["status"] not in ("requested", "approved", "failed"):
             return jsonify({"error": f"Refund is not executable from status {row['status']}"}), 400
         if row["payment_status"] != "success":
             return jsonify({"error": "Underlying payment is no longer refundable"}), 400
@@ -759,6 +774,9 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
             SET status='paystack_pending', approved_amount=:amount,
                 admin_user_id=:admin_id, admin_reason=:reason,
                 paystack_refund_id=:refund_id, paystack_status=:paystack_status,
+                paystack_transaction_reference=:transaction_reference,
+                paystack_refund_reference=:refund_reference,
+                provider_message=:provider_message,
                 updated_at=CURRENT_TIMESTAMP
             WHERE id=:id
         """), {
@@ -766,6 +784,9 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
             "reason": ((request.get_json(silent=True) or {}).get("reason") or "")[:500],
             "refund_id": str(data.get("id")) if data.get("id") else None,
             "paystack_status": data.get("status") or "pending",
+            "transaction_reference": payment["reference"],
+            "refund_reference": data.get("refund_reference") or data.get("reference"),
+            "provider_message": data.get("message") or data.get("failure_reason"),
         })
         # Do NOT mark the payment refunded yet. Paystack's webhook is the
         # authoritative confirmation that the processor actually processed it.
