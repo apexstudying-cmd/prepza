@@ -99,12 +99,12 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
             text("""
                 INSERT INTO student_order
                     (order_number, user_id, payment_id, order_type, item_id,
-                     item_title_snapshot, plan, quantity, unit_amount,
+                     item_title_snapshot, item_file_url_snapshot, plan, quantity, unit_amount,
                      total_amount, currency, requested_payload, checkout_url, status,
                      created_at, updated_at)
                 VALUES
                     (:order_number, :user_id, :payment_id, :order_type, :item_id,
-                     :title, :plan, :quantity, :unit_amount,
+                     :title, :file_url_snapshot, :plan, :quantity, :unit_amount,
                      :total_amount, 'KES', CAST(:requested_payload AS jsonb), :checkout_url, 'pending',
                      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT (payment_id) DO NOTHING
@@ -117,6 +117,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
                 "order_type": order_type,
                 "item_id": item_id,
                 "title": title_snapshot,
+                "file_url_snapshot": item.file_url if payment.payment_type == "content" else None,
                 "plan": plan,
                 "quantity": quantity,
                 "unit_amount": payment.amount,
@@ -270,6 +271,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
             "order_type": row["order_type"],
             "item_id": row["item_id"],
             "item_title": row["item_title_snapshot"],
+            "item_file_url_snapshot": row["item_file_url_snapshot"],
             "plan": row["plan"],
             "quantity": row["quantity"],
             "unit_amount": row["unit_amount"],
