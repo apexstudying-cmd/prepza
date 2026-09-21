@@ -906,11 +906,19 @@ def register_usage_billing(app, db):
             params["status"] = status
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         rows = db.session.execute(text(f"""
-            SELECT id, fingerprint, feature, parameters, scope, owner_user_id,
-                   status, error_message, created_at, updated_at, completed_at
-            FROM ai_generation_artifact
+            SELECT a.id, a.fingerprint, a.content_hash, a.feature, a.parameters,
+                   a.scope, a.owner_user_id, a.status, a.error_message,
+                   a.created_at, a.updated_at, a.completed_at,
+                   (SELECT gm.id FROM generated_material gm
+                    WHERE gm.generation_fingerprint = a.fingerprint
+                    LIMIT 1) AS material_id,
+                   (SELECT d.title FROM document d
+                    JOIN document_content dc ON dc.id = d.document_content_id
+                    WHERE dc.content_hash = a.content_hash AND d.is_removed = FALSE
+                    ORDER BY d.created_at DESC LIMIT 1) AS source_title
+            FROM ai_generation_artifact a
             {where}
-            ORDER BY created_at DESC
+            ORDER BY a.created_at DESC
             LIMIT :limit
         """), params).mappings().all()
         return jsonify({
@@ -918,7 +926,11 @@ def register_usage_billing(app, db):
                 {
                     "id": int(row["id"]),
                     "fingerprint": row["fingerprint"],
+                    "content_hash": row["content_hash"],
                     "feature": row["feature"],
+                    "variant": (row["parameters"] or {}).get("variant") if isinstance(row["parameters"], dict) else None,
+                    "material_id": int(row["material_id"]) if row["material_id"] else None,
+                    "source_title": row["source_title"],
                     "parameters": row["parameters"] or {},
                     "scope": row["scope"],
                     "owner_user_id": row["owner_user_id"],
