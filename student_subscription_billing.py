@@ -499,7 +499,7 @@ def handle_refund_webhook(db, event, payload):
         "refund_id": str(refund_id) if refund_id else None,
         "paystack_status": data.get("status"),
         "transaction_reference": reference,
-        "refund_reference": data.get("refund_reference") || data.get("reference"),
+        "refund_reference": data.get("refund_reference") or data.get("reference"),
         "provider_message": data.get("message") || data.get("failure_reason"),
         "payment_id": payment_id,
     })
