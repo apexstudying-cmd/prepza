@@ -2150,6 +2150,7 @@ def sync_paystack_payment_status(reference):
             print(f"Paystack amount mismatch on payment {payment.id}: "
                   f"expected {payment.amount}, got {paid_amount_kobo}")
             payment.status = "failed"
+            _student_order_helpers["mark_failed"](payment.id)
         else:
             payment.status = "success"
             if payment.payment_type == "promotion" and payment.opportunity_promotion_id:
