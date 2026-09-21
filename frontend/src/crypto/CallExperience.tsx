@@ -19,6 +19,8 @@ export default function CallExperience({ userId }: Props) {
   const [call, setCall] = useState<ActiveCall | null>(null)
   const [muted, setMuted] = useState(false)
   const [cameraOff, setCameraOff] = useState(false)
+  const [connectedAt, setConnectedAt] = useState<number | null>(null)
+  const [callSeconds, setCallSeconds] = useState(0)
   const localVideo = useRef<HTMLVideoElement>(null)
   const remoteVideo = useRef<HTMLVideoElement>(null)
   const remoteAudio = useRef<HTMLAudioElement>(null)
@@ -29,6 +31,14 @@ export default function CallExperience({ userId }: Props) {
   const incomingRef = useRef<CallSignal | null>(null)
 
   useEffect(() => { callRef.current = call }, [call])
+  useEffect(() => {
+    if (!connectedAt) { setCallSeconds(0); return }
+    const tick = () => setCallSeconds(Math.max(0, Math.floor((Date.now() - connectedAt) / 1000)))
+    tick()
+    const timer = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timer)
+  }, [connectedAt])
+
   useEffect(() => { incomingRef.current = incoming }, [incoming])
 
   useEffect(() => {
@@ -67,7 +77,7 @@ export default function CallExperience({ userId }: Props) {
     }
     pc.onconnectionstatechange = () => {
       if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) cleanup(true)
-      else if (pc.connectionState === 'connected') setCall(current => current ? { ...current, connected: true } : current)
+      else if (pc.connectionState === 'connected') { setCall(current => current ? { ...current, connected: true } : current); setConnectedAt(value => value || Date.now()) }
     }
     peer.current = pc
     return pc
@@ -146,6 +156,7 @@ export default function CallExperience({ userId }: Props) {
     if (remoteVideo.current) remoteVideo.current.srcObject = null
     if (remoteAudio.current) remoteAudio.current.srcObject = null
     callRef.current = null
+    setConnectedAt(null); setCallSeconds(0)
     setCall(null); setIncoming(null); setMuted(false); setCameraOff(false); pendingIce.current = []
   }
 
@@ -170,7 +181,7 @@ export default function CallExperience({ userId }: Props) {
     </div>}
     {call && <div style={{ position:'fixed', inset:0, zIndex:2900, background:'#090c14', color:'#fff', display:'flex', flexDirection:'column' }}>
       {call.kind === 'video' && <><video ref={remoteVideo} autoPlay playsInline style={{ position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',background:'#111' }} /><video ref={localVideo} autoPlay playsInline muted style={{ position:'absolute',right:18,top:18,width:'28%',maxWidth:220,aspectRatio:'3/4',objectFit:'cover',borderRadius:18,background:'#222',boxShadow:'0 8px 30px rgba(0,0,0,.35)' }} /></>}
-      {call.kind === 'voice' && <div style={{ flex:1,display:'grid',placeItems:'center' }}><div style={{ textAlign:'center' }}><div style={{ width:110,height:110,borderRadius:'50%',background:'#c9a84c',color:'#0b1437',display:'grid',placeItems:'center',fontSize:42,fontWeight:900,margin:'0 auto 18px' }}>{call.peerName.slice(0,1).toUpperCase()}</div><div style={{fontSize:25,fontWeight:850}}>{call.peerName}</div><div style={{marginTop:8,opacity:.65}}>{call.connected ? 'Connected' : 'Calling…'}</div></div></div>}
+      {call.kind === 'voice' && <div style={{ flex:1,display:'grid',placeItems:'center' }}><div style={{ textAlign:'center' }}><div style={{ width:110,height:110,borderRadius:'50%',background:'#c9a84c',color:'#0b1437',display:'grid',placeItems:'center',fontSize:42,fontWeight:900,margin:'0 auto 18px' }}>{call.peerName.slice(0,1).toUpperCase()}</div><div style={{fontSize:25,fontWeight:850}}>{call.peerName}</div><div style={{marginTop:8,opacity:.65}}>{call.connected ? `Connected · ${Math.floor(callSeconds / 60)}:${String(callSeconds % 60).padStart(2,'0')}` : 'Calling…'}</div></div></div>}
       <div style={{ position:'absolute',left:0,right:0,bottom:0,padding:'28px 22px 34px',display:'flex',justifyContent:'center',gap:14,background:'linear-gradient(transparent,rgba(0,0,0,.65))' }}>
         <button type="button" onClick={() => { const tracks = localStream.current?.getAudioTracks() || []; tracks.forEach(track => { track.enabled = !track.enabled }); setMuted(tracks[0] ? !tracks[0].enabled : false) }} aria-label="Mute microphone" style={{width:52,height:52,border:0,borderRadius:'50%',background:muted?'#fff':'rgba(255,255,255,.18)',color:muted?'#111':'#fff',fontSize:20}}>⌁</button>
         {call.kind === 'video' && <button type="button" onClick={() => { const tracks = localStream.current?.getVideoTracks() || []; tracks.forEach(track => { track.enabled = !track.enabled }); setCameraOff(tracks[0] ? !tracks[0].enabled : false) }} aria-label="Turn camera off" style={{width:52,height:52,border:0,borderRadius:'50%',background:cameraOff?'#fff':'rgba(255,255,255,.18)',color:cameraOff?'#111':'#fff',fontSize:20}}>◉</button>}
