@@ -62,6 +62,8 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 db = SQLAlchemy(app)
 from usage_billing import register_usage_billing
 register_usage_billing(app, db)
+from ai_economics import register_ai_economics
+register_ai_economics(app, db)
 from organisation_billing import register_organisation_billing
 register_organisation_billing(app, db)
 from discovery_billing import register_discovery
