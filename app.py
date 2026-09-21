@@ -2074,13 +2074,24 @@ def get_user_subscription_status(user_id):
         .first()
     )
     if not latest:
-        return {"plan": "free", "is_active": False, "expires_at": None}
+        return {
+            "plan": "free", "is_active": False, "expires_at": None,
+            "cancel_at_period_end": False, "recurring": False,
+        }
 
     is_active = latest.subscription_expires_at > datetime.utcnow()
+    recurring = db.session.execute(text("""
+        SELECT cancel_at_period_end
+        FROM student_subscription
+        WHERE user_id=:uid AND plan=:plan
+        ORDER BY id DESC LIMIT 1
+    """), {"uid": user_id, "plan": latest.plan}).scalar_one_or_none()
     return {
         "plan": latest.plan if is_active else "free",
         "is_active": is_active,
         "expires_at": latest.subscription_expires_at.isoformat(),
+        "cancel_at_period_end": bool(recurring),
+        "recurring": True,
     }
 
 
