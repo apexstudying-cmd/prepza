@@ -2163,8 +2163,8 @@ def sync_paystack_payment_status(reference):
             _maybe_award_referral_commission(payment)
             _student_order_helpers["mark_paid_and_fulfilled"](payment)
     elif tx_status in ("failed", "abandoned", "reversed"):
-        # A payment that definitively failed cannot fulfill the order. Keep
-        # the order pending/failed rather than ever granting access.
+        # A payment that definitively failed cannot fulfill the order.
+        _student_order_helpers["mark_failed"](payment.id)
         payment.status = "failed"
         if payment.payment_type == "promotion" and payment.opportunity_promotion_id:
             promo = db.session.get(OpportunityPromotion, payment.opportunity_promotion_id)
