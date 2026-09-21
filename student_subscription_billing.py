@@ -500,7 +500,7 @@ def handle_refund_webhook(db, event, payload):
         "paystack_status": data.get("status"),
         "transaction_reference": reference,
         "refund_reference": data.get("refund_reference") or data.get("reference"),
-        "provider_message": data.get("message") || data.get("failure_reason"),
+        "provider_message": data.get("message") or data.get("failure_reason"),
         "payment_id": payment_id,
     })
     if event == "refund.processed":
