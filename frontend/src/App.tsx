@@ -9564,7 +9564,6 @@ type AdminAnalytics = {
   payments_by_status: Record<string, number>
   signups_per_day: { date: string; count: number }[]
   revenue_per_day: { date: string; amount: number }[]
-  top_performing_content: { id: number; title: string; content_type: string; revenue: number; purchases: number }[]
 }
 
 type AdminContentReport = {
@@ -11130,22 +11129,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               </div>
             </AdminCard>
           </div>
-
-          <AdminCard title="Top Performing Content">
-            {analytics.top_performing_content.length === 0 ? (
-              <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No paid content purchases yet.</div>
-            ) : (
-              <AdminTable
-                cols={['Title', 'Type', 'Purchases', 'Revenue']}
-                rows={analytics.top_performing_content.map(c => [
-                  c.title,
-                  c.content_type,
-                  c.purchases.toString(),
-                  `KES ${c.revenue.toLocaleString()}`,
-                ])}
-              />
-            )}
-          </AdminCard>
 
           <AdminCard title="Top Universities by Engagement">
             {universityEngagementLoading ? (
