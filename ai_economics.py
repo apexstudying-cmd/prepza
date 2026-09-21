@@ -250,3 +250,82 @@ def validate_plan_patch(payload):
         elif key not in allowed:
             errors[key] = "field is not admin-editable"
     return cleaned, errors
+
+
+def _admin_allowed():
+    from flask import session
+    import os
+    uid = session.get("user_id")
+    if not uid:
+        return False
+    if session.get("is_admin") is True or session.get("role") in ("admin", "superadmin"):
+        return True
+    configured = {int(x.strip()) for x in os.environ.get("PREPZA_ADMIN_USER_IDS", "").split(",") if x.strip().isdigit()}
+    return int(uid) in configured
+
+
+def register_ai_economics(app, db):
+    ensure_economics_schema(db)
+    from flask import jsonify, request, session
+
+    @app.get("/api/admin/ai-economics/plans")
+    def admin_ai_economics_plans():
+        if not _admin_allowed():
+            return jsonify({"error": "Admin access required"}), 403
+        return jsonify({"currency": "KES", "plans": get_plans(db),
+                        "unit_weights": {k: str(v) for k, v in ADA_UNIT_WEIGHTS.items()}})
+
+    @app.patch("/api/admin/ai-economics/plans/<plan_code>")
+    def admin_update_ai_economics_plan(plan_code):
+        if not _admin_allowed():
+            return jsonify({"error": "Admin access required"}), 403
+        payload = request.get_json(silent=True) or {}
+        cleaned, errors = validate_plan_patch(payload)
+        if errors:
+            return jsonify({"error": "Invalid plan configuration", "fields": errors}), 400
+        if not cleaned:
+            return jsonify({"error": "No editable fields supplied"}), 400
+        if not get_plan(db, plan_code):
+            return jsonify({"error": "Unknown plan"}), 404
+        cleaned["updated_by"] = session.get("user_id")
+        assignments = ", ".join(f"{key} = :{key}" for key in cleaned)
+        db.session.execute(text(f"""
+            UPDATE student_plan_config
+            SET {assignments}, updated_at = CURRENT_TIMESTAMP
+            WHERE plan_code = :plan_code
+        """), {"plan_code": plan_code, **cleaned})
+        db.session.commit()
+        return jsonify({"ok": True, "plan": get_plan(db, plan_code)})
+
+    @app.get("/api/ai-economics/plan")
+    def current_ai_economics_plan():
+        uid = session.get("user_id")
+        if not uid:
+            return jsonify({"error": "Not logged in"}), 401
+        row = db.session.execute(text("""
+            SELECT plan FROM payment
+            WHERE user_id = :uid AND payment_type = 'subscription'
+              AND status = 'success' AND subscription_expires_at IS NOT NULL
+              AND subscription_expires_at > CURRENT_TIMESTAMP
+            ORDER BY subscription_expires_at DESC LIMIT 1
+        """), {"uid": uid}).scalar_one_or_none()
+        plan_code = {"semester": "plus", "annual": "pro", "plus": "plus", "pro": "pro"}.get(row, "free")
+        return jsonify({"plan": get_plan(db, plan_code), "ada_usage": get_ada_usage(db, uid, plan_code)})
+
+    @app.get("/api/admin/ai-economics/usage")
+    def admin_ai_economics_usage():
+        if not _admin_allowed():
+            return jsonify({"error": "Admin access required"}), 403
+        row = db.session.execute(text("""
+            SELECT COUNT(*) AS requests,
+                   COALESCE(SUM(input_tokens),0) AS input_tokens,
+                   COALESCE(SUM(cached_tokens),0) AS cached_tokens,
+                   COALESCE(SUM(cache_write_tokens),0) AS cache_write_tokens,
+                   COALESCE(SUM(output_tokens),0) AS output_tokens,
+                   COALESCE(SUM(ada_units),0) AS ada_units,
+                   COALESCE(SUM(cost_usd),0) AS cost_usd
+            FROM ada_request_usage
+            WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+        """)).mappings().one()
+        return jsonify({key: (float(value) if key == "cost_usd" else int(value or 0))
+                        for key, value in row.items()})
