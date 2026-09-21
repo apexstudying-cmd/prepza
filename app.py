@@ -273,7 +273,7 @@ class Payment(db.Model):
 
     # 'content' (one-off document/item purchase) or 'subscription' (plan purchase)
     payment_type = db.Column(db.String(20), nullable=False, default="content")
-    plan = db.Column(db.String(20), nullable=True)  # 'semester' | 'annual' - subscription only
+    plan = db.Column(db.String(20), nullable=True)  # 'plus' | 'pro' - subscription only
     subscription_expires_at = db.Column(db.DateTime, nullable=True)  # subscription only
     # Organisation promotion billing. Nullable so existing student/content/subscription
     # payments remain unchanged.
@@ -1815,7 +1815,17 @@ _student_order_helpers = register_student_orders(app, db, Payment, ContentItem, 
 # (sk_test_ vs sk_live_) determines sandbox vs live - unlike Pesapal,
 # Paystack has no separate base URL per environment.
 PAYSTACK_BASE_URL = "https://api.paystack.co"
-SUBSCRIPTION_PLAN_DURATIONS_DAYS = {"semester": 120, "annual": 365}
+SUBSCRIPTION_PLAN_DURATIONS_MONTHS = {"plus": 1, "pro": 1}
+
+def _add_subscription_month(value):
+    import calendar
+    year, month = value.year, value.month
+    if month == 12:
+        year, month = year + 1, 1
+    else:
+        month += 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
 
 
 def paystack_request(method, path, **kwargs):
@@ -1864,22 +1874,11 @@ def create_paystack_transaction(reference, amount, description, user):
 
 
 def get_plan_prices():
-    keys = ("price_plan_semester", "price_plan_annual")
-    settings = {
-        s.key: s.value
-        for s in SystemSetting.query.filter(SystemSetting.key.in_(keys)).all()
-    }
-
-    def parse(key, default):
-        try:
-            return int(settings.get(key) or default)
-        except (TypeError, ValueError):
-            return default
-
-    return {
-        "semester": parse("price_plan_semester", 499),
-        "annual": parse("price_plan_annual", 999),
-    }
+    """Return canonical monthly student subscription prices."""
+    from ai_economics import get_plan
+    plus = get_plan(db, "plus") or {}
+    pro = get_plan(db, "pro") or {}
+    return {"plus": int(plus.get("price_kes", 499)), "pro": int(pro.get("price_kes", 999))}
 
 
 # ---------- Ambassador / Referral program (Chunk 9) ----------
@@ -2096,8 +2095,7 @@ def get_ai_plan_tier(user_id):
 
 def compute_new_subscription_expiry(user_id, plan):
     """Stacks on top of an unexpired plan rather than resetting it."""
-    duration_days = SUBSCRIPTION_PLAN_DURATIONS_DAYS.get(plan)
-    if not duration_days:
+    if plan not in SUBSCRIPTION_PLAN_DURATIONS_MONTHS:
         return datetime.utcnow()
     current = get_user_subscription_status(user_id)
     base = datetime.utcnow()
@@ -2105,7 +2103,7 @@ def compute_new_subscription_expiry(user_id, plan):
         current_expiry = datetime.fromisoformat(current["expires_at"])
         if current_expiry > base:
             base = current_expiry
-    return base + timedelta(days=duration_days)
+    return _add_subscription_month(base)
 
 
 def recompute_subscription_expiries(user_id):
@@ -2136,13 +2134,12 @@ def recompute_subscription_expiries(user_id):
 
     running_expiry = None
     for p in remaining:
-        duration_days = SUBSCRIPTION_PLAN_DURATIONS_DAYS.get(p.plan)
-        if not duration_days:
+        if p.plan not in SUBSCRIPTION_PLAN_DURATIONS_MONTHS:
             continue
         base = p.created_at or datetime.utcnow()
         if running_expiry and running_expiry > base:
             base = running_expiry
-        running_expiry = base + timedelta(days=duration_days)
+        running_expiry = _add_subscription_month(base)
         p.subscription_expires_at = running_expiry
 
 
@@ -8499,8 +8496,8 @@ def subscription_plans():
     return jsonify({
         "plans": [
             {"id": "free", "name": "Free", "price": 0, "period": None},
-            {"id": "semester", "name": "Plus", "price": prices["semester"], "period": "semester"},
-            {"id": "annual", "name": "Pro", "price": prices["annual"], "period": "year"},
+            {"id": "plus", "name": "Plus", "price": prices["plus"], "period": "month"},
+            {"id": "pro", "name": "Pro", "price": prices["pro"], "period": "month"},
         ]
     })
 
@@ -8526,8 +8523,8 @@ def subscription_upgrade():
 
     data = request.get_json(silent=True) or {}
     plan = data.get("plan")
-    if plan not in ("semester", "annual"):
-        return jsonify({"error": "plan must be 'semester' or 'annual'"}), 400
+    if plan not in ("plus", "pro"):
+        return jsonify({"error": "plan must be 'plus' or 'pro'"}), 400
 
     price = get_plan_prices()[plan]
     if price <= 0:
@@ -8545,7 +8542,7 @@ def subscription_upgrade():
     user = db.session.get(User, user_id)
     reference = f"PZA-sub-{plan}-{secrets.token_hex(6)}"
 
-    plan_name = "Plus" if plan == "semester" else "Pro"
+    plan_name = "Plus" if plan == "plus" else "Pro"
     try:
         provider_reference, authorization_url = create_paystack_transaction(
             reference, price, f"Prepza {plan_name} Plan", user
@@ -8567,10 +8564,10 @@ def subscription_upgrade():
     )
     db.session.add(payment)
     db.session.flush()
-    _student_order_helpers["create"](payment, item_title=("Plus Plan" if plan == "semester" else "Pro Plan"), checkout_url=authorization_url, requested_payload={
+    _student_order_helpers["create"](payment, item_title=("Plus Plan" if plan == "plus" else "Pro Plan"), checkout_url=authorization_url, requested_payload={
         "payment_type": "subscription",
         "plan": plan,
-        "plan_name": "Plus" if plan == "semester" else "Pro",
+        "plan_name": "Plus" if plan == "plus" else "Pro",
         "quantity": 1,
     })
     db.session.commit()
