@@ -23,9 +23,8 @@ from flask import jsonify, request, session
 from sqlalchemy import text
 
 
-# Legacy plan constants are retained only for non-AI organisation/accounting
-# code elsewhere in this module. Student AI quotas are sourced from
-# student_plan_config so admins can change them without a deploy.
+# Legacy student-plan constants are no longer the source of truth.
+# Student AI limits come from student_plan_config via ai_economics.
 STUDENT_PLANS = {}
 
 
@@ -225,13 +224,11 @@ def _current_student_plan(db, user_id):
 
 def _usage_row(db, user_id, feature):
     from ai_economics import get_plan
-    plan_code = _current_student_plan(db, user_id)
-    plan = get_plan(db, plan_code)
+    plan = get_plan(db, _current_student_plan(db, user_id))
     if not plan:
         return None
     return db.session.execute(text("""
-        SELECT units, requests
-        FROM student_ai_usage
+        SELECT units, requests FROM student_ai_usage
         WHERE user_id = :uid AND period_start = :period AND feature = :feature
     """), {"uid": user_id, "period": _period_start(plan), "feature": feature}).mappings().first()
 
@@ -252,65 +249,43 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
     if not plan:
         return False, {"error": "Student plan configuration is unavailable"}
 
-    unit_key = {
-        "summary": "summary_pages",
-        "podcast": "podcast_minutes",
-        "flashcards": "flashcards",
-        "quiz": "questions",
-        "mind_map": "mind_map_nodes",
-    }[feature]
+    unit_key = {"summary":"summary_pages","podcast":"podcast_minutes","flashcards":"flashcards",
+                "quiz":"questions","mind_map":"mind_map_nodes"}[feature]
     max_units = int(plan[unit_key] or 0)
+    label = {"summary":"pages","podcast":"minutes","flashcards":"cards",
+             "quiz":"questions","mind_map":"nodes"}[feature]
     if units > max_units:
-        label = {
-            "summary": "pages", "podcast": "minutes", "flashcards": "cards",
-            "quiz": "questions", "mind_map": "nodes",
-        }[feature]
-        return False, {
-            "error": f"This plan supports at most {max_units} {label} per generation.",
-            "code": "generation_size_limit", "feature": feature,
-            "plan": plan_code, "max_units": max_units,
-        }
+        return False, {"error": f"This plan supports at most {max_units} {label} per generation.",
+                        "code":"generation_size_limit","feature":feature,
+                        "plan":plan_code,"max_units":max_units}
 
     period = _period_start(plan)
     db.session.execute(text("""
         INSERT INTO student_ai_usage
             (user_id, period_start, feature, units, requests, updated_at)
-        VALUES (:uid, :period, :feature, 0, 0, CURRENT_TIMESTAMP)
+        VALUES (:uid,:period,:feature,0,0,CURRENT_TIMESTAMP)
         ON CONFLICT (user_id, period_start, feature) DO NOTHING
-    """), {"uid": user_id, "period": period, "feature": feature})
-
-    row = db.session.execute(text("""
-        SELECT units, requests
-        FROM student_ai_usage
-        WHERE user_id = :uid AND period_start = :period AND feature = :feature
-        FOR UPDATE
-    """), {"uid": user_id, "period": period, "feature": feature}).mappings().first()
-
-    used_units = int(row["units"] or 0)
-    total_unit_limit = max_units
-    if used_units + units > total_unit_limit:
+    """), {"uid":user_id,"period":period,"feature":feature})
+    row=db.session.execute(text("""
+        SELECT units, requests FROM student_ai_usage
+        WHERE user_id=:uid AND period_start=:period AND feature=:feature FOR UPDATE
+    """), {"uid":user_id,"period":period,"feature":feature}).mappings().first()
+    used=int(row["units"] or 0)
+    if used + units > max_units:
         db.session.rollback()
-        return False, {
-            "error": "You have used up this plan's generation allowance.",
-            "code": "generation_quota_exhausted", "feature": feature,
-            "plan": plan_code, "used_units": used_units,
-            "unit_limit": total_unit_limit,
-            "remaining_units": max(0, total_unit_limit - used_units),
-        }
-
+        return False, {"error":"You have used up this plan's generation allowance.",
+                       "code":"generation_quota_exhausted","feature":feature,"plan":plan_code,
+                       "used_units":used,"unit_limit":max_units,
+                       "remaining_units":max(0,max_units-used)}
     db.session.execute(text("""
-        UPDATE student_ai_usage
-        SET units = units + :units, requests = requests + 1,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND period_start = :period AND feature = :feature
-    """), {"uid": user_id, "period": period, "feature": feature, "units": units})
+        UPDATE student_ai_usage SET units=units+:units, requests=requests+1,
+               updated_at=CURRENT_TIMESTAMP
+        WHERE user_id=:uid AND period_start=:period AND feature=:feature
+    """), {"uid":user_id,"period":period,"feature":feature,"units":units})
     db.session.commit()
-    return True, {
-        "feature": feature, "plan": plan_code,
-        "used_units": used_units + units, "unit_limit": total_unit_limit,
-        "remaining_units": max(0, total_unit_limit - (used_units + units)),
-        "max_units_per_generation": max_units, "period_start": period,
-    }
+    return True, {"feature":feature,"plan":plan_code,"used_units":used+units,
+                  "unit_limit":max_units,"remaining_units":max(0,max_units-used-units),
+                  "max_units_per_generation":max_units,"period_start":period}
 
 def reserve_generation_variant(db, user_id, base_fingerprint, feature, base_parameters=None, pool_size=4):
     """Reserve the first shared variant this student has not seen.
@@ -417,7 +392,6 @@ def release_generation_variant(db, user_id, base_fingerprint, variant):
 
 
 def refund_ai_quota(db, user_id, feature, units, period_start=None):
-    """Return a previously reserved generation allowance after a failed call."""
     if feature not in FEATURES:
         return
     try:
@@ -425,20 +399,17 @@ def refund_ai_quota(db, user_id, feature, units, period_start=None):
     except (TypeError, ValueError):
         return
     from ai_economics import get_plan
-    plan_code = _current_student_plan(db, user_id)
-    plan = get_plan(db, plan_code)
+    plan = get_plan(db, _current_student_plan(db, user_id))
     if not plan:
         return
     period = period_start or _period_start(plan)
     db.session.execute(text("""
         UPDATE student_ai_usage
-        SET units = GREATEST(0, units - :units),
-            requests = GREATEST(0, requests - 1),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND period_start = :period AND feature = :feature
-    """), {"uid": user_id, "period": period, "feature": feature, "units": units})
+        SET units=GREATEST(0,units-:units), requests=GREATEST(0,requests-1),
+            updated_at=CURRENT_TIMESTAMP
+        WHERE user_id=:uid AND period_start=:period AND feature=:feature
+    """), {"uid":user_id,"period":period,"feature":feature,"units":units})
     db.session.commit()
-
 
 def _active_user_ids(db, since_date):
     rows = db.session.execute(text("""
@@ -621,10 +592,7 @@ def register_usage_billing(app, db):
             return jsonify({"error": "Not logged in"}), 401
 
         plan_code = _current_student_plan(db, user_id)
-        from ai_economics import get_plan
-    plan = get_plan(db, plan_code)
-    if not plan:
-        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
+        plan = STUDENT_PLANS[plan_code]
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
@@ -650,9 +618,22 @@ def register_usage_billing(app, db):
 
     @app.get("/api/student-plans")
     def student_plans():
-        from ai_economics import get_plans
-        return jsonify({"currency": "KES", "plans": get_plans(db)})
-
+        # These defaults match the current student subscription UI pricing:
+        # KES 599/semester and KES 999/annual. The current student checkout
+        # is a hosted payment flow; keep pricing in one server-owned layer
+        # before adding another payment provider.
+        plans = [
+            {"code": "free", **STUDENT_PLANS["free"]},
+            {
+                "code": "premium",
+                **STUDENT_PLANS["premium"],
+                "price_options": {
+                    "semester": 599,
+                    "annual": 999,
+                },
+            },
+        ]
+        return jsonify({"currency": "KES", "plans": plans})
 
     # Enforce the existing generation endpoints without requiring the
     # frontend to invent a second billing API. The request is rejected before
@@ -1161,10 +1142,7 @@ def refund_ai_quota(db, user_id, feature, units, period_start=None):
     except (TypeError, ValueError):
         return
     plan_code = _current_student_plan(db, user_id)
-    from ai_economics import get_plan
-    plan = get_plan(db, plan_code)
-    if not plan:
-        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
+    plan = STUDENT_PLANS[plan_code]
     period = period_start or _period_start(plan)
     db.session.execute(text("""
         UPDATE student_ai_usage
@@ -1357,10 +1335,7 @@ def register_usage_billing(app, db):
             return jsonify({"error": "Not logged in"}), 401
 
         plan_code = _current_student_plan(db, user_id)
-        from ai_economics import get_plan
-    plan = get_plan(db, plan_code)
-    if not plan:
-        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
+        plan = STUDENT_PLANS[plan_code]
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
@@ -1785,10 +1760,7 @@ def refund_ai_quota(db, user_id, feature, units, period_start=None):
     except (TypeError, ValueError):
         return
     plan_code = _current_student_plan(db, user_id)
-    from ai_economics import get_plan
-    plan = get_plan(db, plan_code)
-    if not plan:
-        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
+    plan = STUDENT_PLANS[plan_code]
     period = period_start or _period_start(plan)
     db.session.execute(text("""
         UPDATE student_ai_usage
@@ -1981,10 +1953,7 @@ def register_usage_billing(app, db):
             return jsonify({"error": "Not logged in"}), 401
 
         plan_code = _current_student_plan(db, user_id)
-        from ai_economics import get_plan
-    plan = get_plan(db, plan_code)
-    if not plan:
-        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
+        plan = STUDENT_PLANS[plan_code]
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
@@ -2411,10 +2380,7 @@ def refund_ai_quota(db, user_id, feature, units, period_start=None):
     except (TypeError, ValueError):
         return
     plan_code = _current_student_plan(db, user_id)
-    from ai_economics import get_plan
-    plan = get_plan(db, plan_code)
-    if not plan:
-        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
+    plan = STUDENT_PLANS[plan_code]
     period = period_start or _period_start(plan)
     db.session.execute(text("""
         UPDATE student_ai_usage
@@ -2602,56 +2568,26 @@ def register_usage_billing(app, db):
 
     @app.get("/api/usage/me")
     def usage_me():
-        user_id = session.get("user_id")
-        if not user_id:
-            return jsonify({"error": "Not logged in"}), 401
-
-        plan_code = _current_student_plan(db, user_id)
+        user_id=session.get("user_id")
+        if not user_id: return jsonify({"error":"Not logged in"}),401
         from ai_economics import get_plan
-    plan = get_plan(db, plan_code)
-    if not plan:
-        return jsonify({"error": "Student plan configuration is unavailable"}) if "jsonify" in globals() else None
-        usage = {}
+        plan_code=_current_student_plan(db,user_id)
+        plan=get_plan(db,plan_code)
+        if not plan: return jsonify({"error":"Student plan configuration is unavailable"}),503
+        units_map={"summary":"summary_pages","podcast":"podcast_minutes","flashcards":"flashcards","quiz":"questions","mind_map":"mind_map_nodes"}
+        usage={}
         for feature in FEATURES:
-            row = _usage_row(db, user_id, feature)
-            request_key, unit_key = FEATURES[feature]
-            max_units_per_generation = int(plan[unit_key])
-            wallet_limit = max_units_per_generation * int(plan[request_key])
-            used_units = int(row["units"]) if row else 0
-            usage[feature] = {
-                "requests": int(row["requests"]) if row else 0,
-                "units": used_units,
-                "remaining_units": max(0, wallet_limit - used_units),
-                "unit_limit": wallet_limit,
-                "max_units_per_generation": max_units_per_generation,
-            }
-        return jsonify({
-            "plan": plan_code,
-            "price_kes": plan["price_kes"],
-            "billing_period": plan["billing_period"],
-            "limits": plan,
-            "usage": usage,
-            "period_start": _period_start(plan).isoformat(),
-        })
+            row=_usage_row(db,user_id,feature); limit=int(plan[units_map[feature]] or 0); used=int(row["units"]) if row else 0
+            usage[feature]={"requests":int(row["requests"]) if row else 0,"units":used,
+                "remaining_units":max(0,limit-used),"unit_limit":limit,"max_units_per_generation":limit}
+        return jsonify({"plan":plan_code,"price_kes":int(plan["price_kes"]),"billing_period":plan["billing_period"],
+                        "limits":plan,"usage":usage,"period_start":_period_start(plan).isoformat()})
 
     @app.get("/api/student-plans")
     def student_plans():
-        # These defaults match the current student subscription UI pricing:
-        # KES 599/semester and KES 999/annual. The current student checkout
-        # is a hosted payment flow; keep pricing in one server-owned layer
-        # before adding another payment provider.
-        plans = [
-            {"code": "free", **STUDENT_PLANS["free"]},
-            {
-                "code": "premium",
-                **STUDENT_PLANS["premium"],
-                "price_options": {
-                    "semester": 599,
-                    "annual": 999,
-                },
-            },
-        ]
-        return jsonify({"currency": "KES", "plans": plans})
+        from ai_economics import get_plans
+        return jsonify({"currency":"KES","plans":get_plans(db)})
+
 
     # Enforce the existing generation endpoints without requiring the
     # frontend to invent a second billing API. The request is rejected before
