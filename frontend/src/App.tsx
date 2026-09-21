@@ -9116,7 +9116,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
           <span style={{ fontSize: 20 }}>🎓</span>
           <div style={{ flex: 1 }}>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>
-              {status ? `Current Plan: ${status.plan.charAt(0).toUpperCase() + status.plan.slice(1)}` : 'Loading plan…'}
+              {status ? `Current Plan: ${status.plan === 'semester' ? 'Plus' : status.plan === 'annual' ? 'Pro' : 'Free'}` : 'Loading plan…'}
             </div>
             <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
               {status?.is_active && status.expires_at
