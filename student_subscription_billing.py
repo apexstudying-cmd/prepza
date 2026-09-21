@@ -459,7 +459,9 @@ def handle_refund_webhook(db, event, payload):
     data = payload.get("data") or {}
     refund_id = data.get("id")
     transaction = data.get("transaction") or {}
-    reference = transaction.get("reference") if isinstance(transaction, dict) else None
+    reference = data.get("transaction_reference")
+    if not reference:
+        reference = transaction.get("reference") if isinstance(transaction, dict) else None
     if not reference:
         reference = data.get("reference")
     if not reference:
