@@ -218,7 +218,10 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
         # Payment fields silently redirect a successful payment to a different
         # student, content item, plan, amount, or currency.
         if not order_payment_matches_snapshot(row, payment):
-            payment.status = "failed"
+            # Provider-successful money must remain successful for accounting,
+            # reconciliation, and possible refund/chargeback handling. A
+            # snapshot mismatch is a fulfillment/reconciliation failure, not
+            # proof that the provider payment itself failed.
             db.session.execute(
                 text("""
                     UPDATE student_order
