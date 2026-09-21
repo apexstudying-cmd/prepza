@@ -2299,10 +2299,11 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
     max_tokens = min(max_tokens, int(plan_config["ada_max_output_tokens"]))
 
     estimated_input_tokens = max(
-        1, (len(system_prompt) + sum(len(str(m["content"])) for m in messages)) // 4
+        1, (len(system_prompt) + sum(len(str(m["content"])) for m in messages)) // 3
     )
     estimated_units = calculate_ada_units(
         input_tokens=estimated_input_tokens,
+        cache_write_tokens=estimated_input_tokens,
         output_tokens=max_tokens,
     )
     reserved_ok, reserve_info = reserve_ada_budget(
