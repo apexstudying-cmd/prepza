@@ -8409,80 +8409,13 @@ def content_view_progress(content_id):
 )
 @require_csrf
 def pay_for_content(content_id):
-    # Individual content checkout is legacy. The current student product uses
-    # Free / Plus / Pro subscriptions; future one-off purchases are usage/add-on
-    # credits, not ownership of Library content.
+    # Kept as an explicit tombstone so stale clients cannot accidentally
+    # create individual content purchases. Content remains Library/learning
+    # infrastructure; student monetization is subscriptions plus future
+    # usage/add-on credits.
     return jsonify({
         "error": "Individual content purchases are no longer available. Choose a Prepza subscription."
     }), 410
-
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    content_item = db.session.get(ContentItem, content_id)
-    if not content_item:
-        return jsonify({"error": "Content not found"}), 404
-
-    price = get_price_for_type(content_item.content_type)
-    if price == 0:
-        return jsonify({"error": "This content is free, no payment needed"}), 400
-
-    if has_access(user_id, content_item):
-        return jsonify({"message": "You already have access to this content"}), 200
-
-    # If checkout was interrupted or the callback response was lost, recover
-    # the exact same pending checkout instead of creating a second charge/order.
-    pending = _student_order_helpers["find_pending_checkout"](user_id, content_item_id=content_id)
-    if pending and pending.get("checkout_url"):
-        return jsonify({
-            "redirect_url": pending["checkout_url"],
-            "reference": pending["reference"],
-            "order_number": pending["order_number"],
-            "recovered": True,
-        })
-
-    user = db.session.get(User, user_id)
-    data = request.get_json(silent=True) or {}
-    phone_number = data.get("phone_number")  # optional - Paystack collects payment details itself
-    reference = f"PZA-content-{content_id}-{secrets.token_hex(6)}"
-
-    try:
-        provider_reference, authorization_url = create_paystack_transaction(
-            reference, price, f"Prepza - {content_item.title}", user
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
-
-    payment = Payment(
-        user_id=user_id,
-        content_item_id=content_id,
-        phone_number=phone_number,
-        amount=price,
-        provider="paystack",
-        reference=reference,
-        provider_reference=provider_reference,
-        payment_type="content",
-        status="pending",
-    )
-    db.session.add(payment)
-    db.session.flush()
-    _student_order_helpers["create"](payment, item_title=content_item.title, checkout_url=authorization_url, requested_payload={
-        "payment_type": "content",
-        "content_item_id": content_item.id,
-        "content_title": content_item.title,
-        "quantity": 1,
-    })
-    db.session.commit()
-
-    return jsonify({
-        # Field kept as "redirect_url" (aliasing Paystack's own
-        # "authorization_url") so the existing frontend payment flow
-        # doesn't need a parallel change just for a field rename.
-        "redirect_url": authorization_url,
-        "reference": reference,
-    })
-
 
 @app.route("/payment/paystack/callback")
 def paystack_callback():
