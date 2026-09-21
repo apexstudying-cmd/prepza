@@ -254,6 +254,12 @@ def handle_subscription_created(db, payload):
     if not local_plan:
         return False
 
+    initial_payment_id = db.session.execute(text("""
+        SELECT id FROM payment
+        WHERE user_id=:uid AND payment_type='subscription'
+          AND plan=:plan AND status='success'
+        ORDER BY id DESC LIMIT 1
+    """), {"uid": user.id, "plan": local_plan}).scalar_one_or_none()
     _upsert_subscription(
         db, user_id=user.id, plan=local_plan, plan_code=plan_code,
         subscription_code=subscription_code,
@@ -261,6 +267,8 @@ def handle_subscription_created(db, payload):
         customer_code=customer.get("customer_code"),
         status=data.get("status") or "active",
         next_payment_at=data.get("next_payment_date"),
+        initial_payment_id=initial_payment_id,
+        latest_payment_id=initial_payment_id,
     )
     db.session.commit()
     return True
@@ -403,6 +411,18 @@ def handle_subscription_webhook(db, event, payload):
         "subscription.not_renew": "non-renewing",
         "subscription.disable": "disabled",
     }.get(event)
+    if event == "invoice.payment_failed":
+        subscription = data.get("subscription") or {}
+        code = code or subscription.get("subscription_code")
+        if not code:
+            return False
+        db.session.execute(text("""
+            UPDATE student_subscription
+            SET status='attention', updated_at=CURRENT_TIMESTAMP
+            WHERE paystack_subscription_code=:code
+        """), {"code": code})
+        db.session.commit()
+        return True
     if not status:
         return False
     db.session.execute(text("""
@@ -497,16 +517,22 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
             })
         except Exception as exc:
             return jsonify({"error": "Could not cancel recurring billing with Paystack", "detail": str(exc)}), 502
+        active_expiry = db.session.execute(text("""
+            SELECT subscription_expires_at
+            FROM payment
+            WHERE id=:pid
+        """), {"pid": row["latest_payment_id"]}).scalar_one_or_none()
         db.session.execute(text("""
             UPDATE student_subscription
-            SET cancel_at_period_end=TRUE,status='non-renewing',updated_at=CURRENT_TIMESTAMP
+            SET cancel_at_period_end=TRUE,status='non-renewing',
+                current_period_end=:period_end,updated_at=CURRENT_TIMESTAMP
             WHERE id=:id
-        """), {"id": row["id"]})
+        """), {"id": row["id"], "period_end": active_expiry})
         db.session.commit()
         return jsonify({
             "ok": True,
             "cancelled": True,
-            "access_until": row["current_period_end"],
+            "access_until": active_expiry.isoformat() if active_expiry else None,
             "message": "Renewal has been cancelled. Current paid access remains active until expiry.",
         })
 
