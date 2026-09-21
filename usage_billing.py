@@ -424,8 +424,11 @@ def refund_ai_quota(db, user_id, feature, units, period_start=None):
         units = max(1, int(units))
     except (TypeError, ValueError):
         return
+    from ai_economics import get_plan
     plan_code = _current_student_plan(db, user_id)
-    plan = STUDENT_PLANS[plan_code]
+    plan = get_plan(db, plan_code)
+    if not plan:
+        return
     period = period_start or _period_start(plan)
     db.session.execute(text("""
         UPDATE student_ai_usage
@@ -644,22 +647,9 @@ def register_usage_billing(app, db):
 
     @app.get("/api/student-plans")
     def student_plans():
-        # These defaults match the current student subscription UI pricing:
-        # KES 599/semester and KES 999/annual. The current student checkout
-        # is a hosted payment flow; keep pricing in one server-owned layer
-        # before adding another payment provider.
-        plans = [
-            {"code": "free", **STUDENT_PLANS["free"]},
-            {
-                "code": "premium",
-                **STUDENT_PLANS["premium"],
-                "price_options": {
-                    "semester": 599,
-                    "annual": 999,
-                },
-            },
-        ]
-        return jsonify({"currency": "KES", "plans": plans})
+        from ai_economics import get_plans
+        return jsonify({"currency": "KES", "plans": get_plans(db)})
+
 
     # Enforce the existing generation endpoints without requiring the
     # frontend to invent a second billing API. The request is rejected before
