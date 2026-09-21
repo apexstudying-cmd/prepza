@@ -116,7 +116,7 @@ def get_user_plan_code(db, user_id):
           AND subscription_expires_at > CURRENT_TIMESTAMP
         ORDER BY subscription_expires_at DESC LIMIT 1
     """), {"uid": user_id}).scalar_one_or_none()
-    return {"semester": "plus", "annual": "pro", "plus": "plus", "pro": "pro"}.get(row, "free")
+    return {"plus": "plus", "pro": "pro"}.get(row, "free")
 
 
 def get_plans(db):
@@ -274,7 +274,7 @@ def validate_plan_patch(payload):
             else: cleaned[key] = value
         elif key in string_fields:
             value = str(value).strip().lower()
-            if value not in {"month","semester","annual"}: errors[key] = "must be month, semester, or annual"
+            if value != "month": errors[key] = "billing period must be month"
             else: cleaned[key] = value
         elif key not in allowed:
             errors[key] = "field is not admin-editable"
