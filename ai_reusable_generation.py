@@ -262,11 +262,31 @@ def generate_document_material(*, material_type, document_content_id, triggering
         scope=scope, owner_user_id=owner_user_id,
     )
 
-    lookup = claim_or_get_generation(
-        fingerprint=fingerprint, content_hash=content.content_hash, feature=material_type,
-        parameters=params, prompt_version=prompt_version, schema_version=schema_version,
-        scope=scope, owner_user_id=owner_user_id,
-    )
+    # Claim/reclaim is part of the same failure boundary as quota + variant
+    # reservation. If an internal DB/fingerprint failure happens here, refund
+    # the student's reservation and release the variant instead of charging
+    # them for a generation Prepza never started.
+    try:
+        lookup = claim_or_get_generation(
+            fingerprint=fingerprint, content_hash=content.content_hash, feature=material_type,
+            parameters=params, prompt_version=prompt_version, schema_version=schema_version,
+            scope=scope, owner_user_id=owner_user_id,
+        )
+    except Exception:
+        if variant_pool_feature and variant is not None:
+            try:
+                release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
+            except Exception:
+                db.session.rollback()
+        if quota_reserved:
+            try:
+                refund_ai_quota(
+                    db, triggering_user_id, quota_feature, quota_units,
+                    period_start=quota_period,
+                )
+            except Exception:
+                db.session.rollback()
+        raise
 
     if lookup.status == "ready" and lookup.payload:
         # Pooled requests are deliberately charged even when the selected
