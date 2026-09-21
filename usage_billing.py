@@ -591,49 +591,70 @@ def register_usage_billing(app, db):
         if not user_id:
             return jsonify({"error": "Not logged in"}), 401
 
+        from ai_economics import get_plan, get_plans
         plan_code = _current_student_plan(db, user_id)
-        plan = STUDENT_PLANS[plan_code]
+        plan = get_plan(db, plan_code)
+        if not plan:
+            return jsonify({"error": "Student plan configuration is unavailable"}), 503
+
+        # Never expose internal Ada token/unit economics to students.
+        public_limits = {
+            "display_name": plan["display_name"],
+            "price_kes": int(plan["price_kes"]),
+            "billing_period": plan["billing_period"],
+            "quota_period": plan["quota_period"],
+            "podcast_minutes": int(plan["podcast_minutes"]),
+            "summary_pages": int(plan["summary_pages"]),
+            "questions": int(plan["questions"]),
+            "mind_map_nodes": int(plan["mind_map_nodes"]),
+            "flashcards": int(plan["flashcards"]),
+            "offline_study": bool(plan["offline_study"]),
+            "premium_library": bool(plan["premium_library"]),
+            "study_hub_uploads": bool(plan["study_hub_uploads"]),
+        }
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
-            request_key, unit_key = FEATURES[feature]
-            max_units_per_generation = int(plan[unit_key])
-            wallet_limit = max_units_per_generation * int(plan[request_key])
+            _, unit_key = FEATURES[feature]
+            max_units_per_generation = int(plan[unit_key] or 0)
             used_units = int(row["units"]) if row else 0
             usage[feature] = {
                 "requests": int(row["requests"]) if row else 0,
                 "units": used_units,
-                "remaining_units": max(0, wallet_limit - used_units),
-                "unit_limit": wallet_limit,
+                "remaining_units": max(0, max_units_per_generation - used_units),
+                "unit_limit": max_units_per_generation,
                 "max_units_per_generation": max_units_per_generation,
             }
         return jsonify({
             "plan": plan_code,
-            "price_kes": plan["price_kes"],
+            "price_kes": int(plan["price_kes"]),
             "billing_period": plan["billing_period"],
-            "limits": plan,
+            "limits": public_limits,
             "usage": usage,
             "period_start": _period_start(plan).isoformat(),
         })
 
     @app.get("/api/student-plans")
     def student_plans():
-        # These defaults match the current student subscription UI pricing:
-        # KES 599/semester and KES 999/annual. The current student checkout
-        # is a hosted payment flow; keep pricing in one server-owned layer
-        # before adding another payment provider.
-        plans = [
-            {"code": "free", **STUDENT_PLANS["free"]},
-            {
-                "code": "premium",
-                **STUDENT_PLANS["premium"],
-                "price_options": {
-                    "semester": 599,
-                    "annual": 999,
-                },
-            },
-        ]
-        return jsonify({"currency": "KES", "plans": plans})
+        from ai_economics import get_plans
+        public_plans = []
+        for plan in get_plans(db):
+            public_plans.append({
+                "code": plan["plan_code"],
+                "display_name": plan["display_name"],
+                "price_kes": int(plan["price_kes"]),
+                "billing_period": plan["billing_period"],
+                "quota_period": plan["quota_period"],
+                "podcast_minutes": int(plan["podcast_minutes"]),
+                "summary_pages": int(plan["summary_pages"]),
+                "questions": int(plan["questions"]),
+                "mind_map_nodes": int(plan["mind_map_nodes"]),
+                "flashcards": int(plan["flashcards"]),
+                "offline_study": bool(plan["offline_study"]),
+                "premium_library": bool(plan["premium_library"]),
+                "study_hub_uploads": bool(plan["study_hub_uploads"]),
+            })
+        return jsonify({"currency": "KES", "plans": public_plans})
 
     # Enforce the existing generation endpoints without requiring the
     # frontend to invent a second billing API. The request is rejected before
