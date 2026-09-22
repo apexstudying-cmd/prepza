@@ -822,10 +822,52 @@ setDocument({
 }
 
 function BottomNav({ active, setScreen, unreadChats = 0, exploreAttention = false }: { active: Screen; setScreen: (s: Screen) => void; unreadChats?: number; exploreAttention?: boolean }) {
-  const isHome=['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map','document-reader'].includes(active)
-  const isExp=active==='explore'||active==='student-profile', isChat=active==='chats'||active==='chat-detail'||active==='new-chat'||active==='chat-options', isProf=active==='profile'||active==='settings'||active==='edit-profile'
-  const tabs=[{key:'home' as Screen,icon:Ic.home,label:'Home',hit:isHome},{key:'explore' as Screen,icon:Ic.explore,label:'Explore',hit:isExp},{key:'create-modal' as Screen,icon:Ic.plus,label:'',hit:false},{key:'chats' as Screen,icon:Ic.chat,label:'Chats',hit:isChat},{key:'profile' as Screen,icon:Ic.person,label:'Profile',hit:isProf}]
-  return <div style={{background:N.navy,borderTop:'1px solid rgba(255,255,255,.07)',display:'flex',alignItems:'center',paddingBottom:6,flexShrink:0}}>{tabs.map(t=>{const isCta=t.key==='create-modal',badge=t.key==='chats'?unreadChats:0,attention=t.key==='explore'&&exploreAttention;return <button key={t.key} onClick={()=>{if(t.key==='explore'){localStorage.setItem('prepza-last-explore-opportunity-id',localStorage.getItem('prepza-latest-explore-opportunity-id') || '0');setExploreAttention(false)}setScreen(t.key)}} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',padding:isCta?'0 0 4px':'8px 0 4px',position:'relative'}}>{isCta?<div style={{width:50,height:50,borderRadius:'50%',background:`linear-gradient(135deg,${N.gold},${N.goldL})`,display:'flex',alignItems:'center',justifyContent:'center',marginTop:-22,boxShadow:'0 4px 18px rgba(201,168,76,.55)'}}><div style={{color:N.navy}}>{Ic.plus()}</div></div>:<>{t.hit&&<div style={{position:'absolute',top:0,left:'50%',transform:'translateX(-50%)',width:18,height:2,background:N.gold,borderRadius:2}}/><div style={{position:'relative',color:t.hit?N.gold:'rgba(255,255,255,.38)'}}>{t.icon()}{badge>0&&<span aria-label={`${badge} unread messages`} style={{position:'absolute',top:-7,right:-10,minWidth:17,height:17,padding:'0 4px',borderRadius:99,background:'#C94C4C',color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',border:`2px solid ${N.navy}`}}>{badge>99?'99+':badge}</span>}{attention&&<span aria-label="New opportunities" style={{position:'absolute',top:-5,right:-5,width:8,height:8,borderRadius:'50%',background:N.goldL,border:`2px solid ${N.navy}`,boxShadow:'0 0 0 4px rgba(232,201,126,.12)'}}/>}</div><span style={{fontSize:10,fontWeight:t.hit?800:500,color:t.hit?N.gold:'rgba(255,255,255,.38)',fontFamily:'Plus Jakarta Sans'}}>{t.label}</span></>}</button>})}</div>
+  const isHome = ['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map','document-reader'].includes(active)
+  const isExp = active === 'explore' || active === 'student-profile'
+  const isChat = active === 'chats' || active === 'chat-detail' || active === 'new-chat' || active === 'chat-options'
+  const isProf = active === 'profile' || active === 'settings' || active === 'edit-profile'
+  const tabs = [
+    { key: 'home' as Screen, icon: Ic.home, label: 'Home', hit: isHome },
+    { key: 'explore' as Screen, icon: Ic.explore, label: 'Explore', hit: isExp },
+    { key: 'create-modal' as Screen, icon: Ic.plus, label: '', hit: false },
+    { key: 'chats' as Screen, icon: Ic.chat, label: 'Chats', hit: isChat },
+    { key: 'profile' as Screen, icon: Ic.person, label: 'Profile', hit: isProf },
+  ]
+  return (
+    <div style={{ background: N.navy, borderTop: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', paddingBottom: 6, flexShrink: 0 }}>
+      {tabs.map((tab) => {
+        const isCta = tab.key === 'create-modal'
+        const badge = tab.key === 'chats' ? unreadChats : 0
+        const attention = tab.key === 'explore' && exploreAttention
+        const handleClick = () => {
+          if (tab.key === 'explore') {
+            localStorage.setItem('prepza-last-explore-opportunity-id', localStorage.getItem('prepza-latest-explore-opportunity-id') || '0')
+            setExploreAttention(false)
+          }
+          setScreen(tab.key)
+        }
+        return (
+          <button key={tab.key} onClick={handleClick} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: isCta ? '0 0 4px' : '8px 0 4px', position: 'relative' }}>
+            {isCta ? (
+              <div style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: '0 4px 18px rgba(201,168,76,.55)' }}>
+                <div style={{ color: N.navy }}>{Ic.plus()}</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                {tab.hit && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 18, height: 2, background: N.gold, borderRadius: 2 }} />}
+                <div style={{ position: 'relative', color: tab.hit ? N.gold : 'rgba(255,255,255,.38)' }}>
+                  {tab.icon()}
+                  {badge > 0 && <span aria-label={`${badge} unread messages`} style={{ position: 'absolute', top: -7, right: -10, minWidth: 17, height: 17, padding: '0 4px', borderRadius: 99, background: '#C94C4C', color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${N.navy}` }}>{badge > 99 ? '99+' : badge}</span>}
+                  {attention && <span aria-label="New opportunities" style={{ position: 'absolute', top: -5, right: -5, width: 8, height: 8, borderRadius: '50%', background: N.goldL, border: `2px solid ${N.navy}`, boxShadow: '0 0 0 4px rgba(232,201,126,.12)' }} />}
+                </div>
+                <span style={{ fontSize: 10, fontWeight: tab.hit ? 800 : 500, color: tab.hit ? N.gold : 'rgba(255,255,255,.38)', fontFamily: 'Plus Jakarta Sans' }}>{tab.label}</span>
+              </div>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 // ─── LOADING SYSTEM ───────────────────────────────────────────────────────────
