@@ -151,7 +151,7 @@ def _policy(db):
     return window_hours, retention_pct, full_zero_usage
 
 
-def _active_payment(db, user_id):
+def _active_payment(db, user_id, payment_id=None, plan=None):
     return db.session.execute(text("""
         SELECT p.*
         FROM payment p
@@ -162,9 +162,11 @@ def _active_payment(db, user_id):
           AND so.status='fulfilled'
           AND p.subscription_expires_at IS NOT NULL
           AND p.subscription_expires_at > CURRENT_TIMESTAMP
-        ORDER BY p.subscription_expires_at DESC, p.id DESC
+          AND (:payment_id IS NULL OR p.id=:payment_id)
+          AND (:plan IS NULL OR p.plan=:plan)
+        ORDER BY p.subscription_starts_at DESC NULLS LAST, p.id DESC
         LIMIT 1
-    """), {"uid": user_id}).mappings().first()
+    """), {"uid": user_id, "payment_id": payment_id, "plan": plan}).mappings().first()
 
 
 def _plan(db, plan_code):
@@ -616,9 +618,13 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
         user_id = session.get("user_id")
         if not user_id:
             return jsonify({"error": "Not logged in"}), 401
-        payment = _active_payment(db, user_id)
+        requested_payment_id = request.args.get("payment_id", type=int)
+        requested_plan = request.args.get("plan")
+        if requested_plan not in (None, "plus", "pro"):
+            return jsonify({"error": "Invalid subscription plan"}), 400
+        payment = _active_payment(db, user_id, requested_payment_id, requested_plan)
         if not payment:
-            return jsonify({"error": "No active paid subscription found"}), 404
+            return jsonify({"error": "No active paid subscription found for the requested entitlement"}), 404
         return jsonify(calculate_refund_quote(db, payment))
 
     @app.post("/subscription/refund-request")
@@ -627,9 +633,18 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
         user_id = session.get("user_id")
         if not user_id:
             return jsonify({"error": "Not logged in"}), 401
-        payment = _active_payment(db, user_id)
+        payload = request.get_json(silent=True) or {}
+        requested_payment_id = payload.get("payment_id")
+        requested_plan = payload.get("plan")
+        try:
+            requested_payment_id = int(requested_payment_id) if requested_payment_id is not None else None
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid payment_id"}), 400
+        if requested_plan not in (None, "plus", "pro"):
+            return jsonify({"error": "Invalid subscription plan"}), 400
+        payment = _active_payment(db, user_id, requested_payment_id, requested_plan)
         if not payment:
-            return jsonify({"error": "No active paid subscription found"}), 404
+            return jsonify({"error": "No active paid subscription found for the requested entitlement"}), 404
 
         existing = db.session.execute(
             text("SELECT status FROM student_refund_request WHERE payment_id=:pid"),
@@ -673,11 +688,17 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
         user_id = session.get("user_id")
         if not user_id:
             return jsonify({"error": "Not logged in"}), 401
+        payload = request.get_json(silent=True) or {}
+        requested_plan = payload.get("plan")
+        if requested_plan not in (None, "plus", "pro"):
+            return jsonify({"error": "Invalid subscription plan"}), 400
         row = db.session.execute(text("""
             SELECT * FROM student_subscription
             WHERE user_id=:uid AND status IN ('active','attention','non-renewing')
-            ORDER BY id DESC LIMIT 1
-        """), {"uid": user_id}).mappings().first()
+              AND (:plan IS NULL OR plan=:plan)
+            ORDER BY CASE WHEN :plan IS NOT NULL THEN 0 ELSE 1 END, id DESC
+            LIMIT 1
+        """), {"uid": user_id, "plan": requested_plan}).mappings().first()
         if not row:
             return jsonify({"error": "No Paystack recurring subscription is linked to this account"}), 404
         if row["cancel_at_period_end"]:
@@ -690,19 +711,16 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
         except Exception as exc:
             return jsonify({"error": "Could not cancel recurring billing with Paystack", "detail": str(exc)}), 502
         active_expiry = db.session.execute(text("""
-            SELECT subscription_expires_at
-            FROM payment
-            WHERE id=COALESCE(
-                :pid,
-                (
-                    SELECT p.id FROM payment p
-                    WHERE p.user_id=:uid AND p.payment_type='subscription'
-                      AND p.status='success'
-                    ORDER BY p.subscription_expires_at DESC NULLS LAST, p.id DESC
-                    LIMIT 1
-                )
-            )
-        """), {"pid": row["latest_payment_id"], "uid": user_id}).scalar_one_or_none()
+            SELECT p.subscription_expires_at
+            FROM payment p
+            WHERE p.user_id=:uid
+              AND p.payment_type='subscription'
+              AND p.plan=:plan
+              AND p.status='success'
+              AND p.subscription_expires_at > CURRENT_TIMESTAMP
+            ORDER BY p.subscription_starts_at DESC NULLS LAST, p.id DESC
+            LIMIT 1
+        """), {"uid": user_id, "plan": row["plan"]}).scalar_one_or_none()
         db.session.execute(text("""
             UPDATE student_subscription
             SET cancel_at_period_end=TRUE,status='non-renewing',
@@ -801,9 +819,9 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
         # refund is actually processed.
         recurring = db.session.execute(text("""
             SELECT * FROM student_subscription
-            WHERE user_id=:uid AND status IN ('active','attention')
+            WHERE user_id=:uid AND plan=:plan AND status IN ('active','attention')
             ORDER BY id DESC LIMIT 1
-        """), {"uid": payment["user_id"]}).mappings().first()
+        """), {"uid": payment["user_id"], "plan": payment["plan"]}).mappings().first()
         if recurring and recurring["paystack_subscription_code"]:
             try:
                 paystack_request("POST", "/subscription/disable", json={
