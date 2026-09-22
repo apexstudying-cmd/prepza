@@ -80,14 +80,20 @@ def patch_api(text, path):
             if needle not in text:
                 raise SystemExit(f'Offline generation: replay fallback anchor missing in {path.name}')
             text = text.replace(needle, replacement, 1)
-    success = "  if (!res.ok) throw new GenerationApiError(body?.error || body?.message || `Request failed (${res.status})`, res.status)"
-    if success not in text:
-        success = "  if (!res.ok) throw new Error(body?.error || body?.message || `Request failed (${res.status})`)"
-    if success not in text:
-        raise SystemExit(f'Offline generation: API success anchor missing in {path.name}')
+    # The generation UI transformer may normalize the API error line before this pass.
+    # Use the stable successful-return anchor instead of coupling this pass to one
+    # particular error-handling spelling.
+    return_anchor = "  return body as T"
     if "// Offline generated-material persistence\n" not in text:
-        addition = success + "\n  // Offline generated-material persistence\n  if (typeof body === 'object' && body !== null && (requestMethod === 'GET' || requestMethod === 'POST')) {\n    void saveGeneratedMaterialOffline(path, requestBody, body)\n    if (requestMethod === 'GET' && path.endsWith('/podcast-audio') && body.audio_status === 'ready' && body.audio_url) void cacheGeneratedAudioOffline(String(body.audio_url))\n  }\n"
-        text = text.replace(success, addition, 1)
+        if return_anchor not in text:
+            raise SystemExit(f'Offline generation: API success return anchor missing in {path.name}')
+        addition = """  // Offline generated-material persistence
+  if (typeof body === 'object' && body !== null && (requestMethod === 'GET' || requestMethod === 'POST')) {
+    void saveGeneratedMaterialOffline(path, requestBody, body)
+    if (requestMethod === 'GET' && path.endsWith('/podcast-audio') && body.audio_status === 'ready' && body.audio_url) void cacheGeneratedAudioOffline(String(body.audio_url))
+  }
+"""
+        text = text.replace(return_anchor, addition + return_anchor, 1)
     return text
 
 
