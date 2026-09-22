@@ -2106,6 +2106,24 @@ def get_user_subscription_status(user_id):
         WHERE user_id=:uid AND plan=:plan
         ORDER BY id DESC LIMIT 1
     """), {"uid": user_id, "plan": latest.plan}).scalar_one_or_none()
+    active_rows = db.session.execute(text("""
+        SELECT p.id, p.plan, p.subscription_starts_at, p.subscription_expires_at
+        FROM payment p
+        JOIN student_order so ON so.payment_id = p.id
+        WHERE p.user_id=:uid
+          AND p.payment_type='subscription'
+          AND p.status='success'
+          AND p.subscription_starts_at <= CURRENT_TIMESTAMP
+          AND p.subscription_expires_at > CURRENT_TIMESTAMP
+          AND so.user_id=p.user_id
+          AND so.order_type='subscription'
+          AND so.status='fulfilled'
+          AND so.plan=p.plan
+          AND so.item_id IS NULL
+          AND so.quantity=1
+          AND so.currency='KES'
+        ORDER BY p.subscription_starts_at ASC, p.id ASC
+    """), {"uid": user_id}).mappings().all()
     return {
         "plan": latest.plan,
         "is_active": True,
@@ -2113,6 +2131,16 @@ def get_user_subscription_status(user_id):
         "expires_at": latest.subscription_expires_at.isoformat(),
         "cancel_at_period_end": bool(recurring),
         "recurring": True,
+        "active_plans": [row["plan"] for row in active_rows],
+        "entitlements": [
+            {
+                "payment_id": int(row["id"]),
+                "plan": row["plan"],
+                "starts_at": row["subscription_starts_at"].isoformat(),
+                "expires_at": row["subscription_expires_at"].isoformat(),
+            }
+            for row in active_rows
+        ],
     }
 
 
@@ -8612,14 +8640,30 @@ def paystack_webhook():
 
 @app.route("/subscription/plans")
 def subscription_plans():
-    prices = get_plan_prices()
-    return jsonify({
-        "plans": [
-            {"id": "free", "name": "Free", "price": 0, "period": None},
-            {"id": "plus", "name": "Plus", "price": prices["plus"], "period": "month"},
-            {"id": "pro", "name": "Pro", "price": prices["pro"], "period": "month"},
-        ]
-    })
+    # Student-facing subscription cards are sourced from the same
+    # admin-configurable plan table used by entitlement enforcement.
+    from ai_economics import get_plans
+    plans = []
+    for plan in get_plans(db):
+        plans.append({
+            "id": plan["plan_code"],
+            "name": plan["display_name"],
+            "price": int(plan["price_kes"]),
+            "period": plan["billing_period"] if plan["plan_code"] != "free" else None,
+            "quota_period": plan["quota_period"],
+            "ada_monthly_units": int(plan["ada_monthly_units"]),
+            "ada_daily_units": int(plan["ada_daily_units"]),
+            "ada_max_output_tokens": int(plan["ada_max_output_tokens"]),
+            "podcast_minutes": int(plan["podcast_minutes"]),
+            "summary_pages": int(plan["summary_pages"]),
+            "questions": int(plan["questions"]),
+            "mind_map_nodes": int(plan["mind_map_nodes"]),
+            "flashcards": int(plan["flashcards"]),
+            "offline_study": True,
+            "premium_library": bool(plan["premium_library"]),
+            "study_hub_uploads": bool(plan["study_hub_uploads"]),
+        })
+    return jsonify({"plans": plans})
 
 
 @app.route("/subscription/status")
