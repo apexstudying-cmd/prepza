@@ -9069,17 +9069,46 @@ function ErrorState({ onRetry }: { onRetry?: () => void }) {
 }
 
 // ─── SUBSCRIPTION ─────────────────────────────────────────────────────────────
-type SubscriptionPlan = { id: string; name: string; price: number; period: string | null }
+type SubscriptionPlan = {
+  id: string
+  name: string
+  price: number
+  period: string | null
+  quota_period?: string
+  podcast_minutes?: number
+  summary_pages?: number
+  questions?: number
+  mind_map_nodes?: number
+  flashcards?: number
+  offline_study?: boolean
+  premium_library?: boolean
+  study_hub_uploads?: boolean
+}
 type SubscriptionStatus = { plan: string; is_active: boolean; expires_at: string | null }
 
 // Static display metadata (badges/colors/feature bullets) keyed by plan id -
 // the backend only knows price/period, not marketing copy, so this stays
 // client-side and is merged onto whatever plans GET /subscription/plans
 // actually returns.
-const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: string; color: string; features: string[] }> = {
-  free: { color: '#6B7280', features: ['Limited Ada', '3 Library documents', '10-minute podcast allowance', '10 summary pages', '20 questions', '30 mind-map nodes', '100 flashcards'] },
-  plus: { badge: 'Plus', badgeColor: N.gold, color: N.gold, features: ['Ada — 5× more usage', '120 podcast minutes', '40 summary pages', '100 questions', '150 mind-map nodes', '300 flashcards', 'Offline study', 'Premium library'] },
-  pro: { badge: 'Pro', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Ada — 12× more usage', '350 podcast minutes', '100 summary pages', '210 questions', '350 mind-map nodes', '600 flashcards', 'Offline study', 'Premium library'] },
+const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: string; color: string }> = {
+  free: { color: '#6B7280' },
+  plus: { badge: 'Plus', badgeColor: N.gold, color: N.gold },
+  pro: { badge: 'Pro', badgeColor: '#4CC97B', color: '#4C7BC9' },
+}
+
+function subscriptionFeatures(plan: SubscriptionPlan): string[] {
+  const features = [
+    'Ada — personalized AI study support',
+    `${Number(plan.podcast_minutes || 0).toLocaleString()} podcast minutes`,
+    `${Number(plan.summary_pages || 0).toLocaleString()} summary pages`,
+    `${Number(plan.questions || 0).toLocaleString()} questions`,
+    `${Number(plan.mind_map_nodes || 0).toLocaleString()} mind-map nodes`,
+    `${Number(plan.flashcards || 0).toLocaleString()} flashcards`,
+  ]
+  if (plan.offline_study) features.push('Offline study')
+  if (plan.premium_library) features.push('Premium library')
+  if (plan.study_hub_uploads) features.push('Unlimited StudyHub uploads')
+  return features
 }
 
 function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setScreen: (s: Screen) => void; selectedPlan: string; setSelectedPlan: (p: string) => void }) {
@@ -9135,7 +9164,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
         ) : (
           <>
             {plans.map(p => {
-              const meta = SUBSCRIPTION_PLAN_META[p.id] || { color: T.textMuted, features: [] }
+              const meta = SUBSCRIPTION_PLAN_META[p.id] || { color: T.textMuted }
               const isCurrent = status?.plan === p.id && status.is_active
               const isSelectable = p.id !== 'free'
               const isSelected = selected?.id === p.id
@@ -9159,7 +9188,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
                     )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                    {meta.features.map((f, i) => (
+                    {subscriptionFeatures(p).map((f, i) => (
                       <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <div style={{ width: 16, height: 16, borderRadius: '50%', background: `${meta.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><div style={{ color: meta.color }}>{Ic.check('w-2.5 h-2.5')}</div></div>
                         <span style={{ fontSize: 12, color: '#4B5563' }}>{f}</span>
