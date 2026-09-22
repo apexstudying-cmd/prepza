@@ -338,9 +338,14 @@ def refund_ada_budget(db, user_id, plan_code, units, entitlement_payment_id=None
     if not units:
         return
     today = date.today()
-    active = get_active_entitlements(db, user_id)
-
-    if entitlement_payment_id and any(int(row["id"]) == int(entitlement_payment_id) for row in active):
+    if entitlement_payment_id:
+        payment_exists = db.session.execute(text("""
+            SELECT 1
+            FROM payment
+            WHERE id=:pid AND user_id=:uid AND payment_type='subscription'
+        """), {"pid": int(entitlement_payment_id), "uid": user_id}).scalar_one_or_none()
+        if not payment_exists:
+            return
         db.session.execute(text("""
             DELETE FROM student_entitlement_usage
             WHERE id = (
