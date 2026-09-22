@@ -267,10 +267,9 @@ def reserve_ada_budget(db, user_id, plan_code, estimated_units):
         db.session.commit()
         return True, {"reserved_units":estimated_units, "period_start":month}
 
-    plans = [get_plan(db, row["plan"]) for row in active]
-    plans = [plan for plan in plans if plan]
-    daily_limit = sum(int(plan["ada_daily_units"] or 0) for plan in plans)
-    monthly_limit = sum(int(plan["ada_monthly_units"] or 0) for plan in plans)
+    plan_map = {row["plan"]: get_plan(db, row["plan"]) for row in active}
+    daily_limit = sum(int(plan_map[row["plan"]]["ada_daily_units"] or 0) for row in active if plan_map.get(row["plan"]))
+    monthly_limit = sum(int(plan_map[row["plan"]]["ada_monthly_units"] or 0) for row in active if plan_map.get(row["plan"]))
     payment_ids = [int(row["id"]) for row in active]
     usage = _paid_ada_usage(db, user_id, payment_ids)
     monthly_used = sum(item["units"] for item in usage.values())
@@ -298,7 +297,10 @@ def reserve_ada_budget(db, user_id, plan_code, estimated_units):
     # remaining monthly capacity. The allowance itself is additive; the ledger
     # keeps each reservation attributable to one paid subscription.
     candidates = []
-    for row, plan in zip(active, plans):
+    for row in active:
+        plan = plan_map.get(row["plan"])
+        if not plan:
+            continue
         limit = int(plan["ada_monthly_units"] or 0)
         used = int(usage.get(int(row["id"]), {}).get("units", 0))
         candidates.append((limit-used, int(row["id"])))
@@ -507,10 +509,9 @@ def get_ada_usage(db, user_id, plan_code):
     day_used = int((day or {}).get("ada_units",0) or 0)
 
     if active:
-        plans = [get_plan(db, row["plan"]) for row in active]
-        plans = [plan for plan in plans if plan]
-        monthly_limit = sum(int(plan["ada_monthly_units"] or 0) for plan in plans)
-        daily_limit = sum(int(plan["ada_daily_units"] or 0) for plan in plans)
+        plan_map = {row["plan"]: get_plan(db, row["plan"]) for row in active}
+        monthly_limit = sum(int(plan_map[row["plan"]]["ada_monthly_units"] or 0) for row in active if plan_map.get(row["plan"]))
+        daily_limit = sum(int(plan_map[row["plan"]]["ada_daily_units"] or 0) for row in active if plan_map.get(row["plan"]))
         usage = _paid_ada_usage(db, user_id, [int(row["id"]) for row in active])
         month_used = sum(item["units"] for item in usage.values())
         return {
