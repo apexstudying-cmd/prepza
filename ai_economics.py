@@ -250,12 +250,17 @@ def reserve_ada_budget(db, user_id, plan_code, estimated_units):
     db.session.commit()
     return True, {"reserved_units": estimated_units}
 
-def refund_ada_budget(db, user_id, units):
+def refund_ada_budget(db, user_id, plan_code, units):
+    """Return an unused reservation to the same entitlement wallet it came from.
+
+    The previous implementation always used the Free/calendar-month wallet,
+    which could refund a failed paid Ada request into the wrong period.
+    """
     units = max(0, int(units or 0))
     if not units:
         return
     today = date.today()
-    _payment_id, month = get_usage_period(db, user_id, "free")
+    _payment_id, month = get_usage_period(db, user_id, plan_code)
     db.session.execute(text("""
         UPDATE ada_usage_day SET ada_units=GREATEST(0, ada_units-:units), updated_at=CURRENT_TIMESTAMP
         WHERE user_id=:uid AND usage_date=:day
