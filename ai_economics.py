@@ -146,24 +146,15 @@ def _period_start():
     return date(now.year, now.month, 1)
 
 
-def get_active_entitlement_period(db, user_id, plan_code):
-    """
-    Return the paid subscription period currently granting this plan.
-
-    Paid monthly quotas must follow the student's actual paid entitlement
-    month, not the calendar month. This is especially important when a
-    student upgrades mid-month: the Pro allowance starts when Pro starts and
-    lasts for that Pro paid period.
-    """
-    if plan_code not in ("plus", "pro"):
-        return None
-    row = db.session.execute(text("""
-        SELECT p.id, p.subscription_starts_at, p.subscription_expires_at
+def get_active_entitlements(db, user_id):
+    """Return every successful, fulfilled paid entitlement active right now."""
+    rows = db.session.execute(text("""
+        SELECT p.id, p.plan, p.subscription_starts_at, p.subscription_expires_at
         FROM payment p
         JOIN student_order so ON so.payment_id = p.id
         WHERE p.user_id=:uid
           AND p.payment_type='subscription'
-          AND p.plan=:plan
+          AND p.plan IN ('plus','pro')
           AND p.status='success'
           AND p.subscription_starts_at IS NOT NULL
           AND p.subscription_expires_at IS NOT NULL
@@ -176,19 +167,45 @@ def get_active_entitlement_period(db, user_id, plan_code):
           AND so.item_id IS NULL
           AND so.quantity=1
           AND so.currency='KES'
-        ORDER BY p.subscription_starts_at DESC, p.id DESC
-        LIMIT 1
-    """), {"uid": user_id, "plan": plan_code}).mappings().first()
-    return dict(row) if row else None
+        ORDER BY p.subscription_starts_at ASC, p.id ASC
+    """), {"uid": user_id}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def get_active_entitlement_period(db, user_id, plan_code):
+    """Compatibility helper: return the newest active entitlement of a plan."""
+    rows = [row for row in get_active_entitlements(db, user_id) if row["plan"] == plan_code]
+    return rows[-1] if rows else None
 
 
 def get_usage_period(db, user_id, plan_code):
     active = get_active_entitlement_period(db, user_id, plan_code)
     if active:
-        # Date is only the storage key; enforcement still verifies the
-        # active payment period from the authoritative payment row.
         return active["id"], active["subscription_starts_at"].date()
     return None, _period_start()
+
+
+def _paid_ada_usage(db, user_id, payment_ids):
+    if not payment_ids:
+        return {}
+    rows = db.session.execute(text("""
+        SELECT payment_id, COALESCE(SUM(units),0) AS units,
+               COALESCE(SUM(request_count),0) AS requests
+        FROM student_entitlement_usage
+        WHERE user_id=:uid
+          AND feature='ada'
+          AND payment_id IS NOT NULL
+        GROUP BY payment_id
+    """), {"uid": user_id}).mappings().all()
+    allowed = set(int(pid) for pid in payment_ids)
+    return {
+        int(row["payment_id"]): {
+            "units": int(row["units"] or 0),
+            "requests": int(row["requests"] or 0),
+        }
+        for row in rows
+        if int(row["payment_id"]) in allowed
+    }
 
 
 def calculate_ada_units(input_tokens=0, cached_tokens=0, cache_write_tokens=0, output_tokens=0):
@@ -204,87 +221,250 @@ def calculate_ada_units(input_tokens=0, cached_tokens=0, cache_write_tokens=0, o
     )
     return int(units.to_integral_value(rounding="ROUND_CEILING"))
 
+
 def reserve_ada_budget(db, user_id, plan_code, estimated_units):
-    plan = get_plan(db, plan_code)
-    if not plan:
-        return False, {"code": "unknown_plan"}
     estimated_units = max(1, int(estimated_units))
+    active = get_active_entitlements(db, user_id)
+
+    if not active:
+        plan = get_plan(db, "free")
+        if not plan:
+            return False, {"code": "unknown_plan"}
+        today = date.today()
+        month = _period_start()
+        db.session.execute(text("""
+            INSERT INTO ada_usage_day (user_id, usage_date) VALUES (:uid, :day)
+            ON CONFLICT (user_id, usage_date) DO NOTHING
+        """), {"uid": user_id, "day": today})
+        db.session.execute(text("""
+            INSERT INTO ada_usage_month (user_id, period_start) VALUES (:uid, :period)
+            ON CONFLICT (user_id, period_start) DO NOTHING
+        """), {"uid": user_id, "period": month})
+        day = db.session.execute(text("""
+            SELECT ada_units FROM ada_usage_day
+            WHERE user_id=:uid AND usage_date=:day FOR UPDATE
+        """), {"uid": user_id, "day": today}).scalar_one()
+        month_used = db.session.execute(text("""
+            SELECT ada_units FROM ada_usage_month
+            WHERE user_id=:uid AND period_start=:period FOR UPDATE
+        """), {"uid": user_id, "period": month}).scalar_one()
+        if int(day) > 0 and int(day) + estimated_units > int(plan["ada_daily_units"]):
+            db.session.rollback()
+            return False, {"code":"ada_daily_limit",
+                            "remaining_units":max(0,int(plan["ada_daily_units"])-int(day))}
+        if int(month_used) + estimated_units > int(plan["ada_monthly_units"]):
+            db.session.rollback()
+            return False, {"code":"ada_monthly_limit",
+                            "remaining_units":max(0,int(plan["ada_monthly_units"])-int(month_used))}
+        db.session.execute(text("""
+            UPDATE ada_usage_day SET ada_units=ada_units+:units, updated_at=CURRENT_TIMESTAMP
+            WHERE user_id=:uid AND usage_date=:day
+        """), {"uid":user_id,"day":today,"units":estimated_units})
+        db.session.execute(text("""
+            UPDATE ada_usage_month SET ada_units=ada_units+:units, updated_at=CURRENT_TIMESTAMP
+            WHERE user_id=:uid AND period_start=:period
+        """), {"uid":user_id,"period":month,"units":estimated_units})
+        db.session.commit()
+        return True, {"reserved_units":estimated_units, "period_start":month}
+
+    plans = [get_plan(db, row["plan"]) for row in active]
+    plans = [plan for plan in plans if plan]
+    daily_limit = sum(int(plan["ada_daily_units"] or 0) for plan in plans)
+    monthly_limit = sum(int(plan["ada_monthly_units"] or 0) for plan in plans)
+    payment_ids = [int(row["id"]) for row in active]
+    usage = _paid_ada_usage(db, user_id, payment_ids)
+    monthly_used = sum(item["units"] for item in usage.values())
+
     today = date.today()
-    entitlement_payment_id, month = get_usage_period(db, user_id, plan_code)
     db.session.execute(text("""
         INSERT INTO ada_usage_day (user_id, usage_date) VALUES (:uid, :day)
         ON CONFLICT (user_id, usage_date) DO NOTHING
     """), {"uid": user_id, "day": today})
-    db.session.execute(text("""
-        INSERT INTO ada_usage_month (user_id, period_start) VALUES (:uid, :period)
-        ON CONFLICT (user_id, period_start) DO NOTHING
-    """), {"uid": user_id, "period": month})
     day = db.session.execute(text("""
-        SELECT ada_units FROM ada_usage_day WHERE user_id=:uid AND usage_date=:day FOR UPDATE
+        SELECT ada_units FROM ada_usage_day
+        WHERE user_id=:uid AND usage_date=:day FOR UPDATE
     """), {"uid": user_id, "day": today}).scalar_one()
-    month_used = db.session.execute(text("""
-        SELECT ada_units FROM ada_usage_month WHERE user_id=:uid AND period_start=:period FOR UPDATE
-    """), {"uid": user_id, "period": month}).scalar_one()
-    # Daily is a safety valve, not the student's entitlement. A first request
-    # may exceed the soft daily ceiling; once the day has already accumulated
-    # usage, stop additional requests at the ceiling. The monthly wallet is
-    # the hard entitlement.
-    daily_limit = int(plan["ada_daily_units"])
+
     if int(day) > 0 and int(day) + estimated_units > daily_limit:
         db.session.rollback()
-        return False, {
-            "code": "ada_daily_limit",
-            "remaining_units": max(0, daily_limit - int(day)),
-        }
-    if int(month_used) + estimated_units > int(plan["ada_monthly_units"]):
+        return False, {"code":"ada_daily_limit",
+                        "remaining_units":max(0,daily_limit-int(day))}
+    if monthly_used + estimated_units > monthly_limit:
         db.session.rollback()
-        return False, {"code": "ada_monthly_limit", "remaining_units": max(0, int(plan["ada_monthly_units"]) - int(month_used))}
+        return False, {"code":"ada_monthly_limit",
+                        "remaining_units":max(0,monthly_limit-monthly_used)}
+
+    # Reserve the request against the active entitlement with the most
+    # remaining monthly capacity. The allowance itself is additive; the ledger
+    # keeps each reservation attributable to one paid subscription.
+    candidates = []
+    for row, plan in zip(active, plans):
+        limit = int(plan["ada_monthly_units"] or 0)
+        used = int(usage.get(int(row["id"]), {}).get("units", 0))
+        candidates.append((limit-used, int(row["id"])))
+    remaining, payment_id = max(candidates, default=(0, None))
+    if remaining < estimated_units:
+        # A single request cannot be split across two entitlement wallets.
+        db.session.rollback()
+        return False, {"code":"ada_request_too_large",
+                        "remaining_units":max(0,monthly_limit-monthly_used)}
+
     db.session.execute(text("""
         UPDATE ada_usage_day SET ada_units=ada_units+:units, updated_at=CURRENT_TIMESTAMP
         WHERE user_id=:uid AND usage_date=:day
-    """), {"uid": user_id, "day": today, "units": estimated_units})
+    """), {"uid":user_id,"day":today,"units":estimated_units})
     db.session.execute(text("""
-        UPDATE ada_usage_month SET ada_units=ada_units+:units, updated_at=CURRENT_TIMESTAMP
-        WHERE user_id=:uid AND period_start=:period
-    """), {"uid": user_id, "period": month, "units": estimated_units})
+        INSERT INTO student_entitlement_usage
+            (user_id,payment_id,feature,units,request_count,metadata)
+        VALUES (:uid,:pid,'ada',:units,1,CAST(:metadata AS jsonb))
+    """), {
+        "uid":user_id, "pid":payment_id, "units":estimated_units,
+        "metadata": __import__("json").dumps({
+            "provisional": True,
+            "active_entitlement_stack": payment_ids,
+        }),
+    })
     db.session.commit()
-    return True, {"reserved_units": estimated_units}
+    return True, {
+        "reserved_units": estimated_units,
+        "period_start": active[0]["subscription_starts_at"].date(),
+        "entitlement_payment_id": payment_id,
+        "entitlement_payment_ids": payment_ids,
+    }
 
-def refund_ada_budget(db, user_id, plan_code, units):
-    """Return an unused reservation to the same entitlement wallet it came from.
 
-    The previous implementation always used the Free/calendar-month wallet,
-    which could refund a failed paid Ada request into the wrong period.
-    """
+def refund_ada_budget(db, user_id, plan_code, units, entitlement_payment_id=None):
     units = max(0, int(units or 0))
     if not units:
         return
     today = date.today()
-    _payment_id, month = get_usage_period(db, user_id, plan_code)
+    active = get_active_entitlements(db, user_id)
+
+    if entitlement_payment_id and any(int(row["id"]) == int(entitlement_payment_id) for row in active):
+        db.session.execute(text("""
+            DELETE FROM student_entitlement_usage
+            WHERE id = (
+                SELECT seu.id
+                FROM student_entitlement_usage seu
+                WHERE seu.user_id=:uid
+                  AND seu.payment_id=:pid
+                  AND seu.feature='ada'
+                  AND seu.units=:units
+                  AND COALESCE(seu.metadata->>'provisional','false')='true'
+                ORDER BY seu.id DESC
+                LIMIT 1
+            )
+        """), {"uid":user_id,"pid":int(entitlement_payment_id),"units":units})
+        db.session.execute(text("""
+            UPDATE ada_usage_day SET ada_units=GREATEST(0,ada_units-:units),
+                   updated_at=CURRENT_TIMESTAMP
+            WHERE user_id=:uid AND usage_date=:day
+        """), {"uid":user_id,"day":today,"units":units})
+        db.session.commit()
+        return
+
+    plan = get_plan(db, "free")
+    if not plan:
+        return
+    month = _period_start()
     db.session.execute(text("""
-        UPDATE ada_usage_day SET ada_units=GREATEST(0, ada_units-:units), updated_at=CURRENT_TIMESTAMP
+        UPDATE ada_usage_day SET ada_units=GREATEST(0,ada_units-:units),
+               updated_at=CURRENT_TIMESTAMP
         WHERE user_id=:uid AND usage_date=:day
-    """), {"uid": user_id, "day": today, "units": units})
+    """), {"uid":user_id,"day":today,"units":units})
     db.session.execute(text("""
-        UPDATE ada_usage_month SET ada_units=GREATEST(0, ada_units-:units), updated_at=CURRENT_TIMESTAMP
+        UPDATE ada_usage_month SET ada_units=GREATEST(0,ada_units-:units),
+               updated_at=CURRENT_TIMESTAMP
         WHERE user_id=:uid AND period_start=:period
-    """), {"uid": user_id, "period": month, "units": units})
+    """), {"uid":user_id,"period":month,"units":units})
     db.session.commit()
 
+
 def record_ada_usage(db, user_id, plan_code, model, provider, input_tokens, cached_tokens,
-                     cache_write_tokens, output_tokens, cost_usd=0, request_key=None, reserved_units=0):
+                     cache_write_tokens, output_tokens, cost_usd=0, request_key=None, reserved_units=0,
+                     entitlement_payment_id=None):
     units = calculate_ada_units(input_tokens, cached_tokens, cache_write_tokens, output_tokens)
     delta = units - max(0, int(reserved_units or 0))
-    entitlement_payment_id, month = get_usage_period(db, user_id, plan_code)
+    active = get_active_entitlements(db, user_id)
+
+    if active and entitlement_payment_id:
+        payment_ids = [int(row["id"]) for row in active]
+        if int(entitlement_payment_id) not in payment_ids:
+            raise ValueError("Ada entitlement is no longer active")
+        month = active[0]["subscription_starts_at"].date()
+        today = date.today()
+        db.session.execute(text("""
+            UPDATE ada_usage_day SET ada_units=GREATEST(0,ada_units+:delta),
+                   updated_at=CURRENT_TIMESTAMP
+            WHERE user_id=:uid AND usage_date=:day
+        """), {"uid":user_id,"day":today,"delta":delta})
+        provisional_id = db.session.execute(text("""
+            SELECT seu.id
+            FROM student_entitlement_usage seu
+            WHERE seu.user_id=:uid
+              AND seu.payment_id=:pid
+              AND seu.feature='ada'
+              AND seu.units=:reserved
+              AND COALESCE(seu.metadata->>'provisional','false')='true'
+            ORDER BY seu.id DESC
+            LIMIT 1
+        """), {"uid":user_id,"pid":int(entitlement_payment_id),"reserved":max(0,int(reserved_units or 0))}).scalar_one_or_none()
+        if provisional_id:
+            db.session.execute(text("""
+                UPDATE student_entitlement_usage
+                SET units=:units,
+                    metadata=CAST(:metadata AS jsonb)
+                WHERE id=:id
+            """), {
+                "id":int(provisional_id), "units":units,
+                "metadata":__import__("json").dumps({
+                    "provisional": False,
+                    "model": model, "provider": provider, "request_key": request_key,
+                    "input_tokens": int(input_tokens or 0),
+                    "cached_tokens": int(cached_tokens or 0),
+                    "cache_write_tokens": int(cache_write_tokens or 0),
+                    "output_tokens": int(output_tokens or 0),
+                }),
+            })
+        else:
+            db.session.execute(text("""
+                INSERT INTO student_entitlement_usage
+                    (user_id,payment_id,feature,units,request_count,metadata)
+                VALUES (:uid,:pid,'ada',:units,1,CAST(:metadata AS jsonb))
+            """), {
+                "uid":user_id,"pid":int(entitlement_payment_id),"units":units,
+                "metadata":__import__("json").dumps({
+                    "provisional":False,"model":model,"provider":provider,"request_key":request_key
+                }),
+            })
+        db.session.execute(text("""
+            INSERT INTO ada_request_usage (
+                user_id,plan_code,model,provider,input_tokens,cached_tokens,cache_write_tokens,
+                output_tokens,ada_units,cost_usd,request_key
+            ) VALUES (:uid,:plan,:model,:provider,:input,:cached,:cache_write,:output,:units,:cost,:request_key)
+        """), {
+            "uid":user_id,"plan":plan_code,"model":model,"provider":provider,
+            "input":int(input_tokens or 0),"cached":int(cached_tokens or 0),
+            "cache_write":int(cache_write_tokens or 0),"output":int(output_tokens or 0),
+            "units":units,"cost":float(cost_usd or 0),"request_key":request_key,
+        })
+        db.session.commit()
+        return units
+
+    # Free users retain the calendar-month accounting wallet.
+    month = _period_start()
     today = date.today()
     db.session.execute(text("""
         INSERT INTO ada_request_usage (
-            user_id, plan_code, model, provider, input_tokens, cached_tokens, cache_write_tokens,
-            output_tokens, ada_units, cost_usd, request_key
+            user_id,plan_code,model,provider,input_tokens,cached_tokens,cache_write_tokens,
+            output_tokens,ada_units,cost_usd,request_key
         ) VALUES (:uid,:plan,:model,:provider,:input,:cached,:cache_write,:output,:units,:cost,:request_key)
-    """), {"uid":user_id,"plan":plan_code,"model":model,"provider":provider,"input":int(input_tokens or 0),
-           "cached":int(cached_tokens or 0),"cache_write":int(cache_write_tokens or 0),
-           "output":int(output_tokens or 0),"units":units,"cost":float(cost_usd or 0),"request_key":request_key})
+    """), {
+        "uid":user_id,"plan":plan_code,"model":model,"provider":provider,
+        "input":int(input_tokens or 0),"cached":int(cached_tokens or 0),
+        "cache_write":int(cache_write_tokens or 0),"output":int(output_tokens or 0),
+        "units":units,"cost":float(cost_usd or 0),"request_key":request_key,
+    })
     db.session.execute(text("""
         INSERT INTO ada_usage_day (user_id, usage_date, ada_units, requests)
         VALUES (:uid,:day,:units,1)
@@ -299,51 +479,53 @@ def record_ada_usage(db, user_id, plan_code, model, provider, input_tokens, cach
             ada_units=GREATEST(0, ada_usage_month.ada_units+EXCLUDED.ada_units),
             requests=ada_usage_month.requests+1, updated_at=CURRENT_TIMESTAMP
     """), {"uid":user_id,"period":month,"units":delta})
-
-    # Record the final, successful Ada consumption against the exact paid
-    # subscription payment. This is separate from the monthly wallet because
-    # the wallet resets and cannot prove which subscription payment was used.
-    if plan_code in ("plus", "pro") and units > 0:
-        payment_id = entitlement_payment_id
-        if payment_id:
-            db.session.execute(text("""
-                INSERT INTO student_entitlement_usage
-                    (user_id,payment_id,feature,units,request_count,metadata)
-                VALUES (:uid,:pid,'ada',:units,1,CAST(:metadata AS jsonb))
-            """), {
-                "uid": user_id, "pid": payment_id, "units": units,
-                "metadata": __import__("json").dumps({
-                    "model": model, "provider": provider, "request_key": request_key,
-                    "input_tokens": int(input_tokens or 0),
-                    "cached_tokens": int(cached_tokens or 0),
-                    "cache_write_tokens": int(cache_write_tokens or 0),
-                    "output_tokens": int(output_tokens or 0),
-                    "provisional": False,
-                }),
-            })
     db.session.commit()
     return units
 
+
 def get_ada_usage(db, user_id, plan_code):
-    plan = get_plan(db, plan_code)
-    entitlement_payment_id, month = get_usage_period(db, user_id, plan_code)
+    active = get_active_entitlements(db, user_id)
     today = date.today()
     day = db.session.execute(text("""
-        SELECT ada_units, requests FROM ada_usage_day WHERE user_id=:uid AND usage_date=:day
+        SELECT ada_units, requests FROM ada_usage_day
+        WHERE user_id=:uid AND usage_date=:day
     """), {"uid":user_id,"day":today}).mappings().first()
+    day_used = int((day or {}).get("ada_units",0) or 0)
+
+    if active:
+        plans = [get_plan(db, row["plan"]) for row in active]
+        plans = [plan for plan in plans if plan]
+        monthly_limit = sum(int(plan["ada_monthly_units"] or 0) for plan in plans)
+        daily_limit = sum(int(plan["ada_daily_units"] or 0) for plan in plans)
+        usage = _paid_ada_usage(db, user_id, [int(row["id"]) for row in active])
+        month_used = sum(item["units"] for item in usage.values())
+        return {
+            "daily_used": day_used, "daily_limit": daily_limit,
+            "monthly_used": month_used, "monthly_limit": monthly_limit,
+            "daily_remaining": max(0,daily_limit-day_used),
+            "monthly_remaining": max(0,monthly_limit-month_used),
+            "entitlement_payment_id": int(active[-1]["id"]),
+            "entitlement_payment_ids": [int(row["id"]) for row in active],
+            "entitlement_period_start": active[0]["subscription_starts_at"].date().isoformat(),
+        }
+
+    plan = get_plan(db, "free")
+    month = _period_start()
     month_row = db.session.execute(text("""
-        SELECT ada_units, requests FROM ada_usage_month WHERE user_id=:uid AND period_start=:period
+        SELECT ada_units, requests FROM ada_usage_month
+        WHERE user_id=:uid AND period_start=:period
     """), {"uid":user_id,"period":month}).mappings().first()
-    day_used = int((day or {}).get("ada_units", 0) or 0)
-    month_used = int((month_row or {}).get("ada_units", 0) or 0)
+    month_used = int((month_row or {}).get("ada_units",0) or 0)
     return {
         "daily_used": day_used, "daily_limit": int(plan["ada_daily_units"]),
         "monthly_used": month_used, "monthly_limit": int(plan["ada_monthly_units"]),
-        "daily_remaining": max(0, int(plan["ada_daily_units"])-day_used),
-        "monthly_remaining": max(0, int(plan["ada_monthly_units"])-month_used),
-        "entitlement_payment_id": entitlement_payment_id,
+        "daily_remaining": max(0,int(plan["ada_daily_units"])-day_used),
+        "monthly_remaining": max(0,int(plan["ada_monthly_units"])-month_used),
+        "entitlement_payment_id": None,
+        "entitlement_payment_ids": [],
         "entitlement_period_start": month.isoformat(),
     }
+
 
 def validate_plan_patch(payload):
     allowed = set(PLAN_DEFAULTS["free"]) - {"display_name"}
