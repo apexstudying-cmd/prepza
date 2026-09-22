@@ -131,17 +131,8 @@ def add_chat_group_members(conversation_id):
         ))
 
     conversation.updated_at = datetime.utcnow()
-    mode = db.session.execute(
-        text("SELECT e2ee_mode, key_epoch FROM conversation WHERE id = :conversation_id"),
-        {"conversation_id": conversation_id},
-    ).first()
-    if mode and mode[0] == "group_v1":
-        conversation_key_epoch = int(mode[1] or 0)
-        conversation_key_epoch += 1
-        db.session.execute(
-            text("UPDATE conversation SET key_epoch = :new_epoch WHERE id = :conversation_id AND key_epoch = :old_epoch"),
-            {"conversation_id": conversation_id, "old_epoch": conversation_key_epoch - 1, "new_epoch": conversation_key_epoch},
-        )
+    # E2EE membership mapper owns the single epoch rotation for this transaction.
+    # Do not also bump the epoch here.
     db.session.commit()
     new_epoch = _current_group_key_epoch(conversation_id)
 
@@ -175,17 +166,8 @@ def remove_chat_group_member(conversation_id, target_user_id):
 
     target.left_at = datetime.utcnow()
     conversation.updated_at = datetime.utcnow()
-    mode = db.session.execute(
-        text("SELECT e2ee_mode, key_epoch FROM conversation WHERE id = :conversation_id"),
-        {"conversation_id": conversation_id},
-    ).first()
-    if mode and mode[0] == "group_v1":
-        conversation_key_epoch = int(mode[1] or 0)
-        conversation_key_epoch += 1
-        db.session.execute(
-            text("UPDATE conversation SET key_epoch = :new_epoch WHERE id = :conversation_id AND key_epoch = :old_epoch"),
-            {"conversation_id": conversation_id, "old_epoch": conversation_key_epoch - 1, "new_epoch": conversation_key_epoch},
-        )
+    # E2EE membership mapper owns the single epoch rotation for this transaction.
+    # Do not also bump the epoch here.
     db.session.commit()
     new_epoch = _current_group_key_epoch(conversation_id)
 
