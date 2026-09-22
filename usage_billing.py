@@ -222,18 +222,81 @@ def _current_student_plan(db, user_id):
     from ai_economics import get_user_plan_code
     return get_user_plan_code(db, user_id)
 
+
+def _active_student_entitlements(db, user_id):
+    """Return every currently-active paid entitlement, not only the latest tier."""
+    rows = db.session.execute(text("""
+        SELECT p.id, p.plan, p.subscription_starts_at, p.subscription_expires_at
+        FROM payment p
+        JOIN student_order so ON so.payment_id = p.id
+        WHERE p.user_id = :uid
+          AND p.payment_type = 'subscription'
+          AND p.plan IN ('plus', 'pro')
+          AND p.status = 'success'
+          AND p.subscription_starts_at IS NOT NULL
+          AND p.subscription_expires_at IS NOT NULL
+          AND p.subscription_starts_at <= CURRENT_TIMESTAMP
+          AND p.subscription_expires_at > CURRENT_TIMESTAMP
+          AND so.user_id = p.user_id
+          AND so.order_type = 'subscription'
+          AND so.status = 'fulfilled'
+          AND so.plan = p.plan
+          AND so.item_id IS NULL
+          AND so.quantity = 1
+          AND so.currency = 'KES'
+        ORDER BY p.subscription_starts_at ASC, p.id ASC
+    """), {"uid": user_id}).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def _active_entitlement_usage(db, user_id, feature, active_ids):
+    if not active_ids:
+        return {}
+    rows = db.session.execute(text("""
+        SELECT payment_id, COALESCE(SUM(units), 0) AS units,
+               COALESCE(SUM(request_count), 0) AS requests
+        FROM student_entitlement_usage
+        WHERE user_id = :uid
+          AND feature = :feature
+          AND payment_id IS NOT NULL
+        GROUP BY payment_id
+    """), {"uid": user_id, "feature": feature}).mappings().all()
+    allowed = set(active_ids)
+    return {
+        int(row["payment_id"]): {
+            "units": int(row["units"] or 0),
+            "requests": int(row["requests"] or 0),
+        }
+        for row in rows
+        if int(row["payment_id"]) in allowed
+    }
+
+
 def _usage_row(db, user_id, feature):
     from ai_economics import get_plan
-    plan = get_plan(db, _current_student_plan(db, user_id))
+    active = _active_student_entitlements(db, user_id)
+    if active:
+        usage = _active_entitlement_usage(db, user_id, feature, [row["id"] for row in active])
+        return {
+            "units": sum(item["units"] for item in usage.values()),
+            "requests": sum(item["requests"] for item in usage.values()),
+            "period": min(row["subscription_starts_at"].date() for row in active),
+        }
+
+    plan = get_plan(db, "free")
     if not plan:
         return None
-    return db.session.execute(text("""
+    row = db.session.execute(text("""
         SELECT units, requests FROM student_ai_usage
         WHERE user_id = :uid AND period_start = :period AND feature = :feature
     """), {"uid": user_id, "period": _period_start(plan), "feature": feature}).mappings().first()
+    if not row:
+        return {"units": 0, "requests": 0, "period": _period_start(plan)}
+    return {**dict(row), "period": _period_start(plan)}
+
 
 def check_and_consume_ai_quota(db, user_id, feature, units):
-    """Consume the admin-configured monthly artifact allowance before generation."""
+    """Consume the student's additive allowance across every active entitlement."""
     if feature not in FEATURES:
         return True, {"feature": feature}
     try:
@@ -244,73 +307,107 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
         return False, {"error": "Generation amount must be positive"}
 
     from ai_economics import get_plan
-    plan_code = _current_student_plan(db, user_id)
-    plan = get_plan(db, plan_code)
-    if not plan:
-        return False, {"error": "Student plan configuration is unavailable"}
+    active = _active_student_entitlements(db, user_id)
+    if not active:
+        plan_code = "free"
+        plan = get_plan(db, plan_code)
+        if not plan:
+            return False, {"error": "Student plan configuration is unavailable"}
+        unit_key = {"summary":"summary_pages","podcast":"podcast_minutes","flashcards":"flashcards",
+                    "quiz":"questions","mind_map":"mind_map_nodes"}[feature]
+        max_units = int(plan[unit_key] or 0)
+        if units > max_units:
+            return False, {"error": f"This plan supports at most {max_units} units per generation.",
+                            "code":"generation_size_limit","feature":feature,
+                            "plan":plan_code,"max_units":max_units}
+        period = _period_start(plan)
+        db.session.execute(text("""
+            INSERT INTO student_ai_usage
+                (user_id, period_start, feature, units, requests, updated_at)
+            VALUES (:uid,:period,:feature,0,0,CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id, period_start, feature) DO NOTHING
+        """), {"uid":user_id,"period":period,"feature":feature})
+        row=db.session.execute(text("""
+            SELECT units, requests FROM student_ai_usage
+            WHERE user_id=:uid AND period_start=:period AND feature=:feature FOR UPDATE
+        """), {"uid":user_id,"period":period,"feature":feature}).mappings().first()
+        used=int(row["units"] or 0)
+        if used + units > max_units:
+            db.session.rollback()
+            return False, {"error":"You have used up this plan's generation allowance.",
+                           "code":"generation_quota_exhausted","feature":feature,"plan":plan_code,
+                           "used_units":used,"unit_limit":max_units,
+                           "remaining_units":max(0,max_units-used)}
+        db.session.execute(text("""
+            UPDATE student_ai_usage SET units=units+:units, requests=requests+1,
+                   updated_at=CURRENT_TIMESTAMP
+            WHERE user_id=:uid AND period_start=:period AND feature=:feature
+        """), {"uid":user_id,"period":period,"feature":feature,"units":units})
+        db.session.commit()
+        return True, {"feature":feature,"plan":"free","used_units":used+units,
+                      "unit_limit":max_units,"remaining_units":max(0,max_units-used-units),
+                      "max_units_per_generation":max_units,"period_start":period}
 
     unit_key = {"summary":"summary_pages","podcast":"podcast_minutes","flashcards":"flashcards",
                 "quiz":"questions","mind_map":"mind_map_nodes"}[feature]
-    max_units = int(plan[unit_key] or 0)
-    label = {"summary":"pages","podcast":"minutes","flashcards":"cards",
-             "quiz":"questions","mind_map":"nodes"}[feature]
-    if units > max_units:
-        return False, {"error": f"This plan supports at most {max_units} {label} per generation.",
+    plans = {row["plan_code"]: get_plan(db, row["plan_code"]) for row in active}
+    limits = [int(plans[row["plan"]][unit_key] or 0) for row in active if plans.get(row["plan"])]
+    max_per_generation = max(limits, default=0)
+    total_limit = sum(limits)
+    if units > max_per_generation:
+        return False, {"error": f"Your active plan(s) support at most {max_per_generation} units per generation.",
                         "code":"generation_size_limit","feature":feature,
-                        "plan":plan_code,"max_units":max_units}
-
-    period = _period_start(plan)
-    db.session.execute(text("""
-        INSERT INTO student_ai_usage
-            (user_id, period_start, feature, units, requests, updated_at)
-        VALUES (:uid,:period,:feature,0,0,CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id, period_start, feature) DO NOTHING
-    """), {"uid":user_id,"period":period,"feature":feature})
-    row=db.session.execute(text("""
-        SELECT units, requests FROM student_ai_usage
-        WHERE user_id=:uid AND period_start=:period AND feature=:feature FOR UPDATE
-    """), {"uid":user_id,"period":period,"feature":feature}).mappings().first()
-    used=int(row["units"] or 0)
-    if used + units > max_units:
+                        "plan":"+".join(row["plan"] for row in active),
+                        "max_units":max_per_generation}
+    active_ids = [row["id"] for row in active]
+    usage = _active_entitlement_usage(db, user_id, feature, active_ids)
+    total_used = sum(item["units"] for item in usage.values())
+    if total_used + units > total_limit:
         db.session.rollback()
-        return False, {"error":"You have used up this plan's generation allowance.",
-                       "code":"generation_quota_exhausted","feature":feature,"plan":plan_code,
-                       "used_units":used,"unit_limit":max_units,
-                       "remaining_units":max(0,max_units-used)}
-    db.session.execute(text("""
-        UPDATE student_ai_usage SET units=units+:units, requests=requests+1,
-               updated_at=CURRENT_TIMESTAMP
-        WHERE user_id=:uid AND period_start=:period AND feature=:feature
-    """), {"uid":user_id,"period":period,"feature":feature,"units":units})
+        return False, {"error":"You have used up your active entitlements' generation allowance.",
+                       "code":"generation_quota_exhausted","feature":feature,
+                       "plan":"+".join(row["plan"] for row in active),
+                       "used_units":total_used,"unit_limit":total_limit,
+                       "remaining_units":max(0,total_limit-total_used)}
 
-    # The quota deduction is also the student's entitlement consumption
-    # evidence. Link it to the exact paid subscription payment so refunds
-    # cannot be calculated from a mutable aggregate wallet alone.
-    if plan_code in ("plus", "pro"):
-        payment_id = db.session.execute(text("""
-            SELECT p.id
-            FROM payment p
-            JOIN student_order so ON so.payment_id=p.id
-            WHERE p.user_id=:uid AND p.payment_type='subscription'
-              AND p.plan=:plan AND p.status='success'
-              AND so.status='fulfilled'
-              AND p.subscription_expires_at > CURRENT_TIMESTAMP
-            ORDER BY p.subscription_expires_at DESC, p.id DESC
-            LIMIT 1
-        """), {"uid":user_id,"plan":plan_code}).scalar_one_or_none()
-        if payment_id:
-            db.session.execute(text("""
-                INSERT INTO student_entitlement_usage
-                    (user_id,payment_id,feature,units,request_count,metadata)
-                VALUES (:uid,:pid,:feature,:units,1,CAST(:metadata AS jsonb))
-            """), {
-                "uid": user_id, "pid": payment_id, "feature": feature,
-                "units": units, "metadata": __import__("json").dumps({"provisional": True}),
-            })
+    # Allocate this request to the active entitlement with the most remaining
+    # capacity. This keeps the ledger auditable while the student's allowance
+    # remains additive across overlapping subscriptions.
+    candidates = []
+    for row in active:
+        limit = int(plans[row["plan"]][unit_key] or 0)
+        used = int(usage.get(int(row["id"]), {}).get("units", 0))
+        candidates.append((limit - used, int(row["id"])))
+    remaining, payment_id = max(candidates)
+    if remaining < units:
+        # The aggregate wallet had enough capacity, but no single entitlement
+        # can fund one generation. A generation cannot be split across plans.
+        return False, {"error":"No single active entitlement can fund this generation size.",
+                       "code":"generation_size_limit","feature":feature,
+                       "max_units":max_per_generation}
+
+    db.session.execute(text("""
+        INSERT INTO student_entitlement_usage
+            (user_id,payment_id,feature,units,request_count,metadata)
+        VALUES (:uid,:pid,:feature,:units,1,CAST(:metadata AS jsonb))
+    """), {
+        "uid": user_id, "pid": payment_id, "feature": feature,
+        "units": units, "metadata": __import__("json").dumps({
+            "provisional": True,
+            "active_entitlement_stack": [int(row["id"]) for row in active],
+        }),
+    })
     db.session.commit()
-    return True, {"feature":feature,"plan":plan_code,"used_units":used+units,
-                  "unit_limit":max_units,"remaining_units":max(0,max_units-used-units),
-                  "max_units_per_generation":max_units,"period_start":period}
+    used_for_payment = int(usage.get(payment_id, {}).get("units", 0))
+    return True, {"feature":feature,
+                  "plan":"+".join(row["plan"] for row in active),
+                  "used_units":total_used+units,
+                  "unit_limit":total_limit,
+                  "remaining_units":max(0,total_limit-total_used-units),
+                  "max_units_per_generation":max_per_generation,
+                  "period_start":min(row["subscription_starts_at"].date() for row in active),
+                  "entitlement_payment_id":payment_id,
+                  "entitlement_used_units":used_for_payment+units}
 
 def reserve_generation_variant(db, user_id, base_fingerprint, feature, base_parameters=None, pool_size=4):
     """Reserve the first shared variant this student has not seen.
