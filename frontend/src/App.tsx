@@ -5226,8 +5226,6 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId,
         </div>
       </div>
       <div style={{ height: 24 }} />
-
-}
     </div>
   )
 }
