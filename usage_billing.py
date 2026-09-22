@@ -757,7 +757,7 @@ def register_usage_billing(app, db):
                 "questions": sum(int(p["questions"] or 0) for p in valid_plans),
                 "mind_map_nodes": sum(int(p["mind_map_nodes"] or 0) for p in valid_plans),
                 "flashcards": sum(int(p["flashcards"] or 0) for p in valid_plans),
-                "offline_study": any(bool(p["offline_study"]) for p in valid_plans),
+                "offline_study": True,
                 "premium_library": any(bool(p["premium_library"]) for p in valid_plans),
                 "study_hub_uploads": any(bool(p["study_hub_uploads"]) for p in valid_plans),
             }
@@ -786,7 +786,7 @@ def register_usage_billing(app, db):
             "billing_period": plan["billing_period"], "quota_period": plan["quota_period"],
             "podcast_minutes": int(plan["podcast_minutes"]), "summary_pages": int(plan["summary_pages"]),
             "questions": int(plan["questions"]), "mind_map_nodes": int(plan["mind_map_nodes"]),
-            "flashcards": int(plan["flashcards"]), "offline_study": bool(plan["offline_study"]),
+            "flashcards": int(plan["flashcards"]), "offline_study": True,
             "premium_library": bool(plan["premium_library"]), "study_hub_uploads": bool(plan["study_hub_uploads"]),
         }
         units_map = {"summary":"summary_pages","podcast":"podcast_minutes","flashcards":"flashcards","quiz":"questions","mind_map":"mind_map_nodes"}
@@ -815,7 +815,7 @@ def register_usage_billing(app, db):
                 "quota_period": plan["quota_period"], "podcast_minutes": int(plan["podcast_minutes"]),
                 "summary_pages": int(plan["summary_pages"]), "questions": int(plan["questions"]),
                 "mind_map_nodes": int(plan["mind_map_nodes"]), "flashcards": int(plan["flashcards"]),
-                "offline_study": bool(plan["offline_study"]), "premium_library": bool(plan["premium_library"]),
+                "offline_study": True, "premium_library": bool(plan["premium_library"]),
                 "study_hub_uploads": bool(plan["study_hub_uploads"]),
             })
         return jsonify({"currency": "KES", "plans": public_plans})
