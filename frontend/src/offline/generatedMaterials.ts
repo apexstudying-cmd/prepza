@@ -13,10 +13,10 @@ type OfflineMaterialSummary = { key: string; path: string; savedAt: number; byte
 type StoredAudio = { key: string; userId: string; sourceUrl: string; blob: Blob; savedAt: number }
 
 function offlineAccessAllowed(): boolean {
-  try {
-    const expiresAt = Number(localStorage.getItem('prepza-offline-entitlement-expires-at') || 0)
-    return Number.isFinite(expiresAt) && expiresAt > Date.now()
-  } catch (_) { return false }
+  // Offline study is available to every signed-in student. Keep this
+  // compatibility helper permissive so older cached materials do not become
+  // inaccessible merely because a paid subscription ended.
+  return true
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -137,7 +137,7 @@ export async function getLatestGeneratedMaterialForPath(path: string): Promise<a
 }
 
 export async function getGeneratedMaterialOffline(path: string, requestBody: unknown): Promise<any | null> {
-  if (!offlineAccessAllowed() && typeof navigator !== 'undefined' && !navigator.onLine) return null\n  try { return (await readMatching(path, requestBody))[0]?.payload ?? null } catch (_) { return null }
+    try { return (await readMatching(path, requestBody))[0]?.payload ?? null } catch (_) { return null }
 }
 
 export async function listGeneratedMaterialsOffline(path: string, requestBody: unknown): Promise<Array<{ payload: unknown; savedAt: number }>> {
@@ -146,7 +146,7 @@ export async function listGeneratedMaterialsOffline(path: string, requestBody: u
 }
 
 export async function listOfflineGeneratedMaterials(): Promise<OfflineMaterialSummary[]> {
-  if (!offlineAccessAllowed() && typeof navigator !== 'undefined' && !navigator.onLine) return []\n  try {
+    try {
     const userId = localStorage.getItem(USER_KEY) || 'unknown'
     return (await readAll())
       .filter(row => row.key.startsWith(`${userId}:`))
