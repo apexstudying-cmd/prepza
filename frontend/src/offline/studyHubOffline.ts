@@ -54,6 +54,10 @@ function openAssetDb(): Promise<IDBDatabase> {
   })
 }
 
+function offlineMetaIsCurrent(meta?: SavedStudyHubMeta | null): boolean {
+  return Boolean(meta?.entitlementExpiresAt && Number.isFinite(meta.entitlementExpiresAt) && meta.entitlementExpiresAt > Date.now())
+}
+
 async function putMeta(meta: SavedStudyHubMeta) {
   const db = await openMetaDb()
   try {
@@ -386,6 +390,7 @@ export async function getOfflineStudyDocumentBlob(documentId: number, userId: nu
     const meta = await getMeta(`${userId}:${documentId}`)
     if (!meta) return null
     const asset = await getStudyAsset(`${userId}:${documentId}`)
+    if (!offlineMetaIsCurrent(meta)) return null
     if (asset?.blob instanceof Blob) return asset.blob
     if (meta.contentHash) {
       const local = await findLocalDocumentByContentHash(userId, meta.contentHash)
@@ -413,6 +418,7 @@ export async function listSavedStudyHubOffline(userId?: number): Promise<SavedSt
     const rows = await getAllMeta(userId)
     const valid: SavedStudyHubMeta[] = []
     for (const row of rows) {
+      if (!offlineMetaIsCurrent(row)) continue
       const asset = await getStudyAsset(row.key)
       if (asset?.blob instanceof Blob && asset.blob.size > 0) valid.push(row)
       else await deleteMeta(row.key)
