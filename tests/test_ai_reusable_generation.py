@@ -168,7 +168,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     )
     monkeypatch.setattr(reusable, "claim_or_get_generation", lambda **kwargs: claim_results.pop(0))
     monkeypatch.setattr(reusable, "mark_generation_ready", lambda *args: None)
-    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: material_calls.append(kwargs) or types.SimpleNamespace(id=99, payload={"title": "Reusable"}))
+    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: material_calls.append(kwargs) or types.SimpleNamespace(id=99, payload='{"title":"Reusable"}'))
 
     first = reusable.generate_document_material(
         material_type="summary",
@@ -234,7 +234,7 @@ def test_reused_ready_artifact_still_consumes_student_allowance(monkeypatch):
         "claim_or_get_generation",
         lambda **kwargs: GenerationLookup(22, "ready", {"title": "Existing"}, False),
     )
-    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: types.SimpleNamespace(id=100, payload={"title": "Existing"}))
+    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: types.SimpleNamespace(id=100, payload='{"title":"Existing"}'))
 
     result = reusable.generate_document_material(
         material_type="summary",
@@ -314,7 +314,7 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
         return GenerationLookup(40 + claim_count["value"], "generating", None, True, f"lease-{claim_count['value']}")
     monkeypatch.setattr(reusable, "claim_or_get_generation", fake_claim)
     monkeypatch.setattr(reusable, "mark_generation_ready", lambda *args: None)
-    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: types.SimpleNamespace(id=kwargs.get("material_id", 1), payload=kwargs.get("payload", {})))
+    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: types.SimpleNamespace(id=kwargs.get("material_id", 1), payload='{}'))
 
     for _ in range(5):
         reusable.generate_document_material(
