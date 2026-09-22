@@ -322,7 +322,7 @@ def register_student_orders(app, db, Payment, ContentItem, User, require_csrf=No
             "currency": row["currency"],
             "checkout_url": row["checkout_url"],
             "status": row["status"],
-            "requested": decode(row["requested_payload"]),
+            "requested": {k: v for k, v in (decode(row["requested_payload"]) or {}).items() if k in ("payment_type", "plan", "quantity")},
             "fulfillment": {"fulfilled_exactly_as_requested": bool((decode(row["fulfillment_payload"]) or {}).get("fulfilled_exactly_as_requested"))} if row["fulfillment_payload"] else None,
             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             "paid_at": row["paid_at"].isoformat() if row["paid_at"] else None,
