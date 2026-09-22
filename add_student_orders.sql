@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS student_order (
     order_type VARCHAR(30) NOT NULL,
     item_id INTEGER NULL REFERENCES content_item(id),
     item_title_snapshot VARCHAR(200) NOT NULL,
+    item_file_url_snapshot VARCHAR(500) NULL,
     plan VARCHAR(20) NULL,
     quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
     unit_amount INTEGER NOT NULL CHECK (unit_amount >= 0),
@@ -33,6 +34,9 @@ CREATE INDEX IF NOT EXISTS ix_student_order_status
 
 CREATE INDEX IF NOT EXISTS ix_student_order_item
     ON student_order (item_id);
+
+ALTER TABLE student_order
+ADD COLUMN IF NOT EXISTS item_file_url_snapshot VARCHAR(500);
 
 ALTER TABLE student_order
 ADD COLUMN IF NOT EXISTS checkout_url TEXT;
