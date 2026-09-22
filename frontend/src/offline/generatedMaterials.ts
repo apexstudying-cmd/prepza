@@ -12,6 +12,13 @@ type StoredMaterial = { key: string; path: string; requestBody: unknown; payload
 type OfflineMaterialSummary = { key: string; path: string; savedAt: number; bytes: number; payload: any }
 type StoredAudio = { key: string; userId: string; sourceUrl: string; blob: Blob; savedAt: number }
 
+function offlineAccessAllowed(): boolean {
+  try {
+    const expiresAt = Number(localStorage.getItem('prepza-offline-entitlement-expires-at') || 0)
+    return Number.isFinite(expiresAt) && expiresAt > Date.now()
+  } catch (_) { return false }
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 3)
@@ -116,7 +123,7 @@ async function readMatching(path: string, requestBody: unknown): Promise<StoredM
 }
 
 export async function getLatestGeneratedMaterialForPath(path: string): Promise<any | null> {
-  if (!supported(path)) return null
+  if (!offlineAccessAllowed() && typeof navigator !== 'undefined' && !navigator.onLine) return null\n  if (!supported(path)) return null
   try {
     const userId = localStorage.getItem(USER_KEY) || 'unknown'
     const rows = (await readAll()).filter(row => row.path === path && row.key.startsWith(`${userId}:`))
@@ -126,7 +133,7 @@ export async function getLatestGeneratedMaterialForPath(path: string): Promise<a
 }
 
 export async function getGeneratedMaterialOffline(path: string, requestBody: unknown): Promise<any | null> {
-  try { return (await readMatching(path, requestBody))[0]?.payload ?? null } catch (_) { return null }
+  if (!offlineAccessAllowed() && typeof navigator !== 'undefined' && !navigator.onLine) return null\n  try { return (await readMatching(path, requestBody))[0]?.payload ?? null } catch (_) { return null }
 }
 
 export async function listGeneratedMaterialsOffline(path: string, requestBody: unknown): Promise<Array<{ payload: unknown; savedAt: number }>> {
@@ -134,7 +141,7 @@ export async function listGeneratedMaterialsOffline(path: string, requestBody: u
 }
 
 export async function listOfflineGeneratedMaterials(): Promise<OfflineMaterialSummary[]> {
-  try {
+  if (!offlineAccessAllowed() && typeof navigator !== 'undefined' && !navigator.onLine) return []\n  try {
     const userId = localStorage.getItem(USER_KEY) || 'unknown'
     return (await readAll())
       .filter(row => row.key.startsWith(`${userId}:`))
