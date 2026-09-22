@@ -103,7 +103,7 @@ async function generationRequest<T = any>(
       if (progress.found !== false) publish(progress)
       if (progress.status === 'completed') return progress
       if (progress.status === 'failed') {
-        throw new ApiError(progress.error_message || progress.error || 'Generation failed. Please try again.', 500)
+        throw new ApiError(progress.error_message || progress.error_message || 'Generation failed. Please try again.', 500)
       }
       await new Promise(resolve => { timer = setTimeout(resolve, 700) })
     }
@@ -426,11 +426,17 @@ type ThemeMode = 'light' | 'dark'
 const THEME_STORAGE_KEY = 'prepza-theme'
 let currentThemeMode: ThemeMode = (typeof window !== 'undefined' && (window.localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode)) || 'light'
 const themeListeners = new Set<() => void>()
+function applyThemeDocument(mode: ThemeMode) {
+  if (typeof document === 'undefined') return
+  document.documentElement.dataset.prepzaTheme = mode
+}
 function setThemeMode(next: ThemeMode) {
   currentThemeMode = next
+  applyThemeDocument(next)
   try { window.localStorage.setItem(THEME_STORAGE_KEY, next) } catch { /* private browsing etc */ }
   themeListeners.forEach(fn => fn())
 }
+applyThemeDocument(currentThemeMode)
 function toggleThemeMode() {
   setThemeMode(currentThemeMode === 'light' ? 'dark' : 'light')
 }
@@ -14608,7 +14614,25 @@ export default function App() {
   const isDark = ['splash','login','processing'].includes(screen)
 
   return (
-    <div style={{ width: '100%', height: '100dvh', background: isDark ? N.navy : N.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <>
+      <style>{`
+        html[data-prepza-theme="dark"] [style*="color: rgb(11, 20, 55)"],
+        html[data-prepza-theme="dark"] [style*="color:#0B1437"],
+        html[data-prepza-theme="dark"] [style*="color: #0B1437"] { color: #F5F6FA !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(55, 65, 81)"],
+        html[data-prepza-theme="dark"] [style*="color:#374151"],
+        html[data-prepza-theme="dark"] [style*="color: #374151"] { color: #D7DBE5 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(107, 114, 128)"],
+        html[data-prepza-theme="dark"] [style*="color:#6B7280"],
+        html[data-prepza-theme="dark"] [style*="color: #6B7280"] { color: #9AA3B8 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(156, 163, 175)"],
+        html[data-prepza-theme="dark"] [style*="color:#9CA3AF"],
+        html[data-prepza-theme="dark"] [style*="color: #9CA3AF"] { color: #AEB7C7 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(17, 24, 39)"],
+        html[data-prepza-theme="dark"] [style*="color:#111827"],
+        html[data-prepza-theme="dark"] [style*="color: #111827"] { color: #F5F6FA !important; }
+      `}</style>
+      <div style={{ width: '100%', height: '100dvh', background: isDark ? N.navy : (currentThemeMode === 'dark' ? DARK_THEME.pageBg : N.bg), display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {renderScreen()}
@@ -14622,8 +14646,10 @@ export default function App() {
           ⚙ Admin Platform
         </button>
       )}
-    </div>
+      </div>
+    </>
   )
+}
 function friendlyGenerationError(error: unknown): string {
   const message = error instanceof ApiError ? error.message : error instanceof Error ? error.message : String(error || '')
   const lower = message.toLowerCase()
