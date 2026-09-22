@@ -17,6 +17,57 @@ new_set_screen = """  const setScreen = (s: Screen) => {
       window.history.back()
       return
     }
+    const parentScreens: Partial<Record<Screen, Screen>> = {
+      'explore': 'home',
+      'create-modal': 'home',
+      'chats': 'home',
+      'profile': 'home',
+      'study-materials': 'home',
+      'document-study': 'study-materials',
+      'document-reader': 'document-study',
+      'ai-tutor': 'document-study',
+      'summary': 'document-study',
+      'flashcards': 'document-study',
+      'quiz': 'document-study',
+      'mind-map': 'document-study',
+      'podcast-player': 'document-study',
+      'podcast-library': 'home',
+      'upload': 'home',
+      'upload-share-choice': 'upload',
+      'processing': 'upload',
+      'doc-ready': 'processing',
+      'opportunities': 'explore',
+      'opportunity-detail': 'opportunities',
+      'share-opp-form': 'opportunities',
+      'settings': 'profile',
+      'student-profile': 'profile',
+      'followers': 'student-profile',
+      'following': 'student-profile',
+      'follow-requests': 'profile',
+      'notifications': 'home',
+      'library': 'home',
+      'new-chat': 'chats',
+      'chat-options': 'chats',
+      'chat-detail': 'chats',
+      'edit-profile': 'profile',
+      'subscription': 'profile',
+      'payment': 'subscription',
+      'payment-success': 'payment',
+      'payment-failure': 'payment',
+      'payment-history': 'profile',
+      'publish-library': 'upload-share-choice',
+      'xp-progress': 'profile',
+      'study-streak': 'profile',
+      'study-activity': 'profile',
+      'time-studied': 'profile',
+      'achievements': 'profile',
+      'group-detail': 'explore',
+      'group-create': 'explore',
+    }
+    if (parentScreens[screen] === s && screenStack.length > 1) {
+      window.history.back()
+      return
+    }
     const nextStack = [...screenStack, s]
     setScreenStack(nextStack)
     try {
