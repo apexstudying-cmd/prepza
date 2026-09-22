@@ -10,6 +10,7 @@ import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
 import StudyShareSheet from './share/StudyShareSheet'
 import StudyActivityScreen from './StudyActivityScreen'
+import PdfStudyCanvas from './crypto/PdfStudyCanvas'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -238,6 +239,7 @@ async function sha256Hex(file: File): Promise<string> {
 
 type DocumentDetail = {
   id: number; title: string; original_filename: string; status: string
+  content_hash?: string | null
   file_type: string | null; file_size_bytes: number | null; page_count: number | null
   error_message: string | null; view_url: string | null
   materials: { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]; created_at: string | null
@@ -2218,9 +2220,6 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
   const [docLoadError, setDocLoadError] = useState('')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
-  const [playerOpportunities, setPlayerOpportunities] = useState<OpportunityPublic[]>([])
-  const [playerOppIndex, setPlayerOppIndex] = useState(0)
-
   useEffect(() => {
     if (activeDocumentId == null) return
     let cancelled = false
@@ -2228,7 +2227,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
     const cached = DOC_CACHE[activeDocumentId]
     if (cached) { setDoc(cached); setRenameVal(cached.title) }
     api<DocumentDetail>(`/documents/${activeDocumentId}`)
-      .then(d => {
+      .then(async d => {
         if (cancelled) return
         const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
         let localUrl: string | null = null
@@ -2284,20 +2283,6 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
   }, [])
-
-  useEffect(() => {
-    if (stage !== 'ready') return
-    let cancelled = false
-    api<{ opportunities: OpportunityPublic[] }>('/podcast-opportunities')
-      .then(res => {
-        if (!cancelled) {
-          setPlayerOpportunities(res.opportunities || [])
-          setPlayerOppIndex(0)
-        }
-      })
-      .catch(() => { if (!cancelled) setPlayerOpportunities([]) })
-    return () => { cancelled = true }
-  }, [stage])
 
   // Study-time heartbeat: only while actually reading the document
   // (tab === 'doc') and the browser tab is visible - backgrounding
@@ -3259,6 +3244,22 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   const [generationPercent, setGenerationPercent] = useState(0)
   const [generationStage, setGenerationStage] = useState('Preparing your podcast…')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
+  const [playerOpportunities, setPlayerOpportunities] = useState<OpportunityPublic[]>([])
+  const [playerOppIndex, setPlayerOppIndex] = useState(0)
+
+  useEffect(() => {
+    if (stage !== 'ready') return
+    let cancelled = false
+    api<{ opportunities: OpportunityPublic[] }>('/podcast-opportunities')
+      .then(res => {
+        if (!cancelled) {
+          setPlayerOpportunities(res.opportunities || [])
+          setPlayerOppIndex(0)
+        }
+      })
+      .catch(() => { if (!cancelled) setPlayerOpportunities([]) })
+    return () => { cancelled = true }
+  }, [stage])
 
   const positionKey = activeDocumentId == null ? '' : `prepza-podcast-position:${activeDocumentId}`
   const selectedPodcastMaterialId = (() => {
@@ -3634,6 +3635,8 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 }
 
 // ─── CHATS ────────────────────────────────────────────────────────────────────
+type Participant = { user_id: number; display_name: string }
+
 type ChatSummary = {
   id: number
   is_group: boolean
@@ -14304,7 +14307,10 @@ export default function App() {
 
   const setScreen = (s: Screen) => {
     if (s === screen) return
-    setScreenStack(stack => [...stack, s])
+    setScreenStack(stack => {
+      const ancestorIndex = stack.lastIndexOf(s)
+      return ancestorIndex >= 0 ? stack.slice(0, ancestorIndex + 1) : [...stack, s]
+    })
     window.history.pushState({ prepzaNav: true }, '')
   }
 
@@ -14357,7 +14363,7 @@ export default function App() {
   // over to PaymentScreen the same way activeDocumentId etc. are - these
   // are two separate mounted components, not steps of one component, so
   // the selection has to be lifted here rather than living in either screen.
-  const [selectedPlan, setSelectedPlan] = useState('semester')
+  const [selectedPlan, setSelectedPlan] = useState('plus')
   // Which user's profile is open in StudentProfileScreen / whose followers-
   // following list is open in FollowListScreen. activeProfileName is a
   // best-effort label carried over from wherever the navigation started
