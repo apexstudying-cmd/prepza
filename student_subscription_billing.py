@@ -459,6 +459,8 @@ def handle_recurring_charge(db, payload):
     starts_at, expires_at = compute_new_subscription_period(local["user_id"], local["plan"])
     payment.subscription_starts_at = starts_at
     payment.subscription_expires_at = expires_at
+    from app import _subscription_allowance_snapshot
+    payment.subscription_allowance_snapshot = _subscription_allowance_snapshot(payment.plan)
     fulfilled = helpers["mark_paid_and_fulfilled"](payment)
     if not fulfilled:
         # A successful Paystack charge without a valid local order snapshot
