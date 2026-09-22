@@ -2,6 +2,7 @@ from pathlib import Path
 import re
 
 APP = Path('frontend/src/App.tsx')
+MARKER = '// PREPZA_STUDY_NAVIGATION_POLISH_APPLIED'
 
 
 def replace_mind_map(text: str) -> str:
@@ -196,6 +197,9 @@ def persist_navigation_across_restarts(text: str) -> str:
 
 def main():
     text = APP.read_text(encoding='utf-8')
+    if MARKER in text:
+        print('study navigation polish already applied')
+        return
     text = replace_mind_map(text)
     text = harden_document_navigation(text)
     text = remove_document_opening_interstitials(text)
