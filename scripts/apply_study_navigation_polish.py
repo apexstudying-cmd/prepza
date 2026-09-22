@@ -205,6 +205,7 @@ def main():
     text = remove_document_opening_interstitials(text)
     text = harden_offline_startup(text)
     text = persist_navigation_across_restarts(text)
+    text = text.rstrip() + '\n' + MARKER + '\n'
     APP.write_text(text, encoding='utf-8')
     print('study navigation polish applied')
 
