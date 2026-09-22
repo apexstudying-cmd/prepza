@@ -775,6 +775,7 @@ def register_usage_billing(app, db):
             return jsonify({"plan": plan_code, "active_plans": [row["plan"] for row in active],
                             "price_kes": public_limits["price_kes"], "billing_period": "month",
                             "limits": public_limits, "usage": usage,
+                            "offline_access_expires_at": max(row["subscription_expires_at"] for row in active).isoformat() if public_limits["offline_study"] else None,
                             "period_start": active[0]["subscription_starts_at"].date().isoformat()})
 
         plan = get_plan(db, "free")
