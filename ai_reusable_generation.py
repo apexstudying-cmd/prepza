@@ -241,7 +241,6 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
-            quota_payment_id = quota_meta.get("entitlement_payment_id")
         quota_payment_id = quota_meta.get("entitlement_payment_id")
 
     base_parameters = dict(params)
@@ -287,7 +286,6 @@ def generate_document_material(*, material_type, document_content_id, triggering
                     db, triggering_user_id, quota_feature, quota_units,
                     period_start=quota_period,
                     entitlement_payment_id=quota_payment_id,
-                    entitlement_payment_id=quota_payment_id,
                 )
             except Exception:
                 db.session.rollback()
@@ -308,6 +306,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 )
             quota_reserved = True
             quota_period = quota_meta.get("period_start")
+            quota_payment_id = quota_meta.get("entitlement_payment_id")
         if variant_pool_feature:
             mark_generation_variant_ready(
                 db, triggering_user_id, base_fingerprint, variant, lookup.artifact_id
@@ -360,6 +359,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
+        quota_payment_id = quota_meta.get("entitlement_payment_id")
 
     job = None
     artifact_ready = False
@@ -444,6 +444,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                     quota_feature,
                     quota_units,
                     period_start=quota_period,
+                    entitlement_payment_id=quota_payment_id,
                 )
             except Exception:
                 db.session.rollback()
