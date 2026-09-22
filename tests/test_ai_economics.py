@@ -61,3 +61,13 @@ def test_plan_patch_accepts_feature_and_access_flags():
         "premium_library": True,
         "study_hub_uploads": True,
     }
+
+
+def test_offline_study_is_core_for_free():
+    assert PLAN_DEFAULTS["free"]["offline_study"] is True
+
+
+def test_admin_cannot_disable_offline_study():
+    cleaned, errors = validate_plan_patch({"offline_study": False})
+    assert cleaned == {}
+    assert errors["offline_study"] == "offline_study is always enabled for all students"
