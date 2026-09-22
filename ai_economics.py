@@ -586,6 +586,64 @@ def validate_plan_patch(payload):
     return cleaned, errors
 
 
+
+def sync_paystack_recurring_plan(plan_code, target_config):
+    """Make the provider's recurring plan match Prepza before local config commits.
+
+    Paid subscription prices are a cross-system invariant: the amount stored in
+    student_plan_config must equal the Paystack plan amount in KES and the plan
+    must remain monthly. Paystack documents that updating a plan can update
+    existing subscriptions; we deliberately set update_existing_subscriptions
+    to true so an existing subscriber is not left on a provider price that
+    disagrees with the local renewal validator.
+    """
+    import os
+    from app import paystack_request
+
+    if plan_code not in ("plus", "pro"):
+        return {"status": "not_required"}
+
+    env_key = "PAYSTACK_PLUS_PLAN_CODE" if plan_code == "plus" else "PAYSTACK_PRO_PLAN_CODE"
+    provider_plan_code = os.environ.get(env_key)
+    if not provider_plan_code:
+        raise RuntimeError(f"{env_key} is not configured; cannot safely change a paid plan")
+
+    expected_kes = int(target_config.get("price_kes") or 0)
+    if expected_kes <= 0:
+        raise ValueError("Paid subscription price must be greater than zero")
+
+    current_result = paystack_request("GET", f"/plan/{provider_plan_code}")
+    current = current_result.get("data") or {}
+    current_amount_kes = int(current.get("amount") or 0) // 100
+    current_currency = str(current.get("currency") or "").upper()
+    current_interval = str(current.get("interval") or "").lower()
+
+    if current_currency == "KES" and int(current.get("amount") or 0) == expected_kes * 100 and current_interval == "monthly":
+        return {
+            "status": "already_synchronized",
+            "plan_code": provider_plan_code,
+            "amount_kes": expected_kes,
+            "existing_subscriptions_updated": 0,
+        }
+
+    update_result = paystack_request("PUT", f"/plan/{provider_plan_code}", json={
+        "name": str(target_config.get("display_name") or plan_code.title()),
+        "amount": expected_kes * 100,
+        "interval": "monthly",
+        "currency": "KES",
+        "update_existing_subscriptions": True,
+    })
+    return {
+        "status": "synchronized",
+        "plan_code": provider_plan_code,
+        "previous_amount_kes": current_amount_kes,
+        "amount_kes": expected_kes,
+        "previous_currency": current_currency,
+        "previous_interval": current_interval,
+        "provider_message": update_result.get("message"),
+        "existing_subscriptions_updated": True,
+    }
+
 def _admin_allowed():
     from flask import session
     import os
@@ -621,8 +679,28 @@ def register_ai_economics(app, db):
             return jsonify({"error": "Invalid plan configuration", "fields": errors}), 400
         if not cleaned:
             return jsonify({"error": "No editable fields supplied"}), 400
-        if not get_plan(db, plan_code):
+        existing_plan = get_plan(db, plan_code)
+        if not existing_plan:
             return jsonify({"error": "Unknown plan"}), 404
+
+        # Paid plan edits must be synchronized with Paystack before the local
+        # price is committed. Otherwise a future renewal could be charged at
+        # a different provider amount and then be rejected by our webhook
+        # validator after the student has already been charged.
+        paystack_sync = {"status": "not_required"}
+        target_config = {**existing_plan, **cleaned}
+        if plan_code in ("plus", "pro"):
+            try:
+                paystack_sync = sync_paystack_recurring_plan(plan_code, target_config)
+            except Exception as exc:
+                db.session.rollback()
+                return jsonify({
+                    "error": "Paystack recurring plan could not be synchronized; local plan was not changed",
+                    "code": "paystack_plan_sync_failed",
+                    "detail": str(exc),
+                    "plan_code": plan_code,
+                }), 502
+
         cleaned["updated_by"] = session.get("user_id")
         assignments = ", ".join(f"{key} = :{key}" for key in cleaned)
         db.session.execute(text(f"""
@@ -630,16 +708,17 @@ def register_ai_economics(app, db):
             SET {assignments}, updated_at = CURRENT_TIMESTAMP
             WHERE plan_code = :plan_code
         """), {"plan_code": plan_code, **cleaned})
+        change_log = {"changes": cleaned, "paystack_sync": paystack_sync}
         db.session.execute(text("""
             INSERT INTO ai_economics_change_log (admin_user_id, plan_code, changes)
             VALUES (:admin_user_id, :plan_code, CAST(:changes AS jsonb))
         """), {
             "admin_user_id": int(session.get("user_id")),
             "plan_code": plan_code,
-            "changes": __import__("json").dumps(cleaned),
+            "changes": __import__("json").dumps(change_log),
         })
         db.session.commit()
-        return jsonify({"ok": True, "plan": get_plan(db, plan_code)})
+        return jsonify({"ok": True, "plan": get_plan(db, plan_code), "paystack_sync": paystack_sync})
 
     @app.get("/api/ai-economics/plan")
     def current_ai_economics_plan():
