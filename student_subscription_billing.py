@@ -203,7 +203,9 @@ def record_entitlement_usage(db, user_id, feature, units, payment_id=None, metad
 
 
 def _consumption_breakdown(db, payment_row):
-    plan = _plan(db, payment_row["plan"])
+    plan = payment_row.get("subscription_allowance_snapshot") if hasattr(payment_row, "get") else None
+    if not plan:
+        plan = _plan(db, payment_row["plan"])
     if not plan:
         return {"consumed_value_kes": 0, "features": {}}
 
