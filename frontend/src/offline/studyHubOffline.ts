@@ -183,6 +183,7 @@ async function assertOfflineEntitlement(): Promise<number> {
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
     throw new Error('Your offline-study entitlement is not currently active.')
   }
+  try { localStorage.setItem('prepza-offline-entitlement-expires-at', String(expiresAt)) } catch (_) {}
   return expiresAt
 }
 
