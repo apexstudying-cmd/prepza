@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from ai_economics import (
+from ai_economics import sync_paystack_recurring_plan, (
     ADA_UNIT_WEIGHTS,
     PLAN_DEFAULTS,
     calculate_ada_units,
