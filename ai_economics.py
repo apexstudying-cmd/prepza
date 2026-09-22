@@ -209,7 +209,8 @@ def reserve_ada_budget(db, user_id, plan_code, estimated_units):
     if not plan:
         return False, {"code": "unknown_plan"}
     estimated_units = max(1, int(estimated_units))
-    today = date.today()\n    entitlement_payment_id, month = get_usage_period(db, user_id, plan_code)
+    today = date.today()
+    entitlement_payment_id, month = get_usage_period(db, user_id, plan_code)
     db.session.execute(text("""
         INSERT INTO ada_usage_day (user_id, usage_date) VALUES (:uid, :day)
         ON CONFLICT (user_id, usage_date) DO NOTHING
@@ -253,7 +254,8 @@ def refund_ada_budget(db, user_id, units):
     units = max(0, int(units or 0))
     if not units:
         return
-    today, month = date.today(), _period_start()
+    today = date.today()
+    _payment_id, month = get_usage_period(db, user_id, "free")
     db.session.execute(text("""
         UPDATE ada_usage_day SET ada_units=GREATEST(0, ada_units-:units), updated_at=CURRENT_TIMESTAMP
         WHERE user_id=:uid AND usage_date=:day
@@ -268,7 +270,8 @@ def record_ada_usage(db, user_id, plan_code, model, provider, input_tokens, cach
                      cache_write_tokens, output_tokens, cost_usd=0, request_key=None, reserved_units=0):
     units = calculate_ada_units(input_tokens, cached_tokens, cache_write_tokens, output_tokens)
     delta = units - max(0, int(reserved_units or 0))
-    entitlement_payment_id, month = get_usage_period(db, user_id, plan_code)\n    today = date.today()
+    entitlement_payment_id, month = get_usage_period(db, user_id, plan_code)
+    today = date.today()
     db.session.execute(text("""
         INSERT INTO ada_request_usage (
             user_id, plan_code, model, provider, input_tokens, cached_tokens, cache_write_tokens,
