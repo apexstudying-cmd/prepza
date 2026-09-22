@@ -134,9 +134,11 @@ def patch_podcast(text, path):
 def patch_flashcards(text, path):
     if 'FlashcardsGenerationScreen' not in text or '// Offline flashcards restore' in text:
         return text
-    anchor = "  useEffect(() => {\n    if (activeDocumentId == null) return\n    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string }>(`/documents/${activeDocumentId}`), fetchPrepzaUsage()])"
-    if anchor not in text:
+    anchor_pattern = r"(?s)  useEffect\\(\\(\\) => \\{\\n    if \\(activeDocumentId == null\\) return\\n    Promise\\.all\\(\\[generationApi<\\{ csrf_token: string \\}>\\('/me'\\),.*?fetchPrepzaUsage\\(\\)\\]\\)"
+    match = re.search(anchor_pattern, text)
+    if not match:
         raise SystemExit(f'Offline generation: flashcard document effect anchor missing in {path.name}')
+    anchor = match.group(0)
     restore = """  // Offline flashcards restore
   useEffect(() => {
     if (navigator.onLine || activeDocumentId == null) return
@@ -157,10 +159,12 @@ def patch_flashcards(text, path):
 def patch_summary(text, path):
     if 'SummaryGenerationScreen' not in text or '// Offline summary restore' in text:
         return text
-    anchor = "  useEffect(() => {\n    if (activeDocumentId == null) return\n    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string }>(`/documents/${activeDocumentId}`)])"
-    positions = [m.start() for m in re.finditer(re.escape(anchor), text)]
-    if not positions:
+    anchor_pattern = r"(?s)  useEffect\\(\\(\\) => \\{\\n    if \\(activeDocumentId == null\\) return\\n    Promise\\.all\\(\\[generationApi<\\{ csrf_token: string \\}>\\('/me'\\),.*?fetchPrepzaUsage\\(\\)\\]\\)"
+    matches = list(re.finditer(anchor_pattern, text))
+    if not matches:
         raise SystemExit(f'Offline generation: summary document effect anchor missing in {path.name}')
+    match = matches[-1]
+    anchor = match.group(0)
     restore = """  // Offline summary restore
   useEffect(() => {
     if (navigator.onLine || activeDocumentId == null) return
