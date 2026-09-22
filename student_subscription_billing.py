@@ -564,9 +564,9 @@ def handle_refund_webhook(db, event, payload):
     db.session.commit()
 
     if event == "refund.processed":
-        # A processed provider refund is only a full local refund if its
-        # amount matches the approved refund amount. Keep unexpected/partial
-        # provider results visible for manual reconciliation.
+        # A provider-confirmed processed refund revokes the entitlement tied
+        # to that payment. Keep unexpected amount differences visible for
+        # manual reconciliation, but do not restore paid access.
         expected_amount = db.session.execute(text("""
             SELECT approved_amount
             FROM student_refund_request
@@ -598,11 +598,6 @@ def handle_refund_webhook(db, event, payload):
         # access only from those non-refunded payments. Thus:
         #   current payment refunded -> current access removed
         #   earlier payment still valid -> access falls back to that period
-        original_amount = db.session.execute(text("""
-            SELECT amount FROM payment WHERE id=:pid
-        """), {"pid": payment_id}).scalar_one()
-        approved_amount = int(expected_amount or 0)
-
         db.session.execute(text("""
             UPDATE payment
             SET status = 'refunded'
