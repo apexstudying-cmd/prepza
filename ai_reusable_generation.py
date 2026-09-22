@@ -195,6 +195,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
     quota_feature = material_type
     quota_units = 0
     quota_period = None
+    quota_payment_id = None
     from usage_billing import (
         FEATURES,
         check_and_consume_ai_quota,
@@ -240,6 +241,8 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
+            quota_payment_id = quota_meta.get("entitlement_payment_id")
+        quota_payment_id = quota_meta.get("entitlement_payment_id")
 
     base_parameters = dict(params)
     base_parameters.pop("variant", None)
@@ -283,6 +286,8 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 refund_ai_quota(
                     db, triggering_user_id, quota_feature, quota_units,
                     period_start=quota_period,
+                    entitlement_payment_id=quota_payment_id,
+                    entitlement_payment_id=quota_payment_id,
                 )
             except Exception:
                 db.session.rollback()
@@ -329,7 +334,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             if variant_pool_feature:
                 release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
             if quota_reserved:
-                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period)
+                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_payment_id=quota_payment_id)
             raise ai_service.AIProviderError("AI generation failed - please try again.")
         # A timeout is not a generation failure. The other worker may still
         # be running (the durable artifact lease is 15 minutes), so do NOT
