@@ -387,11 +387,20 @@ def record_ada_usage(db, user_id, plan_code, model, provider, input_tokens, cach
     delta = units - max(0, int(reserved_units or 0))
     active = get_active_entitlements(db, user_id)
 
-    if active and entitlement_payment_id:
-        payment_ids = [int(row["id"]) for row in active]
-        if int(entitlement_payment_id) not in payment_ids:
-            raise ValueError("Ada entitlement is no longer active")
-        month = active[0]["subscription_starts_at"].date()
+    if entitlement_payment_id:
+        # The reservation was made while this entitlement was active. Do not
+        # fail a successful provider call merely because the entitlement
+        # expires during the request; the reservation remains attributable to
+        # the payment that funded it.
+        payment_row = db.session.execute(text("""
+            SELECT id, plan, subscription_starts_at
+            FROM payment
+            WHERE id=:pid AND user_id=:uid AND payment_type='subscription'
+              AND status IN ('success','refunded')
+        """), {"pid": int(entitlement_payment_id), "uid": user_id}).mappings().first()
+        if not payment_row:
+            raise ValueError("Ada entitlement payment could not be reconciled")
+        month = payment_row["subscription_starts_at"].date() if payment_row["subscription_starts_at"] else _period_start()
         today = date.today()
         db.session.execute(text("""
             UPDATE ada_usage_day SET ada_units=GREATEST(0,ada_units+:delta),
