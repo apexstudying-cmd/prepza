@@ -24,6 +24,10 @@ def ensure_subscription_schema(db):
         ALTER TABLE payment
         ADD COLUMN IF NOT EXISTS subscription_starts_at TIMESTAMP NULL
     """))
+    db.session.execute(text("""
+        ALTER TABLE payment
+        ADD COLUMN IF NOT EXISTS subscription_allowance_snapshot JSONB NULL
+    """))
     # Backfill legacy successful subscription rows as independent
     # entitlement periods. Purchases may overlap; one payment must never
     # consume or extend another payment's entitlement period.
