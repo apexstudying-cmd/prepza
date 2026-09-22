@@ -326,7 +326,8 @@ def record_ada_usage(db, user_id, plan_code, model, provider, input_tokens, cach
 
 def get_ada_usage(db, user_id, plan_code):
     plan = get_plan(db, plan_code)
-    month, today = _period_start(), date.today()
+    entitlement_payment_id, month = get_usage_period(db, user_id, plan_code)
+    today = date.today()
     day = db.session.execute(text("""
         SELECT ada_units, requests FROM ada_usage_day WHERE user_id=:uid AND usage_date=:day
     """), {"uid":user_id,"day":today}).mappings().first()
