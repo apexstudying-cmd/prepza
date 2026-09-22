@@ -65,6 +65,12 @@ class _FakeResponse:
     usage: _FakeUsage = field(default_factory=_FakeUsage)
 
 
+class _FakeDocumentQuery:
+    def filter(self, *args, **kwargs): return self
+    def order_by(self, *args, **kwargs): return self
+    def first(self): return None
+
+
 class _FakeSession:
     def __init__(self, content):
         self.content = content
@@ -73,7 +79,10 @@ class _FakeSession:
         self.added = []
 
     def get(self, model, object_id):
-        return self.content if object_id == 7 or object_id == 8 else None
+        return self.content if object_id in (7, 8, 9, 10) else None
+
+    def query(self, *args, **kwargs):
+        return _FakeDocumentQuery()
 
     def add(self, value):
         self.added.append(value)
