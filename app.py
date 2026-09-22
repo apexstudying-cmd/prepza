@@ -2130,6 +2130,21 @@ def get_ai_plan_tier(user_id):
     return "premium" if status["is_active"] else "free"
 
 
+def _subscription_allowance_snapshot(plan):
+    row = db.session.execute(text("""
+        SELECT ada_monthly_units, ada_daily_units, podcast_minutes, summary_pages,
+               questions, mind_map_nodes, flashcards
+        FROM student_plan_config
+        WHERE plan_code=:plan AND is_active=TRUE
+    """), {"plan": plan}).mappings().first()
+    if not row:
+        return None
+    return {key: int(row[key] or 0) for key in (
+        "ada_monthly_units", "ada_daily_units", "podcast_minutes",
+        "summary_pages", "questions", "mind_map_nodes", "flashcards",
+    )}
+
+
 def compute_new_subscription_period(user_id, plan):
     """
     Return the independent 30-day/calendar-month entitlement period created
@@ -2242,6 +2257,7 @@ def sync_paystack_payment_status(reference):
                     )
                     payment.subscription_starts_at = starts_at
                     payment.subscription_expires_at = expires_at
+                    payment.subscription_allowance_snapshot = _subscription_allowance_snapshot(payment.plan)
 
             if payment.status == "success":
                 _maybe_award_referral_commission(payment)
