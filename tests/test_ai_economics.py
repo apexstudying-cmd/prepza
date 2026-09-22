@@ -85,8 +85,9 @@ def test_paystack_plan_sync_updates_provider_when_price_drifts(monkeypatch):
             return {"status": True, "data": {"amount": 49900, "currency": "KES", "interval": "monthly"}}
         return {"status": True, "message": "Plan updated. 2 subscription(s) affected"}
 
-    import app
-    monkeypatch.setattr(app, "paystack_request", fake_request)
+    import sys
+    from types import SimpleNamespace
+    monkeypatch.setitem(sys.modules, "app", SimpleNamespace(paystack_request=fake_request))
     result = sync_paystack_recurring_plan("plus", {"display_name": "Plus", "price_kes": 599})
     assert result["status"] == "synchronized"
     assert result["amount_kes"] == 599
