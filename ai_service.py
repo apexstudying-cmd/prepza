@@ -2330,7 +2330,7 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             max_tokens=max_tokens, prompt_cache_key=prompt_cache_key,
         )
     except Exception as e:
-        refund_ada_budget(db, triggering_user_id, plan_code, estimated_units)
+        refund_ada_budget(db, triggering_user_id, plan_code, estimated_units, entitlement_payment_id=reserve_info.get("entitlement_payment_id"))
         if isinstance(e, AIProviderError):
             raise
         raise AIProviderError(f"Tutor reply generation failed: {e}")
@@ -2345,6 +2345,7 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
         ai_usage.input_tokens, ai_usage.cache_read_tokens,
         ai_usage.cache_creation_tokens, ai_usage.output_tokens,
         cost_usd=ai_usage.cost_usd, reserved_units=estimated_units,
+        entitlement_payment_id=reserve_info.get("entitlement_payment_id"),
     )
 
     reply_text, concept_name, prerequisite_name = _parse_tutor_reply(raw_text)
