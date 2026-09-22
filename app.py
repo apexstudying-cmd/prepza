@@ -2130,22 +2130,24 @@ def get_ai_plan_tier(user_id):
 
 def compute_new_subscription_period(user_id, plan):
     """
-    Return (start, end) for the new paid period.
+    Return the independent 30-day/calendar-month entitlement period created
+    by THIS subscription payment.
 
-    If another paid period is active, the new period starts exactly when that
-    period ends. This prevents an early upgrade/renewal payment from silently
-    granting the new plan before its paid period begins.
+    Subscription purchases overlap. Example:
+      Plus paid Sep 10 -> Oct 10
+      Pro paid Sep 20 -> Oct 20
+
+    Pro therefore becomes the active plan immediately on Sep 20, while the
+    original Plus entitlement remains valid until Oct 10. From Sep 20-Oct 10
+    both purchased entitlements exist; after Oct 10 only Pro remains.
+
+    This is intentionally NOT Paystack's billing schedule. It is Prepza's
+    internal entitlement contract.
     """
     now = datetime.utcnow()
     if plan not in SUBSCRIPTION_PLAN_DURATIONS_MONTHS:
         return now, now
-    current = get_user_subscription_status(user_id)
-    start = now
-    if current["is_active"] and current["expires_at"]:
-        current_expiry = datetime.fromisoformat(current["expires_at"])
-        if current_expiry > start:
-            start = current_expiry
-    return start, _add_subscription_month(start)
+    return now, _add_subscription_month(now)
 
 
 def compute_new_subscription_expiry(user_id, plan):
@@ -2155,19 +2157,9 @@ def compute_new_subscription_expiry(user_id, plan):
 
 def recompute_subscription_expiries(user_id):
     """
-    Rebuilds subscription_expires_at for every remaining successful
-    subscription Payment a user has, replaying the same additive-stacking
-    logic compute_new_subscription_expiry() uses for a live purchase -
-    except here we're reconstructing history, not computing "now", so
-    each payment's own created_at (not utcnow()) is the stacking base.
-    Needed because admin_refund_payment() can refund an EARLIER payment
-    in a stack after LATER ones already had their expiry frozen assuming
-    the refunded days were real.
-
-    Call this AFTER flipping a subscription payment's status to
-    "refunded" (and before commit) so the remaining chain reflects the
-    correct history. No-op if the user has no remaining subscription
-    payments.
+    Rebuild each successful subscription payment as its own independent
+    entitlement period. Refunds must not extend or shorten another payment's
+    entitlement: overlapping purchases are separate periods.
     """
     remaining = (
         Payment.query.filter(
@@ -2175,20 +2167,16 @@ def recompute_subscription_expiries(user_id):
             Payment.payment_type == "subscription",
             Payment.status == "success",
         )
-        .order_by(Payment.created_at.asc())
+        .order_by(Payment.created_at.asc(), Payment.id.asc())
         .all()
     )
 
-    running_expiry = None
     for p in remaining:
         if p.plan not in SUBSCRIPTION_PLAN_DURATIONS_MONTHS:
             continue
         base = p.created_at or datetime.utcnow()
-        if running_expiry and running_expiry > base:
-            base = running_expiry
         p.subscription_starts_at = base
-        running_expiry = _add_subscription_month(base)
-        p.subscription_expires_at = running_expiry
+        p.subscription_expires_at = _add_subscription_month(base)
 
 
 def sync_paystack_payment_status(reference):
