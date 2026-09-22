@@ -2278,7 +2278,15 @@ def sync_paystack_payment_status(reference):
             if payment.payment_type in ("subscription", "content"):
                 fulfilled = _student_order_helpers["mark_paid_and_fulfilled"](payment)
                 if not fulfilled:
-                    payment.status = "failed"
+                    # Provider-successful money is never rewritten as a local
+                    # failure merely because fulfillment/reconciliation failed.
+                    # Keep the payment successful for accounting and refund/
+                    # chargeback handling; the order ledger records the
+                    # fulfillment failure separately.
+                    print(
+                        f"Payment {payment.id} succeeded at Paystack but "
+                        f"student-order fulfillment failed; manual reconciliation required"
+                    )
                 elif payment.payment_type == "subscription" and payment.plan:
                     starts_at, expires_at = compute_new_subscription_period(
                         payment.user_id, payment.plan
