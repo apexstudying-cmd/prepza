@@ -106,7 +106,14 @@ def get_plan(db, plan_code):
     row = db.session.execute(text("""
         SELECT * FROM student_plan_config WHERE plan_code = :plan_code AND is_active = TRUE
     """), {"plan_code": plan_code}).mappings().first()
-    return dict(row) if row else None
+    if not row:
+        return None
+    plan = dict(row)
+    # Offline study is a core product capability for every signed-in student,
+    # not a subscription feature. Keep it true even if an old database row or
+    # an attempted admin edit contains false.
+    plan["offline_study"] = True
+    return plan
 
 def get_user_plan_code(db, user_id):
     """Return only the plan whose paid entitlement period contains now."""
@@ -139,7 +146,12 @@ def get_plans(db):
         SELECT * FROM student_plan_config WHERE is_active = TRUE
         ORDER BY CASE plan_code WHEN 'free' THEN 1 WHEN 'plus' THEN 2 WHEN 'pro' THEN 3 ELSE 99 END
     """)).mappings().all()
-    return [dict(row) for row in rows]
+    plans = []
+    for row in rows:
+        plan = dict(row)
+        plan["offline_study"] = True
+        plans.append(plan)
+    return plans
 
 def _period_start():
     now = datetime.utcnow()
@@ -561,7 +573,9 @@ def validate_plan_patch(payload):
                 cleaned[key] = value
             except (TypeError, ValueError): errors[key] = "must be a non-negative integer"
         elif key in boolean_fields:
-            if not isinstance(value, bool): errors[key] = "must be boolean"
+            if key == "offline_study" and value is False:
+                errors[key] = "offline_study is always enabled for all students"
+            elif not isinstance(value, bool): errors[key] = "must be boolean"
             else: cleaned[key] = value
         elif key in string_fields:
             value = str(value).strip().lower()
