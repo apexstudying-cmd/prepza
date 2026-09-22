@@ -13,6 +13,7 @@ import StudyActivityScreen from './StudyActivityScreen'
 import PdfStudyCanvas from './crypto/PdfStudyCanvas'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
+// Launch verification: generated frontend architecture and theme contrast are validated in CI.
 // Dev: Vite proxies these paths straight to the Flask backend (see
 // vite.config.ts), so relative paths work identically in dev and once this
 // app is eventually served by Flask itself in production - no base URL
