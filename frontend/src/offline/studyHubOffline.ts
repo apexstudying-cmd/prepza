@@ -167,7 +167,7 @@ async function deleteMeta(key: string) {
   } catch (_) {}
 }
 
-async function assertOfflineEntitlement(): Promise<void> {
+async function assertOfflineEntitlement(): Promise<number> {
   const response = await fetch('/api/usage/me', { credentials: 'include', cache: 'no-store' })
   let payload: any = null
   try { payload = await response.json() } catch (_) {}
@@ -175,6 +175,11 @@ async function assertOfflineEntitlement(): Promise<void> {
   if (payload?.limits?.offline_study !== true) {
     throw new Error('Offline study is available on Plus and Pro plans.')
   }
+  const expiresAt = payload?.offline_access_expires_at ? Date.parse(String(payload.offline_access_expires_at)) : NaN
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    throw new Error('Your offline-study entitlement is not currently active.')
+  }
+  return expiresAt
 }
 
 function absoluteUrl(value: string): string { return new URL(value, window.location.origin).href }
@@ -206,7 +211,7 @@ async function findLocalDocumentByContentHash(userId: number, contentHash?: stri
 
 export async function saveUploadedFileOffline(documentId: number, file: Blob, metadata: { userId: number; title?: string; fileType?: string; pageCount?: number; contentHash?: string }): Promise<SavedStudyHubMeta> {
   if (!('indexedDB' in window)) throw new Error('Offline storage is unavailable in this browser.')
-  await assertOfflineEntitlement()
+  const entitlementExpiresAt = await assertOfflineEntitlement()
   const userId = Number(metadata.userId)
   if (!Number.isInteger(userId) || userId <= 0) throw new Error('Could not identify the signed-in student.')
   if (!(file instanceof Blob) || file.size <= 0) throw new Error('The uploaded study document is empty.')
@@ -243,6 +248,7 @@ export async function saveUploadedFileOffline(documentId: number, file: Blob, me
     contentHash: metadata.contentHash,
     savedAt: Date.now(),
     assetUrls: [],
+    entitlementExpiresAt,
   }
   await putMeta(meta)
   window.dispatchEvent(new CustomEvent('prepza:studyhub-offline-changed', { detail: meta }))
@@ -251,7 +257,7 @@ export async function saveUploadedFileOffline(documentId: number, file: Blob, me
 
 export async function saveStudyHubDocumentOffline(documentId: number): Promise<SavedStudyHubMeta> {
   if (!('indexedDB' in window)) throw new Error('Offline storage is unavailable in this browser.')
-  await assertOfflineEntitlement()
+  const entitlementExpiresAt = await assertOfflineEntitlement()
   const [meResponse, detailResponse] = await Promise.all([
     fetch('/me', { credentials: 'include', cache: 'no-store' }),
     fetch(`/documents/${documentId}`, { credentials: 'include', cache: 'no-store' }),
@@ -264,12 +270,6 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
   const usagePayload: any = await usageResponse.json().catch(() => null)
   if (!usageResponse.ok || usagePayload?.limits?.offline_study !== true) {
     throw new Error('Offline study is available on Plus and Pro plans.')
-  }
-  const entitlementExpiresAt = usagePayload?.offline_access_expires_at
-    ? Date.parse(String(usagePayload.offline_access_expires_at))
-    : NaN
-  if (!Number.isFinite(entitlementExpiresAt) || entitlementExpiresAt <= Date.now()) {
-    throw new Error('Your offline-study entitlement is not currently active.')
   }
   const userId = Number(me.id)
   if (!Number.isInteger(userId) || userId <= 0) throw new Error('Could not identify the signed-in student.')
@@ -291,6 +291,7 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
       contentHash,
       savedAt: Date.now(),
       assetUrls: existingLocal.meta.assetUrls || [],
+      entitlementExpiresAt,
     }
     await putMeta(meta)
     window.dispatchEvent(new CustomEvent('prepza:studyhub-offline-changed', { detail: meta }))
@@ -362,7 +363,7 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
       } catch (_) {}
     }))
 
-    const meta: SavedStudyHubMeta = { key: assetKey, userId, documentId, title: detail.title, fileType: detail.file_type, pageCount: Number(detail.page_count || 0) || undefined, contentHash, savedAt: Date.now(), assetUrls }
+    const meta: SavedStudyHubMeta = { key: assetKey, userId, documentId, title: detail.title, fileType: detail.file_type, pageCount: Number(detail.page_count || 0) || undefined, contentHash, savedAt: Date.now(), assetUrls, entitlementExpiresAt }
     await putMeta(meta)
     window.dispatchEvent(new CustomEvent('prepza:studyhub-offline-changed', { detail: meta }))
     return meta
