@@ -469,10 +469,11 @@ def handle_recurring_charge(db, payload):
     payment.subscription_allowance_snapshot = _subscription_allowance_snapshot(payment.plan)
     fulfilled = helpers["mark_paid_and_fulfilled"](payment)
     if not fulfilled:
-        # A successful Paystack charge without a valid local order snapshot
-        # must never grant entitlement. Leave the provider charge for manual
-        # reconciliation instead of pretending the renewal succeeded locally.
-        db.session.rollback()
+        # The provider charge is already successful. Do NOT roll it back locally:
+        # doing so would erase the money trail needed for reconciliation/refund
+        # handling. The order remains failed and the successful payment stays
+        # visible for manual recovery.
+        db.session.commit()
         return False
 
     _upsert_subscription(
