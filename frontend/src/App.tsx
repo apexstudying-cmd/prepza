@@ -41,7 +41,7 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
 
 type GenerationProgress = { progress_percent: number; progress_stage: string; status: string; found?: boolean; error_message?: string | null }
 
-function generationRequest<T = any>(
+async function generationRequest<T = any>(
   path: string,
   options: RequestInit = {},
   onProgress?: (progress: GenerationProgress) => void,
@@ -50,6 +50,7 @@ function generationRequest<T = any>(
     onProgress?.(progress)
     window.dispatchEvent(new CustomEvent('prepza:generation-progress', { detail: progress }))
   }
+  let selectedMaterialId: number | null = null
   const match = path.match(/^\/documents\/(\d+)\/(summarize|quiz|flashcards|mindmap|podcast-script)$/)
   const documentId = match?.[1]
   const feature = match?.[2] === 'podcast-script' ? 'podcast'
@@ -75,7 +76,6 @@ function generationRequest<T = any>(
 
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | null = null
-  let selectedMaterialId: number | null = null
   try {
     const raw = sessionStorage.getItem('prepza-open-material')
     if (raw) {
@@ -801,7 +801,7 @@ setDocument({
           </div>
         ) : readyMaterials.map((m, i) => {
           const meta = materialMeta[m.type.toLowerCase().replace(/-/g, '_')] || { label: m.type.replace(/_/g, ' '), icon: '•', screen: 'document-reader' as Screen }
-          const variantLabel = label(m.type, m.parameters)
+          const variantLabel = meta.label
           return <button key={m.id} onClick={() => openMaterial(m)} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, marginBottom: 9, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
             <div style={{ width: 42, height: 42, borderRadius: 12, background: `${N.navy}0D`, color: N.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900 }}>{meta.icon}</div>
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13, textTransform: 'capitalize' }}>{variantLabel}</div><div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>Ready to replay</div></div>
