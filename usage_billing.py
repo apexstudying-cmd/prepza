@@ -741,7 +741,43 @@ def register_usage_billing(app, db):
             return jsonify({"error": "Not logged in"}), 401
         from ai_economics import get_plan
         plan_code = _current_student_plan(db, user_id)
-        plan = get_plan(db, plan_code)
+        active = _active_student_entitlements(db, user_id)
+        if active:
+            plans = {row["plan"]: get_plan(db, row["plan"]) for row in active}
+            valid_plans = [plans[row["plan"]] for row in active if plans.get(row["plan"])]
+            if not valid_plans:
+                return jsonify({"error": "Student plan configuration is unavailable"}), 503
+            public_limits = {
+                "display_name": "+".join(row["plan"].title() for row in active),
+                "price_kes": sum(int(p["price_kes"]) for p in valid_plans),
+                "billing_period": "month",
+                "quota_period": "entitlement",
+                "podcast_minutes": sum(int(p["podcast_minutes"] or 0) for p in valid_plans),
+                "summary_pages": sum(int(p["summary_pages"] or 0) for p in valid_plans),
+                "questions": sum(int(p["questions"] or 0) for p in valid_plans),
+                "mind_map_nodes": sum(int(p["mind_map_nodes"] or 0) for p in valid_plans),
+                "flashcards": sum(int(p["flashcards"] or 0) for p in valid_plans),
+                "offline_study": any(bool(p["offline_study"]) for p in valid_plans),
+                "premium_library": any(bool(p["premium_library"]) for p in valid_plans),
+                "study_hub_uploads": any(bool(p["study_hub_uploads"]) for p in valid_plans),
+            }
+            units_map = {"summary":"summary_pages","podcast":"podcast_minutes","flashcards":"flashcards","quiz":"questions","mind_map":"mind_map_nodes"}
+            usage = {}
+            for feature in FEATURES:
+                row = _usage_row(db, user_id, feature)
+                limit = int(public_limits[units_map[feature]] or 0)
+                used = int(row["units"]) if row else 0
+                usage[feature] = {
+                    "requests": int(row["requests"]) if row else 0, "units": used,
+                    "remaining_units": max(0, limit - used), "unit_limit": limit,
+                    "max_units_per_generation": max(int(p[units_map[feature]] or 0) for p in valid_plans),
+                }
+            return jsonify({"plan": plan_code, "active_plans": [row["plan"] for row in active],
+                            "price_kes": public_limits["price_kes"], "billing_period": "month",
+                            "limits": public_limits, "usage": usage,
+                            "period_start": active[0]["subscription_starts_at"].date().isoformat()})
+
+        plan = get_plan(db, "free")
         if not plan:
             return jsonify({"error": "Student plan configuration is unavailable"}), 503
         public_limits = {
@@ -763,8 +799,8 @@ def register_usage_billing(app, db):
                 "remaining_units": max(0, limit - used), "unit_limit": limit,
                 "max_units_per_generation": limit,
             }
-        return jsonify({"plan": plan_code, "price_kes": int(plan["price_kes"]),
-                        "billing_period": plan["billing_period"], "limits": public_limits,
+        return jsonify({"plan": "free", "active_plans": [], "price_kes": 0,
+                        "billing_period": "month", "limits": public_limits,
                         "usage": usage, "period_start": _period_start(plan).isoformat()})
 
     @app.get("/api/student-plans")
