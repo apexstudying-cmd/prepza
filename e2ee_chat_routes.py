@@ -196,6 +196,14 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
         mode, expected_epoch = e2ee_state(conversation.id)
         if mode != "group_v1":
             return jsonify({"error": "Group E2EE is not enabled for this conversation"}), 409
+        locked_row = db.session.execute(
+            text("SELECT key_epoch FROM conversation WHERE id = :conversation_id AND e2ee_mode = 'group_v1' FOR UPDATE"),
+            {"conversation_id": conversation.id},
+        ).mappings().first()
+        locked_epoch = int(locked_row["key_epoch"]) if locked_row else None
+        if locked_epoch != expected_epoch:
+            db.session.rollback()
+            return jsonify({"error": "Key epoch changed; retry with the current epoch"}), 409
         provisioner = active_provisioner(conversation.id, expected_epoch)
         if provisioner is None or user_id != provisioner:
             return jsonify({"error": "Only the elected group key provisioner may publish the current epoch key", "provisioner_user_id": provisioner, "key_epoch": expected_epoch}), 403
@@ -238,7 +246,9 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             if len(nonce) > 256 or len(ciphertext) > 20000:
                 return jsonify({"error": "Encrypted envelope is too large"}), 400
             try:
-                decode_base64(nonce, "nonce", max_bytes=128)
+                nonce_bytes = decode_base64(nonce, "nonce", 12)
+                if len(nonce_bytes) != 12:
+                    raise ValueError("nonce must decode to exactly 12 bytes")
                 decode_base64(ciphertext, "ciphertext", max_bytes=15000)
             except ValueError as exc:
                 return jsonify({"error": str(exc)}), 400
