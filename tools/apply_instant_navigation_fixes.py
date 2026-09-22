@@ -13,8 +13,10 @@ text = text.replace("sessionStorage.setItem('prepza-navigation-state'", "localSt
 
 new_set_screen = """  const setScreen = (s: Screen) => {
     if (s === screen) return
-    if (screenStack.length > 1 && screenStack[screenStack.length - 2] === s) {
-      window.history.back()
+    const existingIndex = screenStack.lastIndexOf(s)
+    if (existingIndex >= 0 && existingIndex < screenStack.length - 1) {
+      const distance = screenStack.length - 1 - existingIndex
+      window.history.go(-distance)
       return
     }
     const parentScreens: Partial<Record<Screen, Screen>> = {
