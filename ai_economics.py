@@ -11,7 +11,7 @@ PLAN_DEFAULTS = {
         "display_name": "Free", "price_kes": 0, "billing_period": "month", "quota_period": "month",
         "ada_monthly_units": 500_000, "ada_daily_units": 20_000, "ada_max_output_tokens": 800,
         "podcast_minutes": 10, "summary_pages": 10, "questions": 20, "mind_map_nodes": 30, "flashcards": 100,
-        "offline_study": False, "premium_library": False, "study_hub_uploads": True,
+        "offline_study": True, "premium_library": False, "study_hub_uploads": True,
     },
     "plus": {
         "display_name": "Plus", "price_kes": 499, "billing_period": "month", "quota_period": "month",
