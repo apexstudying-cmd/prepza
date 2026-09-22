@@ -558,6 +558,11 @@ def handle_refund_webhook(db, event, payload):
         "provider_message": data.get("message") or data.get("failure_reason"),
         "payment_id": payment_id,
     })
+    # The webhook route does not own a transaction commit. Persist the
+    # provider-state transition immediately so pending/processing/failed
+    # refund events cannot disappear when the request ends.
+    db.session.commit()
+
     if event == "refund.processed":
         # A processed provider refund is only a full local refund if its
         # amount matches the approved refund amount. Keep unexpected/partial
@@ -582,8 +587,9 @@ def handle_refund_webhook(db, event, payload):
                     updated_at=CURRENT_TIMESTAMP
                 WHERE payment_id=:pid
             """), {"pid": payment_id})
-            db.session.commit()
-            return True
+            # Paystack has nevertheless confirmed that money was refunded.
+            # Entitlement must therefore be revoked; the amount discrepancy
+            # remains an admin reconciliation issue, not an access grant.
         # Any processed refund revokes the entitlement created by the
         # refunded payment. This is intentional: the customer no longer
         # retains the paid subscription purchased with refunded money.
@@ -611,6 +617,20 @@ def handle_refund_webhook(db, event, payload):
             WHERE payment_id=:pid AND status <> 'cancelled'
         """), {"pid": payment_id})
 
+        # If this payment earned an ambassador commission, void the
+        # commission when it has not yet been bundled into a payout. A refund
+        # must not leave an earned-but-unfunded referral commission payable.
+        from app import Referral
+        db.session.execute(text("""
+            UPDATE referral
+            SET voided_at=COALESCE(voided_at,CURRENT_TIMESTAMP),
+                void_reason=COALESCE(void_reason,'Qualifying payment refunded'),
+                updated_at=CURRENT_TIMESTAMP
+            WHERE first_payment_id=:pid
+              AND payout_id IS NULL
+              AND voided_at IS NULL
+        """), {"pid": payment_id})
+
         # Full or partial refund: rebuild paid subscription expiry from
         # remaining non-refunded subscription payments. A partial refund
         # therefore also removes the entitlement tied to this purchase.
@@ -621,6 +641,7 @@ def handle_refund_webhook(db, event, payload):
         if payment_type_user and payment_type_user["payment_type"] == "subscription":
             recompute_subscription_expiries(payment_type_user["user_id"])
 
+        db.session.commit()
         return True
 
     if not code:
