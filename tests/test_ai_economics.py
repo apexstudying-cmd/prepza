@@ -1,6 +1,7 @@
 from decimal import Decimal
 
-from ai_economics import sync_paystack_recurring_plan, (
+from ai_economics import (
+    sync_paystack_recurring_plan,
     ADA_UNIT_WEIGHTS,
     PLAN_DEFAULTS,
     calculate_ada_units,
@@ -71,3 +72,49 @@ def test_admin_cannot_disable_offline_study():
     cleaned, errors = validate_plan_patch({"offline_study": False})
     assert cleaned == {}
     assert errors["offline_study"] == "offline_study is always enabled for all students"
+
+
+
+def test_paystack_plan_sync_updates_provider_when_price_drifts(monkeypatch):
+    calls = []
+    monkeypatch.setenv("PAYSTACK_PLUS_PLAN_CODE", "PLN_plus")
+
+    def fake_request(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        if method == "GET":
+            return {"status": True, "data": {"amount": 49900, "currency": "KES", "interval": "monthly"}}
+        return {"status": True, "message": "Plan updated. 2 subscription(s) affected"}
+
+    import app
+    monkeypatch.setattr(app, "paystack_request", fake_request)
+    result = sync_paystack_recurring_plan("plus", {"display_name": "Plus", "price_kes": 599})
+    assert result["status"] == "synchronized"
+    assert result["amount_kes"] == 599
+    assert calls[1][0] == "PUT"
+    assert calls[1][1] == "/plan/PLN_plus"
+    assert calls[1][2]["json"]["amount"] == 59900
+    assert calls[1][2]["json"]["currency"] == "KES"
+    assert calls[1][2]["json"]["interval"] == "monthly"
+    assert calls[1][2]["json"]["update_existing_subscriptions"] is True
+
+
+def test_paystack_plan_sync_does_not_write_when_already_matching(monkeypatch):
+    calls = []
+    monkeypatch.setenv("PAYSTACK_PRO_PLAN_CODE", "PLN_pro")
+
+    def fake_request(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return {"status": True, "data": {"amount": 99900, "currency": "KES", "interval": "monthly"}}
+
+    import app
+    monkeypatch.setattr(app, "paystack_request", fake_request)
+    result = sync_paystack_recurring_plan("pro", {"display_name": "Pro", "price_kes": 999})
+    assert result["status"] == "already_synchronized"
+    assert len(calls) == 1
+
+
+def test_paystack_plan_sync_requires_plan_code(monkeypatch):
+    monkeypatch.delenv("PAYSTACK_PLUS_PLAN_CODE", raising=False)
+    import pytest
+    with pytest.raises(RuntimeError, match="PAYSTACK_PLUS_PLAN_CODE"):
+        sync_paystack_recurring_plan("plus", {"price_kes": 599})
