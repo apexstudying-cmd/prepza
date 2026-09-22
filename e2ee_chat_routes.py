@@ -253,6 +253,9 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             except ValueError as exc:
                 return jsonify({"error": str(exc)}), 400
             accepted.append(ConversationKeyEnvelope(conversation_id=conversation.id, recipient_user_id=recipient_id, sender_user_id=sender_id, key_epoch=epoch, version=version, nonce=nonce, ciphertext=ciphertext))
+        if seen_recipient_ids != active_member_ids:
+            db.session.rollback()
+            return jsonify({"error": "A complete current-epoch key envelope is required for every active group member"}), 409
 
         try:
             ConversationKeyEnvelope.query.filter_by(conversation_id=conversation.id, key_epoch=expected_epoch).delete(synchronize_session=False)
