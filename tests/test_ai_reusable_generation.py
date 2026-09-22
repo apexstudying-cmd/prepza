@@ -70,6 +70,17 @@ class _FakeDocumentQuery:
     def order_by(self, *args, **kwargs): return self
     def first(self): return None
 
+class _FakeDocumentModel:
+    # Minimal SQLAlchemy-like column surface used by the production query.
+    class _Column:
+        def __eq__(self, other): return self
+        def is_(self, other): return self
+    user_id = _Column()
+    document_content_id = _Column()
+    is_removed = _Column()
+    id = _Column()
+    title = _Column()
+
 
 class _FakeSession:
     def __init__(self, content):
@@ -103,7 +114,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     content = types.SimpleNamespace(content_hash="hash-7", extracted_text="course notes", page_count=3)
     session = _FakeSession(content)
     fake_db = types.SimpleNamespace(session=session)
-    fake_app = types.SimpleNamespace(db=fake_db, DocumentContent=object, Document=object, AiJob=_FakeAiJob)
+    fake_app = types.SimpleNamespace(db=fake_db, DocumentContent=object, Document=_FakeDocumentModel, AiJob=_FakeAiJob)
 
     class FakeProviderError(Exception):
         pass
