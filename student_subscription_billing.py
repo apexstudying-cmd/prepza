@@ -544,6 +544,31 @@ def handle_refund_webhook(db, event, payload):
         "payment_id": payment_id,
     })
     if event == "refund.processed":
+        # A processed provider refund is only a full local refund if its
+        # amount matches the approved refund amount. Keep unexpected/partial
+        # provider results visible for manual reconciliation.
+        expected_amount = db.session.execute(text("""
+            SELECT approved_amount
+            FROM student_refund_request
+            WHERE payment_id=:pid
+        """), {"pid": payment_id}).scalar_one_or_none()
+        provider_amount = data.get("amount")
+        amount_mismatch = False
+        if expected_amount is not None and provider_amount is not None:
+            try:
+                amount_mismatch = int(provider_amount) != int(expected_amount) * 100
+            except (TypeError, ValueError):
+                amount_mismatch = True
+        if amount_mismatch:
+            db.session.execute(text("""
+                UPDATE student_refund_request
+                SET status='needs_attention',
+                    provider_message=COALESCE(provider_message,'Processed refund amount did not match the approved amount'),
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE payment_id=:pid
+            """), {"pid": payment_id})
+            db.session.commit()
+            return True
         db.session.execute(text("""
             UPDATE payment SET status='refunded' WHERE id=:pid
         """), {"pid": payment_id})
