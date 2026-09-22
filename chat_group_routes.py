@@ -107,6 +107,8 @@ def add_chat_group_members(conversation_id):
         {"conversation_id": conversation_id},
     ).scalar_one_or_none()
     if mode == "group_v1":
+        # The E2EE membership mapper rotates once per transaction.
+        # Do not also bump the epoch here; the mapper owns the rotation.
         keyed_ids = {
             row[0]
             for row in db.session.execute(
