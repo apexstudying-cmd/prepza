@@ -513,15 +513,41 @@ def release_generation_variant(db, user_id, base_fingerprint, variant):
     db.session.commit()
 
 
-def refund_ai_quota(db, user_id, feature, units, period_start=None):
+def refund_ai_quota(db, user_id, feature, units, period_start=None, entitlement_payment_id=None):
     if feature not in FEATURES:
         return
     try:
         units = max(1, int(units))
     except (TypeError, ValueError):
         return
+
+    if entitlement_payment_id:
+        # Paid reservations live directly on the entitlement ledger. Remove
+        # exactly the provisional reservation that was created for this
+        # entitlement rather than decrementing a shared calendar wallet.
+        db.session.execute(text("""
+            DELETE FROM student_entitlement_usage
+            WHERE id = (
+                SELECT seu.id
+                FROM student_entitlement_usage seu
+                WHERE seu.user_id=:uid
+                  AND seu.payment_id=:payment_id
+                  AND seu.feature=:feature
+                  AND seu.units=:units
+                  AND COALESCE(seu.metadata->>'provisional','false')='true'
+                ORDER BY seu.id DESC
+                LIMIT 1
+            )
+        """), {
+            "uid": user_id, "payment_id": int(entitlement_payment_id),
+            "feature": feature, "units": units,
+        })
+        db.session.commit()
+        return
+
+    # Free users continue to use the legacy calendar-month wallet.
     from ai_economics import get_plan
-    plan = get_plan(db, _current_student_plan(db, user_id))
+    plan = get_plan(db, "free")
     if not plan:
         return
     period = period_start or _period_start(plan)
@@ -531,24 +557,8 @@ def refund_ai_quota(db, user_id, feature, units, period_start=None):
             updated_at=CURRENT_TIMESTAMP
         WHERE user_id=:uid AND period_start=:period AND feature=:feature
     """), {"uid":user_id,"period":period,"feature":feature,"units":units})
-    # A failed generation must not make the refund ledger say the student
-    # consumed an entitlement. Remove the most recent matching provisional
-    # reservation for this feature/payment.
-    db.session.execute(text("""
-        DELETE FROM student_entitlement_usage
-        WHERE id = (
-            SELECT seu.id
-            FROM student_entitlement_usage seu
-            WHERE seu.user_id=:uid
-              AND seu.feature=:feature
-              AND seu.units=:units
-              AND seu.payment_id IS NOT NULL
-              AND COALESCE(seu.metadata->>'provisional','false')='true'
-            ORDER BY seu.id DESC
-            LIMIT 1
-        )
-    """), {"uid":user_id,"feature":feature,"units":units})
     db.session.commit()
+
 
 def _active_user_ids(db, since_date):
     rows = db.session.execute(text("""
