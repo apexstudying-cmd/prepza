@@ -107,8 +107,9 @@ def test_paystack_plan_sync_does_not_write_when_already_matching(monkeypatch):
         calls.append((method, path, kwargs))
         return {"status": True, "data": {"amount": 99900, "currency": "KES", "interval": "monthly"}}
 
-    import app
-    monkeypatch.setattr(app, "paystack_request", fake_request)
+    import sys
+    from types import SimpleNamespace
+    monkeypatch.setitem(sys.modules, "app", SimpleNamespace(paystack_request=fake_request))
     result = sync_paystack_recurring_plan("pro", {"display_name": "Pro", "price_kes": 999})
     assert result["status"] == "already_synchronized"
     assert len(calls) == 1
