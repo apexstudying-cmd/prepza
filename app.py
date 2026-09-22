@@ -2262,7 +2262,11 @@ def sync_paystack_payment_status(reference):
                 f"expected {payment.amount * 100} KES kobo, "
                 f"got {paid_amount_kobo} {paid_currency or 'UNKNOWN'}"
             )
-            payment.status = "failed"
+            # Paystack has confirmed a successful charge, so preserve the
+            # successful money record even when the checkout snapshot does not
+            # match the provider amount/currency. Fulfillment remains blocked
+            # and the order is marked failed for reconciliation.
+            payment.status = "success"
             _student_order_helpers["mark_failed"](payment.id)
         else:
             payment.status = "success"
