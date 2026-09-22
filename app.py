@@ -2445,39 +2445,40 @@ def has_access(user_id, content_item):
     if get_price_for_type(content_item.content_type) == 0:
         return True
 
-    successful_payment = Payment.query.filter_by(
-        user_id=user_id,
-        content_item_id=content_item.id,
-        status="success",
-    ).first()
-    if not successful_payment:
-        return False
-
-    # New purchases are entitled through the durable student-order ledger.
-    # The payment alone proves money was recorded; the fulfilled order proves
-    # the exact requested item was fulfilled for this student. Legacy
-    # successful content payments created before the order ledger existed are
-    # retained as a compatibility fallback only when no order row exists.
+    # Access is granted from the durable fulfilled-order ledger, not from
+    # whichever successful payment happens to be returned first. This matters
+    # when a student has multiple purchases for the same item and one older
+    # payment was reconciled/failed while a later purchase was fulfilled.
+    # Requiring the linked payment to still be successful also prevents a
+    # refunded purchase from retaining access.
     order_row = db.session.execute(
         text("""
-            SELECT status, user_id, item_id, payment_id, order_type, quantity
-            FROM student_order
-            WHERE payment_id = :payment_id
+            SELECT so.status, so.user_id, so.item_id, so.payment_id,
+                   so.order_type, so.quantity
+            FROM student_order so
+            JOIN payment p ON p.id = so.payment_id
+            WHERE so.user_id = :user_id
+              AND so.item_id = :item_id
+              AND so.order_type = 'content'
+              AND so.status = 'fulfilled'
+              AND so.quantity = 1
+              AND p.user_id = so.user_id
+              AND p.content_item_id = so.item_id
+              AND p.payment_type = 'content'
+              AND p.status = 'success'
+            ORDER BY so.fulfilled_at DESC NULLS LAST, so.id DESC
             LIMIT 1
         """),
-        {"payment_id": successful_payment.id},
+        {"user_id": user_id, "item_id": content_item.id},
     ).mappings().first()
 
-    if not order_row:
-        # New entitlement flow: a successful payment without a durable order
-        # is an invariant failure, not a reason to grant access.
-        return False
-
+    # New entitlement flow: a successful payment without a durable fulfilled
+    # order is never enough to grant access.
     return bool(
-        order_row["status"] == "fulfilled"
+        order_row
+        and order_row["status"] == "fulfilled"
         and order_row["user_id"] == user_id
         and order_row["item_id"] == content_item.id
-        and order_row["payment_id"] == successful_payment.id
         and order_row["order_type"] == "content"
         and int(order_row["quantity"] or 0) == 1
     )
