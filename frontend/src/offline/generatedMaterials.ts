@@ -58,7 +58,10 @@ export function getOfflineUserId(): string | null {
 
 /** Remove the remembered offline account after the server confirms that the session is no longer authenticated. */
 export function clearOfflineUserId(): void {
-  try { localStorage.removeItem(USER_KEY) } catch {}
+  try {
+    localStorage.removeItem(USER_KEY)
+    localStorage.removeItem('prepza-offline-entitlement-expires-at')
+  } catch {}
 }
 
 function supported(path: string) {
