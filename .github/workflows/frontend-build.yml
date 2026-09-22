@@ -1,4 +1,5 @@
 name: Frontend Build
+# Launch gate: prebuild transforms must pass before TypeScript/build verification.
 
 on:
   push:
