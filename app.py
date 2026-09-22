@@ -276,6 +276,8 @@ class Payment(db.Model):
     plan = db.Column(db.String(20), nullable=True)  # 'plus' | 'pro' - subscription only
     subscription_starts_at = db.Column(db.DateTime, nullable=True)  # subscription entitlement period start
     subscription_expires_at = db.Column(db.DateTime, nullable=True)  # subscription only
+    # Immutable feature allowance snapshot for refund/accounting calculations.
+    subscription_allowance_snapshot = db.Column(db.JSON, nullable=True)
     # Organisation promotion billing. Nullable so existing student/content/subscription
     # payments remain unchanged.
     organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id"), nullable=True)
