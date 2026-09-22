@@ -55,7 +55,7 @@ function QuotaNotice({ usage, feature, unit }: { usage: PrepzaUsage | null; feat
   const remaining = Number(usage?.usage?.[feature]?.remaining_units ?? 0)
   if (!usage || remaining > 0) return null
   const planName = usage.plan === 'free' ? 'Free' : usage.plan === 'plus' ? 'Plus' : 'Pro'
-  return <div style={{ margin: '10px 0 14px', padding: 12, borderRadius: 14, background: 'rgba(201,76,76,0.08)', border: '1px solid rgba(201,76,76,0.22)', color: T.text, fontSize: 11, lineHeight: 1.5 }}>
+  return <div style={{ margin: '10px 0 14px', padding: 12, borderRadius: 14, background: 'rgba(201,76,76,0.08)', border: '1px solid rgba(201,76,76,0.22)', color: '#172033', fontSize: 11, lineHeight: 1.5 }}>
     <strong>Allowance used</strong><br />
     You have no {unit} remaining on your {planName} plan for this period. Upgrade your plan to continue generating.
   </div>
