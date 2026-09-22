@@ -13971,7 +13971,7 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
     if (!isOwner || billingBusy) return
     setBillingBusy(code)
     try {
-      const res = await api<{ status: string; amount_kes: number }>(`/api/organisations/${orgId}/plan/checkout`, {
+      const res = await api<{ status: string; amount_kes: number; redirect_url: string }>(`/api/organisations/${orgId}/plan/checkout`, {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
         body: JSON.stringify({ plan: code }),
