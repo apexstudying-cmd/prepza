@@ -584,24 +584,40 @@ def handle_refund_webhook(db, event, payload):
             """), {"pid": payment_id})
             db.session.commit()
             return True
-        db.session.execute(text("""
-            UPDATE payment SET status='refunded' WHERE id=:pid
-        """), {"pid": payment_id})
-        db.session.execute(text("""
-            UPDATE student_order
-            SET status='refunded', refunded_at=COALESCE(refunded_at,CURRENT_TIMESTAMP),
-                updated_at=CURRENT_TIMESTAMP
-            WHERE payment_id=:pid AND status <> 'cancelled'
-        """), {"pid": payment_id})
-        # If this was an earlier stacked subscription payment, rebuild the
-        # remaining paid periods so the refunded month cannot keep extending
-        # access after the money has been returned.
-        from app import recompute_subscription_expiries
-        payment_type_user = db.session.execute(text("""
-            SELECT payment_type,user_id FROM payment WHERE id=:pid
-        """), {"pid": payment_id}).mappings().first()
-        if payment_type_user and payment_type_user["payment_type"] == "subscription":
-            recompute_subscription_expiries(payment_type_user["user_id"])
+        # A processed partial refund must NOT revoke the whole purchase or
+        # entitlement. Standard refunds can legitimately be less than the
+        # original payment after consumed-value/retention deductions.
+        original_amount = db.session.execute(text("""
+            SELECT amount FROM payment WHERE id=:pid
+        """), {"pid": payment_id}).scalar_one()
+        approved_amount = int(expected_amount or 0)
+        if approved_amount == int(original_amount):
+            db.session.execute(text("""
+                UPDATE payment SET status='refunded' WHERE id=:pid
+            """), {"pid": payment_id})
+            db.session.execute(text("""
+                UPDATE student_order
+                SET status='refunded', refunded_at=COALESCE(refunded_at,CURRENT_TIMESTAMP),
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE payment_id=:pid AND status <> 'cancelled'
+            """), {"pid": payment_id})
+            # Only a full refund removes the entitlement period. A partial
+            # refund leaves the paid entitlement intact because the customer
+            # has not received a full return of the purchase price.
+            from app import recompute_subscription_expiries
+            payment_type_user = db.session.execute(text("""
+                SELECT payment_type,user_id FROM payment WHERE id=:pid
+            """), {"pid": payment_id}).mappings().first()
+            if payment_type_user and payment_type_user["payment_type"] == "subscription":
+                recompute_subscription_expiries(payment_type_user["user_id"])
+        else:
+            db.session.execute(text("""
+                UPDATE student_refund_request
+                SET provider_message=COALESCE(provider_message,
+                    'Partial refund processed; original entitlement remains active.'),
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE payment_id=:pid
+            """), {"pid": payment_id})
     db.session.commit()
     return True
 
