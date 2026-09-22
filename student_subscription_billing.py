@@ -433,6 +433,11 @@ def handle_recurring_charge(db, payload):
         return False
 
     from app import Payment
+    # The reference is the provider's transaction identity. Two webhook
+    # deliveries can race: both may observe no row before one commits.
+    # Flush inside a narrow IntegrityError guard so the losing delivery
+    # becomes an idempotent no-op instead of returning a webhook 500.
+    from sqlalchemy.exc import IntegrityError
     payment = Payment(
         user_id=local["user_id"], content_item_id=None, amount=amount_kes,
         provider="paystack", reference=reference,
@@ -440,7 +445,17 @@ def handle_recurring_charge(db, payload):
         payment_type="subscription", plan=local["plan"], status="success",
     )
     db.session.add(payment)
-    db.session.flush()
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        duplicate = db.session.execute(
+            text("SELECT id FROM payment WHERE reference=:reference LIMIT 1"),
+            {"reference": reference},
+        ).scalar_one_or_none()
+        if duplicate:
+            return True
+        raise
 
     helpers = db.app.extensions["prepza_student_orders"] if hasattr(db, "app") else None
     if helpers is None:
