@@ -15,10 +15,48 @@
 }
 
 :root {
+  --prepza-page-bg: #FFFFFF;
+  --prepza-surface: #FFFFFF;
+  --prepza-text: #0B1437;
+  --prepza-muted: #5B6475;
+  --prepza-border: #E2E5EA;
+  --prepza-input-bg: #FFFFFF;
+  --prepza-placeholder: #6B7280;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
+}
+
+html[data-prepza-theme="dark"] {
+  --prepza-page-bg: #0B1020;
+  --prepza-surface: #141A2B;
+  --prepza-text: #F5F7FB;
+  --prepza-muted: #C1C8D6;
+  --prepza-border: #30384B;
+  --prepza-input-bg: #1A2133;
+  --prepza-placeholder: #A8B0C0;
+  color-scheme: dark;
+}
+
+html[data-prepza-theme="dark"] body,
+html[data-prepza-theme="dark"] #root {
+  background: var(--prepza-page-bg) !important;
+  color: var(--prepza-text);
+}
+
+html[data-prepza-theme="dark"] input,
+html[data-prepza-theme="dark"] textarea,
+html[data-prepza-theme="dark"] select {
+  background-color: var(--prepza-input-bg);
+  color: var(--prepza-text);
+  border-color: var(--prepza-border);
+}
+
+html[data-prepza-theme="dark"] input::placeholder,
+html[data-prepza-theme="dark"] textarea::placeholder {
+  color: var(--prepza-placeholder);
+  opacity: 1;
 }
 
 * {
@@ -35,7 +73,7 @@ html {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  background: #0B1437;
+  background: var(--prepza-page-bg);
 }
 
 html, body {
@@ -51,7 +89,8 @@ body {
   min-width: 0;
   min-height: 0;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  background: #0B1437;
+  background: var(--prepza-page-bg);
+  color: var(--prepza-text);
 }
 
 /* The app is a full-viewport PWA, but the viewport is owned by the device,
