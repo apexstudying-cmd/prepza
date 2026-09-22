@@ -222,11 +222,16 @@ def generate_document_material(*, material_type, document_content_id, triggering
             # The resolved size becomes part of the fingerprint, so changing
             # the admin limit creates a new generation family rather than
             # silently reusing an artifact built for the old size.
-            plan_code = get_user_plan_code(db, triggering_user_id)
-            plan = get_plan(db, plan_code)
-            if not plan:
-                raise ai_service.AIRateLimitExceededError("Student plan configuration is unavailable.")
-            quota_units = int(plan[unit_keys[material_type]] or 0)
+            from usage_billing import _active_student_entitlements
+            active_entitlements = _active_student_entitlements(db, triggering_user_id)
+            if active_entitlements:
+                plans = [get_plan(db, row["plan"]) for row in active_entitlements]
+                plans = [plan for plan in plans if plan]
+                quota_units = max((int(plan[unit_keys[material_type]] or 0) for plan in plans), default=0)
+            else:
+                plan_code = get_user_plan_code(db, triggering_user_id)
+                plan = get_plan(db, plan_code)
+                quota_units = int(plan[unit_keys[material_type]] or 0) if plan else 0
             if quota_units <= 0:
                 raise ai_service.AIRateLimitExceededError(
                     f"{material_type.replace('_', ' ').title()} generation is unavailable on this plan."
