@@ -14,6 +14,8 @@ export type PrepzaUsage = {
   }
   usage: Record<string, { requests: number; units: number; remaining_units?: number; unit_limit?: number; max_units_per_generation?: number }>
   period_start: string
+  active_plans?: Array<'plus' | 'pro'>
+  offline_access_expires_at?: string | null
 }
 
 export async function fetchPrepzaUsage(): Promise<PrepzaUsage> {
@@ -38,9 +40,10 @@ export function canGenerate(
   } as const
   const limit = Number(usage.limits[limitKey[feature]] || 0)
   const current = usage.usage[feature] || { requests: 0, units: 0, remaining_units: limit }
-  // The plan allowance is a monthly spendable wallet. The same feature limit
-  // also caps one generation. Reused artifacts still consume this wallet.
-  return units <= limit && units <= Number(current.remaining_units ?? Math.max(0, limit - Number(current.units || 0)))
+  const maxPerGeneration = Number(current.max_units_per_generation ?? limit)
+  // Overlapping paid entitlements stack their monthly wallet, while a single
+  // generation cannot exceed the largest individual entitlement's generation size.
+  return units <= maxPerGeneration && units <= Number(current.remaining_units ?? Math.max(0, limit - Number(current.units || 0)))
 }
 
 export function remainingUnits(usage: PrepzaUsage | null, feature: 'summary' | 'podcast' | 'flashcards' | 'quiz' | 'mind_map') {
