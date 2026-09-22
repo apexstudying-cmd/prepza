@@ -18,6 +18,7 @@ type SavedStudyHubMeta = {
   contentHash?: string
   savedAt: number
   assetUrls: string[]
+  entitlementExpiresAt?: number
 }
 
 type StoredStudyAsset = {
@@ -223,6 +224,7 @@ export async function saveUploadedFileOffline(documentId: number, file: Blob, me
       contentHash: metadata.contentHash,
       savedAt: Date.now(),
       assetUrls: existingLocal.meta.assetUrls || [],
+      entitlementExpiresAt,
     }
     await putMeta(meta)
     window.dispatchEvent(new CustomEvent('prepza:studyhub-offline-changed', { detail: meta }))
@@ -258,6 +260,17 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
 
   const me: { id: number } = await meResponse.json()
   const detail: any = await detailResponse.json()
+  const usageResponse = await fetch('/api/usage/me', { credentials: 'include', cache: 'no-store' })
+  const usagePayload: any = await usageResponse.json().catch(() => null)
+  if (!usageResponse.ok || usagePayload?.limits?.offline_study !== true) {
+    throw new Error('Offline study is available on Plus and Pro plans.')
+  }
+  const entitlementExpiresAt = usagePayload?.offline_access_expires_at
+    ? Date.parse(String(usagePayload.offline_access_expires_at))
+    : NaN
+  if (!Number.isFinite(entitlementExpiresAt) || entitlementExpiresAt <= Date.now()) {
+    throw new Error('Your offline-study entitlement is not currently active.')
+  }
   const userId = Number(me.id)
   if (!Number.isInteger(userId) || userId <= 0) throw new Error('Could not identify the signed-in student.')
   setOfflineUserId(userId)
