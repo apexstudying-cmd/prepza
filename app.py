@@ -4784,7 +4784,7 @@ def mindmap_document(document_id):
         return jsonify({"error": "Document not found"}), 404
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate a mind map from"}), 400
-        if document.user_id != user_id:
+    if document.user_id != user_id:
         shared = _published_ready_material_for_viewer(user_id, document, "mind_map", _ai_generation_parameters_from_request())
         if not shared:
             return jsonify({"error": "Published mindmap has not been generated yet"}), 404
