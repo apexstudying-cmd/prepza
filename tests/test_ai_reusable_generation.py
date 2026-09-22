@@ -75,6 +75,7 @@ class _FakeDocumentModel:
     class _Column:
         def __eq__(self, other): return self
         def is_(self, other): return self
+        def desc(self): return self
     user_id = _Column()
     document_content_id = _Column()
     is_removed = _Column()
@@ -196,7 +197,7 @@ def test_reused_ready_artifact_still_consumes_student_allowance(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-8", extracted_text="notes", page_count=1)
     session = _FakeSession(content)
     fake_app = types.SimpleNamespace(
-        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=_FakeDocumentModel, AiJob=_FakeAiJob
     )
 
     class FakeProviderError(Exception):
@@ -252,7 +253,7 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-flash", extracted_text="course notes", page_count=4)
     session = _FakeSession(content)
     fake_app = types.SimpleNamespace(
-        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=_FakeDocumentModel, AiJob=_FakeAiJob
     )
 
     class FakeProviderError(Exception):
@@ -344,7 +345,7 @@ def test_internal_artifact_claim_failure_refunds_quota_and_releases_variant(monk
     content = types.SimpleNamespace(content_hash="hash-claim-failure", extracted_text="notes", page_count=2)
     session = _FakeSession(content)
     fake_app = types.SimpleNamespace(
-        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=_FakeDocumentModel, AiJob=_FakeAiJob
     )
 
     class FakeRateError(Exception):
@@ -396,7 +397,7 @@ def test_wait_timeout_does_not_refund_live_generation(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-timeout", extracted_text="notes", page_count=2)
     session = _FakeSession(content)
     fake_app = types.SimpleNamespace(
-        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=_FakeDocumentModel, AiJob=_FakeAiJob
     )
     refunds, releases = [], []
     fake_usage = types.SimpleNamespace(
