@@ -117,6 +117,11 @@ def test_paystack_plan_sync_does_not_write_when_already_matching(monkeypatch):
 
 def test_paystack_plan_sync_requires_plan_code(monkeypatch):
     monkeypatch.delenv("PAYSTACK_PLUS_PLAN_CODE", raising=False)
+    import sys
+    from types import SimpleNamespace
+    # The production helper imports paystack_request lazily. Supply only that
+    # dependency so this unit test remains provider-free.
+    monkeypatch.setitem(sys.modules, "app", SimpleNamespace(paystack_request=lambda *args, **kwargs: None))
     import pytest
     with pytest.raises(RuntimeError, match="PAYSTACK_PLUS_PLAN_CODE"):
         sync_paystack_recurring_plan("plus", {"price_kes": 599})
