@@ -166,6 +166,16 @@ async function deleteMeta(key: string) {
   } catch (_) {}
 }
 
+async function assertOfflineEntitlement(): Promise<void> {
+  const response = await fetch('/api/usage/me', { credentials: 'include', cache: 'no-store' })
+  let payload: any = null
+  try { payload = await response.json() } catch (_) {}
+  if (!response.ok) throw new Error(payload?.error || 'Could not verify offline-study access.')
+  if (payload?.limits?.offline_study !== true) {
+    throw new Error('Offline study is available on Plus and Pro plans.')
+  }
+}
+
 function absoluteUrl(value: string): string { return new URL(value, window.location.origin).href }
 
 async function cacheResponse(cache: Cache, url: string, response: Response): Promise<boolean> {
@@ -195,6 +205,7 @@ async function findLocalDocumentByContentHash(userId: number, contentHash?: stri
 
 export async function saveUploadedFileOffline(documentId: number, file: Blob, metadata: { userId: number; title?: string; fileType?: string; pageCount?: number; contentHash?: string }): Promise<SavedStudyHubMeta> {
   if (!('indexedDB' in window)) throw new Error('Offline storage is unavailable in this browser.')
+  await assertOfflineEntitlement()
   const userId = Number(metadata.userId)
   if (!Number.isInteger(userId) || userId <= 0) throw new Error('Could not identify the signed-in student.')
   if (!(file instanceof Blob) || file.size <= 0) throw new Error('The uploaded study document is empty.')
@@ -238,6 +249,7 @@ export async function saveUploadedFileOffline(documentId: number, file: Blob, me
 
 export async function saveStudyHubDocumentOffline(documentId: number): Promise<SavedStudyHubMeta> {
   if (!('indexedDB' in window)) throw new Error('Offline storage is unavailable in this browser.')
+  await assertOfflineEntitlement()
   const [meResponse, detailResponse] = await Promise.all([
     fetch('/me', { credentials: 'include', cache: 'no-store' }),
     fetch(`/documents/${documentId}`, { credentials: 'include', cache: 'no-store' }),
