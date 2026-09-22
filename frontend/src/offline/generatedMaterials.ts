@@ -123,7 +123,8 @@ async function readMatching(path: string, requestBody: unknown): Promise<StoredM
 }
 
 export async function getLatestGeneratedMaterialForPath(path: string): Promise<any | null> {
-  if (!offlineAccessAllowed() && typeof navigator !== 'undefined' && !navigator.onLine) return null\n  if (!supported(path)) return null
+  if (!offlineAccessAllowed() && typeof navigator !== 'undefined' && !navigator.onLine) return null
+  if (!supported(path)) return null
   try {
     const userId = localStorage.getItem(USER_KEY) || 'unknown'
     const rows = (await readAll()).filter(row => row.path === path && row.key.startsWith(`${userId}:`))
@@ -137,6 +138,7 @@ export async function getGeneratedMaterialOffline(path: string, requestBody: unk
 }
 
 export async function listGeneratedMaterialsOffline(path: string, requestBody: unknown): Promise<Array<{ payload: unknown; savedAt: number }>> {
+  if (!offlineAccessAllowed() && typeof navigator !== 'undefined' && !navigator.onLine) return []
   try { return (await readMatching(path, requestBody)).map(row => ({ payload: row.payload, savedAt: row.savedAt })) } catch (_) { return [] }
 }
 
