@@ -350,7 +350,7 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
 
     unit_key = {"summary":"summary_pages","podcast":"podcast_minutes","flashcards":"flashcards",
                 "quiz":"questions","mind_map":"mind_map_nodes"}[feature]
-    plans = {row["plan_code"]: get_plan(db, row["plan_code"]) for row in active}
+    plans = {row["plan"]: get_plan(db, row["plan"]) for row in active}
     limits = [int(plans[row["plan"]][unit_key] or 0) for row in active if plans.get(row["plan"])]
     max_per_generation = max(limits, default=0)
     total_limit = sum(limits)
