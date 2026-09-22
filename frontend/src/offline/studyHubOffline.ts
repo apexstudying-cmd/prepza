@@ -172,19 +172,16 @@ async function deleteMeta(key: string) {
 }
 
 async function assertOfflineEntitlement(): Promise<number> {
+  // Offline study is available to every signed-in student; it is not a paid
+  // entitlement and must not expire when a subscription ends.
   const response = await fetch('/api/usage/me', { credentials: 'include', cache: 'no-store' })
   let payload: any = null
   try { payload = await response.json() } catch (_) {}
   if (!response.ok) throw new Error(payload?.error || 'Could not verify offline-study access.')
   if (payload?.limits?.offline_study !== true) {
-    throw new Error('Offline study is available on Plus and Pro plans.')
+    throw new Error('Offline study is currently unavailable.')
   }
-  const expiresAt = payload?.offline_access_expires_at ? Date.parse(String(payload.offline_access_expires_at)) : NaN
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-    throw new Error('Your offline-study entitlement is not currently active.')
-  }
-  try { localStorage.setItem('prepza-offline-entitlement-expires-at', String(expiresAt)) } catch (_) {}
-  return expiresAt
+  return 0
 }
 
 function absoluteUrl(value: string): string { return new URL(value, window.location.origin).href }
@@ -274,7 +271,7 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
   const usageResponse = await fetch('/api/usage/me', { credentials: 'include', cache: 'no-store' })
   const usagePayload: any = await usageResponse.json().catch(() => null)
   if (!usageResponse.ok || usagePayload?.limits?.offline_study !== true) {
-    throw new Error('Offline study is available on Plus and Pro plans.')
+    throw new Error('Offline study is currently unavailable.')
   }
   const userId = Number(me.id)
   if (!Number.isInteger(userId) || userId <= 0) throw new Error('Could not identify the signed-in student.')
