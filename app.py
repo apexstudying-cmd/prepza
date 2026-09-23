@@ -1364,6 +1364,15 @@ class GroupPost(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_removed = db.Column(db.Boolean, nullable=False, default=False)
 
+class GroupPostReaction(db.Model):
+    __tablename__ = "group_post_reaction"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    post_id = db.Column(db.Integer, db.ForeignKey("group_post.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    reaction = db.Column(db.String(16), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("post_id", "user_id", name="uq_group_post_reaction_user"),)
+
 
 class GroupPostComment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
