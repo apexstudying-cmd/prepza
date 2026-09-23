@@ -4,7 +4,8 @@ import json
 from flask import jsonify, session
 from sqlalchemy import text
 
-def register_b2b_campaign_finance(app, db):
+def _register_b2b_campaign_finance_schema(db):
+
     if db.engine.dialect.name == "sqlite":
         return
     db.session.execute(text("""
@@ -92,9 +93,17 @@ def register_b2b_campaign_finance(app, db):
     db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_b2b_audit_campaign_created ON b2b_audit_log (campaign_id, created_at DESC)"))
     db.session.commit()
 
+
+def register_b2b_campaign_finance(app, db):
+    with app.app_context():
+        _register_b2b_campaign_finance_schema(db)
+
     def is_admin():
         uid = session.get("user_id")
-        return bool(uid and (session.get("is_admin") is True or session.get("role") in ("admin", "superadmin")))
+        if not uid:
+            return False
+        row = db.session.execute(text('SELECT is_admin FROM "user" WHERE id=:uid'), {"uid": uid}).scalar()
+        return bool(row)
 
     @app.get("/api/admin/b2b/pricing")
     def admin_b2b_pricing():
