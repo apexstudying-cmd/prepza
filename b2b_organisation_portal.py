@@ -216,6 +216,53 @@ def register_b2b_organisation_portal(app, db):
         db.session.commit()
         return jsonify({"ok":True,"status":"pending","file_name":file.filename[:255]}),201
 
+    def admin_user():
+        uid=session.get("user_id")
+        return bool(uid and (session.get("is_admin") is True or session.get("role") in ("admin","superadmin")))
+
+    @app.get("/api/admin/b2b/kyc")
+    def admin_kyc():
+        if not admin_user(): return jsonify({"error":"Admin access required"}),403
+        rows=db.session.execute(text("SELECT id,organisation_id,document_type,file_name,status,admin_notes,created_at,reviewed_at,reviewed_by FROM organisation_kyc_document ORDER BY created_at DESC LIMIT 500")).mappings().all()
+        return jsonify({"documents":[dict(x) for x in rows]})
+
+    @app.patch("/api/admin/b2b/kyc/<int:doc_id>")
+    def admin_update_kyc(doc_id):
+        if not admin_user(): return jsonify({"error":"Admin access required"}),403
+        data=request.get_json(silent=True) or {}; status=str(data.get("status") or "").lower()
+        if status not in ("approved","rejected","pending"): return jsonify({"error":"Invalid KYC status"}),400
+        notes=str(data.get("admin_notes") or "").strip()[:2000]
+        uid=session.get("user_id")
+        db.session.execute(text("UPDATE organisation_kyc_document SET status=:s,admin_notes=:n,reviewed_at=CASE WHEN :s='pending' THEN NULL ELSE CURRENT_TIMESTAMP END,reviewed_by=CASE WHEN :s='pending' THEN NULL ELSE :u END WHERE id=:i"),{"s":status,"n":notes or None,"u":uid,"i":doc_id})
+        db.session.commit(); return jsonify({"ok":True,"status":status})
+
+    @app.get("/api/admin/b2b/invoices")
+    def admin_invoices():
+        if not admin_user(): return jsonify({"error":"Admin access required"}),403
+        rows=db.session.execute(text("SELECT id,organisation_id,campaign_id,invoice_number,subtotal_minor,processing_fee_minor,total_minor,status,payment_method,due_at,paid_at,created_at FROM b2b_invoice ORDER BY created_at DESC LIMIT 500")).mappings().all()
+        return jsonify({"invoices":[dict(x) for x in rows]})
+
+    @app.post("/api/admin/b2b/invoices/<int:invoice_id>/mark-paid")
+    def admin_mark_invoice_paid(invoice_id):
+        if not admin_user(): return jsonify({"error":"Admin access required"}),403
+        if not csrf(): return jsonify({"error":"Valid CSRF token required"}),403
+        inv=db.session.execute(text("SELECT * FROM b2b_invoice WHERE id=:i FOR UPDATE"),{"i":invoice_id}).mappings().first()
+        if not inv:return jsonify({"error":"Invoice not found"}),404
+        if inv["status"]=="paid":return jsonify({"ok":True,"duplicate":True})
+        ref="invoice-"+str(inv["invoice_number"])
+        existing=db.session.execute(text("SELECT id FROM b2b_payment WHERE provider_reference=:r"),{"r":ref}).scalar_one_or_none()
+        if existing:
+            db.session.execute(text("UPDATE b2b_invoice SET status='paid',paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP) WHERE id=:i"),{"i":invoice_id});db.session.commit()
+            return jsonify({"ok":True,"duplicate":True})
+        pid=db.session.execute(text("""INSERT INTO b2b_payment(organisation_id,campaign_id,provider,provider_reference,currency,customer_amount_minor,campaign_amount_minor,processing_fee_minor,status,purpose,paid_at)
+          VALUES(:o,:c,'invoice',:r,'KES',:total,:subtotal,0,'paid','sponsored_campaign',CURRENT_TIMESTAMP) RETURNING id"""),{"o":inv["organisation_id"],"c":inv["campaign_id"],"r":ref,"total":inv["total_minor"],"subtotal":inv["subtotal_minor"]}).scalar_one()
+        fid=db.session.execute(text("INSERT INTO b2b_campaign_funding(campaign_id,payment_id,amount_minor,status) VALUES(:c,:p,:a,'credited') RETURNING id"),{"c":inv["campaign_id"],"p":pid,"a":inv["subtotal_minor"]}).scalar_one()
+        db.session.execute(text("""INSERT INTO b2b_campaign_ledger(campaign_id,entry_type,signed_amount_minor,currency,idempotency_key,payment_id,funding_id,actor_user_id,description)
+          VALUES(:c,'funding',:a,'KES',:k,:p,:f,:u,'Bank/invoice campaign funding') ON CONFLICT (idempotency_key) DO NOTHING"""),{"c":inv["campaign_id"],"a":inv["subtotal_minor"],"k":"funding:"+ref,"p":pid,"f":fid,"u":session.get("user_id")})
+        db.session.execute(text("UPDATE discovery_campaign SET funding_status='funded',funded_amount_minor=funded_amount_minor+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:c"),{"c":inv["campaign_id"],"a":inv["subtotal_minor"]})
+        db.session.execute(text("UPDATE b2b_invoice SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE id=:i"),{"i":invoice_id})
+        db.session.commit(); return jsonify({"ok":True,"payment_id":int(pid)})
+    
     @app.get("/api/organisations/<int:oid>/kyc")
     def kyc_list(oid):
         uid=session.get("user_id")
