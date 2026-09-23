@@ -94,7 +94,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     content = types.SimpleNamespace(content_hash="hash-7", extracted_text="course notes", page_count=3)
     session = _FakeSession(content)
     fake_db = types.SimpleNamespace(session=session)
-    fake_app = types.SimpleNamespace(db=fake_db, DocumentContent=object, AiJob=_FakeAiJob)
+    fake_app = types.SimpleNamespace(db=fake_db, DocumentContent=object, AiJob=_FakeAiJob, Document=object)
 
     class FakeProviderError(Exception):
         pass
