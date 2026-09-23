@@ -3634,6 +3634,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
   // only surfaced via Explore. Fetched here too so the Groups tab shows
   // both: the study groups you've joined AND any ad-hoc group chats.
   const [myGroups, setMyGroups] = useState<GroupSummary[]>(CHATS_CACHE.myGroups ?? [])
+  const [friendStreaks, setFriendStreaks] = useState<any[]>([])
 
   // Requests tab: follow requests + message requests (Instagram-style
   // pending DMs from non-followers). Fetched lazily the first time the
@@ -3669,6 +3670,9 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
     api<{ groups: GroupSummary[] }>('/groups/mine')
       .then(res => { setMyGroups(res.groups); CHATS_CACHE.myGroups = res.groups })
       .catch(() => {})
+    api<{ streaks: any[] }>('/study-friend-streaks')
+      .then(res => setFriendStreaks(Array.isArray(res.streaks) ? res.streaks.filter(s => s.status === 'active') : []))
+      .catch(() => setFriendStreaks([]))
   }, [])
 
   useEffect(() => {
@@ -3864,8 +3868,8 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
                           <div style={{ position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: N.navy, fontWeight: 800 }}>G</div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{g.name}</span>
-                          <div style={{ fontSize: 12, color: T.textMuted }} className="line-clamp-1">{g.member_count} member{g.member_count === 1 ? '' : 's'}{g.unit_code ? ` · ${g.unit_code}` : ''}</div>
+                          <div style={{ display:'flex',alignItems:'center',gap:7 }}><span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{g.name}</span>{g.mode === 'broadcast' && <span style={{fontSize:9,fontWeight:800,color:T.textMuted}}>CHANNEL</span>}</div>
+                          <div style={{ fontSize: 12, color: T.textMuted }} className="line-clamp-1">{g.member_count} member{g.member_count === 1 ? '' : 's'}{g.unit_code ? ` · ${g.unit_code}` : ''}{g.mode === 'broadcast' ? ' · admin posts' : ''}</div>
                         </div>
                         <div style={{ color: T.textMuted }}>{Ic.chevR('w-4 h-4')}</div>
                       </div>
@@ -3886,7 +3890,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 3 }}>
-                              <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.name}</span>
+                              <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.name}</span>{friendStreaks.some(s => Number(s.conversation_id) === Number(chat.id)) && <span aria-label="Active study streak" title="Active study streak" style={{fontSize:13,marginLeft:5}}>🔥</span>}
                               <span style={{ fontSize: 10.5, color: unread ? N.gold : T.textMuted, fontWeight: unread ? 700 : 500, flexShrink: 0 }}>{chatListTime(chat.last_message_at)}</span>
                             </div>
                             <div style={{ display:'flex',alignItems:'center',gap:4,fontSize:12,color:unread?T.text:T.textMuted,fontWeight:unread?650:500 }} className="line-clamp-1">
