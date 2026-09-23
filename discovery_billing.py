@@ -98,6 +98,33 @@ def register_discovery(app, db):
             UNIQUE (campaign_id, user_id)
         )
     """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS student_opportunity_discovery (
+            user_id INTEGER PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
+            discoverable BOOLEAN NOT NULL DEFAULT FALSE,
+            consent_version VARCHAR(40) NOT NULL DEFAULT 'g5-v1',
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS student_opportunity_discovery_audit (
+            id BIGSERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+            discoverable BOOLEAN NOT NULL,
+            consent_version VARCHAR(40) NOT NULL,
+            source VARCHAR(40) NOT NULL DEFAULT 'settings',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    db.session.execute(text("""
+        CREATE INDEX IF NOT EXISTS ix_student_opportunity_discovery_audit_user_created
+        ON student_opportunity_discovery (user_id, updated_at)
+    """))
+    db.session.execute(text("""
+        CREATE INDEX IF NOT EXISTS ix_student_opportunity_discovery_audit_log_user_created
+        ON student_opportunity_discovery_audit (user_id, created_at)
+    """))
+
     db.session.commit()
 
     def csrf_ok():
