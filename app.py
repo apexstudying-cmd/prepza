@@ -3169,13 +3169,24 @@ def delete_account():
     # to another existing member/admin; never leave a non-null FK pointing at
     # the deleted account.
     admin_user = User.query.filter(User.id != user_id, User.is_admin.is_(True)).order_by(User.id).first()
+    ownership_requires_transfer = (
+        Conversation.query.filter_by(created_by=user_id).first() is not None
+        or Group.query.filter_by(created_by=user_id).first() is not None
+        or Organisation.query.filter_by(created_by=user_id).first() is not None
+        or Opportunity.query.filter_by(created_by=user_id).first() is not None
+        or Announcement.query.filter_by(sent_by=user_id).first() is not None
+        or UserWarning.query.filter_by(issued_by=user_id).first() is not None
+    )
+    if ownership_requires_transfer and not admin_user:
+        db.session.rollback()
+        return jsonify({"error": "Account deletion is temporarily unavailable because this account owns platform records and no administrator account is available to preserve them safely."}), 409
 
     for conversation in Conversation.query.filter_by(created_by=user_id).all():
         replacement = (ConversationParticipant.query
                        .filter(ConversationParticipant.conversation_id == conversation.id,
                                ConversationParticipant.user_id != user_id)
                        .order_by(ConversationParticipant.id).first())
-        conversation.created_by = replacement.user_id if replacement else (admin_user.id if admin_user else user_id)
+        conversation.created_by = replacement.user_id if replacement else admin_user.id
 
     for group in Group.query.filter_by(created_by=user_id).all():
         replacement = (GroupMember.query
@@ -3287,6 +3298,18 @@ def delete_account():
     db.session.commit()
     session.pop("user_id", None)
     return jsonify({"message": "Account deleted successfully"})
+
+
+@app.route("/support/contact", methods=["GET"])
+def public_support_contact():
+    settings = {s.key: s.value for s in SystemSetting.query.filter(
+        SystemSetting.key.in_(["support_email", "support_phone", "support_message"])
+    ).all()}
+    return jsonify({
+        "email": settings.get("support_email", ""),
+        "phone": settings.get("support_phone", ""),
+        "message": settings.get("support_message", "Need help? Contact the Prepza support team."),
+    })
 
 
 @app.route("/profile", methods=["PATCH"])
@@ -12342,6 +12365,20 @@ def admin_update_settings():
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    for key, max_len in (("support_email", 160), ("support_phone", 40), ("support_message", 500)):
+        if key in data:
+            value = data[key]
+            if not isinstance(value, str):
+                return jsonify({"error": f"{key} must be a string"}), 400
+            value = value.strip()
+            if len(value) > max_len:
+                return jsonify({"error": f"{key} is too long"}), 400
+            setting = SystemSetting.query.filter_by(key=key).first()
+            if not setting:
+                setting = SystemSetting(key=key, value="")
+                db.session.add(setting)
+            setting.value = value
 
     if "maintenance_mode" in data:
         value = data["maintenance_mode"]
