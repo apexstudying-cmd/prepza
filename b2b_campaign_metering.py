@@ -66,11 +66,13 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             return {"ok": False, "reason": "unsupported_currency"}
 
         existing = db.session.execute(text("""
-            SELECT id, amount_kes FROM discovery_event
+            SELECT id, amount_kes, metadata FROM discovery_event
             WHERE event_key=:key
         """), {"key": event_key}).mappings().first()
         if existing:
-            return {"ok": True, "duplicate": True, "amount_minor": int(existing["amount_kes"] or 0) * 100}
+            metadata = existing["metadata"] if isinstance(existing["metadata"], dict) else {}
+            amount_minor = int(metadata.get("amount_minor") or round(Decimal(str(existing["amount_kes"] or 0)) * 100))
+            return {"ok": True, "duplicate": True, "amount_minor": amount_minor}
 
         # Serialize events for the same student so a rolling frequency cap
         # cannot be bypassed by two simultaneous requests.
