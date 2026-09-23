@@ -5379,7 +5379,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </Section>
 
         <Section title="Subscription">
-          <Row label="Subscription & Plan" sub="Free plan — Tap to upgrade" right={<Pill text="Upgrade" color={N.gold} />} onPress={() => setScreen('subscription')} />
+          <Row label="Subscription & Plan" sub="Manage your current plan and AI allowances" right={<Pill text="Manage" color={N.gold} />} onPress={() => setScreen('subscription')} />
           <Row label="Payment History" onPress={() => setScreen('payment-history')} />
         </Section>
 
@@ -5390,7 +5390,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </Section>
 
         <Section title="About">
-          <Row label="About Prepza" sub="v1.0.0 · Kenyatta University Launch" onPress={() => setShowModal('about')} />
+          <Row label="About Prepza" sub="Study smarter together" onPress={() => setShowModal('about')} />
           <Row label="Terms of Service" onPress={() => setShowModal('terms')} />
           <Row label="Privacy Policy" onPress={() => setShowModal('privacy-policy')} />
         </Section>
