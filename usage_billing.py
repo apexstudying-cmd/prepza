@@ -637,12 +637,49 @@ def register_usage_billing(app, db):
         plan_code=get_user_plan_code(db,user_id)
         plan=get_plan(db,plan_code) or get_plan(db,"free")
         active=get_active_entitlements(db,user_id)
+        feature_keys={"summary":"summary_pages","podcast":"podcast_minutes","flashcards":"flashcards","quiz":"questions","mind_map":"mind_map_nodes"}
+        usage={}
+        if active:
+            limits_by_payment={}
+            for ent in active:
+                cfg=get_plan(db,ent["plan"]) or {}
+                limits_by_payment[int(ent["id"])]={
+                    feature:int(cfg.get(key) or 0) for feature,key in feature_keys.items()
+                }
+            rows=db.session.execute(text("""
+                SELECT payment_id,feature,COALESCE(SUM(units),0) AS units
+                FROM student_entitlement_usage
+                WHERE user_id=:uid AND payment_id IS NOT NULL
+                GROUP BY payment_id,feature
+            """),{"uid":user_id}).mappings().all()
+            used={(int(row["payment_id"]),row["feature"]):int(row["units"] or 0) for row in rows}
+            for feature in feature_keys:
+                total=sum(v[feature] for v in limits_by_payment.values())
+                spent=sum(used.get((pid,feature),0) for pid in limits_by_payment)
+                largest=max((v[feature] for v in limits_by_payment.values()),default=0)
+                usage[feature]={"requests":0,"units":spent,"remaining_units":max(0,total-spent),
+                                "unit_limit":total,"max_units_per_generation":largest}
+        else:
+            period=date.today().replace(day=1)
+            rows=db.session.execute(text("""
+                SELECT feature,units,requests FROM student_ai_usage
+                WHERE user_id=:uid AND period_start=:period
+            """),{"uid":user_id,"period":period}).mappings().all()
+            free_usage={row["feature"]:row for row in rows}
+            for feature,key in feature_keys.items():
+                limit=int(plan.get(key) or 0)
+                row=free_usage.get(feature)
+                spent=int(row["units"] or 0) if row else 0
+                usage[feature]={"requests":int(row["requests"] or 0) if row else 0,
+                                "units":spent,"remaining_units":max(0,limit-spent),
+                                "unit_limit":limit,"max_units_per_generation":limit}
         return jsonify({
             "plan":plan_code,"price_kes":int(plan["price_kes"]),
             "billing_period":plan["billing_period"] if plan_code!="free" else None,
             "limits":{k:int(plan[k]) for k in ("podcast_minutes","summary_pages","questions","mind_map_nodes","flashcards","ada_monthly_units","ada_daily_units","ada_max_output_tokens")},
-            "offline_study":True,"premium_library":bool(plan["premium_library"]),
+            "usage":usage,"offline_study":True,"premium_library":bool(plan["premium_library"]),
             "study_hub_uploads":bool(plan["study_hub_uploads"]),
+            "active_plans":[x["plan"] for x in active],
             "active_entitlements":[{"payment_id":int(x["id"]),"plan":x["plan"],
                 "starts_at":x["subscription_starts_at"].isoformat(),"expires_at":x["subscription_expires_at"].isoformat()} for x in active],
             "period_start":date.today().replace(day=1).isoformat()
