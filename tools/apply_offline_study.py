@@ -130,3 +130,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# Idempotent transformer: current PDF canvas may already provide offline tracking.
