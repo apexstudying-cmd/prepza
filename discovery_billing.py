@@ -486,20 +486,10 @@ def register_discovery(app, db):
 
         target = row["target_json"] or {}
         user_ids = eligible_users(target)
-        allowed_ids = []
-        for user_id in user_ids:
-            recent = db.session.execute(text("""
-                SELECT COUNT(*) FROM discovery_push_delivery
-                WHERE user_id=:uid AND status='sent'
-                  AND sent_at >= CURRENT_TIMESTAMP - INTERVAL '48 hours'
-            """), {"uid": user_id}).scalar_one()
-            weekly = db.session.execute(text("""
-                SELECT COUNT(*) FROM discovery_push_delivery
-                WHERE user_id=:uid AND status='sent'
-                  AND sent_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
-            """), {"uid": user_id}).scalar_one()
-            if int(recent) < PUSH_CAP_PER_48_HOURS and int(weekly) < PUSH_CAP_PER_7_DAYS:
-                allowed_ids.append(user_id)
+        # Final frequency enforcement happens inside the atomic metering
+        # transaction. Keep all otherwise eligible recipients in the queue so
+        # concurrent campaigns cannot bypass or accidentally double-apply caps.
+        allowed_ids = list(user_ids)
 
         subscriptions = push_subscription_rows(allowed_ids)
         queued = 0
