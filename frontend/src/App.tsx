@@ -13171,17 +13171,11 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             {!!statusData?.rejection_reason && <div style={{ fontSize: 12, color: '#991B1B' }}>{statusData.rejection_reason}</div>}
           </div>
         )}
-        <div style={{ fontWeight: 700, fontSize: 13, color: AMB_COLORS.navy, marginBottom: 10 }}>Commission tiers</div>
-        <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', marginBottom: 20 }}>
-          {[[1, 10, '0–4 paying referrals'], [2, 15, '5–19 paying referrals'], [3, 20, '20+ paying referrals']].map(([t, pct, range], i) => (
-            <div key={t as number} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i < 2 ? '1px solid #F3F4F6' : 'none' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: AMB_COLORS.gold + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: AMB_COLORS.gold }}>T{t}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: AMB_COLORS.navy }}>{pct}% commission</div>
-                <div style={{ fontSize: 11, color: AMB_COLORS.gray }}>{range}</div>
-              </div>
-            </div>
-          ))}
+        <div style={{ background: T.card, borderRadius: 16, padding: '15px 16px', marginBottom: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontWeight: 800, fontSize: 14, color: AMB_COLORS.navy }}>10% commission</div>
+          <div style={{ fontSize: 11, color: AMB_COLORS.gray, lineHeight: 1.5, marginTop: 4 }}>
+            Earn 10% of each referred student's first successful payment. The rate does not increase with referral volume.
+          </div>
         </div>
         <button onClick={handleApply} disabled={applying} style={{ width: '100%', padding: '15px 0', fontSize: 14, background: AMB_COLORS.gold, color: AMB_COLORS.navy, border: 'none', borderRadius: 14, fontWeight: 800, cursor: applying ? 'default' : 'pointer', opacity: applying ? 0.7 : 1 }}>
           {applying ? 'Submitting…' : (appStatus === 'rejected' ? 'Reapply' : 'Apply to become an ambassador')}
@@ -13211,7 +13205,6 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   )
 
   const canRequestPayout = dashboard.status === 'active' && dashboard.earnings.available_kes >= dashboard.min_payout_kes
-  const tierPct = dashboard.next_tier_at ? Math.min(100, (dashboard.funnel.paying / dashboard.next_tier_at) * 100) : 100
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
@@ -13249,17 +13242,12 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ margin: '0 18px 14px', background: T.card, borderRadius: 16, padding: 16, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 15, color: AMB_COLORS.navy }}>Tier {dashboard.tier} · {dashboard.commission_pct}% commission</div>
-              <div style={{ fontSize: 11, color: AMB_COLORS.gray }}>{dashboard.next_tier_at ? `${Math.max(0, dashboard.next_tier_at - dashboard.funnel.paying)} more paying referrals to Tier ${dashboard.tier + 1}` : 'Top tier reached'}</div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: AMB_COLORS.navy }}>10% commission · first payment only</div>
+              <div style={{ fontSize: 11, color: AMB_COLORS.gray }}>Your rate is fixed and does not change with referral volume.</div>
             </div>
             {amPill(`${dashboard.funnel.paying} paying`, AMB_COLORS.gold)}
           </div>
-          {!!dashboard.next_tier_at && (
-            <div style={{ background: '#F3F4F6', borderRadius: 99, height: 7, overflow: 'hidden' }}>
-              <div style={{ background: `linear-gradient(90deg,${AMB_COLORS.gold},${AMB_COLORS.goldLight})`, height: 7, width: `${tierPct}%`, borderRadius: 99 }} />
-            </div>
-          )}
-        </div>
+/div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, margin: '0 18px 14px' }}>
           {[['Pending', dashboard.earnings.pending_kes, AMB_COLORS.gray], ['Available', dashboard.earnings.available_kes, AMB_COLORS.green], ['Paid out', dashboard.earnings.paid_kes, AMB_COLORS.navy]].map(([label, val, color]) => (
             <div key={label as string} style={{ background: T.card, borderRadius: 14, padding: '12px 6px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
