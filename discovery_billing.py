@@ -403,32 +403,25 @@ def register_discovery(app, db):
         if not uid:
             return jsonify({"error": "Not logged in"}), 401
         row = campaign_row(campaign_id)
-        if not row or row["status"] != "active":
+        if not row:
             return jsonify({"error": "Campaign unavailable"}), 404
-        if campaign_usage(row) >= int(row["budget_kes"]):
-            return jsonify({"eligible": False, "code": "campaign_budget_exhausted"}), 200
         target = row["target_json"] or {}
         if not target_matches(uid, target):
             return jsonify({"eligible": False}), 200
         day = date.today().isoformat()
         event_key = f"imp:{campaign_id}:{uid}:{day}:{row['placement']}"
-        inserted = db.session.execute(text("""
-            INSERT INTO discovery_event
-                (campaign_id,user_id,event_key,event_type,placement,amount_kes,metadata)
-            VALUES (:cid,:uid,:key,'impression',:placement,0,CAST(:meta AS jsonb))
-            ON CONFLICT (event_key) DO NOTHING
-            RETURNING id
-        """), {"cid": campaign_id, "uid": uid, "key": event_key,
-               "placement": row["placement"], "meta": json.dumps({"verified": True})}).first()
-        if inserted:
-            db.session.execute(text("""
-                UPDATE discovery_campaign
-                SET delivered_impressions=delivered_impressions+1, updated_at=CURRENT_TIMESTAMP
-                WHERE id=:cid
-            """), {"cid": campaign_id})
+        result = record_billable_event(db, campaign_id, uid, "impression", row["placement"], event_key)
+        if result.get("ok"):
             db.session.commit()
-            sync_org_invoice(int(row["organisation_id"]))
-        return jsonify({"eligible": True, "recorded": bool(inserted)})
+            return jsonify({"eligible": True, "recorded": not result.get("duplicate"), "amount_minor": result.get("amount_minor", 0),
+                            "remaining_minor": result.get("remaining_minor")}), 200
+        db.session.rollback()
+        if result.get("reason") in ("campaign_budget_exhausted", "campaign_not_funded"):
+            return jsonify({"eligible": False, "code": result["reason"], "remaining_minor": result.get("remaining_minor", 0)}), 200
+        if result.get("reason") == "campaign_inactive":
+            return jsonify({"error": "Campaign unavailable"}), 404
+        return jsonify({"eligible": False, "code": result.get("reason", "meter_rejected")}), 200
+
 
     @app.post("/api/discovery/campaigns/<int:campaign_id>/click")
     def discovery_click(campaign_id):
@@ -436,27 +429,23 @@ def register_discovery(app, db):
         if not uid:
             return jsonify({"error": "Not logged in"}), 401
         row = campaign_row(campaign_id)
-        if not row or row["status"] != "active":
+        if not row:
             return jsonify({"error": "Campaign unavailable"}), 404
         if not target_matches(uid, row["target_json"] or {}):
             return jsonify({"eligible": False}), 200
-        if campaign_usage(row) >= int(row["budget_kes"]):
-            return jsonify({"eligible": False, "code": "campaign_budget_exhausted"}), 200
-        key = f"click:{campaign_id}:{uid}:{secrets.token_hex(8)}"
-        amount = int(row["bid_kes"]) if row["bid_type"] == "cpc" else 0
-        db.session.execute(text("""
-            INSERT INTO discovery_event
-                (campaign_id,user_id,event_key,event_type,placement,amount_kes,metadata)
-            VALUES (:cid,:uid,:key,'click',:placement,:amount,CAST(:meta AS jsonb))
-        """), {"cid": campaign_id, "uid": uid, "key": key, "placement": row["placement"],
-               "amount": amount, "meta": json.dumps({"billable": row["bid_type"] == "cpc"})})
-        db.session.execute(text("""
-            UPDATE discovery_campaign SET delivered_clicks=delivered_clicks+1,
-              updated_at=CURRENT_TIMESTAMP WHERE id=:cid
-        """), {"cid": campaign_id})
-        db.session.commit()
-        sync_org_invoice(int(row["organisation_id"]))
-        return jsonify({"eligible": True, "recorded": True})
+        event_key = f"click:{campaign_id}:{uid}:{secrets.token_hex(16)}"
+        result = record_billable_event(db, campaign_id, uid, "click", row["placement"], event_key)
+        if result.get("ok"):
+            db.session.commit()
+            return jsonify({"eligible": True, "recorded": True, "amount_minor": result.get("amount_minor", 0),
+                            "remaining_minor": result.get("remaining_minor")}), 200
+        db.session.rollback()
+        if result.get("reason") in ("campaign_budget_exhausted", "campaign_not_funded"):
+            return jsonify({"eligible": False, "code": result["reason"], "remaining_minor": result.get("remaining_minor", 0)}), 200
+        if result.get("reason") == "campaign_inactive":
+            return jsonify({"error": "Campaign unavailable"}), 404
+        return jsonify({"eligible": False, "code": result.get("reason", "meter_rejected")}), 200
+
 
     @app.post("/api/discovery/campaigns/<int:campaign_id>/application")
     def discovery_application(campaign_id):
@@ -468,19 +457,20 @@ def register_discovery(app, db):
             return jsonify({"error": "Campaign unavailable"}), 404
         if not target_matches(uid, row["target_json"] or {}):
             return jsonify({"eligible": False}), 200
-        key = f"application:{campaign_id}:{uid}:{secrets.token_hex(8)}"
+        key = f"application:{campaign_id}:{uid}:{secrets.token_hex(16)}"
         db.session.execute(text("""
             INSERT INTO discovery_event
                 (campaign_id,user_id,event_key,event_type,placement,amount_kes,metadata)
             VALUES (:cid,:uid,:key,'application',:placement,0,CAST(:meta AS jsonb))
         """), {"cid": campaign_id, "uid": uid, "key": key, "placement": row["placement"],
-               "amount": 0, "meta": json.dumps({"verified": True})})
+               "meta": json.dumps({"verified": True, "billable": False})})
         db.session.execute(text("""
             UPDATE discovery_campaign SET delivered_applications=delivered_applications+1,
               updated_at=CURRENT_TIMESTAMP WHERE id=:cid
         """), {"cid": campaign_id})
         db.session.commit()
         return jsonify({"eligible": True, "recorded": True})
+
 
     @app.get("/api/organisations/<int:organisation_id>/discovery/billing-preview")
     def discovery_billing_preview(organisation_id):
@@ -645,6 +635,7 @@ def register_discovery(app, db):
                    bid_type, bid_kes, target_json
             FROM discovery_campaign
             WHERE status='active'
+              AND funding_status IN ('funded','credited')
               AND placement IN ('feed','feed_push')
               AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
               AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
