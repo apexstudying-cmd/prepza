@@ -653,13 +653,13 @@ def log_usage(user_id, request_type, model=None, provider=None,
 DAILY_FRESH_GENERATION_LIMITS = {
     "free": 5,
     "plus": 15,
-    "premium": None,  # None = unlimited
+    "pro": 50,
 }
 
 _DAILY_LIMIT_SETTING_KEYS = {
     "free": "ai_daily_limit_free",
     "plus": "ai_daily_limit_plus",
-    "premium": "ai_daily_limit_premium",
+    "pro": "ai_daily_limit_pro",
 }
 
 
@@ -739,7 +739,7 @@ def check_daily_limit(user_id, plan_tier="free"):
 DAILY_FRESH_TUTOR_LIMITS = {
     "free": 5,
     "plus": 20,
-    "premium": 50,
+    "pro": 50,
     # premium is a soft abuse-guard here, not a real cost ceiling - see
     # the ai_monthly_budget_usd global circuit breaker below for that.
 }
@@ -747,7 +747,7 @@ DAILY_FRESH_TUTOR_LIMITS = {
 _DAILY_TUTOR_LIMIT_SETTING_KEYS = {
     "free": "ai_daily_tutor_limit_free",
     "plus": "ai_daily_tutor_limit_plus",
-    "premium": "ai_daily_tutor_limit_premium",
+    "pro": "ai_daily_tutor_limit_pro",
 }
 
 
