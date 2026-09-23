@@ -9,7 +9,7 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
         return text
     if old not in text:
         print(f'Offline chat queue patch anchor unavailable; skipping: {label}')
-            return text
+        return text
     if text.count(old) != 1:
         raise SystemExit(f'Offline chat queue patch anchor not unique: {label}')
     return text.replace(old, new, 1)
