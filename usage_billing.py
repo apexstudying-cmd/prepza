@@ -25,36 +25,31 @@ from sqlalchemy import text
 
 STUDENT_PLANS = {
     "free": {
-        "price_kes": 0,
-        "billing_period": "month",
-        "quota_period": "month",
-        "summary_generations": 3,
-        "summary_max_pages": 2,
-        "podcast_generations": 1,
-        "podcast_max_minutes": 10,
-        "flashcard_generations": 3,
-        "flashcard_max_cards": 10,
-        "quiz_generations": 2,
-        "quiz_max_questions": 10,
-        "mind_map_generations": 2,
-        "mind_map_max_nodes": 10,
+        "price_kes": 0, "billing_period": "month", "quota_period": "month",
+        "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 10,
+        "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 10,
+        "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 100,
+        "quiz_generations": 0, "quiz_max_questions": 50, "quiz_monthly_questions": 20,
+        "mind_map_generations": 0, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 30,
         "tutor_messages": 20,
     },
-    "premium": {
-        "price_kes": 599,
-        "billing_period": "semester",
-        "quota_period": "month",
-        "summary_generations": 30,
-        "summary_max_pages": 10,
-        "podcast_generations": 4,
-        "podcast_max_minutes": 50,
-        "flashcard_generations": 30,
-        "flashcard_max_cards": 50,
-        "quiz_generations": 20,
-        "quiz_max_questions": 50,
-        "mind_map_generations": 20,
-        "mind_map_max_nodes": 50,
-        "tutor_messages": 300,
+    "plus": {
+        "price_kes": 399, "billing_period": "month", "quota_period": "month",
+        "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 40,
+        "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 120,
+        "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 300,
+        "quiz_generations": 0, "quiz_max_questions": 50, "quiz_monthly_questions": 100,
+        "mind_map_generations": 0, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 150,
+        "tutor_messages": 20,
+    },
+    "pro": {
+        "price_kes": 699, "billing_period": "month", "quota_period": "month",
+        "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 100,
+        "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 350,
+        "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 600,
+        "quiz_generations": 0, "quiz_max_questions": 50, "quiz_monthly_questions": 210,
+        "mind_map_generations": 0, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 350,
+        "tutor_messages": 50,
     },
 }
 
@@ -91,11 +86,11 @@ SPONSORED_CPM_KES = 250
 SPONSORED_MIN_CAMPAIGN_KES = 2500
 
 FEATURES = {
-    "summary": ("summary_generations", "summary_max_pages"),
-    "podcast": ("podcast_generations", "podcast_max_minutes"),
-    "flashcards": ("flashcard_generations", "flashcard_max_cards"),
-    "quiz": ("quiz_generations", "quiz_max_questions"),
-    "mind_map": ("mind_map_generations", "mind_map_max_nodes"),
+    "summary": ("summary_generations", "summary_max_pages", "summary_monthly_pages"),
+    "podcast": ("podcast_generations", "podcast_max_minutes", "podcast_monthly_minutes"),
+    "flashcards": ("flashcard_generations", "flashcard_max_cards", "flashcard_monthly_cards"),
+    "quiz": ("quiz_generations", "quiz_max_questions", "quiz_monthly_questions"),
+    "mind_map": ("mind_map_generations", "mind_map_max_nodes", "mind_map_monthly_nodes"),
 }
 
 DEFAULT_GENERATION_UNITS = {
@@ -288,9 +283,10 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
 
     plan_code = _current_student_plan(db, user_id)
     plan = STUDENT_PLANS[plan_code]
-    request_limit_key, unit_limit_key = FEATURES[feature]
-    max_requests = int(plan[request_limit_key])
+    request_limit_key, unit_limit_key, monthly_unit_key = FEATURES[feature]
+    max_requests = int(plan[request_limit_key]) if request_limit_key else 0
     max_units = int(plan[unit_limit_key])
+    monthly_units = int(plan[monthly_unit_key])
 
     if units > max_units:
         return False, {
@@ -320,7 +316,7 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
     used_units = int(row["units"] or 0)
     # Requests are telemetry, not a second hard quota. The allowance is a
     # spendable unit wallet derived from the plan's maximum generation size.
-    total_unit_limit = max_units * max_requests
+    total_unit_limit = monthly_units
     remaining_units = max(0, total_unit_limit - used_units)
 
     if used_units + units > total_unit_limit:
@@ -670,9 +666,9 @@ def register_usage_billing(app, db):
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
-            request_key, unit_key = FEATURES[feature]
+            request_key, unit_key, monthly_key = FEATURES[feature]
             max_units_per_generation = int(plan[unit_key])
-            wallet_limit = max_units_per_generation * int(plan[request_key])
+            wallet_limit = int(plan[monthly_key])
             used_units = int(row["units"]) if row else 0
             usage[feature] = {
                 "requests": int(row["requests"]) if row else 0,
@@ -696,17 +692,7 @@ def register_usage_billing(app, db):
         # KES 599/semester and KES 999/annual. The current student checkout
         # is a hosted payment flow; keep pricing in one server-owned layer
         # before adding another payment provider.
-        plans = [
-            {"code": "free", **STUDENT_PLANS["free"]},
-            {
-                "code": "premium",
-                **STUDENT_PLANS["premium"],
-                "price_options": {
-                    "semester": 599,
-                    "annual": 999,
-                },
-            },
-        ]
+        plans = [{"code": code, **plan} for code, plan in STUDENT_PLANS.items()]
         return jsonify({"currency": "KES", "plans": plans})
 
     # Enforce the existing generation endpoints without requiring the
