@@ -7972,7 +7972,6 @@ def should_notify(user_id, category):
 
 
 @app.route("/api/opportunity-discovery", methods=["GET", "POST"])
-@require_csrf if False else (lambda f: f)
 def opportunity_discovery_preference():
     """Get or update whether the student allows organisation opportunity discovery.
 
