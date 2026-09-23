@@ -66,6 +66,20 @@ def register_b2b_organisation_portal(app, db):
     def csrf():
         return bool(session.get("csrf_token") and request.headers.get("X-CSRF-Token")==session.get("csrf_token"))
 
+    @app.get("/api/organisations/mine")
+    def my_organisations():
+        uid=session.get("user_id")
+        if not uid:return jsonify({"error":"Not logged in"}),401
+        rows=db.session.execute(text("""
+          SELECT o.id,o.name,o.description,o.website,o.logo_url,o.contact_email,o.contact_phone,
+                 o.verification_status,o.verification_notes,o.is_active,om.role
+          FROM organisation_member om
+          JOIN organisation o ON o.id=om.organisation_id
+          WHERE om.user_id=:u AND o.is_active=TRUE
+          ORDER BY o.name
+        """),{"u":uid}).mappings().all()
+        return jsonify({"organisations":[dict(x) for x in rows]})
+
     @app.get("/api/organisations/<int:oid>/portal/dashboard")
     def portal_dashboard(oid):
         uid=session.get("user_id")
