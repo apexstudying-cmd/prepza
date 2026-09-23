@@ -53,7 +53,7 @@ def test_order_payment_match_rejects_payment_type_change():
 
 
 def test_plus_subscription_order_requires_subscription_payment():
-    order = _order(order_type="subscription", item_id=None, plan="plus", total_amount=499)
+    order = _order(order_type="subscription", item_id=None, plan="plus", total_amount=499, unit_amount=499)
     payment = _payment(
         content_item_id=None,
         plan="plus",
