@@ -35,6 +35,8 @@ ADA_UNIT_WEIGHTS = {
 }
 
 def ensure_economics_schema(db):
+    if db.engine.dialect.name == 'sqlite':
+        return
     db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS student_plan_config (
             plan_code VARCHAR(20) PRIMARY KEY, display_name VARCHAR(40) NOT NULL,
