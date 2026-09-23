@@ -134,11 +134,10 @@ def patch_podcast(text, path):
 def patch_flashcards(text, path):
     if 'FlashcardsGenerationScreen' not in text or '// Offline flashcards restore' in text:
         return text
-    anchor_pattern = r"(?s)  useEffect\(\(\) => \{\n    if \(activeDocumentId == null\) return\n    Promise\.all\(\[generationApi<\{ csrf_token: string \}>\('/me'\),.*?fetchPrepzaUsage\(\)\]\)"
-    match = re.search(anchor_pattern, text)
-    if not match:
-        raise SystemExit(f'Offline generation: flashcard document effect anchor missing in {path.name}')
-    anchor = match.group(0)
+    marker = '  const generate = async () => {'
+    pos = text.find(marker, text.find('function FlashcardsGenerationScreen'))
+    if pos < 0:
+        raise SystemExit(f'Offline generation: flashcard generate anchor missing in {path.name}')
     restore = """  // Offline flashcards restore
   useEffect(() => {
     if (navigator.onLine || activeDocumentId == null) return
@@ -153,18 +152,15 @@ def patch_flashcards(text, path):
   }, [activeDocumentId])
 
 """
-    return text.replace(anchor, restore + anchor, 1)
-
+    return text[:pos] + restore + text[pos:]
 
 def patch_summary(text, path):
     if 'SummaryGenerationScreen' not in text or '// Offline summary restore' in text:
         return text
-    anchor_pattern = r"(?s)  useEffect\\(\\(\\) => \\{\\n    if \\(activeDocumentId == null\\) return\\n    Promise\\.all\\(\\[generationApi<\\{ csrf_token: string \\}>\\('/me'\\),.*?fetchPrepzaUsage\\(\\)\\]\\)"
-    matches = list(re.finditer(anchor_pattern, text))
-    if not matches:
-        raise SystemExit(f'Offline generation: summary document effect anchor missing in {path.name}')
-    match = matches[-1]
-    anchor = match.group(0)
+    marker = '  const generate = async () => {'
+    pos = text.find(marker, text.find('function SummaryGenerationScreen'))
+    if pos < 0:
+        raise SystemExit(f'Offline generation: summary generate anchor missing in {path.name}')
     restore = """  // Offline summary restore
   useEffect(() => {
     if (navigator.onLine || activeDocumentId == null) return
@@ -177,9 +173,7 @@ def patch_summary(text, path):
   }, [activeDocumentId])
 
 """
-    pos = positions[-1]
     return text[:pos] + restore + text[pos:]
-
 
 def patch(path):
     text = path.read_text(encoding='utf-8')
