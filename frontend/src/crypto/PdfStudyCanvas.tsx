@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'
-type Props = { src: string; title: string; storageKey?: string; onPageChange?: (page: number) => void; onTextSelection?: (text: string) => void }
+import { startOfflineStudyTracking } from '../offline/studyActivity'
+import { getOfflineStudyDocumentUrl } from '../offline/studyHubOffline'
+import { getOfflineUserId } from '../offline/generatedMaterials'
+type Props = { src: string; title: string; storageKey?: string; initialPage?: number; documentId?: number; onPageChange?: (page: number) => void; onTextSelection?: (text: string) => void }
 type Tool = 'select' | 'highlight' | 'underline' | 'strike' | 'pen' | 'eraser' | 'note' | 'rect' | 'arrow'
 type Annotation = { id: string; page: number; tool: Exclude<Tool, 'select'>; x: number; y: number; w: number; h: number; text?: string; points?: Array<[number, number]> }
 const MIN_ZOOM = 0.5, MAX_ZOOM = 3, ZOOM_STEP = 0.15
@@ -22,14 +25,15 @@ function saveAnnotations(key: string, value: Annotation[]): boolean {
 function loadBookmarks(key: string): number[] { try { const value = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(value) ? value.filter(v => Number.isInteger(v) && v > 0) : [] } catch { return [] } }
 function saveBookmarks(key: string, value: number[]) { try { localStorage.setItem(key, JSON.stringify(value)) } catch {} }
 function textStyle(item: PdfTextItem, pageHeight: number) { const fontSize = Math.max(6, Math.hypot(item.transform[2], item.transform[3]) || item.height); const x = item.transform[4]; const y = pageHeight - item.transform[5] - fontSize; return { left: x, top: y, width: Math.max(item.width, 1), height: Math.max(item.height, fontSize), fontSize } }
-export default function PdfStudyCanvas({ src, title, storageKey, onPageChange, onTextSelection }: Props) {
+export default function PdfStudyCanvas({ src, title, storageKey, initialPage = 1, documentId, onPageChange, onTextSelection }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null), stageRef = useRef<HTMLDivElement | null>(null), overlayRef = useRef<HTMLDivElement | null>(null), documentRef = useRef<PdfDocument | null>(null), tokenRef = useRef(0), undoRef = useRef<Annotation[][]>([])
-  const [page, setPage] = useState(1), [pages, setPages] = useState(0), [zoom, setZoom] = useState(1), [loading, setLoading] = useState(true), [error, setError] = useState(''), [text, setText] = useState<PdfTextItem[]>([]), [tool, setTool] = useState<Tool>('select'), [annotations, setAnnotations] = useState<Annotation[]>([]), [search, setSearch] = useState(''), [searchMatches, setSearchMatches] = useState<number[]>([]), [note, setNote] = useState(''), [bookmarks, setBookmarks] = useState<number[]>([]), [selectedRange, setSelectedRange] = useState<DOMRect[]>([]), [selectedText, setSelectedText] = useState('')
+  const [page, setPage] = useState(Math.max(1, initialPage)), [pages, setPages] = useState(0), [zoom, setZoom] = useState(1), [loading, setLoading] = useState(true), [error, setError] = useState(''), [text, setText] = useState<PdfTextItem[]>([]), [tool, setTool] = useState<Tool>('select'), [annotations, setAnnotations] = useState<Annotation[]>([]), [search, setSearch] = useState(''), [searchMatches, setSearchMatches] = useState<number[]>([]), [note, setNote] = useState(''), [bookmarks, setBookmarks] = useState<number[]>([]), [selectedRange, setSelectedRange] = useState<DOMRect[]>([]), [selectedText, setSelectedText] = useState('')
   // Signed/blob URLs can change across refreshes and cold restarts. Use the
   // stable document identity supplied by the caller whenever available so
   // offline annotations and bookmarks survive a new object URL.
   const stableStudyKey = storageKey || src
   const annotationKey = `${STORE}:${stableStudyKey}`, bookmarkKey = `${BOOKMARKS}:${stableStudyKey}`
+  useEffect(() => { if (documentId == null) return startOfflineStudyTracking(documentId, 'reading') }, [documentId])
   useEffect(() => { setAnnotations(loadAnnotations(annotationKey)); undoRef.current = []; setBookmarks(loadBookmarks(bookmarkKey)) }, [annotationKey, bookmarkKey])
   const commitAnnotations = (next: Annotation[]) => {
     const bounded = next.length > MAX_ANNOTATIONS ? next.slice(-MAX_ANNOTATIONS) : next
@@ -40,7 +44,7 @@ export default function PdfStudyCanvas({ src, title, storageKey, onPageChange, o
     return true
   }
   const render = useCallback(async (nextPage: number, nextZoom: number) => { const document = documentRef.current, canvas = canvasRef.current; if (!document || !canvas) return; const token = ++tokenRef.current; setLoading(true); setError(''); try { const result = await renderPdfPage(document, nextPage, nextZoom, canvas); if (token !== tokenRef.current) return; setText(result.text); setSelectedRange([]); setSelectedText(''); onTextSelection?.(''); setPage(nextPage); onPageChange?.(nextPage) } catch (value) { if (token === tokenRef.current) setError(value instanceof Error ? value.message : 'Could not render this page.') } finally { if (token === tokenRef.current) setLoading(false) } }, [onPageChange, onTextSelection])
-  useEffect(() => { let cancelled = false; documentRef.current = null; setPage(1); setPages(0); setZoom(1); setLoading(true); setError(''); ;(async () => { try { const response = await window.fetch(src, { credentials: 'include' }); if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`); const document = await openPdf(new Uint8Array(await response.arrayBuffer())); if (cancelled) return; documentRef.current = document; setPages(document.numPages); const result = await renderPdfPage(document, 1, 1, canvasRef.current!); if (!cancelled) { setText(result.text); onPageChange?.(1) } } catch (value) { if (!cancelled) setError(value instanceof Error ? value.message : 'Could not open this PDF.') } finally { if (!cancelled) setLoading(false) } })(); return () => { cancelled = true; tokenRef.current += 1; documentRef.current = null } }, [src, onPageChange])
+  useEffect(() => { let cancelled = false; documentRef.current = null; setPage(1); setPages(0); setZoom(1); setLoading(true); setError(''); ;(async () => { try { const response = await window.fetch(src, { credentials: 'include' }); if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`); const document = await openPdf(new Uint8Array(await response.arrayBuffer())); if (cancelled) return; documentRef.current = document; setPages(document.numPages); const result = await renderPdfPage(document, 1, 1, canvasRef.current!); if (!cancelled) { setText(result.text); onPageChange?.(1) } } catch (value) { if (!cancelled) setError(value instanceof Error ? value.message : 'Could not open this PDF.') } finally { if (!cancelled) setLoading(false) } })(); return () => { cancelled = true; tokenRef.current += 1; documentRef.current = null } }, [src, initialPage, documentId, onPageChange])
   useEffect(() => { const query = search.trim().toLowerCase(); setSearchMatches(query ? text.map((item, i) => item.str.toLowerCase().includes(query) ? i : -1).filter(i => i >= 0) : []) }, [search, text])
   useEffect(() => { const handler = () => { if (tool !== 'select') return; const selection = window.getSelection(); const value = selection?.toString().trim() || ''; if (!selection || !value || !overlayRef.current || !overlayRef.current.contains(selection.anchorNode)) return; const base = overlayRef.current.getBoundingClientRect(); const rects = Array.from(selection.getRangeAt(0).getClientRects()).map(rect => new DOMRect(rect.left - base.left, rect.top - base.top, rect.width, rect.height)).filter(rect => rect.width > 1 && rect.height > 1); if (!rects.length) return; setSelectedText(value.slice(0, 20000)); setSelectedRange(rects); onTextSelection?.(value.slice(0, 20000)) }; document.addEventListener('selectionchange', handler); return () => document.removeEventListener('selectionchange', handler) }, [tool, onTextSelection])
   const fit = async (mode: 'width' | 'page') => { const document = documentRef.current, stage = stageRef.current; if (!document || !stage) return; const size = await getPdfPageSize(document, page); const w = Math.max(240, stage.clientWidth - 32), h = Math.max(240, stage.clientHeight - 100); const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, mode === 'width' ? w / size.width : Math.min(w / size.width, h / size.height))); setZoom(next); await render(page, next) }
@@ -81,7 +85,9 @@ export default function PdfStudyCanvas({ src, title, storageKey, onPageChange, o
       // This is what makes "circle/box this passage -> ask Ada" work without
       // requiring the student to precisely drag-select the PDF text layer.
       if (tool === 'rect') {
-        const pageHeight = overlayRef.current.clientHeight
+        const overlay = overlayRef.current
+        if (!overlay) return
+        const pageHeight = overlay.clientHeight
         const picked = text
           .map(item => ({ item, box: textStyle(item, pageHeight) }))
           .filter(({ box }) => box.left < x + w && box.left + box.width > x && box.top < y + h && box.top + box.height > y)
