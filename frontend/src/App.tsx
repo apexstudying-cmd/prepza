@@ -5302,9 +5302,9 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </Section>
 
         <Section title="Preferences">
-          <Row label="Study Preferences" sub="Goals, daily target, subjects" onPress={() => setShowModal('study-prefs')} />
-          <Row label="AI Preferences" sub="Language, explanation style" onPress={() => setShowModal('ai-prefs')} />
-          <Row label="Language" sub="English" onPress={() => setShowModal('language')} />
+          <Row label="Study Preferences" sub="Not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
+          <Row label="AI Preferences" sub="Not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
+          <Row label="Language" sub="English · only supported language" />
           <Row label="Appearance" sub={themeMode === 'dark' ? 'Dark mode' : 'Light mode'} right={<div onClick={e => { e.stopPropagation(); toggleTheme() }}>{Ic.toggle(themeMode === 'dark')}</div>} />
         </Section>
 
