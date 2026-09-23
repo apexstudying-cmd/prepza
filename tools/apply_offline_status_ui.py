@@ -5,6 +5,10 @@ APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 IMPORT = "import OfflineStatusBanner from './offline/OfflineStatusBanner'\n"
 text = APP.read_text(encoding='utf-8')
 
+if '<OfflineStatusBanner />' in text:
+    print('Offline status UI already present; skipping root-shape transformer.')
+    raise SystemExit(0)
+
 if IMPORT not in text:
     anchor = "import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'\n"
     if anchor not in text:
