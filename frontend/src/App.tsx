@@ -13168,6 +13168,9 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     ctx.fillStyle = AMB_COLORS.navy; ctx.fillRect(0, 0, W, H)
     ctx.fillStyle = '#F8F9FC'; ctx.fillRect(70, 70, W - 140, H - 140)
     ctx.fillStyle = AMB_COLORS.navy; ctx.font = '900 86px Plus Jakarta Sans, Arial'; ctx.fillText('PREPZA', 120, 190)
+    const logo = new Image()
+    logo.onload = () => { ctx.drawImage(logo, 120, 105, 82, 82) }
+    logo.src = logoImg
     ctx.fillStyle = AMB_COLORS.gold; ctx.fillRect(120, 220, 170, 8)
     ctx.fillStyle = AMB_COLORS.navy; ctx.font = '800 52px Plus Jakarta Sans, Arial'; ctx.fillText('Study smarter together.', 120, 320)
     const wrap = (text: string, x: number, y: number, maxWidth: number, lineHeight: number, font: string) => {
@@ -13240,6 +13243,30 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
   const enrolled = statusData?.enrolled ?? false
   const appStatus = statusData?.status
+
+  if (statusData && statusData.program_enabled === false && !enrolled) return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
+      <Header title="Ambassador Program" />
+      <div style={{ padding: 28 }}>
+        <div style={{ background: T.card, borderRadius: 18, padding: 24, textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontWeight: 800, fontSize: 17, color: AMB_COLORS.navy, marginBottom: 7 }}>Ambassador applications are paused</div>
+          <div style={{ fontSize: 12, color: AMB_COLORS.gray, lineHeight: 1.6 }}>Prepza is not accepting new ambassador applications or new referral attribution right now. Existing approved ambassadors keep their historical records.</div>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (appStatus === 'terminated') return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
+      <Header title="Ambassador Program" />
+      <div style={{ padding: 28 }}>
+        <div style={{ background: T.card, borderRadius: 18, padding: 24, textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontWeight: 800, fontSize: 17, color: AMB_COLORS.navy, marginBottom: 7 }}>Ambassador account terminated</div>
+          <div style={{ fontSize: 12, color: AMB_COLORS.gray, lineHeight: 1.6 }}>New referrals and new payout requests are disabled. Historical referral and payout records are retained for accounting and support.</div>
+        </div>
+      </div>
+    </div>
+  )
 
   if (!enrolled || appStatus === 'rejected') return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
