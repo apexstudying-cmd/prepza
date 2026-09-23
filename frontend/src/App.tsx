@@ -5270,15 +5270,19 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', margin: '0 16px' }}>{children}</div>
     </div>
   )
-  const Row = ({ label, sub, onPress, right, danger }: { label: string; sub?: string; onPress?: () => void; right?: React.ReactNode; danger?: boolean }) => (
-    <button onClick={onPress} style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 14, padding: '14px 16px', background: 'none', border: 'none', borderBottom: `1px solid ${T.border}`, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', textAlign: 'left' }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, color: danger ? '#C94C4C' : T.text }}>{label}</div>
-        {sub && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 1 }}>{sub}</div>}
-      </div>
-      {right ?? <div style={{ color: T.textMuted }}>{Ic.chevR()}</div>}
-    </button>
-  )
+  const Row = ({ label, sub, onPress, right, danger }: { label: string; sub?: string; onPress?: () => void; right?: React.ReactNode; danger?: boolean }) => {
+    const content = (
+      <>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: danger ? '#C94C4C' : T.text }}>{label}</div>
+          {sub && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 1 }}>{sub}</div>}
+        </div>
+        {right ?? <div style={{ color: T.textMuted }}>{Ic.chevR()}</div>}
+      </>
+    )
+    const style = { display: 'flex', alignItems: 'center', width: '100%', gap: 14, padding: '14px 16px', background: 'none', border: 'none', borderBottom: '1px solid '+T.border, cursor: onPress ? 'pointer' : 'default', fontFamily: 'Plus Jakarta Sans', textAlign: 'left' as const }
+    return onPress ? <button onClick={onPress} style={style}>{content}</button> : <div style={style}>{content}</div>
+  }
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
@@ -5325,7 +5329,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             }}>{Ic.toggle(notifs[k])}</div>} />
           ))}
           <Row label="Opportunities" sub={opportunityDiscovery ? 'Organisations can discover you for relevant opportunities' : 'Not discoverable by organisations'} right={<div onClick={async e => { e.stopPropagation(); if (privacyBusy) return; const next = !opportunityDiscovery; setPrivacyBusy(true); try { const res = await api<{ discoverable: boolean }>('/api/opportunity-discovery', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ discoverable: next }) }); setOpportunityDiscovery(!!res.discoverable) } catch {} finally { setPrivacyBusy(false) } }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(opportunityDiscovery)}</div>} />
-          <Row label="Study Reminders" sub="Coming soon" right={<Pill text="Soon" color="#9CA3AF" />} />
+          <Row label="Study Reminders" sub="Not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
         </Section>
 
         <Section title="Privacy">
@@ -5370,8 +5374,8 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
         <Section title="Security">
           <Row label="Change Password" onPress={() => { setCurrentPassword(''); setNewPassword(''); setConfirmNewPassword(''); setPasswordChangeError(''); setPasswordChangeSuccess(false); setShowModal('change-password') }} />
-          <Row label="Login Sessions" sub="1 active session" onPress={() => setShowModal('sessions')} />
-          <Row label="Two-Factor Authentication" sub="Not enabled" onPress={() => setShowModal('2fa')} />
+          <Row label="Login Sessions" sub="Session management is not available yet" />
+          <Row label="Two-Factor Authentication" sub="Not available yet" />
         </Section>
 
         <Section title="Subscription">
