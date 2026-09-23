@@ -271,7 +271,7 @@ class Payment(db.Model):
 
     # 'content' (one-off document/item purchase) or 'subscription' (plan purchase)
     payment_type = db.Column(db.String(20), nullable=False, default="content")
-    plan = db.Column(db.String(20), nullable=True)  # 'semester' | 'annual' - subscription only
+    plan = db.Column(db.String(20), nullable=True)  # 'plus' | 'pro' - monthly subscription only
     subscription_expires_at = db.Column(db.DateTime, nullable=True)  # subscription only
     # Organisation promotion billing. Nullable so existing student/content/subscription
     # payments remain unchanged.
@@ -997,8 +997,7 @@ class LibraryPublication(db.Model):
     pending).
     """
     id = db.Column(db.Integer, primary_key=True)
-    document_id = db.Column(db.Integer, db.ForeignKey("document.id"), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    document_id = db.Column(db.Integer, db.ForeignKey("document.id"), nullable=False)    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.String(1000), nullable=True)
@@ -1805,7 +1804,7 @@ class AmbassadorPayout(db.Model):
 # (sk_test_ vs sk_live_) determines sandbox vs live - unlike Pesapal,
 # Paystack has no separate base URL per environment.
 PAYSTACK_BASE_URL = "https://api.paystack.co"
-SUBSCRIPTION_PLAN_DURATIONS_DAYS = {"semester": 120, "annual": 365}
+SUBSCRIPTION_PLAN_DURATIONS_DAYS = {"plus": 30, "pro": 30}
 
 
 def paystack_request(method, path, **kwargs):
@@ -1854,7 +1853,7 @@ def create_paystack_transaction(reference, amount, description, user):
 
 
 def get_plan_prices():
-    keys = ("price_plan_semester", "price_plan_annual")
+    keys = ("price_plan_plus", "price_plan_pro")
     settings = {
         s.key: s.value
         for s in SystemSetting.query.filter(SystemSetting.key.in_(keys)).all()
@@ -1867,8 +1866,8 @@ def get_plan_prices():
             return default
 
     return {
-        "semester": parse("price_plan_semester", 599),
-        "annual": parse("price_plan_annual", 999),
+        "plus": parse("price_plan_plus", 399),
+        "pro": parse("price_plan_pro", 699),
     }
 
 
@@ -1997,8 +1996,7 @@ def _maybe_award_referral_commission(payment):
 
     prior_success_count = Payment.query.filter(
         Payment.user_id == payment.user_id,
-        Payment.status == "success",
-        Payment.id != payment.id,
+        Payment.status == "success",        Payment.id != payment.id,
     ).count()
     if prior_success_count > 0:
         return  # not their first successful payment - no commission
@@ -2025,76 +2023,46 @@ def _maybe_award_referral_commission(payment):
 
 
 def get_user_subscription_status(user_id):
-    """
-    A user's plan is derived from their most recent successful subscription
-    Payment row rather than a separate table - mirrors how content access
-    already works off the Payment table.
-    """
-    latest = (
+    """Return the highest active monthly entitlement plus every active entitlement."""
+    now = datetime.utcnow()
+    active = (
         Payment.query.filter(
             Payment.user_id == user_id,
             Payment.payment_type == "subscription",
             Payment.status == "success",
-            Payment.subscription_expires_at.isnot(None),
+            Payment.subscription_expires_at > now,
+            Payment.plan.in_(("plus", "pro")),
         )
-        .order_by(Payment.subscription_expires_at.desc())
-        .first()
+        .order_by(Payment.created_at.desc())
+        .all()
     )
-    if not latest:
-        return {"plan": "free", "is_active": False, "expires_at": None}
-
-    is_active = latest.subscription_expires_at > datetime.utcnow()
+    rank = {"pro": 2, "plus": 1}
+    active.sort(key=lambda p: (rank.get(p.plan, 0), p.created_at or datetime.min), reverse=True)
+    chosen = active[0] if active else None
     return {
-        "plan": latest.plan if is_active else "free",
-        "is_active": is_active,
-        "expires_at": latest.subscription_expires_at.isoformat(),
+        "plan": chosen.plan if chosen else "free",
+        "is_active": bool(chosen),
+        "expires_at": chosen.subscription_expires_at.isoformat() if chosen else None,
+        "entitlements": [
+            {"plan": p.plan, "expires_at": p.subscription_expires_at.isoformat()}
+            for p in sorted(active, key=lambda p: (p.created_at or datetime.min))
+        ],
     }
 
 
 def get_ai_plan_tier(user_id):
-    """
-    Maps a user's subscription status to the plan_tier kwarg ai_service's
-    generate_* functions expect ("free" or "premium"), so daily AI limits
-    actually reflect what the user is paying for instead of every call
-    silently running at the free-tier cap. Only "free"/"premium" are real
-    products today - the "plus" tier already present in
-    DAILY_FRESH_GENERATION_LIMITS / DAILY_FRESH_TUTOR_LIMITS is dormant
-    scaffolding for a tier that hasn't shipped, so it's never returned here.
-    """
-    status = get_user_subscription_status(user_id)
-    return "premium" if status["is_active"] else "free"
+    """Return the canonical Free/Plus/Pro tier used by all AI enforcement."""
+    return get_user_subscription_status(user_id)["plan"]
 
 
 def compute_new_subscription_expiry(user_id, plan):
-    """Stacks on top of an unexpired plan rather than resetting it."""
+    """Each successful monthly purchase gets its own 30-day entitlement window."""
     duration_days = SUBSCRIPTION_PLAN_DURATIONS_DAYS.get(plan)
-    if not duration_days:
-        return datetime.utcnow()
-    current = get_user_subscription_status(user_id)
-    base = datetime.utcnow()
-    if current["is_active"] and current["expires_at"]:
-        current_expiry = datetime.fromisoformat(current["expires_at"])
-        if current_expiry > base:
-            base = current_expiry
-    return base + timedelta(days=duration_days)
+    return datetime.utcnow() + timedelta(days=duration_days or 0)
 
 
 def recompute_subscription_expiries(user_id):
-    """
-    Rebuilds subscription_expires_at for every remaining successful
-    subscription Payment a user has, replaying the same additive-stacking
-    logic compute_new_subscription_expiry() uses for a live purchase -
-    except here we're reconstructing history, not computing "now", so
-    each payment's own created_at (not utcnow()) is the stacking base.
-    Needed because admin_refund_payment() can refund an EARLIER payment
-    in a stack after LATER ones already had their expiry frozen assuming
-    the refunded days were real.
-
-    Call this AFTER flipping a subscription payment's status to
-    "refunded" (and before commit) so the remaining chain reflects the
-    correct history. No-op if the user has no remaining subscription
-    payments.
-    """
+    """Restore each successful subscription to its own purchase+30-day window."""
     remaining = (
         Payment.query.filter(
             Payment.user_id == user_id,
@@ -2104,17 +2072,10 @@ def recompute_subscription_expiries(user_id):
         .order_by(Payment.created_at.asc())
         .all()
     )
-
-    running_expiry = None
     for p in remaining:
         duration_days = SUBSCRIPTION_PLAN_DURATIONS_DAYS.get(p.plan)
-        if not duration_days:
-            continue
-        base = p.created_at or datetime.utcnow()
-        if running_expiry and running_expiry > base:
-            base = running_expiry
-        running_expiry = base + timedelta(days=duration_days)
-        p.subscription_expires_at = running_expiry
+        if duration_days:
+            p.subscription_expires_at = (p.created_at or datetime.utcnow()) + timedelta(days=duration_days)
 
 
 def sync_paystack_payment_status(reference):
@@ -2997,8 +2958,7 @@ def google_auth_start():
         "response_type": "code",
         "scope": "openid email profile",
         "state": state,
-        "access_type": "online",
-        "prompt": "select_account",
+        "access_type": "online",        "prompt": "select_account",
     }
     return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
 
@@ -3998,7 +3958,6 @@ def _ai_generation_parameters_from_request():
 )
 @require_csrf
 
-
 def summarize_document(document_id):
     user_id = session.get("user_id")
     if not user_id:
@@ -4997,8 +4956,7 @@ def browse_library():
     )
 
     result = []
-    for pub in publications:
-        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+    for pub in publications:        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
         author = db.session.get(User, pub.user_id)
         result.append({
             "id": pub.id,
@@ -5997,8 +5955,7 @@ def xp_progress():
             "icon": icon,
             "label": label,
             "xp": e.xp_amount,
-            "created_at": e.created_at.isoformat() if e.created_at else None,
-        })
+            "created_at": e.created_at.isoformat() if e.created_at else None,        })
 
     return jsonify({
         "level": level_info["level"],
@@ -6997,8 +6954,7 @@ def update_group_member_role(group_id, target_user_id):
     if not group:
         return jsonify({"error": "Group not found"}), 404
 
-    requester = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()
-    if not requester or requester.role != "admin":
+    requester = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()    if not requester or requester.role != "admin":
         return jsonify({"error": "Only group admins can change member roles"}), 403
 
     target = GroupMember.query.filter_by(group_id=group_id, user_id=target_user_id).first()
@@ -7997,8 +7953,7 @@ def get_key_backup():
     Returns the logged-in user's OWN passphrase-wrapped private key
     blob, for a new device to download and decrypt locally with the
     user's passphrase (see frontend/src/crypto/backup.ts). Scoped to
-    session["user_id"] only - there is no way to fetch anyone else's
-    backup blob through this route.
+    session["user_id"] only - there is no way to fetch anyone else's    backup blob through this route.
     """
     user_id = session.get("user_id")
     if not user_id:
@@ -8332,8 +8287,8 @@ def subscription_plans():
     return jsonify({
         "plans": [
             {"id": "free", "name": "Free", "price": 0, "period": None},
-            {"id": "semester", "name": "Semester", "price": prices["semester"], "period": "semester"},
-            {"id": "annual", "name": "Annual", "price": prices["annual"], "period": "year"},
+            {"id": "plus", "name": "Plus", "price": prices["plus"], "period": "month", "duration_days": 30},
+            {"id": "pro", "name": "Pro", "price": prices["pro"], "period": "month", "duration_days": 30},
         ]
     })
 
@@ -8359,8 +8314,8 @@ def subscription_upgrade():
 
     data = request.get_json(silent=True) or {}
     plan = data.get("plan")
-    if plan not in ("semester", "annual"):
-        return jsonify({"error": "plan must be 'semester' or 'annual'"}), 400
+    if plan not in ("plus", "pro"):
+        return jsonify({"error": "plan must be 'plus' or 'pro'"}), 400
 
     price = get_plan_prices()[plan]
     if price <= 0:
@@ -8998,7 +8953,6 @@ def admin_reinstate_ambassador(ambassador_id):
     ambassador.reviewed_by = acting_admin_id
     ambassador.reviewed_at = datetime.utcnow()
     db.session.commit()
-
     return jsonify({"id": ambassador.id, "status": ambassador.status})
 
 
@@ -9997,8 +9951,7 @@ def init_chat_attachment(conversation_id):
 
 
 @app.route("/chats/<int:conversation_id>/attachments/<int:attachment_id>/uploaded", methods=["POST"])
-@require_csrf
-def confirm_chat_attachment_uploaded(conversation_id, attachment_id):
+@require_csrfdef confirm_chat_attachment_uploaded(conversation_id, attachment_id):
     """Step 2: confirms the direct upload landed in storage before
     trusting the client's word for it - same verification as
     POST /documents/<id>/uploaded."""
@@ -10997,8 +10950,7 @@ def admin_list_payments():
             "status": p.status,
             "provider": p.provider,
             "reference": p.reference,
-            "subscription_expires_at": p.subscription_expires_at.isoformat() if p.subscription_expires_at else None,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "subscription_expires_at": p.subscription_expires_at.isoformat() if p.subscription_expires_at else None,            "created_at": p.created_at.isoformat() if p.created_at else None,
         })
 
     return jsonify({"payments": result})
@@ -11900,17 +11852,17 @@ def admin_get_settings():
         "price_notes": price("price_notes"),
         "price_past_paper": price("price_past_paper"),
         "price_qna": price("price_qna"),
-        "price_plan_semester": price("price_plan_semester") or 599,
-        "price_plan_annual": price("price_plan_annual") or 999,
+        "price_plan_plus": price("price_plan_plus") or 399,
+        "price_plan_pro": price("price_plan_pro") or 699,
         "price_promotion_standard": price("price_promotion_standard"),
         "price_promotion_featured": price("price_promotion_featured") or 300,
         "price_promotion_sponsored": price("price_promotion_sponsored") or 800,
         "ai_daily_limit_free": daily_limit("ai_daily_limit_free", 5),
         "ai_daily_limit_plus": daily_limit("ai_daily_limit_plus", 15),
-        "ai_daily_limit_premium": daily_limit("ai_daily_limit_premium", None),
+        "ai_daily_limit_pro": daily_limit("ai_daily_limit_pro", 50),
         "ai_daily_tutor_limit_free": daily_limit("ai_daily_tutor_limit_free", 5),
         "ai_daily_tutor_limit_plus": daily_limit("ai_daily_tutor_limit_plus", 20),
-        "ai_daily_tutor_limit_premium": daily_limit("ai_daily_tutor_limit_premium", 50),
+        "ai_daily_tutor_limit_pro": daily_limit("ai_daily_tutor_limit_pro", 50),
         "ai_monthly_budget_usd": money("ai_monthly_budget_usd", "300.00"),
     })
 
@@ -11961,7 +11913,7 @@ def admin_update_settings():
             details={"enabled": value},
         )
 
-    for price_key in ("price_notes", "price_past_paper", "price_qna", "price_plan_semester", "price_plan_annual", "price_promotion_standard", "price_promotion_featured", "price_promotion_sponsored"):
+    for price_key in ("price_notes", "price_past_paper", "price_qna", "price_plan_plus", "price_plan_pro", "price_promotion_standard", "price_promotion_featured", "price_promotion_sponsored"):
         if price_key in data:
             value = data[price_key]
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -11973,8 +11925,8 @@ def admin_update_settings():
             setting.value = str(value)
 
     for tier_key in (
-        "ai_daily_limit_free", "ai_daily_limit_plus", "ai_daily_limit_premium",
-        "ai_daily_tutor_limit_free", "ai_daily_tutor_limit_plus", "ai_daily_tutor_limit_premium",
+        "ai_daily_limit_free", "ai_daily_limit_plus", "ai_daily_limit_pro",
+        "ai_daily_tutor_limit_free", "ai_daily_tutor_limit_plus", "ai_daily_tutor_limit_pro",
     ):
         if tier_key in data:
             value = data[tier_key]
@@ -11997,8 +11949,7 @@ def admin_update_settings():
             return jsonify({"error": "ai_monthly_budget_usd must be a positive number"}), 400
         setting = SystemSetting.query.filter_by(key="ai_monthly_budget_usd").first()
         if not setting:
-            setting = SystemSetting(key="ai_monthly_budget_usd", value=str(value))
-            db.session.add(setting)
+            setting = SystemSetting(key="ai_monthly_budget_usd", value=str(value))            db.session.add(setting)
         else:
             setting.value = str(value)
 
@@ -12997,8 +12948,7 @@ def admin_publish_opportunity(opportunity_id):
         }), 400
 
     now = datetime.utcnow()
-    if opp.application_deadline <= now or opp.expiry_date <= now:
-        return jsonify({
+    if opp.application_deadline <= now or opp.expiry_date <= now:        return jsonify({
             "error": "Cannot publish - application_deadline or expiry_date has already passed"
         }), 400
 
@@ -13998,7 +13948,6 @@ register_control_routes(
     log_admin_action,
     limiter,
 )
-
 from infrastructure_monitoring import register_infrastructure_monitoring
 
 register_infrastructure_monitoring(
