@@ -5023,8 +5023,9 @@ def _free_library_publication_ids(user_id):
     return {int(row.id) for row in rows}
 
 def _student_has_premium_library(user_id):
-    from ai_economics import get_active_entitlements
-    return bool(get_active_entitlements(db,user_id))
+    from ai_economics import get_user_plan_code, get_plan
+    plan=get_plan(db,get_user_plan_code(db,user_id)) or {}
+    return bool(plan.get("premium_library"))
 
 
 
