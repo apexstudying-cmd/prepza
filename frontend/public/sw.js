@@ -16,7 +16,7 @@ const CORE_SHELL = ['/offline.html', '/manifest.json', '/icon-192.png', '/icon-5
 function sameOrigin(url) { return url.origin === self.location.origin; }
 function isPdfJsAsset(url) { return url.hostname === PDFJS_HOST && url.pathname.startsWith(PDFJS_PATH_PREFIX); }
 function isNativeStudyPage(url) {
-  return sameOrigin(url) && /^\\/documents\\/\\d+\\/reading\\/page\\/\\d+$/.test(url.pathname);
+  return sameOrigin(url) && /^\/documents\/\d+\/reading\/page\/\d+$/.test(url.pathname);
 }
 
 function isCacheableAsset(request) {
