@@ -390,7 +390,7 @@ def register_discovery(app, db):
             return jsonify({"eligible": False, "code": "student_frequency_cap"}), 200
         data = request.get_json(silent=True) or {}
         supplied_key = str(data.get("event_id") or "").strip()
-        event_key = supplied_key[:160] if supplied_key else f"imp:{campaign_id}:{uid}:{secrets.token_hex(16)}"
+        event_key = f"imp:{campaign_id}:{uid}:{supplied_key[:100]}" if supplied_key else f"imp:{campaign_id}:{uid}:{secrets.token_hex(16)}"
         result = record_billable_event(db, campaign_id, uid, "impression", row["placement"], event_key)
         if result.get("ok"):
             db.session.commit()
