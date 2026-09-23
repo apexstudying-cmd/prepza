@@ -1888,6 +1888,8 @@ def get_plan_prices():
 # ---------- Ambassador / Referral program (Chunk 9) ----------
 
 AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT = 21
+AMBASSADOR_MIN_PAYOUT_KES = 500
+AMBASSADOR_PITCH_DEFAULT = "Study smarter together with Prepza — find course-specific learning materials, use AI study tools, discover opportunities, and study offline."
 
 
 def get_ambassador_settings():
@@ -1904,6 +1906,7 @@ def get_ambassador_settings():
         "ambassador_program_enabled",
         "ambassador_payout_hold_days",
         "ambassador_min_payout_kes",
+        "ambassador_pitch",
     )
     settings = {
         s.key: s.value
@@ -1916,11 +1919,21 @@ def get_ambassador_settings():
         except (TypeError, ValueError):
             return default
 
+    try:
+        hold_days = max(0, parse_int("ambassador_payout_hold_days", AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT))
+    except Exception:
+        hold_days = AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT
+    try:
+        min_payout_kes = max(AMBASSADOR_MIN_PAYOUT_KES, parse_int("ambassador_min_payout_kes", AMBASSADOR_MIN_PAYOUT_KES))
+    except Exception:
+        min_payout_kes = AMBASSADOR_MIN_PAYOUT_KES
+    pitch = settings.get("ambassador_pitch", AMBASSADOR_PITCH_DEFAULT).strip() or AMBASSADOR_PITCH_DEFAULT
     return {
-        "enabled": settings.get("ambassador_program_enabled", "true") == "true",
+        "enabled": settings.get("ambassador_program_enabled", "true").strip().lower() == "true",
         "commission_pct": 10,
-        "payout_hold_days": parse_int("ambassador_payout_hold_days", AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT),
-        "min_payout_kes": parse_int("ambassador_min_payout_kes", 500),
+        "payout_hold_days": hold_days,
+        "min_payout_kes": min_payout_kes,
+        "pitch": pitch[:1000],
     }
 
 
@@ -2731,9 +2744,11 @@ def signup():
     if raw_ref_code and isinstance(raw_ref_code, str):
         try:
             ref_code_clean = raw_ref_code.strip().upper()[:20]
-            ambassador = Ambassador.query.filter_by(
-                referral_code=ref_code_clean, status="active"
-            ).first()
+            ambassador = None
+            if get_ambassador_settings()["enabled"]:
+                ambassador = Ambassador.query.filter_by(
+                    referral_code=ref_code_clean, status="active"
+                ).first()
             if ambassador:
                 raw_channel = session.get("signup_referral_channel") or data.get("via")
                 channel = None
@@ -2811,7 +2826,7 @@ def signup_page():
     raw_via = request.args.get("via")
     if isinstance(raw_ref, str):
         ref_code = raw_ref.strip().upper()[:20]
-        if ref_code and Ambassador.query.filter_by(referral_code=ref_code, status="active").first():
+        if ref_code and get_ambassador_settings()["enabled"] and Ambassador.query.filter_by(referral_code=ref_code, status="active").first():
             # First valid referral touch is locked into the unauthenticated
             # session until signup. This survives leaving the page and
             # returning to /signup without the query string.
@@ -8994,6 +9009,7 @@ def ambassador_dashboard():
         },
         "min_payout_kes": settings["min_payout_kes"],
         "payout_hold_days": settings["payout_hold_days"],
+        "pitch": settings["pitch"],
     })
 
 
@@ -9004,8 +9020,10 @@ def ambassador_referral_qr():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
     ambassador = Ambassador.query.filter_by(user_id=user_id).first()
-    if not ambassador or ambassador.status not in ("active", "suspended"):
-        return jsonify({"error": "You are not an active ambassador"}), 403
+    if not ambassador or ambassador.status != "active":
+        return jsonify({"error": "Your ambassador account is not active"}), 403
+    if not get_ambassador_settings()["enabled"]:
+        return jsonify({"error": "The ambassador program is currently paused"}), 503
 
     referral_link = f"{BASE_URL}/signup?ref={ambassador.referral_code}&via=qr"
     import qrcode
@@ -9423,6 +9441,24 @@ def admin_suspend_ambassador(ambassador_id):
     ambassador.reviewed_at = datetime.utcnow()
     db.session.commit()
 
+    return jsonify({"id": ambassador.id, "status": ambassador.status})
+
+
+@app.route("/admin/ambassadors/<int:ambassador_id>/terminate", methods=["POST"])
+@require_csrf
+@require_admin
+def admin_terminate_ambassador(ambassador_id):
+    """Permanently terminates one ambassador's participation without deleting financial history."""
+    acting_admin_id = session.get("user_id")
+    ambassador = db.session.get(Ambassador, ambassador_id)
+    if not ambassador:
+        return jsonify({"error": "Ambassador not found"}), 404
+    if ambassador.status not in ("active", "suspended"):
+        return jsonify({"error": f"Only active or suspended ambassadors can be terminated (status: {ambassador.status})"}), 400
+    ambassador.status = "terminated"
+    ambassador.reviewed_by = acting_admin_id
+    ambassador.reviewed_at = datetime.utcnow()
+    db.session.commit()
     return jsonify({"id": ambassador.id, "status": ambassador.status})
 
 
@@ -11798,10 +11834,20 @@ def admin_refund_payment(payment_id):
 
     referral = Referral.query.filter_by(first_payment_id=payment.id).first()
     referral_commission_voided = False
-    if referral and referral.payout_id is None and referral.voided_at is None:
-        referral.voided_at = datetime.utcnow()
-        referral.void_reason = "Underlying payment refunded"
-        referral_commission_voided = True
+    payout_released = False
+    if referral and referral.voided_at is None:
+        payout = db.session.get(AmbassadorPayout, referral.payout_id) if referral.payout_id else None
+        if payout and payout.status == "pending":
+            payout.status = "rejected"
+            payout.rejection_reason = "Qualifying payment refunded before payout approval"
+            payout.reviewed_at = datetime.utcnow()
+            Referral.query.filter_by(payout_id=payout.id).update({"payout_id": None})
+            payout_released = True
+            referral.payout_id = None
+        if referral.payout_id is None:
+            referral.voided_at = datetime.utcnow()
+            referral.void_reason = "Underlying payment refunded"
+            referral_commission_voided = True
 
     db.session.commit()
 
@@ -12362,6 +12408,10 @@ def admin_get_settings():
         "support_email": settings.get("support_email", ""),
         "support_phone": settings.get("support_phone", ""),
         "support_message": settings.get("support_message", "Contact Prepza support and our team will get back to you."),
+        "ambassador_program_enabled": settings.get("ambassador_program_enabled", "true") == "true",
+        "ambassador_payout_hold_days": max(0, int(settings.get("ambassador_payout_hold_days", AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT) or AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT)),
+        "ambassador_min_payout_kes": max(AMBASSADOR_MIN_PAYOUT_KES, int(settings.get("ambassador_min_payout_kes", AMBASSADOR_MIN_PAYOUT_KES) or AMBASSADOR_MIN_PAYOUT_KES)),
+        "ambassador_pitch": settings.get("ambassador_pitch", AMBASSADOR_PITCH_DEFAULT),
     })
 
 
@@ -12469,6 +12519,49 @@ def admin_update_settings():
                 db.session.add(setting)
             else:
                 setting.value = value
+
+    if "ambassador_program_enabled" in data:
+        value = data["ambassador_program_enabled"]
+        if not isinstance(value, bool):
+            return jsonify({"error": "ambassador_program_enabled must be true or false"}), 400
+        setting = SystemSetting.query.filter_by(key="ambassador_program_enabled").first()
+        if not setting:
+            setting = SystemSetting(key="ambassador_program_enabled", value="true")
+            db.session.add(setting)
+        setting.value = "true" if value else "false"
+
+    if "ambassador_payout_hold_days" in data:
+        value = data["ambassador_payout_hold_days"]
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            return jsonify({"error": "ambassador_payout_hold_days must be a non-negative integer"}), 400
+        setting = SystemSetting.query.filter_by(key="ambassador_payout_hold_days").first()
+        if not setting:
+            setting = SystemSetting(key="ambassador_payout_hold_days", value=str(value))
+            db.session.add(setting)
+        setting.value = str(value)
+
+    if "ambassador_min_payout_kes" in data:
+        value = data["ambassador_min_payout_kes"]
+        if not isinstance(value, int) or isinstance(value, bool) or value < AMBASSADOR_MIN_PAYOUT_KES:
+            return jsonify({"error": f"ambassador_min_payout_kes must be at least KES {AMBASSADOR_MIN_PAYOUT_KES}"}), 400
+        setting = SystemSetting.query.filter_by(key="ambassador_min_payout_kes").first()
+        if not setting:
+            setting = SystemSetting(key="ambassador_min_payout_kes", value=str(value))
+            db.session.add(setting)
+        setting.value = str(value)
+
+    if "ambassador_pitch" in data:
+        value = data["ambassador_pitch"]
+        if not isinstance(value, str):
+            return jsonify({"error": "ambassador_pitch must be a string"}), 400
+        value = value.strip()
+        if len(value) > 1000:
+            return jsonify({"error": "ambassador_pitch must be 1000 characters or fewer"}), 400
+        setting = SystemSetting.query.filter_by(key="ambassador_pitch").first()
+        if not setting:
+            setting = SystemSetting(key="ambassador_pitch", value=AMBASSADOR_PITCH_DEFAULT)
+            db.session.add(setting)
+        setting.value = value or AMBASSADOR_PITCH_DEFAULT
 
     if "ai_monthly_budget_usd" in data:
         value = data["ai_monthly_budget_usd"]
