@@ -58,6 +58,6 @@ require("Study Preferences" in FRONTEND and "Not available yet" in FRONTEND, "st
 require("AI Preferences" in FRONTEND and "Not available yet" in FRONTEND, "AI preferences must not be a fake action")
 require("setScreen('subscription')" in FRONTEND, "subscription settings navigation missing")
 require("setScreen('payment-history')" in FRONTEND, "payment history navigation missing")
-require("await api('/logout'" in FRONTEND, "logout must await server success")
+require("await api('/logout', { method: 'POST'" in FRONTEND, "logout must await server success")
 
 print("STUDENT_RELEASE_CONTRACT_PASSED")
