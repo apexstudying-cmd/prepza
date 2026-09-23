@@ -70,6 +70,8 @@ from discovery_billing import register_discovery
 register_discovery(app, db)
 from b2b_campaign_finance import register_b2b_campaign_finance
 register_b2b_campaign_finance(app, db)
+from b2b_admin_routes import register_b2b_admin_routes
+register_b2b_admin_routes(app, db)
 from b2b_campaign_payments import register_b2b_campaign_payments
 register_b2b_campaign_payments(app, db)
 
