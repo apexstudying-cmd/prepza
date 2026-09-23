@@ -18,6 +18,18 @@ def register_study_friend_streak_routes(app, db):
         # Idempotent bootstrap for the repo's no-Alembic deployment model.
         # String UUID ids work on both PostgreSQL and SQLite.
         db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS study_friend_streak_activity (
+                id VARCHAR(36) PRIMARY KEY,
+                streak_id VARCHAR(36) NOT NULL,
+                user_id INTEGER NOT NULL,
+                friend_user_id INTEGER NOT NULL,
+                activity_date DATE NOT NULL,
+                streak_day INTEGER NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(streak_id, user_id, activity_date)
+            )
+        """))
+        db.session.execute(text("""
             CREATE TABLE IF NOT EXISTS study_friend_streak (
                 id VARCHAR(36) PRIMARY KEY,
                 user_a_id INTEGER NOT NULL,
@@ -92,6 +104,31 @@ def register_study_friend_streak_routes(app, db):
                 break
 
         if row["status"] == "active":
+            # Persist the shared day as a study-activity event. The underlying
+            # study minutes remain each student's own StudyTimeLog; this record
+            # captures the social streak milestone without double-counting time.
+            if streak and last_shared:
+                friend_id = row["user_b_id"] if row["user_a_id"] == row["user_b_id"] else row["user_a_id"]
+                db.session.execute(text("""
+                    INSERT INTO study_friend_streak_activity
+                    (id,streak_id,user_id,friend_user_id,activity_date,streak_day)
+                    VALUES(:id,:sid,:uid,:fid,:day,:streak_day)
+                    ON CONFLICT (streak_id,user_id,activity_date) DO NOTHING
+                """), {
+                    "id": str(uuid.uuid4()), "sid": row["id"],
+                    "uid": row["user_a_id"], "fid": row["user_b_id"],
+                    "day": last_shared, "streak_day": streak,
+                })
+                db.session.execute(text("""
+                    INSERT INTO study_friend_streak_activity
+                    (id,streak_id,user_id,friend_user_id,activity_date,streak_day)
+                    VALUES(:id,:sid,:uid,:fid,:day,:streak_day)
+                    ON CONFLICT (streak_id,user_id,activity_date) DO NOTHING
+                """), {
+                    "id": str(uuid.uuid4()), "sid": row["id"],
+                    "uid": row["user_b_id"], "fid": row["user_a_id"],
+                    "day": last_shared, "streak_day": streak,
+                })
             db.session.execute(text("""
                 UPDATE study_friend_streak
                 SET current_streak=:s,
