@@ -1167,26 +1167,3 @@ def register_usage_billing(app, db):
         return jsonify({"ok": True, "billing": _org_plan(organisation_id)})
 
     return None
-
-          AND (a.parameters->>'variant')::integer BETWEEN 1 AND :pool_size
-        ORDER BY (parameters->>'variant')::integer
-    """), {
-        "feature": feature,
-        "prefix": base_fingerprint[:0] + "%",
-        "pool_size": pool_size,
-    }).mappings().all()
-
-    existing_variants = {int(r["variant"]) for r in existing if r["variant"] is not None}
-    for variant in range(1, pool_size + 1):
-        if variant not in seen:
-            db.session.execute(text("""
-                INSERT INTO ai_generation_variant_access
-                    (user_id, base_fingerprint, variant, status)
-                VALUES (:uid, :fingerprint, :variant, 'reserved')
-                ON CONFLICT (user_id, base_fingerprint, variant) DO NOTHING
-            """), {"uid": user_id, "fingerprint": base_fingerprint, "variant": variant})
-            db.session.commit()
-            return variant
-
-    db.session.rollback()
-    return 1
