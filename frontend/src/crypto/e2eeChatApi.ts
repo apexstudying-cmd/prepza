@@ -1,6 +1,6 @@
 import { decryptGroupMessage, encryptGroupMessage, type GroupKeyEnvelope } from './group'
 import { openGroupE2EESession, type GroupE2EEState } from './groupSession'
-import { exportPublicKeyBase64Url, getOrCreateIdentityKeyPair } from './keys'
+import { exportPublicKeyBase64Url, getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'\nimport { deriveDirectChatKey } from './direct'
 
 let identityReadyPromise: Promise<void> | null = null
 
@@ -64,4 +64,13 @@ export async function encryptGroupText(key: CryptoKey, plaintext: string, conver
 
 export async function decryptGroupText(key: CryptoKey, body: string, nonce: string, conversationId?: number, keyEpoch?: number) {
   return decryptGroupMessage(key, body, nonce, conversationId, keyEpoch)
+}
+
+export async function openDirectSession(conversationId: number, currentUserId: number, peerUserId: number): Promise<CryptoKey> {
+  if (!Number.isInteger(currentUserId) || currentUserId <= 0) throw new Error('Invalid current user id')
+  if (!Number.isInteger(peerUserId) || peerUserId <= 0 || peerUserId === currentUserId) throw new Error('Invalid peer user id')
+  await ensureE2EEIdentityReady()
+  const { keyPair } = await getOrCreateIdentityKeyPair(currentUserId)
+  const peerPublicKey = await importPeerPublicKey(await fetchUserPublicKey(peerUserId))
+  return deriveDirectChatKey(keyPair.privateKey, peerPublicKey, conversationId, currentUserId, peerUserId)
 }
