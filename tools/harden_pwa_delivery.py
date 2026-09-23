@@ -91,8 +91,8 @@ def audit_dist() -> None:
             raise SystemExit(f"PWA delivery: manifest is missing {key}")
 
     sw = (DIST / "sw.js").read_text(encoding="utf-8")
-    if "SW_VERSION = 'v16'" not in sw:
-        raise SystemExit("PWA delivery: expected v16 service-worker cache reset is missing")
+    if "SW_VERSION = 'v17'" not in sw:
+        raise SystemExit("PWA delivery: expected v17 service-worker cache reset is missing")
     if "self.addEventListener('fetch'" not in sw and 'self.addEventListener("fetch"' not in sw:
         raise SystemExit("PWA delivery: service worker has no fetch handler")
 
