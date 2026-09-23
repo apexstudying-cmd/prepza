@@ -28,13 +28,13 @@ export async function registerUserPublicKey(publicKey: string, csrfToken?: strin
   await jsonFetch('/keys/register', { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ public_key: publicKey }) })
 }
 
-export async function ensureE2EEIdentityReady(): Promise<void> {
+export async function ensureE2EEIdentityReady(): Promise<number> {
   if (identityReadyPromise) return identityReadyPromise
   identityReadyPromise = (async () => {
     const me = await jsonFetch<{ id: number; csrf_token: string }>('/me')
     if (!me?.id) throw new Error('Authentication required')
     if (!me?.csrf_token) throw new Error('CSRF token is unavailable; please refresh the session')
-    const { keyPair } = await getOrCreateIdentityKeyPair()
+    const { keyPair } = await getOrCreateIdentityKeyPair(me.id)
     await registerUserPublicKey(await exportPublicKeyBase64Url(keyPair.publicKey), me.csrf_token)
   })()
   try { await identityReadyPromise } catch (error) { identityReadyPromise = null; throw error }
