@@ -6360,6 +6360,7 @@ def _ensure_large_group_schema():
 
 
 def create_group():
+    _ensure_large_group_schema()
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
