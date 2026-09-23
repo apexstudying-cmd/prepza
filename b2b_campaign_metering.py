@@ -86,7 +86,7 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
         """), {
             "cid": campaign_id, "uid": user_id, "key": event_key,
             "etype": event_type, "placement": placement,
-            "amount": amount_kes,
+            "amount": 0,
             "meta": json.dumps({"billable": True, "amount_minor": price, "meter_version": "g3-v1"})
         })
         db.session.execute(text("""
