@@ -36,4 +36,13 @@ require("db.session.commit()\n\n        # Existing installations need the new se
 require("def local_today()" in STREAK, "shared streak local-date helper missing")
 require("started = False" in STREAK and "elif started:" in STREAK, "shared streak must preserve an active streak when today is not yet qualified")
 
+# Settings must be real end-to-end controls, not local-only toggles.
+require('who_can_message: next ? \'everyone\' : \'followers\'' in FRONTEND, "message privacy toggle must persist through /profile")
+require('who_can_follow: next ? \'everyone\' : \'approval_required\'' in FRONTEND, "follow privacy toggle must persist through /profile")
+require("@app.route(\"/api/opportunity-discovery\", methods=[\"GET\", \"POST\"])") in APP, "opportunity discovery endpoint missing")
+require("CREATE TABLE IF NOT EXISTS student_opportunity_discovery" in APP, "opportunity discovery persistence bootstrap missing")
+require("/api/opportunity-discovery" in FRONTEND and "method: 'POST'" in FRONTEND, "opportunity discovery setting is not wired to the backend")
+require("phone_number: me.phone_number" in FRONTEND, "settings does not load the saved phone number")
+require("phone_number: phoneNumber.trim() || null" in FRONTEND, "settings phone save is not wired to /profile")
+
 print("STUDENT_RELEASE_CONTRACT_PASSED")
