@@ -7039,6 +7039,65 @@ def _serialize_group_member(membership):
     }
 
 
+@app.route("/groups/<int:group_id>/members", methods=["POST"])
+@require_csrf
+def add_group_members(group_id):
+    _ensure_large_group_schema()
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+    admin = GroupMember.query.filter_by(group_id=group_id, user_id=user_id, role="admin").first()
+    if not admin:
+        return jsonify({"error": "Only group admins can add members"}), 403
+    data = request.get_json(silent=True) or {}
+    ids = data.get("user_ids")
+    if not isinstance(ids, list) or not ids:
+        return jsonify({"error": "user_ids must be a non-empty list"}), 400
+    ids = sorted({int(x) for x in ids if isinstance(x, int) and not isinstance(x, bool) and int(x) != user_id})
+    if not ids:
+        return jsonify({"error": "No new member ids were supplied"}), 400
+    if (group.member_count or 0) + len(ids) > GROUP_MAX_MEMBERS:
+        return jsonify({"error": "The group cannot exceed 200,000 members"}), 409
+    existing = {m.user_id for m in GroupMember.query.filter_by(group_id=group_id).all()}
+    new_ids = [x for x in ids if x not in existing]
+    if not new_ids:
+        return jsonify({"group": _serialize_group(group, admin), "added": []}), 200
+    valid = {u.id for u in User.query.filter(User.id.in_(new_ids), User.is_suspended.is_(False)).all()}
+    if valid != set(new_ids):
+        return jsonify({"error": "One or more students were not found or are unavailable"}), 404
+    for target_id in new_ids:
+        db.session.add(GroupMember(group_id=group_id, user_id=target_id, role="member"))
+    group.member_count = (group.member_count or 0) + len(new_ids)
+    db.session.commit()
+    return jsonify({"group": _serialize_group(group, admin), "added": new_ids}), 201
+
+@app.route("/groups/join-by-code/<invite_code>", methods=["POST"])
+@require_csrf
+def join_group_by_invite_code(invite_code):
+    _ensure_large_group_schema()
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    group = Group.query.filter_by(invite_code=invite_code, is_active=True).first()
+    if not group:
+        return jsonify({"error": "Invite link is invalid or expired"}), 404
+    if group.member_count >= GROUP_MAX_MEMBERS:
+        return jsonify({"error": "This group is full"}), 409
+    existing = GroupMember.query.filter_by(group_id=group.id, user_id=user_id).first()
+    if existing:
+        return jsonify({"group": _serialize_group(group, existing), "already_member": True}), 200
+    if group.privacy == "private":
+        # Private groups are invite-only; possessing the invite code is the invitation.
+        pass
+    membership = GroupMember(group_id=group.id, user_id=user_id, role="member")
+    db.session.add(membership)
+    group.member_count = (group.member_count or 0) + 1
+    db.session.commit()
+    return jsonify({"group": _serialize_group(group, membership)}), 201
+
 @app.route("/groups/<int:group_id>/members")
 def list_group_members(group_id):
     user_id = session.get("user_id")
