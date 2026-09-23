@@ -3121,6 +3121,21 @@ def me():
         "program_id": user.program_id,
         "csrf_token": session["csrf_token"],
     })
+@app.route("/support/config")
+def support_config():
+    """Authenticated student-facing support contact configuration."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Not logged in"}), 401
+    settings = {s.key: s.value for s in SystemSetting.query.filter(
+        SystemSetting.key.in_(( "support_email", "support_phone", "support_message" ))
+    ).all()}
+    return jsonify({
+        "email": settings.get("support_email", ""),
+        "phone": settings.get("support_phone", ""),
+        "message": settings.get("support_message", "Contact Prepza support and our team will get back to you."),
+    })
+
+
 @app.route("/delete-account", methods=["DELETE"])
 @require_csrf
 def delete_account():
@@ -12181,6 +12196,9 @@ def admin_get_settings():
         "ai_daily_tutor_limit_plus": daily_limit("ai_daily_tutor_limit_plus", 20),
         "ai_daily_tutor_limit_pro": daily_limit("ai_daily_tutor_limit_pro", 50),
         "ai_monthly_budget_usd": money("ai_monthly_budget_usd", "300.00"),
+        "support_email": settings.get("support_email", ""),
+        "support_phone": settings.get("support_phone", ""),
+        "support_message": settings.get("support_message", "Contact Prepza support and our team will get back to you."),
     })
 
 
@@ -12259,6 +12277,21 @@ def admin_update_settings():
                 db.session.add(setting)
             else:
                 setting.value = stored
+
+    for support_key in ("support_email", "support_phone", "support_message"):
+        if support_key in data:
+            value = data[support_key]
+            if not isinstance(value, str):
+                return jsonify({"error": f"{support_key} must be a string"}), 400
+            max_len = 160 if support_key != "support_message" else 500
+            if len(value) > max_len:
+                return jsonify({"error": f"{support_key} must be {max_len} characters or fewer"}), 400
+            setting = SystemSetting.query.filter_by(key=support_key).first()
+            if not setting:
+                setting = SystemSetting(key=support_key, value=value)
+                db.session.add(setting)
+            else:
+                setting.value = value
 
     if "ai_monthly_budget_usd" in data:
         value = data["ai_monthly_budget_usd"]
