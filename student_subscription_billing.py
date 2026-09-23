@@ -255,12 +255,12 @@ def calculate_refund_quote(db, payment_row, requested_at=None):
     breakdown = _consumption_breakdown(db, payment_row)
     consumed_value = breakdown["consumed_value_kes"]
     amount = int(payment_row["amount"])
-    if consumed_value == 0 and full_zero_usage:
-        retention = 0
-        refund = amount
-    elif not within_window:
+    if not within_window:
         retention = 0
         refund = 0
+    elif consumed_value == 0 and full_zero_usage:
+        retention = 0
+        refund = amount
     else:
         retention = int(math.ceil(amount * float(retention_pct) / 100.0))
         refund = max(0, amount - consumed_value - retention)
