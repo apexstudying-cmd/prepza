@@ -125,3 +125,29 @@ def test_paystack_plan_sync_requires_plan_code(monkeypatch):
     import pytest
     with pytest.raises(RuntimeError, match="PAYSTACK_PLUS_PLAN_CODE"):
         sync_paystack_recurring_plan("plus", {"price_kes": 599})
+
+
+def test_student_offer_definition_is_monthly_and_plan_isolated():
+    assert set(PLAN_DEFAULTS) == {"free", "plus", "pro"}
+    for code, cfg in PLAN_DEFAULTS.items():
+        assert cfg["quota_period"] == "month"
+        assert cfg["offline_study"] is True
+        assert cfg["study_hub_uploads"] is True
+    assert PLAN_DEFAULTS["free"]["premium_library"] is False
+    assert PLAN_DEFAULTS["plus"]["premium_library"] is True
+    assert PLAN_DEFAULTS["pro"]["premium_library"] is True
+    assert PLAN_DEFAULTS["free"]["price_kes"] == 0
+    assert PLAN_DEFAULTS["plus"]["price_kes"] == 499
+    assert PLAN_DEFAULTS["pro"]["price_kes"] == 999
+    assert PLAN_DEFAULTS["free"]["summary_pages"] == 10
+    assert PLAN_DEFAULTS["plus"]["summary_pages"] == 40
+    assert PLAN_DEFAULTS["pro"]["summary_pages"] == 100
+    assert PLAN_DEFAULTS["free"]["questions"] == 20
+    assert PLAN_DEFAULTS["plus"]["questions"] == 100
+    assert PLAN_DEFAULTS["pro"]["questions"] == 210
+    assert PLAN_DEFAULTS["free"]["mind_map_nodes"] == 30
+    assert PLAN_DEFAULTS["plus"]["mind_map_nodes"] == 150
+    assert PLAN_DEFAULTS["pro"]["mind_map_nodes"] == 350
+    assert PLAN_DEFAULTS["free"]["flashcards"] == 100
+    assert PLAN_DEFAULTS["plus"]["flashcards"] == 300
+    assert PLAN_DEFAULTS["pro"]["flashcards"] == 600
