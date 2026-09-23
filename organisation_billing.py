@@ -20,6 +20,8 @@ ORGANISATION_PLANS = {
 
 
 def register_organisation_billing(app, db):
+    if db.engine.dialect.name == "sqlite":
+        return
     db.session.execute(text("""
         ALTER TABLE organisation_billing
         ADD COLUMN IF NOT EXISTS transaction_reference VARCHAR(120),
