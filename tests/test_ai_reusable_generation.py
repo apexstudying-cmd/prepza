@@ -226,6 +226,7 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
     fake_usage = types.SimpleNamespace(
         FEATURES={"flashcards": ("flashcard_generations", "flashcard_max_cards")},
         check_and_consume_ai_quota=lambda *args, **kwargs: (True, {"period_start": "2026-09-01"}),
+        mark_generation_variant_ready=lambda *args, **kwargs: None,
         reserve_generation_variant=lambda *args, **kwargs: (
             seen_variants.append(variant_state["next"]) or
             variant_state.update(next=1 if variant_state["next"] == 4 else variant_state["next"] + 1) or
