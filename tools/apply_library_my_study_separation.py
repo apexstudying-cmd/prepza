@@ -7,6 +7,10 @@ APP = Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx"
 text = APP.read_text(encoding="utf-8")
 
 
+if "const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')" not in text:
+    print('Library/My Study separation: current App structure has already evolved; skipping legacy transformation.')
+    raise SystemExit(0)
+
 def replace_once(source: str, old: str, new: str, label: str) -> str:
     if old not in source or source.count(old) != 1:
         print(f"Library/My Study patch anchor unavailable; skipping: {label}")
