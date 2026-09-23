@@ -1684,37 +1684,6 @@ class Opportunity(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-OPPORTUNITY_PROMOTION_TYPES = ("standard", "featured", "sponsored")
-OPPORTUNITY_PROMOTION_APPROVAL_STATUSES = ("pending", "approved", "rejected")
-OPPORTUNITY_PROMOTION_PAYMENT_STATUSES = ("unpaid", "pending", "paid", "refunded")
-
-
-class OpportunityPromotion(db.Model):
-    """
-    One promotion campaign for an Opportunity. Deliberately separate
-    from Opportunity itself (rather than fields on it) since an org can
-    run more than one promotion over an opportunity's lifetime, each
-    with its own window/price/approval. price is a snapshot captured at
-    creation time from admin-configurable SystemSetting pricing (same
-    pattern as get_content_prices()) - NOT hard-coded here. Actual
-    payment collection/webhook wiring belongs to the Payments chunk;
-    payment_status exists now so that schema is ready for it.
-    """
-    id = db.Column(db.Integer, primary_key=True)
-    opportunity_id = db.Column(db.Integer, db.ForeignKey("opportunity.id", ondelete="CASCADE"), nullable=False)
-    organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id"), nullable=False)
-    # denormalized for admin filtering, per the MVP spec's stored-fields list
-    promotion_type = db.Column(db.String(20), nullable=False)
-    start_date = db.Column(db.DateTime, nullable=False)
-    end_date = db.Column(db.DateTime, nullable=False)
-    price = db.Column(db.Integer, nullable=False, default=0)
-    payment_status = db.Column(db.String(20), nullable=False, default="unpaid")
-    approval_status = db.Column(db.String(20), nullable=False, default="pending")
-    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    reviewed_at = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
 class Ambassador(db.Model):
     """
     A user's enrollment in the referral/ambassador program (Chunk 9).
