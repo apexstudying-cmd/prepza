@@ -5452,7 +5452,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>👋</div>
             <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 8 }}>Log out of Prepza?</div>
             <div style={{ fontSize: 13, color: T.textMuted, textAlign: 'center', marginBottom: 24 }}>You'll need to sign in again to access your study materials.</div>
-            <button onClick={() => { api('/logout', { method: 'POST' }).catch(() => {}).finally(() => setScreen('login')) }} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
+            <button onClick={() => { api('/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }).catch(() => {}).finally(() => setScreen('login')) }} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
             <button onClick={() => setShowLogout(false)} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
           </div>
         </div>
