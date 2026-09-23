@@ -642,9 +642,9 @@ function DocumentStudyHubScreen({
             const payload = await getLatestGeneratedMaterialForPath(path)
             if (!payload) return null
             if (type === 'podcast' && payload?.audio_status !== 'ready') return null
-            return { type, status: 'ready' }
+            return { id: Number(payload?.material_id || 0), type, status: 'ready', parameters: payload?.parameters || {} }
           }))
-          const offlineMaterials = cachedMaterialTypes.filter(Boolean) as { type: string; status: string }[]
+          const offlineMaterials = cachedMaterialTypes.filter((m): m is { id: number; type: string; status: string; parameters?: Record<string, unknown> } => Boolean(m && m.id > 0))
           setDocument({
             id: activeDocumentId,
             title: saved.title || 'Saved study document',
@@ -9160,6 +9160,7 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
         headers: { 'X-CSRF-Token': me.csrf_token },
         body: JSON.stringify({ plan: selectedPlan, phone_number: phone.trim() || undefined }),
       })
+      if (!res.redirect_url) throw new Error('Payment checkout URL was not returned.')
       window.location.href = res.redirect_url
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not start checkout - please try again.')
@@ -13520,6 +13521,28 @@ function OrgOpportunitiesTab({ orgId, isOwner, csrfToken, onCreate }: { orgId: n
     }
   }
 
+  const payPromotion = async (promotionId: number) => {
+    if (!isOwner || promoPayingId === promotionId) return
+    setPromoPayingId(promotionId)
+    setPromoError('')
+    try {
+      const res = await api<{ payment_required: boolean; redirect_url?: string }>(
+        `/organisations/${orgId}/opportunity-promotions/${promotionId}/pay`,
+        { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } },
+      )
+      if (res.payment_required && res.redirect_url) {
+        window.location.href = res.redirect_url
+      } else if (promoTarget) {
+        const refreshed = await api<{ promotions: OrgPromotion[] }>(`/organisations/${orgId}/opportunities/${promoTarget.id}/promotions`)
+        setPromoHistory(refreshed.promotions)
+      }
+    } catch (e) {
+      setPromoError(e instanceof ApiError ? e.message : 'Could not start payment.')
+    } finally {
+      setPromoPayingId(null)
+    }
+  }
+
   const load = () => {
     setLoading(true); setError('')
     api<{ opportunities: OrgOpportunity[] }>(`/organisations/${orgId}/opportunities`)
@@ -13851,7 +13874,7 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
     if (!isOwner || billingBusy) return
     setBillingBusy(code)
     try {
-      const res = await api<{ status: string; amount_kes: number }>(`/api/organisations/${orgId}/plan/checkout`, {
+      const res = await api<{ status: string; amount_kes: number; redirect_url?: string }>(`/api/organisations/${orgId}/plan/checkout`, {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
         body: JSON.stringify({ plan: code }),
