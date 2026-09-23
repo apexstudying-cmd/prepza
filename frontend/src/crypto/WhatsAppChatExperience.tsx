@@ -93,6 +93,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const [studyStreak, setStudyStreak] = useState<any>(null)
   const [studyStreakLoading, setStudyStreakLoading] = useState(false)
   const [studyStreakBusy, setStudyStreakBusy] = useState(false)
+  const [studyWeekendPause, setStudyWeekendPause] = useState(false)
   const [showListSearch, setShowListSearch] = useState(false)
   const [showGroupCreator, setShowGroupCreator] = useState(false)
   const [groupName, setGroupName] = useState('')
@@ -491,14 +492,24 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const loadStudyStreak = async () => {
     if (selectedId == null || !detail || detail.is_group) { setStudyStreak(null); return }
     setStudyStreakLoading(true)
-    try { const result = await api<{ supported: boolean; streak: any | null }>(`/chats/${selectedId}/study-streak`); setStudyStreak(result.streak) }
+    try { const result = await api<{ supported: boolean; streak: any | null }>(`/chats/${selectedId}/study-streak`); setStudyStreak(result.streak); setStudyWeekendPause(Boolean(result.streak?.weekend_pause)) }
     catch { setStudyStreak(null) } finally { setStudyStreakLoading(false) }
   }
   const startStudyStreak = async () => {
     if (selectedId == null || studyStreakBusy) return
     setStudyStreakBusy(true); setError('')
-    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/study-streak`, { method:'POST', headers:{'X-CSRF-Token':token}, body:'{}' }); await loadStudyStreak() }
+    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/study-streak`, { method:'POST', headers:{'X-CSRF-Token':token}, body:JSON.stringify({ weekend_pause: studyWeekendPause }) }); await loadStudyStreak() }
     catch (value) { setError(friendlyError(value, 'Could not start the shared study streak.')) }
+    finally { setStudyStreakBusy(false) }
+  }
+  const toggleStudyWeekendPause = async () => {
+    if (selectedId == null || !studyStreak || studyStreak.status !== 'active' || studyStreakBusy) return
+    setStudyStreakBusy(true); setError('')
+    try {
+      const token = await getCsrfToken()
+      const result = await api<{ streak:any }>(`/chats/${selectedId}/study-streak/settings`, { method:'POST', headers:{'X-CSRF-Token':token}, body:JSON.stringify({ weekend_pause: !studyWeekendPause }) })
+      setStudyWeekendPause(Boolean(result.streak?.weekend_pause)); setStudyStreak(result.streak)
+    } catch (value) { setError(friendlyError(value, 'Could not update weekend pause.')) }
     finally { setStudyStreakBusy(false) }
   }
   const acceptStudyStreak = async () => {
@@ -509,7 +520,6 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
     finally { setStudyStreakBusy(false) }
   }
   const openAda = () => window.dispatchEvent(new CustomEvent('prepza-open-ada', { detail: { conversationId: selectedId } }))
-  useEffect(() => { if (!visible || view !== 'detail' || selectedId == null || !detail || detail.is_group) { if (view !== 'detail') setStudyStreak(null); return } void loadStudyStreak() }, [visible, view, selectedId, detail?.id, detail?.is_group])
   useEffect(() => { if (!visible || view !== 'detail' || selectedId == null || !detail || detail.is_group) { if (view !== 'detail') setStudyStreak(null); return } void loadStudyStreak() }, [visible, view, selectedId, detail?.id, detail?.is_group])
   if (!visible) return null
 
@@ -558,6 +568,9 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
             {!isGroup && !studyStreak && <button type="button" onClick={() => { setActionMenuOpen(false); void startStudyStreak() }} style={{width:'100%',border:0,background:'transparent',padding:'10px 11px',textAlign:'left',borderRadius:10,cursor:'pointer',fontWeight:800,color:'#202534'}}>Start study streak</button>}
             {!isGroup && studyStreak?.can_accept && <button type="button" onClick={() => { setActionMenuOpen(false); void acceptStudyStreak() }} style={{width:'100%',border:0,background:'#fff9e9',padding:'10px 11px',textAlign:'left',borderRadius:10,cursor:'pointer',fontWeight:800,color:'#6b520d'}}>Accept study streak</button>}
             {!isGroup && studyStreak && <div style={{padding:'9px 11px',fontSize:11,color:'#606672'}}>{studyStreak.status === 'active' ? `🔥 ${studyStreak.current_streak}-day shared study streak` : 'Study streak invitation pending'}</div>}
+            {!isGroup && !studyStreak && <label style={{display:'flex',alignItems:'center',gap:9,padding:'7px 11px',fontSize:10,color:'#606672',cursor:'pointer'}}><input type="checkbox" checked={studyWeekendPause} onChange={e=>setStudyWeekendPause(e.target.checked)} /> Pause shared streak on weekends</label>}
+            {!isGroup && studyStreak?.status === 'active' && <button type="button" onClick={() => void toggleStudyWeekendPause()} style={{width:'100%',border:0,background:'transparent',padding:'9px 11px',textAlign:'left',borderRadius:10,cursor:'pointer',fontWeight:750,color:'#606672'}}>{studyWeekendPause ? 'Weekend pause: on' : 'Weekend pause: off'} · tap to change</button>}
+
             <button type="button" onClick={() => { setActionMenuOpen(false); openAda() }} style={{width:'100%',border:0,background:'transparent',padding:'10px 11px',textAlign:'left',borderRadius:10,cursor:'pointer',fontWeight:800,color:'#202534'}}>Ask Ada</button>
           </div>}
           <main className="prepza-wa-messages">
