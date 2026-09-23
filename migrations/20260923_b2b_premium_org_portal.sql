@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS b2b_invoice (
   subtotal_minor BIGINT NOT NULL,
   processing_fee_minor BIGINT NOT NULL DEFAULT 0,
   total_minor BIGINT NOT NULL,
-  status VARCHAR(30) NOT NULL DEFAULT 'issued',
+  status VARCHAR(30) NOT NULL DEFAULT 'pro_forma',
   payment_method VARCHAR(30) NOT NULL DEFAULT 'bank_transfer',
   due_at TIMESTAMP,
   paid_at TIMESTAMP,
