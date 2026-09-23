@@ -117,19 +117,23 @@ def register_b2b_organisation_portal(app, db):
         """),{"i":opp_id}).mappings().first()
         if not row or row["status"]!="published" or row["verification_status"]!="verified" or not row["is_active"] or row["expiry_date"]<=datetime.utcnow():
             db.session.rollback();return jsonify({"error":"Opportunity not found"}),404
+        source=str(request.args.get('source') or 'organic').lower()
+        if source not in ('organic','paid'): source='organic'
         paid=db.session.execute(text("SELECT 1 FROM discovery_campaign WHERE opportunity_id=:i AND organisation_id=:o AND status='active' LIMIT 1"),{"i":opp_id,"o":row["organisation_id"]}).first()
         total=db.session.execute(text("SELECT COUNT(*) FROM opportunity_view_event WHERE opportunity_id=:i AND source='organic'"),{"i":opp_id}).scalar_one()
         mine=db.session.execute(text("SELECT COUNT(*) FROM opportunity_view_event WHERE opportunity_id=:i AND user_id=:u AND source='organic'"),{"i":opp_id,"u":uid}).scalar_one()
-        if row["organic_free_cap_reached_at"] and not paid:
+        if source=='paid' and not paid:
+            db.session.rollback(); return jsonify({"error":"Sponsored delivery is no longer active."}),410
+        if source=='organic' and row["organic_free_cap_reached_at"]:
             db.session.rollback();return jsonify({"error":"This opportunity has reached its free 5,000-view limit.","cap_reached":True}),410
-        if not paid and int(total)>=5000:
+        if source=='organic' and int(total)>=5000:
             db.session.execute(text("UPDATE opportunity SET organic_free_cap_reached_at=COALESCE(organic_free_cap_reached_at,CURRENT_TIMESTAMP) WHERE id=:i"),{"i":opp_id});db.session.commit()
             return jsonify({"error":"This opportunity has reached its free 5,000-view limit.","cap_reached":True}),410
-        if not paid and int(mine)>=3:
+        if source=='organic' and int(mine)>=3:
             db.session.rollback();return jsonify({"error":"Your free views for this opportunity have been used."}),429
-        db.session.execute(text("INSERT INTO opportunity_view_event(opportunity_id,user_id,source) VALUES(:i,:u,'organic')"),{"i":opp_id,"u":uid})
+        db.session.execute(text("INSERT INTO opportunity_view_event(opportunity_id,user_id,source) VALUES(:i,:u,:s)"),{"i":opp_id,"u":uid,"s":source})
         db.session.execute(text("UPDATE opportunity SET view_count=view_count+1 WHERE id=:i"),{"i":opp_id})
-        if not paid and int(total)+1>=5000:db.session.execute(text("UPDATE opportunity SET organic_free_cap_reached_at=CURRENT_TIMESTAMP WHERE id=:i"),{"i":opp_id})
+        if source=='organic' and int(total)+1>=5000:db.session.execute(text("UPDATE opportunity SET organic_free_cap_reached_at=CURRENT_TIMESTAMP WHERE id=:i"),{"i":opp_id})
         db.session.commit()
         saved=False
         try:saved=bool(db.session.execute(text("SELECT 1 FROM saved_opportunity WHERE opportunity_id=:i AND user_id=:u LIMIT 1"),{"i":opp_id,"u":uid}).first())
