@@ -74,7 +74,8 @@ export async function openGroupE2EESession(
   const envelope = remote.envelopes[0]
   if (!envelope) throw new Error('No encrypted group key is available for this device.')
 
-  if (!Number.isInteger(currentUserId) || currentUserId! <= 0) throw new Error('Current user id is required for secure group chat.')\n  const { keyPair } = await getOrCreateIdentityKeyPair(currentUserId!)
+  if (!Number.isInteger(currentUserId) || currentUserId! <= 0) throw new Error('Current user id is required for secure group chat.')
+  const { keyPair } = await getOrCreateIdentityKeyPair(currentUserId!)
   validateCurrentEnvelope(envelope, conversationId, remote.key_epoch, currentUserId!)
   const senderPublicKeyBase64Url = await resolvePublicKey(envelope.senderUserId)
   const senderPublicKey = await importPeerPublicKey(senderPublicKeyBase64Url)
