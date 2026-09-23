@@ -4786,8 +4786,8 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
     const cached = OPP_DETAIL_CACHE[opportunityId]
     if (cached) { setOpp(cached); setLoading(false) } else { setLoading(true) }
     setError('')
-    api<OpportunityPublic>(`/opportunities/${opportunityId}`)
-      .then(res => { setOpp(res); OPP_DETAIL_CACHE[opportunityId] = res })
+    api<OpportunityPublic>(`/api/opportunities/${opportunityId}/organic-view?source=${OPP_DETAIL_CACHE[opportunityId]?.promotion_type === 'sponsored' ? 'paid' : 'organic'}`)
+      .then(res => { setOpp(res.opportunity || res); OPP_DETAIL_CACHE[opportunityId] = (res.opportunity || res) })
       .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load this opportunity.'))
       .finally(() => setLoading(false))
   }, [opportunityId])
