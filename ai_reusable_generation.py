@@ -75,9 +75,12 @@ def _parameter_instruction(params: dict) -> str:
     if not params:
         return ""
     labels = {
-        "max_pages": "summary target length", "question_count": "number of quiz questions",
-        "card_count": "number of flashcards", "duration_minutes": "target podcast duration in minutes",
-        "node_count": "number of mind-map nodes/branches", "difficulty": "difficulty",
+        "max_pages": "exact number of summary pages/sections to produce",
+        "question_count": "exact number of quiz questions to produce",
+        "card_count": "exact number of flashcards to produce",
+        "duration_minutes": "exact target podcast duration in minutes",
+        "node_count": "exact number of mind-map branches/nodes to produce",
+        "difficulty": "difficulty",
         "style": "style", "language": "language",
         "variant": "variation number; produce a meaningfully different set from other variations",
     }
@@ -85,6 +88,32 @@ def _parameter_instruction(params: dict) -> str:
         f"- {labels.get(k, k)}: {params[k]}"
         for k in sorted(params)
     )
+
+
+def _validate_requested_output(material_type: str, payload: dict, parameters: dict) -> dict:
+    """Enforce the exact student-selected output size before an artifact can become ready."""
+    size_keys = {
+        "summary": ("max_pages", "sections"),
+        "quiz": ("question_count", "questions"),
+        "flashcards": ("card_count", "cards"),
+        "mind_map": ("node_count", "branches"),
+    }
+    if material_type not in size_keys:
+        return payload
+
+    key, collection_key = size_keys[material_type]
+    requested = parameters.get(key)
+    if requested is None:
+        raise ValueError(f"Missing required generation size for {material_type}")
+    items = payload.get(collection_key) if isinstance(payload, dict) else None
+    if not isinstance(items, list):
+        raise ValueError(f"{material_type} output is missing its {collection_key} list")
+    if len(items) != requested:
+        raise ValueError(
+            f"{material_type} generation returned {len(items)} {collection_key}; "
+            f"exactly {requested} were requested"
+        )
+    return payload
 
 
 def _generator(material_type, parameters=None):
@@ -335,6 +364,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
         job.progress_stage = "checking and formatting the result"
         db.session.commit()
         parsed = parser(ai_response.text)
+        parsed = _validate_requested_output(material_type, parsed, params)
         payload = _podcast_payload(parsed) if material_type == "podcast" else parsed
         mark_generation_ready(lookup.artifact_id, payload, lookup.lease_token)
         if variant_pool_feature:
