@@ -378,8 +378,19 @@ def register_discovery(app, db):
         target = row["target_json"] or {}
         if not target_matches(uid, target):
             return jsonify({"eligible": False}), 200
-        day = date.today().isoformat()
-        event_key = f"imp:{campaign_id}:{uid}:{day}:{row['placement']}"
+        # Launch home/feed sponsored inventory cap: no more than 3
+        # qualifying sponsored impressions for one student in any rolling 7 days.
+        recent_impressions = db.session.execute(text("""
+            SELECT COUNT(*) FROM discovery_event
+            WHERE user_id=:uid
+              AND event_type='impression'
+              AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+        """), {"uid": uid}).scalar_one()
+        if int(recent_impressions) >= 3:
+            return jsonify({"eligible": False, "code": "student_frequency_cap"}), 200
+        data = request.get_json(silent=True) or {}
+        supplied_key = str(data.get("event_id") or "").strip()
+        event_key = supplied_key[:160] if supplied_key else f"imp:{campaign_id}:{uid}:{secrets.token_hex(16)}"
         result = record_billable_event(db, campaign_id, uid, "impression", row["placement"], event_key)
         if result.get("ok"):
             db.session.commit()
