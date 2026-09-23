@@ -144,9 +144,11 @@ def register_b2b_organisation_portal(app, db):
         """),{"i":opp_id}).mappings().first()
         if not row or row["status"]!="published" or row["verification_status"]!="verified" or not row["is_active"] or row["expiry_date"]<=datetime.utcnow():
             db.session.rollback();return jsonify({"error":"Opportunity not found"}),404
-        source=str(request.args.get('source') or 'organic').lower()
+        requested_source=request.args.get('source')
+        source=str(requested_source or 'organic').lower()
         if source not in ('organic','paid'): source='organic'
         paid=db.session.execute(text("SELECT 1 FROM discovery_campaign WHERE opportunity_id=:i AND organisation_id=:o AND status='active' LIMIT 1"),{"i":opp_id,"o":row["organisation_id"]}).first()
+        if requested_source is None and paid: source='paid'
         total=db.session.execute(text("SELECT COUNT(*) FROM opportunity_view_event WHERE opportunity_id=:i AND source='organic'"),{"i":opp_id}).scalar_one()
         mine=db.session.execute(text("SELECT COUNT(*) FROM opportunity_view_event WHERE opportunity_id=:i AND user_id=:u AND source='organic'"),{"i":opp_id,"u":uid}).scalar_one()
         if source=='paid' and not paid:
