@@ -502,7 +502,11 @@ def _online_user_count(db):
 
 
 def register_usage_billing(app, db):
-    _ensure_schema(db)
+    # Schema setup uses PostgreSQL-specific JSONB/DDL. Push an application
+    # context during startup, but skip it for SQLite-based CI unit tests.
+    with app.app_context():
+        if db.engine.dialect.name == "postgresql":
+            _ensure_schema(db)
 
     @app.post("/api/analytics/heartbeat")
     def analytics_heartbeat():
