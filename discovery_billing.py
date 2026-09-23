@@ -165,46 +165,15 @@ def register_discovery(app, db):
         return (int(row["delivered_impressions"] or 0) * int(row["bid_kes"]) + 999) // 1000
 
     def sync_org_invoice(organisation_id):
-        now = datetime.utcnow()
-        period_start = date(now.year, now.month, 1)
-        next_month = date(now.year + (1 if now.month == 12 else 0), 1 if now.month == 12 else now.month + 1, 1)
-        period_end = next_month - timedelta(days=1)
+        # G3: sponsored campaigns are prepaid. Never create a second monthly
+        # usage invoice for delivery events; the canonical campaign ledger is
+        # the billing source of truth. Organisation subscription billing remains
+        # separate.
         base = db.session.execute(text("""
-            SELECT COALESCE(monthly_fee_kes, 0) FROM organisation_billing WHERE organisation_id=:oid
+            SELECT COALESCE(monthly_fee_kes,0)
+            FROM organisation_billing WHERE organisation_id=:oid
         """), {"oid": organisation_id}).scalar_one_or_none() or 0
-        rows = db.session.execute(text("""
-            SELECT id,bid_type,bid_kes,placement,budget_kes,delivered_impressions,delivered_clicks,push_delivered
-            FROM discovery_campaign WHERE organisation_id=:oid AND created_at >= :period
-        """), {"oid": organisation_id, "period": datetime.combine(period_start, datetime.min.time())}).mappings().all()
-        usage = sum(min(campaign_usage(r), int(r["budget_kes"])) for r in rows)
-        total = int(base) + int(usage)
-        existing = db.session.execute(text("""
-            SELECT status FROM organisation_invoice
-            WHERE organisation_id=:oid AND period_start=:start AND period_end=:end
-        """), {"oid":organisation_id,"start":period_start,"end":period_end}).scalar_one_or_none()
-        if existing == "paid":
-            db.session.execute(text("""
-                INSERT INTO organisation_usage_invoice
-                    (organisation_id,period_start,period_end,usage_type,amount_kes,status)
-                VALUES (:oid,:start,:end,'discovery',:usage,'pending')
-                ON CONFLICT (organisation_id,period_start,period_end,usage_type)
-                DO UPDATE SET amount_kes=:usage,
-                    status=CASE WHEN organisation_usage_invoice.status='paid' THEN 'paid' ELSE 'pending' END
-            """), {"oid":organisation_id,"start":period_start,"end":period_end,"usage":int(usage)})
-            db.session.commit()
-            usage_status = db.session.execute(text("""SELECT status FROM organisation_usage_invoice WHERE organisation_id=:oid AND period_start=:start AND period_end=:end AND usage_type='discovery'"""), {"oid":organisation_id,"start":period_start,"end":period_end}).scalar_one_or_none()
-            return total, usage, usage_status == "paid"
-        db.session.execute(text("""
-            INSERT INTO organisation_invoice
-                (organisation_id,period_start,period_end,plan_code,amount_kes,status)
-            VALUES (:oid,:start,:end,
-                    COALESCE((SELECT plan_code FROM organisation_billing WHERE organisation_id=:oid),'launch'),
-                    :amount,'pending')
-            ON CONFLICT (organisation_id,period_start,period_end)
-            DO UPDATE SET amount_kes=:amount, status=CASE WHEN organisation_invoice.status='paid' THEN 'paid' ELSE 'pending' END
-        """), {"oid":organisation_id,"start":period_start,"end":period_end,"amount":total})
-        db.session.commit()
-        return total, usage, False
+        return int(base), 0, False
 
     def campaign_row(campaign_id):
         return db.session.execute(text("""
