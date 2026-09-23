@@ -5146,6 +5146,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [showLogout, setShowLogout] = useState(false)
   const [logoutError, setLogoutError] = useState('')
   const [showModal, setShowModal] = useState<string|null>(null)
+  const [supportConfig, setSupportConfig] = useState<{ email: string; phone: string; message: string }>({ email: '', phone: '', message: 'Contact Prepza support and our team will get back to you.' })
 
   const [csrfToken, setCsrfToken] = useState('')
   const [email, setEmail] = useState('')
@@ -5238,6 +5239,13 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       .then(value => setOpportunityDiscovery(!!value.discoverable))
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (showModal !== 'contact') return
+    api<{ email: string; phone: string; message: string }>('/support/config')
+      .then(setSupportConfig)
+      .catch(() => {})
+  }, [showModal])
 
   useEffect(() => {
     api<{ community_enabled: boolean; messages_enabled: boolean }>('/notification-preferences')
@@ -5385,7 +5393,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
         <Section title="Support">
           <Row label="Help Centre" sub="Help centre is not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
-          <Row label="Contact Support" sub="Support contact is not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
+          <Row label="Contact Support" sub="Contact the Prepza support team" onPress={() => setShowModal('contact')} />
           <Row label="Report a Problem" sub="Problem reporting is not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
         </Section>
 
@@ -5457,6 +5465,13 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                   {showModal === 'terms' || showModal === 'privacy-policy' ? (
                     <div style={{ maxHeight: '50vh', overflowY: 'auto', whiteSpace: 'pre-wrap' }} className="scrollbar-hide">
                       {showModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
+                    </div>
+                  ) : showModal === 'contact' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div>{supportConfig.message}</div>
+                      {supportConfig.email && <a href={`mailto:${supportConfig.email}`} style={{ color: N.gold, fontWeight: 700, textDecoration: 'none' }}>Email support: {supportConfig.email}</a>}
+                      {supportConfig.phone && <a href={`tel:${supportConfig.phone}`} style={{ color: N.gold, fontWeight: 700, textDecoration: 'none' }}>Call support: {supportConfig.phone}</a>}
+                      {!supportConfig.email && !supportConfig.phone && <div style={{ color: T.textMuted }}>Support contact details have not been configured yet. Please try again later.</div>}
                     </div>
                   ) : showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? `Prepza v1.0.0 — Kenyatta University Launch\n\nVision: ${PREPZA_VISION}\n\nMission: ${PREPZA_MISSION}` : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
                 </div>
@@ -9642,6 +9657,9 @@ type AdminPlatformSettings = {
   ai_daily_tutor_limit_plus: number | null
   ai_daily_tutor_limit_premium: number | null
   ai_monthly_budget_usd: number
+  support_email: string
+  support_phone: string
+  support_message: string
 }
 
 type AdminAuditLogEntry = {
@@ -11485,6 +11503,15 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               {numField('Tutor — Premium tier', 'ai_daily_tutor_limit_premium', { allowNull: true })}
             </div>
             <div style={{ padding: '0 18px 14px', fontSize: 11, color: T.textMuted }}>Leave blank for unlimited.</div>
+          </AdminCard>
+
+          <AdminCard title="Student Support Contact">
+            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input value={settingsDraft.support_email} onChange={e => setSettingsDraft({ ...settingsDraft, support_email: e.target.value })} placeholder="Support email" maxLength={160} style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card }} />
+              <input value={settingsDraft.support_phone} onChange={e => setSettingsDraft({ ...settingsDraft, support_phone: e.target.value })} placeholder="Support phone" maxLength={160} style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card }} />
+              <textarea value={settingsDraft.support_message} onChange={e => setSettingsDraft({ ...settingsDraft, support_message: e.target.value })} placeholder="Message shown to students" maxLength={500} rows={3} style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card, resize: 'vertical' }} />
+              <div style={{ fontSize: 11, color: T.textMuted }}>Students see these details in Settings → Contact Support. Changes apply to new support views immediately.</div>
+            </div>
           </AdminCard>
 
           <AdminCard title="AI Monthly Budget">
