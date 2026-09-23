@@ -1892,17 +1892,18 @@ AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT = 21
 
 def get_ambassador_settings():
     """
-    Returns the admin-configurable ambassador program settings, sourced
-    from SystemSetting rows - same pattern as get_content_prices() /
-    get_plan_prices(). Tier percentages are whole-number percents
-    (e.g. 15 means 15%), applied to a referral's first successful
-    payment amount only - not to any payment after that.
+    Returns the ambassador program settings.
+
+    The commission contract is intentionally fixed at 10% of a referred
+    student's first successful payment. There are no performance tiers and
+    no admin-configurable commission percentage. Historical commission rows
+    keep their already-snapshotted amounts; this function governs future
+    conversions.
     """
     keys = (
         "ambassador_program_enabled",
-        "ambassador_tier1_pct", "ambassador_tier2_pct", "ambassador_tier3_pct",
-        "ambassador_tier2_threshold", "ambassador_tier3_threshold",
-        "ambassador_payout_hold_days", "ambassador_min_payout_kes",
+        "ambassador_payout_hold_days",
+        "ambassador_min_payout_kes",
     )
     settings = {
         s.key: s.value
@@ -1917,11 +1918,7 @@ def get_ambassador_settings():
 
     return {
         "enabled": settings.get("ambassador_program_enabled", "true") == "true",
-        "tier1_pct": parse_int("ambassador_tier1_pct", 10),
-        "tier2_pct": parse_int("ambassador_tier2_pct", 15),
-        "tier3_pct": parse_int("ambassador_tier3_pct", 20),
-        "tier2_threshold": parse_int("ambassador_tier2_threshold", 5),
-        "tier3_threshold": parse_int("ambassador_tier3_threshold", 20),
+        "commission_pct": 10,
         "payout_hold_days": parse_int("ambassador_payout_hold_days", AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT),
         "min_payout_kes": parse_int("ambassador_min_payout_kes", 500),
     }
@@ -1929,19 +1926,12 @@ def get_ambassador_settings():
 
 def compute_ambassador_tier(prior_converted_count, settings=None):
     """
-    Returns (tier_number, commission_pct) for an ambassador's NEXT
-    conversion, based on how many of their referrals have already
-    converted (voided ones don't count - see the query in the
-    conversion hook, added in the next patch). Tier climbs
-    automatically; no manual admin bump needed unless overriding via
-    the SystemSetting thresholds above.
+    Compatibility helper for the existing dashboard/analytics contract.
+    Every ambassador conversion is always commissionable at exactly 10%;
+    prior conversion count never changes the rate.
     """
     settings = settings or get_ambassador_settings()
-    if prior_converted_count >= settings["tier3_threshold"]:
-        return 3, settings["tier3_pct"]
-    if prior_converted_count >= settings["tier2_threshold"]:
-        return 2, settings["tier2_pct"]
-    return 1, settings["tier1_pct"]
+    return 1, 10
 
 
 def generate_referral_code(display_name=None):
@@ -2734,7 +2724,10 @@ def signup():
     db.session.add(new_user)
     db.session.commit()
 
-    raw_ref_code = data.get("ref")
+    # Prefer the first valid referral captured on /signup over a
+    # client-supplied ref value. This prevents a later referral link from
+    # silently replacing the ambassador who originally acquired the user.
+    raw_ref_code = session.get("signup_referral_code") or data.get("ref")
     if raw_ref_code and isinstance(raw_ref_code, str):
         try:
             ref_code_clean = raw_ref_code.strip().upper()[:20]
@@ -2742,7 +2735,7 @@ def signup():
                 referral_code=ref_code_clean, status="active"
             ).first()
             if ambassador:
-                raw_channel = data.get("via")
+                raw_channel = session.get("signup_referral_channel") or data.get("via")
                 channel = None
                 if raw_channel and isinstance(raw_channel, str):
                     channel = "".join(
@@ -2756,6 +2749,8 @@ def signup():
                     channel=channel,
                 ))
                 db.session.commit()
+            session.pop("signup_referral_code", None)
+            session.pop("signup_referral_channel", None)
         except Exception as e:
             # Never let referral-tracking issues affect the already-created
             # account - same defensive stance as the verification email
@@ -2812,6 +2807,23 @@ def signup_page():
     POST /signup body (that's the separate, already-existing route
     below, unaffected by this one).
     """
+    raw_ref = request.args.get("ref")
+    raw_via = request.args.get("via")
+    if isinstance(raw_ref, str):
+        ref_code = raw_ref.strip().upper()[:20]
+        if ref_code and Ambassador.query.filter_by(referral_code=ref_code, status="active").first():
+            # First valid referral touch is locked into the unauthenticated
+            # session until signup. This survives leaving the page and
+            # returning to /signup without the query string.
+            session.setdefault("signup_referral_code", ref_code)
+            if isinstance(raw_via, str):
+                via = "".join(
+                    ch for ch in raw_via.strip().lower()[:30]
+                    if ch.isalnum() or ch in ("_", "-")
+                ) or None
+                if via and "signup_referral_channel" not in session:
+                    session["signup_referral_channel"] = via
+
     return send_from_directory(app.static_folder, "index.html")
 
 
@@ -8960,11 +8972,6 @@ def ambassador_dashboard():
 
     settings = get_ambassador_settings()
     current_tier, current_pct = compute_ambassador_tier(paying_count, settings)
-    next_threshold = (
-        settings["tier2_threshold"] if current_tier == 1
-        else settings["tier3_threshold"] if current_tier == 2
-        else None
-    )
 
     return jsonify({
         "referral_code": ambassador.referral_code,
@@ -8972,7 +8979,7 @@ def ambassador_dashboard():
         "status": ambassador.status,
         "tier": current_tier,
         "commission_pct": current_pct,
-        "next_tier_at": next_threshold,
+        "next_tier_at": None,
         "funnel": {
             "referred": referred_count,
             "verified": verified_count,
