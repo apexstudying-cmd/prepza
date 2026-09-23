@@ -4,6 +4,13 @@ import re
 APP = Path(__file__).resolve().parents[1] / "app.py"
 text = APP.read_text(encoding="utf-8")
 
+# The current production schema still uses Unit/UnitProgram for curriculum
+# metadata. Do not let a stale frontend prebuild migration delete live ORM
+# models or rewrite the backend during a static frontend build.
+if "class Unit(db.Model)" in text:
+    print("Skipped Unit-reference retirement audit: current backend still owns the Unit curriculum model.")
+    raise SystemExit(0)
+
 # The Unit tables are already removed from production. This final prebuild
 # cleanup makes the application source match that schema before the process
 # starts. It is deliberately fail-closed around the model block so we never
