@@ -5146,6 +5146,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [showLogout, setShowLogout] = useState(false)
   const [logoutError, setLogoutError] = useState('')
   const [showModal, setShowModal] = useState<string|null>(null)
+  const [supportContact, setSupportContact] = useState<{ email: string; phone: string; message: string } | null>(null)
   const [supportConfig, setSupportConfig] = useState<{ email: string; phone: string; message: string }>({ email: '', phone: '', message: 'Contact Prepza support and our team will get back to you.' })
 
   const [csrfToken, setCsrfToken] = useState('')
@@ -5233,6 +5234,13 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       })
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (showModal !== 'contact') return
+    api<{ email: string; phone: string; message: string }>('/support/contact')
+      .then(setSupportContact)
+      .catch(() => setSupportContact(null))
+  }, [showModal])
 
   useEffect(() => {
     api<{ discoverable: boolean }>('/api/opportunity-discovery')
@@ -5473,6 +5481,15 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                       {supportConfig.phone && <a href={`tel:${supportConfig.phone}`} style={{ color: N.gold, fontWeight: 700, textDecoration: 'none' }}>Call support: {supportConfig.phone}</a>}
                       {!supportConfig.email && !supportConfig.phone && <div style={{ color: T.textMuted }}>Support contact details have not been configured yet. Please try again later.</div>}
                     </div>
+                  ) : showModal === 'contact' ? (
+                    supportContact ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <div>{supportContact.message}</div>
+                        {supportContact.email && <a href={`mailto:${supportContact.email}`} style={{ color: N.gold, fontWeight: 800, textDecoration: 'none' }}>Email {supportContact.email}</a>}
+                        {supportContact.phone && <a href={`tel:${supportContact.phone.replace(/[^+\\d]/g, '')}`} style={{ color: N.gold, fontWeight: 800, textDecoration: 'none' }}>Call {supportContact.phone}</a>}
+                        {!supportContact.email && !supportContact.phone && <div style={{ color: T.textMuted }}>Support contact details have not been configured yet.</div>}
+                      </div>
+                    ) : 'Loading support contact…'
                   ) : showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? `Prepza v1.0.0 — Kenyatta University Launch\n\nVision: ${PREPZA_VISION}\n\nMission: ${PREPZA_MISSION}` : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
                 </div>
                 <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
