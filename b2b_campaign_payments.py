@@ -351,14 +351,157 @@ def register_b2b_campaign_payments(app, db):
         db.session.commit()
         return {"ok": True, "funded_amount_minor": expected_campaign}
 
+    def admin_allowed():
+        uid = session.get("user_id")
+        configured = {int(x.strip()) for x in os.environ.get("PREPZA_ADMIN_USER_IDS", "").split(",") if x.strip().isdigit()}
+        return bool(uid and (session.get("is_admin") is True or session.get("role") in ("admin", "superadmin") or int(uid) in configured))
+
+    def refund_available_balance(campaign_id):
+        """Return currently unused prepaid campaign value from the append-only ledger."""
+        funded = db.session.execute(text("""
+            SELECT COALESCE(funded_amount_minor,0) FROM discovery_campaign WHERE id=:cid FOR UPDATE
+        """), {"cid": campaign_id}).scalar_one()
+        net = db.session.execute(text("""
+            SELECT COALESCE(SUM(signed_amount_minor),0) FROM b2b_campaign_ledger WHERE campaign_id=:cid
+        """), {"cid": campaign_id}).scalar_one()
+        return max(0, int(funded or 0) + int(net or 0))
+
+    def initiate_refund(payment_id, amount_minor, actor_id, reason):
+        payment = db.session.execute(text("""
+            SELECT * FROM b2b_payment WHERE id=:pid FOR UPDATE
+        """), {"pid": payment_id}).mappings().first()
+        if not payment:
+            return {"ok": False, "code": "payment_not_found"}, 404
+        if payment["provider"] != "paystack" or not payment["provider_reference"]:
+            return {"ok": False, "code": "unsupported_provider"}, 409
+        if payment["status"] not in ("paid", "credited", "refund_failed"):
+            return {"ok": False, "code": "payment_not_refundable", "status": payment["status"]}, 409
+        original = int(payment["customer_amount_minor"] or 0)
+        already = int(payment.get("refunded_amount_minor") or 0)
+        remaining_customer = max(0, original - already)
+        amount = remaining_customer if amount_minor is None else int(amount_minor)
+        if amount <= 0 or amount > remaining_customer:
+            return {"ok": False, "code": "invalid_refund_amount", "remaining_customer_minor": remaining_customer}, 400
+
+        campaign_id = int(payment["campaign_id"])
+        campaign = db.session.execute(text("SELECT status FROM discovery_campaign WHERE id=:cid FOR UPDATE"), {"cid": campaign_id}).mappings().first()
+        if not campaign:
+            return {"ok": False, "code": "campaign_not_found"}, 404
+        try:
+            data = paystack_request("POST", "/refund", json={
+                "transaction": payment["provider_reference"],
+                "amount": amount,
+                "currency": "KES",
+                "customer_note": "Prepza campaign refund",
+                "merchant_note": reason[:500],
+            })
+        except Exception:
+            db.session.rollback()
+            raise
+
+        refund_reference = str(data.get("refund_reference") or data.get("id") or "").strip() or None
+        db.session.execute(text("""
+            UPDATE b2b_payment
+            SET status='refund_pending', refund_status='pending',
+                refund_reference=:rr, refund_requested_at=CURRENT_TIMESTAMP,
+                metadata=metadata || CAST(:meta AS jsonb), updated_at=CURRENT_TIMESTAMP
+            WHERE id=:pid
+        """), {"pid": payment_id, "rr": refund_reference,
+               "meta": json.dumps({"refund_requested_by": actor_id, "refund_reason": reason, "refund_amount_minor": amount})})
+        db.session.execute(text("""
+            UPDATE discovery_campaign
+            SET status='refund_pending', updated_at=CURRENT_TIMESTAMP
+            WHERE id=:cid
+        """), {"cid": campaign_id})
+        mark_audit(int(payment["organisation_id"]), campaign_id, actor_id, "refund_requested",
+                   from_state=str(campaign["status"]), to_state="refund_pending",
+                   reason=reason, metadata={"payment_id": payment_id, "amount_minor": amount, "refund_reference": refund_reference})
+        db.session.commit()
+        return {"ok": True, "status": "refund_pending", "amount_minor": amount, "refund_reference": refund_reference}, 202
+
+    @app.post("/api/admin/b2b/payments/<int:payment_id>/refund")
+    def admin_b2b_refund(payment_id):
+        if not admin_allowed():
+            return jsonify({"error": "Admin access required"}), 403
+        if not csrf_ok():
+            return jsonify({"error": "Invalid CSRF token"}), 403
+        data = request.get_json(silent=True) or {}
+        raw_amount = data.get("amount_minor")
+        amount = None if raw_amount in (None, "") else int(raw_amount)
+        reason = str(data.get("reason") or "").strip()
+        if not reason:
+            return jsonify({"error": "Refund reason required"}), 400
+        try:
+            result, status = initiate_refund(payment_id, amount, int(session["user_id"]), reason)
+            return jsonify(result), status
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("B2B refund initiation failed")
+            return jsonify({"error": "Refund could not be initiated"}), 502
+
+    def handle_refund_event(event_name, data):
+        reference = str(data.get("transaction_reference") or data.get("reference") or "").strip()
+        if not reference:
+            return {"ok": True, "ignored": True, "reason": "missing_transaction_reference"}
+        payment = db.session.execute(text("""
+            SELECT * FROM b2b_payment WHERE provider='paystack' AND provider_reference=:ref FOR UPDATE
+        """), {"ref": reference}).mappings().first()
+        if not payment:
+            return {"ok": True, "ignored": True, "reason": "unknown_reference"}
+        amount = int(data.get("amount") or 0)
+        if event_name == "refund.processed":
+            available = refund_available_balance(int(payment["campaign_id"]))
+            campaign_refund = min(amount, available)
+            if campaign_refund > 0:
+                idem = f"refund:{reference}:{amount}"
+                exists = db.session.execute(text("SELECT id FROM b2b_campaign_ledger WHERE idempotency_key=:key"), {"key": idem}).scalar_one_or_none()
+                if not exists:
+                    db.session.execute(text("""
+                        INSERT INTO b2b_campaign_ledger
+                            (campaign_id,entry_type,signed_amount_minor,currency,idempotency_key,payment_id,description,metadata)
+                        VALUES (:cid,'refund',:amount,'KES',:key,:pid,'Prepaid campaign value reversed after processed refund',CAST(:meta AS jsonb))
+                    """), {"cid": int(payment["campaign_id"]), "amount": -campaign_refund, "key": idem,
+                           "pid": int(payment["id"]), "meta": json.dumps({"refund_amount_minor": amount, "reversed_campaign_value_minor": campaign_refund, "refund_reference": data.get("refund_reference")})})
+            db.session.execute(text("""
+                UPDATE b2b_payment
+                SET status='refunded', refund_status='processed',
+                    refunded_amount_minor=COALESCE(refunded_amount_minor,0)+:amount,
+                    refund_processed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+                WHERE id=:pid
+            """), {"pid": int(payment["id"]), "amount": amount})
+            db.session.execute(text("""
+                UPDATE discovery_campaign SET status='refunded', funding_status='refunded', updated_at=CURRENT_TIMESTAMP
+                WHERE id=:cid
+            """), {"cid": int(payment["campaign_id"])})
+        elif event_name in ("refund.pending", "refund.processing", "refund.needs-attention"):
+            db.session.execute(text("UPDATE b2b_payment SET status='refund_pending', refund_status=:status, updated_at=CURRENT_TIMESTAMP WHERE id=:pid"),
+                               {"pid": int(payment["id"]), "status": event_name.split(".",1)[1]})
+            db.session.execute(text("UPDATE discovery_campaign SET status='refund_pending', updated_at=CURRENT_TIMESTAMP WHERE id=:cid"), {"cid": int(payment["campaign_id"])})
+        elif event_name == "refund.failed":
+            db.session.execute(text("UPDATE b2b_payment SET status='refund_failed', refund_status='failed', updated_at=CURRENT_TIMESTAMP WHERE id=:pid"), {"pid": int(payment["id"])})
+            db.session.execute(text("""
+                UPDATE discovery_campaign SET status=CASE WHEN funding_status IN ('funded','credited') THEN 'active' ELSE status END,
+                    updated_at=CURRENT_TIMESTAMP WHERE id=:cid
+            """), {"cid": int(payment["campaign_id"])})
+        db.session.commit()
+        return {"ok": True, "event": event_name}
+
     @app.post("/payment/paystack/b2b-webhook")
     def b2b_paystack_webhook():
         if not provider_signature_valid():
             return jsonify({"error": "Invalid Paystack signature"}), 401
         payload = request.get_json(silent=True) or {}
-        if payload.get("event") != "charge.success":
-            return jsonify({"ok": True, "ignored": True}), 200
+        event_name = str(payload.get("event") or "")
         data = payload.get("data") or {}
+        if event_name in ("refund.pending", "refund.processing", "refund.needs-attention", "refund.processed", "refund.failed"):
+            try:
+                return jsonify(handle_refund_event(event_name, data)), 200
+            except Exception:
+                db.session.rollback()
+                app.logger.exception("B2B Paystack refund webhook handling failed")
+                return jsonify({"error": "Temporary processing failure"}), 500
+        if event_name != "charge.success":
+            return jsonify({"ok": True, "ignored": True}), 200
         reference = str(data.get("reference") or "").strip()
         metadata = parse_metadata(data)
         if not reference or metadata.get("purpose") != "sponsored_campaign":
