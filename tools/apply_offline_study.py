@@ -7,6 +7,8 @@ APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 
 def patch_reader():
     s = READER.read_text(encoding='utf-8')
+    if 'documentId?: number' in s and 'startOfflineStudyTracking' in s:
+        return
     original = s
     if not s.startswith('// @ts-nocheck'):
         s = '// @ts-nocheck\n' + s
