@@ -47,14 +47,9 @@ jobs:
       - name: Validate realtime security invariants
         run: python scripts/validate_realtime_security.py
       - name: Compile E2EE and realtime backend modules
-        run: python -m py_compile app.py e2ee_chat_models.py e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py realtime_server.py || { echo '--- compile diagnostics ---'; python - <<'PY'
-import py_compile
-files=['app.py','e2ee_chat_models.py','e2ee_chat_routes.py','e2ee_ada_routes.py','prepza_control.py','realtime_server.py']
-for f in files:
-    try: py_compile.compile(f,doraise=True); print('OK',f)
-    except Exception as e: print('FAIL',f,e)
-PY
- exit 1; }
+        run: |
+          set -o pipefail
+          python -m py_compile app.py e2ee_chat_models.py e2ee_chat_routes.py e2ee_ada_routes.py prepza_control.py realtime_server.py
       - name: Install realtime regression test dependencies
         run: python -m pip install -r requirements.txt pytest
       - name: Run realtime runtime regression tests
