@@ -8785,6 +8785,7 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
   const [privacy, setPrivacy] = useState<'Public' | 'Private' | 'Course-only'>('Public')
+  const [groupMode, setGroupMode] = useState<'community' | 'broadcast'>('community')
 
   const [universities, setUniversities] = useState<UniversityOption[]>([])
   const [universityId, setUniversityId] = useState<number | null>(null)
@@ -8834,6 +8835,9 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
           name: name.trim(),
           description: desc.trim() || undefined,
           privacy: privacyValue,
+          mode: groupMode,
+          history_visible: true,
+          allow_member_posts: groupMode === 'community',
           university_id: universityId ?? undefined,
           program_id: programId ?? undefined,
           year: year ?? undefined,
@@ -8886,6 +8890,16 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Description <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
             <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="What is this group for?" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Group format</div>
+            {([['community','Community group','Members can participate in the discussion.'],['broadcast','Channel-style','Admins publish; members follow the feed.']] as const).map(([value,label,sub]) => (
+              <div key={value} onClick={() => setGroupMode(value)} style={{ display:'flex',gap:12,alignItems:'center',padding:'12px 14px',background:T.card,borderRadius:12,border:`1.5px solid ${groupMode===value?N.gold:'rgba(0,0,0,0.08)'}`,marginBottom:8,cursor:'pointer' }}>
+                <div style={{ width:18,height:18,borderRadius:'50%',border:`2px solid ${groupMode===value?N.gold:T.textMuted}`,background:groupMode===value?N.gold:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>{groupMode===value&&<div style={{width:6,height:6,borderRadius:'50%',background:N.navy}}/>}</div>
+                <div><div style={{fontWeight:600,fontSize:13,color:T.text}}>{label}</div><div style={{fontSize:11,color:T.textMuted}}>{sub}</div></div>
+              </div>
+            ))}
+            <div style={{fontSize:10,color:T.textMuted,marginTop:6}}>Large groups can grow to 200,000 members. Broadcast groups are admin-posted.</div>
           </div>
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Privacy</div>
