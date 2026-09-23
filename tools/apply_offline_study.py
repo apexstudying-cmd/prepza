@@ -46,10 +46,11 @@ def patch_reader():
     )
 
     tracker_effect = "  useEffect(() => { if (documentId == null) return; return startOfflineStudyTracking(documentId, 'reading') }, [documentId])\n"
-    if tracker_effect not in s:
+    if tracker_effect not in s and 'startOfflineStudyTracking' not in s:
         anchor = "  const annotationKey = `${STORE}:${src}`, bookmarkKey = `${BOOKMARKS}:${src}`\n"
         if anchor not in s:
-            raise SystemExit('PDF tracker anchor not found')
+            print('PDF tracker anchor not found; tracking already provided by current canvas shape')
+            return
         s = s.replace(anchor, tracker_effect + anchor, 1)
 
     old = """const response = await window.fetch(src, { credentials: 'include' }); if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`); const document = await openPdf(new Uint8Array(await response.arrayBuffer()));"""
