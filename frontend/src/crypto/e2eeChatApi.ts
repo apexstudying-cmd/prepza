@@ -40,6 +40,8 @@ export async function ensureE2EEIdentityReady(): Promise<number> {
     return me.id
   })()
   try { await identityReadyPromise } catch (error) { identityReadyPromise = null; throw error }
+  return identityReadyPromise
+}
 
 export async function fetchUserPublicKey(userId: number): Promise<string> {
   const attempts = 4
