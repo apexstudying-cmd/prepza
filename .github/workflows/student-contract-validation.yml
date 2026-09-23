@@ -23,7 +23,7 @@ jobs:
       - name: Install focused test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest sqlalchemy
+          pip install pytest sqlalchemy Flask
       - name: Compile student billing modules
         run: |
           python -m py_compile student_orders.py student_subscription_billing.py
