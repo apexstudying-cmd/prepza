@@ -1,0 +1,39 @@
+name: Student Frontend Contract
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "app.py"
+      - "usage_billing.py"
+      - "ai_economics.py"
+      - ".github/workflows/student-frontend-contract.yml"
+  push:
+    branches:
+      - "g7-g10-b2b-hardening"
+
+jobs:
+  student-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+          run_install: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck without mutating backend source
+        working-directory: frontend
+        run: pnpm exec tsc --noEmit
+      - name: Chat UI contract
+        run: python3 scripts/test_chat_ui_contract.py
