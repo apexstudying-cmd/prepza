@@ -34,6 +34,10 @@ replace_once(
     "complete academic context validation",
 )
 
+if "FREE_LIBRARY_DOCUMENT_LIMIT" in text:
+    print("Skipped exact Library academic-eligibility patch: canonical Free cohort entitlement is already enforced.")
+    raise SystemExit(0)
+
 if "_library_context_matches(viewer, publication)" not in text:
     marker = 'LIBRARY_ACTIVE_STATUSES = ("pending", "approved")'
     if text.count(marker) != 1:
