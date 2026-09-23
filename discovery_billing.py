@@ -13,6 +13,7 @@ from flask import jsonify, request, session
 from sqlalchemy import text
 from pywebpush import webpush
 from b2b_campaign_metering import record_billable_event, reverse_billable_event
+from usage_billing import ORGANISATION_PLANS
 
 DISCOVERY_PRICING = {
     "feed_cpm_kes": 350,
