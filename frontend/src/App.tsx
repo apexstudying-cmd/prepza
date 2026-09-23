@@ -5715,6 +5715,7 @@ type GroupSummary = {
 type GroupPostData = {
   id: number; group_id: number; post_type: 'post' | 'question'; body: string | null; is_removed: boolean
   author: string; author_id: number; like_count: number | null; viewer_liked: boolean
+  reaction_counts?: Record<string, number>; viewer_reaction?: string | null
   vote_count: number | null; viewer_voted: boolean; comment_count: number; created_at: string | null
 }
 type GroupPostCommentData = {
@@ -8377,6 +8378,7 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
   const [postsError, setPostsError] = useState('')
   const [composeText, setComposeText] = useState('')
   const [composing, setComposing] = useState(false)
+  const [reactionPickerId, setReactionPickerId] = useState<number | null>(null)
 
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [expandedDetail, setExpandedDetail] = useState<GroupPostDetail | null>(null)
@@ -8482,6 +8484,20 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
       const res = await api<{ like_count: number }>(`/groups/${groupId}/posts/${p.id}/like`, { method, headers: { 'X-CSRF-Token': csrfToken } })
       setPosts(ps => ps.map(x => x.id === p.id ? { ...x, viewer_liked: !p.viewer_liked, like_count: res.like_count } : x))
     } catch { /* transient failure - the button just won't visually update, safe to ignore */ }
+  }
+
+  const reactToPost = async (p: GroupPostData, reaction: string) => {
+    if (groupId == null || !joined) return
+    const next = p.viewer_reaction === reaction ? '' : reaction
+    try {
+      const res = await api<{ my_reaction: string | null; counts: Record<string, number> }>(
+        `/groups/${groupId}/posts/${p.id}/reaction`,
+        { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ reaction: next }) },
+      )
+      setPosts(ps => ps.map(x => x.id === p.id ? { ...x, viewer_reaction: res.my_reaction, reaction_counts: res.counts } : x))
+      setExpandedDetail(d => d && d.id === p.id ? { ...d, viewer_reaction: res.my_reaction, reaction_counts: res.counts } : d)
+      setReactionPickerId(null)
+    } catch { /* transient failure - keep the picker open so the student can retry */ }
   }
 
   const toggleVote = async (p: GroupPostData) => {
@@ -8660,7 +8676,28 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
                   <div><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{p.author}</div><div style={{ fontSize: 11, color: T.textMuted }}>{p.created_at ? new Date(p.created_at).toLocaleString() : ''}</div></div>
                 </div>
                 <div style={{ fontSize: 13, color: T.text, lineHeight: 1.65, marginBottom: 12 }}>{p.is_removed ? '[removed]' : p.body}</div>
-                <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #F3F4F6', paddingTop: 10 }}>
+                {Object.keys(p.reaction_counts || {}).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+                    {Object.entries(p.reaction_counts || {}).filter(([, count]) => count > 0).map(([reaction, count]) => (
+                      <button key={reaction} onClick={() => reactToPost(p, reaction)} disabled={!joined} aria-label={`React ${reaction}`}
+                        style={{ border: p.viewer_reaction === reaction ? `1px solid ${N.gold}` : '1px solid #E5E7EB', background: p.viewer_reaction === reaction ? 'rgba(230,183,74,0.12)' : T.card, borderRadius: 999, padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4, cursor: joined ? 'pointer' : 'default', fontSize: 12 }}>
+                        <span>{reaction}</span><span style={{ color: T.textMuted, fontWeight: 700 }}>{count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #F3F4F6', paddingTop: 10, position: 'relative' }}>
+                  <button onClick={() => setReactionPickerId(reactionPickerId === p.id ? null : p.id)} disabled={!joined} aria-label="Add reaction"
+                    style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: p.viewer_reaction ? N.gold : T.textMuted, cursor: joined ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
+                    <span style={{ fontSize: 15, lineHeight: 1 }}>☺</span> React
+                  </button>
+                  {reactionPickerId === p.id && joined && (
+                    <div style={{ position: 'absolute', left: 0, bottom: 34, zIndex: 5, display: 'flex', gap: 4, padding: 7, background: T.card, border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+                      {['👍','❤️','😂','😮','😢','🎉'].map(reaction => (
+                        <button key={reaction} onClick={() => reactToPost(p, reaction)} aria-label={`React ${reaction}`} style={{ width: 32, height: 32, border: 'none', background: p.viewer_reaction === reaction ? 'rgba(230,183,74,0.16)' : 'transparent', borderRadius: 8, cursor: 'pointer', fontSize: 18 }}>{reaction}</button>
+                      ))}
+                    </div>
+                  )}
                   {tab === 'Posts' ? (
                     <button onClick={() => toggleLike(p)} disabled={!joined} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: p.viewer_liked ? N.gold : T.textMuted, cursor: joined ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
                       <svg width="14" height="14" viewBox="0 0 14 14" fill={p.viewer_liked ? N.gold : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 12.5S1.5 9 1.5 5a2.5 2.5 0 015-0 2.5 2.5 0 015 0c0 4-5.5 7.5-5.5 7.5z"/></svg>
