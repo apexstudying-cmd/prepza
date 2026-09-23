@@ -2568,7 +2568,7 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
     return <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#111827' }}>
       <div style={{ background: N.navy, padding: '10px 14px 12px', flexShrink: 0, zIndex: 5 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => window.history.back()} aria-label="Back" style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => setScreen('profile')} aria-label="Back" style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ color: '#fff', fontWeight: 800, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.title}</div>
             <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 }}>Offline study copy</div>
@@ -5140,6 +5140,9 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [priv, setPriv] = useState({ profilePublic: true, whoMessages: false, whoFollows: true, readReceipts: true })
   const [privacyBusy, setPrivacyBusy] = useState(false)
   const [opportunityDiscovery, setOpportunityDiscovery] = useState(false)
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [phoneBusy, setPhoneBusy] = useState(false)
+  const [phoneError, setPhoneError] = useState('')
   const [showLogout, setShowLogout] = useState(false)
   const [showModal, setShowModal] = useState<string|null>(null)
 
@@ -5209,10 +5212,11 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   useEffect(() => {
-    api<{ email: string; csrf_token: string; university_id: number | null; program_id: number | null; profile_visibility?: string; who_can_message?: string; who_can_follow?: string; read_receipts_enabled?: boolean; year?: number; semester?: number }>('/me')
+    api<{ email: string; csrf_token: string; phone_number?: string | null; university_id: number | null; program_id: number | null; profile_visibility?: string; who_can_message?: string; who_can_follow?: string; read_receipts_enabled?: boolean; year?: number; semester?: number }>('/me')
       .then(me => {
         setCsrfToken(me.csrf_token)
         setEmail(me.email)
+        setPhoneNumber(me.phone_number || '')
         setPriv({ profilePublic: me.profile_visibility !== 'private', whoMessages: me.who_can_message === 'everyone', whoFollows: me.who_can_follow === 'everyone', readReceipts: me.read_receipts_enabled !== false })
         if (me.university_id != null) {
           api<UniversityOption[]>('/universities')
@@ -5239,6 +5243,11 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       .then(p => setNotifs(n => ({ ...n, community: p.community_enabled, messages: p.messages_enabled })))
       .catch(() => {})
   }, [])
+
+  const saveProfilePreference = async (patch: Record<string, unknown>) => {
+    const me = await api<{ year: number; semester: number }>('/me')
+    return api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ year: me.year, semester: me.semester, ...patch }) })
+  }
 
   const handleDeleteAccount = async () => {
     setDeleting(true)
@@ -5282,7 +5291,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <Section title="Account">
           <Row label="Edit Profile" sub="Name, photo, bio" onPress={() => setScreen('edit-profile')} />
           <Row label="Email" sub={email || 'Loading...'} onPress={() => { setNewEmail(''); setEmailPassword(''); setEmailChangeError(''); setEmailChangeSuccess(false); setShowModal('email') }} />
-          <Row label="Phone" sub="+254 *** *** **89" onPress={() => setShowModal('phone')} />
+          <Row label="Phone" sub={phoneNumber ? phoneNumber.replace(/(\\+?\\d{3})\\d+(\\d{2})$/, '$1*** **$2') : 'Not set'} onPress={() => { setPhoneError(''); setShowModal('phone') }} />
           <Row label="University" sub={uniName || 'Not set'} onPress={() => setScreen('edit-profile')} />
           <Row label="Course" sub={programName || 'Not set'} onPress={() => setScreen('edit-profile')} />
         </Section>
@@ -5314,7 +5323,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
               }
             }}>{Ic.toggle(notifs[k])}</div>} />
           ))}
-          <Row label="Opportunities" sub="Relevant opportunities and discovery" right={<Pill text="Ready" color={N.gold} />} />
+          <Row label="Opportunities" sub={opportunityDiscovery ? 'Organisations can discover you for relevant opportunities' : 'Not discoverable by organisations'} right={<div onClick={async e => { e.stopPropagation(); if (privacyBusy) return; const next = !opportunityDiscovery; setPrivacyBusy(true); try { const res = await api<{ discoverable: boolean }>('/api/opportunity-discovery', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ discoverable: next }) }); setOpportunityDiscovery(!!res.discoverable) } catch {} finally { setPrivacyBusy(false) } }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(opportunityDiscovery)}</div>} />
           <Row label="Study Reminders" sub="Coming soon" right={<Pill text="Soon" color="#9CA3AF" />} />
         </Section>
 
@@ -5331,8 +5340,8 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             } catch { /* keep the previous value if saving fails */ }
             finally { setPrivacyBusy(false) }
           }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.profilePublic)}</div>} sub={priv.profilePublic ? 'Public' : 'Private'} />
-          <Row label="Who can message me" right={<div onClick={() => setPriv(p => ({ ...p, whoMessages: !p.whoMessages }))}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
-          <Row label="Who can follow me" right={<div onClick={() => setPriv(p => ({ ...p, whoFollows: !p.whoFollows }))}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
+          <Row label="Who can message me" right={<div onClick={async e => { e.stopPropagation(); if (privacyBusy) return; const next = !priv.whoMessages; setPrivacyBusy(true); try { await saveProfilePreference({ who_can_message: next ? 'everyone' : 'followers' }); setPriv(p => ({ ...p, whoMessages: next })) } catch {} finally { setPrivacyBusy(false) } }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
+          <Row label="Who can follow me" right={<div onClick={async e => { e.stopPropagation(); if (privacyBusy) return; const next = !priv.whoFollows; setPrivacyBusy(true); try { await saveProfilePreference({ who_can_follow: next ? 'everyone' : 'approval_required' }); setPriv(p => ({ ...p, whoFollows: next })) } catch {} finally { setPrivacyBusy(false) } }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
           <Row label="Read receipts" sub={priv.readReceipts ? 'Enabled' : 'Disabled'} right={<div onClick={async e => {
             e.stopPropagation()
             if (privacyBusy) return
@@ -5413,6 +5422,14 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                   <button onClick={() => setShowModal(null)} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
                 </>
               )
+            ) : showModal === 'phone' ? (
+              <>
+                <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginBottom: 16 }}>Add or update the phone number associated with your Prepza account.</div>
+                <input type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="+254712345678" style={{ width: '100%', border: '1.5px solid '+T.border, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 12, boxSizing: 'border-box', background: T.card, color: T.text }} />
+                {phoneError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{phoneError}</div>}
+                <button onClick={async () => { if (phoneBusy) return; setPhoneBusy(true); setPhoneError(''); try { await saveProfilePreference({ phone_number: phoneNumber.trim() || null }); setShowModal(null) } catch (e) { setPhoneError(e instanceof ApiError ? e.message : 'Could not save your phone number.') } finally { setPhoneBusy(false) } }} disabled={phoneBusy} style={{ width: '100%', background: 'linear-gradient(135deg,'+N.gold+','+N.goldL+')', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10, opacity: phoneBusy ? 0.6 : 1 }}>{phoneBusy ? 'Saving…' : 'Save Phone'}</button>
+                <button onClick={() => setShowModal(null)} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
+              </>
             ) : showModal === 'change-password' ? (
               passwordChangeSuccess ? (
                 <>
