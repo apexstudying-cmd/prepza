@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
+import os
 import uuid
+from zoneinfo import ZoneInfo
 
 from flask import jsonify, session
 from sqlalchemy import text
@@ -16,7 +18,10 @@ def register_study_friend_streak_routes(app, db):
 
     def ensure_schema():
         # Idempotent bootstrap for the repo's no-Alembic deployment model.
-        # String UUID ids work on both PostgreSQL and SQLite.
+        # String UUID ids work on both PostgreSQL and SQLite. Commit the
+        # CREATE TABLE work before any compatibility ALTER so an already-
+        # migrated database cannot roll the new tables back when the column
+        # already exists.
         db.session.execute(text("""
             CREATE TABLE IF NOT EXISTS study_friend_streak_activity (
                 id VARCHAR(36) PRIMARY KEY,
@@ -45,14 +50,36 @@ def register_study_friend_streak_routes(app, db):
                 UNIQUE(user_a_id, user_b_id)
             )
         """))
+        db.session.commit()
+
         # Existing installations need the new setting without a destructive migration.
-        try:
+        dialect = db.engine.dialect.name
+        if dialect == "sqlite":
+            columns = {
+                row[1] for row in db.session.execute(text("PRAGMA table_info(study_friend_streak)")).all()
+            }
+        else:
+            columns = {
+                row[0] for row in db.session.execute(text("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name='study_friend_streak'
+                """)).all()
+            }
+        if "weekend_pause" not in columns:
             db.session.execute(text(
                 "ALTER TABLE study_friend_streak ADD COLUMN weekend_pause BOOLEAN NOT NULL DEFAULT FALSE"
             ))
-        except Exception:
-            db.session.rollback()
-        db.session.commit()
+            db.session.commit()
+
+    timezone_name = os.environ.get("PREPZA_TIMEZONE", "Africa/Nairobi")
+    try:
+        APP_TIMEZONE = ZoneInfo(timezone_name)
+    except Exception:
+        APP_TIMEZONE = ZoneInfo("UTC")
+
+    def local_today():
+        return datetime.now(APP_TIMEZONE).date()
 
     def pair(user_id, peer_id):
         return min(int(user_id), int(peer_id)), max(int(user_id), int(peer_id))
@@ -87,20 +114,23 @@ def register_study_friend_streak_routes(app, db):
         return not (weekend_pause and day.weekday() >= 5)
 
     def refresh(row):
-        today = datetime.utcnow().date()
+        today = local_today()
         pause = bool(row["weekend_pause"])
         streak = 0
         last_shared = None
+        started = False
 
         for offset in range(366 * 2):
             day = today - timedelta(days=offset)
             if not is_counted_day(day, pause):
                 continue
-            if studied(row["user_a_id"], day) and studied(row["user_b_id"], day):
+            qualifies = studied(row["user_a_id"], day) and studied(row["user_b_id"], day)
+            if qualifies:
+                started = True
                 streak += 1
                 if last_shared is None:
                     last_shared = day
-            elif streak:
+            elif started:
                 break
 
         if row["status"] == "active":
@@ -146,7 +176,7 @@ def register_study_friend_streak_routes(app, db):
     def serialize(row, viewer_id, conversation_id=None):
         pid = row["user_b_id"] if row["user_a_id"] == viewer_id else row["user_a_id"]
         peer = db.session.get(User, pid)
-        today = datetime.utcnow().date()
+        today = local_today()
         you, friend = studied(viewer_id, today), studied(pid, today)
         current, refreshed = refresh(row)
         return {
