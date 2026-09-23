@@ -17,7 +17,7 @@
 const DB_NAME = 'prepza-e2ee'
 const DB_VERSION = 1
 const STORE_NAME = 'identity-keys'
-const RECORD_KEY = 'self' // single identity keypair per device for now
+const RECORD_KEY_PREFIX = 'account:' // one identity keypair per Prepza account on this browser
 
 export interface IdentityKeyRecord {
   publicKey: CryptoKey
@@ -138,6 +138,6 @@ export async function getOrCreateIdentityKeyPair(): Promise<{
     return { keyPair: existing, isNew: false }
   }
   const keyPair = await generateIdentityKeyPair()
-  await storeIdentityKeyPair(keyPair)
+  await storeIdentityKeyPair(keyPair, userId)
   return { keyPair, isNew: true }
 }
