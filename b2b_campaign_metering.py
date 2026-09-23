@@ -15,6 +15,9 @@ EVENT_TYPES = {"impression", "click", "push_delivery"}
 def _unit_price_minor(campaign, event_type):
     placement = str(campaign["placement"] or "")
     bid_type = str(campaign["bid_type"] or "")
+    target = campaign["target_json"] or {}
+    billing_modes = target.get("billing_modes") if isinstance(target, dict) else None
+    if not isinstance(billing_modes, list): billing_modes = ["cpm"] if bid_type == "cpm" else ["cpc"] if bid_type == "cpc" else ["cpm","cpc"] if bid_type == "both" else []
     snapshot = campaign["pricing_snapshot"] or {}
     if event_type == "push_delivery":
         snap = ((snapshot.get("push_delivery_cpm") or {}).get("value") or {}).get("amount_kes")
@@ -24,7 +27,7 @@ def _unit_price_minor(campaign, event_type):
         snap = ((snapshot.get("click_cpc") or {}).get("value") or {}).get("amount_kes")
     bid_kes = int(snap if snap is not None else (campaign["bid_kes"] or 0))
     if event_type == "click":
-        if bid_type != "cpc":
+        if "cpc" not in billing_modes:
             return 0
         return bid_kes * 100
     if event_type == "push_delivery":
@@ -32,7 +35,7 @@ def _unit_price_minor(campaign, event_type):
             return 0
         return int((Decimal(bid_kes) * Decimal(100) / Decimal(1000)).to_integral_value())
     if event_type == "impression":
-        if placement not in ("feed", "feed_push"):
+        if "cpm" not in billing_modes or placement not in ("feed", "feed_push"):
             return 0
         return int((Decimal(bid_kes) * Decimal(100) / Decimal(1000)).to_integral_value())
     return 0
