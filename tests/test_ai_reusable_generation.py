@@ -164,7 +164,7 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-8", extracted_text="notes", page_count=1)
     session = _FakeSession(content)
     fake_app = types.SimpleNamespace(
-        db=types.SimpleNamespace(session=session), DocumentContent=object, AiJob=_FakeAiJob
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
     )
 
     class FakeProviderError(Exception):
