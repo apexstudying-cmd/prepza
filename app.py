@@ -5293,11 +5293,6 @@ def _ensure_studyhub_document_for_publication(user_id, publication):
     receives their own Document row, so title/delete/read-progress state is
     personal and cannot mutate the publisher's Document row.
     """
-    if not _student_has_premium_library(user_id):
-        free_ids=_free_library_publication_ids(user_id)
-        if publication_id not in free_ids:
-            return jsonify({"error":"This Library item is outside your Free plan cohort allowance. Upgrade to Plus or Pro for premium Library access."}),403
-
     source = db.session.get(Document, publication.document_id)
     if not source or source.is_removed or not source.document_content_id:
         return None
@@ -5351,6 +5346,11 @@ def save_library_item(publication_id):
     publication = db.session.get(LibraryPublication, publication_id)
     if not publication or publication.status != "approved":
         return jsonify({"error": "Library item not found"}), 404
+
+    if not _student_has_premium_library(user_id):
+        free_ids=_free_library_publication_ids(user_id)
+        if publication_id not in free_ids:
+            return jsonify({"error":"This Library item is outside your Free plan cohort allowance. Upgrade to Plus or Pro for premium Library access."}),403
 
     source = db.session.get(Document, publication.document_id)
     if not source or source.is_removed or not source.document_content_id:
