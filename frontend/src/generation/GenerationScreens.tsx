@@ -27,7 +27,7 @@ async function generationApi<T = any>(path: string, options: RequestInit = {}): 
 }
 async function pollGenerationJob<T = any>(jobId: number, onProgress?: (percent: number, stage: string) => void): Promise<{ payload: T; materialId: number | null }> {
   for (;;) {
-    const job = await generationApi<{ status: string; progress_percent: number; progress_stage: string; error?: string; payload?: T }>(`/ai-jobs/${jobId}`)
+    const job = await generationApi<{ status: string; progress_percent: number; progress_stage: string; error?: string; material_id?: number | null; payload?: T }>(`/ai-jobs/${jobId}`)
     onProgress?.(Math.max(0, Math.min(100, Number(job.progress_percent || 0))), job.progress_stage || 'working')
     if (job.status === 'completed') return { payload: (job.payload ?? {}) as T, materialId: job.material_id ?? null }
     if (job.status === 'failed') throw new Error(job.error || 'Generation failed. Please try again.')
