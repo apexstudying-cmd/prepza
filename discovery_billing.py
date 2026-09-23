@@ -389,13 +389,7 @@ def register_discovery(app, db):
         name = str(data.get("name") or "").strip()[:200]
         placement = str(data.get("placement") or "feed").lower()
         objective = str(data.get("objective") or "reach").lower()
-        raw_modes = data.get("billing_modes")
-        if isinstance(raw_modes, list):
-            billing_modes = [str(x).lower() for x in raw_modes if str(x).lower() in ("cpm","cpc")]
-        else:
-            legacy = str(data.get("bid_type") or "cpm").lower()
-            billing_modes = [legacy] if legacy in ("cpm","cpc") else []
-        billing_modes = list(dict.fromkeys(billing_modes))
+        billing_modes = ["cpm", "cpc"]
         try:
             budget = int(data.get("budget_kes") or 0)
         except (TypeError, ValueError):
@@ -409,18 +403,25 @@ def register_discovery(app, db):
             return jsonify({"error": "Campaign name and valid placement are required"}), 400
         if objective not in ("reach", "traffic", "applications"):
             return jsonify({"error": "Invalid campaign objective"}), 400
-        if not billing_modes:
-            return jsonify({"error": "Select CPM, CPC, or both"}), 400
         if placement == "push":
             billing_modes = ["cpm"]
         bid_type = "both" if len(billing_modes) == 2 else billing_modes[0]
         if budget < DISCOVERY_PRICING["minimum_campaign_kes"]:
             return jsonify({"error": f"Minimum campaign budget is KES {DISCOVERY_PRICING['minimum_campaign_kes']:,}"}), 400
-        if placement == "feed_push" and "cpm" not in billing_modes:
-            return jsonify({"error": "Feed + push requires CPM for push delivery"}), 400
         bid = DISCOVERY_PRICING["push_cpm_kes"] if placement == "push" else DISCOVERY_PRICING["feed_cpm_kes"]
         start = data.get("starts_at")
         end = data.get("ends_at")
+        try:
+            duration_days = int(data.get("duration_days") or data.get("active_days") or 30)
+        except (TypeError, ValueError):
+            duration_days = 30
+        if duration_days not in (7, 30, 90):
+            return jsonify({"error":"Campaign maximum delivery window must be 7, 30, or 90 days"}), 400
+        if not end:
+            from datetime import datetime as _dt, timedelta as _td
+            base_start = _dt.fromisoformat(str(start).replace('Z','+00:00')) if start else _dt.utcnow()
+            if getattr(base_start, 'tzinfo', None): base_start = base_start.replace(tzinfo=None)
+            end = (base_start + _td(days=duration_days)).isoformat()
         plan_code, status, expires_at = org_plan(organisation_id)
         if status in ("suspended", "expired", "past_due"):
             return jsonify({"error": "Organisation billing is not active"}), 402
