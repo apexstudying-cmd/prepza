@@ -258,7 +258,7 @@ def register_b2b_organisation_portal(app, db):
         page.insert_text((55,y),title,fontsize=20,color=(0.04,0.08,0.22));y+=35
         for k,v in [("Organisation",org),("Reference",ref),("Campaign",campaign or "—"),("Amount",f"KES {int(amount)/100:,.2f}"),("Status",status),("Issued",datetime.utcnow().strftime("%d %b %Y %H:%M UTC"))]:
             page.insert_text((55,y),f"{k}: {v or '—'}",fontsize=11);y+=23
-        page.insert_text((55,y+12),"Prepza Education · Customer payment record",fontsize=9,color=(0.35,0.38,0.45))
+        page.insert_text((55,y+12),"Prepza Education · Internal/customer payment record. Tax invoice must be issued through the applicable KRA eTIMS process.",fontsize=8,color=(0.35,0.38,0.45))
         data=doc.tobytes();doc.close()
         return send_file(io.BytesIO(data),mimetype="application/pdf",as_attachment=True,download_name=filename)
 
@@ -268,7 +268,7 @@ def register_b2b_organisation_portal(app, db):
         if not uid or not access(oid,uid):return jsonify({"error":"Organisation membership required"}),403
         x=db.session.execute(text("SELECT i.*,o.name organisation_name,c.name campaign_name FROM b2b_invoice i JOIN organisation o ON o.id=i.organisation_id LEFT JOIN discovery_campaign c ON c.id=i.campaign_id WHERE i.id=:i AND i.organisation_id=:o"),{"i":iid,"o":oid}).mappings().first()
         if not x:return jsonify({"error":"Invoice not found"}),404
-        title = "PREPZA PRO FORMA INVOICE" if str(x["status"]) != "paid" else "PREPZA PAYMENT RECEIPT"
+        title = "PREPZA PRO FORMA INVOICE" if str(x["status"]) != "paid" else "PREPZA PAYMENT RECORD — NOT AN eTIMS TAX INVOICE"
         return pdf(title,x["invoice_number"],x["organisation_name"],x["campaign_name"],x["total_minor"],str(x["status"]).upper(),"invoice-"+x["invoice_number"]+".pdf")
 
     @app.get("/api/organisations/<int:oid>/billing/payments/<int:pid>/receipt.pdf")
