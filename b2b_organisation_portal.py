@@ -184,6 +184,33 @@ def register_b2b_organisation_portal(app, db):
         if not x:return jsonify({"error":"Payment not found"}),404
         return pdf("PREPZA PAYMENT RECEIPT",x["provider_reference"],x["organisation_name"],x["campaign_name"],x["customer_amount_minor"],str(x["status"]).upper(),"receipt-"+x["provider_reference"]+".pdf")
 
+    @app.post("/api/organisations/<int:oid>/kyc/upload")
+    def kyc_upload(oid):
+        uid=session.get("user_id")
+        if not uid or not access(oid,uid,owner=True) or not csrf(): return jsonify({"error":"Organisation owner and valid CSRF token required"}),403
+        file=request.files.get("file")
+        dtype=str(request.form.get("document_type") or "").strip()[:60]
+        if not file or not file.filename or not dtype: return jsonify({"error":"Document type and file are required"}),400
+        allowed={"pdf","png","jpg","jpeg"}
+        ext=file.filename.rsplit(".",1)[-1].lower() if "." in file.filename else ""
+        if ext not in allowed:return jsonify({"error":"KYC documents must be PDF, PNG or JPEG"}),400
+        data=file.read()
+        if len(data)>10*1024*1024:return jsonify({"error":"KYC document must be 10 MB or smaller"}),400
+        base=os.environ.get("SUPABASE_URL","").strip()
+        key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY","").strip()
+        if not base or not key:return jsonify({"error":"Private document storage is not configured yet"}),503
+        bucket="organisation-kyc"
+        headers={"Authorization":"Bearer "+key,"apikey":key,"Content-Type":file.mimetype or "application/octet-stream"}
+        try:
+            requests.post(base+"/storage/v1/bucket",json={"id":bucket,"name":bucket,"public":False},headers={"Authorization":"Bearer "+key,"apikey":key},timeout=10)
+        except Exception: pass
+        path=f"{oid}/{uuid.uuid4().hex}.{ext}"
+        res=requests.post(base+"/storage/v1/object/"+bucket+"/"+path,data=data,headers=headers,timeout=30)
+        if not res.ok:return jsonify({"error":"Could not securely store the KYC document"}),502
+        db.session.execute(text("INSERT INTO organisation_kyc_document(organisation_id,document_type,file_name,storage_path) VALUES(:o,:t,:f,:p)"),{"o":oid,"t":dtype,"f":file.filename[:255],"p":path})
+        db.session.commit()
+        return jsonify({"ok":True,"status":"pending","file_name":file.filename[:255]}),201
+
     @app.get("/api/organisations/<int:oid>/kyc")
     def kyc_list(oid):
         uid=session.get("user_id")
