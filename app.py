@@ -2345,6 +2345,17 @@ def require_admin(f):
     return decorated
 
 
+def login_required(f):
+    """Require an authenticated Prepza session for protected routes."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
 def require_csrf(f):
     """
     Requires a valid X-CSRF-Token header matching this session's token.
