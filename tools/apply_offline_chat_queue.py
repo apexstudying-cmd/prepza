@@ -4,56 +4,41 @@ ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / 'frontend' / 'src' / 'crypto' / 'WhatsAppChatExperience.tsx'
 
 
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    if new in text:
-        return text
-    if old not in text:
-        raise SystemExit(f'Offline chat queue patch anchor missing: {label}')
-    if text.count(old) != 1:
-        raise SystemExit(f'Offline chat queue patch anchor not unique: {label}')
-    return text.replace(old, new, 1)
-
-
 def main() -> None:
     text = TARGET.read_text(encoding='utf-8')
 
-    # The current chat implementation already has a request-aware offline fallback.
-    # Keep this build transform idempotent across both the legacy and current send() shapes.
-    text = replace_once(
-        text,
-        "import { provisionInitialGroupKey } from './groupProvisioning'\n",
-        "import { provisionInitialGroupKey } from './groupProvisioning'\nimport { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'\n",
-        'imports',
-    )
+    # The chat source has evolved from the original one-line send() implementation.
+    # Validate and complete the current implementation instead of requiring the old anchor.
+    if "enqueueOfflineChatMessage" not in text:
+        raise SystemExit('Offline chat queue: current text-send implementation is missing enqueueOfflineChatMessage')
 
-    text = replace_once(
-        text,
-        "installConversationObserver()\n",
-        "installConversationObserver()\ninstallOfflineChatQueue()\n",
-        'queue startup',
-    )
+    if "import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'" in text:
+        text = text.replace(
+            "import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'",
+            "import { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'",
+            1,
+        )
+    elif "import { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'" not in text:
+        anchor = "import { provisionInitialGroupKey } from './groupProvisioning'\n"
+        if anchor not in text:
+            raise SystemExit('Offline chat queue: imports anchor missing')
+        text = text.replace(
+            anchor,
+            anchor + "import { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'\n",
+            1,
+        )
 
-    old_send = """    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) }); setInput(''); setReplyingTo(null); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this message.')) } finally { setSending(false) }"""
-    new_send = """    try {
-      const token = await getCsrfToken()
-      const body = JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' })
-      if (!navigator.onLine) {
-        const queued = await enqueueOfflineChatMessage(`/chats/${selectedId}/messages`, body, token)
-        if (!queued) throw new Error('Could not save this message for offline delivery.')
-        setInput(''); setReplyingTo(null)
-        setMessages(current => [...current, { id: -Date.now(), conversation_id: selectedId, sender_id: meIdRef.current || 0, body: JSON.stringify(envelope), nonce: null, is_deleted: false, created_at: new Date().toISOString(), edited_at: null, attachment: null, kind: 'text' }])
-        setError('Message saved. It will send when your connection returns.')
-      } else {
-        await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body })
-        setInput(''); setReplyingTo(null)
-        const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`)
-        setMessages(result.messages || []); void loadList()
-      }
-    } catch (value) { setError(friendlyError(value, 'Could not send this message.')) } finally { setSending(false) }"""
-    text = replace_once(text, old_send, new_send, 'text send')
+    if "installOfflineChatQueue()" not in text:
+        anchor = "installConversationObserver()\n"
+        if anchor not in text:
+            raise SystemExit('Offline chat queue: observer startup anchor missing')
+        text = text.replace(anchor, anchor + "installOfflineChatQueue()\n", 1)
 
-    # Reconcile queued messages as soon as the account reconnects while the chat is open.
-    reconnect_effect = """  useEffect(() => {
+    if 'prepza:offline-chat-synced' not in text:
+        anchor = "  useEffect(() => { const onStatus = (event: Event) => setRealtimeConnected(Boolean((event as CustomEvent<{ connected?: boolean }>).detail?.connected)); window.addEventListener('prepza-realtime-status', onStatus); return () => window.removeEventListener('prepza-realtime-status', onStatus) }, [])\n"
+        if anchor not in text:
+            raise SystemExit('Offline chat queue: reconnect effect anchor missing')
+        reconnect_effect = """  useEffect(() => {
     const onSynced = () => {
       if (!navigator.onLine || selectedId == null) return
       void api<{ messages: Message[] }>(`/chats/${selectedId}/messages`).then(result => setMessages(result.messages || [])).catch(() => {})
@@ -64,22 +49,18 @@ def main() -> None:
   }, [selectedId])
 
 """
-    if 'prepza:offline-chat-synced' not in text:
-        anchor = "  useEffect(() => { const onStatus = (event: Event) => setRealtimeConnected(Boolean((event as CustomEvent<{ connected?: boolean }>).detail?.connected)); window.addEventListener('prepza-realtime-status', onStatus); return () => window.removeEventListener('prepza-realtime-status', onStatus) }, [])\n"
-        if anchor not in text:
-            raise SystemExit('Offline chat queue: reconnect effect anchor missing')
         text = text.replace(anchor, anchor + reconnect_effect, 1)
 
     required = [
         "../offline/chatOfflineQueue",
         'installOfflineChatQueue()',
         'enqueueOfflineChatMessage',
-        'Message saved. It will send when your connection returns.',
         'prepza:offline-chat-synced',
     ]
     missing = [marker for marker in required if marker not in text]
     if missing:
         raise SystemExit('Offline chat queue verification failed: ' + ', '.join(missing))
+
     TARGET.write_text(text, encoding='utf-8')
     print('Offline chat text-message queue applied and verified.')
 
