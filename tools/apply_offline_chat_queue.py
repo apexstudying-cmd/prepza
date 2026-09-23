@@ -16,6 +16,9 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 def main() -> None:
     text = TARGET.read_text(encoding='utf-8')
+
+    # The current chat implementation already has a request-aware offline fallback.
+    # Keep this build transform idempotent across both the legacy and current send() shapes.
     text = replace_once(
         text,
         "import { provisionInitialGroupKey } from './groupProvisioning'\n",
