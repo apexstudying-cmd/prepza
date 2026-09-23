@@ -353,19 +353,52 @@ def register_discovery(app, db):
         if not uid or not csrf_ok() or not org_access(organisation_id, uid, owner_only=True):
             return jsonify({"error": "Organisation owner and valid CSRF token required"}), 403
         data = request.get_json(silent=True) or {}
-        allowed = {"draft", "pending_payment", "active", "paused", "completed", "cancelled"}
-        status = str(data.get("status") or "").lower()
-        if status not in allowed:
-            return jsonify({"error": "Invalid campaign status"}), 400
+        requested = str(data.get("status") or "").lower()
         row = campaign_row(campaign_id)
         if not row or int(row["organisation_id"]) != organisation_id:
             return jsonify({"error": "Campaign not found"}), 404
-        db.session.execute(text("""
-            UPDATE discovery_campaign SET status=:status, updated_at=CURRENT_TIMESTAMP
-            WHERE id=:cid AND organisation_id=:oid
-        """), {"status": status, "cid": campaign_id, "oid": organisation_id})
+
+        current = str(row["status"] or "draft")
+        funding = str(row["funding_status"] or "unfunded")
+        transitions = {
+            "draft": {"pending_payment", "cancelled"},
+            "pending_payment": {"draft", "cancelled"},
+            "active": {"paused", "completed", "cancelled"},
+            "paused": {"active", "completed", "cancelled"},
+            "completed": set(),
+            "cancelled": set(),
+        }
+        if requested not in transitions.get(current, set()):
+            return jsonify({"error": f"Invalid state transition: {current} -> {requested}"}), 409
+
+        if requested == "active" and funding not in ("funded", "credited"):
+            return jsonify({"error": "Campaign must be fully funded before activation"}), 409
+
+        if requested == "active":
+            now = datetime.utcnow()
+            db.session.execute(text("""
+                UPDATE discovery_campaign
+                SET status='active', activated_at=COALESCE(activated_at,:now), updated_at=CURRENT_TIMESTAMP
+                WHERE id=:cid AND organisation_id=:oid AND funding_status IN ('funded','credited')
+                  AND status='paused'
+            """), {"cid": campaign_id, "oid": organisation_id, "now": now})
+        elif requested == "paused":
+            db.session.execute(text("""
+                UPDATE discovery_campaign SET status='paused', updated_at=CURRENT_TIMESTAMP
+                WHERE id=:cid AND organisation_id=:oid AND status='active'
+            """), {"cid": campaign_id, "oid": organisation_id})
+        elif requested in ("completed", "cancelled"):
+            db.session.execute(text("""
+                UPDATE discovery_campaign SET status=:status, updated_at=CURRENT_TIMESTAMP
+                WHERE id=:cid AND organisation_id=:oid AND status IN ('active','paused','pending_payment','draft')
+            """), {"status": requested, "cid": campaign_id, "oid": organisation_id})
+        else:
+            db.session.execute(text("""
+                UPDATE discovery_campaign SET status=:status, updated_at=CURRENT_TIMESTAMP
+                WHERE id=:cid AND organisation_id=:oid AND status=:current
+            """), {"status": requested, "cid": campaign_id, "oid": organisation_id, "current": current})
         db.session.commit()
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "from": current, "to": requested})
 
     @app.post("/api/discovery/campaigns/<int:campaign_id>/impression")
     def discovery_impression(campaign_id):
