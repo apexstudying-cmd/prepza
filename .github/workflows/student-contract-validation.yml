@@ -26,8 +26,8 @@ jobs:
           pip install pytest sqlalchemy Flask
       - name: Compile student billing modules
         run: |
-          python -m py_compile student_orders.py student_subscription_billing.py ai_economics.py usage_billing.py ai_reusable_generation.py
+          python -m py_compile app.py student_orders.py student_subscription_billing.py ai_economics.py usage_billing.py ai_reusable_generation.py
       - name: Run student order and subscription contract tests
         env:
           PYTHONPATH: .
-        run: pytest -q tests/test_student_orders.py tests/test_student_subscription_billing.py tests/test_ai_economics.py
+        run: pytest -q tests/test_student_orders.py tests/test_student_subscription_billing.py tests/test_ai_economics.py scripts/test_chat_ui_contract.py
