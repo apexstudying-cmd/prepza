@@ -62,9 +62,9 @@ require("setScreen('payment-history')" in FRONTEND, "payment history navigation 
 require("await api('/logout', { method: 'POST'" in FRONTEND, "logout must await server success")
 
 # Support must be an actual admin-configurable contact surface.
-require('@app.route("/support/config")' in APP, "student support config endpoint missing")
+require('@app.route("/support/contact", methods=["GET"])' in APP, "student support config endpoint missing")
 require('support_email' in APP and 'support_phone' in APP and 'support_message' in APP, "support configuration fields missing")
-require("/support/config" in FRONTEND and "mailto:" in FRONTEND and "tel:" in FRONTEND, "contact support must use admin-configured contact details")
+require("/support/contact" in FRONTEND and "mailto:" in FRONTEND and "tel:" in FRONTEND, "contact support must use admin-configured contact details")
 require("support_email: string" in FRONTEND and "support_phone: string" in FRONTEND, "admin support settings are not represented in the frontend")
 require("Student Support Contact" in FRONTEND and "settingsDraft.support_email" in FRONTEND, "admin support settings UI missing")
 
@@ -74,6 +74,8 @@ delete_block = re.search(r'@app\.route\("/delete-account", methods=\["DELETE"\]\
 require(delete_block is not None, "account deletion endpoint missing")
 require("Payment.query.filter_by(user_id=user_id).update({\"user_id\": None}" in APP, "payment history must be detached rather than deleted")
 require("GeneratedMaterial.owner_user_id == user_id" in APP and "GeneratedMaterial.owner_user_id: None" in APP, "reusable generated artifacts must be detached from the deleted user")
+require("ownership_requires_transfer" in APP and "not admin_user" in APP, "unsafe ownership deletion must be blocked without an admin transfer target")
+require("DocumentContent/GeneratedMaterial" in APP, "deletion contract must document reusable artifact preservation")
 require("Document.query.filter_by(user_id=user_id).delete" in APP, "student document ownership rows must be removed")
 
 
