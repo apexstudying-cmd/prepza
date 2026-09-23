@@ -61,4 +61,20 @@ require("setScreen('subscription')" in FRONTEND, "subscription settings navigati
 require("setScreen('payment-history')" in FRONTEND, "payment history navigation missing")
 require("await api('/logout', { method: 'POST'" in FRONTEND, "logout must await server success")
 
+# Support must be an actual admin-configurable contact surface.
+require('@app.route("/support/config")' in APP, "student support config endpoint missing")
+require('support_email' in APP and 'support_phone' in APP and 'support_message' in APP, "support configuration fields missing")
+require("/support/config" in FRONTEND and "mailto:" in FRONTEND and "tel:" in FRONTEND, "contact support must use admin-configured contact details")
+require("support_email: string" in FRONTEND and "support_phone: string" in FRONTEND, "admin support settings are not represented in the frontend")
+require("Student Support Contact" in FRONTEND and "settingsDraft.support_email" in FRONTEND, "admin support settings UI missing")
+
+# Account deletion must remove the user and personal rows while preserving
+# detached payment history and reusable shared generation artifacts.
+delete_block = re.search(r'@app\\.route\\("/delete-account", methods=\\["DELETE"\\]\\).*?db\\.session\\.delete\\(user\\)', APP, re.S)
+require(delete_block is not None, "account deletion endpoint missing")
+require("Payment.query.filter_by(user_id=user_id).update({\"user_id\": None}" in APP, "payment history must be detached rather than deleted")
+require("GeneratedMaterial.owner_user_id == user_id" in APP and "GeneratedMaterial.owner_user_id: None" in APP, "reusable generated artifacts must be detached from the deleted user")
+require("Document.query.filter_by(user_id=user_id).delete" in APP, "student document ownership rows must be removed")
+
+
 print("STUDENT_RELEASE_CONTRACT_PASSED")
