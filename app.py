@@ -6706,6 +6706,38 @@ def update_group_settings(group_id):
     return jsonify(_serialize_group(group, membership))
 
 
+@app.route("/groups/<int:group_id>/posts/<int:post_id>/reaction", methods=["POST"])
+@require_csrf
+def react_to_group_post(group_id, post_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    group, membership = _get_group_visible(group_id, user_id)
+    if not group or not membership:
+        return jsonify({"error": "You must be a member of this group"}), 403
+    post = GroupPost.query.filter_by(id=post_id, group_id=group_id).first()
+    if not post:
+        return jsonify({"error": "Post not found"}), 404
+    data = request.get_json(silent=True) or {}
+    reaction = str(data.get("reaction") or "").strip()
+    if len(reaction) > 16:
+        return jsonify({"error": "Reaction is too long"}), 400
+    # One reaction per member per post, matching WhatsApp/Telegram-style behavior.
+    existing = GroupPostReaction.query.filter_by(post_id=post_id, user_id=user_id).first()
+    if not reaction:
+        if existing:
+            db.session.delete(existing)
+    elif existing:
+        existing.reaction = reaction
+    else:
+        db.session.add(GroupPostReaction(post_id=post_id, user_id=user_id, reaction=reaction))
+    db.session.commit()
+    reactions = GroupPostReaction.query.filter_by(post_id=post_id).all()
+    counts = {}
+    for item in reactions:
+        counts[item.reaction] = counts.get(item.reaction, 0) + 1
+    return jsonify({"post_id": post_id, "my_reaction": reaction or None, "counts": counts}), 200
+
 @app.route("/groups/<int:group_id>/posts", methods=["POST"])
 @require_csrf
 def create_group_post(group_id):
