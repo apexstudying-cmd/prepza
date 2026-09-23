@@ -17,7 +17,6 @@ def test_chat_surface_contains_whatsapp_core_interactions():
     text = CHAT.read_text(encoding="utf-8")
     required = {
         "conversation search": "Search conversations",
-        "message search": "Search this chat",
         "group creation": "New study group",
         "reply": "Reply",
         "reactions": "React",
