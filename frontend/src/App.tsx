@@ -1564,117 +1564,88 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
             </div>
           </section>
         )}
-        {/* Trending */}
-        {(filter === 'All' || filter === 'Notes' || filter === 'Past Papers') && (
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>🔥 Trending</div>
-            {trending.length === 0 ? null : (
-              <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
-                {trending.map(t => (
-                  <div key={t.id} onClick={() => { setActiveDocumentId(t.document_id); setScreen('document-study') }} style={{ flexShrink: 0, background: T.card, borderRadius: 14, padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', minWidth: 148, cursor: 'pointer' }}>
-                    <div style={{ fontWeight: 800, fontSize: 20, color: N.gold, marginBottom: 6, fontFamily: 'Plus Jakarta Sans' }}>{t.material_type === 'summary' ? '📊' : '📕'}</div>
-                    <div style={{ fontWeight: 700, fontSize: 12, color: T.text, marginBottom: 2 }} className="line-clamp-1">{t.title}</div>
-                    <div style={{ fontSize: 11, color: T.textMuted }}>{t.view_count} views</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Groups */}
-        {(filter === 'All' || filter === 'Groups') && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>👥 Groups</div>
-              <button onClick={() => setScreen('group-create')} style={{ fontSize: 12, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Create</button>
-            </div>
-            {loadingGroups ? (
-              <div style={{ fontSize: 12, color: T.textMuted }}>Loading groups…</div>
-            ) : groupsError ? (
-              <div style={{ fontSize: 12, color: '#C94C4C' }}>{groupsError}</div>
-            ) : groups.length === 0 ? (
-              <div style={{ fontSize: 12, color: T.textMuted }}>No groups found yet — be the first to start one.</div>
-            ) : (
-              groups.map(g => (
-                <div key={g.id} onClick={() => openGroup(g.id)} style={{ background: T.card, borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <div style={{ width: 42, height: 42, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: N.gold, flexShrink: 0 }}>{g.name.slice(0, 2).toUpperCase()}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{g.name}</div>
-                    <div style={{ fontSize: 11, color: T.textMuted }}>{g.unit_code ? `${g.unit_code} · ` : ''}{g.member_count} member{g.member_count === 1 ? '' : 's'}</div>
-                    {g.privacy === 'course_only' && <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>Course-only</div>}
-                  </div>
-                  {g.is_member ? (
-                    <Pill text="Joined" color="#4CC97B" />
-                  ) : (
-                    <button onClick={e => { e.stopPropagation(); quickJoin(g) }} disabled={joiningGroupId === g.id} style={{ background: N.gold, color: N.navy, fontWeight: 700, fontSize: 11, border: 'none', borderRadius: 9, padding: '6px 12px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: joiningGroupId === g.id ? 0.6 : 1 }}>{joiningGroupId === g.id ? '…' : 'Join'}</button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Documents */}
-        {filter !== 'Students' && filter !== 'Opportunities' && filter !== 'Groups' && (
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>📄 {filter === 'Past Papers' ? 'Past Papers' : filter === 'Notes' ? 'Lecture Notes' : 'Recent Documents'}</div>
-            {loadingDocs ? (
-              <div style={{ fontSize: 12, color: T.textMuted }}>Loading documents…</div>
-            ) : docsError ? (
-              <div style={{ fontSize: 12, color: '#C94C4C' }}>{docsError}</div>
-            ) : filtered.length === 0 ? (
-              <div style={{ fontSize: 12, color: T.textMuted }}>No documents found yet.</div>
-            ) : filtered.map(d => (
-              <div key={d.id} onClick={() => { setActiveDocumentId(d.document_id); setScreen('document-study') }} style={{ background: T.card, borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div style={{ width: 42, height: 42, background: d.material_type === 'summary' ? 'rgba(76,123,201,0.1)' : 'rgba(201,68,68,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{d.material_type === 'summary' ? '📊' : '📕'}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{d.title}</div>
-                  <div style={{ fontSize: 11, color: T.textMuted }}>{d.author}{d.unit_code ? ` · ${d.unit_code}` : ''}</div>
-                  <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>{d.save_count} saves</div>
-                </div>
-                <Pill text={materialTypeLabel(d.material_type)} />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Students */}
-        {(filter === 'All' || filter === 'Students') && (
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>👥 Students</div>
-            {loadingStudents ? (
-              <div style={{ fontSize: 12, color: T.textMuted }}>Loading students…</div>
-            ) : studentsError ? (
-              <div style={{ fontSize: 12, color: '#C94C4C' }}>{studentsError}</div>
-            ) : students.length === 0 ? (
-              <div style={{ fontSize: 12, color: T.textMuted }}>No students found yet.</div>
-            ) : (
-              <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
-                {students.map(s => {
-                  const initials = s.display_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
-                  return (
-                    <div key={s.user_id} style={{ flexShrink: 0, background: T.card, borderRadius: 16, padding: '16px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', width: 148, textAlign: 'center' }}>
-                      <div onClick={() => openStudentProfile(s)} style={{ cursor: 'pointer' }}>
-                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><Avi name={initials} size={48} /></div>
-                        <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{s.display_name}</div>
-                        <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }} className="line-clamp-1">{s.program_name || 'Student'}{s.year ? ` · Y${s.year}` : ''}</div>
-                        <div style={{ fontSize: 10, color: N.gold, fontWeight: 700 }}>{s.xp_total != null ? `⭐ ${s.xp_total.toLocaleString()} XP` : 'Private profile'}</div>
-                      </div>
-                      <button onClick={() => toggleFollow(s)} disabled={followBusy[s.user_id] || s.is_pending}
-                        style={{ marginTop: 10, background: (s.is_following || s.is_pending) ? 'rgba(201,168,76,0.15)' : N.navy, color: N.gold, border: (s.is_following || s.is_pending) ? `1px solid ${N.gold}44` : 'none', borderRadius: 10, padding: '6px 16px', fontSize: 11, fontWeight: 700, cursor: s.is_pending ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy[s.user_id] ? 0.6 : 1 }}>
-                        {followBusy[s.user_id] ? '…' : s.is_pending ? 'Requested' : s.is_following ? 'Following ✓' : 'Follow'}
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )
+}
+
+function ExploreScreen({
+  setScreen,
+  setActiveGroupId,
+  setActiveDocumentId,
+  setActiveProfileUserId,
+  setActiveProfileName,
+}: {
+  setScreen: (s: Screen) => void
+  setActiveGroupId: (id: number | null) => void
+  setActiveDocumentId: (id: number | null) => void
+  setActiveProfileUserId: (id: number | null) => void
+  setActiveProfileName: (name: string | null) => void
+}) {
+  const { tokens: T } = useTheme()
+  const [tab, setTab] = useState<'all' | 'documents' | 'groups' | 'students'>('all')
+  const [query, setQuery] = useState('')
+  const [groups, setGroups] = useState<any[]>([])
+  const [documents, setDocuments] = useState<any[]>([])
+  const [students, setStudents] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    Promise.all([
+      api<any>('/groups?q='),
+      api<any>('/documents'),
+      api<any>('/students'),
+    ]).then(([groupData, docData, studentData]) => {
+      if (cancelled) return
+      setGroups(groupData?.groups || [])
+      setDocuments(docData?.documents || [])
+      setStudents(studentData?.students || [])
+    }).catch(() => {
+      if (!cancelled) {
+        setGroups([]); setDocuments([]); setStudents([])
+      }
+    }).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const q = query.trim().toLowerCase()
+  const filteredGroups = groups.filter(g => !q || String(g.name || '').toLowerCase().includes(q))
+  const filteredDocuments = documents.filter(d => !q || String(d.title || '').toLowerCase().includes(q))
+  const filteredStudents = students.filter(u => !q || String(u.display_name || '').toLowerCase().includes(q))
+
+  return <div style={{ flex:1, overflowY:'auto', background:T.pageBg }} className="scrollbar-hide">
+    <div style={{ background:N.navy, color:'#fff', padding:'18px 18px 16px' }}>
+      <div style={{ fontSize:20, fontWeight:850 }}>Explore</div>
+      <div style={{ fontSize:11, opacity:.55, marginTop:4 }}>Discover study resources, groups, and students.</div>
+      <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search Explore" aria-label="Search Explore" style={{ marginTop:14, width:'100%', boxSizing:'border-box', height:42, border:0, borderRadius:12, padding:'0 12px', background:'rgba(255,255,255,.1)', color:'#fff', outline:0 }} />
+    </div>
+    <div style={{ padding:14 }}>
+      <div style={{ display:'flex', gap:7, overflowX:'auto', marginBottom:14 }}>
+        {([['all','All'],['documents','Documents'],['groups','Groups'],['students','Students']] as const).map(([key,label]) =>
+          <button key={key} onClick={() => setTab(key)} style={{ border:0, borderRadius:20, padding:'7px 12px', background:tab===key?N.gold:T.card, color:tab===key?N.navy:T.text, fontSize:10, fontWeight:800 }}>{label}</button>
+        )}
+      </div>
+      {loading ? <GenerationLoading label="Loading Explore…" /> : <>
+        {(tab==='all'||tab==='groups') && <section style={{ marginBottom:18 }}>
+          <div style={{ fontWeight:850, fontSize:14, color:T.text, marginBottom:9 }}>Groups</div>
+          {filteredGroups.slice(0,10).map(g => <button key={g.id} onClick={() => { setActiveGroupId(g.id); setScreen('group-detail') }} style={{ width:'100%', textAlign:'left', border:0, background:T.card, borderRadius:13, padding:12, marginBottom:7, color:T.text }}>{g.name || 'Study group'}<div style={{ fontSize:10, color:T.textMuted, marginTop:3 }}>{g.member_count || 0} members</div></button>)}
+          {!filteredGroups.length && <div style={{ color:T.textMuted, fontSize:11 }}>No groups found.</div>}
+        </section>}
+        {(tab==='all'||tab==='documents') && <section style={{ marginBottom:18 }}>
+          <div style={{ fontWeight:850, fontSize:14, color:T.text, marginBottom:9 }}>Documents</div>
+          {filteredDocuments.slice(0,10).map(d => <button key={d.id} onClick={() => { setActiveDocumentId(d.document_id || d.id); setScreen('document-study') }} style={{ width:'100%', textAlign:'left', border:0, background:T.card, borderRadius:13, padding:12, marginBottom:7, color:T.text }}>{d.title || 'Document'}<div style={{ fontSize:10, color:T.textMuted, marginTop:3 }}>{d.unit_code || 'Study material'}</div></button>)}
+          {!filteredDocuments.length && <div style={{ color:T.textMuted, fontSize:11 }}>No documents found.</div>}
+        </section>}
+        {(tab==='all'||tab==='students') && <section>
+          <div style={{ fontWeight:850, fontSize:14, color:T.text, marginBottom:9 }}>Students</div>
+          {filteredStudents.slice(0,10).map(u => <button key={u.user_id || u.id} onClick={() => { const id=Number(u.user_id || u.id); setActiveProfileUserId(id); setActiveProfileName(u.display_name || 'Student'); setScreen('student-profile') }} style={{ width:'100%', textAlign:'left', border:0, background:T.card, borderRadius:13, padding:12, marginBottom:7, color:T.text }}>{u.display_name || 'Student'}<div style={{ fontSize:10, color:T.textMuted, marginTop:3 }}>{u.program_name || 'Student'}</div></button>)}
+          {!filteredStudents.length && <div style={{ color:T.textMuted, fontSize:11 }}>No students found.</div>}
+        </section>}
+      </>}
+    </div>
+  </div>
 }
 
 // ─── CREATE MODAL ─────────────────────────────────────────────────────────────
