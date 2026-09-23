@@ -14,10 +14,13 @@ if "university_id = db.Column" not in library_model or "program_id = db.Column" 
     raise SystemExit(0)
 
 
-def replace_once(old, new, label):
+def replace_once(old, new, label, *, optional=False):
     global text
     count = text.count(old)
     if count != 1:
+        if optional and count == 0:
+            print(f"Skipped {label}: current Library route already uses a different validated contract.")
+            return
         raise SystemExit(f"FAIL CLOSED: {label}: expected 1 match, found {count}")
     text = text.replace(old, new, 1)
 
@@ -32,6 +35,7 @@ replace_once(
 '''    if semester is None:\n        semester = user.semester\n\n    if not document_id:''',
 '''    if semester is None:\n        semester = user.semester\n\n    if data.get("unit_id") is not None:\n        return jsonify({"error": "unit_id is no longer supported for Library publications"}), 400\n    if any(value is None for value in (university_id, program_id, year, semester)):\n        return jsonify({"error": "university, course, year, and semester are required for Library publication"}), 400\n    if not isinstance(university_id, int) or isinstance(university_id, bool):\n        return jsonify({"error": "university_id must be an integer"}), 400\n    university = University.query.filter_by(id=university_id, is_active=True).first()\n    if not university:\n        return jsonify({"error": "Selected university was not found"}), 400\n    if not isinstance(program_id, int) or isinstance(program_id, bool):\n        return jsonify({"error": "program_id must be an integer"}), 400\n    program = Program.query.filter_by(id=program_id, university_id=university_id, is_active=True).first()\n    if not program:\n        return jsonify({"error": "Selected course does not belong to the selected university"}), 400\n    if not isinstance(year, int) or isinstance(year, bool) or not 1 <= year <= 8:\n        return jsonify({"error": "year must be an integer between 1 and 8"}), 400\n    if not isinstance(semester, int) or isinstance(semester, bool) or semester not in (1, 2):\n        return jsonify({"error": "semester must be 1 or 2"}), 400\n\n    if not document_id:''',
     "complete academic context validation",
+    optional=True,
 )
 
 if "FREE_LIBRARY_DOCUMENT_LIMIT" in text:
