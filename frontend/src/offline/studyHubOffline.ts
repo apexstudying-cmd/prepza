@@ -296,7 +296,7 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     assetUrls.push(url)
     if (cache) { try { await cacheResponse(cache, url, new Response(blob, { headers: { 'Content-Type': blob.type || 'application/pdf' } })) } catch (_) {} }
 
-    const generatedPaths = ['summarize', 'quiz', 'flashcards', 'podcast-script', 'podcast-audio', 'mindmap']
+    const generatedPaths = ['summarize', 'quiz', 'flashcards', 'podcast-script', 'podcast-audio', 'mind-map']
     await Promise.all(generatedPaths.map(async feature => {
       try {
         const materialResponse = await fetch(`/documents/${documentId}/${feature}`, { credentials: 'include', cache: 'no-store' })
