@@ -191,7 +191,7 @@ async function openCurrentGroupSession(conversationId: number) {
   try { return await openGroupSession(conversationId, currentUserId!) }
   catch {
     await provisionCurrentEpochIfElected(conversationId)
-    return openGroupSession(conversationId)
+    return openGroupSession(conversationId, currentUserId!)
   }
 }
 
