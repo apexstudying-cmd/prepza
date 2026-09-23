@@ -997,7 +997,8 @@ class LibraryPublication(db.Model):
     pending).
     """
     id = db.Column(db.Integer, primary_key=True)
-    document_id = db.Column(db.Integer, db.ForeignKey("document.id"), nullable=False)    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    document_id = db.Column(db.Integer, db.ForeignKey("document.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.String(1000), nullable=True)
@@ -1996,7 +1997,8 @@ def _maybe_award_referral_commission(payment):
 
     prior_success_count = Payment.query.filter(
         Payment.user_id == payment.user_id,
-        Payment.status == "success",        Payment.id != payment.id,
+        Payment.status == "success",
+        Payment.id != payment.id,
     ).count()
     if prior_success_count > 0:
         return  # not their first successful payment - no commission
@@ -2958,7 +2960,8 @@ def google_auth_start():
         "response_type": "code",
         "scope": "openid email profile",
         "state": state,
-        "access_type": "online",        "prompt": "select_account",
+        "access_type": "online",
+        "prompt": "select_account",
     }
     return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
 
@@ -3958,6 +3961,7 @@ def _ai_generation_parameters_from_request():
 )
 @require_csrf
 
+
 def summarize_document(document_id):
     user_id = session.get("user_id")
     if not user_id:
@@ -4956,7 +4960,8 @@ def browse_library():
     )
 
     result = []
-    for pub in publications:        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+    for pub in publications:
+        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
         author = db.session.get(User, pub.user_id)
         result.append({
             "id": pub.id,
@@ -5955,7 +5960,8 @@ def xp_progress():
             "icon": icon,
             "label": label,
             "xp": e.xp_amount,
-            "created_at": e.created_at.isoformat() if e.created_at else None,        })
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        })
 
     return jsonify({
         "level": level_info["level"],
@@ -6954,7 +6960,8 @@ def update_group_member_role(group_id, target_user_id):
     if not group:
         return jsonify({"error": "Group not found"}), 404
 
-    requester = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()    if not requester or requester.role != "admin":
+    requester = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()
+    if not requester or requester.role != "admin":
         return jsonify({"error": "Only group admins can change member roles"}), 403
 
     target = GroupMember.query.filter_by(group_id=group_id, user_id=target_user_id).first()
@@ -7953,7 +7960,8 @@ def get_key_backup():
     Returns the logged-in user's OWN passphrase-wrapped private key
     blob, for a new device to download and decrypt locally with the
     user's passphrase (see frontend/src/crypto/backup.ts). Scoped to
-    session["user_id"] only - there is no way to fetch anyone else's    backup blob through this route.
+    session["user_id"] only - there is no way to fetch anyone else's
+    backup blob through this route.
     """
     user_id = session.get("user_id")
     if not user_id:
@@ -8953,6 +8961,7 @@ def admin_reinstate_ambassador(ambassador_id):
     ambassador.reviewed_by = acting_admin_id
     ambassador.reviewed_at = datetime.utcnow()
     db.session.commit()
+
     return jsonify({"id": ambassador.id, "status": ambassador.status})
 
 
@@ -9951,7 +9960,8 @@ def init_chat_attachment(conversation_id):
 
 
 @app.route("/chats/<int:conversation_id>/attachments/<int:attachment_id>/uploaded", methods=["POST"])
-@require_csrfdef confirm_chat_attachment_uploaded(conversation_id, attachment_id):
+@require_csrf
+def confirm_chat_attachment_uploaded(conversation_id, attachment_id):
     """Step 2: confirms the direct upload landed in storage before
     trusting the client's word for it - same verification as
     POST /documents/<id>/uploaded."""
@@ -10950,7 +10960,8 @@ def admin_list_payments():
             "status": p.status,
             "provider": p.provider,
             "reference": p.reference,
-            "subscription_expires_at": p.subscription_expires_at.isoformat() if p.subscription_expires_at else None,            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "subscription_expires_at": p.subscription_expires_at.isoformat() if p.subscription_expires_at else None,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
         })
 
     return jsonify({"payments": result})
@@ -11949,7 +11960,8 @@ def admin_update_settings():
             return jsonify({"error": "ai_monthly_budget_usd must be a positive number"}), 400
         setting = SystemSetting.query.filter_by(key="ai_monthly_budget_usd").first()
         if not setting:
-            setting = SystemSetting(key="ai_monthly_budget_usd", value=str(value))            db.session.add(setting)
+            setting = SystemSetting(key="ai_monthly_budget_usd", value=str(value))
+            db.session.add(setting)
         else:
             setting.value = str(value)
 
@@ -12948,7 +12960,8 @@ def admin_publish_opportunity(opportunity_id):
         }), 400
 
     now = datetime.utcnow()
-    if opp.application_deadline <= now or opp.expiry_date <= now:        return jsonify({
+    if opp.application_deadline <= now or opp.expiry_date <= now:
+        return jsonify({
             "error": "Cannot publish - application_deadline or expiry_date has already passed"
         }), 400
 
@@ -13948,6 +13961,7 @@ register_control_routes(
     log_admin_action,
     limiter,
 )
+
 from infrastructure_monitoring import register_infrastructure_monitoring
 
 register_infrastructure_monitoring(
