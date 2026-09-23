@@ -10,6 +10,7 @@ import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
 import StudyShareSheet from './share/StudyShareSheet'
 import StudyActivityScreen from './StudyActivityScreen'
+import PdfStudyCanvas from './crypto/PdfStudyCanvas'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Dev: Vite proxies these paths straight to the Flask backend (see
@@ -644,7 +645,7 @@ function DocumentStudyHubScreen({
             if (type === 'podcast' && payload?.audio_status !== 'ready') return null
             return { id: Number(payload?.material_id || 0), type, status: 'ready', parameters: payload?.parameters || {} }
           }))
-          const offlineMaterials = cachedMaterialTypes.filter((m): m is { id: number; type: string; status: string; parameters?: Record<string, unknown> } => Boolean(m && m.id > 0))
+          const offlineMaterials = cachedMaterialTypes.filter(m => Boolean(m && m.id > 0)) as { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]
           setDocument({
             id: activeDocumentId,
             title: saved.title || 'Saved study document',
@@ -3143,6 +3144,9 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   const [generationPercent, setGenerationPercent] = useState(0)
   const [generationStage, setGenerationStage] = useState('Preparing your podcast…')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
+  const [playerOpportunities, setPlayerOpportunities] = useState<OpportunityPublic[]>([])
+  const [playerOppIndex, setPlayerOppIndex] = useState(0)
+
 
   const positionKey = activeDocumentId == null ? '' : `prepza-podcast-position:${activeDocumentId}`
   const selectedPodcastMaterialId = (() => {
@@ -3157,6 +3161,15 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   const podcastAudioPath = selectedPodcastMaterialId
     ? `/documents/${activeDocumentId}/podcast-audio?material_id=${selectedPodcastMaterialId}`
     : `/documents/${activeDocumentId}/podcast-audio`
+
+  useEffect(() => {
+    if (stage !== 'ready') return
+    let cancelled = false
+    api<{ opportunities: OpportunityPublic[] }>('/podcast-opportunities')
+      .then(res => { if (!cancelled) { setPlayerOpportunities(res.opportunities || []); setPlayerOppIndex(0) } })
+      .catch(() => { if (!cancelled) setPlayerOpportunities([]) })
+    return () => { cancelled = true }
+  }, [stage])
 
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
@@ -12652,24 +12665,6 @@ function AdminCommunityPanel() {
 
   useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
 
-  const payPromotion = async (promotionId: number) => {
-    if (!isOwner || promoPayingId === promotionId) return
-    setPromoPayingId(promotionId); setPromoError('')
-    try {
-      const res = await api<{ payment_required: boolean; redirect_url?: string }>(
-        `/organisations/${orgId}/opportunity-promotions/${promotionId}/pay`,
-        { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } },
-      )
-      if (res.payment_required && res.redirect_url) window.location.href = res.redirect_url
-      else {
-        const refreshed = await api<{ promotions: OrgPromotion[] }>(`/organisations/${orgId}/opportunities/${promoTarget?.id}/promotions`)
-        setPromoHistory(refreshed.promotions)
-      }
-    } catch (e) {
-      setPromoError(e instanceof ApiError ? e.message : 'Could not start payment.')
-    } finally { setPromoPayingId(null) }
-  }
-
   const load = () => {
     setLoading(true); setError('')
     api<{ reports: AdminContentReport[] }>('/admin/content-reports?status=pending')
@@ -13879,6 +13874,7 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
         headers: { 'X-CSRF-Token': csrfToken },
         body: JSON.stringify({ plan: code }),
       })
+      if (!res.redirect_url) throw new Error('Payment checkout URL was not returned.')
       window.location.href = res.redirect_url
     } catch (e) {
       alert(e instanceof ApiError ? e.message : 'Could not start organisation checkout.')
@@ -14439,7 +14435,8 @@ export default function App() {
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
   if (orgPortalMode) return <OrganisationPortalScreen onExit={() => setOrgPortalMode(false)} />
 
-  // Bottom navigation belongs to the primary app surfaces. Detail/immersive flows must own the full viewport so the global nav does not compete with their back/close controls.\n  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','upload-share-choice','processing','doc-ready','document-study','document-reader','ai-tutor','flashcards','quiz','podcast-player','podcast-library','summary','opportunity-detail','share-sheet','settings','student-profile','notifications','library','mind-map','new-chat','chat-detail','chat-options','edit-profile','payment','payment-success','payment-failure','payment-history','publish-library','xp-progress','study-streak','study-activity','achievements','time-studied','followers','following','follow-requests','group-detail','group-create']
+  // Bottom navigation belongs to the primary app surfaces. Detail/immersive flows must own the full viewport so the global nav does not compete with their back/close controls.
+  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','upload-share-choice','processing','doc-ready','document-study','document-reader','ai-tutor','flashcards','quiz','podcast-player','podcast-library','summary','opportunity-detail','share-sheet','settings','student-profile','notifications','library','mind-map','new-chat','chat-detail','chat-options','edit-profile','payment','payment-success','payment-failure','payment-history','publish-library','xp-progress','study-streak','study-activity','achievements','time-studied','followers','following','follow-requests','group-detail','group-create']
   const darkHomeIndicator: Screen[] = ['processing','splash','login']
 
   const renderScreen = () => {
