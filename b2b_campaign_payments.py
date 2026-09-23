@@ -248,9 +248,6 @@ def register_b2b_campaign_payments(app, db):
             db.session.commit()
             return {"ok": False, "reason": "campaign_missing"}
 
-        # Re-verify against Paystack's server-side transaction record before
-        # delivering campaign value. The signed webhook is authentic, but the
-        # amount still must match the requested campaign value.
         verified = paystack_request("GET", f"/transaction/verify/{reference}")
         if str(verified.get("status", "")).lower() != "success":
             db.session.rollback()
@@ -260,31 +257,30 @@ def register_b2b_campaign_payments(app, db):
         requested_amount = int(verified.get("requested_amount") or 0)
         paid_amount = int(verified.get("amount") or 0)
         provider_fee = verified.get("fees")
-        provider_fee = int(provider_fee) if provider_fee is not None else max(0, paid_amount - requested_amount)
-
+        provider_fee = int(provider_fee) if provider_fee is not None else 0
         expected_campaign = int(payment["campaign_amount_minor"])
+
         if currency != "KES" or requested_amount != expected_campaign or paid_amount < expected_campaign:
             db.session.execute(text("""
                 UPDATE b2b_payment SET status='amount_mismatch',
-                       customer_amount_minor=:customer_amount,
-                       processing_fee_minor=:processing_fee,
-                       metadata=metadata || CAST(:extra AS jsonb),
-                       updated_at=CURRENT_TIMESTAMP
+                    customer_amount_minor=:customer_amount,
+                    processing_fee_minor=:processing_fee,
+                    metadata=metadata || CAST(:extra AS jsonb),
+                    updated_at=CURRENT_TIMESTAMP
                 WHERE id=:pid
             """), {
                 "pid": int(payment["id"]), "customer_amount": paid_amount,
                 "processing_fee": max(0, paid_amount - expected_campaign),
-                "extra": json.dumps({"provider_verification": {"currency": currency,
-                         "requested_amount": requested_amount, "amount": paid_amount,
-                         "fees": provider_fee}}),
+                "extra": json.dumps({"provider_verification": {
+                    "currency": currency, "requested_amount": requested_amount,
+                    "amount": paid_amount, "fees": provider_fee
+                }}),
             })
             db.session.commit()
             return {"ok": False, "reason": "amount_or_currency_mismatch"}
 
-        if paid_amount - expected_campaign < 0:
-            db.session.rollback()
-            return {"ok": False, "reason": "negative_processing_fee"}
-
+        # The campaign gets exactly the frozen campaign amount. Provider fees
+        # are customer-side economics and never reduce prepaid campaign value.
         existing_funding = db.session.execute(text("""
             SELECT id FROM b2b_campaign_funding WHERE payment_id=:pid
         """), {"pid": int(payment["id"])}).scalar_one_or_none()
