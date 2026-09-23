@@ -337,6 +337,7 @@ def register_b2b_campaign_payments(app, db):
         db.session.execute(text("""
             UPDATE discovery_campaign
             SET funding_status='funded',
+                status=CASE WHEN starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP THEN 'active' ELSE 'active' END,
                 funded_amount_minor=funded_amount_minor+:amount,
                 updated_at=CURRENT_TIMESTAMP
             WHERE id=:cid
