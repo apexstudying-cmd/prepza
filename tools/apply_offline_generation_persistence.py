@@ -134,7 +134,7 @@ def patch_podcast(text, path):
 def patch_flashcards(text, path):
     if 'FlashcardsGenerationScreen' not in text or '// Offline flashcards restore' in text:
         return text
-    anchor_pattern = r"(?s)  useEffect\\(\\(\\) => \\{\\n    if \\(activeDocumentId == null\\) return\\n    Promise\\.all\\(\\[generationApi<\\{ csrf_token: string \\}>\\('/me'\\),.*?fetchPrepzaUsage\\(\\)\\]\\)"
+    anchor_pattern = r"(?s)  useEffect\(\(\) => \{\n    if \(activeDocumentId == null\) return\n    Promise\.all\(\[generationApi<\{ csrf_token: string \}>\('/me'\),.*?fetchPrepzaUsage\(\)\]\)"
     match = re.search(anchor_pattern, text)
     if not match:
         raise SystemExit(f'Offline generation: flashcard document effect anchor missing in {path.name}')
