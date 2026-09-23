@@ -56,6 +56,7 @@ require("Two-Factor Authentication" in FRONTEND and "Not available yet" in FRONT
 require("Study Reminders" in FRONTEND and "Not available yet" in FRONTEND, "study reminders must not be a fake action")
 require("Study Preferences" in FRONTEND and "Not available yet" in FRONTEND, "study preferences must not be a fake action")
 require("AI Preferences" in FRONTEND and "Not available yet" in FRONTEND, "AI preferences must not be a fake action")
+require("Help centre is not available yet" in FRONTEND and "Support contact is not available yet" in FRONTEND and "Problem reporting is not available yet" in FRONTEND, "support controls must not be fake actions")
 require("setScreen('subscription')" in FRONTEND, "subscription settings navigation missing")
 require("setScreen('payment-history')" in FRONTEND, "payment history navigation missing")
 require("await api('/logout', { method: 'POST'" in FRONTEND, "logout must await server success")
