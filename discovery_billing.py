@@ -378,16 +378,6 @@ def register_discovery(app, db):
         target = row["target_json"] or {}
         if not target_matches(uid, target):
             return jsonify({"eligible": False}), 200
-        # Launch home/feed sponsored inventory cap: no more than 3
-        # qualifying sponsored impressions for one student in any rolling 7 days.
-        recent_impressions = db.session.execute(text("""
-            SELECT COUNT(*) FROM discovery_event
-            WHERE user_id=:uid
-              AND event_type='impression'
-              AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
-        """), {"uid": uid}).scalar_one()
-        if int(recent_impressions) >= 3:
-            return jsonify({"eligible": False, "code": "student_frequency_cap"}), 200
         data = request.get_json(silent=True) or {}
         supplied_key = str(data.get("event_id") or "").strip()
         event_key = f"imp:{campaign_id}:{uid}:{supplied_key[:100]}" if supplied_key else f"imp:{campaign_id}:{uid}:{secrets.token_hex(16)}"
@@ -397,7 +387,7 @@ def register_discovery(app, db):
             return jsonify({"eligible": True, "recorded": not result.get("duplicate"), "amount_minor": result.get("amount_minor", 0),
                             "remaining_minor": result.get("remaining_minor")}), 200
         db.session.rollback()
-        if result.get("reason") in ("campaign_budget_exhausted", "campaign_not_funded"):
+        if result.get("reason") in ("campaign_budget_exhausted", "campaign_not_funded", "student_frequency_cap"):
             return jsonify({"eligible": False, "code": result["reason"], "remaining_minor": result.get("remaining_minor", 0)}), 200
         if result.get("reason") == "campaign_inactive":
             return jsonify({"error": "Campaign unavailable"}), 404
