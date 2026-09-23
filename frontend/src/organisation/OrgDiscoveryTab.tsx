@@ -1,29 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
 
-type Props = { orgId: number; isOwner: boolean }
-
+type Props = { orgId:number; isOwner:boolean }
 type Campaign = {
   id:number; name:string; objective:string; placement:string; status:string; budget_kes:number
   bid_type:string; bid_kes:number; delivered_impressions:number; delivered_clicks:number
-  delivered_applications:number; push_delivered:number
+  delivered_applications:number; push_delivered:number; funding_status?:string; funded_amount_minor?:number
 }
-
 type Option = { id:number; name:string }
 
-async function req<T>(path:string, options:RequestInit = {}):Promise<T> {
-  const res = await fetch(path, {
-    credentials:'include',
-    ...options,
-    headers:{'Content-Type':'application/json', ...(options.headers || {})},
-  })
-  const body:any = await res.json().catch(()=>null)
-  if (!res.ok) throw new Error(body?.error || 'Request failed')
+async function req<T>(path:string, options:RequestInit = {}):Promise<T>{
+  const res=await fetch(path,{credentials:'include',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}})
+  const body:any=await res.json().catch(()=>null)
+  if(!res.ok) throw new Error(body?.error||'Request failed')
   return body
 }
 
-const gold='#C9A84C', navy='#0B1437'
+const navy='#0B1437', gold='#C9A84C'
+const input:React.CSSProperties={width:'100%',boxSizing:'border-box',border:'1px solid #E5E7EB',borderRadius:11,padding:'10px 12px',fontSize:12,marginBottom:9,background:'#fff',color:navy,fontFamily:'Plus Jakarta Sans'}
+const primary:React.CSSProperties={background:'linear-gradient(135deg,#C9A84C,#E8C97E)',color:navy,border:0,borderRadius:11,padding:'10px 14px',fontWeight:800,cursor:'pointer'}
+const secondary:React.CSSProperties={background:'#F3F4F6',color:navy,border:0,borderRadius:11,padding:'10px 14px',fontWeight:700,cursor:'pointer'}
 
-export default function OrgDiscoveryTab({orgId,isOwner}:Props) {
+export default function OrgDiscoveryTab({orgId,isOwner}:Props){
   const [csrf,setCsrf]=useState('')
   const [campaigns,setCampaigns]=useState<Campaign[]>([])
   const [universities,setUniversities]=useState<Option[]>([])
@@ -32,158 +29,132 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props) {
   const [selectedPrograms,setSelectedPrograms]=useState<number[]>([])
   const [years,setYears]=useState<number[]>([])
   const [audience,setAudience]=useState<number|null>(null)
-  const [summary,setSummary]=useState<any>(null)
-  const [billing,setBilling]=useState<any>(null)
-  const [loading,setLoading]=useState(true)
-  const [creating,setCreating]=useState(false)
-  const [error,setError]=useState('')
-  const [form,setForm]=useState({
-    name:'', objective:'reach', placement:'feed', bid_type:'cpm', budget_kes:'5000',
-    active_days:'30',
-  })
+  const [loading,setLoading]=useState(true),[saving,setSaving]=useState(false)
+  const [error,setError]=useState(''),[notice,setNotice]=useState('')
+  const [payingId,setPayingId]=useState<number|null>(null)
+  const [form,setForm]=useState({name:'',objective:'reach',placement:'feed',bid_type:'cpm',budget_kes:'5000',active_days:'30',opportunity_id:''})
 
   const load=async()=>{
-    setLoading(true); setError('')
-    try {
-      const [me,c,u,p,s,b]=await Promise.all([
+    setLoading(true);setError('')
+    try{
+      const [me,c,u]=await Promise.all([
         req<{csrf_token:string}>('/me'),
         req<{campaigns:Campaign[]}>(`/api/organisations/${orgId}/discovery/campaigns`),
         req<Option[]>('/universities'),
-        req<any>('/api/organisations/'+orgId+'/discovery/pricing'),
-        req<any>('/api/organisations/'+orgId+'/discovery/summary'),
-        req<any>('/api/organisations/'+orgId+'/discovery/billing-preview'),
       ])
-      setCsrf(me.csrf_token); setCampaigns(c.campaigns); setUniversities(u)
-      setSummary(s)
-      setBilling(b)
-      void p
-    } catch(e){setError(e instanceof Error?e.message:'Could not load Discovery.')}
+      setCsrf(me.csrf_token);setCampaigns(c.campaigns);setUniversities(u)
+    }catch(e){setError(e instanceof Error?e.message:'Could not load campaigns.')}
     finally{setLoading(false)}
   }
   useEffect(()=>{void load()},[orgId])
-
   useEffect(()=>{
     if(selectedUniversities.length!==1){setPrograms([]);return}
-    req<any[]>(`/universities/${selectedUniversities[0]}/programs`).then(setPrograms).catch(()=>setPrograms([]))
+    req<Option[]>(`/universities/${selectedUniversities[0]}/programs`).then(setPrograms).catch(()=>setPrograms([]))
   },[selectedUniversities])
 
-  const estimated = useMemo(()=>audience ?? 0,[audience])
-  const bid = form.placement==='push' ? 1500 : form.bid_type==='cpc' ? 20 : 350
-
+  const bid=useMemo(()=>form.placement==='push'||form.placement==='feed_push'?1500:form.bid_type==='cpc'?20:350,[form.placement,form.bid_type])
+  const audienceLabel=audience===null?'—':audience<10?'Too small to disclose':audience.toLocaleString()
   const estimate=async()=>{
-    setError('')
+    setError('');setNotice('')
     try{
-      const target={university_ids:selectedUniversities,program_ids:selectedPrograms,years,active_days:Number(form.active_days),discoverable:true}
-      const r=await req<any>(`/api/organisations/${orgId}/discovery/audience-estimate`,{
-        method:'POST',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({target})
-      })
+      const target={university_ids:selectedUniversities,program_ids:selectedPrograms,years,active_days:Number(form.active_days)}
+      const r=await req<any>(`/api/organisations/${orgId}/discovery/audience-estimate`,{method:'POST',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({target})})
       setAudience(r.audience_estimate)
+      setNotice(r.audience_estimate_available?'Aggregate estimate calculated.':'Audience is below Prepza’s privacy threshold and is not disclosed.')
     }catch(e){setError(e instanceof Error?e.message:'Could not estimate audience.')}
   }
-
   const create=async()=>{
-    if(!form.name.trim()||creating)return
-    setCreating(true);setError('')
+    if(!form.name.trim()||saving)return
+    setSaving(true);setError('');setNotice('')
     try{
-      const target={university_ids:selectedUniversities,program_ids:selectedPrograms,years,active_days:Number(form.active_days),discoverable:true}
+      const target={university_ids:selectedUniversities,program_ids:selectedPrograms,years,active_days:Number(form.active_days)}
       await req(`/api/organisations/${orgId}/discovery/campaigns`,{
         method:'POST',headers:{'X-CSRF-Token':csrf},
-        body:JSON.stringify({name:form.name.trim(),objective:form.objective,placement:form.placement,bid_type:form.placement==='push'?'cpm':form.bid_type,budget_kes:Number(form.budget_kes)||5000,target})
+        body:JSON.stringify({
+          name:form.name.trim(),objective:form.objective,placement:form.placement,
+          bid_type:form.placement==='push'||form.placement==='feed_push'?'cpm':form.bid_type,
+          budget_kes:Number(form.budget_kes)||5000,target,
+          opportunity_id:form.opportunity_id?Number(form.opportunity_id):null,
+        })
       })
-      setForm(f=>({...f,name:''}));setAudience(null);await load()
+      setForm(f=>({...f,name:'',opportunity_id:''}));setAudience(null);setNotice('Draft created. Review it, fund it, then activate it.');await load()
     }catch(e){setError(e instanceof Error?e.message:'Could not create campaign.')}
-    finally{setCreating(false)}
+    finally{setSaving(false)}
   }
-
+  const pay=async(c:Campaign)=>{
+    setPayingId(c.id);setError('')
+    try{
+      const r=await req<any>(`/api/organisations/${orgId}/discovery/campaigns/${c.id}/payment`,{method:'POST',headers:{'X-CSRF-Token':csrf}})
+      if(r.authorization_url) window.location.assign(r.authorization_url)
+      else throw new Error('Paystack did not return a payment URL.')
+    }catch(e){setError(e instanceof Error?e.message:'Could not start payment.')}
+    finally{setPayingId(null)}
+  }
   const setStatus=async(id:number,status:string)=>{
-    try{
-      await req(`/api/organisations/${orgId}/discovery/campaigns/${id}`,{
-        method:'PATCH',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({status})
-      });await load()
-    }catch(e){setError(e instanceof Error?e.message:'Could not update campaign.')}
+    setError('')
+    try{await req(`/api/organisations/${orgId}/discovery/campaigns/${id}`,{method:'PATCH',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({status})});await load()}
+    catch(e){setError(e instanceof Error?e.message:'Could not update campaign.')}
   }
 
-  const sendPush=async(id:number)=>{
-    try{
-      const r=await req<any>(`/api/organisations/${orgId}/discovery/campaigns/${id}/push`,{method:'POST',headers:{'X-CSRF-Token':csrf}})
-      alert(`Eligible: ${r.eligible_recipients} · queued: ${r.queued} · sent: ${r.sent}`)
-      await load()
-    }catch(e){setError(e instanceof Error?e.message:'Could not send push campaign.')}
-  }
-
-  if(!isOwner)return <div style={{padding:20,color:'#6B7280',fontSize:13}}>Only the organisation owner can create or activate Discovery campaigns.</div>
+  if(!isOwner)return <div style={{padding:20,color:'#6B7280',fontSize:13}}>Only the organisation owner can create, fund or activate Discovery campaigns.</div>
   if(loading)return <div style={{padding:30,textAlign:'center',color:'#9CA3AF'}}>Loading Discovery…</div>
 
   return <div style={{padding:16,display:'flex',flexDirection:'column',gap:14}}>
     {error&&<div style={{background:'#FEE2E2',color:'#991B1B',borderRadius:12,padding:'10px 12px',fontSize:12}}>{error}</div>}
-    <div style={{background:`linear-gradient(135deg,${navy},#1A2A5E)`,borderRadius:18,padding:18,color:'#fff'}}>
-      <div style={{fontSize:11,opacity:.55,marginBottom:4}}>PREPZA DISCOVERY</div>
-      <div style={{fontSize:20,fontWeight:800,marginBottom:5}}>Reach the right students.</div>
-      <div style={{fontSize:12,lineHeight:1.6,opacity:.72}}>Target by university, course and year. Prepza selects the audience internally; organisations never receive the student list.</div>
+    {notice&&<div style={{background:'#F8F5EC',color:'#6B4F00',borderRadius:12,padding:'10px 12px',fontSize:12}}>{notice}</div>}
+
+    <div style={{background:'linear-gradient(135deg,#0B1437,#1A2A5E)',borderRadius:18,padding:18,color:'#fff'}}>
+      <div style={{fontSize:11,opacity:.6,marginBottom:4}}>PREPZA DISCOVERY</div>
+      <div style={{fontSize:21,fontWeight:800}}>Put an opportunity in front of the right students.</div>
+      <div style={{fontSize:12,lineHeight:1.6,opacity:.75,marginTop:6}}>Prepza matches students server-side using their university, programme and year. Organisations never receive the student list.</div>
     </div>
 
     <div style={{background:'#fff',borderRadius:16,padding:16,boxShadow:'0 2px 8px rgba(0,0,0,.04)'}}>
-      <div style={{fontWeight:800,fontSize:14,color:navy,marginBottom:12}}>Create campaign</div>
+      <div style={{fontWeight:800,fontSize:15,color:navy,marginBottom:12}}>1. Build campaign</div>
       <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Campaign name" style={input}/>
-      <div style={grid}>
+      <input value={form.opportunity_id} onChange={e=>setForm(f=>({...f,opportunity_id:e.target.value.replace(/\D/g,'')}))} inputMode="numeric" placeholder="Opportunity ID (optional)" style={input}/>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
         <select value={form.objective} onChange={e=>setForm(f=>({...f,objective:e.target.value}))} style={input}><option value="reach">Reach</option><option value="traffic">Traffic</option><option value="applications">Applications</option></select>
-        <select value={form.placement} onChange={e=>setForm(f=>({...f,placement:e.target.value}))} style={input}><option value="feed">Discovery Feed</option><option value="push">Targeted Push</option><option value="feed_push">Feed + Push</option></select>
+        <select value={form.placement} onChange={e=>setForm(f=>({...f,placement:e.target.value}))} style={input}><option value="feed">Opportunities feed</option><option value="push">Targeted push</option><option value="feed_push">Feed + push</option></select>
       </div>
-      {form.placement==='feed'&&<select value={form.bid_type} onChange={e=>setForm(f=>({...f,bid_type:e.target.value}))} style={input}><option value="cpm">Pay per 1,000 impressions · KES 350 CPM</option><option value="cpc">Pay per click · KES 20 CPC</option></select>}
-      <div style={grid}>
-        <input type="number" min="5000" step="500" value={form.budget_kes} onChange={e=>setForm(f=>({...f,budget_kes:e.target.value}))} style={input} placeholder="Budget (KES)"/>
-        <select value={form.active_days} onChange={e=>setForm(f=>({...f,active_days:e.target.value}))} style={input}><option value="7">Active students · 7 days</option><option value="30">Active students · 30 days</option><option value="90">Active students · 90 days</option></select>
+      {form.placement==='feed'&&<select value={form.bid_type} onChange={e=>setForm(f=>({...f,bid_type:e.target.value}))} style={input}><option value="cpm">KES 350 per 1,000 qualifying impressions</option><option value="cpc">KES 20 per qualifying click</option></select>}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <input type="number" min="5000" step="500" value={form.budget_kes} onChange={e=>setForm(f=>({...f,budget_kes:e.target.value}))} style={input} placeholder="Campaign budget (KES)"/>
+        <select value={form.active_days} onChange={e=>setForm(f=>({...f,active_days:e.target.value}))} style={input}><option value="7">Match active students · 7 days</option><option value="30">30 days</option><option value="90">90 days</option></select>
       </div>
-      <div style={{fontSize:11,fontWeight:700,color:'#6B7280',margin:'6px 0'}}>University</div>
-      <select multiple value={selectedUniversities.map(String)} onChange={e=>setSelectedUniversities(Array.from(e.target.selectedOptions).map(x=>Number(x.value)))} style={{...input,minHeight:82}}>
-        {universities.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
-      </select>
-      {programs.length>0&&<><div style={{fontSize:11,fontWeight:700,color:'#6B7280',margin:'8px 0 6px'}}>Course</div><select multiple value={selectedPrograms.map(String)} onChange={e=>setSelectedPrograms(Array.from(e.target.selectedOptions).map(x=>Number(x.value)))} style={{...input,minHeight:82}}>{programs.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></>}
-      <div style={{fontSize:11,fontWeight:700,color:'#6B7280',margin:'8px 0 6px'}}>Year</div>
-      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{[1,2,3,4].map(y=><button key={y} type="button" onClick={()=>setYears(v=>v.includes(y)?v.filter(x=>x!==y):[...v,y])} style={{border:`1px solid ${years.includes(y)?gold:'#E5E7EB'}`,background:years.includes(y)?gold+'18':'#fff',color:years.includes(y)?navy:'#6B7280',borderRadius:9,padding:'7px 11px',fontWeight:700,cursor:'pointer'}}>Year {y}</button>)}</div>
-      <div style={{display:'flex',gap:8,marginTop:12}}>
-        <button onClick={estimate} disabled={!form.name.trim()} style={buttonSecondary}>Estimate audience</button>
-        <button onClick={create} disabled={creating||!form.name.trim()} style={buttonPrimary}>{creating?'Creating…':'Create draft'}</button>
+      <div style={{fontSize:11,fontWeight:700,color:'#6B7280'}}>University</div>
+      <select multiple value={selectedUniversities.map(String)} onChange={e=>setSelectedUniversities(Array.from(e.target.selectedOptions).map(x=>Number(x.value)))} style={{...input,minHeight:82}}>{universities.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select>
+      {programs.length>0&&<><div style={{fontSize:11,fontWeight:700,color:'#6B7280'}}>Programme</div><select multiple value={selectedPrograms.map(String)} onChange={e=>setSelectedPrograms(Array.from(e.target.selectedOptions).map(x=>Number(x.value)))} style={{...input,minHeight:82}}>{programs.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></>}
+      <div style={{fontSize:11,fontWeight:700,color:'#6B7280'}}>Year</div>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',margin:'6px 0 12px'}}>{[1,2,3,4].map(y=><button key={y} type="button" onClick={()=>setYears(v=>v.includes(y)?v.filter(x=>x!==y):[...v,y])} style={{border:`1px solid ${years.includes(y)?gold:'#E5E7EB'}`,background:years.includes(y)?'#C9A84C18':'#fff',color:years.includes(y)?navy:'#6B7280',borderRadius:9,padding:'7px 11px',fontWeight:700,cursor:'pointer'}}>Year {y}</button>)}</div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button onClick={estimate} disabled={!form.name.trim()} style={secondary}>Estimate eligible audience</button>
+        <button onClick={create} disabled={saving||!form.name.trim()} style={primary}>{saving?'Creating…':'Create draft'}</button>
       </div>
-      {audience!==null&&<div style={{marginTop:12,background:'#F8F5EC',borderRadius:12,padding:12,fontSize:12,color:'#6B4F00'}}><strong>{estimated.toLocaleString()}</strong> eligible students matched. Targeting is internal and aggregate.</div>}
-      <div style={{fontSize:10,color:'#9CA3AF',marginTop:10}}>Minimum campaign budget: KES 5,000. Usage is metered against verified delivery and capped by your campaign budget.</div>
+      <div style={{marginTop:12,padding:12,borderRadius:12,background:'#F8F5EC',fontSize:12,color:'#6B4F00'}}>
+        <strong>Live preview</strong><div style={{marginTop:8,border:'1px solid #E8E5DC',borderRadius:13,padding:12,background:'#fff',color:navy}}>
+          <div style={{fontSize:9,fontWeight:800,color:'#9A7B25',letterSpacing:.5}}>SPONSORED</div>
+          <div style={{fontWeight:800,fontSize:14,marginTop:3}}>{form.name||'Your opportunity title'}</div>
+          <div style={{fontSize:11,color:'#6B7280',marginTop:4}}>Your organisation · Opportunity</div>
+          <div style={{fontSize:10,color:'#9CA3AF',marginTop:8}}>Targeted to eligible students in Prepza</div>
+        </div>
+        <div style={{fontSize:10,marginTop:8}}>Placement: {form.placement} · Rate: KES {bid.toLocaleString()} {form.placement==='feed'&&form.bid_type==='cpm'?'CPM':form.placement==='feed'&&form.bid_type==='cpc'?'CPC':'CPM'} · Budget: KES {Number(form.budget_kes||0).toLocaleString()}</div>
+        <div style={{fontSize:10,marginTop:3}}>Estimated eligible audience: {audienceLabel}. Estimates are not delivery guarantees.</div>
+      </div>
+      <div style={{fontSize:10,color:'#9CA3AF',marginTop:9}}>Minimum campaign budget is KES 5,000. Payment-processing fees are separate from the campaign budget.</div>
     </div>
 
-    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-      <Metric label="Impressions" value={summary?.campaigns?.reduce((s:number,c:Campaign)=>s+c.delivered_impressions,0)||0}/>
-      <Metric label="Clicks" value={summary?.campaigns?.reduce((s:number,c:Campaign)=>s+c.delivered_clicks,0)||0}/>
-      <Metric label="Push delivered" value={summary?.campaigns?.reduce((s:number,c:Campaign)=>s+c.push_delivered,0)||0}/>
-    </div>
-
-    <div style={{background:'#fff',borderRadius:14,padding:14,boxShadow:'0 2px 7px rgba(0,0,0,.04)'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{fontWeight:800,fontSize:13,color:navy}}>Current invoice</div><span style={{fontSize:11,color:'#16A34A',fontWeight:700}}>{billing?.invoice_locked?'Locked':'Metered'}</span></div>
-      <div style={{fontSize:22,fontWeight:800,color:navy,marginTop:7}}>KES {Number(billing?.current_invoice_kes||0).toLocaleString()}</div>
-      <div style={{fontSize:10,color:'#9CA3AF',marginTop:3}}>Base plan KES {Number(billing?.base_plan_kes||0).toLocaleString()} · Discovery usage KES {Number(billing?.discovery_usage_kes||0).toLocaleString()}</div>
-      <div style={{fontSize:10,color:'#6B7280',marginTop:7}}>The invoice amount updates from verified campaign delivery. The campaign budget is the hard spend cap.</div>
-    </div>
     <div style={{fontWeight:800,fontSize:14,color:navy}}>Campaigns</div>
     {campaigns.map(c=><div key={c.id} style={{background:'#fff',borderRadius:14,padding:14,boxShadow:'0 2px 7px rgba(0,0,0,.04)'}}>
-      <div style={{display:'flex',alignItems:'center',gap:10}}>
-        <div style={{flex:1}}><div style={{fontWeight:800,fontSize:13,color:navy}}>{c.name}</div><div style={{fontSize:10,color:'#9CA3AF',marginTop:3}}>{c.placement} · {c.bid_type.toUpperCase()} · KES {c.bid_kes.toLocaleString()}</div></div>
-        <span style={{fontSize:10,fontWeight:800,color:c.status==='active'?'#16A34A':gold}}>{c.status}</span>
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginTop:10}}>
-        <Metric label="Impr." value={c.delivered_impressions}/><Metric label="Clicks" value={c.delivered_clicks}/><Metric label="Apps" value={c.delivered_applications}/><Metric label="Push" value={c.push_delivered}/>
-      </div>
-      <div style={{fontSize:11,color:'#6B7280',marginTop:8}}>Budget KES {c.budget_kes.toLocaleString()} · estimated billed usage updates from verified events.</div>
-      <div style={{display:'flex',gap:6,marginTop:10}}>
-        {c.status==='draft'&&<button onClick={()=>setStatus(c.id,'active')} style={buttonPrimary}>Activate</button>}
-        {c.status==='active'&&c.placement!=='feed'&&<button onClick={()=>sendPush(c.id)} style={buttonSecondary}>Send targeted push</button>}
-        {c.status==='active'&&<button onClick={()=>setStatus(c.id,'paused')} style={buttonSecondary}>Pause</button>}
-        {c.status==='paused'&&<button onClick={()=>setStatus(c.id,'active')} style={buttonPrimary}>Resume</button>}
+      <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{flex:1}}><div style={{fontWeight:800,fontSize:13,color:navy}}>{c.name}</div><div style={{fontSize:10,color:'#9CA3AF',marginTop:3}}>{c.placement} · {c.bid_type.toUpperCase()} · KES {Number(c.bid_kes).toLocaleString()}</div></div><span style={{fontSize:10,fontWeight:800,color:c.status==='active'?'#16A34A':gold}}>{c.status}</span></div>
+      <div style={{fontSize:11,color:'#6B7280',marginTop:8}}>Budget KES {Number(c.budget_kes).toLocaleString()} · Funded {((Number(c.funded_amount_minor||0))/100).toLocaleString()} KES · {c.funding_status||'unfunded'}</div>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}}>
+        {c.status==='draft'&&<button onClick={()=>setStatus(c.id,'pending_payment')} style={secondary}>Continue to payment</button>}
+        {['pending_payment','draft'].includes(c.status)&&c.funding_status!=='funded'&&<button onClick={()=>pay(c)} disabled={payingId===c.id} style={primary}>{payingId===c.id?'Opening payment…':'Pay & fund campaign'}</button>}
+        {c.status==='paused'&&c.funding_status==='funded'&&<button onClick={()=>setStatus(c.id,'active')} style={primary}>Resume</button>}
+        {c.status==='active'&&<button onClick={()=>setStatus(c.id,'paused')} style={secondary}>Pause</button>}
       </div>
     </div>)}
     {campaigns.length===0&&<div style={{textAlign:'center',padding:28,color:'#9CA3AF',fontSize:12}}>No campaigns yet.</div>}
   </div>
 }
-
-const input:React.CSSProperties={width:'100%',boxSizing:'border-box',border:'1px solid #E5E7EB',borderRadius:11,padding:'10px 12px',fontSize:12,marginBottom:9,background:'#fff',color:navy,fontFamily:'Plus Jakarta Sans'}
-const grid:React.CSSProperties={display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}
-const buttonPrimary:React.CSSProperties={background:`linear-gradient(135deg,${gold},#E8C97E)`,color:navy,border:'none',borderRadius:11,padding:'10px 13px',fontWeight:800,cursor:'pointer'}
-const buttonSecondary:React.CSSProperties={background:'#F3F4F6',color:navy,border:'none',borderRadius:11,padding:'10px 13px',fontWeight:700,cursor:'pointer'}
-function Metric({label,value}:{label:string;value:number}){return <div style={{background:'#fff',borderRadius:12,padding:10,textAlign:'center',boxShadow:'0 2px 5px rgba(0,0,0,.04)'}}><div style={{fontWeight:800,fontSize:16,color:navy}}>{Number(value||0).toLocaleString()}</div><div style={{fontSize:9,color:'#9CA3AF'}}>{label}</div></div>}
