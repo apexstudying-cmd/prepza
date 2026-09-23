@@ -32,7 +32,7 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props){
   const [loading,setLoading]=useState(true),[saving,setSaving]=useState(false)
   const [error,setError]=useState(''),[notice,setNotice]=useState('')
   const [payingId,setPayingId]=useState<number|null>(null)
-  const [form,setForm]=useState({name:'',objective:'reach',placement:'feed',bid_type:'cpm',budget_kes:'5000',active_days:'30',opportunity_id:''})
+  const [form,setForm]=useState({name:'',objective:'reach',placement:'feed',bid_type:'both',budget_kes:'5000',billing_modes:['cpm','cpc'] as string[],active_days:'30',opportunity_id:''})
 
   const load=async()=>{
     setLoading(true);setError('')
@@ -52,7 +52,7 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props){
     req<Option[]>(`/universities/${selectedUniversities[0]}/programs`).then(setPrograms).catch(()=>setPrograms([]))
   },[selectedUniversities])
 
-  const bid=useMemo(()=>form.placement==='push'||form.placement==='feed_push'?1500:form.bid_type==='cpc'?20:350,[form.placement,form.bid_type])
+  const bid=useMemo(()=>form.placement==='push'?1500:form.placement==='feed_push'?350:form.billing_modes.includes('cpc')&&!form.billing_modes.includes('cpm')?20:350,[form.placement,form.billing_modes])
   const audienceLabel=audience===null?'—':audience<10?'Too small to disclose':audience.toLocaleString()
   const estimate=async()=>{
     setError('');setNotice('')
@@ -72,7 +72,7 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props){
         method:'POST',headers:{'X-CSRF-Token':csrf},
         body:JSON.stringify({
           name:form.name.trim(),objective:form.objective,placement:form.placement,
-          bid_type:form.placement==='push'||form.placement==='feed_push'?'cpm':form.bid_type,
+          billing_modes:form.placement==='push'?['cpm']:form.billing_modes,
           budget_kes:Number(form.budget_kes)||5000,target,
           opportunity_id:form.opportunity_id?Number(form.opportunity_id):null,
         })
@@ -117,7 +117,15 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props){
         <select value={form.objective} onChange={e=>setForm(f=>({...f,objective:e.target.value}))} style={input}><option value="reach">Reach</option><option value="traffic">Traffic</option><option value="applications">Applications</option></select>
         <select value={form.placement} onChange={e=>setForm(f=>({...f,placement:e.target.value}))} style={input}><option value="feed">Opportunities feed</option><option value="push">Targeted push</option><option value="feed_push">Feed + push</option></select>
       </div>
-      {form.placement==='feed'&&<select value={form.bid_type} onChange={e=>setForm(f=>({...f,bid_type:e.target.value}))} style={input}><option value="cpm">KES 350 per 1,000 qualifying impressions</option><option value="cpc">KES 20 per qualifying click</option></select>}
+      <div style={{fontSize:11,fontWeight:700,color:'#6B7280',marginBottom:5}}>Billing model</div>
+      <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:9}}>
+        {(['cpm','cpc'] as const).map(mode=>{
+          const forced=form.placement==='push'&&mode==='cpc'
+          const checked=forced||form.billing_modes.includes(mode)
+          return <button key={mode} type="button" disabled={forced} onClick={()=>!forced&&setForm(f=>({...f,billing_modes:f.billing_modes.includes(mode)?f.billing_modes.filter(x=>x!==mode):[...f.billing_modes,mode]}))} style={{border:`1px solid ${checked?gold:'#E5E7EB'}`,background:checked?'#C9A84C18':'#fff',color:checked?navy:'#6B7280',borderRadius:9,padding:'8px 11px',fontWeight:700,cursor:forced?'not-allowed':'pointer',opacity:forced?.7:1}}>{mode.toUpperCase()} · {mode==='cpm'?'KES 350 / 1,000 impressions':'KES 20 / click'}</button>
+        })}
+      </div>
+      <div style={{fontSize:10,color:'#9CA3AF',marginBottom:9}}>Default: both. Use CPM for reach, CPC for click-driven billing, or both. Targeting does not expose student lists.</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
         <input type="number" min="5000" step="500" value={form.budget_kes} onChange={e=>setForm(f=>({...f,budget_kes:e.target.value}))} style={input} placeholder="Campaign budget (KES)"/>
         <select value={form.active_days} onChange={e=>setForm(f=>({...f,active_days:e.target.value}))} style={input}><option value="7">Match active students · 7 days</option><option value="30">30 days</option><option value="90">90 days</option></select>
@@ -138,7 +146,7 @@ export default function OrgDiscoveryTab({orgId,isOwner}:Props){
           <div style={{fontSize:11,color:'#6B7280',marginTop:4}}>Your organisation · Opportunity</div>
           <div style={{fontSize:10,color:'#9CA3AF',marginTop:8}}>Targeted to eligible students in Prepza</div>
         </div>
-        <div style={{fontSize:10,marginTop:8}}>Placement: {form.placement} · Rate: KES {bid.toLocaleString()} {form.placement==='feed'&&form.bid_type==='cpm'?'CPM':form.placement==='feed'&&form.bid_type==='cpc'?'CPC':'CPM'} · Budget: KES {Number(form.budget_kes||0).toLocaleString()}</div>
+        <div style={{fontSize:10,marginTop:8}}>Placement: {form.placement} · Billing: {form.placement==='push'?'CPM':form.billing_modes.map(x=>x.toUpperCase()).join(' + ')} · Reference rate KES {bid.toLocaleString()} · Budget: KES {Number(form.budget_kes||0).toLocaleString()}</div>
         <div style={{fontSize:10,marginTop:3}}>Estimated eligible audience: {audienceLabel}. Estimates are not delivery guarantees.</div>
       </div>
       <div style={{fontSize:10,color:'#9CA3AF',marginTop:9}}>Minimum campaign budget is KES 5,000. Payment-processing fees are separate from the campaign budget.</div>
