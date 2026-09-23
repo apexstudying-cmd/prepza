@@ -5222,7 +5222,7 @@ def browse_library():
     query = LibraryPublication.query.filter_by(status="approved")
     if not _student_has_premium_library(user_id):
         free_ids=_free_library_publication_ids(user_id)
-        query=query.filter(LibraryPublication.id.in_(free_ids)) if free_ids else query.filter(db.literal(False))
+        query=query.filter(LibraryPublication.id.in_(free_ids)) if free_ids else query.filter(text("1=0"))
     flagged_document_ids = _flagged_document_ids()
     if flagged_document_ids:
         query = query.filter(~LibraryPublication.document_id.in_(flagged_document_ids))
