@@ -3,6 +3,16 @@ from pathlib import Path
 APP = Path(__file__).resolve().parents[1] / "app.py"
 text = APP.read_text()
 
+# This patch targets the newer LibraryPublication academic-context schema.
+# Older/current branches still derive cohort eligibility from Unit/UnitProgram;
+# do not fail the entire frontend build when that schema is not present.
+model_start=text.find("class LibraryPublication")
+model_end=text.find("class SavedLibraryMaterial", model_start)
+library_model=text[model_start:model_end] if model_start >= 0 and model_end > model_start else ""
+if "university_id = db.Column" not in library_model or "program_id = db.Column" not in library_model:
+    print("Skipped exact Library academic-eligibility patch: LibraryPublication academic fields are not present.")
+    raise SystemExit(0)
+
 
 def replace_once(old, new, label):
     global text
