@@ -121,7 +121,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     material_calls = []
     claim_results = [
         GenerationLookup(11, "generating", None, True),
-        GenerationLookup(11, "ready", {"title": "Reusable"}, False),
+        GenerationLookup(11, "ready", {"title": "Reusable", "sections": [{"title": "A", "body": "B"}]}, False),
     ]
 
     fake_ai = types.SimpleNamespace(
@@ -152,7 +152,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     monkeypatch.setattr(
         reusable,
         "_generator",
-        lambda material_type: ("system", lambda raw: {"title": "Reusable"}, "SUMMARIZATION"),
+        lambda material_type: ("system", lambda raw: {"title": "Reusable", "sections": [{"title": "A", "body": "B"}]}, "SUMMARIZATION"),
     )
     monkeypatch.setattr(reusable, "claim_or_get_generation", lambda **kwargs: claim_results.pop(0))
     monkeypatch.setattr(reusable, "mark_generation_ready", lambda *args: None)
