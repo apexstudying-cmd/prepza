@@ -5012,11 +5012,12 @@ def _free_library_publication_ids(user_id):
     user=db.session.get(User,user_id)
     if not user: return set()
     query=(LibraryPublication.query
-        .join(Unit,LibraryPublication.unit_id==Unit.id)
-        .filter(LibraryPublication.status=="approved",Unit.university_id==user.university_id,
-                Unit.year==user.year,Unit.semester==user.semester))
-    if user.program_id:
-        query=query.join(UnitProgram,UnitProgram.unit_id==Unit.id).filter(UnitProgram.program_id==user.program_id)
+        .join(User,LibraryPublication.user_id==User.id)
+        .filter(LibraryPublication.status=="approved",
+                User.university_id==user.university_id,
+                User.program_id==user.program_id,
+                User.year==user.year,
+                User.semester==user.semester))
     flagged=_flagged_document_ids()
     if flagged: query=query.filter(~LibraryPublication.document_id.in_(flagged))
     rows=query.order_by(LibraryPublication.created_at.asc(),LibraryPublication.id.asc()).limit(FREE_LIBRARY_DOCUMENT_LIMIT).all()
