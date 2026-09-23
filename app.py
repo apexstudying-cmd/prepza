@@ -6718,6 +6718,8 @@ def create_group_post(group_id):
         return jsonify({"error": "Group not found"}), 404
     if not membership:
         return jsonify({"error": "You must join this group first"}), 403
+    if (group.mode == "broadcast" or not group.allow_member_posts) and membership.role != "admin":
+        return jsonify({"error": "Only group admins can post in this broadcast group"}), 403
     if not group.is_active:
         return jsonify({"error": "This group has been deactivated"}), 403
 
