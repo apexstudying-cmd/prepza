@@ -290,6 +290,9 @@ def register_b2b_organisation_portal(app, db):
         if ext not in allowed:return jsonify({"error":"KYC documents must be PDF, PNG or JPEG"}),400
         data=file.read()
         if len(data)>10*1024*1024:return jsonify({"error":"KYC document must be 10 MB or smaller"}),400
+        signatures={"pdf":b"%PDF-","png":b"\\x89PNG\\r\\n\\x1a\\n","jpg":b"\\xff\\xd8\\xff","jpeg":b"\\xff\\xd8\\xff"}
+        if not data.startswith(signatures[ext]):
+            return jsonify({"error":"The uploaded file does not match its declared document type."}),400
         base=os.environ.get("SUPABASE_URL","").strip()
         key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY","").strip()
         if not base or not key:return jsonify({"error":"Private document storage is not configured yet"}),503
