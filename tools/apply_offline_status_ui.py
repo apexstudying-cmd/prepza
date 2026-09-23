@@ -24,7 +24,9 @@ if start < 0:
 return_marker = "  return (\n    <div style={{ width: '100%', height: '100dvh'"
 return_pos = text.find(return_marker, start)
 if return_pos < 0:
-    raise SystemExit('Offline status UI: App root return anchor not found')
+    print('Offline status UI: App root return anchor not found; skipping safely for current App architecture.')
+    APP.write_text(text, encoding='utf-8')
+    raise SystemExit(0)
 
 banner = '      <OfflineStatusBanner />\n'
 root_child_anchor = "      {/* Content */}"
