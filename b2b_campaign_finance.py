@@ -121,11 +121,28 @@ def register_b2b_campaign_finance(app, db):
         totals=db.session.execute(text("""
             SELECT COUNT(*) AS campaigns,
                    COALESCE(SUM(CASE WHEN status='active' THEN 1 ELSE 0 END),0) AS active,
-                   COALESCE(SUM(CASE WHEN status='exhausted' THEN 1 ELSE 0 END),0) AS exhausted,
+                   COALESCE(SUM(CASE WHEN funding_status='exhausted' THEN 1 ELSE 0 END),0) AS exhausted,
                    COALESCE(SUM(funded_amount_minor),0) AS funded_minor
             FROM discovery_campaign
         """)).mappings().one()
-        ledger=db.session.execute(text("SELECT COALESCE(SUM(signed_amount_minor),0) FROM b2b_campaign_ledger")).scalar_one()
-        return jsonify({"currency":"KES","campaigns":int(totals["campaigns"]),"active_campaigns":int(totals["active"]),
-                        "exhausted_campaigns":int(totals["exhausted"]),"campaign_funding_kes":int(totals["funded_minor"])/100,
-                        "ledger_net_balance_kes":int(ledger)/100,"processing_fees_are_customer_costs":True})
+        ledger=db.session.execute(text("""
+            SELECT COALESCE(SUM(signed_amount_minor),0) FROM b2b_campaign_ledger
+        """)).scalar_one()
+        payments=db.session.execute(text("""
+            SELECT
+              COALESCE(SUM(CASE WHEN status IN ('paid','credited') THEN campaign_amount_minor ELSE 0 END),0) AS campaign_value_minor,
+              COALESCE(SUM(CASE WHEN status IN ('paid','credited') THEN processing_fee_minor ELSE 0 END),0) AS processing_fee_minor,
+              COALESCE(SUM(CASE WHEN status='refunded' THEN campaign_amount_minor ELSE 0 END),0) AS refunded_campaign_minor
+            FROM b2b_payment
+        """)).mappings().one()
+        return jsonify({
+            "currency":"KES","campaigns":int(totals["campaigns"]),
+            "active_campaigns":int(totals["active"]),
+            "exhausted_campaigns":int(totals["exhausted"]),
+            "campaign_funding_kes":int(totals["funded_minor"])/100,
+            "ledger_net_balance_kes":int(ledger)/100,
+            "paid_campaign_value_kes":int(payments["campaign_value_minor"])/100,
+            "customer_processing_fees_kes":int(payments["processing_fee_minor"])/100,
+            "refunded_campaign_value_kes":int(payments["refunded_campaign_minor"])/100,
+            "processing_fees_are_customer_costs":True
+        })
