@@ -13984,6 +13984,9 @@ def admin_list_audit_logs():
 
 
 import chat_interactions
+from study_friend_streak_routes import register_study_friend_streak_routes
+
+register_study_friend_streak_routes(app, db)
 
 from prepza_control import register_control_routes
 
