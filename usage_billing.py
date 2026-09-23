@@ -244,20 +244,19 @@ def _csrf_ok():
 
 
 def _current_student_plan(db, user_id):
-    row = db.session.execute(text("""
+    """Return the highest active monthly subscription tier."""
+    rows = db.session.execute(text("""
         SELECT plan, subscription_expires_at
         FROM payment
         WHERE user_id = :uid
           AND payment_type = 'subscription'
           AND status = 'success'
-          AND subscription_expires_at IS NOT NULL
-        ORDER BY subscription_expires_at DESC
-        LIMIT 1
-    """), {"uid": user_id}).mappings().first()
-    if row and row["subscription_expires_at"] and row["subscription_expires_at"] > datetime.utcnow():
-        return "premium"
-    return "free"
-
+          AND subscription_expires_at > CURRENT_TIMESTAMP
+          AND plan IN ('plus', 'pro')
+        ORDER BY CASE plan WHEN 'pro' THEN 2 WHEN 'plus' THEN 1 ELSE 0 END DESC,
+                 created_at DESC
+    """), {"uid": user_id}).mappings().all()
+    return str(rows[0]["plan"]) if rows else "free"
 
 def _usage_row(db, user_id, feature):
     plan_code = _current_student_plan(db, user_id)
