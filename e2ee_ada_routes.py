@@ -26,6 +26,7 @@ from ai_service import (
 MAX_SELECTED_TEXT = 20_000
 MAX_PROMPT = 4_000
 MAX_PAGE_SPAN = 50
+MAX_MENTION_PROMPT = 2_000
 
 
 def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Document, User):
@@ -206,6 +207,68 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
             "model_used": response.model_used,
             "key_epoch": current_key_epoch,
             "context_scope": context_scope,
+        }), 200
+
+    @app.post("/chats/<int:conversation_id>/ada/mention")
+    def scoped_ada_mention(conversation_id):
+        """Answer an explicit @Ada question without reading encrypted chat history."""
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Authentication required"}), 401
+        if not active_member(conversation_id, user_id):
+            return jsonify({"error": "Conversation not found"}), 404
+
+        state = db.session.execute(
+            text("SELECT e2ee_mode, key_epoch FROM conversation WHERE id = :conversation_id"),
+            {"conversation_id": conversation_id},
+        ).mappings().first()
+        if not state or state["e2ee_mode"] not in {"group_v1", "direct_v1"}:
+            return jsonify({"error": "Ada requires a secure conversation"}), 409
+
+        data = request.get_json(silent=True) or {}
+        try:
+            prompt = clean_text(data.get("prompt"), MAX_MENTION_PROMPT, "prompt")
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        if not re.match(r"^@ada\\b", prompt, re.I):
+            return jsonify({"error": "Mention Ada with @Ada followed by your question"}), 400
+        question = re.sub(r"^@ada\\s*[:,]?\\s*", "", prompt, flags=re.I).strip()
+        if not question:
+            return jsonify({"error": "Ask Ada a question after @Ada"}), 400
+
+        allowed, used, limit = check_daily_tutor_limit(user_id, plan_tier="free")
+        if not allowed:
+            return jsonify({"error": "Daily Ada limit reached", "used": used, "limit": limit}), 429
+        if is_spend_cap_reached():
+            return jsonify({"error": "Fresh Ada generation is temporarily unavailable"}), 503
+
+        system_prompt = (
+            "You are Ada, Prepza's AI study tutor. You were explicitly mentioned "
+            "in a student's secure chat. Answer the academic question directly and "
+            "concisely using general academic knowledge. Do not claim access to "
+            "encrypted chat history, private messages, keys, or documents. If the "
+            "question needs a specific course context that was not supplied, say so "
+            "briefly and still give the useful general explanation you can."
+        )
+        try:
+            response = route_and_generate(AIRequest(
+                task="TUTORING",
+                system_prompt=system_prompt,
+                user_message=question,
+                cacheable_system=True,
+            ))
+        except AIBudgetExceededError:
+            return jsonify({"error": "Fresh Ada generation is temporarily unavailable"}), 503
+        except AIRateLimitExceededError:
+            return jsonify({"error": "Daily Ada limit reached"}), 429
+        except AIProviderError:
+            return jsonify({"error": "Ada could not answer right now"}), 502
+
+        log_usage(user_id, request_type="tutor_message", model=response.model_used,
+                  provider=response.provider, usage=response.usage)
+        return jsonify({
+            "answer": response.text,
+            "key_epoch": int(state["key_epoch"] or 0),
         }), 200
 
     app._prepza_e2ee_ada_route_registered = True
