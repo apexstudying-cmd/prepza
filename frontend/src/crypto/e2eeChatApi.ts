@@ -37,6 +37,7 @@ export async function ensureE2EEIdentityReady(): Promise<number> {
     if (!me?.csrf_token) throw new Error('CSRF token is unavailable; please refresh the session')
     const { keyPair } = await getOrCreateIdentityKeyPair(me.id)
     await registerUserPublicKey(await exportPublicKeyBase64Url(keyPair.publicKey), me.csrf_token)
+    return me.id
   })()
   try { await identityReadyPromise } catch (error) { identityReadyPromise = null; throw error }
 }
@@ -55,8 +56,8 @@ export async function fetchUserPublicKey(userId: number): Promise<string> {
   throw lastError instanceof Error ? lastError : new Error('Secure conversation is temporarily unavailable')
 }
 
-export async function openGroupSession(conversationId: number): Promise<GroupE2EEState> {
-  return openGroupE2EESession(conversationId, fetchGroupKeyEnvelopes, fetchUserPublicKey)
+export async function openGroupSession(conversationId: number, currentUserId: number): Promise<GroupE2EEState> {
+  return openGroupE2EESession(conversationId, fetchGroupKeyEnvelopes, fetchUserPublicKey, undefined, currentUserId)
 }
 
 export async function encryptGroupText(key: CryptoKey, plaintext: string, conversationId?: number, keyEpoch?: number) {
