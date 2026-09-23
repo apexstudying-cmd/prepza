@@ -48,3 +48,11 @@ ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_status VARCHAR(30) NOT NU
 ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_invoice_number VARCHAR(120);
 ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_control_code VARCHAR(120);
 ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_issued_at TIMESTAMP;
+
+
+-- Sponsored delivery analytics can be below KES 1 per event (for example,
+-- KES 350 CPM = KES 0.35 per impression). Keep accounting in minor units in
+-- the B2B ledger and retain the event's human-readable amount at four decimals.
+ALTER TABLE discovery_event
+  ALTER COLUMN amount_kes TYPE NUMERIC(12,4)
+  USING amount_kes::numeric;
