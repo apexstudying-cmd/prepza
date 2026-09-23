@@ -6332,6 +6332,28 @@ def _ensure_large_group_schema():
         db.session.execute(text("ALTER TABLE \"group\" ADD COLUMN IF NOT EXISTS allow_member_posts BOOLEAN NOT NULL DEFAULT TRUE"))
         db.session.execute(text("ALTER TABLE \"group\" ADD COLUMN IF NOT EXISTS invite_code VARCHAR(64)"))
         db.session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_group_invite_code ON \"group\" (invite_code)"))
+        if db.engine.dialect.name == "sqlite":
+            db.session.execute(text("""
+                CREATE TABLE IF NOT EXISTS group_post_reaction (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    post_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    reaction VARCHAR(16) NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(post_id, user_id)
+                )
+            """))
+        else:
+            db.session.execute(text("""
+                CREATE TABLE IF NOT EXISTS group_post_reaction (
+                    id BIGSERIAL PRIMARY KEY,
+                    post_id INTEGER NOT NULL REFERENCES group_post(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES user(id),
+                    reaction VARCHAR(16) NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_group_post_reaction_user UNIQUE(post_id, user_id)
+                )
+            """))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -6639,6 +6661,13 @@ GROUP_POST_COMMENT_MAX = 2000
 
 def _serialize_group_post(post, user_id):
     author = db.session.get(User, post.user_id)
+    reaction_rows = GroupPostReaction.query.filter_by(post_id=post.id).all()
+    reaction_counts = {}
+    viewer_reaction = None
+    for reaction_row in reaction_rows:
+        reaction_counts[reaction_row.reaction] = reaction_counts.get(reaction_row.reaction, 0) + 1
+        if reaction_row.user_id == user_id:
+            viewer_reaction = reaction_row.reaction
     like_count = None
     vote_count = None
     viewer_liked = False
@@ -6660,6 +6689,8 @@ def _serialize_group_post(post, user_id):
         "author_id": post.user_id,
         "like_count": like_count,
         "viewer_liked": viewer_liked,
+        "reaction_counts": reaction_counts,
+        "viewer_reaction": viewer_reaction,
         "vote_count": vote_count,
         "viewer_voted": viewer_voted,
         "comment_count": comment_count,
@@ -6718,6 +6749,7 @@ def update_group_settings(group_id):
 @app.route("/groups/<int:group_id>/posts/<int:post_id>/reaction", methods=["POST"])
 @require_csrf
 def react_to_group_post(group_id, post_id):
+    _ensure_large_group_schema()
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -6750,6 +6782,7 @@ def react_to_group_post(group_id, post_id):
 @app.route("/groups/<int:group_id>/posts", methods=["POST"])
 @require_csrf
 def create_group_post(group_id):
+    _ensure_large_group_schema()
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -6785,6 +6818,7 @@ def create_group_post(group_id):
 
 @app.route("/groups/<int:group_id>/posts")
 def list_group_posts(group_id):
+    _ensure_large_group_schema()
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -6819,6 +6853,7 @@ def list_group_posts(group_id):
 
 @app.route("/groups/<int:group_id>/posts/<int:post_id>")
 def get_group_post(group_id, post_id):
+    _ensure_large_group_schema()
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
