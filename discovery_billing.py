@@ -61,7 +61,7 @@ def _register_discovery_schema(db):
             event_key VARCHAR(180) NOT NULL UNIQUE,
             event_type VARCHAR(30) NOT NULL,
             placement VARCHAR(30) NOT NULL,
-            amount_kes INTEGER NOT NULL DEFAULT 0,
+            amount_kes NUMERIC(12,4) NOT NULL DEFAULT 0,
             metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
