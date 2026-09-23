@@ -366,12 +366,17 @@ def register_discovery(app, db):
         if not uid or not org_access(organisation_id, uid):
             return jsonify({"error":"Organisation membership required"}), 403
         data = request.get_json(silent=True) or {}
-        target = data.get("target") if isinstance(data.get("target"), dict) else {}
+        raw_target = data.get("target") if isinstance(data.get("target"), dict) else {}
         try:
+            target = normalize_target(raw_target)
             count = len(eligible_users(target))
-        except Exception:
-            count = 0
-        return jsonify({"audience_estimate": count, "target": target})
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid targeting criteria"}), 400
+        return jsonify({
+            "audience_estimate": count if count >= 10 else None,
+            "audience_estimate_available": count >= 10,
+            "target": target,
+        })
 
     @app.post("/api/organisations/<int:organisation_id>/discovery/campaigns")
     def create_discovery_campaign(organisation_id):
@@ -389,7 +394,11 @@ def register_discovery(app, db):
             budget = int(data.get("budget_kes") or 0)
         except (TypeError, ValueError):
             budget = 0
-        target = data.get("target") if isinstance(data.get("target"), dict) else {}
+        raw_target = data.get("target") if isinstance(data.get("target"), dict) else {}
+        try:
+            target = normalize_target(raw_target)
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid targeting criteria"}), 400
         if not name or placement not in ("feed", "push", "feed_push"):
             return jsonify({"error": "Campaign name and valid placement are required"}), 400
         if objective not in ("reach", "traffic", "applications"):
@@ -407,6 +416,8 @@ def register_discovery(app, db):
         if status in ("suspended", "expired", "past_due"):
             return jsonify({"error": "Organisation billing is not active"}), 402
         audience = eligible_users(target)
+        if len(audience) < 10:
+            return jsonify({"error": "Target audience must contain at least 10 consented eligible students"}), 400
         db.session.execute(text("""
             INSERT INTO discovery_campaign
                 (organisation_id, opportunity_id, name, objective, placement, status,
@@ -446,8 +457,13 @@ def register_discovery(app, db):
         """), {"cid": campaign_id, "oid": organisation_id}).mappings().first()
         if not row:
             return jsonify({"error": "Campaign not found"}), 404
-        target = row["target_json"] or {}
-        return jsonify({"campaign": dict(row), "audience_estimate": len(eligible_users(target))})
+        target = normalize_target(row["target_json"] or {})
+        count = len(eligible_users(target))
+        return jsonify({
+            "campaign": dict(row),
+            "audience_estimate": count if count >= 10 else None,
+            "audience_estimate_available": count >= 10,
+        })
 
     @app.patch("/api/organisations/<int:organisation_id>/discovery/campaigns/<int:campaign_id>")
     def update_discovery_campaign(organisation_id, campaign_id):
@@ -475,6 +491,12 @@ def register_discovery(app, db):
 
         if requested == "active" and funding not in ("funded", "credited"):
             return jsonify({"error": "Campaign must be fully funded before activation"}), 409
+        if requested == "active":
+            try:
+                if len(eligible_users(normalize_target(row["target_json"] or {}))) < 10:
+                    return jsonify({"error": "Campaign cannot activate with fewer than 10 consented eligible students"}), 409
+            except (ValueError, TypeError):
+                return jsonify({"error": "Campaign targeting is invalid"}), 409
 
         if requested == "active":
             now = datetime.utcnow()
