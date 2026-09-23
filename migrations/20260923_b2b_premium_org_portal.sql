@@ -42,3 +42,9 @@ CREATE TABLE IF NOT EXISTS b2b_invoice (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_b2b_invoice_org_created ON b2b_invoice(organisation_id,created_at DESC);
+
+
+ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_status VARCHAR(30) NOT NULL DEFAULT 'not_issued';
+ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_invoice_number VARCHAR(120);
+ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_control_code VARCHAR(120);
+ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_issued_at TIMESTAMP;
