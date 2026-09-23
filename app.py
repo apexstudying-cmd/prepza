@@ -1321,6 +1321,10 @@ class Group(db.Model):
     description = db.Column(db.String(1000), nullable=True)
     privacy = db.Column(db.String(20), nullable=False, default="public")
     # public | private | course_only
+    mode = db.Column(db.String(20), nullable=False, default="community")
+    history_visible = db.Column(db.Boolean, nullable=False, default=True)
+    allow_member_posts = db.Column(db.Boolean, nullable=False, default=True)
+    invite_code = db.Column(db.String(64), unique=True, nullable=True)
     university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=True)
     program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=True)
     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
@@ -6279,7 +6283,9 @@ def list_achievements():
 
 GROUP_NAME_MAX = 150
 GROUP_DESCRIPTION_MAX = 1000
+GROUP_MAX_MEMBERS = 200_000
 GROUP_PRIVACY_VALUES = {"public", "private", "course_only"}
+GROUP_MODE_VALUES = {"community", "broadcast"}
 
 
 def _serialize_group(group, membership=None):
@@ -6289,6 +6295,11 @@ def _serialize_group(group, membership=None):
         "name": group.name,
         "description": group.description,
         "privacy": group.privacy,
+        "mode": group.mode or "community",
+        "history_visible": bool(group.history_visible),
+        "allow_member_posts": bool(group.allow_member_posts),
+        "invite_code": group.invite_code,
+        "max_members": GROUP_MAX_MEMBERS,
         "university_id": group.university_id,
         "program_id": group.program_id,
         "unit_id": group.unit_id,
@@ -6305,6 +6316,18 @@ def _serialize_group(group, membership=None):
 
 @app.route("/groups", methods=["POST"])
 @require_csrf
+def _ensure_large_group_schema():
+    try:
+        db.session.execute(text("ALTER TABLE \"group\" ADD COLUMN IF NOT EXISTS mode VARCHAR(20) NOT NULL DEFAULT 'community'"))
+        db.session.execute(text("ALTER TABLE \"group\" ADD COLUMN IF NOT EXISTS history_visible BOOLEAN NOT NULL DEFAULT TRUE"))
+        db.session.execute(text("ALTER TABLE \"group\" ADD COLUMN IF NOT EXISTS allow_member_posts BOOLEAN NOT NULL DEFAULT TRUE"))
+        db.session.execute(text("ALTER TABLE \"group\" ADD COLUMN IF NOT EXISTS invite_code VARCHAR(64)"))
+        db.session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_group_invite_code ON \"group\" (invite_code)"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 def create_group():
     user_id = session.get("user_id")
     if not user_id:
@@ -6329,6 +6352,13 @@ def create_group():
     privacy = (data.get("privacy") or "public").strip().lower()
     if privacy not in GROUP_PRIVACY_VALUES:
         return jsonify({"error": "privacy must be one of: " + ", ".join(sorted(GROUP_PRIVACY_VALUES))}), 400
+    mode = (data.get("mode") or "community").strip().lower()
+    if mode not in GROUP_MODE_VALUES:
+        return jsonify({"error": "mode must be one of: community, broadcast"}), 400
+    history_visible = bool(data.get("history_visible", True))
+    allow_member_posts = bool(data.get("allow_member_posts", mode != "broadcast"))
+    if mode == "broadcast":
+        allow_member_posts = False
 
     university_id = data.get("university_id")
     if university_id is not None:
@@ -6364,6 +6394,10 @@ def create_group():
         name=name,
         description=description,
         privacy=privacy,
+        mode=mode,
+        history_visible=history_visible,
+        allow_member_posts=allow_member_posts,
+        invite_code=secrets.token_urlsafe(24),
         university_id=university_id,
         program_id=program_id,
         unit_id=unit_id,
@@ -6394,6 +6428,7 @@ def create_group():
 
 @app.route("/groups")
 def browse_groups():
+    _ensure_large_group_schema()
     """
     Browse/discover groups. Private groups are excluded entirely - no
     invite/request flow exists yet, so surfacing them would just be a
@@ -6448,6 +6483,7 @@ def browse_groups():
 
 @app.route("/groups/mine")
 def my_groups():
+    _ensure_large_group_schema()
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -6470,6 +6506,7 @@ def my_groups():
 
 @app.route("/groups/<int:group_id>")
 def get_group(group_id):
+    _ensure_large_group_schema()
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -6491,6 +6528,7 @@ def get_group(group_id):
 @app.route("/groups/<int:group_id>/join", methods=["POST"])
 @require_csrf
 def join_group(group_id):
+    _ensure_large_group_schema()
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -6505,6 +6543,9 @@ def join_group(group_id):
 
     if not group.is_active:
         return jsonify({"error": "This group has been deactivated"}), 403
+
+    if (group.member_count or 0) >= GROUP_MAX_MEMBERS:
+        return jsonify({"error": "This group has reached its 200,000-member limit"}), 409
 
     if group.privacy == "private":
         # No invite/request flow yet.
@@ -6629,6 +6670,40 @@ def _serialize_group_post_comment(comment):
         "marked_helpful": comment.marked_helpful,
         "created_at": comment.created_at.isoformat() if comment.created_at else None,
     }
+
+
+@app.route("/groups/<int:group_id>/settings", methods=["PATCH"])
+@require_csrf
+def update_group_settings(group_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+    membership = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()
+    if not membership or membership.role != "admin":
+        return jsonify({"error": "Only group admins can change group settings"}), 403
+    data = request.get_json(silent=True) or {}
+    if "mode" in data:
+        mode = str(data["mode"]).strip().lower()
+        if mode not in GROUP_MODE_VALUES:
+            return jsonify({"error": "mode must be community or broadcast"}), 400
+        group.mode = mode
+        if mode == "broadcast":
+            group.allow_member_posts = False
+    if "history_visible" in data:
+        if not isinstance(data["history_visible"], bool):
+            return jsonify({"error": "history_visible must be true or false"}), 400
+        group.history_visible = data["history_visible"]
+    if "allow_member_posts" in data:
+        if not isinstance(data["allow_member_posts"], bool):
+            return jsonify({"error": "allow_member_posts must be true or false"}), 400
+        if group.mode == "broadcast" and data["allow_member_posts"]:
+            return jsonify({"error": "Broadcast groups are admin-only posting"}), 400
+        group.allow_member_posts = data["allow_member_posts"]
+    db.session.commit()
+    return jsonify(_serialize_group(group, membership))
 
 
 @app.route("/groups/<int:group_id>/posts", methods=["POST"])
