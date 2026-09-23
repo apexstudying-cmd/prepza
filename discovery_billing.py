@@ -460,15 +460,20 @@ def register_discovery(app, db):
         row = campaign_row(campaign_id)
         if not row or int(row["organisation_id"]) != organisation_id:
             return jsonify({"error": "Campaign not found"}), 404
-        impressions = int(row["delivered_impressions"] or 0)
-        clicks = int(row["delivered_clicks"] or 0)
-        push = int(row["push_delivered"] or 0)
-        usage = campaign_usage(row)
+        ledger_net_minor = db.session.execute(text("""
+            SELECT COALESCE(SUM(signed_amount_minor),0)
+            FROM b2b_campaign_ledger WHERE campaign_id=:cid
+        """), {"cid": campaign_id}).scalar_one()
+        funded_minor = int(row["funded_amount_minor"] or 0)
+        remaining_minor = max(0, funded_minor + int(ledger_net_minor))
+        spent_minor = max(0, -int(ledger_net_minor))
         return jsonify({
-            "currency": "KES", "usage_charge_kes": min(max(0, usage), int(row["budget_kes"])),
+            "currency": "KES",
+            "spent_kes": spent_minor / 100,
             "budget_kes": int(row["budget_kes"]),
-            "remaining_kes": max(0, int(row["budget_kes"]) - usage),
-            "billing_basis": "verified delivery events",
+            "funded_kes": funded_minor / 100,
+            "remaining_kes": remaining_minor / 100,
+            "billing_basis": "append-only prepaid campaign ledger",
         })
 
     @app.post("/api/organisations/<int:organisation_id>/discovery/campaigns/<int:campaign_id>/push")
@@ -673,11 +678,28 @@ def register_discovery(app, db):
                    delivered_impressions,delivered_clicks,delivered_applications,push_delivered
             FROM discovery_campaign WHERE organisation_id=:oid ORDER BY created_at DESC
         """), {"oid": organisation_id}).mappings().all()
-        total_spend = 0
+        total_spend_minor = 0
+        enriched = []
         for r in rows:
-            charge = campaign_usage(r)
-            total_spend += min(charge, int(r["budget_kes"]))
+            net = db.session.execute(text("""
+                SELECT COALESCE(SUM(signed_amount_minor),0)
+                FROM b2b_campaign_ledger WHERE campaign_id=:cid
+            """), {"cid": int(r["id"])}).scalar_one()
+            funded = db.session.execute(text("""
+                SELECT COALESCE(funded_amount_minor,0)
+                FROM discovery_campaign WHERE id=:cid
+            """), {"cid": int(r["id"])}).scalar_one() or 0
+            spent_minor = max(0, -int(net))
+            remaining_minor = max(0, int(funded) + int(net))
+            item = dict(r)
+            item.update({
+                "funded_kes": int(funded) / 100,
+                "spent_kes": spent_minor / 100,
+                "remaining_kes": remaining_minor / 100,
+            })
+            enriched.append(item)
+            total_spend_minor += spent_minor
         return jsonify({"currency": "KES", "pricing": DISCOVERY_PRICING,
-                        "campaigns": [dict(r) for r in rows], "estimated_usage_spend_kes": total_spend})
+                        "campaigns": enriched, "prepaid_ledger_spend_kes": total_spend_minor / 100})
 
     return None
