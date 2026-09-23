@@ -5318,7 +5318,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                 if (next) {
                   subscribeToPush(csrfToken).catch(() => setNotifs(n => ({ ...n, push: false })))
                 } else {
-                  unsubscribeFromPush(csrfToken).catch(() => {})
+                  unsubscribeFromPush(csrfToken).catch(() => setNotifs(n => ({ ...n, push: true })))
                 }
               } else {
                 const next = !notifs[k]
@@ -5384,9 +5384,9 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </Section>
 
         <Section title="Support">
-          <Row label="Help Centre" onPress={() => setShowModal('help')} />
-          <Row label="Contact Support" onPress={() => setShowModal('contact')} />
-          <Row label="Report a Problem" onPress={() => setShowModal('report-problem')} />
+          <Row label="Help Centre" sub="Help centre is not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
+          <Row label="Contact Support" sub="Support contact is not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
+          <Row label="Report a Problem" sub="Problem reporting is not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
         </Section>
 
         <Section title="About">
@@ -5408,7 +5408,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }}>
           <div style={{ background: T.card, borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%' }}>
             <div style={{ width: 40, height: 4, background: T.border, borderRadius: 99, margin: '0 auto 20px' }} />
-            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>
+            <div style={{ fontWeight: 800, fontSize: 17, color: T.text, marginBottom: 8 }}>
               {showModal === 'email' ? 'Change Email' : showModal === 'phone' ? 'Change Phone' : showModal === 'university' ? 'Select University' : showModal === 'course' ? 'Select Course' : showModal === 'study-prefs' ? 'Study Preferences' : showModal === 'ai-prefs' ? 'AI Preferences' : showModal === 'language' ? 'Language' : showModal === 'appearance' ? 'Appearance' : showModal === 'change-password' ? 'Change Password' : showModal === 'sessions' ? 'Login Sessions' : showModal === '2fa' ? 'Two-Factor Authentication' : showModal === 'plan' ? 'Current Plan' : showModal === 'upgrade' ? 'Upgrade to Premium' : showModal === 'billing' ? 'Billing' : showModal === 'help' ? 'Help Centre' : showModal === 'contact' ? 'Contact Support' : showModal === 'report-problem' ? 'Report a Problem' : showModal === 'about' ? 'About Prepza' : showModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
             </div>
             {showModal === 'email' ? (
