@@ -50,4 +50,14 @@ require("function SubscriptionScreen" in FRONTEND and "setScreen('settings')" in
 require("function PaymentHistoryScreen" in FRONTEND, "payment history screen missing")
 require("function EditProfileScreen" in FRONTEND, "edit profile screen missing")
 
+# No Settings row may advertise unsupported controls as interactive.
+require("Login Sessions" in FRONTEND and "Session management is not available yet" in FRONTEND, "login sessions must not be a fake action")
+require("Two-Factor Authentication" in FRONTEND and "Not available yet" in FRONTEND, "2FA must not be a fake action")
+require("Study Reminders" in FRONTEND and "Not available yet" in FRONTEND, "study reminders must not be a fake action")
+require("Study Preferences" in FRONTEND and "Not available yet" in FRONTEND, "study preferences must not be a fake action")
+require("AI Preferences" in FRONTEND and "Not available yet" in FRONTEND, "AI preferences must not be a fake action")
+require("setScreen('subscription')" in FRONTEND, "subscription settings navigation missing")
+require("setScreen('payment-history')" in FRONTEND, "payment history navigation missing")
+require("await api('/logout'" in FRONTEND, "logout must await server success")
+
 print("STUDENT_RELEASE_CONTRACT_PASSED")
