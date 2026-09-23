@@ -379,6 +379,7 @@ def register_b2b_organisation_portal(app, db):
     @app.patch("/api/admin/b2b/invoices/<int:invoice_id>/etims")
     def admin_update_etims(invoice_id):
         if not admin_user(): return jsonify({"error":"Admin access required"}),403
+        if not csrf(): return jsonify({"error":"Valid CSRF token required"}),403
         data=request.get_json(silent=True) or {}
         status=str(data.get("status") or "").strip().lower()
         if status not in ("not_issued","issued","voided"):return jsonify({"error":"Invalid eTIMS status"}),400
