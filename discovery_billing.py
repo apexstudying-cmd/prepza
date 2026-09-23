@@ -389,7 +389,13 @@ def register_discovery(app, db):
         name = str(data.get("name") or "").strip()[:200]
         placement = str(data.get("placement") or "feed").lower()
         objective = str(data.get("objective") or "reach").lower()
-        bid_type = str(data.get("bid_type") or "cpm").lower()
+        raw_modes = data.get("billing_modes")
+        if isinstance(raw_modes, list):
+            billing_modes = [str(x).lower() for x in raw_modes if str(x).lower() in ("cpm","cpc")]
+        else:
+            legacy = str(data.get("bid_type") or "cpm").lower()
+            billing_modes = [legacy] if legacy in ("cpm","cpc") else []
+        billing_modes = list(dict.fromkeys(billing_modes))
         try:
             budget = int(data.get("budget_kes") or 0)
         except (TypeError, ValueError):
@@ -403,12 +409,15 @@ def register_discovery(app, db):
             return jsonify({"error": "Campaign name and valid placement are required"}), 400
         if objective not in ("reach", "traffic", "applications"):
             return jsonify({"error": "Invalid campaign objective"}), 400
-        if bid_type not in ("cpm", "cpc"):
-            return jsonify({"error": "Invalid billing type"}), 400
+        if not billing_modes:
+            return jsonify({"error": "Select CPM, CPC, or both"}), 400
+        if placement == "push":
+            billing_modes = ["cpm"]
+        bid_type = "both" if len(billing_modes) == 2 else billing_modes[0]
         if budget < DISCOVERY_PRICING["minimum_campaign_kes"]:
             return jsonify({"error": f"Minimum campaign budget is KES {DISCOVERY_PRICING['minimum_campaign_kes']:,}"}), 400
-        if placement in ("push", "feed_push") and bid_type != "cpm":
-            return jsonify({"error": "Push inventory uses delivered-recipient CPM"}), 400
+        if placement == "feed_push" and "cpm" not in billing_modes:
+            return jsonify({"error": "Feed + push requires CPM for push delivery"}), 400
         bid = DISCOVERY_PRICING["push_cpm_kes"] if placement == "push" else DISCOVERY_PRICING["feed_cpm_kes"]
         start = data.get("starts_at")
         end = data.get("ends_at")
@@ -426,7 +435,7 @@ def register_discovery(app, db):
                     :budget, :bid_type, :bid, CAST(:target AS jsonb), :starts, :ends)
         """), {"oid": organisation_id, "opp": data.get("opportunity_id"), "name": name,
                "objective": objective, "placement": placement, "budget": budget,
-               "bid_type": bid_type, "bid": bid, "target": json.dumps(target),
+               "bid_type": bid_type, "bid": bid, "target": json.dumps({**target, "billing_modes": billing_modes}),
                "starts": start, "ends": end})
         db.session.commit()
         return jsonify({"ok": True, "audience_estimate": len(audience), "campaign": dict(campaign_row(
