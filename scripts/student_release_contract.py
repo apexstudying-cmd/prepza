@@ -42,7 +42,7 @@ require('who_can_follow: next ? \'everyone\' : \'approval_required\'' in FRONTEN
 require("@app.route(\"/api/opportunity-discovery\", methods=[\"GET\", \"POST\"])") in APP, "opportunity discovery endpoint missing")
 require("CREATE TABLE IF NOT EXISTS student_opportunity_discovery" in APP, "opportunity discovery persistence bootstrap missing")
 require("/api/opportunity-discovery" in FRONTEND and "method: 'POST'" in FRONTEND, "opportunity discovery setting is not wired to the backend")
-require("phone_number: me.phone_number" in FRONTEND, "settings does not load the saved phone number")
+require("setPhoneNumber(me.phone_number || '')" in FRONTEND, "settings does not load the saved phone number")
 require("phone_number: phoneNumber.trim() || null" in FRONTEND, "settings phone save is not wired to /profile")
 
 print("STUDENT_RELEASE_CONTRACT_PASSED")
