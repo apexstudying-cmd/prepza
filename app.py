@@ -4542,23 +4542,50 @@ def mindmap_document(document_id):
         return jsonify({"error": "Document not found"}), 404
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate a mind map from"}), 400
-        if document.user_id != user_id:
-        shared = _published_ready_material_for_viewer(user_id, document, "mind_map", _ai_generation_parameters_from_request())
+
+    if document.user_id != user_id:
+        shared = _published_ready_material_for_viewer(
+            user_id, document, "mind_map", _ai_generation_parameters_from_request()
+        )
         if not shared:
             return jsonify({"error": "Published mindmap has not been generated yet"}), 404
         content, material = shared
         result = _published_material_response(user_id, content, material)
-        return jsonify({"material_id": result["material_id"], "reused": True, "mindmap": result["payload"]}), 200
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": True,
+            "mindmap": result["payload"],
+        }), 200
 
     content = db.session.get(DocumentContent, document.document_content_id)
     if not content or content.status != "ready":
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
+
+    requested_material_id = request.headers.get("X-Prepza-Material-ID")
+    if requested_material_id:
+        exact = _requested_generated_material(user_id, document, requested_material_id, "mind_map")
+        if not exact:
+            return jsonify({"error": "The selected study material is no longer available"}), 404
+        return jsonify({
+            "material_id": exact.id,
+            "reused": True,
+            "mindmap": json.loads(exact.payload),
+        }), 200
+
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
-        result = _resolve_material_generation(mind_map, content, user_id, parameters)
-        return jsonify({"material_id": result["material_id"], "reused": result["reused"], "mindmap": result["payload"]}), 200
+        result = _resolve_material_generation("mind_map", content, user_id, parameters)
+        return jsonify({
+            "material_id": result["material_id"],
+            "reused": result["reused"],
+            "mindmap": result["payload"],
+        }), 200
+
     job_id = _start_async_material_generation(
-        document_content_id=content.id, user_id=user_id, feature="mind_map", parameters=parameters
+        document_content_id=content.id,
+        user_id=user_id,
+        feature="mind_map",
+        parameters=parameters,
     )
     return jsonify({"job_id": job_id, "status": "processing", "progress_percent": 5}), 202
 
