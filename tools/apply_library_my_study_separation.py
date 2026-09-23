@@ -54,7 +54,7 @@ text = replace_once(
 
 text = replace_once(
     text,
-    "const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; type: string }[]>([])\n  const [loading, setLoading] = useState(true)",
+    "const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; materialId: number; type: string; parameters?: Record<string, unknown> }[]>([])\n  const [loading, setLoading] = useState(true)",
     "const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; type: string }[]>([])\n  const [savedLibrary, setSavedLibrary] = useState<SavedLibraryItem[]>([])\n  const [csrfToken, setCsrfToken] = useState('')\n  const [loading, setLoading] = useState(true)",
     "My Study saved Library state",
 )
