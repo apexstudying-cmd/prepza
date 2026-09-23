@@ -13004,7 +13004,8 @@ const AMB_COLORS = { navy: '#0B1437', navy3: '#1A2A5E', gold: '#C9A84C', goldLig
 
 interface AmbassadorStatusResp {
   enrolled: boolean
-  status?: 'pending' | 'active' | 'suspended' | 'rejected'
+  status?: 'pending' | 'active' | 'suspended' | 'rejected' | 'terminated'
+  program_enabled?: boolean
   referral_code?: string
   applied_at?: string
   rejection_reason?: string | null
@@ -13265,6 +13266,20 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <div style={{ fontSize: 12, color: AMB_COLORS.gray, lineHeight: 1.6 }}>New referrals and new payout requests are disabled. Historical referral and payout records are retained for accounting and support.</div>
         </div>
       </div>
+    </div>
+  )
+
+  if (statusData && statusData.program_enabled === false && !enrolled) return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
+      <Header title="Ambassador Program" />
+      <div style={{ padding: 28 }}><div style={{ background: T.card, borderRadius: 18, padding: 24, textAlign: 'center' }}><div style={{ fontWeight: 800, fontSize: 17, color: AMB_COLORS.navy, marginBottom: 7 }}>Ambassador applications are paused</div><div style={{ fontSize: 12, color: AMB_COLORS.gray, lineHeight: 1.6 }}>Prepza is not accepting new ambassador applications or new referral attribution right now.</div></div></div>
+    </div>
+  )
+
+  if (appStatus === 'terminated') return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
+      <Header title="Ambassador Program" />
+      <div style={{ padding: 28 }}><div style={{ background: T.card, borderRadius: 18, padding: 24, textAlign: 'center' }}><div style={{ fontWeight: 800, fontSize: 17, color: AMB_COLORS.navy, marginBottom: 7 }}>Ambassador account terminated</div><div style={{ fontSize: 12, color: AMB_COLORS.gray, lineHeight: 1.6 }}>New referrals and new payout requests are disabled. Historical referral and payout records are retained for accounting and support.</div></div></div>
     </div>
   )
 
