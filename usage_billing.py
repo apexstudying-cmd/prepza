@@ -108,6 +108,8 @@ DEFAULT_GENERATION_UNITS = {
 
 
 def _ensure_schema(db):
+    if db.engine.dialect.name == 'sqlite':
+        return
     db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS student_ai_usage (
             user_id INTEGER NOT NULL,
