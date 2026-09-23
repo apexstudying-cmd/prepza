@@ -2105,7 +2105,7 @@ def get_user_subscription_status(user_id):
         "starts_at": latest.subscription_starts_at.isoformat(),
         "expires_at": latest.subscription_expires_at.isoformat(),
         "cancel_at_period_end": bool(recurring),
-        "recurring": True,
+        "recurring": bool(recurring),
         "active_plans": [row["plan"] for row in active_rows],
         "entitlements": [
             {
