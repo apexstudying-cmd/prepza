@@ -81,7 +81,9 @@ export default function PdfStudyCanvas({ src, title, storageKey, onPageChange, o
       // This is what makes "circle/box this passage -> ask Ada" work without
       // requiring the student to precisely drag-select the PDF text layer.
       if (tool === 'rect') {
-        const pageHeight = overlayRef.current.clientHeight
+        const overlay = overlayRef.current
+        if (!overlay) return
+        const pageHeight = overlay.clientHeight
         const picked = text
           .map(item => ({ item, box: textStyle(item, pageHeight) }))
           .filter(({ box }) => box.left < x + w && box.left + box.width > x && box.top < y + h && box.top + box.height > y)
