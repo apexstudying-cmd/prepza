@@ -9,6 +9,7 @@ import requests
 import sentry_sdk
 import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from functools import wraps
 from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
 from flask_sqlalchemy import SQLAlchemy
@@ -6003,7 +6004,7 @@ def _get_or_create_streak(user_id):
 
 def _refresh_streak_from_study_time(user_id, today=None):
     """Rebuild the streak from the real 10-minute daily study threshold."""
-    today = today or datetime.utcnow().date()
+    today = today or _study_local_date()
     rows = db.session.query(
         StudyTimeLog.activity_date,
         db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0),
@@ -6056,7 +6057,7 @@ def record_study_activity(user_id, document_content_id=None):
     minimum 10 active study minutes today. Generation/completion alone can
     never create a streak day.
     """
-    today = datetime.utcnow().date()
+    today = _study_local_date()
     total_seconds = db.session.query(
         db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
     ).filter(
@@ -6089,7 +6090,7 @@ def record_document_studied(user_id, document_content_id):
     accumulated meaningful study time on that document today. Generation
     itself is not enough to create or renew a streak.
     """
-    today = datetime.utcnow().date()
+    today = _study_local_date()
     activity = StudyActivityLog.query.filter_by(
         user_id=user_id, document_content_id=document_content_id, activity_date=today,
     ).first()
@@ -6110,7 +6111,7 @@ def _document_study_event_id(user_id, document_content_id):
     (user, document, day), which is itself uniquely constrained -
     giving each new day its own related_id "for free".
     """
-    today = datetime.utcnow().date()
+    today = _study_local_date()
     row = StudyActivityLog.query.filter_by(
         user_id=user_id, document_content_id=document_content_id, activity_date=today,
     ).first()
@@ -6137,7 +6138,7 @@ def record_study_time_heartbeat(user_id, feature="reading"):
     one day. Returns this user's total study time across all
     features today, in seconds.
     """
-    today = datetime.utcnow().date()
+    today = _study_local_date()
     now = datetime.utcnow()
 
     row = StudyTimeLog.query.filter_by(user_id=user_id, activity_date=today, feature=feature).first()
@@ -6322,7 +6323,7 @@ def streak_detail():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    today = datetime.utcnow().date()
+    today = _study_local_date()
     streak = _refresh_streak_from_study_time(user_id, today)
     db.session.commit()
 
@@ -6508,7 +6509,7 @@ def study_time_summary():
         return jsonify({"error": "Not logged in"}), 401
 
     period = request.args.get("period", "week")
-    today = datetime.utcnow().date()
+    today = _study_local_date()
     if period == "day":
         start_date = today
     elif period == "month":
