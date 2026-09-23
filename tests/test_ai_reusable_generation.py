@@ -132,8 +132,11 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
         AIProviderError=FakeProviderError,
         is_spend_cap_reached=lambda: False,
         check_daily_limit=lambda *args, **kwargs: (limit_calls.append(args) or (True, 0, 5)),
-        route_and_generate=lambda request: (route_calls.append(request) or _FakeResponse()),
+        route_and_generate=lambda request: (route_calls.append(request) or _FakeResponse(
+            text='{"title":"Reusable","sections":[{"title":"A","body":"B"}]}'
+        )),
         log_usage=lambda *args, **kwargs: usage_calls.append((args, kwargs)),
+    )
     fake_usage_billing = types.SimpleNamespace(
         FEATURES={"summary": ("summary_generations", "summary_max_pages", "summary_monthly_pages")},
         check_and_consume_ai_quota=lambda *args, **kwargs: (quota_calls.append(args) or (True, {"period_start": "2026-09-01"})),
@@ -142,8 +145,6 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
         release_generation_variant=lambda *args, **kwargs: None,
         refund_ai_quota=lambda *args, **kwargs: None,
     )
-    )
-
     monkeypatch.setitem(sys.modules, "app", fake_app)
     monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
     monkeypatch.setitem(sys.modules, "usage_billing", fake_usage_billing)
@@ -161,13 +162,13 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
         material_type="summary",
         document_content_id=7,
         triggering_user_id=101,
-        parameters={"language": " English "},
+        parameters={"max_pages": 1, "language": " English "},
     )
     second = reusable.generate_document_material(
         material_type="summary",
         document_content_id=7,
         triggering_user_id=101,
-        parameters={"language": "English"},
+        parameters={"max_pages": 1, "language": "English"},
     )
 
     assert first["reused"] is False
@@ -204,7 +205,6 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
     )
 
     monkeypatch.setitem(sys.modules, "app", fake_app)
-    monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
     monkeypatch.setitem(sys.modules, "usage_billing", types.SimpleNamespace(
         FEATURES={"summary": ("summary_generations", "summary_max_pages", "summary_monthly_pages")},
         check_and_consume_ai_quota=lambda *args, **kwargs: (quota_called.append(args) or (True, {"period_start": "2026-09-01"})),
@@ -225,7 +225,7 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
         material_type="summary",
         document_content_id=8,
         triggering_user_id=202,
-        parameters={},
+        parameters={"max_pages": 1},
     )
 
     assert result["reused"] is True
