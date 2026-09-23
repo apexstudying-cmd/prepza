@@ -283,6 +283,13 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
                       "remaining_units":max(0,max_units-used-units),"max_units_per_generation":max_units,
                       "period_start":period}
 
+    # Serialize quota reservations for this student's active entitlement
+    # payments so two simultaneous generation requests cannot both spend the
+    # same remaining allowance.
+    for ent in active:
+        db.session.execute(text("SELECT id FROM payment WHERE id=:pid FOR UPDATE"),
+                           {"pid":int(ent["id"])}).first()
+
     plan_map={row["plan"]:get_plan(db,row["plan"]) for row in active}
     limits={int(row["id"]):int((plan_map.get(row["plan"]) or {}).get(allowance_key) or 0) for row in active}
     usage_rows=db.session.execute(text("""
