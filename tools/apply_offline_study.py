@@ -35,7 +35,7 @@ def patch_reader():
         1,
     )
     s = s.replace(
-        "const [page, setPage] = useState(1), [pages, setPages] = useState(0)",
+        "const [page, setPage] = useState(Math.max(1, initialPage)), [pages, setPages] = useState(0)",
         "const [page, setPage] = useState(Math.max(1, initialPage)), [pages, setPages] = useState(0)",
         1,
     )
@@ -47,7 +47,7 @@ def patch_reader():
 
     tracker_effect = "  useEffect(() => { if (documentId == null) return; return startOfflineStudyTracking(documentId, 'reading') }, [documentId])\n"
     if tracker_effect not in s:
-        anchor = "  const annotationKey = `${STORE}:${src}`, bookmarkKey = `${BOOKMARKS}:${src}`\n"
+        anchor = "  const annotationKey = `${STORE}:${stableStudyKey}`, bookmarkKey = `${BOOKMARKS}:${stableStudyKey}`\n"
         if anchor not in s:
             raise SystemExit('PDF tracker anchor not found')
         s = s.replace(anchor, tracker_effect + anchor, 1)
