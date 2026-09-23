@@ -6762,9 +6762,11 @@ def react_to_group_post(group_id, post_id):
         return jsonify({"error": "Post not found"}), 404
     data = request.get_json(silent=True) or {}
     reaction = str(data.get("reaction") or "").strip()
-    if len(reaction) > 16:
-        return jsonify({"error": "Reaction is too long"}), 400
-    # One reaction per member per post, matching WhatsApp/Telegram-style behavior.
+    allowed_reactions = {"👍", "❤️", "😂", "😮", "😢", "🎉"}
+    if reaction and reaction not in allowed_reactions:
+        return jsonify({"error": "Unsupported reaction"}), 400
+    # One reaction per member per post. The same fixed set is exposed by the client
+    # so stored values stay predictable and moderation-friendly.
     existing = GroupPostReaction.query.filter_by(post_id=post_id, user_id=user_id).first()
     if not reaction:
         if existing:
@@ -9374,6 +9376,7 @@ CHAT_MESSAGE_CIPHERTEXT_MAX = 20000
 # the CHAT_MESSAGE_MAX length - guards against abuse/garbage, not a
 # tight format check.
 CHAT_GROUP_NAME_MAX = 100
+CHAT_GROUP_MAX_MEMBERS = 100
 CHAT_MESSAGE_PAGE_SIZE = 50
 CHAT_MESSAGE_SEARCH_LIMIT = 50
 
@@ -9610,6 +9613,8 @@ def create_chat():
         return jsonify({"error": "One or more participants were not found"}), 404
 
     if is_group:
+        if len(participant_ids) + 1 > CHAT_GROUP_MAX_MEMBERS:
+            return jsonify({"error": f"Encrypted group chats support at most {CHAT_GROUP_MAX_MEMBERS} members"}), 400
         if not name or len(name) > CHAT_GROUP_NAME_MAX:
             return jsonify({"error": f"Group name is required and must be {CHAT_GROUP_NAME_MAX} characters or fewer"}), 400
     else:
