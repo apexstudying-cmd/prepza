@@ -1790,8 +1790,6 @@ class AmbassadorPayout(db.Model):
 # ---------- Student orders / exact fulfillment ----------
 from student_orders import register_student_orders
 
-_student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
-
 
 # ---------- Paystack (Chunk 8, migrated from Pesapal) ----------
 # Docs: paystack.com/docs/payments/accept-payments /
@@ -2361,6 +2359,8 @@ def require_csrf(f):
             return jsonify({"error": "Missing or invalid CSRF token"}), 403
         return f(*args, **kwargs)
     return decorated
+
+_student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
 
 
 def get_content_prices():
