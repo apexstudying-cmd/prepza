@@ -45,4 +45,9 @@ require("/api/opportunity-discovery" in FRONTEND and "method: 'POST'" in FRONTEN
 require("setPhoneNumber(me.phone_number || '')" in FRONTEND, "settings does not load the saved phone number")
 require("phone_number: phoneNumber.trim() || null" in FRONTEND, "settings phone save is not wired to /profile")
 
+# Child settings screens must return to Settings through the SPA stack.
+require("function SubscriptionScreen" in FRONTEND and "setScreen('settings')" in FRONTEND[FRONTEND.index("function SubscriptionScreen"):FRONTEND.index("function PaymentScreen")], "subscription screen back navigation must return to settings")
+require("function PaymentHistoryScreen" in FRONTEND, "payment history screen missing")
+require("function EditProfileScreen" in FRONTEND, "edit profile screen missing")
+
 print("STUDENT_RELEASE_CONTRACT_PASSED")
