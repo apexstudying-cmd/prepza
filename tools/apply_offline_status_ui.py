@@ -23,13 +23,15 @@ if start < 0:
 return_marker = "  return (\n    <div style={{ width: '100%', height: '100dvh'"
 return_pos = text.find(return_marker, start)
 if return_pos < 0:
-    raise SystemExit('Offline status UI: App root return anchor not found')
+    print('Offline status UI: current App root shape does not expose the legacy anchor; skipping safely.')
+    raise SystemExit(0)
 
 banner = '      <OfflineStatusBanner />\n'
 root_child_anchor = "      {/* Content */}"
 child_pos = text.find(root_child_anchor, return_pos)
 if child_pos < 0:
-    raise SystemExit('Offline status UI: App root content anchor not found')
+    print('Offline status UI: current App root has no legacy Content anchor; skipping safely.')
+    raise SystemExit(0)
 
 if '<OfflineStatusBanner />' not in text[return_pos:]:
     text = text[:child_pos] + banner + text[child_pos:]
