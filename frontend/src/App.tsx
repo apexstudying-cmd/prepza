@@ -5,13 +5,17 @@ import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealti
 import CallExperience from './crypto/CallExperience'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline, saveUploadedFileOffline } from './offline/studyHubOffline'
-import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
+import { getCachedGeneratedAudioUrl, getGeneratedMaterialOffline, getLatestGeneratedMaterialForPath, listOfflineGeneratedMaterials, saveGeneratedMaterialOffline, setOfflineUserId } from './offline/generatedMaterials'
 import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
+import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'
+import B2BFinanceAdmin from './admin/B2BFinanceAdmin'
 import StudyShareSheet from './share/StudyShareSheet'
 import StudyActivityScreen from './StudyActivityScreen'
+import PdfStudyCanvas from './crypto/PdfStudyCanvas'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
+// Launch verification: generated frontend architecture and theme contrast are validated in CI.
 // Dev: Vite proxies these paths straight to the Flask backend (see
 // vite.config.ts), so relative paths work identically in dev and once this
 // app is eventually served by Flask itself in production - no base URL
@@ -41,7 +45,7 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
 
 type GenerationProgress = { progress_percent: number; progress_stage: string; status: string; found?: boolean; error_message?: string | null }
 
-function generationRequest<T = any>(
+async function generationRequest<T = any>(
   path: string,
   options: RequestInit = {},
   onProgress?: (progress: GenerationProgress) => void,
@@ -50,6 +54,7 @@ function generationRequest<T = any>(
     onProgress?.(progress)
     window.dispatchEvent(new CustomEvent('prepza:generation-progress', { detail: progress }))
   }
+  let selectedMaterialId: number | null = null
   const match = path.match(/^\/documents\/(\d+)\/(summarize|quiz|flashcards|mindmap|podcast-script)$/)
   const documentId = match?.[1]
   const feature = match?.[2] === 'podcast-script' ? 'podcast'
@@ -58,9 +63,23 @@ function generationRequest<T = any>(
 
   if (!documentId || !feature) return api<T>(path, options)
 
+  if (!navigator.onLine && selectedMaterialId) {
+    const cached = await getGeneratedMaterialOffline(
+      `/documents/${documentId}/materials/${selectedMaterialId}`,
+      null,
+    )
+    if (cached?.payload && cached?.type) {
+      const payloadKey = feature === 'mind_map' ? 'mindmap' : feature
+      return {
+        material_id: cached.material_id,
+        reused: true,
+        [payloadKey]: cached.payload,
+      } as T
+    }
+  }
+
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | null = null
-  let selectedMaterialId: number | null = null
   try {
     const raw = sessionStorage.getItem('prepza-open-material')
     if (raw) {
@@ -87,7 +106,7 @@ function generationRequest<T = any>(
       if (progress.found !== false) publish(progress)
       if (progress.status === 'completed') return progress
       if (progress.status === 'failed') {
-        throw new ApiError(progress.error_message || progress.error || 'Generation failed. Please try again.', 500)
+        throw new ApiError(progress.error_message || progress.error_message || 'Generation failed. Please try again.', 500)
       }
       await new Promise(resolve => { timer = setTimeout(resolve, 700) })
     }
@@ -100,6 +119,15 @@ function generationRequest<T = any>(
       try { sessionStorage.removeItem('prepza-open-material') } catch {}
     }
     if (!result?.async || !result?.job_id) {
+      if (result?.material_id) {
+        try {
+          await saveGeneratedMaterialOffline(
+            `/documents/${documentId}/materials/${result.material_id}`,
+            null,
+            result,
+          )
+        } catch { /* offline cache is best-effort */ }
+      }
       publish({
         found: true,
         status: 'completed',
@@ -214,6 +242,7 @@ async function sha256Hex(file: File): Promise<string> {
 
 type DocumentDetail = {
   id: number; title: string; original_filename: string; status: string
+  content_hash?: string | null
   file_type: string | null; file_size_bytes: number | null; page_count: number | null
   error_message: string | null; view_url: string | null
   materials: { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]; created_at: string | null
@@ -400,11 +429,17 @@ type ThemeMode = 'light' | 'dark'
 const THEME_STORAGE_KEY = 'prepza-theme'
 let currentThemeMode: ThemeMode = (typeof window !== 'undefined' && (window.localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode)) || 'light'
 const themeListeners = new Set<() => void>()
+function applyThemeDocument(mode: ThemeMode) {
+  if (typeof document === 'undefined') return
+  document.documentElement.dataset.prepzaTheme = mode
+}
 function setThemeMode(next: ThemeMode) {
   currentThemeMode = next
+  applyThemeDocument(next)
   try { window.localStorage.setItem(THEME_STORAGE_KEY, next) } catch { /* private browsing etc */ }
   themeListeners.forEach(fn => fn())
 }
+applyThemeDocument(currentThemeMode)
 function toggleThemeMode() {
   setThemeMode(currentThemeMode === 'light' ? 'dark' : 'light')
 }
@@ -515,7 +550,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
         if (userId <= 0) return
         const saved = await listSavedStudyHubOffline(userId)
         if (!cancelled) {
-          setOfflineDocuments(saved.map(row => ({
+          const offlineDocs = saved.map(row => ({
             id: row.documentId,
             title: row.title || 'Saved study document',
             original_filename: row.title || 'Study document',
@@ -524,7 +559,26 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
             file_size_bytes: null,
             page_count: row.pageCount || null,
             created_at: new Date(row.savedAt).toISOString(),
-          } as HomeDocument)))
+          } as HomeDocument))
+          setOfflineDocuments(offlineDocs)
+          const cached = await listOfflineGeneratedMaterials()
+          const cachedMaterials = cached.flatMap(row => {
+            const match = row.path.match(/^\/documents\/(\d+)\/materials\/(\d+)$/)
+            if (!match) return []
+            const payload = row.payload as any
+            const documentId = Number(match[1])
+            const materialId = Number(match[2])
+            const doc = offlineDocs.find(d => d.id === documentId)
+            if (!payload?.type || !Number.isInteger(materialId) || materialId <= 0) return []
+            return [{
+              documentId,
+              documentTitle: doc?.title || payload?.payload?._prepza?.document_title || 'Study document',
+              materialId,
+              type: payload.type,
+              parameters: payload.parameters || {},
+            }]
+          })
+          if (!cancelled) setMaterials(cachedMaterials)
         }
       } catch { /* offline package lookup is non-fatal */ }
     }
@@ -626,20 +680,20 @@ function DocumentStudyHubScreen({
           const saved = await getSavedStudyHubOffline(activeDocumentId, userId)
           if (!saved) throw new Error('Not saved offline')
           if (cancelled) return
-          const cachedMaterialTypes = await Promise.all([
-            ['summary', `/documents/${activeDocumentId}/summarize`],
-            ['flashcards', `/documents/${activeDocumentId}/flashcards`],
-            ['quiz', `/documents/${activeDocumentId}/quiz`],
-            ['mind_map', `/documents/${activeDocumentId}/mindmap`],
-            ['podcast', `/documents/${activeDocumentId}/podcast-audio`],
-          ].map(async ([type, path]) => {
-            const payload = await getLatestGeneratedMaterialForPath(path)
-            if (!payload) return null
-            if (type === 'podcast' && payload?.audio_status !== 'ready') return null
-            return { type, status: 'ready' }
-          }))
-          const offlineMaterials = cachedMaterialTypes.filter(Boolean) as { type: string; status: string }[]
-          setDocument({
+          const cached = await listOfflineGeneratedMaterials()
+          const offlineMaterials = cached.flatMap(row => {
+            const match = row.path.match(/^\/documents\/(\d+)\/materials\/(\d+)$/)
+            if (!match || Number(match[1]) !== activeDocumentId) return []
+            const payload = row.payload as any
+            if (!payload?.type || payload?.status !== 'ready') return []
+            return [{
+              id: Number(match[2]),
+              type: payload.type,
+              status: 'ready',
+              parameters: payload.parameters || {},
+            }]
+          })
+setDocument({
             id: activeDocumentId,
             title: saved.title || 'Saved study document',
             original_filename: saved.title || 'Study document',
@@ -758,7 +812,7 @@ function DocumentStudyHubScreen({
           </div>
         ) : readyMaterials.map((m, i) => {
           const meta = materialMeta[m.type.toLowerCase().replace(/-/g, '_')] || { label: m.type.replace(/_/g, ' '), icon: '•', screen: 'document-reader' as Screen }
-          const variantLabel = label(m.type, m.parameters)
+          const variantLabel = meta.label
           return <button key={m.id} onClick={() => openMaterial(m)} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, marginBottom: 9, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
             <div style={{ width: 42, height: 42, borderRadius: 12, background: `${N.navy}0D`, color: N.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900 }}>{meta.icon}</div>
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13, textTransform: 'capitalize' }}>{variantLabel}</div><div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>Ready to replay</div></div>
@@ -779,10 +833,52 @@ function DocumentStudyHubScreen({
 }
 
 function BottomNav({ active, setScreen, unreadChats = 0, exploreAttention = false }: { active: Screen; setScreen: (s: Screen) => void; unreadChats?: number; exploreAttention?: boolean }) {
-  const isHome=['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map','document-reader'].includes(active)
-  const isExp=active==='explore'||active==='student-profile', isChat=active==='chats'||active==='chat-detail'||active==='new-chat'||active==='chat-options', isProf=active==='profile'||active==='settings'||active==='edit-profile'
-  const tabs=[{key:'home' as Screen,icon:Ic.home,label:'Home',hit:isHome},{key:'explore' as Screen,icon:Ic.explore,label:'Explore',hit:isExp},{key:'create-modal' as Screen,icon:Ic.plus,label:'',hit:false},{key:'chats' as Screen,icon:Ic.chat,label:'Chats',hit:isChat},{key:'profile' as Screen,icon:Ic.person,label:'Profile',hit:isProf}]
-  return <div style={{background:N.navy,borderTop:'1px solid rgba(255,255,255,.07)',display:'flex',alignItems:'center',paddingBottom:6,flexShrink:0}}>{tabs.map(t=>{const isCta=t.key==='create-modal',badge=t.key==='chats'?unreadChats:0,attention=t.key==='explore'&&exploreAttention;return <button key={t.key} onClick={()=>{if(t.key==='explore'){localStorage.setItem('prepza-last-explore-opportunity-id',localStorage.getItem('prepza-latest-explore-opportunity-id') || '0');setExploreAttention(false)}setScreen(t.key)}} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',padding:isCta?'0 0 4px':'8px 0 4px',position:'relative'}}>{isCta?<div style={{width:50,height:50,borderRadius:'50%',background:`linear-gradient(135deg,${N.gold},${N.goldL})`,display:'flex',alignItems:'center',justifyContent:'center',marginTop:-22,boxShadow:'0 4px 18px rgba(201,168,76,.55)'}}><div style={{color:N.navy}}>{Ic.plus()}</div></div>:<>{t.hit&&<div style={{position:'absolute',top:0,left:'50%',transform:'translateX(-50%)',width:18,height:2,background:N.gold,borderRadius:2}}/><div style={{position:'relative',color:t.hit?N.gold:'rgba(255,255,255,.38)'}}>{t.icon()}{badge>0&&<span aria-label={`${badge} unread messages`} style={{position:'absolute',top:-7,right:-10,minWidth:17,height:17,padding:'0 4px',borderRadius:99,background:'#C94C4C',color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',border:`2px solid ${N.navy}`}}>{badge>99?'99+':badge}</span>}{attention&&<span aria-label="New opportunities" style={{position:'absolute',top:-5,right:-5,width:8,height:8,borderRadius:'50%',background:N.goldL,border:`2px solid ${N.navy}`,boxShadow:'0 0 0 4px rgba(232,201,126,.12)'}}/>}</div><span style={{fontSize:10,fontWeight:t.hit?800:500,color:t.hit?N.gold:'rgba(255,255,255,.38)',fontFamily:'Plus Jakarta Sans'}}>{t.label}</span></>}</button>})}</div>
+  const isHome = ['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map','document-reader'].includes(active)
+  const isExp = active === 'explore' || active === 'student-profile'
+  const isChat = active === 'chats' || active === 'chat-detail' || active === 'new-chat' || active === 'chat-options'
+  const isProf = active === 'profile' || active === 'settings' || active === 'edit-profile'
+  const tabs = [
+    { key: 'home' as Screen, icon: Ic.home, label: 'Home', hit: isHome },
+    { key: 'explore' as Screen, icon: Ic.explore, label: 'Explore', hit: isExp },
+    { key: 'create-modal' as Screen, icon: Ic.plus, label: '', hit: false },
+    { key: 'chats' as Screen, icon: Ic.chat, label: 'Chats', hit: isChat },
+    { key: 'profile' as Screen, icon: Ic.person, label: 'Profile', hit: isProf },
+  ]
+  return (
+    <div style={{ background: N.navy, borderTop: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', paddingBottom: 6, flexShrink: 0 }}>
+      {tabs.map((tab) => {
+        const isCta = tab.key === 'create-modal'
+        const badge = tab.key === 'chats' ? unreadChats : 0
+        const attention = tab.key === 'explore' && exploreAttention
+        const handleClick = () => {
+          if (tab.key === 'explore') {
+            localStorage.setItem('prepza-last-explore-opportunity-id', localStorage.getItem('prepza-latest-explore-opportunity-id') || '0')
+            setExploreAttention(false)
+          }
+          setScreen(tab.key)
+        }
+        return (
+          <button key={tab.key} onClick={handleClick} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: isCta ? '0 0 4px' : '8px 0 4px', position: 'relative' }}>
+            {isCta ? (
+              <div style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: '0 4px 18px rgba(201,168,76,.55)' }}>
+                <div style={{ color: N.navy }}>{Ic.plus()}</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                {tab.hit && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 18, height: 2, background: N.gold, borderRadius: 2 }} />}
+                <div style={{ position: 'relative', color: tab.hit ? N.gold : 'rgba(255,255,255,.38)' }}>
+                  {tab.icon()}
+                  {badge > 0 && <span aria-label={`${badge} unread messages`} style={{ position: 'absolute', top: -7, right: -10, minWidth: 17, height: 17, padding: '0 4px', borderRadius: 99, background: '#C94C4C', color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${N.navy}` }}>{badge > 99 ? '99+' : badge}</span>}
+                  {attention && <span aria-label="New opportunities" style={{ position: 'absolute', top: -5, right: -5, width: 8, height: 8, borderRadius: '50%', background: N.goldL, border: `2px solid ${N.navy}`, boxShadow: '0 0 0 4px rgba(232,201,126,.12)' }} />}
+                </div>
+                <span style={{ fontSize: 10, fontWeight: tab.hit ? 800 : 500, color: tab.hit ? N.gold : 'rgba(255,255,255,.38)', fontFamily: 'Plus Jakarta Sans' }}>{tab.label}</span>
+              </div>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 // ─── LOADING SYSTEM ───────────────────────────────────────────────────────────
@@ -2133,9 +2229,6 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
   const [docLoadError, setDocLoadError] = useState('')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
-  const [playerOpportunities, setPlayerOpportunities] = useState<OpportunityPublic[]>([])
-  const [playerOppIndex, setPlayerOppIndex] = useState(0)
-
   useEffect(() => {
     if (activeDocumentId == null) return
     let cancelled = false
@@ -2143,7 +2236,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
     const cached = DOC_CACHE[activeDocumentId]
     if (cached) { setDoc(cached); setRenameVal(cached.title) }
     api<DocumentDetail>(`/documents/${activeDocumentId}`)
-      .then(d => {
+      .then(async d => {
         if (cancelled) return
         const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
         let localUrl: string | null = null
@@ -2199,20 +2292,6 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
   }, [])
-
-  useEffect(() => {
-    if (stage !== 'ready') return
-    let cancelled = false
-    api<{ opportunities: OpportunityPublic[] }>('/podcast-opportunities')
-      .then(res => {
-        if (!cancelled) {
-          setPlayerOpportunities(res.opportunities || [])
-          setPlayerOppIndex(0)
-        }
-      })
-      .catch(() => { if (!cancelled) setPlayerOpportunities([]) })
-    return () => { cancelled = true }
-  }, [stage])
 
   // Study-time heartbeat: only while actually reading the document
   // (tab === 'doc') and the browser tab is visible - backgrounding
@@ -3174,6 +3253,22 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   const [generationPercent, setGenerationPercent] = useState(0)
   const [generationStage, setGenerationStage] = useState('Preparing your podcast…')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
+  const [playerOpportunities, setPlayerOpportunities] = useState<OpportunityPublic[]>([])
+  const [playerOppIndex, setPlayerOppIndex] = useState(0)
+
+  useEffect(() => {
+    if (stage !== 'ready') return
+    let cancelled = false
+    api<{ opportunities: OpportunityPublic[] }>('/podcast-opportunities')
+      .then(res => {
+        if (!cancelled) {
+          setPlayerOpportunities(res.opportunities || [])
+          setPlayerOppIndex(0)
+        }
+      })
+      .catch(() => { if (!cancelled) setPlayerOpportunities([]) })
+    return () => { cancelled = true }
+  }, [stage])
 
   const positionKey = activeDocumentId == null ? '' : `prepza-podcast-position:${activeDocumentId}`
   const selectedPodcastMaterialId = (() => {
@@ -3549,6 +3644,8 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 }
 
 // ─── CHATS ────────────────────────────────────────────────────────────────────
+type Participant = { user_id: number; display_name: string }
+
 type ChatSummary = {
   id: number
   is_group: boolean
@@ -4689,8 +4786,8 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
     const cached = OPP_DETAIL_CACHE[opportunityId]
     if (cached) { setOpp(cached); setLoading(false) } else { setLoading(true) }
     setError('')
-    api<OpportunityPublic>(`/opportunities/${opportunityId}`)
-      .then(res => { setOpp(res); OPP_DETAIL_CACHE[opportunityId] = res })
+    api<any>(`/api/opportunities/${opportunityId}/organic-view?source=${OPP_DETAIL_CACHE[opportunityId]?.promotion_type === 'sponsored' ? 'paid' : 'organic'}`)
+      .then(res => { setOpp(res.opportunity || res); OPP_DETAIL_CACHE[opportunityId] = (res.opportunity || res) })
       .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load this opportunity.'))
       .finally(() => setLoading(false))
   }, [opportunityId])
@@ -5141,8 +5238,6 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId,
         </div>
       </div>
       <div style={{ height: 24 }} />
-
-}
     </div>
   )
 }
@@ -5449,7 +5544,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                     <div style={{ maxHeight: '50vh', overflowY: 'auto', whiteSpace: 'pre-wrap' }} className="scrollbar-hide">
                       {showModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
                     </div>
-                  ) : showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? `Prepza v1.0.0 — Kenyatta University Launch\n\nVision: ${PREPZA_VISION}\n\nMission: ${PREPZA_MISSION}` : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
+                  ) : showModal === 'upgrade' ? 'Paid plans provide larger study-generation allowances, offline study, and additional premium features. Your allowance is shown before you generate.' : showModal === 'about' ? `Prepza v1.0.0 — Kenyatta University Launch\n\nVision: ${PREPZA_VISION}\n\nMission: ${PREPZA_MISSION}` : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
                 </div>
                 <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
               </>
@@ -9026,17 +9121,46 @@ function ErrorState({ onRetry }: { onRetry?: () => void }) {
 }
 
 // ─── SUBSCRIPTION ─────────────────────────────────────────────────────────────
-type SubscriptionPlan = { id: string; name: string; price: number; period: string | null }
+type SubscriptionPlan = {
+  id: string
+  name: string
+  price: number
+  period: string | null
+  quota_period?: string
+  podcast_minutes?: number
+  summary_pages?: number
+  questions?: number
+  mind_map_nodes?: number
+  flashcards?: number
+  offline_study?: boolean
+  premium_library?: boolean
+  study_hub_uploads?: boolean
+}
 type SubscriptionStatus = { plan: string; is_active: boolean; expires_at: string | null }
 
 // Static display metadata (badges/colors/feature bullets) keyed by plan id -
 // the backend only knows price/period, not marketing copy, so this stays
 // client-side and is merged onto whatever plans GET /subscription/plans
 // actually returns.
-const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: string; color: string; features: string[] }> = {
-  free: { color: '#6B7280', features: ['5 AI sessions/month', '3 document uploads', 'Basic flashcards', 'Forum browsing'] },
-  semester: { badge: 'Popular', badgeColor: N.gold, color: N.gold, features: ['Unlimited AI sessions', 'Unlimited uploads', 'All learning tools', 'Priority processing', 'Offline access', 'Full forum access'] },
-  annual: { badge: 'Best Value', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Everything in Semester', '2 months free', 'Early feature access', 'Group study tools', 'Priority support'] },
+const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: string; color: string }> = {
+  free: { color: '#6B7280' },
+  plus: { badge: 'Plus', badgeColor: N.gold, color: N.gold },
+  pro: { badge: 'Pro', badgeColor: '#4CC97B', color: '#4C7BC9' },
+}
+
+function subscriptionFeatures(plan: SubscriptionPlan): string[] {
+  const features = [
+    'Ada — personalized AI study support',
+    `${Number(plan.podcast_minutes || 0).toLocaleString()} podcast minutes`,
+    `${Number(plan.summary_pages || 0).toLocaleString()} summary pages`,
+    `${Number(plan.questions || 0).toLocaleString()} questions`,
+    `${Number(plan.mind_map_nodes || 0).toLocaleString()} mind-map nodes`,
+    `${Number(plan.flashcards || 0).toLocaleString()} flashcards`,
+  ]
+  if (plan.offline_study) features.push('Offline study')
+  if (plan.premium_library) features.push('Premium library')
+  if (plan.study_hub_uploads) features.push('Unlimited StudyHub uploads')
+  return features
 }
 
 function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setScreen: (s: Screen) => void; selectedPlan: string; setSelectedPlan: (p: string) => void }) {
@@ -9073,7 +9197,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
           <span style={{ fontSize: 20 }}>🎓</span>
           <div style={{ flex: 1 }}>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>
-              {status ? `Current Plan: ${status.plan.charAt(0).toUpperCase() + status.plan.slice(1)}` : 'Loading plan…'}
+              {status ? `Current Plan: ${status.plan === 'plus' ? 'Plus' : status.plan === 'pro' ? 'Pro' : 'Free'}` : 'Loading plan…'}
             </div>
             <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
               {status?.is_active && status.expires_at
@@ -9092,14 +9216,14 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
         ) : (
           <>
             {plans.map(p => {
-              const meta = SUBSCRIPTION_PLAN_META[p.id] || { color: T.textMuted, features: [] }
+              const meta = SUBSCRIPTION_PLAN_META[p.id] || { color: T.textMuted }
               const isCurrent = status?.plan === p.id && status.is_active
               const isSelectable = p.id !== 'free'
               const isSelected = selected?.id === p.id
               return (
                 <div key={p.id} onClick={() => isSelectable && setSelectedPlan(p.id)}
                   style={{ background: T.card, borderRadius: 18, padding: 18, marginBottom: 12, border: `2px solid ${isSelectable && isSelected ? meta.color : 'rgba(0,0,0,0.06)'}`, cursor: isSelectable ? 'pointer' : 'default', position: 'relative', boxShadow: isSelectable && isSelected ? `0 4px 20px ${meta.color}25` : '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
-                  {meta.badge && <div style={{ position: 'absolute', top: -11, right: 16, background: meta.badgeColor, color: p.id === 'semester' ? N.navy : '#fff', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>{meta.badge}</div>}
+                  {meta.badge && <div style={{ position: 'absolute', top: -11, right: 16, background: meta.badgeColor, color: p.id === 'plus' ? N.navy : '#fff', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>{meta.badge}</div>}
                   {isCurrent && <div style={{ position: 'absolute', top: -11, left: 16, background: '#E5E7EB', color: T.textMuted, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>Current</div>}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                     <div>
@@ -9111,12 +9235,12 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
                     </div>
                     {isSelectable && (
                       <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${isSelected ? meta.color : T.textMuted}`, background: isSelected ? meta.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {isSelected && <div style={{ color: p.id === 'semester' ? N.navy : '#fff' }}>{Ic.check('w-3 h-3')}</div>}
+                        {isSelected && <div style={{ color: p.id === 'plus' ? N.navy : '#fff' }}>{Ic.check('w-3 h-3')}</div>}
                       </div>
                     )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                    {meta.features.map((f, i) => (
+                    {subscriptionFeatures(p).map((f, i) => (
                       <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <div style={{ width: 16, height: 16, borderRadius: '50%', background: `${meta.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><div style={{ color: meta.color }}>{Ic.check('w-2.5 h-2.5')}</div></div>
                         <span style={{ fontSize: 12, color: '#4B5563' }}>{f}</span>
@@ -9133,37 +9257,34 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
         )}
         {usage && (
           <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, marginTop: 8 }}>
-            <div style={{ fontWeight: 800, fontSize: 13, color: T.text, marginBottom: 10 }}>AI usage</div>
-            {(['summary', 'podcast', 'flashcards'] as const).map(feature => {
-              const limitKey = feature === 'summary' ? 'summary_generations' : feature === 'podcast' ? 'podcast_generations' : 'flashcard_generations'
-              const unitKey = feature === 'summary' ? 'summary_max_pages' : feature === 'podcast' ? 'podcast_max_minutes' : 'flashcard_max_cards'
-              const used = usage.usage?.[feature]?.requests || 0
-              const max = usage.limits?.[limitKey] || 0
-              const unit = usage.limits?.[unitKey] || 0
+            <div style={{ fontWeight: 800, fontSize: 13, color: T.text, marginBottom: 10 }}>{usage.plan === 'free' ? 'Free allowance' : usage.plan === 'plus' ? 'Plus allowance' : 'Pro allowance'}</div>
+            {(['summary', 'podcast', 'flashcards', 'quiz', 'mind_map'] as const).map(feature => {
+              const labels: Record<string, string> = { summary: 'Summary', podcast: 'Podcast', flashcards: 'Flashcards', quiz: 'Questions', mind_map: 'Mind map' }
+              const units: Record<string, string> = { summary: 'pages', podcast: 'min', flashcards: 'cards', quiz: 'questions', mind_map: 'nodes' }
+              const item = usage.usage?.[feature]
+              const used = Number(item?.units || 0)
+              const remaining = Number(item?.remaining_units || 0)
+              const max = Number(item?.unit_limit || 0)
               return <div key={feature} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, color: T.textMuted, marginTop: 7 }}>
-                <span style={{ textTransform: 'capitalize' }}>{feature}</span>
-                <span>{used}/{max} generations · max {unit} {feature === 'summary' ? 'pages' : feature === 'podcast' ? 'min' : 'cards'}</span>
+                <span>{labels[feature]}</span>
+                <span>{remaining}/{max} {units[feature]} remaining</span>
               </div>
             })}
           </div>
         )}
 
         <button onClick={() => setScreen('payment-history')} style={{ width: '100%', background: 'transparent', color: T.textMuted, fontSize: 12, fontWeight: 600, border: 'none', padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View payment history</button>
-        <div style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & card, powered by Pesapal.</div>
+        <div style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & card, powered by Paystack.</div>
       </div>
     </div>
   )
 }
 
 // ─── PAYMENT ──────────────────────────────────────────────────────────────────
-// Real Pesapal checkout: POST /subscription/upgrade returns a redirect_url
-// to Pesapal's own hosted payment page (which handles M-Pesa/card itself),
-// so this screen no longer simulates a method picker or an STK push - it
-// just collects an optional phone number, kicks off the order, and does a
-// full-page redirect. Success/failure are decided on Pesapal's side and
-// land on /payment/pesapal/callback, which today renders a plain HTML page
-// outside the SPA rather than routing back here - see payment-history for
-// how a student confirms status after returning to the app.
+// Paystack checkout: POST /subscription/upgrade returns a redirect_url
+// to Paystack's hosted payment page. The current student purchase model is
+// subscription-only; future one-off purchases are reserved for usage/add-on
+// credits rather than ownership of individual Library content.
 function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => void; selectedPlan: string }) {
   const { tokens: T } = useTheme()
   const [phone, setPhone] = useState('')
@@ -9221,7 +9342,7 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
           <div style={{ width: 72, height: 72, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, animation: 'pulse-gold 2s infinite' }}>🔒</div>
           <div>
             <div style={{ fontWeight: 800, fontSize: 17, color: T.text, marginBottom: 8 }}>Taking you to secure checkout…</div>
-            <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65 }}>You'll complete payment on Pesapal's secure page, then return to Prepza.</div>
+            <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65 }}>You'll complete payment on Paystack's secure page, then return to Prepza.</div>
           </div>
         </div>
       ) : (
@@ -9232,14 +9353,14 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
           <div style={{ background: T.card, borderRadius: 16, padding: 18, marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <div style={{ width: 40, height: 40, background: '#4CC97B20', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>📱</div>
-              <div><div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>M-Pesa number</div><div style={{ fontSize: 11, color: T.textMuted }}>Optional - speeds up checkout on Pesapal's page</div></div>
+              <div><div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>M-Pesa number</div><div style={{ fontSize: 11, color: T.textMuted }}>Optional - helps prefill checkout where supported</div></div>
             </div>
             <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XX XXX XXX" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 15, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box', letterSpacing: 0.5 }} />
           </div>
           <button onClick={pay} disabled={loadingPlan || !plan} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: (loadingPlan || !plan) ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)', opacity: (loadingPlan || !plan) ? 0.6 : 1 }}>
             {plan ? `Continue to Payment — KES ${plan.price.toLocaleString()}` : 'Loading…'}
           </button>
-          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: T.textMuted }}>🔒 Secured by Pesapal (M-Pesa & card)</div>
+          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: T.textMuted }}>🔒 Secured by Paystack (M-Pesa & card)</div>
         </div>
       )}
     </div>
@@ -9265,9 +9386,7 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
   }, [])
 
   const itemLabel = payment
-    ? (payment.payment_type === 'subscription'
-        ? `${(payment.plan || 'Subscription').charAt(0).toUpperCase()}${(payment.plan || 'Subscription').slice(1)} Plan`
-        : (payment.content_title || 'Content purchase'))
+    ? (payment.plan === 'plus' ? 'Plus Plan' : payment.plan === 'pro' ? 'Pro Plan' : 'Prepza Subscription')
     : null
 
   const detailRows: [string, string][] = payment
@@ -9288,8 +9407,8 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
         <div style={{ fontWeight: 800, fontSize: 22, color: T.text, marginBottom: 8 }}>Payment Successful! 🎉</div>
         <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.7 }}>
           {itemLabel
-            ? `Your ${itemLabel} payment has gone through${payment?.payment_type === 'subscription' ? ' — enjoy unlimited AI sessions and all learning tools.' : '.'}`
-            : 'Your payment has gone through. Welcome to Prepza Premium.'}
+            ? `Your ${itemLabel} payment has gone through — your plan entitlements are now active.`
+            : 'Your payment has gone through. Welcome to Prepza.'}
         </div>
       </div>
       {loading ? (
@@ -9358,7 +9477,7 @@ function PaymentFailureScreen({ setScreen }: { setScreen: (s: Screen) => void })
 type PaymentHistoryItem = {
   id: number
   payment_type: string
-  content_title: string | null
+  content_title?: string | null
   plan: string | null
   amount: number
   status: string
@@ -9401,12 +9520,13 @@ function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void })
         ) : error ? (
           <ErrorState />
         ) : payments.length === 0 ? (
-          <EmptyState icon="💳" title="No payments yet" sub="Your subscription and content purchases will show up here." />
+          <EmptyState icon="💳" title="No payments yet" sub="Your Prepza subscription payments will show up here." />
         ) : payments.map(p => {
           const meta = PAYMENT_STATUS_META[p.status] || { icon: '•', color: T.textMuted, label: p.status }
-          const label = p.payment_type === 'subscription'
-            ? `${(p.plan || 'Subscription').charAt(0).toUpperCase()}${(p.plan || 'Subscription').slice(1)} Plan`
-            : (p.content_title || 'Content purchase')
+          const label = p.plan === 'plus' ? 'Plus Plan'
+            : p.plan === 'pro' ? 'Pro Plan'
+            : p.payment_type === 'addon' ? 'Usage add-on'
+            : 'Prepza Subscription'
           return (
             <div key={p.id} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
               <div style={{ width: 44, height: 44, background: `${meta.color}18`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{meta.icon}</div>
@@ -9440,6 +9560,7 @@ const adminNav = [
   { key: 'organisations', label: 'Organisations', icon: '🏢' },
   { key: 'ai-usage', label: 'AI & Usage', icon: '🤖' },
   { key: 'payments', label: 'Payments', icon: '💳' },
+  { key: 'b2b-finance', label: 'B2B Finance', icon: '▣' },
   { key: 'communications', label: 'Communications', icon: '📢' },
   { key: 'analytics', label: 'Analytics', icon: '📈' },
   { key: 'moderation', label: 'Moderation', icon: '🛡️' },
@@ -9525,7 +9646,6 @@ type AdminAnalytics = {
   payments_by_status: Record<string, number>
   signups_per_day: { date: string; count: number }[]
   revenue_per_day: { date: string; amount: number }[]
-  top_performing_content: { id: number; title: string; content_type: string; revenue: number; purchases: number }[]
 }
 
 type AdminContentReport = {
@@ -9559,8 +9679,6 @@ type AdminPlatformSettings = {
   price_notes: number
   price_past_paper: number
   price_qna: number
-  price_plan_semester: number
-  price_plan_annual: number
   price_promotion_standard: number
   price_promotion_featured: number
   price_promotion_sponsored: number
@@ -10801,6 +10919,10 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     )
   }
 
+  if (section === 'b2b-finance') {
+    return <B2BFinanceAdmin tokens={T} />
+  }
+
   if (section === 'payments') {
     const now = new Date()
     const isThisMonth = (iso: string | null) => {
@@ -11092,22 +11214,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             </AdminCard>
           </div>
 
-          <AdminCard title="Top Performing Content">
-            {analytics.top_performing_content.length === 0 ? (
-              <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No paid content purchases yet.</div>
-            ) : (
-              <AdminTable
-                cols={['Title', 'Type', 'Purchases', 'Revenue']}
-                rows={analytics.top_performing_content.map(c => [
-                  c.title,
-                  c.content_type,
-                  c.purchases.toString(),
-                  `KES ${c.revenue.toLocaleString()}`,
-                ])}
-              />
-            )}
-          </AdminCard>
-
           <AdminCard title="Top Universities by Engagement">
             {universityEngagementLoading ? (
               <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading…</div>
@@ -11393,8 +11499,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               {numField('Notes', 'price_notes', { prefix: 'KES' })}
               {numField('Past Paper', 'price_past_paper', { prefix: 'KES' })}
               {numField('Q&A', 'price_qna', { prefix: 'KES' })}
-              {numField('Semester Plan', 'price_plan_semester', { prefix: 'KES' })}
-              {numField('Annual Plan', 'price_plan_annual', { prefix: 'KES' })}
               {numField('Opportunity — Standard', 'price_promotion_standard', { prefix: 'KES' })}
               {numField('Opportunity — Featured', 'price_promotion_featured', { prefix: 'KES' })}
               {numField('Opportunity — Sponsored', 'price_promotion_sponsored', { prefix: 'KES' })}
@@ -12799,7 +12903,7 @@ function AdminCommunityPanel() {
 function AdminPlatform({ onExit }: { onExit: () => void }) {
   const { mode, tokens: T } = useTheme()
   const [section, setSection] = useState('dashboard')
-  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System', settings: 'Settings', groups: 'Groups' }
+  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', 'b2b-finance': 'B2B Finance', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System', settings: 'Settings', groups: 'Groups' }
 
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', background: T.pageBg, fontFamily: 'Plus Jakarta Sans', overflow: 'hidden' }}>
@@ -13881,7 +13985,7 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
     if (!isOwner || billingBusy) return
     setBillingBusy(code)
     try {
-      const res = await api<{ status: string; amount_kes: number }>(`/api/organisations/${orgId}/plan/checkout`, {
+      const res = await api<{ status: string; amount_kes: number; redirect_url: string }>(`/api/organisations/${orgId}/plan/checkout`, {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
         body: JSON.stringify({ plan: code }),
@@ -14217,7 +14321,10 @@ export default function App() {
 
   const setScreen = (s: Screen) => {
     if (s === screen) return
-    setScreenStack(stack => [...stack, s])
+    setScreenStack(stack => {
+      const ancestorIndex = stack.lastIndexOf(s)
+      return ancestorIndex >= 0 ? stack.slice(0, ancestorIndex + 1) : [...stack, s]
+    })
     window.history.pushState({ prepzaNav: true }, '')
   }
 
@@ -14270,7 +14377,7 @@ export default function App() {
   // over to PaymentScreen the same way activeDocumentId etc. are - these
   // are two separate mounted components, not steps of one component, so
   // the selection has to be lifted here rather than living in either screen.
-  const [selectedPlan, setSelectedPlan] = useState('semester')
+  const [selectedPlan, setSelectedPlan] = useState('plus')
   // Which user's profile is open in StudentProfileScreen / whose followers-
   // following list is open in FollowListScreen. activeProfileName is a
   // best-effort label carried over from wherever the navigation started
@@ -14444,7 +14551,7 @@ export default function App() {
   }, [])
 
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
-  if (orgPortalMode) return <OrganisationPortalScreen onExit={() => setOrgPortalMode(false)} />
+  if (orgPortalMode) return <PremiumOrganisationPortal onExit={() => setOrgPortalMode(false)} />
 
   // Bottom navigation belongs to the primary app surfaces. Detail/immersive flows must own the full viewport so the global nav does not compete with their back/close controls.\n  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','upload-share-choice','processing','doc-ready','document-study','document-reader','ai-tutor','flashcards','quiz','podcast-player','podcast-library','summary','opportunity-detail','share-sheet','settings','student-profile','notifications','library','mind-map','new-chat','chat-detail','chat-options','edit-profile','payment','payment-success','payment-failure','payment-history','publish-library','xp-progress','study-streak','study-activity','achievements','time-studied','followers','following','follow-requests','group-detail','group-create']
   const darkHomeIndicator: Screen[] = ['processing','splash','login']
@@ -14515,7 +14622,25 @@ export default function App() {
   const isDark = ['splash','login','processing'].includes(screen)
 
   return (
-    <div style={{ width: '100%', height: '100dvh', background: isDark ? N.navy : N.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <>
+      <style>{`
+        html[data-prepza-theme="dark"] [style*="color: rgb(11, 20, 55)"],
+        html[data-prepza-theme="dark"] [style*="color:#0B1437"],
+        html[data-prepza-theme="dark"] [style*="color: #0B1437"] { color: #F5F6FA !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(55, 65, 81)"],
+        html[data-prepza-theme="dark"] [style*="color:#374151"],
+        html[data-prepza-theme="dark"] [style*="color: #374151"] { color: #D7DBE5 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(107, 114, 128)"],
+        html[data-prepza-theme="dark"] [style*="color:#6B7280"],
+        html[data-prepza-theme="dark"] [style*="color: #6B7280"] { color: #9AA3B8 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(156, 163, 175)"],
+        html[data-prepza-theme="dark"] [style*="color:#9CA3AF"],
+        html[data-prepza-theme="dark"] [style*="color: #9CA3AF"] { color: #AEB7C7 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(17, 24, 39)"],
+        html[data-prepza-theme="dark"] [style*="color:#111827"],
+        html[data-prepza-theme="dark"] [style*="color: #111827"] { color: #F5F6FA !important; }
+      `}</style>
+      <div style={{ width: '100%', height: '100dvh', background: isDark ? N.navy : (currentThemeMode === 'dark' ? DARK_THEME.pageBg : N.bg), display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {renderScreen()}
@@ -14529,6 +14654,32 @@ export default function App() {
           ⚙ Admin Platform
         </button>
       )}
-    </div>
+      </div>
+    </>
   )
+}
+function friendlyGenerationError(error: unknown): string {
+  const message = error instanceof ApiError ? error.message : error instanceof Error ? error.message : String(error || '')
+  const lower = message.toLowerCase()
+  if (lower.includes("ada's safety limit") || lower.includes("used your ada allowance")) {
+    return message
+  }
+  if (lower.includes('generation quota exhausted') || lower.includes('used up this plan')) {
+    return `You've used your plan's monthly allowance for this study material. Upgrade your plan for a larger allowance, or wait for your allowance to reset.`
+  }
+  if (lower.includes('supports at most') || lower.includes('generation amount')) {
+    return message + ' You can choose a smaller generation or upgrade your plan for a larger one.'
+  }
+  if (lower.includes('student plan configuration is unavailable')) {
+    return 'Your study allowance is temporarily unavailable. Please try again shortly.'
+  }
+  if (error instanceof ApiError && error.status === 429) {
+    return 'Too many generation requests in a short time. Please wait a little and try again.'
+  }
+  if (error instanceof ApiError && error.status === 503) {
+    return 'Prepza has temporarily paused fresh AI generation. Your existing study materials are still available. Please try again later.'
+  }
+  return message || 'We could not generate this study material. Please try again.'
+}
+
 }
