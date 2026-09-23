@@ -19,6 +19,10 @@ export default function CallExperience({ userId }: Props) {
   const [call, setCall] = useState<ActiveCall | null>(null)
   const [muted, setMuted] = useState(false)
   const [cameraOff, setCameraOff] = useState(false)
+  const [screenSharing, setScreenSharing] = useState(false)
+  const [seconds, setSeconds] = useState(0)
+  const screenStream = useRef<MediaStream | null>(null)
+  const callStartedAt = useRef<number | null>(null)
   const localVideo = useRef<HTMLVideoElement>(null)
   const remoteVideo = useRef<HTMLVideoElement>(null)
   const remoteAudio = useRef<HTMLAudioElement>(null)
@@ -28,7 +32,8 @@ export default function CallExperience({ userId }: Props) {
   const callRef = useRef<ActiveCall | null>(null)
   const incomingRef = useRef<CallSignal | null>(null)
 
-  useEffect(() => { callRef.current = call }, [call])
+  useEffect(() => { callRef.current = call; if (!call) { setSeconds(0); callStartedAt.current = null } else if (!callStartedAt.current) callStartedAt.current = Date.now() }, [call])
+  useEffect(() => { if (!call) return; const timer = window.setInterval(() => { if (callStartedAt.current) setSeconds(Math.floor((Date.now() - callStartedAt.current) / 1000)) }, 1000); return () => window.clearInterval(timer) }, [call])
   useEffect(() => { incomingRef.current = incoming }, [incoming])
 
   useEffect(() => {
@@ -137,16 +142,64 @@ export default function CallExperience({ userId }: Props) {
     try { await peer.current.addIceCandidate(candidate) } catch { /* stale ICE candidate */ }
   }
 
+  async function toggleScreenShare() {
+    if (!call || call.kind !== 'video' || !peer.current) return
+    try {
+      if (screenSharing && screenStream.current) {
+        const cameraTrack = localStream.current?.getVideoTracks()[0]
+        const sender = peer.current.getSenders().find(item => item.track?.kind === 'video')
+        if (sender && cameraTrack) await sender.replaceTrack(cameraTrack)
+        screenStream.current.getTracks().forEach(track => track.stop())
+        screenStream.current = null
+        setScreenSharing(false)
+        return
+      }
+      if (!navigator.mediaDevices?.getDisplayMedia) throw new Error('Screen sharing is not supported in this browser.')
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+      const track = display.getVideoTracks()[0]
+      const sender = peer.current.getSenders().find(item => item.track?.kind === 'video')
+      if (!sender) { display.getTracks().forEach(t => t.stop()); throw new Error('Video track is unavailable.') }
+      await sender.replaceTrack(track)
+      screenStream.current = display
+      setScreenSharing(true)
+      track.onended = () => { void toggleScreenShare() }
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent('prepza-call-error', { detail: error instanceof Error ? error.message : 'Screen sharing could not start.' }))
+    }
+  }
+
+  async function switchCamera() {
+    if (!call || call.kind !== 'video' || !navigator.mediaDevices?.getUserMedia || !peer.current) return
+    try {
+      const current = localStream.current?.getVideoTracks()[0]
+      const nextFacing = current?.getSettings().facingMode === 'environment' ? 'user' : 'environment'
+      const replacement = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: nextFacing } }, audio: false })
+      const track = replacement.getVideoTracks()[0]
+      const sender = peer.current.getSenders().find(item => item.track?.kind === 'video')
+      if (!sender) { replacement.getTracks().forEach(t => t.stop()); return }
+      await sender.replaceTrack(track)
+      if (current) current.stop()
+      if (localStream.current) { localStream.current.removeTrack(current!); localStream.current.addTrack(track) }
+    } catch { /* keep the current camera */ }
+  }
+
+  async function enterPictureInPicture() {
+    const video = remoteVideo.current as (HTMLVideoElement & { requestPictureInPicture?: () => Promise<void> }) | null
+    if (!video?.requestPictureInPicture) return
+    try { await video.requestPictureInPicture() } catch { /* browser denied PiP */ }
+  }
+
   function cleanup(notify: boolean) {
     const current = callRef.current
     if (notify && current) emitCall('call:end', { call_id: current.callId, conversation_id: current.conversationId, to_user_id: current.peerId })
     peer.current?.close(); peer.current = null
+    screenStream.current?.getTracks().forEach(track => track.stop()); screenStream.current = null
     localStream.current?.getTracks().forEach(track => track.stop()); localStream.current = null
     if (localVideo.current) localVideo.current.srcObject = null
     if (remoteVideo.current) remoteVideo.current.srcObject = null
     if (remoteAudio.current) remoteAudio.current.srcObject = null
     callRef.current = null
-    setCall(null); setIncoming(null); setMuted(false); setCameraOff(false); pendingIce.current = []
+    setCall(null); setIncoming(null); setMuted(false); setCameraOff(false); setScreenSharing(false); setSeconds(0); callStartedAt.current = null; pendingIce.current = []
   }
 
   useEffect(() => {
@@ -170,11 +223,26 @@ export default function CallExperience({ userId }: Props) {
     </div>}
     {call && <div style={{ position:'fixed', inset:0, zIndex:2900, background:'#090c14', color:'#fff', display:'flex', flexDirection:'column' }}>
       {call.kind === 'video' && <><video ref={remoteVideo} autoPlay playsInline style={{ position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',background:'#111' }} /><video ref={localVideo} autoPlay playsInline muted style={{ position:'absolute',right:18,top:18,width:'28%',maxWidth:220,aspectRatio:'3/4',objectFit:'cover',borderRadius:18,background:'#222',boxShadow:'0 8px 30px rgba(0,0,0,.35)' }} /></>}
-      {call.kind === 'voice' && <div style={{ flex:1,display:'grid',placeItems:'center' }}><div style={{ textAlign:'center' }}><div style={{ width:110,height:110,borderRadius:'50%',background:'#c9a84c',color:'#0b1437',display:'grid',placeItems:'center',fontSize:42,fontWeight:900,margin:'0 auto 18px' }}>{call.peerName.slice(0,1).toUpperCase()}</div><div style={{fontSize:25,fontWeight:850}}>{call.peerName}</div><div style={{marginTop:8,opacity:.65}}>{call.connected ? 'Connected' : 'Calling…'}</div></div></div>}
-      <div style={{ position:'absolute',left:0,right:0,bottom:0,padding:'28px 22px 34px',display:'flex',justifyContent:'center',gap:14,background:'linear-gradient(transparent,rgba(0,0,0,.65))' }}>
-        <button type="button" onClick={() => { const tracks = localStream.current?.getAudioTracks() || []; tracks.forEach(track => { track.enabled = !track.enabled }); setMuted(tracks[0] ? !tracks[0].enabled : false) }} aria-label="Mute microphone" style={{width:52,height:52,border:0,borderRadius:'50%',background:muted?'#fff':'rgba(255,255,255,.18)',color:muted?'#111':'#fff',fontSize:20}}>⌁</button>
-        {call.kind === 'video' && <button type="button" onClick={() => { const tracks = localStream.current?.getVideoTracks() || []; tracks.forEach(track => { track.enabled = !track.enabled }); setCameraOff(tracks[0] ? !tracks[0].enabled : false) }} aria-label="Turn camera off" style={{width:52,height:52,border:0,borderRadius:'50%',background:cameraOff?'#fff':'rgba(255,255,255,.18)',color:cameraOff?'#111':'#fff',fontSize:20}}>◉</button>}
-        <button type="button" onClick={() => cleanup(true)} aria-label="End call" style={{width:58,height:58,border:0,borderRadius:'50%',background:'#d84b4b',color:'#fff',fontSize:23}}>×</button>
+      {call.kind === 'voice' && <div style={{ flex:1,display:'grid',placeItems:'center' }}><div style={{ textAlign:'center' }}><div style={{ width:110,height:110,borderRadius:'50%',background:'#c9a84c',color:'#0b1437',display:'grid',placeItems:'center',fontSize:42,fontWeight:900,margin:'0 auto 18px' }}>{call.peerName.slice(0,1).toUpperCase()}</div><div style={{fontSize:25,fontWeight:850}}>{call.peerName}</div><div style={{marginTop:8,opacity:.65}}>{call.connected ? `${String(Math.floor(seconds / 60)).padStart(2,'0')}:${String(seconds % 60).padStart(2,'0')}` : 'Calling…'}</div></div></div>}
+      <div style={{ position:'absolute',left:0,right:0,bottom:0,padding:'20px 18px 32px',display:'flex',justifyContent:'center',gap:12,background:'linear-gradient(transparent,rgba(0,0,0,.72))',flexWrap:'wrap' }}>
+        <button type="button" onClick={() => { const tracks = localStream.current?.getAudioTracks() || []; tracks.forEach(track => { track.enabled = !track.enabled }); setMuted(tracks[0] ? !tracks[0].enabled : false) }} aria-label={muted ? 'Unmute microphone' : 'Mute microphone'} style={{width:52,height:52,border:0,borderRadius:'50%',background:muted?'#fff':'rgba(255,255,255,.18)',color:muted?'#111':'#fff',display:'grid',placeItems:'center'}}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>
+        </button>
+        {call.kind === 'video' && <button type="button" onClick={() => { const tracks = localStream.current?.getVideoTracks() || []; tracks.forEach(track => { track.enabled = !track.enabled }); setCameraOff(tracks[0] ? !tracks[0].enabled : false) }} aria-label={cameraOff ? 'Turn camera on' : 'Turn camera off'} style={{width:52,height:52,border:0,borderRadius:'50%',background:cameraOff?'#fff':'rgba(255,255,255,.18)',color:cameraOff?'#111':'#fff',display:'grid',placeItems:'center'}}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m16 13 5 3V8l-5 3Z"/><rect x="3" y="6" width="13" height="12" rx="2"/></svg>
+        </button>}
+        {call.kind === 'video' && <button type="button" onClick={() => void switchCamera()} aria-label="Switch camera" style={{width:52,height:52,border:0,borderRadius:'50%',background:'rgba(255,255,255,.18)',color:'#fff',display:'grid',placeItems:'center'}}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 7h12l-2-2M20 17H8l2 2"/><path d="M16 5l2 2-2 2M8 15l-2 2 2 2"/></svg>
+        </button>}
+        {call.kind === 'video' && <button type="button" onClick={() => void toggleScreenShare()} aria-label={screenSharing ? 'Stop screen sharing' : 'Share screen'} style={{width:52,height:52,border:0,borderRadius:'50%',background:screenSharing?'#fff':'rgba(255,255,255,.18)',color:screenSharing?'#111':'#fff',display:'grid',placeItems:'center'}}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        </button>}
+        {call.kind === 'video' && <button type="button" onClick={() => void enterPictureInPicture()} aria-label="Picture in picture" style={{width:52,height:52,border:0,borderRadius:'50%',background:'rgba(255,255,255,.18)',color:'#fff',display:'grid',placeItems:'center'}}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M13 14h6v4h-6z"/></svg>
+        </button>}
+        <button type="button" onClick={() => cleanup(true)} aria-label="End call" style={{width:58,height:58,border:0,borderRadius:'50%',background:'#d84b4b',color:'#fff',display:'grid',placeItems:'center'}}>
+          <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 5c3 4 9 4 12 0l2 3c-1 2-3 4-5 5v3a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-3c-2-1-4-3-5-5l2-3Z"/></svg>
+        </button>
       </div>
     </div>}
   </>
