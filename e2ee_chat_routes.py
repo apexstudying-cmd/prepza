@@ -196,7 +196,7 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
         mode, expected_epoch = e2ee_state(conversation.id)
         if mode != "group_v1":
             return jsonify({"error": "Group E2EE is not enabled for this conversation"}), 409
-        provisioner = active_provisioner(conversation.id, expected_epoch)
+        locked_epoch = db.session.execute(text("SELECT key_epoch FROM conversation WHERE id = :conversation_id FOR UPDATE"), {"conversation_id": conversation.id}).scalar_one_or_none()\n        locked_epoch = int(locked_epoch or 0)\n        if locked_epoch != expected_epoch:\n            db.session.rollback()\n            return jsonify({"error": "Group key epoch changed; retry with the current epoch", "key_epoch": locked_epoch}), 409\n\n        provisioner = active_provisioner(conversation.id, expected_epoch)
         if provisioner is None or user_id != provisioner:
             return jsonify({"error": "Only the elected group key provisioner may publish the current epoch key", "provisioner_user_id": provisioner, "key_epoch": expected_epoch}), 403
 
@@ -238,8 +238,8 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             if len(nonce) > 256 or len(ciphertext) > 20000:
                 return jsonify({"error": "Encrypted envelope is too large"}), 400
             try:
-                decode_base64(nonce, "nonce", max_bytes=128)
-                decode_base64(ciphertext, "ciphertext", max_bytes=15000)
+                decode_base64(nonce, "nonce", max_bytes=12)
+                decode_base64(ciphertext, "ciphertext", max_bytes=15000)\n                nonce_bytes = decode_base64(nonce, "nonce", max_bytes=12)\n                if len(nonce_bytes) != 12:\n                    raise ValueError("nonce must be exactly 12 bytes")
             except ValueError as exc:
                 return jsonify({"error": str(exc)}), 400
             accepted.append(ConversationKeyEnvelope(conversation_id=conversation.id, recipient_user_id=recipient_id, sender_user_id=sender_id, key_epoch=epoch, version=version, nonce=nonce, ciphertext=ciphertext))
