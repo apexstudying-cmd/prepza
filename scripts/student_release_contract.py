@@ -56,7 +56,7 @@ require("Two-Factor Authentication" in FRONTEND and "Not available yet" in FRONT
 require("Study Reminders" in FRONTEND and "Not available yet" in FRONTEND, "study reminders must not be a fake action")
 require("Study Preferences" in FRONTEND and "Not available yet" in FRONTEND, "study preferences must not be a fake action")
 require("AI Preferences" in FRONTEND and "Not available yet" in FRONTEND, "AI preferences must not be a fake action")
-require("Help centre is not available yet" in FRONTEND and "Support contact is not available yet" in FRONTEND and "Problem reporting is not available yet" in FRONTEND, "support controls must not be fake actions")
+require("Help centre is not available yet" in FRONTEND and "Problem reporting is not available yet" in FRONTEND and "Contact Support" in FRONTEND, "support controls must not be fake actions")
 require("setScreen('subscription')" in FRONTEND, "subscription settings navigation missing")
 require("setScreen('payment-history')" in FRONTEND, "payment history navigation missing")
 require("await api('/logout', { method: 'POST'" in FRONTEND, "logout must await server success")
@@ -70,7 +70,7 @@ require("Student Support Contact" in FRONTEND and "settingsDraft.support_email" 
 
 # Account deletion must remove the user and personal rows while preserving
 # detached payment history and reusable shared generation artifacts.
-delete_block = re.search(r'@app\\.route\\("/delete-account", methods=\\["DELETE"\\]\\).*?db\\.session\\.delete\\(user\\)', APP, re.S)
+delete_block = re.search(r'@app\.route\("/delete-account", methods=\["DELETE"\]\).*?db\.session\.delete\(user\)', APP, re.S)
 require(delete_block is not None, "account deletion endpoint missing")
 require("Payment.query.filter_by(user_id=user_id).update({\"user_id\": None}" in APP, "payment history must be detached rather than deleted")
 require("GeneratedMaterial.owner_user_id == user_id" in APP and "GeneratedMaterial.owner_user_id: None" in APP, "reusable generated artifacts must be detached from the deleted user")
