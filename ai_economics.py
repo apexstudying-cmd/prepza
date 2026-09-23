@@ -657,7 +657,8 @@ def _admin_allowed():
 
 
 def register_ai_economics(app, db):
-    ensure_economics_schema(db)
+    with app.app_context():
+        ensure_economics_schema(db)
     from flask import jsonify, request, session
 
     @app.get("/api/admin/ai-economics/plans")
