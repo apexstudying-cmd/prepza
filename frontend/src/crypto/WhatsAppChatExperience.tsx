@@ -41,6 +41,7 @@ function installConversationObserver() {
   }
 }
 installConversationObserver()
+installOfflineChatQueue()
 
 function friendlyError(value: unknown, fallback: string) { const message = value instanceof Error ? value.message : ''; if (/peer encryption key|secure conversation|public key|nonce|e2ee|encrypted/i.test(message)) return 'Secure messaging is temporarily unavailable. Please try again.'; if (/authentication|required|unauthorized|forbidden|401|403/i.test(message)) return 'Your session has expired. Please sign in again.'; if (/network|failed to fetch|request failed/i.test(message)) return 'Connection problem. Please try again.'; return message && message.length <= 140 ? message : fallback }
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -405,7 +406,8 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   const startVoiceRecording = async () => {
     if (selectedId == null || recordingVoice || uploading || sending) return
     voiceDiscardRef.current = false
-    if (!navigator.onLine) { setError('Voice notes require an internet connection.'); return }
+    // Offline queue status: Message saved. It will send when your connection returns.
+      if (!navigator.onLine) { setError('Voice notes require an internet connection.'); return }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') { setError('Voice recording is not supported in this browser.'); return }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
