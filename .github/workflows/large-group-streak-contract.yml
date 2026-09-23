@@ -1,0 +1,25 @@
+name: Large group and streak contract
+
+on:
+  pull_request:
+    paths:
+      - "app.py"
+      - "study_friend_streak_routes.py"
+      - "frontend/src/App.tsx"
+      - "frontend/src/crypto/WhatsAppChatExperience.tsx"
+      - "frontend/src/share/StudyShareSheet.tsx"
+      - "scripts/test_large_group_streak_contract.py"
+      - ".github/workflows/large-group-streak-contract.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile changed Python
+        run: python -m py_compile app.py study_friend_streak_routes.py scripts/test_large_group_streak_contract.py
+      - name: Run contract test
+        run: python scripts/test_large_group_streak_contract.py
