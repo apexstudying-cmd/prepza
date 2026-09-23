@@ -20,15 +20,15 @@ ORGANISATION_PLANS = {
 
 
 def register_organisation_billing(app, db):
-    if db.engine.dialect.name == 'sqlite':
-        return
     with app.app_context():
+        if db.engine.dialect.name == 'sqlite':
+            return
         db.session.execute(text("""
-        ALTER TABLE organisation_billing
-        ADD COLUMN IF NOT EXISTS transaction_reference VARCHAR(120),
-        ADD COLUMN IF NOT EXISTS checkout_url TEXT
-    """))
-    db.session.commit()
+            ALTER TABLE organisation_billing
+            ADD COLUMN IF NOT EXISTS transaction_reference VARCHAR(120),
+            ADD COLUMN IF NOT EXISTS checkout_url TEXT
+        """))
+        db.session.commit()
 
     def member_role(org_id, user_id):
         return db.session.execute(text("""
