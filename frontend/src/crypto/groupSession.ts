@@ -49,6 +49,7 @@ export async function openGroupE2EESession(
   fetchEnvelopes: GroupEnvelopeFetcher,
   resolvePublicKey: PublicKeyResolver,
   expectedKeyEpoch?: number,
+  currentUserId?: number,
 ): Promise<GroupE2EEState> {
   assertPositiveId(conversationId, 'conversation id')
   if (expectedKeyEpoch !== undefined && (!Number.isInteger(expectedKeyEpoch) || expectedKeyEpoch < 1)) {
