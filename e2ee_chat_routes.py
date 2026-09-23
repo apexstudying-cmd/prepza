@@ -244,7 +244,7 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
             if len(nonce) > 256 or len(ciphertext) > 20000:
                 return jsonify({"error": "Encrypted envelope is too large"}), 400
             try:
-                decode_base64(nonce, "nonce", max_bytes=12)
+                decode_base64(nonce, "nonce", 12)
                 decode_base64(ciphertext, "ciphertext", max_bytes=15000)
                 nonce_bytes = decode_base64(nonce, "nonce", max_bytes=12)
                 if len(nonce_bytes) != 12:
