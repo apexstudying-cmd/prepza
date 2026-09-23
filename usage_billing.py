@@ -582,7 +582,11 @@ def _online_user_count(db):
 
 
 def register_usage_billing(app, db):
-    _ensure_schema(db)
+    # Route registration happens during app import, outside a request context.
+    # Schema bootstrap must explicitly own an application context so tests and
+    # secondary entrypoints can import the module safely.
+    with app.app_context():
+        _ensure_schema(db)
 
     @app.post("/api/analytics/heartbeat")
     def analytics_heartbeat():
