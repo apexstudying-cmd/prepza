@@ -21,7 +21,7 @@ def require(condition: bool, message: str) -> None:
 
 require("CHAT_GROUP_MAX_MEMBERS = 100" in APP, "encrypted group-chat member ceiling missing")
 require("len(participant_ids) + 1 > CHAT_GROUP_MAX_MEMBERS" in APP, "backend does not enforce the encrypted group-chat ceiling")
-require("len(members) > 100" in PROVISION, "client group-key provisioning ceiling missing")
+require("members.length > 100" in PROVISION, "client group-key provisioning ceiling missing")
 require('if not isinstance(envelopes, list) or not envelopes or len(envelopes) > 100:' in (ROOT / "e2ee_chat_routes.py").read_text(encoding="utf-8"), "server group-key envelope ceiling missing")
 
 logout_block = re.search(r'@app\.route\("/logout", methods=\["POST"\]\)\s+@require_csrf\s+def logout', APP)
