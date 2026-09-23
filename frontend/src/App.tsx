@@ -9674,6 +9674,10 @@ type AdminPlatformSettings = {
   ai_daily_tutor_limit_plus: number | null
   ai_daily_tutor_limit_premium: number | null
   ai_monthly_budget_usd: number
+  ambassador_program_enabled: boolean
+  ambassador_payout_hold_days: number
+  ambassador_min_payout_kes: number
+  ambassador_pitch: string
   support_email: string
   support_phone: string
   support_message: string
@@ -11522,6 +11526,19 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             <div style={{ padding: '0 18px 14px', fontSize: 11, color: T.textMuted }}>Leave blank for unlimited.</div>
           </AdminCard>
 
+          <AdminCard title="Ambassador Program">
+            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={settingsDraft.ambassador_program_enabled} onChange={e => setSettingsDraft({ ...settingsDraft, ambassador_program_enabled: e.target.checked })} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Accept ambassador applications and new referral attribution</span>
+              </label>
+              {numField('Payout hold (days)', 'ambassador_payout_hold_days')}
+              {numField('Minimum payout', 'ambassador_min_payout_kes', { prefix: 'KES' })}
+              <textarea value={settingsDraft.ambassador_pitch} onChange={e => setSettingsDraft({ ...settingsDraft, ambassador_pitch: e.target.value })} maxLength={1000} rows={5} placeholder="What ambassadors should share about Prepza…" style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card, resize: 'vertical' }} />
+              <div style={{ fontSize: 11, color: T.textMuted }}>This pitch is used by the ambassador Share action and branded printable poster. The referral URL and commission terms remain system-controlled. Minimum payout cannot be set below KES 500.</div>
+            </div>
+          </AdminCard>
+
           <AdminCard title="Student Support Contact">
             <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <input value={settingsDraft.support_email} onChange={e => setSettingsDraft({ ...settingsDraft, support_email: e.target.value })} placeholder="Support email" maxLength={160} style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card }} />
@@ -11658,7 +11675,7 @@ interface AdminAmbassadorRow {
   email: string | null
   display_name: string | null
   referral_code: string
-  status: 'pending' | 'active' | 'suspended' | 'rejected'
+  status: 'pending' | 'active' | 'suspended' | 'rejected' | 'terminated'
   applied_at: string | null
   reviewed_at: string | null
   rejection_reason: string | null
@@ -11701,7 +11718,7 @@ interface AdminPayoutRow {
 }
 
 const ADMIN_AMB_STATUS_COLOR: Record<string, string> = {
-  pending: 'amber', active: 'green', suspended: 'red', rejected: 'gray',
+  pending: 'amber', active: 'green', suspended: 'red', rejected: 'gray', terminated: 'gray',
   approved: 'blue', paid: 'green',
 }
 
@@ -11760,7 +11777,7 @@ function AdminAmbassadorsPanel() {
       .finally(() => setLoadingDetail(false))
   }
 
-  const runAmbassadorAction = async (id: number, action: 'approve' | 'suspend' | 'reinstate') => {
+  const runAmbassadorAction = async (id: number, action: 'approve' | 'suspend' | 'reinstate' | 'terminate') => {
     setActionBusy(true)
     try {
       await api(`/admin/ambassadors/${id}/${action}`, {
@@ -11893,6 +11910,12 @@ function AdminAmbassadorsPanel() {
               {selected.status === 'suspended' && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                   <button disabled={actionBusy} onClick={() => runAmbassadorAction(selected.id, 'reinstate')} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12 }}>Reinstate</button>
+                  <button disabled={actionBusy} onClick={() => runAmbassadorAction(selected.id, 'terminate')} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12 }}>Terminate</button>
+                </div>
+              )}
+              {selected.status === 'active' && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  <button disabled={actionBusy} onClick={() => runAmbassadorAction(selected.id, 'terminate')} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12 }}>Terminate</button>
                 </div>
               )}
               {selected.rejection_reason && (
@@ -12997,6 +13020,7 @@ interface AmbassadorDashboardResp {
   earnings: { pending_kes: number; available_kes: number; paid_kes: number }
   min_payout_kes: number
   payout_hold_days: number
+  pitch: string
 }
 interface AmbassadorReferral {
   id: number
@@ -13048,6 +13072,9 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [copied, setCopied] = useState(false)
   const [showSheet, setShowSheet] = useState(false)
   const [payoutPhone, setPayoutPhone] = useState('')
+  const [recipientFirstName, setRecipientFirstName] = useState('')
+  const [recipientLastName, setRecipientLastName] = useState('')
+  const posterCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const [payoutError, setPayoutError] = useState('')
   const [submittingPayout, setSubmittingPayout] = useState(false)
 
@@ -13097,7 +13124,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
   const shareLink = async () => {
     if (!dashboard) return
-    const text = `Study smarter with Prepza - sign up with my link: ${dashboard.referral_link}`
+    const text = `${dashboard.pitch}\n\nJoin through my Prepza ambassador link: ${dashboard.referral_link}`
     if ((navigator as any).share) {
       try { await (navigator as any).share({ text, url: dashboard.referral_link }) } catch {}
     } else {
@@ -13110,13 +13137,17 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       setPayoutError('Enter a valid phone number (e.g. +254712345678).')
       return
     }
+    if (!recipientFirstName.trim() || !recipientLastName.trim()) {
+      setPayoutError('Enter the recipient first and last name used for the M-Pesa payout.')
+      return
+    }
     setSubmittingPayout(true)
     setPayoutError('')
     try {
       await api('/ambassador/payouts/request', {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ payout_destination: payoutPhone.trim() }),
+        body: JSON.stringify({ payout_destination: payoutPhone.trim(), recipient_first_name: recipientFirstName.trim(), recipient_last_name: recipientLastName.trim() }),
       })
       setShowSheet(false)
       loadAll()
@@ -13125,6 +13156,60 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     } finally {
       setSubmittingPayout(false)
     }
+  }
+
+  useEffect(() => {
+    if (!dashboard || !posterCanvasRef.current) return
+    const canvas = posterCanvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const W = 1200, H = 1600
+    canvas.width = W; canvas.height = H
+    ctx.fillStyle = AMB_COLORS.navy; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#F8F9FC'; ctx.fillRect(70, 70, W - 140, H - 140)
+    ctx.fillStyle = AMB_COLORS.navy; ctx.font = '900 86px Plus Jakarta Sans, Arial'; ctx.fillText('PREPZA', 120, 190)
+    ctx.fillStyle = AMB_COLORS.gold; ctx.fillRect(120, 220, 170, 8)
+    ctx.fillStyle = AMB_COLORS.navy; ctx.font = '800 52px Plus Jakarta Sans, Arial'; ctx.fillText('Study smarter together.', 120, 320)
+    const wrap = (text: string, x: number, y: number, maxWidth: number, lineHeight: number, font: string) => {
+      ctx.font = font
+      const words = text.split(/\s+/); let line = ''; let yy = y
+      for (const word of words) {
+        const test = line ? line + ' ' + word : word
+        if (ctx.measureText(test).width > maxWidth && line) { ctx.fillText(line, x, yy); line = word; yy += lineHeight } else line = test
+      }
+      if (line) { ctx.fillText(line, x, yy); yy += lineHeight }
+      return yy
+    }
+    ctx.fillStyle = '#4B5563'
+    const y = wrap(dashboard.pitch, 120, 410, 650, 44, '500 31px Plus Jakarta Sans, Arial')
+    ctx.fillStyle = AMB_COLORS.gold; ctx.font = '900 30px Plus Jakarta Sans, Arial'; ctx.fillText('10% commission on the first successful payment', 120, y + 35)
+    ctx.fillStyle = AMB_COLORS.navy; ctx.font = '800 32px Plus Jakarta Sans, Arial'; ctx.fillText('SCAN TO JOIN PREPZA', 120, y + 105)
+    const qr = new Image()
+    qr.onload = () => {
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(790, 360, 300, 300); ctx.drawImage(qr, 810, 380, 260, 260)
+      ctx.fillStyle = '#111827'; ctx.font = '700 24px Plus Jakarta Sans, Arial'; ctx.fillText('Personal referral', 120, H - 285); ctx.fillText('Code: ' + dashboard.referral_code, 120, H - 245)
+      ctx.fillStyle = '#6B7280'; wrap('Share this poster in class groups, campus spaces, or online. The QR code keeps your referral attribution.', 120, H - 185, 920, 34, '500 22px Plus Jakarta Sans, Arial')
+    }
+    qr.src = '/ambassador/referral-qr'
+  }, [dashboard])
+
+  const downloadPoster = () => {
+    const canvas = posterCanvasRef.current
+    if (!canvas || !dashboard) return
+    const link = document.createElement('a')
+    link.download = `prepza-ambassador-poster-${dashboard.referral_code}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+  }
+
+  const printPoster = () => {
+    const canvas = posterCanvasRef.current
+    if (!canvas) return
+    const win = window.open('', '_blank')
+    if (!win) return
+    const image = canvas.toDataURL('image/png')
+    win.document.write('<!doctype html><html><head><title>Prepza Ambassador Poster</title><style>@page{size:A4;margin:0}body{margin:0}img{width:210mm;height:297mm;object-fit:contain}</style></head><body><img src="' + image + '" onload="window.print()"></body></html>')
+    win.document.close()
   }
 
   const Header = ({ title }: { title: string }) => (
@@ -13231,6 +13316,18 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
               <a href="/ambassador/referral-qr" download={`prepza-ambassador-${dashboard.referral_code}.svg`} style={{ display:'inline-block', marginTop:9, color:AMB_COLORS.gold, fontSize:11, fontWeight:800, textDecoration:'none' }}>Save QR code</a>
             </div>
           </div>
+          <div style={{ marginTop: 10, background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: 10 }}>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,.55)', marginBottom: 7 }}>Approved sharing message</div>
+            <div style={{ fontSize: 11, color: '#fff', lineHeight: 1.5 }}>{dashboard.pitch}</div>
+          </div>
+          <div style={{ marginTop: 12, background: T.card, borderRadius: 14, padding: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: T.text, marginBottom: 8 }}>Printable ambassador poster</div>
+            <canvas ref={posterCanvasRef} style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 10, background: '#fff' }} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
+              <button onClick={downloadPoster} style={{ flex: 1, background: AMB_COLORS.navy, color: '#fff', border: 'none', borderRadius: 9, padding: '9px 0', fontWeight: 800, fontSize: 11, cursor: 'pointer' }}>Download poster</button>
+              <button onClick={printPoster} style={{ flex: 1, background: 'transparent', color: AMB_COLORS.navy, border: '1px solid rgba(11,20,55,.18)', borderRadius: 9, padding: '9px 0', fontWeight: 800, fontSize: 11, cursor: 'pointer' }}>Print</button>
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={shareLink} style={{ flex: 1, background: `linear-gradient(135deg,${AMB_COLORS.gold},${AMB_COLORS.goldLight})`, color: AMB_COLORS.navy, border: 'none', borderRadius: 12, padding: '11px 0', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>Share link</button>
             <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -13334,6 +13431,10 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
             <div style={{ fontWeight: 800, fontSize: 16, color: AMB_COLORS.navy, marginBottom: 4 }}>Request payout</div>
             <div style={{ fontSize: 12, color: AMB_COLORS.gray, marginBottom: 18 }}>Available balance: {fmtKes(dashboard.earnings.available_kes)}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <input value={recipientFirstName} onChange={e => setRecipientFirstName(e.target.value)} placeholder='First name' style={{ width: '100%', boxSizing: 'border-box', background: AMB_COLORS.bg, border: '1px solid #E5E7EB', borderRadius: 12, padding: '13px 12px', fontSize: 13, color: AMB_COLORS.navy }} />
+              <input value={recipientLastName} onChange={e => setRecipientLastName(e.target.value)} placeholder='Last name' style={{ width: '100%', boxSizing: 'border-box', background: AMB_COLORS.bg, border: '1px solid #E5E7EB', borderRadius: 12, padding: '13px 12px', fontSize: 13, color: AMB_COLORS.navy }} />
+            </div>
             <div style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>M-Pesa number</div>
             <input value={payoutPhone} onChange={e => setPayoutPhone(e.target.value)} placeholder="+254712345678" style={{ width: '100%', boxSizing: 'border-box', background: AMB_COLORS.bg, border: '1px solid #E5E7EB', borderRadius: 12, padding: '13px 14px', fontSize: 13, color: AMB_COLORS.navy, marginBottom: 8 }} />
             {!!payoutError && <div style={{ fontSize: 11, color: AMB_COLORS.red, marginBottom: 10 }}>{payoutError}</div>}
