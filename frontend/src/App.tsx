@@ -39,7 +39,7 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
   return body as T
 }
 
-type GenerationProgress = { progress_percent: number; progress_stage: string; status: string; found?: boolean; error_message?: string | null }
+type GenerationProgress = { progress_percent: number; progress_stage: string; status: string; found?: boolean; error_message?: string | null; error?: string | null }
 
 function generationRequest<T = any>(
   path: string,
