@@ -12,7 +12,8 @@ FREE_ORGANIC_PER_STUDENT_CAP = 3
 CAMPAIGN_MAX_DAYS = (7, 30, 90)
 
 def _register_b2b_schema(db):
-
+    if db.engine.dialect.name == "sqlite":
+        return
     db.session.execute(text("""
       ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS organic_free_impression_cap INTEGER NOT NULL DEFAULT 5000;
       ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS organic_free_cap_reached_at TIMESTAMP;
