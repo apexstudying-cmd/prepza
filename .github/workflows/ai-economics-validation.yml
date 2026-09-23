@@ -16,17 +16,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Install focused test dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pytest sqlalchemy
+
       - name: Compile changed Python modules
         run: |
           python -m py_compile ai_economics.py ai_generation_store.py ai_artifact_fingerprint.py ai_reusable_generation.py ai_service.py usage_billing.py
+
       - name: Run focused economics and reuse tests
         env:
           PYTHONPATH: .
