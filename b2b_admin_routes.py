@@ -5,6 +5,8 @@ from flask import jsonify, request, session
 from sqlalchemy import text
 
 def register_b2b_admin_routes(app, db):
+    if db.engine.dialect.name == "sqlite":
+        return
     db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS b2b_placement_config (
             id BIGSERIAL PRIMARY KEY,
