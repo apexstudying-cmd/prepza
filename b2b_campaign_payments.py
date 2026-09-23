@@ -375,6 +375,30 @@ def register_b2b_campaign_payments(app, db):
         uid = session.get("user_id")
         if not uid or not member_role(organisation_id, uid):
             return jsonify({"error": "Organisation membership required"}), 403
+        campaign = db.session.execute(text("""
+            SELECT id,status,funding_status,funded_amount_minor,exhausted_at,
+                   approved_at,activated_at FROM discovery_campaign
+            WHERE id=:cid AND organisation_id=:oid
+        """), {"oid": organisation_id, "cid": campaign_id}).mappings().first()
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+        row = db.session.execute(text("""
+            SELECT id,provider_reference,status,customer_amount_minor,campaign_amount_minor,
+                   processing_fee_minor,paid_at,created_at
+            FROM b2b_payment
+            WHERE organisation_id=:oid AND campaign_id=:cid
+            ORDER BY id DESC LIMIT 1
+        """), {"oid": organisation_id, "cid": campaign_id}).mappings().first()
+        return jsonify({
+            "campaign": dict(campaign),
+            "payment": dict(row) if row else None,
+            "status": dict(campaign).get("funding_status") if not row else row["status"]
+        }), 200
+
+    def b2b_campaign_payment_status(organisation_id, campaign_id):
+        uid = session.get("user_id")
+        if not uid or not member_role(organisation_id, uid):
+            return jsonify({"error": "Organisation membership required"}), 403
         row = db.session.execute(text("""
             SELECT id,provider_reference,status,customer_amount_minor,campaign_amount_minor,
                    processing_fee_minor,paid_at,created_at
