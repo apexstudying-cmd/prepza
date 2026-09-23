@@ -3196,6 +3196,12 @@ def delete_account():
         ).order_by(OrganisationMember.id).first()
         opportunity.created_by = replacement.user_id if replacement else (admin_user.id if admin_user else user_id)
 
+    # Non-null administrative authorship fields are transferred to an
+    # existing admin so deleting a student cannot orphan a platform record.
+    if admin_user:
+        Announcement.query.filter_by(sent_by=user_id).update({"sent_by": admin_user.id}, synchronize_session=False)
+        UserWarning.query.filter_by(issued_by=user_id).update({"issued_by": admin_user.id}, synchronize_session=False)
+
     # Audit/moderation references are nullable and should become anonymous,
     # not block account deletion.
     for model, column in (
@@ -3222,6 +3228,8 @@ def delete_account():
         (LearningEvent, LearningEvent.user_id),
         (StudentConceptMastery, StudentConceptMastery.user_id),
         (SavedLibraryMaterial, SavedLibraryMaterial.user_id),
+        (ConversationParticipant, ConversationParticipant.user_id),
+        (LibraryReport, LibraryReport.reporter_user_id),
         (XpEvent, XpEvent.user_id),
         (StudyStreak, StudyStreak.user_id),
         (StudyActivityLog, StudyActivityLog.user_id),
@@ -3241,6 +3249,7 @@ def delete_account():
         (GroupPostComment, GroupPostComment.user_id),
         (GroupPostLike, GroupPostLike.user_id),
         (GroupQuestionVote, GroupQuestionVote.user_id),
+        (GroupFile, GroupFile.shared_by_user_id),
         (Follow, Follow.follower_id),
         (Follow, Follow.followed_id),
         (FollowRequest, FollowRequest.requester_id),
