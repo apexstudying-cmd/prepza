@@ -3139,6 +3139,16 @@ def support_config():
 @app.route("/delete-account", methods=["DELETE"])
 @require_csrf
 def delete_account():
+    """Permanently remove the student's account while preserving non-personal
+    business records and reusable shared AI artifacts.
+
+    Personal/profile/activity rows are removed. Payments remain for financial
+    reconciliation but are detached from the deleted account. Deduplicated
+    DocumentContent/GeneratedMaterial rows are deliberately retained because
+    they are the reusable processing layer; the student's Document ownership
+    row is removed. We do not keep a live user record merely to make deletion
+    easier to implement.
+    """
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -3146,10 +3156,124 @@ def delete_account():
     if not user:
         session.pop("user_id", None)
         return jsonify({"error": "Account not found"}), 404
-    # Preserve payment/financial records for accounting and any M-Pesa
-    # dispute purposes - just disassociate them from the deleted user
-    # instead of deleting the rows outright.
-    Payment.query.filter_by(user_id=user.id).update({"user_id": None})
+
+    # Preserve payment/audit value without retaining a foreign key to the
+    # deleted account.
+    Payment.query.filter_by(user_id=user_id).update({"user_id": None}, synchronize_session=False)
+    GeneratedMaterial.query.filter(
+        (GeneratedMaterial.owner_user_id == user_id) |
+        (GeneratedMaterial.flagged_by == user_id)
+    ).update({GeneratedMaterial.owner_user_id: None, GeneratedMaterial.flagged_by: None}, synchronize_session=False)
+
+    # Preserve community containers when possible by transferring ownership
+    # to another existing member/admin; never leave a non-null FK pointing at
+    # the deleted account.
+    admin_user = User.query.filter(User.id != user_id, User.is_admin.is_(True)).order_by(User.id).first()
+
+    for conversation in Conversation.query.filter_by(created_by=user_id).all():
+        replacement = (ConversationParticipant.query
+                       .filter(ConversationParticipant.conversation_id == conversation.id,
+                               ConversationParticipant.user_id != user_id)
+                       .order_by(ConversationParticipant.id).first())
+        conversation.created_by = replacement.user_id if replacement else (admin_user.id if admin_user else user_id)
+
+    for group in Group.query.filter_by(created_by=user_id).all():
+        replacement = (GroupMember.query
+                       .filter(GroupMember.group_id == group.id, GroupMember.user_id != user_id)
+                       .order_by(GroupMember.id).first())
+        group.created_by = replacement.user_id if replacement else (admin_user.id if admin_user else user_id)
+
+    for organisation in Organisation.query.filter_by(created_by=user_id).all():
+        replacement = (OrganisationMember.query
+                       .filter(OrganisationMember.organisation_id == organisation.id, OrganisationMember.user_id != user_id)
+                       .order_by(OrganisationMember.id).first())
+        organisation.created_by = replacement.user_id if replacement else (admin_user.id if admin_user else user_id)
+
+    for opportunity in Opportunity.query.filter_by(created_by=user_id).all():
+        replacement = OrganisationMember.query.filter(
+            OrganisationMember.organisation_id == opportunity.organisation_id,
+            OrganisationMember.user_id != user_id
+        ).order_by(OrganisationMember.id).first()
+        opportunity.created_by = replacement.user_id if replacement else (admin_user.id if admin_user else user_id)
+
+    # Audit/moderation references are nullable and should become anonymous,
+    # not block account deletion.
+    for model, column in (
+        (GeneratedMaterial, GeneratedMaterial.flagged_by),
+        (LibraryPublication, LibraryPublication.reviewed_by),
+        (LibraryReport, LibraryReport.reviewed_by),
+        (ContentReport, ContentReport.reporter_user_id),
+        (ContentReport, ContentReport.reviewed_by),
+        (Opportunity, Opportunity.reviewed_by),
+        (OpportunityPromotion, OpportunityPromotion.reviewed_by),
+        (Ambassador, Ambassador.reviewed_by),
+        (AmbassadorPayout, AmbassadorPayout.reviewed_by),
+        (AuditLog, AuditLog.actor_id),
+    ):
+        db.session.query(model).filter(column == user_id).update({column: None}, synchronize_session=False)
+
+    # Remove direct/user-owned records. Shared deduplicated content is not
+    # touched, and payment records were already detached above.
+    delete_specs = (
+        (ViewProgress, ViewProgress.user_id),
+        (DocumentReadingProgress, DocumentReadingProgress.user_id),
+        (TutorConversation, TutorConversation.user_id),
+        (StudentLearningProfile, StudentLearningProfile.user_id),
+        (LearningEvent, LearningEvent.user_id),
+        (StudentConceptMastery, StudentConceptMastery.user_id),
+        (SavedLibraryMaterial, SavedLibraryMaterial.user_id),
+        (XpEvent, XpEvent.user_id),
+        (StudyStreak, StudyStreak.user_id),
+        (StudyActivityLog, StudyActivityLog.user_id),
+        (StudyTimeLog, StudyTimeLog.user_id),
+        (QuizAttempt, QuizAttempt.user_id),
+        (FlashcardSession, FlashcardSession.user_id),
+        (UserAchievement, UserAchievement.user_id),
+        (Notification, Notification.user_id),
+        (NotificationPreference, NotificationPreference.user_id),
+        (UserWarning, UserWarning.user_id),
+        (PushSubscription, PushSubscription.user_id),
+        (UserKey, UserKey.user_id),
+        (SavedOpportunity, SavedOpportunity.user_id),
+        (OrganisationMember, OrganisationMember.user_id),
+        (GroupMember, GroupMember.user_id),
+        (GroupPostReaction, GroupPostReaction.user_id),
+        (GroupPostComment, GroupPostComment.user_id),
+        (GroupPostLike, GroupPostLike.user_id),
+        (GroupQuestionVote, GroupQuestionVote.user_id),
+        (Follow, Follow.follower_id),
+        (Follow, Follow.followed_id),
+        (FollowRequest, FollowRequest.requester_id),
+        (FollowRequest, FollowRequest.target_id),
+        (Ambassador, Ambassador.user_id),
+        (Referral, Referral.referred_user_id),
+    )
+    for model, column in delete_specs:
+        db.session.query(model).filter(column == user_id).delete(synchronize_session=False)
+
+    # Delete the student's chat messages/attachments after membership removal.
+    message_ids = [m.id for m in Message.query.filter_by(sender_id=user_id).all()]
+    if message_ids:
+        MessageAttachment.query.filter(MessageAttachment.message_id.in_(message_ids)).delete(synchronize_session=False)
+        Message.query.filter(Message.id.in_(message_ids)).delete(synchronize_session=False)
+    MessageAttachment.query.filter_by(uploaded_by_user_id=user_id).delete(synchronize_session=False)
+
+    # Delete personal documents, but leave the deduplicated DocumentContent and
+    # reusable GeneratedMaterial layer available to the platform.
+    Document.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
+    # Public library publications are authored records tied directly to the
+    # student, so remove the publication rather than misattribute it to an admin.
+    LibraryPublication.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
+    # User-authored group content cannot safely remain attributable after the
+    # account is removed; delete it along with dependent reactions/comments.
+    post_ids = [p.id for p in GroupPost.query.filter_by(user_id=user_id).all()]
+    if post_ids:
+        GroupPostReaction.query.filter(GroupPostReaction.post_id.in_(post_ids)).delete(synchronize_session=False)
+        GroupPostComment.query.filter(GroupPostComment.group_post_id.in_(post_ids)).delete(synchronize_session=False)
+        GroupPost.query.filter(GroupPost.id.in_(post_ids)).delete(synchronize_session=False)
+
     db.session.delete(user)
     db.session.commit()
     session.pop("user_id", None)
