@@ -9041,3 +9041,373 @@ def ambassador_request_payout():
         status="pending",
     )
     db.session.add(payout)
+
+# ---------- Student chat runtime (base conversation API) ----------
+# The chat UX is intentionally polling-based. Message bodies are opaque:
+# direct E2EE clients send ciphertext+nonce, while legacy conversations may
+# still contain plaintext until migrated. Group E2EE routes are registered
+# immediately below this base API.
+
+CHAT_MESSAGE_BODY_MAX = 20000
+CHAT_MESSAGE_CIPHERTEXT_MAX = 30000
+CHAT_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024
+CHAT_PAGE_SIZE = 50
+
+def _active_participant(conversation_id, user_id):
+    return ConversationParticipant.query.filter_by(
+        conversation_id=conversation_id, user_id=user_id, left_at=None
+    ).first()
+
+def _serialize_conversation_detail(conversation, viewer_id):
+    participants = ConversationParticipant.query.filter_by(
+        conversation_id=conversation.id, left_at=None
+    ).order_by(ConversationParticipant.joined_at.asc()).all()
+    users = {u.id: u for u in User.query.filter(User.id.in_([p.user_id for p in participants])).all()} if participants else {}
+    return {
+        "id": conversation.id,
+        "is_group": bool(conversation.is_group),
+        "name": conversation.name,
+        "created_by": conversation.created_by,
+        "member_count": len(participants),
+        "status": conversation.status,
+        "e2ee_mode": conversation.e2ee_mode or "legacy",
+        "key_epoch": int(conversation.key_epoch or 0),
+        "participants": [
+            {
+                "user_id": p.user_id,
+                "display_name": _display_name(users[p.user_id]) if p.user_id in users else "Student",
+                "role": p.role,
+            }
+            for p in participants
+        ],
+        "is_member": any(p.user_id == viewer_id for p in participants),
+    }
+
+def _serialize_chat_message(message):
+    attachment = MessageAttachment.query.filter_by(
+        message_id=message.id, status="ready"
+    ).first()
+    attachment_payload = None
+    if attachment:
+        attachment_payload = {
+            "id": attachment.id,
+            "file_type": attachment.file_type,
+            "original_filename": attachment.original_filename,
+            "file_size_bytes": attachment.file_size_bytes,
+            "view_url": get_cached_chat_attachment_url(attachment),
+        }
+    return {
+        "id": message.id,
+        "conversation_id": message.conversation_id,
+        "sender_id": message.sender_id,
+        "body": message.body,
+        "nonce": message.nonce,
+        "is_deleted": bool(message.is_deleted),
+        "created_at": message.created_at.isoformat() if message.created_at else None,
+        "edited_at": message.edited_at.isoformat() if message.edited_at else None,
+        "e2ee_key_epoch": int(message.e2ee_key_epoch or 0),
+        "attachment": attachment_payload,
+    }
+
+def _serialize_chat_summary(conversation, user_id):
+    participant = _active_participant(conversation.id, user_id)
+    unread = 0
+    if participant:
+        query = Message.query.filter(
+            Message.conversation_id == conversation.id,
+            Message.sender_id != user_id,
+            Message.is_deleted.is_(False),
+        )
+        if participant.last_read_at:
+            query = query.filter(Message.created_at > participant.last_read_at)
+        unread = query.count()
+    last_message = Message.query.filter_by(conversation_id=conversation.id).order_by(Message.created_at.desc(), Message.id.desc()).first()
+    return {
+        "id": conversation.id,
+        "is_group": bool(conversation.is_group),
+        "name": conversation.name,
+        "last_message": "Encrypted message" if last_message and last_message.nonce else (
+            (last_message.body[:120] if last_message and last_message.body else None)
+        ),
+        "last_message_at": last_message.created_at.isoformat() if last_message and last_message.created_at else None,
+        "unread_count": unread,
+        "e2ee_mode": conversation.e2ee_mode or "legacy",
+        "key_epoch": int(conversation.key_epoch or 0),
+    }
+
+def _get_chat_or_404(conversation_id, user_id):
+    conversation = db.session.get(Conversation, conversation_id)
+    if not conversation or not _active_participant(conversation_id, user_id):
+        return None
+    return conversation
+
+@app.get("/users/search")
+def search_chat_users():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error":"Not logged in"}),401
+    q=(request.args.get("q") or "").strip()
+    if len(q)<2:
+        return jsonify({"users":[]})
+    users=User.query.filter(
+        User.id != user_id,
+        User.is_suspended.is_(False),
+        User.profile_visibility == "public",
+        User.display_name.isnot(None),
+        User.display_name.ilike(f"%{q}%"),
+    ).order_by(User.display_name.asc()).limit(20).all()
+    return jsonify({"users":[{"id":u.id,"display_name":_display_name(u),
+        "year":u.year,"semester":u.semester} for u in users]})
+
+@app.get("/chats")
+def list_chats():
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    memberships=ConversationParticipant.query.filter_by(user_id=user_id,left_at=None).all()
+    ids=[m.conversation_id for m in memberships]
+    if not ids: return jsonify({"chats":[]})
+    conversations=Conversation.query.filter(
+        Conversation.id.in_(ids),
+        Conversation.status == "accepted",
+    ).order_by(Conversation.updated_at.desc(),Conversation.id.desc()).all()
+    return jsonify({"chats":[_serialize_chat_summary(c,user_id) for c in conversations]})
+
+@app.post("/chats")
+@require_csrf
+def create_chat():
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    data=request.get_json(silent=True) or {}
+    is_group=bool(data.get("is_group"))
+    try:
+        participant_ids=sorted({int(x) for x in (data.get("participant_ids") or [])})
+    except (TypeError,ValueError):
+        return jsonify({"error":"participant_ids must contain integers"}),400
+    participant_ids=[x for x in participant_ids if x != user_id]
+    if is_group:
+        name=(data.get("name") or "").strip()
+        if not name or len(name)>100: return jsonify({"error":"Group name is required and must be 100 characters or fewer"}),400
+        if not participant_ids: return jsonify({"error":"A group needs at least one other member"}),400
+        if len(participant_ids)+1>100: return jsonify({"error":"A group can have at most 100 members"}),400
+    else:
+        if len(participant_ids)!=1: return jsonify({"error":"A direct chat requires exactly one other participant"}),400
+        target= db.session.get(User,participant_ids[0])
+        if not target or target.is_suspended: return jsonify({"error":"Student not found"}),404
+        if target.who_can_message=="followers":
+            follows=Follow.query.filter_by(follower_id=user_id,followed_id=target.id).first()
+            if not follows: return jsonify({"error":"This student only accepts messages from followers"}),403
+        existing_rows=ConversationParticipant.query.filter_by(user_id=user_id,left_at=None).all()
+        for row in existing_rows:
+            conv=db.session.get(Conversation,row.conversation_id)
+            if conv and not conv.is_group:
+                other=_active_participant(conv.id,target.id)
+                if other:
+                    return jsonify({"id":conv.id,"reused":True}),200
+    if participant_ids:
+        users=User.query.filter(User.id.in_(participant_ids),User.is_suspended.is_(False)).all()
+        if len(users)!=len(participant_ids): return jsonify({"error":"One or more students are unavailable"}),404
+    conversation=Conversation(
+        is_group=is_group,name=(data.get("name") or "").strip() if is_group else None,
+        created_by=user_id,status="accepted",e2ee_mode="legacy",key_epoch=0,
+    )
+    db.session.add(conversation); db.session.flush()
+    db.session.add(ConversationParticipant(conversation_id=conversation.id,user_id=user_id,role="admin" if is_group else "member"))
+    for pid in participant_ids:
+        db.session.add(ConversationParticipant(conversation_id=conversation.id,user_id=pid,role="member"))
+    db.session.commit()
+    return jsonify({"id":conversation.id,"reused":False}),201
+
+@app.get("/chats/<int:conversation_id>")
+def get_chat(conversation_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    conversation=_get_chat_or_404(conversation_id,user_id)
+    if not conversation: return jsonify({"error":"Conversation not found"}),404
+    return jsonify(_serialize_conversation_detail(conversation,user_id))
+
+@app.get("/chats/<int:conversation_id>/messages")
+def list_chat_messages(conversation_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    conversation=_get_chat_or_404(conversation_id,user_id)
+    if not conversation: return jsonify({"error":"Conversation not found"}),404
+    query=Message.query.filter_by(conversation_id=conversation_id)
+    before_id=request.args.get("before_id",type=int)
+    if before_id: query=query.filter(Message.id<before_id)
+    messages=query.order_by(Message.created_at.desc(),Message.id.desc()).limit(CHAT_PAGE_SIZE).all()
+    messages.reverse()
+    return jsonify({"messages":[_serialize_chat_message(m) for m in messages]})
+
+@app.post("/chats/<int:conversation_id>/messages")
+@require_csrf
+def send_chat_message(conversation_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    conversation=_get_chat_or_404(conversation_id,user_id)
+    if not conversation: return jsonify({"error":"Conversation not found"}),404
+    data=request.get_json(silent=True) or {}
+    body=data.get("body")
+    nonce=data.get("nonce")
+    attachment_id=data.get("attachment_id")
+    if body is not None and not isinstance(body,str): return jsonify({"error":"body must be a string"}),400
+    body=(body or "").strip() if body else None
+    if body and len(body)>CHAT_MESSAGE_CIPHERTEXT_MAX: return jsonify({"error":"Message is too large"}),400
+    if nonce is not None and (not isinstance(nonce,str) or len(nonce)>64): return jsonify({"error":"Invalid message nonce"}),400
+    if not body and not attachment_id: return jsonify({"error":"Message body or attachment is required"}),400
+    if conversation.e2ee_mode=="group_v1" and body and not nonce:
+        return jsonify({"error":"Encrypted group messages require a nonce"}),409
+    attachment=None
+    if attachment_id is not None:
+        attachment=db.session.get(MessageAttachment,int(attachment_id))
+        if not attachment or attachment.conversation_id!=conversation_id or attachment.uploaded_by_user_id!=user_id or attachment.status!="ready" or attachment.message_id is not None:
+            return jsonify({"error":"Attachment is unavailable"}),400
+    message=Message(conversation_id=conversation_id,sender_id=user_id,body=body,nonce=nonce,
+                    e2ee_key_epoch=int(conversation.key_epoch or 0) if conversation.e2ee_mode=="group_v1" else 0)
+    db.session.add(message); db.session.flush()
+    if attachment:
+        attachment.message_id=message.id
+    conversation.updated_at=datetime.utcnow()
+    db.session.commit()
+    return jsonify(_serialize_chat_message(message)),201
+
+@app.post("/chats/<int:conversation_id>/read")
+@require_csrf
+def mark_chat_read(conversation_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    participant=_active_participant(conversation_id,user_id)
+    if not participant: return jsonify({"error":"Conversation not found"}),404
+    participant.last_read_at=datetime.utcnow()
+    db.session.commit()
+    return jsonify({"message":"Marked read"})
+
+@app.patch("/chats/<int:conversation_id>")
+@require_csrf
+def rename_chat(conversation_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    conversation=_get_chat_or_404(conversation_id,user_id)
+    if not conversation: return jsonify({"error":"Conversation not found"}),404
+    participant=_active_participant(conversation_id,user_id)
+    if not conversation.is_group or (participant.role!="admin" and conversation.created_by!=user_id):
+        return jsonify({"error":"Only group admins can rename a group"}),403
+    name=(request.get_json(silent=True) or {}).get("name","").strip()
+    if not name or len(name)>100: return jsonify({"error":"Invalid group name"}),400
+    conversation.name=name; conversation.updated_at=datetime.utcnow(); db.session.commit()
+    return jsonify({"id":conversation.id,"name":conversation.name})
+
+@app.post("/chats/<int:conversation_id>/leave")
+@require_csrf
+def leave_chat(conversation_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    conversation=_get_chat_or_404(conversation_id,user_id)
+    if not conversation: return jsonify({"error":"Conversation not found"}),404
+    if not conversation.is_group: return jsonify({"error":"Direct chats cannot be left"}),400
+    participant=_active_participant(conversation_id,user_id)
+    if participant.role=="admin":
+        admins=ConversationParticipant.query.filter_by(conversation_id=conversation_id,role="admin",left_at=None).count()
+        if admins<=1: return jsonify({"error":"Promote another admin before leaving"}),400
+    participant.left_at=datetime.utcnow()
+    conversation.updated_at=datetime.utcnow(); db.session.commit()
+    return jsonify({"message":"Left group"})
+
+@app.patch("/chats/<int:conversation_id>/messages/<int:message_id>")
+@require_csrf
+def edit_chat_message(conversation_id,message_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    conversation=_get_chat_or_404(conversation_id,user_id)
+    message=db.session.get(Message,message_id) if conversation else None
+    if not message or message.conversation_id!=conversation_id or message.sender_id!=user_id or message.is_deleted:
+        return jsonify({"error":"Message not found"}),404
+    body=(request.get_json(silent=True) or {}).get("body")
+    if not isinstance(body,str) or not body.strip() or len(body)>CHAT_MESSAGE_CIPHERTEXT_MAX: return jsonify({"error":"Invalid message body"}),400
+    message.body=body.strip()
+    message.edited_at=datetime.utcnow()
+    if conversation.e2ee_mode=="group_v1":
+        nonce=(request.get_json(silent=True) or {}).get("nonce")
+        if not nonce: return jsonify({"error":"Encrypted group edits require a nonce"}),409
+        message.nonce=nonce; message.e2ee_key_epoch=int(conversation.key_epoch or 0)
+    db.session.commit()
+    return jsonify(_serialize_chat_message(message))
+
+@app.delete("/chats/<int:conversation_id>/messages/<int:message_id>")
+@require_csrf
+def delete_chat_message(conversation_id,message_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    conversation=_get_chat_or_404(conversation_id,user_id)
+    message=db.session.get(Message,message_id) if conversation else None
+    if not message or message.conversation_id!=conversation_id or message.sender_id!=user_id:
+        return jsonify({"error":"Message not found"}),404
+    message.is_deleted=True; message.body=None; message.nonce=None; message.edited_at=datetime.utcnow()
+    db.session.commit()
+    return jsonify({"message":"Deleted"})
+
+@app.get("/chats/<int:conversation_id>/messages/search")
+def search_chat_messages(conversation_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    conversation=_get_chat_or_404(conversation_id,user_id)
+    if not conversation: return jsonify({"error":"Conversation not found"}),404
+    if conversation.e2ee_mode=="group_v1":
+        return jsonify({"messages":[],"search_disabled":True})
+    q=(request.args.get("q") or "").strip()
+    if not q: return jsonify({"messages":[]})
+    messages=Message.query.filter(
+        Message.conversation_id==conversation_id,Message.is_deleted.is_(False),Message.body.ilike(f"%{q}%")
+    ).order_by(Message.created_at.desc()).limit(50).all()
+    return jsonify({"messages":[_serialize_chat_message(m) for m in messages]})
+
+@app.post("/chats/<int:conversation_id>/attachments")
+@require_csrf
+def create_chat_attachment(conversation_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    if not _get_chat_or_404(conversation_id,user_id): return jsonify({"error":"Conversation not found"}),404
+    data=request.get_json(silent=True) or {}
+    filename=(data.get("original_filename") or "").strip()
+    try: size=int(data.get("file_size_bytes"))
+    except (TypeError,ValueError): return jsonify({"error":"file_size_bytes is required"}),400
+    if not filename or len(filename)>255 or size<=0 or size>CHAT_ATTACHMENT_MAX_BYTES:
+        return jsonify({"error":"Invalid attachment"}),400
+    ext=(filename.rsplit(".",1)[-1].lower() if "." in filename else "bin")
+    if not re.fullmatch(r"[a-z0-9]{1,10}",ext): ext="bin"
+    path=f"chat/{user_id}/{secrets.token_urlsafe(18)}.{ext}"
+    upload_url=create_signed_upload_url("documents",path)
+    if not upload_url: return jsonify({"error":"Could not prepare secure upload"}),503
+    file_type=(data.get("file_type") or "application/octet-stream").strip()[:20]
+    attachment=MessageAttachment(conversation_id=conversation_id,uploaded_by_user_id=user_id,
+        storage_path=path,file_type=file_type,original_filename=filename,file_size_bytes=size,status="uploading")
+    db.session.add(attachment); db.session.commit()
+    return jsonify({"attachment_id":attachment.id,"upload_url":upload_url}),201
+
+@app.post("/chats/<int:conversation_id>/attachments/<int:attachment_id>/uploaded")
+@require_csrf
+def confirm_chat_attachment(conversation_id,attachment_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    attachment=db.session.get(MessageAttachment,attachment_id)
+    if not attachment or attachment.conversation_id!=conversation_id or attachment.uploaded_by_user_id!=user_id:
+        return jsonify({"error":"Attachment not found"}),404
+    if attachment.status!="uploading" or attachment.message_id is not None:
+        return jsonify({"error":"Attachment is no longer uploadable"}),409
+    if not storage_object_exists("documents",attachment.storage_path):
+        attachment.status="failed"; db.session.commit()
+        return jsonify({"error":"Uploaded file was not found in secure storage"}),400
+    attachment.status="ready"; db.session.commit()
+    return jsonify({"attachment_id":attachment.id,"status":"ready"}),200
+
+# Register the split chat modules only after the base models/helpers/routes
+# above exist. They add group membership management, E2EE key envelopes,
+# and read-receipt/message metadata hooks without circular imports.
+try:
+    from e2ee_chat_models import create_e2ee_models
+    ConversationKeyEnvelope = create_e2ee_models(db)
+    from e2ee_chat_routes import register_e2ee_chat_routes
+    register_e2ee_chat_routes(app,db,Conversation,ConversationParticipant,User,ConversationKeyEnvelope)
+    import chat_group_routes  # noqa: F401 - decorator registration
+    import chat_interactions  # noqa: F401 - before/after hook registration
+except Exception as exc:
+    app.logger.exception("Chat runtime registration failed: %s", exc)
