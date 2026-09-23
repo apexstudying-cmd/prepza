@@ -107,6 +107,33 @@ def register_b2b_organisation_portal(app, db):
         """),{"i":cid}).mappings().all()
         return jsonify({"campaign":dict(c),"daily":[dict(x) for x in daily]})
 
+    @app.get("/opportunities")
+    def public_opportunity_feed_capped():
+        uid=session.get("user_id")
+        if not uid:return jsonify({"error":"Not logged in"}),401
+        q=(request.args.get("q") or "").strip()
+        typ=request.args.get("opportunity_type")
+        remote=request.args.get("is_remote")
+        page=max(1,int(request.args.get("page",1) or 1))
+        params={"now":datetime.utcnow()}
+        filters=["o.status='published'","o.expiry_date>:now","org.verification_status='verified'","org.is_active=TRUE",
+                 "(o.organic_free_cap_reached_at IS NULL OR EXISTS (SELECT 1 FROM discovery_campaign dc WHERE dc.opportunity_id=o.id AND dc.status='active'))"]
+        if q:filters.append("o.title ILIKE :q");params["q"]="%"+q+"%"
+        if typ:filters.append("o.opportunity_type=:typ");params["typ"]=typ
+        if remote in ("true","false"):filters.append("o.is_remote=:remote");params["remote"]=remote=="true"
+        rows=db.session.execute(text("""SELECT o.id,o.title,o.description,o.opportunity_type,o.location,o.is_remote,o.application_url,
+          o.application_instructions,o.application_deadline,o.expiry_date,o.published_at,o.view_count,
+          org.id organisation_id,org.name organisation_name,org.logo_url,org.website,
+          CASE WHEN EXISTS(SELECT 1 FROM discovery_campaign dc WHERE dc.opportunity_id=o.id AND dc.status='active') THEN 'sponsored' ELSE NULL END promotion_type
+          FROM opportunity o JOIN organisation org ON org.id=o.organisation_id WHERE """+" AND ".join(filters)+
+          " ORDER BY CASE WHEN EXISTS(SELECT 1 FROM discovery_campaign dc WHERE dc.opportunity_id=o.id AND dc.status='active') THEN 0 ELSE 1 END,o.created_at DESC LIMIT 20 OFFSET :off"),
+          {**params,"off":(page-1)*20}).mappings().all()
+        return jsonify({"page":page,"opportunities":[{"id":r["id"],"title":r["title"],"description":r["description"],"opportunity_type":r["opportunity_type"],"location":r["location"],"is_remote":r["is_remote"],"application_url":r["application_url"],"application_instructions":r["application_instructions"],"application_deadline":r["application_deadline"].isoformat() if r["application_deadline"] else None,"expiry_date":r["expiry_date"].isoformat() if r["expiry_date"] else None,"published_at":r["published_at"].isoformat() if r["published_at"] else None,"view_count":r["view_count"],"organisation":{"id":r["organisation_id"],"name":r["organisation_name"],"logo_url":r["logo_url"],"website":r["website"]},"promotion_type":r["promotion_type"]} for r in rows]})
+
+    @app.get("/opportunities/<int:opportunity_id>")
+    def public_opportunity_detail_capped(opportunity_id):
+        return record_organic_view(opportunity_id)
+
     @app.post("/api/opportunities/<int:opp_id>/organic-view")
     def record_organic_view(opp_id):
         uid=session.get("user_id")
