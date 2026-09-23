@@ -1,8 +1,9 @@
 import { decryptGroupMessage, encryptGroupMessage, type GroupKeyEnvelope } from './group'
 import { openGroupE2EESession, type GroupE2EEState } from './groupSession'
-import { exportPublicKeyBase64Url, getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'\nimport { deriveDirectChatKey } from './direct'
+import { exportPublicKeyBase64Url, getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'
+import { deriveDirectChatKey } from './direct'
 
-let identityReadyPromise: Promise<void> | null = null
+let identityReadyPromise: Promise<number> | null = null
 
 async function jsonFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { credentials: 'include', ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } })
