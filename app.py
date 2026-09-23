@@ -62,10 +62,20 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 db = SQLAlchemy(app)
 from usage_billing import register_usage_billing
 register_usage_billing(app, db)
+from ai_economics import register_ai_economics
+register_ai_economics(app, db)
 from organisation_billing import register_organisation_billing
 register_organisation_billing(app, db)
 from discovery_billing import register_discovery
 register_discovery(app, db)
+from b2b_campaign_finance import register_b2b_campaign_finance
+register_b2b_campaign_finance(app, db)
+from b2b_admin_routes import register_b2b_admin_routes
+register_b2b_admin_routes(app, db)
+from b2b_campaign_payments import register_b2b_campaign_payments
+register_b2b_campaign_payments(app, db)
+from b2b_organisation_portal import register_b2b_organisation_portal
+register_b2b_organisation_portal(app, db)
 
 # Offline chat retries need a server-side idempotency record. The client keeps
 # one stable UUID for a queued send; this table lets a retry return the
@@ -271,12 +281,14 @@ class Payment(db.Model):
 
     # 'content' (one-off document/item purchase) or 'subscription' (plan purchase)
     payment_type = db.Column(db.String(20), nullable=False, default="content")
-    plan = db.Column(db.String(20), nullable=True)  # 'semester' | 'annual' - subscription only
+    plan = db.Column(db.String(20), nullable=True)  # 'plus' | 'pro' - subscription only
+    subscription_starts_at = db.Column(db.DateTime, nullable=True)  # subscription entitlement period start
     subscription_expires_at = db.Column(db.DateTime, nullable=True)  # subscription only
+    # Immutable feature allowance snapshot for refund/accounting calculations.
+    subscription_allowance_snapshot = db.Column(db.JSON, nullable=True)
     # Organisation promotion billing. Nullable so existing student/content/subscription
     # payments remain unchanged.
     organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id"), nullable=True)
-    opportunity_promotion_id = db.Column(db.Integer, db.ForeignKey("opportunity_promotion.id"), nullable=True)
 
 
 class SystemSetting(db.Model):
@@ -407,19 +419,18 @@ def get_generated_material_for_user(document_content_id, material_type, user_id)
         document_content_id=document_content_id, material_type=material_type, status="ready", generation_version="v2"
     )
     if owned:
-        approved = (
-            db.session.query(LibraryPublication.id)
-            .filter(
-                LibraryPublication.document_id == owned.id,
-                LibraryPublication.status == "approved",
-            )
-            .first()
-        )
-        if approved:
-            return query.filter(GeneratedMaterial.scope == "shared").first()
+        # An owner can replay both their own private generations and any
+        # shared/published generation. Publishing a document must never make
+        # the student's previously generated private material disappear.
         return query.filter(
-            GeneratedMaterial.scope == "private", GeneratedMaterial.owner_user_id == user_id
-        ).first()
+            db.or_(
+                GeneratedMaterial.scope == "shared",
+                db.and_(
+                    GeneratedMaterial.scope == "private",
+                    GeneratedMaterial.owner_user_id == user_id,
+                ),
+            )
+        ).order_by(GeneratedMaterial.updated_at.desc()).first()
 
     public = (
         db.session.query(LibraryPublication.id)
@@ -433,14 +444,16 @@ def get_generated_material_for_user(document_content_id, material_type, user_id)
 
 
 def _resolve_material_generation(feature, content, user_id, parameters):
-    generator = {
-        "summary": ai_service.generate_document_summary,
-        "quiz": ai_service.generate_document_quiz,
-        "flashcards": ai_service.generate_document_flashcards,
-        "podcast": ai_service.generate_document_podcast_script,
-        "mind_map": ai_service.generate_document_mindmap,
-    }[feature]
-    return generator(
+    """Resolve generation through the reusable fingerprinted path.
+
+    This is deliberately the same path used by async jobs so the requested
+    configuration, variant, quota reservation, artifact identity, and
+    privacy scope cannot diverge between sync and async generation.
+    """
+    from ai_reusable_generation import generate_document_material
+
+    return generate_document_material(
+        material_type=feature,
         document_content_id=content.id,
         triggering_user_id=user_id,
         plan_tier=get_ai_plan_tier(user_id),
@@ -449,10 +462,14 @@ def _resolve_material_generation(feature, content, user_id, parameters):
 
 
 def _start_async_material_generation(document_content_id, user_id, feature, parameters):
-    """Create a user-visible generation job and run the existing generator off-request."""
+    """Create a user-visible job and run the exact requested generation off-request."""
+    if not isinstance(parameters, dict):
+        raise ValueError("AI generation parameters must be an object")
     job = AiJob(
         document_content_id=document_content_id,
+        user_id=user_id,
         feature=feature,
+        generation_parameters=dict(parameters),
         status="processing",
         progress_percent=5,
         progress_stage="queued",
@@ -470,21 +487,17 @@ def _start_async_material_generation(document_content_id, user_id, feature, para
                 local_job.progress_percent = 12
                 local_job.progress_stage = "preparing"
                 db.session.commit()
-                generator = {
-                    "summary": ai_service.generate_document_summary,
-                    "quiz": ai_service.generate_document_quiz,
-                    "flashcards": ai_service.generate_document_flashcards,
-                    "podcast": ai_service.generate_document_podcast_script,
-                    "mind_map": ai_service.generate_document_mindmap,
-                }[feature]
+                from ai_reusable_generation import generate_document_material
+                requested_parameters = dict(local_job.generation_parameters or {})
                 local_job.progress_percent = 20
                 local_job.progress_stage = "generating with AI"
                 db.session.commit()
-                result = generator(
+                result = generate_document_material(
+                    material_type=feature,
                     document_content_id=document_content_id,
                     triggering_user_id=user_id,
                     plan_tier=get_ai_plan_tier(user_id),
-                    parameters=parameters,
+                    parameters=requested_parameters,
                 )
                 local_job.material_id = result.get("material_id")
                 local_job.progress_percent = 92
@@ -561,6 +574,8 @@ class AiJob(db.Model):
     """
     id = db.Column(db.Integer, primary_key=True)
     document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=False)
+    # Nullable for legacy text-extraction jobs; required on all student generation jobs.
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
     feature = db.Column(db.String(30), nullable=False)
     # text_extraction | summary | quiz | flashcards | podcast | podcast_audio | mind_map
     status = db.Column(db.String(20), nullable=False, default="pending")
@@ -574,6 +589,10 @@ class AiJob(db.Model):
     material_id = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     batch_id = db.Column(db.String(100), nullable=True)
+    # Immutable request configuration used by the generation worker. Keeping
+    # it on the job makes the requested generation auditable and prevents a
+    # future retry worker from reconstructing a different request.
+    generation_parameters = db.Column(db.JSON, nullable=False, default=dict)
     # Notification row to finalize when a background generation completes.
     notification_id = db.Column(db.Integer, db.ForeignKey("notification.id"), nullable=True)
     # Anthropic Message Batch id, when this job's AI call(s) went through
@@ -1666,37 +1685,6 @@ class Opportunity(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-OPPORTUNITY_PROMOTION_TYPES = ("standard", "featured", "sponsored")
-OPPORTUNITY_PROMOTION_APPROVAL_STATUSES = ("pending", "approved", "rejected")
-OPPORTUNITY_PROMOTION_PAYMENT_STATUSES = ("unpaid", "pending", "paid", "refunded")
-
-
-class OpportunityPromotion(db.Model):
-    """
-    One promotion campaign for an Opportunity. Deliberately separate
-    from Opportunity itself (rather than fields on it) since an org can
-    run more than one promotion over an opportunity's lifetime, each
-    with its own window/price/approval. price is a snapshot captured at
-    creation time from admin-configurable SystemSetting pricing (same
-    pattern as get_content_prices()) - NOT hard-coded here. Actual
-    payment collection/webhook wiring belongs to the Payments chunk;
-    payment_status exists now so that schema is ready for it.
-    """
-    id = db.Column(db.Integer, primary_key=True)
-    opportunity_id = db.Column(db.Integer, db.ForeignKey("opportunity.id", ondelete="CASCADE"), nullable=False)
-    organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id"), nullable=False)
-    # denormalized for admin filtering, per the MVP spec's stored-fields list
-    promotion_type = db.Column(db.String(20), nullable=False)
-    start_date = db.Column(db.DateTime, nullable=False)
-    end_date = db.Column(db.DateTime, nullable=False)
-    price = db.Column(db.Integer, nullable=False, default=0)
-    payment_status = db.Column(db.String(20), nullable=False, default="unpaid")
-    approval_status = db.Column(db.String(20), nullable=False, default="pending")
-    reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    reviewed_at = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
 class Ambassador(db.Model):
     """
     A user's enrollment in the referral/ambassador program (Chunk 9).
@@ -1799,13 +1787,29 @@ class AmbassadorPayout(db.Model):
     paid_at = db.Column(db.DateTime, nullable=True)
 
 
+# ---------- Student orders / exact fulfillment ----------
+from student_orders import register_student_orders
+
+_student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
+
+
 # ---------- Paystack (Chunk 8, migrated from Pesapal) ----------
 # Docs: paystack.com/docs/payments/accept-payments /
 # paystack.com/docs/api/transaction. PAYSTACK_SECRET_KEY's own prefix
 # (sk_test_ vs sk_live_) determines sandbox vs live - unlike Pesapal,
 # Paystack has no separate base URL per environment.
 PAYSTACK_BASE_URL = "https://api.paystack.co"
-SUBSCRIPTION_PLAN_DURATIONS_DAYS = {"semester": 120, "annual": 365}
+SUBSCRIPTION_PLAN_DURATIONS_MONTHS = {"plus": 1, "pro": 1}
+
+def _add_subscription_month(value):
+    import calendar
+    year, month = value.year, value.month
+    if month == 12:
+        year, month = year + 1, 1
+    else:
+        month += 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
 
 
 def paystack_request(method, path, **kwargs):
@@ -1825,7 +1829,7 @@ def paystack_request(method, path, **kwargs):
     return data
 
 
-def create_paystack_transaction(reference, amount, description, user):
+def create_paystack_transaction(reference, amount, description, user, paystack_plan_code=None):
     """
     Initializes a Paystack transaction. amount is in whole KES (same unit
     the rest of this file uses) - Paystack expects the lowest currency
@@ -1844,6 +1848,22 @@ def create_paystack_transaction(reference, amount, description, user):
         "callback_url": f"{BASE_URL}/payment/paystack/callback",
         "metadata": {"description": description[:100]},
     }
+    # Passing a Paystack plan code turns the first checkout into a recurring
+    # subscription. Paystack's subscription plans are card-only in Kenya;
+    # M-PESA/Airtel Money remain available for non-recurring checkout flows.
+    if paystack_plan_code:
+        plan_result = paystack_request("GET", f"/plan/{paystack_plan_code}")
+        paystack_plan = plan_result.get("data") or {}
+        expected_amount = int(amount) * 100
+        actual_amount = int(paystack_plan.get("amount") or 0)
+        interval = str(paystack_plan.get("interval") or "").lower()
+        currency = str(paystack_plan.get("currency") or "").upper()
+        if actual_amount != expected_amount or interval != "monthly" or currency != "KES":
+            raise RuntimeError(
+                "Paystack recurring plan does not exactly match Prepza's configured "
+                "price, monthly interval, and KES currency"
+            )
+        payload["plan"] = paystack_plan_code
     data = paystack_request("POST", "/transaction/initialize", json=payload)
     tx = data.get("data") or {}
     authorization_url = tx.get("authorization_url")
@@ -1854,22 +1874,11 @@ def create_paystack_transaction(reference, amount, description, user):
 
 
 def get_plan_prices():
-    keys = ("price_plan_semester", "price_plan_annual")
-    settings = {
-        s.key: s.value
-        for s in SystemSetting.query.filter(SystemSetting.key.in_(keys)).all()
-    }
-
-    def parse(key, default):
-        try:
-            return int(settings.get(key) or default)
-        except (TypeError, ValueError):
-            return default
-
-    return {
-        "semester": parse("price_plan_semester", 599),
-        "annual": parse("price_plan_annual", 999),
-    }
+    """Return canonical monthly student subscription prices."""
+    from ai_economics import get_plan
+    plus = get_plan(db, "plus") or {}
+    pro = get_plan(db, "pro") or {}
+    return {"plus": int(plus.get("price_kes", 499)), "pro": int(pro.get("price_kes", 999))}
 
 
 # ---------- Ambassador / Referral program (Chunk 9) ----------
@@ -2026,28 +2035,88 @@ def _maybe_award_referral_commission(payment):
 
 def get_user_subscription_status(user_id):
     """
-    A user's plan is derived from their most recent successful subscription
-    Payment row rather than a separate table - mirrors how content access
-    already works off the Payment table.
+    Return the paid subscription period that contains *now*.
+
+    A payment may be paid today but represent a future stacked period (for
+    example, buying Pro while an existing Plus period still has 20 days
+    remaining). Future paid periods must not grant their plan early.
     """
+    now = datetime.utcnow()
     latest = (
-        Payment.query.filter(
+        Payment.query
+        .filter(
             Payment.user_id == user_id,
             Payment.payment_type == "subscription",
             Payment.status == "success",
+            Payment.subscription_starts_at.isnot(None),
             Payment.subscription_expires_at.isnot(None),
+            Payment.subscription_starts_at <= now,
+            Payment.subscription_expires_at > now,
+            text("""
+                payment.id IN (
+                    SELECT so.payment_id
+                    FROM student_order AS so
+                    WHERE so.user_id = :subscription_user_id
+                      AND so.order_type = 'subscription'
+                      AND so.status = 'fulfilled'
+                      AND so.plan = payment.plan
+                      AND so.item_id IS NULL
+                      AND so.quantity = 1
+                      AND so.currency = 'KES'
+                )
+            """),
         )
-        .order_by(Payment.subscription_expires_at.desc())
+        .params(subscription_user_id=user_id)
+        .order_by(Payment.subscription_starts_at.desc(), Payment.id.desc())
         .first()
     )
     if not latest:
-        return {"plan": "free", "is_active": False, "expires_at": None}
+        return {
+            "plan": "free", "is_active": False, "expires_at": None,
+            "starts_at": None, "cancel_at_period_end": False, "recurring": False,
+        }
 
-    is_active = latest.subscription_expires_at > datetime.utcnow()
+    recurring = db.session.execute(text("""
+        SELECT cancel_at_period_end
+        FROM student_subscription
+        WHERE user_id=:uid AND plan=:plan
+        ORDER BY id DESC LIMIT 1
+    """), {"uid": user_id, "plan": latest.plan}).scalar_one_or_none()
+    active_rows = db.session.execute(text("""
+        SELECT p.id, p.plan, p.subscription_starts_at, p.subscription_expires_at
+        FROM payment p
+        JOIN student_order so ON so.payment_id = p.id
+        WHERE p.user_id=:uid
+          AND p.payment_type='subscription'
+          AND p.status='success'
+          AND p.subscription_starts_at <= CURRENT_TIMESTAMP
+          AND p.subscription_expires_at > CURRENT_TIMESTAMP
+          AND so.user_id=p.user_id
+          AND so.order_type='subscription'
+          AND so.status='fulfilled'
+          AND so.plan=p.plan
+          AND so.item_id IS NULL
+          AND so.quantity=1
+          AND so.currency='KES'
+        ORDER BY p.subscription_starts_at ASC, p.id ASC
+    """), {"uid": user_id}).mappings().all()
     return {
-        "plan": latest.plan if is_active else "free",
-        "is_active": is_active,
+        "plan": latest.plan,
+        "is_active": True,
+        "starts_at": latest.subscription_starts_at.isoformat(),
         "expires_at": latest.subscription_expires_at.isoformat(),
+        "cancel_at_period_end": bool(recurring),
+        "recurring": True,
+        "active_plans": [row["plan"] for row in active_rows],
+        "entitlements": [
+            {
+                "payment_id": int(row["id"]),
+                "plan": row["plan"],
+                "starts_at": row["subscription_starts_at"].isoformat(),
+                "expires_at": row["subscription_expires_at"].isoformat(),
+            }
+            for row in active_rows
+        ],
     }
 
 
@@ -2065,35 +2134,53 @@ def get_ai_plan_tier(user_id):
     return "premium" if status["is_active"] else "free"
 
 
+def _subscription_allowance_snapshot(plan):
+    row = db.session.execute(text("""
+        SELECT ada_monthly_units, ada_daily_units, podcast_minutes, summary_pages,
+               questions, mind_map_nodes, flashcards
+        FROM student_plan_config
+        WHERE plan_code=:plan AND is_active=TRUE
+    """), {"plan": plan}).mappings().first()
+    if not row:
+        return None
+    return {key: int(row[key] or 0) for key in (
+        "ada_monthly_units", "ada_daily_units", "podcast_minutes",
+        "summary_pages", "questions", "mind_map_nodes", "flashcards",
+    )}
+
+
+def compute_new_subscription_period(user_id, plan):
+    """
+    Return the independent 30-day/calendar-month entitlement period created
+    by THIS subscription payment.
+
+    Subscription purchases overlap. Example:
+      Plus paid Sep 10 -> Oct 10
+      Pro paid Sep 20 -> Oct 20
+
+    Pro therefore becomes the active plan immediately on Sep 20, while the
+    original Plus entitlement remains valid until Oct 10. From Sep 20-Oct 10
+    both purchased entitlements exist; after Oct 10 only Pro remains.
+
+    This is intentionally NOT Paystack's billing schedule. It is Prepza's
+    internal entitlement contract.
+    """
+    now = datetime.utcnow()
+    if plan not in SUBSCRIPTION_PLAN_DURATIONS_MONTHS:
+        return now, now
+    return now, _add_subscription_month(now)
+
+
 def compute_new_subscription_expiry(user_id, plan):
-    """Stacks on top of an unexpired plan rather than resetting it."""
-    duration_days = SUBSCRIPTION_PLAN_DURATIONS_DAYS.get(plan)
-    if not duration_days:
-        return datetime.utcnow()
-    current = get_user_subscription_status(user_id)
-    base = datetime.utcnow()
-    if current["is_active"] and current["expires_at"]:
-        current_expiry = datetime.fromisoformat(current["expires_at"])
-        if current_expiry > base:
-            base = current_expiry
-    return base + timedelta(days=duration_days)
+    """Compatibility wrapper returning only the new period's end."""
+    return compute_new_subscription_period(user_id, plan)[1]
 
 
 def recompute_subscription_expiries(user_id):
     """
-    Rebuilds subscription_expires_at for every remaining successful
-    subscription Payment a user has, replaying the same additive-stacking
-    logic compute_new_subscription_expiry() uses for a live purchase -
-    except here we're reconstructing history, not computing "now", so
-    each payment's own created_at (not utcnow()) is the stacking base.
-    Needed because admin_refund_payment() can refund an EARLIER payment
-    in a stack after LATER ones already had their expiry frozen assuming
-    the refunded days were real.
-
-    Call this AFTER flipping a subscription payment's status to
-    "refunded" (and before commit) so the remaining chain reflects the
-    correct history. No-op if the user has no remaining subscription
-    payments.
+    Rebuild each successful subscription payment as its own independent
+    entitlement period. Refunds must not extend or shorten another payment's
+    entitlement: overlapping purchases are separate periods.
     """
     remaining = (
         Payment.query.filter(
@@ -2101,20 +2188,16 @@ def recompute_subscription_expiries(user_id):
             Payment.payment_type == "subscription",
             Payment.status == "success",
         )
-        .order_by(Payment.created_at.asc())
+        .order_by(Payment.created_at.asc(), Payment.id.asc())
         .all()
     )
 
-    running_expiry = None
     for p in remaining:
-        duration_days = SUBSCRIPTION_PLAN_DURATIONS_DAYS.get(p.plan)
-        if not duration_days:
+        if p.plan not in SUBSCRIPTION_PLAN_DURATIONS_MONTHS:
             continue
         base = p.created_at or datetime.utcnow()
-        if running_expiry and running_expiry > base:
-            base = running_expiry
-        running_expiry = base + timedelta(days=duration_days)
-        p.subscription_expires_at = running_expiry
+        p.subscription_starts_at = base
+        p.subscription_expires_at = _add_subscription_month(base)
 
 
 def sync_paystack_payment_status(reference):
@@ -2125,7 +2208,14 @@ def sync_paystack_payment_status(reference):
     (best-effort, user is waiting) and the webhook (authoritative,
     server-to-server) - either can be first, both are safe to call.
     """
-    payment = Payment.query.filter_by(reference=reference).first()
+    # Serialize verification for a single payment. Callback + webhook can
+    # legitimately arrive at the same time; without a row lock both requests
+    # could observe "pending" and a subscription could be extended twice.
+    payment = (
+        Payment.query.filter_by(reference=reference)
+        .with_for_update()
+        .first()
+    )
     if not payment or payment.status != "pending":
         return payment
 
@@ -2136,27 +2226,56 @@ def sync_paystack_payment_status(reference):
 
     if tx_status == "success":
         paid_amount_kobo = tx.get("amount")
-        if paid_amount_kobo is not None and round(float(paid_amount_kobo) / 100) != payment.amount:
-            print(f"Paystack amount mismatch on payment {payment.id}: "
-                  f"expected {payment.amount}, got {paid_amount_kobo}")
-            payment.status = "failed"
+        paid_currency = (tx.get("currency") or "").upper()
+        amount_matches = (
+            paid_amount_kobo is not None
+            and int(paid_amount_kobo) == int(payment.amount) * 100
+        )
+        currency_matches = paid_currency == "KES"
+        if not amount_matches or not currency_matches:
+            print(
+                f"Paystack payment mismatch on payment {payment.id}: "
+                f"expected {payment.amount * 100} KES kobo, "
+                f"got {paid_amount_kobo} {paid_currency or 'UNKNOWN'}"
+            )
+            # Paystack has confirmed a successful charge, so preserve the
+            # successful money record even when the checkout snapshot does not
+            # match the provider amount/currency. Fulfillment remains blocked
+            # and the order is marked failed for reconciliation.
+            payment.status = "success"
+            _student_order_helpers["mark_failed"](payment.id)
         else:
             payment.status = "success"
-            if payment.payment_type == "promotion" and payment.opportunity_promotion_id:
-                promo = db.session.get(OpportunityPromotion, payment.opportunity_promotion_id)
-                if promo:
-                    promo.payment_status = "success"
-            if payment.payment_type == "subscription" and payment.plan:
-                payment.subscription_expires_at = compute_new_subscription_expiry(
-                    payment.user_id, payment.plan
-                )
-            _maybe_award_referral_commission(payment)
+            # Student subscriptions are only activated after the durable order
+            # ledger confirms that the payment matches the exact checkout
+            # snapshot. A successful provider transaction without a valid
+            # order must never grant plan access.
+            if payment.payment_type in ("subscription", "content"):
+                fulfilled = _student_order_helpers["mark_paid_and_fulfilled"](payment)
+                if not fulfilled:
+                    # Provider-successful money is never rewritten as a local
+                    # failure merely because fulfillment/reconciliation failed.
+                    # Keep the payment successful for accounting and refund/
+                    # chargeback handling; the order ledger records the
+                    # fulfillment failure separately.
+                    print(
+                        f"Payment {payment.id} succeeded at Paystack but "
+                        f"student-order fulfillment failed; manual reconciliation required"
+                    )
+                elif payment.payment_type == "subscription" and payment.plan:
+                    starts_at, expires_at = compute_new_subscription_period(
+                        payment.user_id, payment.plan
+                    )
+                    payment.subscription_starts_at = starts_at
+                    payment.subscription_expires_at = expires_at
+                    payment.subscription_allowance_snapshot = _subscription_allowance_snapshot(payment.plan)
+
+            if payment.status == "success":
+                _maybe_award_referral_commission(payment)
     elif tx_status in ("failed", "abandoned", "reversed"):
+        # A payment that definitively failed cannot fulfill the order.
+        _student_order_helpers["mark_failed"](payment.id)
         payment.status = "failed"
-        if payment.payment_type == "promotion" and payment.opportunity_promotion_id:
-            promo = db.session.get(OpportunityPromotion, payment.opportunity_promotion_id)
-            if promo and promo.payment_status != "success":
-                promo.payment_status = "failed"
     # else: still processing on Paystack's side, leave as pending
 
     db.session.commit()
@@ -2273,17 +2392,67 @@ def get_price_for_type(content_type):
     return get_content_prices().get(content_type, 0)
 
 
+def get_fulfilled_content_file_path(user_id, content_item_id):
+    """Return the immutable file path captured by the student's fulfilled order."""
+    row = db.session.execute(
+        text("""
+            SELECT item_file_url_snapshot
+            FROM student_order
+            WHERE user_id = :user_id
+              AND item_id = :item_id
+              AND order_type = 'content'
+              AND status = 'fulfilled'
+              AND quantity = 1
+              AND item_file_url_snapshot IS NOT NULL
+            ORDER BY fulfilled_at DESC NULLS LAST, id DESC
+            LIMIT 1
+        """),
+        {"user_id": user_id, "item_id": content_item_id},
+    ).mappings().first()
+    return row["item_file_url_snapshot"] if row else None
+
+
 def has_access(user_id, content_item):
     if get_price_for_type(content_item.content_type) == 0:
         return True
 
-    successful_payment = Payment.query.filter_by(
-        user_id=user_id,
-        content_item_id=content_item.id,
-        status="success",
-    ).first()
+    # Access is granted from the durable fulfilled-order ledger, not from
+    # whichever successful payment happens to be returned first. This matters
+    # when a student has multiple purchases for the same item and one older
+    # payment was reconciled/failed while a later purchase was fulfilled.
+    # Requiring the linked payment to still be successful also prevents a
+    # refunded purchase from retaining access.
+    order_row = db.session.execute(
+        text("""
+            SELECT so.status, so.user_id, so.item_id, so.payment_id,
+                   so.order_type, so.quantity
+            FROM student_order so
+            JOIN payment p ON p.id = so.payment_id
+            WHERE so.user_id = :user_id
+              AND so.item_id = :item_id
+              AND so.order_type = 'content'
+              AND so.status = 'fulfilled'
+              AND so.quantity = 1
+              AND p.user_id = so.user_id
+              AND p.content_item_id = so.item_id
+              AND p.payment_type = 'content'
+              AND p.status = 'success'
+            ORDER BY so.fulfilled_at DESC NULLS LAST, so.id DESC
+            LIMIT 1
+        """),
+        {"user_id": user_id, "item_id": content_item.id},
+    ).mappings().first()
 
-    return successful_payment is not None
+    # New entitlement flow: a successful payment without a durable fulfilled
+    # order is never enough to grant access.
+    return bool(
+        order_row
+        and order_row["status"] == "fulfilled"
+        and order_row["user_id"] == user_id
+        and order_row["item_id"] == content_item.id
+        and order_row["order_type"] == "content"
+        and int(order_row["quantity"] or 0) == 1
+    )
 
 
 def get_signed_url(bucket_path, expires_in=60, bucket="content"):
@@ -3392,19 +3561,25 @@ def payment_history():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
+    # Student billing is subscription-first. Individual content purchases are
+    # legacy and must not appear as current student transactions. Keep the
+    # endpoint ready for future usage/add-on payments without reviving content
+    # ownership as a product model.
     payments = (
-        Payment.query.filter_by(user_id=user_id)
+        Payment.query.filter(
+            Payment.user_id == user_id,
+            Payment.payment_type.in_(( "subscription", "addon" )),
+        )
         .order_by(Payment.created_at.desc())
         .all()
     )
 
     result = []
     for p in payments:
-        content_item = db.session.get(ContentItem, p.content_item_id) if p.content_item_id else None
         result.append({
             "id": p.id,
             "payment_type": p.payment_type,
-            "content_title": content_item.title if content_item else None,
+            "content_title": None,
             "plan": p.plan,
             "amount": p.amount,
             "status": p.status,
@@ -3700,9 +3875,28 @@ def get_document(document_id):
 
     materials = []
     if content:
-        material_query = GeneratedMaterial.query.filter_by(document_content_id=content.id)
-        if document.user_id != user_id:
-            material_query = material_query.filter_by(status="ready", scope="shared", owner_user_id=None)
+        material_query = GeneratedMaterial.query.filter_by(
+            document_content_id=content.id,
+            status="ready",
+            generation_version="v2",
+        )
+        if document.user_id == user_id:
+            # Never expose another student's private artifact just because
+            # DocumentContent is deduplicated across identical uploads.
+            material_query = material_query.filter(
+                db.or_(
+                    GeneratedMaterial.scope == "shared",
+                    db.and_(
+                        GeneratedMaterial.scope == "private",
+                        GeneratedMaterial.owner_user_id == user_id,
+                    ),
+                )
+            )
+        else:
+            material_query = material_query.filter(
+                GeneratedMaterial.scope == "shared",
+                GeneratedMaterial.owner_user_id.is_(None),
+            )
         materials = [
             {
                 "id": m.id,
@@ -3710,7 +3904,7 @@ def get_document(document_id):
                 "status": m.status,
                 "parameters": m.generation_parameters or {},
             }
-            for m in material_query.all()
+            for m in material_query.order_by(GeneratedMaterial.updated_at.desc()).all()
         ]
 
     return jsonify({
@@ -3727,6 +3921,43 @@ def get_document(document_id):
         "materials": materials,
         "created_at": document.created_at.isoformat() if document.created_at else None,
     })
+
+
+@app.route("/documents/<int:document_id>/materials/<int:material_id>", methods=["GET"])
+@login_required
+def get_generated_material(document_id, material_id):
+    """Return one exact ready artifact the current student is allowed to replay."""
+    user_id = session.get("user_id")
+    document = db.session.get(Document, document_id)
+    if not user_id or not _can_study_document(user_id, document):
+        return jsonify({"error": "Document not found"}), 404
+    if not document.document_content_id:
+        return jsonify({"error": "Document has no generated material"}), 404
+
+    material = db.session.get(GeneratedMaterial, material_id)
+    if not material or material.status != "ready" or not material.payload:
+        return jsonify({"error": "Study material not found"}), 404
+    if material.document_content_id != document.document_content_id:
+        return jsonify({"error": "Study material not found"}), 404
+
+    if material.scope == "private":
+        if material.owner_user_id != user_id or document.user_id != user_id:
+            return jsonify({"error": "Study material not found"}), 404
+    elif material.scope == "shared":
+        if material.owner_user_id is not None:
+            return jsonify({"error": "Study material not found"}), 404
+        if not _can_study_document(user_id, document):
+            return jsonify({"error": "Study material not found"}), 404
+    else:
+        return jsonify({"error": "Study material not found"}), 404
+
+    return jsonify({
+        "material_id": material.id,
+        "type": material.material_type,
+        "status": material.status,
+        "parameters": material.generation_parameters or {},
+        "payload": json.loads(material.payload),
+    }), 200
 
 
 def _approved_library_publication(document):
@@ -3993,7 +4224,7 @@ def _ai_generation_parameters_from_request():
 
 @app.route("/documents/<int:document_id>/summarize", methods=["POST"])
 @limiter.limit(
-    "20 per hour",
+    "200 per hour",
     key_func=lambda: f"summarize:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
@@ -4037,7 +4268,7 @@ def summarize_document(document_id):
 
 @app.route("/documents/<int:document_id>/quiz", methods=["POST"])
 @limiter.limit(
-    "20 per hour",
+    "200 per hour",
     key_func=lambda: f"quiz:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
@@ -4143,7 +4374,7 @@ def complete_quiz(document_id, material_id):
 
 @app.route("/documents/<int:document_id>/flashcards", methods=["POST"])
 @limiter.limit(
-    "20 per hour",
+    "200 per hour",
     key_func=lambda: f"flashcards:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
@@ -4303,7 +4534,7 @@ def generation_progress(document_id):
 
     job = (
         AiJob.query
-        .filter_by(document_content_id=document.document_content_id, feature=feature)
+        .filter_by(document_content_id=document.document_content_id, feature=feature, user_id=user_id)
         .order_by(AiJob.id.desc())
         .first()
     )
@@ -4328,7 +4559,7 @@ def generation_progress(document_id):
 
 @app.route("/documents/<int:document_id>/podcast-script", methods=["POST"])
 @limiter.limit(
-    "20 per hour",
+    "200 per hour",
     key_func=lambda: f"podcast-script:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
@@ -4566,7 +4797,7 @@ def list_podcasts():
 
 @app.route("/documents/<int:document_id>/mindmap", methods=["POST"])
 @limiter.limit(
-    "20 per hour",
+    "200 per hour",
     key_func=lambda: f"mindmap:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
@@ -4579,7 +4810,7 @@ def mindmap_document(document_id):
         return jsonify({"error": "Document not found"}), 404
     if not document.document_content_id:
         return jsonify({"error": "Document has no content to generate a mind map from"}), 400
-        if document.user_id != user_id:
+    if document.user_id != user_id:
         shared = _published_ready_material_for_viewer(user_id, document, "mind_map", _ai_generation_parameters_from_request())
         if not shared:
             return jsonify({"error": "Published mindmap has not been generated yet"}), 404
@@ -5098,6 +5329,17 @@ def save_library_item(publication_id):
     existing = SavedLibraryMaterial.query.filter_by(
         user_id=user_id, library_publication_id=publication_id
     ).first()
+    if not existing:
+        # Free students may save up to 3 Library documents. Plus/Pro get the
+        # premium Library entitlement. Enforce this server-side; never trust
+        # the frontend's plan display for an access decision.
+        subscription = get_user_subscription_status(user_id)
+        if not subscription["is_active"]:
+            saved_count = SavedLibraryMaterial.query.filter_by(user_id=user_id).count()
+            if saved_count >= 3:
+                return jsonify({
+                    "error": "Free plan Library limit reached. Upgrade to Plus or Pro for premium Library access."
+                }), 403
     if existing:
         # A legacy SavedLibraryMaterial row may predate the StudyHub-document
         # guarantee. In that case _ensure_studyhub_document_for_publication
@@ -5748,53 +5990,85 @@ def _get_or_create_streak(user_id):
     return streak
 
 
+def _refresh_streak_from_study_time(user_id, today=None):
+    """Rebuild the streak from the real 10-minute daily study threshold."""
+    today = today or datetime.utcnow().date()
+    rows = db.session.query(
+        StudyTimeLog.activity_date,
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0),
+    ).filter(
+        StudyTimeLog.user_id == user_id,
+        StudyTimeLog.activity_date <= today,
+    ).group_by(StudyTimeLog.activity_date).all()
+
+    qualifying_dates = {
+        activity_date for activity_date, seconds in rows
+        if int(seconds or 0) >= MIN_QUALIFYING_STUDY_SECONDS
+    }
+
+    streak = _get_or_create_streak(user_id)
+    current = 0
+    cursor = today
+    while cursor in qualifying_dates:
+        current += 1
+        cursor -= timedelta(days=1)
+
+    longest = 0
+    run = 0
+    previous = None
+    for activity_date in sorted(qualifying_dates):
+        if previous is not None and activity_date == previous + timedelta(days=1):
+            run += 1
+        else:
+            run = 1
+        longest = max(longest, run)
+        previous = activity_date
+
+    old_current = streak.current_streak
+    streak.current_streak = current
+    streak.longest_streak = max(streak.longest_streak, longest)
+    streak.last_study_date = max(qualifying_dates) if qualifying_dates else None
+
+    # Milestones are awarded only when a newly-qualified streak reaches the
+    # milestone. The XP ledger remains idempotent through its unique key.
+    if current != old_current:
+        milestone_xp = XP_STREAK_MILESTONES.get(current)
+        if milestone_xp:
+            award_xp(user_id, "streak_milestone", milestone_xp, related_id=current)
+
+    return streak
+
+
 def record_study_activity(user_id, document_content_id=None):
     """
-    Marks today as a study day for this user (and optionally this
-    document), updates the running streak, and awards any newly-crossed
-    streak milestone. Safe to call multiple times per day - the
-    StudyActivityLog unique constraint no-ops repeats for the same
-    (user, document, day), and the streak/milestone logic only advances
-    on the FIRST qualifying activity of a new calendar day.
-    Returns True if this was the first study activity logged today.
+    Records document activity only after the student has accumulated the
+    minimum 10 active study minutes today. Generation/completion alone can
+    never create a streak day.
     """
     today = datetime.utcnow().date()
+    total_seconds = db.session.query(
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+    ).filter(
+        StudyTimeLog.user_id == user_id,
+        StudyTimeLog.activity_date == today,
+    ).scalar() or 0
+    if int(total_seconds) < MIN_QUALIFYING_STUDY_SECONDS:
+        _refresh_streak_from_study_time(user_id, today)
+        return False
 
-    log_row = StudyActivityLog(user_id=user_id, document_content_id=document_content_id, activity_date=today)
+    log_row = StudyActivityLog(
+        user_id=user_id,
+        document_content_id=document_content_id,
+        activity_date=today,
+    )
     db.session.add(log_row)
     try:
         db.session.flush()
     except IntegrityError:
         db.session.rollback()
-        return False  # already logged this exact (user, document, day)
+        return False
 
-    # Was ANY activity already logged today (possibly for a different
-    # document, or with document_content_id=None)? If so, the streak
-    # itself was already advanced today - only the per-document XP cap
-    # above needed the fresh row.
-    already_active_today = StudyActivityLog.query.filter(
-        StudyActivityLog.user_id == user_id,
-        StudyActivityLog.activity_date == today,
-        StudyActivityLog.id != log_row.id,
-    ).first() is not None
-    if already_active_today:
-        return True
-
-    streak = _get_or_create_streak(user_id)
-    yesterday = today - timedelta(days=1)
-    if streak.last_study_date == yesterday:
-        streak.current_streak += 1
-    elif streak.last_study_date == today:
-        pass
-    else:
-        streak.current_streak = 1
-    streak.longest_streak = max(streak.longest_streak, streak.current_streak)
-    streak.last_study_date = today
-
-    milestone_xp = XP_STREAK_MILESTONES.get(streak.current_streak)
-    if milestone_xp:
-        award_xp(user_id, "streak_milestone", milestone_xp, related_id=streak.current_streak)
-
+    _refresh_streak_from_study_time(user_id, today)
     return True
 
 
@@ -5834,6 +6108,7 @@ def _document_study_event_id(user_id, document_content_id):
 
 MAX_HEARTBEAT_INTERVAL_SECONDS = 30
 MAX_STUDY_TIME_SECONDS_PER_DAY = 8 * 60 * 60  # anti-gaming ceiling, 8h/day
+MIN_QUALIFYING_STUDY_SECONDS = 10 * 60  # 10 cumulative active minutes/day
 
 
 def record_study_time_heartbeat(user_id, feature="reading"):
@@ -5946,7 +6221,7 @@ def gamification_summary():
         XpEvent.user_id == user_id
     ).scalar()
     level_info = get_level_info(xp_total)
-    streak = _get_or_create_streak(user_id)
+    streak = _refresh_streak_from_study_time(user_id)
     db.session.commit()  # persist a lazily-created StudyStreak row, if any
 
     documents_count = Document.query.filter_by(user_id=user_id, is_removed=False).count()
@@ -6036,10 +6311,9 @@ def streak_detail():
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    streak = _get_or_create_streak(user_id)
-    db.session.commit()
-
     today = datetime.utcnow().date()
+    streak = _refresh_streak_from_study_time(user_id, today)
+    db.session.commit()
 
     month_param = request.args.get("month")
     view_first_day = None
@@ -6178,23 +6452,35 @@ def study_time_heartbeat():
     ).scalar() or 0)
 
     credited_this_heartbeat = max(0, after_feature_seconds - before_feature_seconds)
-    # A visible session must accumulate at least one minute before it can
-    # create/renew a study day. This prevents opening the app/document from
-    # immediately starting a streak.
-    if credited_this_heartbeat > 0 and document_content_id is not None:
-        today = datetime.utcnow().date()
+    # A study day requires 10 cumulative active minutes across all study
+    # features. Opening a document or completing a generation is not enough.
+    feature_session_seconds = after_feature_seconds
+    today = datetime.utcnow().date()
+    total_today = int(db.session.query(
+        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
+    ).filter(
+        StudyTimeLog.user_id == user_id,
+        StudyTimeLog.activity_date == today,
+    ).scalar() or 0)
+    study_day_active = total_today >= MIN_QUALIFYING_STUDY_SECONDS
+
+    if credited_this_heartbeat > 0 and document_content_id is not None and study_day_active:
         existing = StudyActivityLog.query.filter_by(
             user_id=user_id, document_content_id=document_content_id, activity_date=today,
         ).first()
-        feature_session_seconds = after_feature_seconds
-        if existing is None and feature_session_seconds >= 60:
+        if existing is None:
             record_study_activity(user_id, document_content_id=document_content_id)
+    else:
+        # Also clears a stale streak immediately after a missed day once the
+        # student next interacts with the study-time system.
+        _refresh_streak_from_study_time(user_id, today)
 
     db.session.commit()
     return jsonify({
-        "study_time_seconds_today": seconds_today,
+        "study_time_seconds_today": total_today,
         "credited_this_heartbeat": credited_this_heartbeat,
-        "study_day_active": bool(document_content_id is not None and feature_session_seconds >= 60) if 'feature_session_seconds' in locals() else False,
+        "qualifying_study_seconds": MIN_QUALIFYING_STUDY_SECONDS,
+        "study_day_active": study_day_active,
     })
 
 
@@ -8029,16 +8315,33 @@ def _display_name(user):
 
 @app.route("/library/my-purchases")
 def my_library():
+    # Legacy endpoint retained for compatibility with old clients only.
+    # Current Library access is subscription/plan based and does not create
+    # per-content ownership records.
+    return jsonify({
+        "error": "Individual content purchases are no longer part of Prepza."
+    }), 410
+
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    payments = Payment.query.filter_by(user_id=user_id, status="success").all()
-    unlocked_at = {}
-    for p in payments:
-        existing = unlocked_at.get(p.content_item_id)
-        if existing is None or (p.created_at and p.created_at > existing):
-            unlocked_at[p.content_item_id] = p.created_at
+    # Only fulfilled order-ledger purchases are eligible for the paid
+    # library. Do not build the entitlement set from Payment rows alone.
+    fulfilled_orders = db.session.execute(
+        text("""
+            SELECT item_id, MAX(COALESCE(fulfilled_at, paid_at, created_at)) AS unlocked_at
+            FROM student_order
+            WHERE user_id = :user_id
+              AND order_type = 'content'
+              AND status = 'fulfilled'
+              AND quantity = 1
+              AND item_id IS NOT NULL
+            GROUP BY item_id
+        """),
+        {"user_id": user_id},
+    ).mappings().all()
+    unlocked_at = {row["item_id"]: row["unlocked_at"] for row in fulfilled_orders}
 
     items = ContentItem.query.all()
     grouped = {"past_paper": [], "notes": [], "qna": []}
@@ -8053,7 +8356,10 @@ def my_library():
             "paper_year": item.paper_year,
             "unit_id": item.unit_id,
             "unit_code": unit.code if unit else None,
-            "file_url": get_signed_url(item.file_url) if item.is_downloadable else None,
+            "file_url": (
+                get_signed_url(get_fulfilled_content_file_path(user_id, item.id))
+                if item.is_downloadable else None
+            ),
             "unlocked_at": item_unlocked_at.isoformat() if item_unlocked_at else None,
         })
 
@@ -8085,7 +8391,11 @@ def content_view_info(content_id):
     if not has_access(user_id, content_item):
         return jsonify({"error": "You don't have access to this content"}), 403
 
-    pdf_bytes = fetch_private_file_bytes(content_item.file_url)
+    purchased_file_path = get_fulfilled_content_file_path(user_id, content_item.id)
+    if not purchased_file_path:
+        return jsonify({"error": "Purchased file is unavailable"}), 404
+
+    pdf_bytes = fetch_private_file_bytes(purchased_file_path)
     if pdf_bytes is None:
         return jsonify({"error": "Content file could not be loaded"}), 500
 
@@ -8136,7 +8446,11 @@ def content_view_page(content_id, page_num):
     user = db.session.get(User, user_id)
     watermark_text = user.email
 
-    pdf_bytes = fetch_private_file_bytes(content_item.file_url)
+    purchased_file_path = get_fulfilled_content_file_path(user_id, content_item.id)
+    if not purchased_file_path:
+        return jsonify({"error": "Purchased file is unavailable"}), 404
+
+    pdf_bytes = fetch_private_file_bytes(purchased_file_path)
     if pdf_bytes is None:
         return jsonify({"error": "Content file could not be loaded"}), 500
 
@@ -8200,55 +8514,13 @@ def content_view_progress(content_id):
 )
 @require_csrf
 def pay_for_content(content_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    content_item = db.session.get(ContentItem, content_id)
-    if not content_item:
-        return jsonify({"error": "Content not found"}), 404
-
-    price = get_price_for_type(content_item.content_type)
-    if price == 0:
-        return jsonify({"error": "This content is free, no payment needed"}), 400
-
-    if has_access(user_id, content_item):
-        return jsonify({"message": "You already have access to this content"}), 200
-
-    user = db.session.get(User, user_id)
-    data = request.get_json(silent=True) or {}
-    phone_number = data.get("phone_number")  # optional - Paystack collects payment details itself
-    reference = f"PZA-content-{content_id}-{secrets.token_hex(6)}"
-
-    try:
-        provider_reference, authorization_url = create_paystack_transaction(
-            reference, price, f"Prepza - {content_item.title}", user
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
-
-    payment = Payment(
-        user_id=user_id,
-        content_item_id=content_id,
-        phone_number=phone_number,
-        amount=price,
-        provider="paystack",
-        reference=reference,
-        provider_reference=provider_reference,
-        payment_type="content",
-        status="pending",
-    )
-    db.session.add(payment)
-    db.session.commit()
-
+    # Kept as an explicit tombstone so stale clients cannot accidentally
+    # create individual content purchases. Content remains Library/learning
+    # infrastructure; student monetization is subscriptions plus future
+    # usage/add-on credits.
     return jsonify({
-        # Field kept as "redirect_url" (aliasing Paystack's own
-        # "authorization_url") so the existing frontend payment flow
-        # doesn't need a parallel change just for a field rename.
-        "redirect_url": authorization_url,
-        "reference": reference,
-    })
-
+        "error": "Individual content purchases are no longer available. Choose a Prepza subscription."
+    }), 410
 
 @app.route("/payment/paystack/callback")
 def paystack_callback():
@@ -8300,9 +8572,29 @@ def paystack_webhook():
 
     if event == "charge.success" and reference:
         try:
-            sync_paystack_payment_status(reference)
+            payment = sync_paystack_payment_status(reference)
+            if payment is None:
+                _student_subscription_billing["recurring_charge"](db, payload)
         except Exception as e:
             print("Paystack webhook sync error:", str(e))
+            return jsonify({"status": "error"}), 500
+    elif event == "subscription.create":
+        try:
+            _student_subscription_billing["subscription_created"](db, payload)
+        except Exception as e:
+            print("Paystack subscription.create webhook error:", str(e))
+            return jsonify({"status": "error"}), 500
+    elif event in ("subscription.not_renew", "subscription.disable", "invoice.payment_failed"):
+        try:
+            _student_subscription_billing["subscription_webhook"](db, event, payload)
+        except Exception as e:
+            print("Paystack subscription webhook error:", str(e))
+            return jsonify({"status": "error"}), 500
+    elif event in ("refund.pending", "refund.processing", "refund.needs-attention", "refund.processed", "refund.failed"):
+        try:
+            _student_subscription_billing["refund_webhook"](db, event, payload)
+        except Exception as e:
+            print("Paystack refund webhook error:", str(e))
             return jsonify({"status": "error"}), 500
     elif event in ("transfer.success", "transfer.failed", "transfer.reversed") and reference:
         # Ambassador payout confirmation - shares this route with checkout
@@ -8328,14 +8620,30 @@ def paystack_webhook():
 
 @app.route("/subscription/plans")
 def subscription_plans():
-    prices = get_plan_prices()
-    return jsonify({
-        "plans": [
-            {"id": "free", "name": "Free", "price": 0, "period": None},
-            {"id": "semester", "name": "Semester", "price": prices["semester"], "period": "semester"},
-            {"id": "annual", "name": "Annual", "price": prices["annual"], "period": "year"},
-        ]
-    })
+    # Student-facing subscription cards are sourced from the same
+    # admin-configurable plan table used by entitlement enforcement.
+    from ai_economics import get_plans
+    plans = []
+    for plan in get_plans(db):
+        plans.append({
+            "id": plan["plan_code"],
+            "name": plan["display_name"],
+            "price": int(plan["price_kes"]),
+            "period": plan["billing_period"] if plan["plan_code"] != "free" else None,
+            "quota_period": plan["quota_period"],
+            "ada_monthly_units": int(plan["ada_monthly_units"]),
+            "ada_daily_units": int(plan["ada_daily_units"]),
+            "ada_max_output_tokens": int(plan["ada_max_output_tokens"]),
+            "podcast_minutes": int(plan["podcast_minutes"]),
+            "summary_pages": int(plan["summary_pages"]),
+            "questions": int(plan["questions"]),
+            "mind_map_nodes": int(plan["mind_map_nodes"]),
+            "flashcards": int(plan["flashcards"]),
+            "offline_study": True,
+            "premium_library": bool(plan["premium_library"]),
+            "study_hub_uploads": bool(plan["study_hub_uploads"]),
+        })
+    return jsonify({"plans": plans})
 
 
 @app.route("/subscription/status")
@@ -8359,19 +8667,39 @@ def subscription_upgrade():
 
     data = request.get_json(silent=True) or {}
     plan = data.get("plan")
-    if plan not in ("semester", "annual"):
-        return jsonify({"error": "plan must be 'semester' or 'annual'"}), 400
+    if plan not in ("plus", "pro"):
+        return jsonify({"error": "plan must be 'plus' or 'pro'"}), 400
 
     price = get_plan_prices()[plan]
     if price <= 0:
         return jsonify({"error": "This plan is not currently available"}), 400
 
+    paystack_plan_code = os.environ.get(
+        "PAYSTACK_PLUS_PLAN_CODE" if plan == "plus" else "PAYSTACK_PRO_PLAN_CODE"
+    )
+    if not paystack_plan_code:
+        return jsonify({
+            "error": "Recurring billing is not configured for this plan yet. "
+                     "Admin must add the matching Paystack plan code."
+        }), 503
+
+    pending = _student_order_helpers["find_pending_checkout"](user_id, plan=plan)
+    if pending and pending.get("checkout_url"):
+        return jsonify({
+            "redirect_url": pending["checkout_url"],
+            "reference": pending["reference"],
+            "order_number": pending["order_number"],
+            "recovered": True,
+        })
+
     user = db.session.get(User, user_id)
     reference = f"PZA-sub-{plan}-{secrets.token_hex(6)}"
 
+    plan_name = "Plus" if plan == "plus" else "Pro"
     try:
         provider_reference, authorization_url = create_paystack_transaction(
-            reference, price, f"Prepza {plan.title()} Plan", user
+            reference, price, f"Prepza {plan_name} Plan", user,
+            paystack_plan_code=paystack_plan_code,
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -8389,6 +8717,13 @@ def subscription_upgrade():
         status="pending",
     )
     db.session.add(payment)
+    db.session.flush()
+    _student_order_helpers["create"](payment, item_title=("Plus Plan" if plan == "plus" else "Pro Plan"), checkout_url=authorization_url, requested_payload={
+        "payment_type": "subscription",
+        "plan": plan,
+        "plan_name": "Plus" if plan == "plus" else "Pro",
+        "quantity": 1,
+    })
     db.session.commit()
 
     return jsonify({
@@ -8694,5317 +9029,3 @@ def ambassador_request_payout():
         status="pending",
     )
     db.session.add(payout)
-    db.session.flush()  # assign payout.id before referrals reference it
-
-    for referral in eligible:
-        referral.payout_id = payout.id
-
-    db.session.commit()
-
-    return jsonify({"id": payout.id, "amount": payout.amount, "status": payout.status}), 201
-
-
-# ---------- Paystack Transfers (Chunk 9, migrated from Kasapay) ----------
-# Ambassador commission payouts via Paystack's Transfers API. Two-step,
-# unlike Kasapay's single-call B2C: a transfer recipient must exist
-# before a transfer can be initiated (POST /transferrecipient once per
-# payout, then cached and reused on retries), then POST /transfer moves
-# the money. The result is confirmed via the SAME unified webhook route
-# used for checkout (/payment/paystack/webhook below), branching on the
-# event field - Paystack only supports one webhook URL per account, so
-# there's no separate /payment/paystack/payout-webhook route.
-# Docs: paystack.com/docs/transfers
-
-PAYSTACK_MOBILE_MONEY_BANK_CODE = os.environ.get("PAYSTACK_MOBILE_MONEY_BANK_CODE", "MPESA")
-# "MPESA" is Paystack's Kenya mobile-money bank_code for M-Pesa
-# recipients - confirmed via Paystack's Kenya docs. account_reference is
-# only needed for Paybill/Till transfers, not personal M-Pesa numbers,
-# so it's correctly omitted from the recipient payload below.
-
-
-def _ensure_paystack_transfer_recipient(payout):
-    """
-    Creates (and caches) a Paystack transfer recipient for this payout's
-    destination phone number. Idempotent - if payout.paystack_recipient_code
-    is already set, reuses it rather than creating a duplicate recipient
-    on a retried approval.
-    """
-    if payout.paystack_recipient_code:
-        return payout.paystack_recipient_code
-
-    recipient_name = f"{payout.recipient_first_name} {payout.recipient_last_name}"
-    payload = {
-        "type": "mobile_money",
-        "name": recipient_name,
-        "account_number": payout.payout_destination,
-        "bank_code": PAYSTACK_MOBILE_MONEY_BANK_CODE,
-        "currency": "KES",
-    }
-    data = paystack_request("POST", "/transferrecipient", json=payload)
-    recipient_code = (data.get("data") or {}).get("recipient_code")
-    if not recipient_code:
-        raise RuntimeError(f"Paystack recipient creation failed: {data}")
-
-    payout.paystack_recipient_code = recipient_code
-    db.session.commit()
-    return recipient_code
-
-
-def initiate_paystack_transfer(payout):
-    """
-    Submits a Paystack transfer for one approved AmbassadorPayout,
-    creating a transfer recipient first if needed. Returns
-    (transfer_reference, transfer_status) - transfer_reference is OUR
-    reference, stored on payout.paystack_transfer_code for later
-    lookups (webhook + manual sync). transfer_status is Paystack's own
-    status string - in sandbox this is already "success" by the time
-    this returns, since test-mode transfers auto-succeed with no OTP
-    step at all; once live keys are in use it will typically come back
-    "pending" until OTP confirmation is disabled under Settings ->
-    Preferences, or via the Transfer Control API's /transfer/disable_otp.
-    """
-    recipient_code = _ensure_paystack_transfer_recipient(payout)
-    reference = f"PZA-amb-{payout.id}-{secrets.token_hex(4)}"
-
-    payload = {
-        "source": "balance",
-        "amount": payout.amount * 100,
-        "recipient": recipient_code,
-        "reason": "Prepza ambassador commission payout",
-        "reference": reference,
-    }
-    data = paystack_request("POST", "/transfer", json=payload)
-    tx = data.get("data") or {}
-    if not tx.get("transfer_code"):
-        raise RuntimeError(f"Paystack transfer initiation failed: {data}")
-    return reference, tx.get("status")
-
-
-def _apply_paystack_transfer_result(payout, transfer_status):
-    """
-    Shared by the webhook and the manual status-poll route. Idempotent -
-    no-ops if the payout is already resolved to 'paid', so a retried
-    webhook or a repeated manual poll can never double-apply a result.
-    """
-    if payout.status == "paid":
-        return payout
-
-    if transfer_status == "success":
-        payout.status = "paid"
-        payout.paid_at = datetime.utcnow()
-    elif transfer_status in ("failed", "reversed"):
-        # Release the bundled referrals so the ambassador's commissions
-        # become requestable again, same pattern as admin_reject_ambassador_payout.
-        payout.status = "rejected"
-        payout.rejection_reason = f"Payout {transfer_status} at Paystack"
-        Referral.query.filter_by(payout_id=payout.id).update({"payout_id": None})
-    # else: still pending/otp/processing on Paystack's side - leave the
-    # payout as 'approved' and check again later (webhook retry or manual sync).
-
-    db.session.commit()
-    return payout
-
-
-def sync_paystack_transfer_status(payout):
-    """Polls Paystack's verify-transfer endpoint directly - a manual
-    fallback since webhooks can occasionally be missed."""
-    if not payout.paystack_transfer_code or payout.status == "paid":
-        return payout
-    data = paystack_request("GET", f"/transfer/verify/{payout.paystack_transfer_code}")
-    tx = data.get("data") or {}
-    return _apply_paystack_transfer_result(payout, tx.get("status"))
-
-
-# ---------- Admin: ambassador management (Chunk 9) ----------
-
-@app.route("/admin/ambassadors")
-@require_admin
-def admin_list_ambassadors():
-    """Lists ambassadors, optionally filtered by ?status= (pending |
-    active | suspended | rejected). Newest applications first."""
-    status_filter = request.args.get("status")
-
-    query = Ambassador.query
-    if status_filter:
-        query = query.filter_by(status=status_filter)
-
-    ambassadors = query.order_by(Ambassador.applied_at.desc()).all()
-
-    result = []
-    for a in ambassadors:
-        user = db.session.get(User, a.user_id)
-        result.append({
-            "id": a.id,
-            "user_id": a.user_id,
-            "email": user.email if user else None,
-            "display_name": _display_name(user) if user else None,
-            "referral_code": a.referral_code,
-            "status": a.status,
-            "applied_at": a.applied_at.isoformat() if a.applied_at else None,
-            "reviewed_at": a.reviewed_at.isoformat() if a.reviewed_at else None,
-            "rejection_reason": a.rejection_reason,
-        })
-
-    return jsonify({"ambassadors": result})
-
-
-@app.route("/admin/ambassadors/<int:ambassador_id>")
-@require_admin
-def admin_get_ambassador(ambassador_id):
-    """
-    Full detail view for one ambassador - their referral list with
-    per-referral commission/void state, meant for the fraud-review
-    pass before approving a payout (self-referral patterns, unusually
-    fast conversions, etc. are all visible here per-referral).
-    """
-    ambassador = db.session.get(Ambassador, ambassador_id)
-    if not ambassador:
-        return jsonify({"error": "Ambassador not found"}), 404
-
-    user = db.session.get(User, ambassador.user_id)
-    referrals = (
-        Referral.query.filter_by(ambassador_id=ambassador.id)
-        .order_by(Referral.created_at.desc())
-        .all()
-    )
-
-    referral_rows = []
-    for r in referrals:
-        referred_user = db.session.get(User, r.referred_user_id)
-        referral_rows.append({
-            "id": r.id,
-            "referred_email": referred_user.email if referred_user else None,
-            "status": r.status,
-            "channel": r.channel,
-            "converted": r.first_payment_id is not None,
-            "commission_amount": r.commission_amount,
-            "unlock_at": r.unlock_at.isoformat() if r.unlock_at else None,
-            "voided": r.voided_at is not None,
-            "void_reason": r.void_reason,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        })
-
-    converted = [r for r in referrals if r.first_payment_id and not r.voided_at]
-    total_commission_awarded = sum((r.commission_amount or 0) for r in converted)
-    total_paid = db.session.query(func.coalesce(func.sum(AmbassadorPayout.amount), 0)).filter(
-        AmbassadorPayout.ambassador_id == ambassador.id, AmbassadorPayout.status == "paid",
-    ).scalar()
-
-    return jsonify({
-        "id": ambassador.id,
-        "user_id": ambassador.user_id,
-        "email": user.email if user else None,
-        "display_name": _display_name(user) if user else None,
-        "referral_code": ambassador.referral_code,
-        "status": ambassador.status,
-        "applied_at": ambassador.applied_at.isoformat() if ambassador.applied_at else None,
-        "reviewed_by": ambassador.reviewed_by,
-        "reviewed_at": ambassador.reviewed_at.isoformat() if ambassador.reviewed_at else None,
-        "rejection_reason": ambassador.rejection_reason,
-        "referred_count": len(referrals),
-        "paying_count": len(converted),
-        "total_commission_awarded_kes": total_commission_awarded,
-        "total_paid_kes": total_paid,
-        "referrals": referral_rows,
-    })
-
-
-@app.route("/admin/ambassadors/<int:ambassador_id>/approve", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_approve_ambassador(ambassador_id):
-    acting_admin_id = session.get("user_id")
-
-    ambassador = db.session.get(Ambassador, ambassador_id)
-    if not ambassador:
-        return jsonify({"error": "Ambassador not found"}), 404
-    if ambassador.status != "pending":
-        return jsonify({"error": f"Ambassador is not pending (status: {ambassador.status})"}), 400
-
-    ambassador.status = "active"
-    ambassador.reviewed_by = acting_admin_id
-    ambassador.reviewed_at = datetime.utcnow()
-    ambassador.rejection_reason = None
-    db.session.commit()
-
-    return jsonify({"id": ambassador.id, "status": ambassador.status})
-
-
-@app.route("/admin/ambassadors/<int:ambassador_id>/reject", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_reject_ambassador(ambassador_id):
-    acting_admin_id = session.get("user_id")
-
-    ambassador = db.session.get(Ambassador, ambassador_id)
-    if not ambassador:
-        return jsonify({"error": "Ambassador not found"}), 404
-    if ambassador.status != "pending":
-        return jsonify({"error": f"Ambassador is not pending (status: {ambassador.status})"}), 400
-
-    data = request.get_json(silent=True) or {}
-    reason = (data.get("reason") or "").strip()
-    if not reason or len(reason) > 500:
-        return jsonify({"error": "reason is required and must be 500 characters or fewer"}), 400
-
-    ambassador.status = "rejected"
-    ambassador.rejection_reason = reason
-    ambassador.reviewed_by = acting_admin_id
-    ambassador.reviewed_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify({"id": ambassador.id, "status": ambassador.status})
-
-
-@app.route("/admin/ambassadors/<int:ambassador_id>/suspend", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_suspend_ambassador(ambassador_id):
-    """
-    Suspending does NOT touch existing Referral/commission rows or
-    in-flight payouts - it only blocks new applications-worth of
-    trust (dashboard access, new payout requests). Any pending payout
-    still goes through the normal admin approve/reject flow.
-    """
-    acting_admin_id = session.get("user_id")
-
-    ambassador = db.session.get(Ambassador, ambassador_id)
-    if not ambassador:
-        return jsonify({"error": "Ambassador not found"}), 404
-    if ambassador.status != "active":
-        return jsonify({"error": f"Only active ambassadors can be suspended (status: {ambassador.status})"}), 400
-
-    ambassador.status = "suspended"
-    ambassador.reviewed_by = acting_admin_id
-    ambassador.reviewed_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify({"id": ambassador.id, "status": ambassador.status})
-
-
-@app.route("/admin/ambassadors/<int:ambassador_id>/reinstate", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_reinstate_ambassador(ambassador_id):
-    acting_admin_id = session.get("user_id")
-
-    ambassador = db.session.get(Ambassador, ambassador_id)
-    if not ambassador:
-        return jsonify({"error": "Ambassador not found"}), 404
-    if ambassador.status != "suspended":
-        return jsonify({"error": f"Only suspended ambassadors can be reinstated (status: {ambassador.status})"}), 400
-
-    ambassador.status = "active"
-    ambassador.reviewed_by = acting_admin_id
-    ambassador.reviewed_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify({"id": ambassador.id, "status": ambassador.status})
-
-
-# ---------- Admin: ambassador payouts (Chunk 9) ----------
-
-@app.route("/admin/payouts")
-@require_admin
-def admin_list_ambassador_payouts():
-    """Lists ambassador payout requests, optionally filtered by
-    ?status= (pending | approved | rejected | paid)."""
-    status_filter = request.args.get("status")
-
-    query = AmbassadorPayout.query
-    if status_filter:
-        query = query.filter_by(status=status_filter)
-
-    payouts = query.order_by(AmbassadorPayout.requested_at.desc()).all()
-
-    result = []
-    for p in payouts:
-        ambassador = db.session.get(Ambassador, p.ambassador_id)
-        user = db.session.get(User, ambassador.user_id) if ambassador else None
-        result.append({
-            "id": p.id,
-            "ambassador_id": p.ambassador_id,
-            "email": user.email if user else None,
-            "amount": p.amount,
-            "status": p.status,
-            "payout_destination": p.payout_destination,
-            "paystack_transfer_code": p.paystack_transfer_code,
-            "requested_at": p.requested_at.isoformat() if p.requested_at else None,
-            "reviewed_at": p.reviewed_at.isoformat() if p.reviewed_at else None,
-            "rejection_reason": p.rejection_reason,
-            "paid_at": p.paid_at.isoformat() if p.paid_at else None,
-        })
-
-    return jsonify({"payouts": result})
-
-
-@app.route("/admin/payouts/<int:payout_id>/approve", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_approve_ambassador_payout(payout_id):
-    """
-    Greenlights a payout request AND fires the actual Paystack transfer
-    in the same action - approving IS sending, which is the fraud
-    checkpoint you get instead of a separate "send" button. If the
-    Paystack request fails, nothing is marked approved and the payout
-    stays 'pending', so the admin can fix whatever's wrong (balance,
-    recipient details) and retry the same click.
-
-    In sandbox, test-mode transfers always auto-succeed - the payout may
-    already be 'paid' by the time this returns. Once switching to live
-    keys, a successful call here only means Paystack ACCEPTED the
-    transfer for processing - the real outcome arrives later via
-    /payment/paystack/webhook, or can be checked manually via
-    /admin/payouts/<id>/sync-status.
-    """
-    acting_admin_id = session.get("user_id")
-
-    payout = db.session.get(AmbassadorPayout, payout_id)
-    if not payout:
-        return jsonify({"error": "Payout not found"}), 404
-    if payout.status != "pending":
-        return jsonify({"error": f"Payout is not pending (status: {payout.status})"}), 400
-
-    try:
-        transfer_reference, transfer_status = initiate_paystack_transfer(payout)
-    except Exception as e:
-        return jsonify({"error": f"Paystack transfer request failed: {e}"}), 502
-
-    payout.status = "approved"
-    payout.paystack_transfer_code = transfer_reference
-    payout.reviewed_by = acting_admin_id
-    payout.reviewed_at = datetime.utcnow()
-    db.session.commit()
-
-    if transfer_status:
-        _apply_paystack_transfer_result(payout, transfer_status)
-
-    return jsonify({
-        "id": payout.id, "status": payout.status, "paystack_transfer_code": payout.paystack_transfer_code,
-    })
-
-
-@app.route("/admin/payouts/<int:payout_id>/reject", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_reject_ambassador_payout(payout_id):
-    """
-    Rejects a payout request and releases every Referral that had been
-    bundled into it (payout_id back to NULL), so the ambassador can
-    request again later - e.g. once a flagged referral is resolved -
-    without losing the rest of their already-unlocked commissions.
-    """
-    acting_admin_id = session.get("user_id")
-
-    payout = db.session.get(AmbassadorPayout, payout_id)
-    if not payout:
-        return jsonify({"error": "Payout not found"}), 404
-    if payout.status != "pending":
-        return jsonify({"error": f"Payout is not pending (status: {payout.status})"}), 400
-
-    data = request.get_json(silent=True) or {}
-    reason = (data.get("reason") or "").strip()
-    if not reason or len(reason) > 500:
-        return jsonify({"error": "reason is required and must be 500 characters or fewer"}), 400
-
-    payout.status = "rejected"
-    payout.rejection_reason = reason
-    payout.reviewed_by = acting_admin_id
-    payout.reviewed_at = datetime.utcnow()
-
-    Referral.query.filter_by(payout_id=payout.id).update({"payout_id": None})
-
-    db.session.commit()
-
-    return jsonify({"id": payout.id, "status": payout.status})
-
-
-@app.route("/admin/payouts/<int:payout_id>/sync-status", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_sync_ambassador_payout_status(payout_id):
-    """
-    Manually re-checks a payout's status directly against Paystack's
-    verify-transfer endpoint - useful if a webhook was missed. Safe to
-    call any time after a payout has a paystack_transfer_code (i.e.
-    after it's been approved/sent).
-    """
-    payout = db.session.get(AmbassadorPayout, payout_id)
-    if not payout:
-        return jsonify({"error": "Payout not found"}), 404
-    if not payout.paystack_transfer_code:
-        return jsonify({"error": "This payout has not been sent to Paystack yet"}), 400
-
-    try:
-        sync_paystack_transfer_status(payout)
-    except Exception as e:
-        return jsonify({"error": f"Paystack status check failed: {e}"}), 502
-
-    return jsonify({
-        "id": payout.id,
-        "status": payout.status,
-        "rejection_reason": payout.rejection_reason,
-        "paid_at": payout.paid_at.isoformat() if payout.paid_at else None,
-    })
-
-
-# ---------- Chat routes (Chunk 6) ----------
-
-CHAT_MESSAGE_MAX = 3000
-# Retained as the reference plaintext-length limit surfaced in the
-# frontend UI (e.g. a character counter) - no longer what the
-# server itself validates against, since body is ciphertext.
-CHAT_MESSAGE_CIPHERTEXT_MAX = 20000
-# What send_message() actually checks. Generous ceiling accounting
-# for AES-GCM overhead (16-byte tag) + base64 encoding (~4/3
-# expansion) + worst-case 4-byte-per-character UTF-8 plaintext at
-# the CHAT_MESSAGE_MAX length - guards against abuse/garbage, not a
-# tight format check.
-CHAT_GROUP_NAME_MAX = 100
-CHAT_MESSAGE_PAGE_SIZE = 50
-CHAT_MESSAGE_SEARCH_LIMIT = 50
-
-
-def _active_participant(conversation_id, user_id):
-    """Returns the caller's ConversationParticipant row if they are a
-    current (non-left) member of the conversation, else None."""
-    return ConversationParticipant.query.filter_by(
-        conversation_id=conversation_id, user_id=user_id, left_at=None,
-    ).first()
-
-
-def _conversation_display_name(conversation, viewer_id):
-    """Group conversations use their own name. 1:1 conversations are
-    named after the other participant, so the viewer never has to name
-    their own DMs."""
-    if conversation.is_group:
-        return conversation.name or "Study Group"
-
-    other = (
-        ConversationParticipant.query
-        .filter(
-            ConversationParticipant.conversation_id == conversation.id,
-            ConversationParticipant.user_id != viewer_id,
-        )
-        .first()
-    )
-    if not other:
-        return "Conversation"
-    other_user = db.session.get(User, other.user_id)
-    return _display_name(other_user) if other_user else "Deleted user"
-
-
-def _serialize_message(message, attachment=None):
-    """
-    attachment is an optional pre-fetched MessageAttachment - callers
-    that serialize many messages at once (list_messages, search_messages)
-    batch-fetch attachments up front and pass the matching one in here,
-    rather than this function querying per-message (would be an N+1 on
-    a 50-row page).
-    """
-    attachment_data = None
-    if attachment and not message.is_deleted:
-        attachment_data = {
-            "id": attachment.id,
-            "file_type": attachment.file_type,
-            "original_filename": attachment.original_filename,
-            "file_size_bytes": attachment.file_size_bytes,
-            "view_url": get_cached_chat_attachment_url(attachment),
-        }
-    return {
-        "id": message.id,
-        "conversation_id": message.conversation_id,
-        "sender_id": message.sender_id,
-        "body": message.body if not message.is_deleted else None,
-        "nonce": message.nonce if not message.is_deleted else None,
-        "key_epoch": message.e2ee_key_epoch if not message.is_deleted else None,
-        "is_deleted": message.is_deleted,
-        "created_at": message.created_at.isoformat() if message.created_at else None,
-        "edited_at": message.edited_at.isoformat() if message.edited_at else None,
-        "attachment": attachment_data,
-    }
-
-
-def _serialize_conversation_detail(conversation, viewer_id):
-    """
-    Full detail payload for GET /chats/<id> - the display name (reusing
-    the same logic /chats uses), the active (non-left) participant list
-    with display names, and who created it. Exists so the frontend can
-    label group-chat message senders and show a real member count/
-    creator in chat-options, without a message-by-message name lookup.
-    """
-    participant_rows = (
-        ConversationParticipant.query
-        .filter_by(conversation_id=conversation.id, left_at=None)
-        .all()
-    )
-    participants = []
-    for p in participant_rows:
-        member = db.session.get(User, p.user_id)
-        participants.append({
-            "user_id": p.user_id,
-            "display_name": _display_name(member) if member else "Deleted user",
-            "role": p.role,
-        })
-    creator = db.session.get(User, conversation.created_by)
-    viewer_participant = next((p for p in participant_rows if p.user_id == viewer_id), None)
-    return {
-        "id": conversation.id,
-        "is_group": conversation.is_group,
-        "name": _conversation_display_name(conversation, viewer_id),
-        "created_by": conversation.created_by,
-        "created_by_name": _display_name(creator) if creator else "Deleted user",
-        "member_count": len(participant_rows),
-        "participants": participants,
-        "viewer_muted": bool(viewer_participant.muted) if viewer_participant else False,
-    }
-
-
-@app.route("/chats")
-def list_chats():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    participations = (
-        ConversationParticipant.query
-        .filter_by(user_id=user_id, left_at=None)
-        .all()
-    )
-
-    result = []
-    for p in participations:
-        conversation = db.session.get(Conversation, p.conversation_id)
-        if not conversation:
-            continue
-
-        last_message = (
-            Message.query
-            .filter_by(conversation_id=conversation.id, is_deleted=False)
-            .order_by(Message.created_at.desc())
-            .first()
-        )
-
-        unread_query = Message.query.filter(
-            Message.conversation_id == conversation.id,
-            Message.sender_id != user_id,
-        )
-        if p.last_read_at:
-            unread_query = unread_query.filter(Message.created_at > p.last_read_at)
-        unread_count = unread_query.count()
-
-        # A pending request directed AT me (I didn't create it) stays
-        # out of the normal chat list until I accept it via
-        # /message-requests - the requester still sees it in theirs.
-        if conversation.status == "pending" and conversation.created_by != user_id:
-            continue
-
-        last_attachment = None
-        if last_message:
-            last_attachment = (
-                MessageAttachment.query
-                .filter_by(message_id=last_message.id, status="ready")
-                .first()
-            )
-
-        peer_user_id = None
-        peer_display_name = None
-        if not conversation.is_group:
-            peer = (
-                ConversationParticipant.query
-                .filter(
-                    ConversationParticipant.conversation_id == conversation.id,
-                    ConversationParticipant.user_id != user_id,
-                    ConversationParticipant.left_at.is_(None),
-                )
-                .first()
-            )
-            if peer:
-                peer_user_id = peer.user_id
-                peer_user = db.session.get(User, peer.user_id)
-                peer_display_name = _display_name(peer_user) if peer_user else None
-
-        result.append({
-            "id": conversation.id,
-            "is_group": conversation.is_group,
-            "name": _conversation_display_name(conversation, user_id),
-            "peer_user_id": peer_user_id,
-            "last_message": last_message.body if last_message else None,
-            "last_message_at": last_message.created_at.isoformat() if last_message else None,
-            "last_message_sender_name": (
-                _display_name(db.session.get(User, last_message.sender_id))
-                if last_message and last_message.sender_id
-                else None
-            ),
-            "last_message_sender_id": last_message.sender_id if last_message else None,
-            "last_message_read_by_all": (
-                bool(last_message)
-                and last_message.sender_id == user_id
-                and all(
-                    participant.last_read_at is not None
-                    and participant.last_read_at >= last_message.created_at
-                    for participant in ConversationParticipant.query.filter(
-                        ConversationParticipant.conversation_id == conversation.id,
-                        ConversationParticipant.user_id != user_id,
-                        ConversationParticipant.left_at.is_(None),
-                    ).all()
-                )
-            ) if last_message else False,
-            "last_message_file_type": last_attachment.file_type if last_attachment else None,
-            "last_message_filename": last_attachment.original_filename if last_attachment else None,
-            "unread_count": unread_count,
-            "status": conversation.status,
-        })
-
-    result.sort(key=lambda c: c["last_message_at"] or "", reverse=True)
-    return jsonify({"chats": result})
-
-
-@app.route("/chats", methods=["POST"])
-@limiter.limit("30 per hour")
-@require_csrf
-def create_chat():
-    """
-    Starts a conversation. For a non-group chat between exactly 2
-    users, reuses an existing conversation between the same pair
-    instead of creating a duplicate every time someone taps "message"
-    on the same classmate.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    is_group = bool(data.get("is_group"))
-    participant_ids = data.get("participant_ids")
-    name = (data.get("name") or "").strip()
-
-    if not isinstance(participant_ids, list) or not participant_ids:
-        return jsonify({"error": "participant_ids must be a non-empty list"}), 400
-    try:
-        participant_ids = {int(pid) for pid in participant_ids}
-    except (TypeError, ValueError):
-        return jsonify({"error": "participant_ids must be integers"}), 400
-    participant_ids.discard(user_id)
-    if not participant_ids:
-        return jsonify({"error": "Cannot start a conversation with only yourself"}), 400
-
-    valid_users = User.query.filter(User.id.in_(participant_ids)).count()
-    if valid_users != len(participant_ids):
-        return jsonify({"error": "One or more participants were not found"}), 404
-
-    if is_group:
-        if not name or len(name) > CHAT_GROUP_NAME_MAX:
-            return jsonify({"error": f"Group name is required and must be {CHAT_GROUP_NAME_MAX} characters or fewer"}), 400
-    else:
-        if len(participant_ids) != 1:
-            return jsonify({"error": "Direct chats must have exactly one other participant"}), 400
-        other_id = next(iter(participant_ids))
-
-        # Reused regardless of status - a second attempt by the same
-        # sender while a request is still pending just returns the
-        # same pending conversation instead of creating a duplicate.
-        existing = (
-            db.session.query(Conversation.id)
-            .join(ConversationParticipant, ConversationParticipant.conversation_id == Conversation.id)
-            .filter(Conversation.is_group.is_(False))
-            .filter(ConversationParticipant.user_id.in_([user_id, other_id]))
-            .group_by(Conversation.id)
-            .having(func.count(ConversationParticipant.user_id.distinct()) == 2)
-            .first()
-        )
-        if existing:
-            return jsonify({"id": existing.id, "reused": True}), 200
-
-    # A conversation with exactly one OTHER participant functions like a
-    # direct message regardless of is_group, so who_can_message="followers"
-    # has to be enforced here too - otherwise it could be dodged just by
-    # setting is_group=true and giving it a name. Groups with 2+ other
-    # participants (3+ total members) are a different, legitimate case
-    # (a real study group someone was added to) and are left alone.
-    # Instagram-style message requests: rather than hard-blocking with
-    # a 403, a non-follower's message just creates the conversation as
-    # "pending" - see the Conversation.status column and
-    # GET /message-requests / accept-request / decline-request below.
-    conversation_status = "accepted"
-    if len(participant_ids) == 1:
-        only_other_id = next(iter(participant_ids))
-        only_other_user = db.session.get(User, only_other_id)
-        if only_other_user and only_other_user.who_can_message == "followers":
-            sender_is_follower = Follow.query.filter_by(
-                follower_id=user_id, followed_id=only_other_id
-            ).first() is not None
-            if not sender_is_follower:
-                conversation_status = "pending"
-
-    conversation = Conversation(
-        is_group=is_group,
-        name=name if is_group else None,
-        created_by=user_id,
-        status=conversation_status,
-    )
-    db.session.add(conversation)
-    db.session.flush()
-
-    all_member_ids = participant_ids | {user_id}
-    for member_id in all_member_ids:
-        db.session.add(ConversationParticipant(
-            conversation_id=conversation.id,
-            user_id=member_id,
-            role="admin" if (is_group and member_id == user_id) else "member",
-        ))
-
-    db.session.commit()
-    return jsonify({"id": conversation.id, "reused": False, "status": conversation_status}), 201
-
-
-@app.route("/message-requests")
-def list_message_requests():
-    """
-    Pending 1:1 conversations directed AT the logged-in user - the
-    who_can_message="followers" equivalent of /follow-requests. The
-    requester already sees these in their normal /chats list; only
-    the receiver's view is gated until they accept or decline.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    participations = (
-        ConversationParticipant.query
-        .filter_by(user_id=user_id, left_at=None)
-        .all()
-    )
-
-    result = []
-    for p in participations:
-        conversation = db.session.get(Conversation, p.conversation_id)
-        if not conversation or conversation.is_group or conversation.status != "pending":
-            continue
-        if conversation.created_by == user_id:
-            continue
-
-        requester = db.session.get(User, conversation.created_by)
-        # Message bodies are E2EE ciphertext - the server can't preview
-        # content, same reasoning as the push-notification fallback
-        # elsewhere in this file.
-        has_message = Message.query.filter_by(conversation_id=conversation.id, is_deleted=False).first() is not None
-        result.append({
-            "conversation_id": conversation.id,
-            "requester_id": conversation.created_by,
-            "requester_display_name": _display_name(requester) if requester else "Deleted user",
-            "has_message": has_message,
-            "created_at": conversation.created_at.isoformat() if conversation.created_at else None,
-        })
-
-    result.sort(key=lambda r: r["created_at"] or "", reverse=True)
-    return jsonify({"requests": result})
-
-
-@app.route("/chats/<int:conversation_id>/accept-request", methods=["POST"])
-@require_csrf
-def accept_message_request(conversation_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    conversation = db.session.get(Conversation, conversation_id)
-    if not conversation or conversation.is_group or conversation.status != "pending" or conversation.created_by == user_id:
-        return jsonify({"error": "Message request not found"}), 404
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Message request not found"}), 404
-
-    conversation.status = "accepted"
-    db.session.commit()
-
-    requester_id = conversation.created_by
-    accepter = db.session.get(User, user_id)
-    if should_notify(requester_id, "community"):
-        db.session.add(Notification(
-            user_id=requester_id,
-            type="message_request_accepted",
-            title="Message request accepted",
-            body=f"{_display_name(accepter)} accepted your message request",
-            related_type="conversation",
-            related_id=conversation.id,
-        ))
-        db.session.commit()
-        send_push_notification(
-            requester_id,
-            "Message request accepted",
-            f"{_display_name(accepter)} accepted your message request",
-        )
-
-    return jsonify({"message": "Accepted", "id": conversation.id})
-
-
-@app.route("/chats/<int:conversation_id>/decline-request", methods=["POST"])
-@require_csrf
-def decline_message_request(conversation_id):
-    """
-    Declining deletes the pending conversation outright (cascades to
-    its participants/messages) rather than leaving a "declined"
-    marker - same silent-dismiss convention as follow-request
-    declines, and lets the same sender try again later with a clean
-    conversation instead of being permanently blocked.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    conversation = db.session.get(Conversation, conversation_id)
-    if not conversation or conversation.is_group or conversation.status != "pending" or conversation.created_by == user_id:
-        return jsonify({"error": "Message request not found"}), 404
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Message request not found"}), 404
-
-    db.session.delete(conversation)
-    db.session.commit()
-
-    return jsonify({"message": "Declined"})
-
-
-@app.route("/chats/<int:conversation_id>")
-def get_chat_detail(conversation_id):
-    """
-    Single-conversation detail: display name, participant list (with
-    names), member count, and creator - powers the chat-detail header,
-    group-message sender labels, and chat-options screen on the
-    frontend. 404s (not 403) for a non-participant, same "don't confirm
-    existence" pattern as other conversation routes.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Conversation not found"}), 404
-
-    conversation = db.session.get(Conversation, conversation_id)
-    if not conversation:
-        return jsonify({"error": "Conversation not found"}), 404
-
-    return jsonify(_serialize_conversation_detail(conversation, user_id))
-
-
-@app.route("/chats/<int:conversation_id>/messages")
-def list_messages(conversation_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Conversation not found"}), 404
-
-    before_id = request.args.get("before_id", type=int)
-    preview_only = request.args.get("preview") == "1"
-    query = Message.query.filter_by(conversation_id=conversation_id)
-    if before_id:
-        query = query.filter(Message.id < before_id)
-
-    messages = (
-        query.order_by(Message.created_at.desc())
-        .limit(1 if preview_only else CHAT_MESSAGE_PAGE_SIZE)
-        .all()
-    )
-    messages.reverse()  # oldest-first for the client's scroll-down feed
-
-    message_ids = [m.id for m in messages]
-    attachments_by_message = {
-        a.message_id: a
-        for a in MessageAttachment.query.filter(
-            MessageAttachment.message_id.in_(message_ids),
-            MessageAttachment.status == "ready",
-        ).all()
-    } if message_ids else {}
-
-    return jsonify({
-        "messages": [_serialize_message(m, attachments_by_message.get(m.id)) for m in messages]
-    })
-
-
-@app.route("/chats/<int:conversation_id>/messages/search")
-def search_messages(conversation_id):
-    """
-    Substring search of this conversation's own message history. Scoped
-    to one conversation only (no cross-chat search) - same membership
-    gate as every other /chats/<id> route. Returns newest-first, capped
-    at CHAT_MESSAGE_SEARCH_LIMIT - this is a search result, not a feed,
-    so no before_id pagination like list_messages() has.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Conversation not found"}), 404
-
-    q = (request.args.get("q") or "").strip()
-    if not q:
-        return jsonify({"messages": []})
-
-    messages = (
-        Message.query.filter(
-            Message.conversation_id == conversation_id,
-            Message.is_deleted.is_(False),
-            Message.body.ilike(f"%{q}%"),
-        )
-        .order_by(Message.created_at.desc())
-        .limit(CHAT_MESSAGE_SEARCH_LIMIT)
-        .all()
-    )
-
-    message_ids = [m.id for m in messages]
-    attachments_by_message = {
-        a.message_id: a
-        for a in MessageAttachment.query.filter(
-            MessageAttachment.message_id.in_(message_ids),
-            MessageAttachment.status == "ready",
-        ).all()
-    } if message_ids else {}
-
-    return jsonify({
-        "messages": [_serialize_message(m, attachments_by_message.get(m.id)) for m in messages]
-    })
-
-
-@app.route("/chats/<int:conversation_id>/messages", methods=["POST"])
-@limiter.limit("120 per hour")
-@require_csrf
-def send_message(conversation_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Conversation not found"}), 404
-
-    pending_check = db.session.get(Conversation, conversation_id)
-    if pending_check and pending_check.status == "pending" and pending_check.created_by != user_id:
-        return jsonify({"error": "Accept this message request before replying"}), 403
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    client_message_id = (data.get("client_message_id") or "").strip() or None
-    if client_message_id is not None:
-        if len(client_message_id) > 128 or not re.fullmatch(r"[A-Za-z0-9._:-]{8,128}", client_message_id):
-            return jsonify({"error": "client_message_id is invalid"}), 400
-        if _ensure_chat_idempotency_schema():
-            existing_message_id = db.session.execute(
-                text("""
-                    SELECT message_id
-                    FROM chat_message_idempotency
-                    WHERE conversation_id = :conversation_id
-                      AND sender_id = :sender_id
-                      AND client_message_id = :client_message_id
-                """),
-                {
-                    "conversation_id": conversation_id,
-                    "sender_id": user_id,
-                    "client_message_id": client_message_id,
-                },
-            ).scalar_one_or_none()
-            if existing_message_id:
-                existing_message = db.session.get(Message, int(existing_message_id))
-                if existing_message:
-                    existing_attachment = MessageAttachment.query.filter_by(
-                        message_id=existing_message.id,
-                        status="ready",
-                    ).first()
-                    return jsonify(_serialize_message(existing_message, existing_attachment)), 200
-                db.session.execute(
-                    text("""
-                        DELETE FROM chat_message_idempotency
-                        WHERE conversation_id = :conversation_id
-                          AND sender_id = :sender_id
-                          AND client_message_id = :client_message_id
-                    """),
-                    {
-                        "conversation_id": conversation_id,
-                        "sender_id": user_id,
-                        "client_message_id": client_message_id,
-                    },
-                )
-                db.session.commit()
-
-    body = (data.get("body") or "").strip() or None
-    nonce = (data.get("nonce") or "").strip() or None
-    conversation = db.session.get(Conversation, conversation_id)
-    e2ee_mode = getattr(conversation, "e2ee_mode", "legacy") if conversation else "legacy"
-    requested_key_epoch = data.get("key_epoch")
-    if requested_key_epoch is not None and (not isinstance(requested_key_epoch, int) or isinstance(requested_key_epoch, bool) or requested_key_epoch < 1):
-        return jsonify({"error": "key_epoch must be a positive integer"}), 400
-    if e2ee_mode == "group_v1":
-        current_epoch = db.session.execute(text("SELECT key_epoch FROM conversation WHERE id = :conversation_id"), {"conversation_id": conversation_id}).scalar_one_or_none()
-        current_epoch = int(current_epoch or 0)
-        if not body or not nonce:
-            return jsonify({"error": "Encrypted group messages require body and nonce"}), 400
-        if requested_key_epoch != current_epoch:
-            return jsonify({"error": "Encrypted group message key epoch is stale; retry with the current group key", "key_epoch": current_epoch}), 409
-    if body and len(body) > CHAT_MESSAGE_CIPHERTEXT_MAX:
-        return jsonify({"error": f"Message must be {CHAT_MESSAGE_CIPHERTEXT_MAX} characters or fewer"}), 400
-    if body and not nonce:
-        return jsonify({"error": "nonce is required alongside an encrypted body"}), 400
-
-    attachment_id = data.get("attachment_id")
-    attachment = None
-    if attachment_id is not None:
-        if not isinstance(attachment_id, int) or isinstance(attachment_id, bool):
-            return jsonify({"error": "attachment_id must be an integer"}), 400
-        attachment = db.session.get(MessageAttachment, attachment_id)
-        if (
-            not attachment
-            or attachment.conversation_id != conversation_id
-            or attachment.uploaded_by_user_id != user_id
-            or attachment.status != "ready"
-            or attachment.message_id is not None
-        ):
-            return jsonify({"error": "Attachment not found or already sent"}), 404
-
-    if not body and not attachment:
-        return jsonify({"error": "Message must include text or an attachment"}), 400
-
-    message = Message(conversation_id=conversation_id, sender_id=user_id, body=body, nonce=nonce, e2ee_key_epoch=requested_key_epoch if e2ee_mode == "group_v1" else 0)
-    db.session.add(message)
-    db.session.flush()  # assign message.id before linking the attachment
-
-    if attachment:
-        attachment.message_id = message.id
-
-    if client_message_id and _ensure_chat_idempotency_schema():
-        db.session.execute(
-            text("""
-                INSERT INTO chat_message_idempotency
-                    (conversation_id, sender_id, client_message_id, message_id)
-                VALUES
-                    (:conversation_id, :sender_id, :client_message_id, :message_id)
-                ON CONFLICT (conversation_id, sender_id, client_message_id) DO NOTHING
-            """),
-            {
-                "conversation_id": conversation_id,
-                "sender_id": user_id,
-                "client_message_id": client_message_id,
-                "message_id": message.id,
-            },
-        )
-        mapped_message_id = db.session.execute(
-            text("""
-                SELECT message_id
-                FROM chat_message_idempotency
-                WHERE conversation_id = :conversation_id
-                  AND sender_id = :sender_id
-                  AND client_message_id = :client_message_id
-            """),
-            {
-                "conversation_id": conversation_id,
-                "sender_id": user_id,
-                "client_message_id": client_message_id,
-            },
-        ).scalar_one_or_none()
-        if mapped_message_id and int(mapped_message_id) != message.id:
-            db.session.rollback()
-            existing_message = db.session.get(Message, int(mapped_message_id))
-            if existing_message:
-                existing_attachment = MessageAttachment.query.filter_by(
-                    message_id=existing_message.id,
-                    status="ready",
-                ).first()
-                return jsonify(_serialize_message(existing_message, existing_attachment)), 200
-            return jsonify({"error": "Message idempotency conflict; retry"}), 409
-
-    if conversation:
-        conversation.updated_at = datetime.utcnow()
-
-    db.session.commit()
-
-    # Chat push follows a DM pattern (like Instagram) rather than the
-    # in-app Notification feed - push only, no Notification row, and
-    # suppressed for any recipient whose last_read_at is very recent
-    # (a cheap proxy for "still looking at this conversation right now",
-    # since this app is polling-based with no real presence/websockets).
-    sender = db.session.get(User, user_id)
-    sender_name = _display_name(sender) if sender else "Someone"
-    # E2EE (Chats only): body is ciphertext as of the 1:1 chat
-    # encryption chunk, so the server can no longer build a content
-    # preview here - generic preview instead, same reasoning as the
-    # design doc's WhatsApp-style push fallback. Pulled forward into
-    # this chunk since it's the same function already being edited.
-    push_preview = "New message" if body else "Sent an attachment"
-    recently_active_cutoff = datetime.utcnow() - timedelta(seconds=15)
-    other_participants = ConversationParticipant.query.filter(
-        ConversationParticipant.conversation_id == conversation_id,
-        ConversationParticipant.user_id != user_id,
-        ConversationParticipant.left_at.is_(None),
-    ).all()
-    for participant in other_participants:
-        if participant.last_read_at and participant.last_read_at >= recently_active_cutoff:
-            continue
-        if not should_notify(participant.user_id, "messages"):
-            continue
-        send_push_notification(participant.user_id, sender_name, push_preview)
-
-    return jsonify(_serialize_message(message, attachment)), 201
-
-
-CHAT_EDIT_WINDOW = timedelta(minutes=15)
-CHAT_DELETE_WINDOW = timedelta(days=2)
-
-
-@app.route("/chats/<int:conversation_id>/messages/<int:message_id>", methods=["PATCH"])
-@require_csrf
-def edit_message(conversation_id, message_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Conversation not found"}), 404
-
-    message = Message.query.filter_by(id=message_id, conversation_id=conversation_id).first()
-    if not message or message.is_deleted:
-        return jsonify({"error": "Message not found"}), 404
-    if message.sender_id != user_id:
-        return jsonify({"error": "You can only edit your own messages"}), 403
-    if message.created_at and datetime.utcnow() - message.created_at > CHAT_EDIT_WINDOW:
-        return jsonify({"error": "Messages can only be edited within 15 minutes"}), 409
-    if MessageAttachment.query.filter_by(message_id=message.id).first():
-        return jsonify({"error": "Attachments cannot be edited"}), 400
-
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-    body = (data.get("body") or "").strip()
-    nonce = (data.get("nonce") or "").strip()
-    if not body:
-        return jsonify({"error": "Edited message body is required"}), 400
-    if len(body) > CHAT_MESSAGE_CIPHERTEXT_MAX:
-        return jsonify({"error": f"Message must be {CHAT_MESSAGE_CIPHERTEXT_MAX} characters or fewer"}), 400
-    conversation = db.session.get(Conversation, conversation_id)
-    e2ee_mode = getattr(conversation, "e2ee_mode", "legacy") if conversation else "legacy"
-    requested_key_epoch = data.get("key_epoch")
-    if requested_key_epoch is not None and (not isinstance(requested_key_epoch, int) or isinstance(requested_key_epoch, bool) or requested_key_epoch < 1):
-        return jsonify({"error": "key_epoch must be a positive integer"}), 400
-    if e2ee_mode == "group_v1":
-        current_epoch = db.session.execute(text("SELECT key_epoch FROM conversation WHERE id = :conversation_id"), {"conversation_id": conversation_id}).scalar_one_or_none()
-        current_epoch = int(current_epoch or 0)
-        if not nonce or requested_key_epoch != current_epoch:
-            return jsonify({"error": "Encrypted group edit key epoch is stale or missing; retry with the current group key", "key_epoch": current_epoch}), 409
-
-    message.body = body
-    message.e2ee_key_epoch = requested_key_epoch if e2ee_mode == "group_v1" else 0
-    message.nonce = nonce or None
-    message.edited_at = datetime.utcnow()
-    db.session.commit()
-    return jsonify(_serialize_message(message))
-
-
-@app.route("/chats/<int:conversation_id>/messages/<int:message_id>", methods=["DELETE"])
-@require_csrf
-def delete_message(conversation_id, message_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Conversation not found"}), 404
-
-    message = Message.query.filter_by(id=message_id, conversation_id=conversation_id).first()
-    if not message or message.is_deleted:
-        return jsonify({"error": "Message not found"}), 404
-    if message.sender_id != user_id:
-        return jsonify({"error": "You can only delete your own messages"}), 403
-    if message.created_at and datetime.utcnow() - message.created_at > CHAT_DELETE_WINDOW:
-        return jsonify({"error": "Messages can only be deleted within 2 days"}), 409
-
-    message.is_deleted = True
-    message.body = None
-    message.nonce = None
-    message.edited_at = None
-    db.session.commit()
-    return jsonify(_serialize_message(message))
-
-
-CHAT_ATTACHMENT_MAX_SIZE_BYTES = 20 * 1024 * 1024
-# 20 MB - deliberately smaller than document uploads (50 MB); chat
-# attachments don't get AI processing or text extraction, so there's no
-# reason to allow document-sized files here.
-
-
-@app.route("/chats/<int:conversation_id>/attachments", methods=["POST"])
-@limiter.limit("30 per hour")
-@require_csrf
-def init_chat_attachment(conversation_id):
-    """
-    Step 1 of sending a chat attachment: registers a pending
-    MessageAttachment (status='uploading', message_id=None) and returns
-    a signed direct-upload URL - same two-phase pattern as POST
-    /documents. Reuses the existing "documents" Supabase bucket under a
-    chat-attachments/ prefix rather than provisioning a separate bucket.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Conversation not found"}), 404
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    original_filename = (data.get("original_filename") or "").strip()
-    file_size_bytes = data.get("file_size_bytes")
-
-    if not original_filename or len(original_filename) > 255:
-        return jsonify({"error": "original_filename is required and must be 255 characters or fewer"}), 400
-    ext = get_document_extension(original_filename)
-    if not ext:
-        return jsonify({"error": "Unsupported file type"}), 400
-    if not isinstance(file_size_bytes, int) or isinstance(file_size_bytes, bool) or file_size_bytes <= 0:
-        return jsonify({"error": "file_size_bytes must be a positive integer"}), 400
-    if file_size_bytes > CHAT_ATTACHMENT_MAX_SIZE_BYTES:
-        return jsonify({
-            "error": f"File exceeds the {CHAT_ATTACHMENT_MAX_SIZE_BYTES // (1024 * 1024)} MB limit"
-        }), 400
-
-    storage_path = f"chat-attachments/{conversation_id}/{secrets.token_hex(16)}.{ext}"
-    attachment = MessageAttachment(
-        conversation_id=conversation_id,
-        uploaded_by_user_id=user_id,
-        storage_path=storage_path,
-        file_type=ext,
-        original_filename=original_filename,
-        file_size_bytes=file_size_bytes,
-        status="uploading",
-    )
-    db.session.add(attachment)
-    db.session.commit()
-
-    upload_url = create_signed_upload_url("documents", storage_path)
-    if not upload_url:
-        return jsonify({"error": "Could not prepare upload - please try again shortly"}), 502
-
-    return jsonify({
-        "attachment_id": attachment.id,
-        "upload_url": upload_url,
-        "storage_path": storage_path,
-    }), 201
-
-
-@app.route("/chats/<int:conversation_id>/attachments/<int:attachment_id>/uploaded", methods=["POST"])
-@require_csrf
-def confirm_chat_attachment_uploaded(conversation_id, attachment_id):
-    """Step 2: confirms the direct upload landed in storage before
-    trusting the client's word for it - same verification as
-    POST /documents/<id>/uploaded."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Conversation not found"}), 404
-
-    attachment = db.session.get(MessageAttachment, attachment_id)
-    if (
-        not attachment
-        or attachment.conversation_id != conversation_id
-        or attachment.uploaded_by_user_id != user_id
-    ):
-        return jsonify({"error": "Attachment not found"}), 404
-
-    if attachment.status != "uploading":
-        return jsonify({"error": f"Attachment is not awaiting upload (status: {attachment.status})"}), 400
-
-    if not storage_object_exists("documents", attachment.storage_path):
-        return jsonify({"error": "Upload not found in storage yet - please retry"}), 409
-
-    attachment.status = "ready"
-    db.session.commit()
-
-    return jsonify({"attachment_id": attachment.id, "status": "ready"})
-
-
-@app.route("/chats/<int:conversation_id>/attachments")
-def list_chat_attachments(conversation_id):
-    """
-    Powers the Shared Media tab: every ready attachment sent in this
-    conversation (excluding ones on soft-deleted messages), newest
-    first. Only attachments actually attached to a sent message
-    (message_id set) are eligible - an initiated-but-abandoned upload
-    never shows up here.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Conversation not found"}), 404
-
-    rows = (
-        db.session.query(MessageAttachment, Message)
-        .join(Message, MessageAttachment.message_id == Message.id)
-        .filter(
-            MessageAttachment.conversation_id == conversation_id,
-            MessageAttachment.status == "ready",
-            Message.is_deleted.is_(False),
-        )
-        .order_by(MessageAttachment.created_at.desc())
-        .limit(100)
-        .all()
-    )
-
-    result = []
-    for attachment, message in rows:
-        uploader = db.session.get(User, attachment.uploaded_by_user_id)
-        result.append({
-            "id": attachment.id,
-            "message_id": attachment.message_id,
-            "file_type": attachment.file_type,
-            "original_filename": attachment.original_filename,
-            "file_size_bytes": attachment.file_size_bytes,
-            "view_url": get_cached_chat_attachment_url(attachment),
-            "uploaded_by_user_id": attachment.uploaded_by_user_id,
-            "uploaded_by_name": _display_name(uploader) if uploader else "Deleted user",
-            "created_at": attachment.created_at.isoformat() if attachment.created_at else None,
-        })
-
-    return jsonify({"attachments": result})
-
-
-@app.route("/chats/<int:conversation_id>/read", methods=["POST"])
-@require_csrf
-def mark_chat_read(conversation_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    participant = _active_participant(conversation_id, user_id)
-    if not participant:
-        return jsonify({"error": "Conversation not found"}), 404
-
-    user = db.session.get(User, user_id)
-    if user is not None and not bool(user.read_receipts_enabled):
-        return jsonify({"message": "Read receipts disabled", "marked": False})
-
-    participant.last_read_at = datetime.utcnow()
-    db.session.commit()
-    return jsonify({"message": "Marked as read"})
-
-
-@app.route("/chats/<int:conversation_id>/mute", methods=["POST"])
-@require_csrf
-def toggle_chat_mute(conversation_id):
-    """
-    Sets (or toggles) the CALLER's own mute flag for this conversation -
-    purely a per-participant notification preference, not a moderation
-    action, so no admin/role check beyond being an active participant.
-    Body is optional: {"muted": true|false} sets it explicitly; an empty
-    body toggles the current value.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    participant = _active_participant(conversation_id, user_id)
-    if not participant:
-        return jsonify({"error": "Conversation not found"}), 404
-
-    data = request.get_json(silent=True) or {}
-    if "muted" in data:
-        if not isinstance(data["muted"], bool):
-            return jsonify({"error": "muted must be true or false"}), 400
-        participant.muted = data["muted"]
-    else:
-        participant.muted = not participant.muted
-
-    db.session.commit()
-    return jsonify({"muted": participant.muted})
-
-
-@app.route("/chats/<int:conversation_id>", methods=["PATCH"])
-@require_csrf
-def rename_chat(conversation_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    if not _active_participant(conversation_id, user_id):
-        return jsonify({"error": "Conversation not found"}), 404
-
-    conversation = db.session.get(Conversation, conversation_id)
-    if not conversation or not conversation.is_group:
-        return jsonify({"error": "Only group conversations can be renamed"}), 400
-
-    data = request.get_json(silent=True)
-    if not data or "name" not in data:
-        return jsonify({"error": "name is required"}), 400
-
-    name = (data.get("name") or "").strip()
-    if not name or len(name) > CHAT_GROUP_NAME_MAX:
-        return jsonify({"error": f"Group name must be 1-{CHAT_GROUP_NAME_MAX} characters"}), 400
-
-    conversation.name = name
-    db.session.commit()
-    return jsonify({"id": conversation.id, "name": conversation.name})
-
-
-@app.route("/chats/<int:conversation_id>/leave", methods=["POST"])
-@require_csrf
-def leave_chat(conversation_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    conversation = db.session.get(Conversation, conversation_id)
-    if not conversation or not conversation.is_group:
-        return jsonify({"error": "Only group conversations can be left"}), 400
-
-    participant = _active_participant(conversation_id, user_id)
-    if not participant:
-        return jsonify({"error": "Conversation not found"}), 404
-
-    participant.left_at = datetime.utcnow()
-    if getattr(conversation, "e2ee_mode", "legacy") == "group_v1":
-        current_epoch = db.session.execute(
-            text("SELECT key_epoch FROM conversation WHERE id = :conversation_id"),
-            {"conversation_id": conversation_id},
-        ).scalar_one_or_none()
-        current_epoch = int(current_epoch or 0)
-        db.session.execute(
-            text("UPDATE conversation SET key_epoch = :new_epoch WHERE id = :conversation_id AND key_epoch = :old_epoch"),
-            {"conversation_id": conversation_id, "old_epoch": current_epoch, "new_epoch": current_epoch + 1},
-        )
-    db.session.commit()
-    return jsonify({"message": "Left group"})
-
-
-@app.route("/students")
-def browse_students():
-    """
-    Browse students for the Explore > Students tab. Unlike /users/search
-    (a narrow contact-picker for chat), this is a real directory: ranked
-    by lifetime XP, filterable by university/program, with follow state
-    for the viewer. Excludes email and any other sensitive fields, and
-    - same rule as get_public_profile - hides program_name/year/xp_total
-    for a private-profile user the viewer doesn't follow.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    q = (request.args.get("q") or "").strip()
-    university_id = request.args.get("university_id", type=int)
-    program_id = request.args.get("program_id", type=int)
-    try:
-        page = max(1, int(request.args.get("page", 1)))
-    except ValueError:
-        page = 1
-    per_page = 20
-
-    xp_subq = (
-        db.session.query(
-            XpEvent.user_id.label("user_id"),
-            func.sum(XpEvent.xp_amount).label("xp_total"),
-        )
-        .group_by(XpEvent.user_id)
-        .subquery()
-    )
-
-    xp_col = func.coalesce(xp_subq.c.xp_total, 0)
-    query = (
-        db.session.query(User, xp_col.label("xp_total"))
-        .outerjoin(xp_subq, xp_subq.c.user_id == User.id)
-        .filter(User.is_suspended.is_(False))
-        .filter(User.id != user_id)
-    )
-    if q:
-        query = query.filter(User.display_name.ilike(f"%{q}%"))
-    if university_id:
-        query = query.filter(User.university_id == university_id)
-    if program_id:
-        query = query.filter(User.program_id == program_id)
-
-    rows = (
-        query.order_by(xp_col.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
-
-    page_user_ids = [u.id for u, _ in rows]
-    followed_ids = set()
-    if page_user_ids:
-        followed_ids = {
-            f.followed_id for f in Follow.query.filter(
-                Follow.follower_id == user_id,
-                Follow.followed_id.in_(page_user_ids),
-            ).all()
-        }
-
-    result = []
-    for u, xp_total in rows:
-        is_following = u.id in followed_ids
-        is_private = u.profile_visibility == "private" and not is_following
-        program = db.session.get(Program, u.program_id) if u.program_id else None
-        result.append({
-            "user_id": u.id,
-            "display_name": _display_name(u),
-            "program_name": None if is_private else (program.name if program else None),
-            "year": None if is_private else u.year,
-            "xp_total": None if is_private else int(xp_total),
-            "is_following": is_following,
-            "is_private": is_private,
-        })
-
-    return jsonify({"page": page, "students": result})
-
-
-@app.route("/users/search")
-def search_users():
-    """Backs the "New Chat"/"New Group" contact picker. Deliberately
-    narrow: only display_name matches, capped results, no email
-    exposure - this is a people-picker, not a directory lookup."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    q = (request.args.get("q") or "").strip()
-    if not q:
-        return jsonify({"users": []})
-
-    matches = (
-        User.query
-        .filter(User.id != user_id)
-        .filter(User.is_suspended.is_(False))
-        .filter(User.display_name.ilike(f"%{q}%"))
-        .limit(20)
-        .all()
-    )
-
-    return jsonify({"users": [
-        {"id": u.id, "display_name": _display_name(u), "year": u.year, "semester": u.semester}
-        for u in matches
-    ]})
-
-
-# ---------- Admin routes (protected) ----------
-
-ANNOUNCEMENT_TITLE_MAX = 200
-ANNOUNCEMENT_BODY_MAX = 500
-
-
-@app.route("/admin/announcements", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_send_announcement():
-    """
-    Broadcasts an announcement to every non-suspended user as a
-    Notification(type="announcement"), and logs the send in
-    Announcement for the Communications history table. Reach is
-    computed and stored at send time.
-    """
-    acting_admin_id = session.get("user_id")
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    title = (data.get("title") or "").strip()
-    body = (data.get("body") or "").strip()
-
-    if not title or len(title) > ANNOUNCEMENT_TITLE_MAX:
-        return jsonify({"error": f"title is required and must be {ANNOUNCEMENT_TITLE_MAX} characters or fewer"}), 400
-    if not body or len(body) > ANNOUNCEMENT_BODY_MAX:
-        return jsonify({"error": f"body is required and must be {ANNOUNCEMENT_BODY_MAX} characters or fewer"}), 400
-
-    university_id = data.get("university_id")
-    program_id = data.get("program_id")
-    year = data.get("year")
-    semester = data.get("semester")
-    group_id = data.get("group_id")
-
-    audience_query = User.query.filter(User.is_suspended.is_(False))
-
-    if university_id is not None:
-        if not isinstance(university_id, int) or isinstance(university_id, bool):
-            return jsonify({"error": "university_id must be an integer"}), 400
-        audience_query = audience_query.filter(User.university_id == university_id)
-
-    if program_id is not None:
-        if not isinstance(program_id, int) or isinstance(program_id, bool):
-            return jsonify({"error": "program_id must be an integer"}), 400
-        audience_query = audience_query.filter(User.program_id == program_id)
-
-    if year is not None:
-        if not isinstance(year, int) or isinstance(year, bool):
-            return jsonify({"error": "year must be an integer"}), 400
-        audience_query = audience_query.filter(User.year == year)
-
-    if semester is not None:
-        if not isinstance(semester, int) or isinstance(semester, bool):
-            return jsonify({"error": "semester must be an integer"}), 400
-        audience_query = audience_query.filter(User.semester == semester)
-
-    if group_id is not None:
-        if not isinstance(group_id, int) or isinstance(group_id, bool):
-            return jsonify({"error": "group_id must be an integer"}), 400
-        if not db.session.get(Group, group_id):
-            return jsonify({"error": "Group not found"}), 404
-        member_ids = [
-            row[0] for row in
-            db.session.query(GroupMember.user_id).filter(GroupMember.group_id == group_id).all()
-        ]
-        audience_query = audience_query.filter(User.id.in_(member_ids))
-
-    recipient_ids = [row.id for row in audience_query.with_entities(User.id).all()]
-
-    announcement = Announcement(title=title, body=body, sent_by=acting_admin_id, reach=len(recipient_ids))
-    db.session.add(announcement)
-    db.session.flush()  # assign announcement.id before Notification.related_id references it
-
-    for recipient_id in recipient_ids:
-        db.session.add(Notification(
-            user_id=recipient_id,
-            type="announcement",
-            title=title,
-            body=body,
-            related_type="announcement",
-            related_id=announcement.id,
-        ))
-
-    db.session.commit()
-
-    # Best-effort push fan-out to the same audience - never blocks or fails
-    # the announcement itself if push sending has issues (see
-    # send_push_notification()'s own internal error handling).
-    for recipient_id in recipient_ids:
-        send_push_notification(recipient_id, title, body)
-
-    return jsonify({
-        "id": announcement.id,
-        "title": announcement.title,
-        "body": announcement.body,
-        "reach": announcement.reach,
-        "created_at": announcement.created_at.isoformat(),
-    }), 201
-
-
-@app.route("/admin/announcements")
-@require_admin
-def admin_list_announcements():
-    """History for the Communications tab, newest first."""
-    announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(50).all()
-    return jsonify([
-        {
-            "id": a.id,
-            "title": a.title,
-            "body": a.body,
-            "reach": a.reach,
-            "created_at": a.created_at.isoformat() if a.created_at else None,
-        }
-        for a in announcements
-    ])
-
-
-# ---------- Admin: moderation (Chunk 10) ----------
-
-def _content_report_preview(report):
-    """
-    Best-effort preview of the reported content for the admin queue -
-    a short text snippet plus who authored it. Returns None fields if
-    the target was hard-deleted out from under the report (shouldn't
-    normally happen since content is soft-removed, but don't 500 if it
-    does).
-    """
-    author_id = None
-    snippet = None
-
-    if report.target_type == "group_post":
-        row = db.session.get(GroupPost, report.target_id)
-        if row:
-            author_id = row.user_id
-            snippet = row.body
-    elif report.target_type == "group_post_comment":
-        row = db.session.get(GroupPostComment, report.target_id)
-        if row:
-            author_id = row.user_id
-            snippet = row.body
-    elif report.target_type == "user":
-        author_id = report.target_id
-
-    author = db.session.get(User, author_id) if author_id else None
-    return {
-        "author_id": author_id,
-        "author_email": author.email if author else None,
-        "snippet": (snippet[:200] if snippet else None),
-    }
-
-
-def _serialize_content_report(report):
-    reporter = db.session.get(User, report.reporter_user_id) if report.reporter_user_id else None
-    entry = {
-        "id": report.id,
-        "target_type": report.target_type,
-        "target_id": report.target_id,
-        "reporter_email": reporter.email if reporter else "System",
-        "reason": report.reason,
-        "details": report.details,
-        "priority": report.priority,
-        "status": report.status,
-        "action_taken": report.action_taken,
-        "admin_notes": report.admin_notes,
-        "created_at": report.created_at.isoformat() if report.created_at else None,
-    }
-    entry.update(_content_report_preview(report))
-    return entry
-
-
-@app.route("/admin/content-reports")
-@require_admin
-def admin_list_content_reports():
-    """
-    Moderation queue. Defaults to pending only, ordered highest
-    priority first (then oldest first within a priority tier) so the
-    most urgent reports surface at the top; pass status=all to see
-    dismissed/actioned ones too.
-
-    Sorted in Python rather than via a SQL CASE expression - same
-    pattern as admin_list_users() below, which avoids depending on
-    SQLAlchemy version-specific case() syntax (the tuple-positional
-    form needs 1.4+; older installs need the list/`whens=` form).
-    Report volume is small enough that this costs nothing.
-    """
-    status_filter = request.args.get("status", "pending")
-    if status_filter != "all" and status_filter not in CONTENT_REPORT_STATUSES:
-        return jsonify({"error": "status must be 'all' or one of: " + ", ".join(CONTENT_REPORT_STATUSES)}), 400
-
-    query = ContentReport.query
-    if status_filter != "all":
-        query = query.filter_by(status=status_filter)
-
-    reports = query.order_by(ContentReport.created_at.asc()).all()
-    priority_rank = {"high": 0, "medium": 1, "low": 2}
-    reports.sort(key=lambda r: priority_rank.get(r.priority, 3))
-
-    return jsonify({"reports": [_serialize_content_report(r) for r in reports]})
-
-
-@app.route("/admin/content-reports/summary")
-@require_admin
-def admin_content_reports_summary():
-    """KPI row for the Moderation tab header."""
-    open_reports = ContentReport.query.filter_by(status="pending").count()
-    today = datetime.utcnow().date()
-    resolved_today = ContentReport.query.filter(
-        ContentReport.status != "pending",
-        func.date(ContentReport.reviewed_at) == today,
-    ).count()
-    suspended_users = User.query.filter_by(is_suspended=True).count()
-    warnings_issued = UserWarning.query.count()
-
-    return jsonify({
-        "open_reports": open_reports,
-        "resolved_today": resolved_today,
-        "suspended_users": suspended_users,
-        "warnings_issued": warnings_issued,
-    })
-
-
-def _load_pending_report(report_id):
-    report = db.session.get(ContentReport, report_id)
-    if not report:
-        return None, (jsonify({"error": "Report not found"}), 404)
-    if report.status != "pending":
-        return None, (jsonify({"error": f"Report is not pending (status: {report.status})"}), 400)
-    return report, None
-
-
-@app.route("/admin/content-reports/<int:report_id>/dismiss", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_dismiss_content_report(report_id):
-    acting_admin_id = session.get("user_id")
-    report, error = _load_pending_report(report_id)
-    if error:
-        return error
-
-    data = request.get_json(silent=True) or {}
-    admin_notes = data.get("admin_notes")
-    if admin_notes is not None:
-        admin_notes = admin_notes.strip()
-        if len(admin_notes) > CONTENT_REPORT_DETAILS_MAX:
-            return jsonify({"error": f"admin_notes must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
-        admin_notes = admin_notes or None
-
-    report.status = "dismissed"
-    report.action_taken = "dismissed"
-    report.admin_notes = admin_notes
-    report.reviewed_by = acting_admin_id
-    report.reviewed_at = datetime.utcnow()
-    log_admin_action(acting_admin_id, "content_report_dismissed", target_type="content_report", target_id=report.id, details={"admin_notes": admin_notes} if admin_notes else None)
-    db.session.commit()
-
-    return jsonify(_serialize_content_report(report))
-
-
-@app.route("/admin/content-reports/<int:report_id>/remove", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_remove_reported_content(report_id):
-    """
-    Hides the reported content (soft-remove, same is_removed pattern
-    used everywhere else) and marks the report actioned. Not valid for
-    target_type='user' - there's no "content" to remove for a user
-    report; use /warn or the existing /admin/users suspend toggle
-    instead.
-    """
-    acting_admin_id = session.get("user_id")
-    report, error = _load_pending_report(report_id)
-    if error:
-        return error
-
-    if report.target_type == "user":
-        return jsonify({
-            "error": "Can't 'remove' a user report - use /admin/content-reports/<id>/warn, "
-                     "or suspend the user via PATCH /admin/users/<id>"
-        }), 400
-
-    model_by_type = {
-        "group_post": GroupPost,
-        "group_post_comment": GroupPostComment,
-    }
-    model = model_by_type[report.target_type]
-    target = db.session.get(model, report.target_id)
-    if not target:
-        return jsonify({"error": "Reported content no longer exists"}), 404
-
-    target.is_removed = True
-
-    data = request.get_json(silent=True) or {}
-    admin_notes = data.get("admin_notes")
-    if admin_notes is not None:
-        admin_notes = admin_notes.strip()
-        if len(admin_notes) > CONTENT_REPORT_DETAILS_MAX:
-            return jsonify({"error": f"admin_notes must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
-        admin_notes = admin_notes or None
-
-    report.status = "actioned"
-    report.action_taken = "removed"
-    report.admin_notes = admin_notes
-    report.reviewed_by = acting_admin_id
-    report.reviewed_at = datetime.utcnow()
-    log_admin_action(acting_admin_id, "content_report_content_removed", target_type="content_report", target_id=report.id, details={"target_type": report.target_type, "target_id": report.target_id})
-    db.session.commit()
-
-    return jsonify(_serialize_content_report(report))
-
-
-@app.route("/admin/content-reports/<int:report_id>/warn", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_warn_from_content_report(report_id):
-    """
-    Issues a UserWarning to the content's author (or the reported user
-    directly, for target_type='user'), tied back to this report. The
-    warning ALWAYS reaches the student as a Notification - message
-    states what they did wrong, consequence states what happens as a
-    result. Both are admin-authored per warning, not templated, since
-    the punishment should fit the specific violation. Optionally also
-    removes the content in the same call (remove_content=true).
-    """
-    acting_admin_id = session.get("user_id")
-    report, error = _load_pending_report(report_id)
-    if error:
-        return error
-
-    data = request.get_json(silent=True) or {}
-    message = (data.get("message") or "").strip()
-    consequence = (data.get("consequence") or "").strip()
-    remove_content = bool(data.get("remove_content"))
-
-    if not message or len(message) > CONTENT_REPORT_DETAILS_MAX:
-        return jsonify({"error": f"message is required and must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
-    if not consequence or len(consequence) > CONTENT_REPORT_DETAILS_MAX:
-        return jsonify({"error": f"consequence is required and must be {CONTENT_REPORT_DETAILS_MAX} characters or fewer"}), 400
-
-    if report.target_type == "user":
-        warned_user_id = report.target_id
-    else:
-        preview = _content_report_preview(report)
-        warned_user_id = preview["author_id"]
-        if not warned_user_id:
-            return jsonify({"error": "Could not determine the content's author to warn"}), 404
-
-        if remove_content:
-            model_by_type = {
-                "group_post": GroupPost,
-                "group_post_comment": GroupPostComment,
-            }
-            target = db.session.get(model_by_type[report.target_type], report.target_id)
-            if target:
-                target.is_removed = True
-
-    warning = UserWarning(
-        user_id=warned_user_id,
-        issued_by=acting_admin_id,
-        content_report_id=report.id,
-        reason=report.reason,
-        message=message,
-        consequence=consequence,
-    )
-    db.session.add(warning)
-    db.session.flush()  # assign warning.id before Notification.related_id references it
-
-    db.session.add(Notification(
-        user_id=warned_user_id,
-        type="moderation_warning",
-        title="You've received a warning",
-        body=f"{message} {consequence}",
-        related_type="user_warning",
-        related_id=warning.id,
-    ))
-    send_push_notification(warned_user_id, "You've received a warning", f"{message} {consequence}")
-
-    report.status = "actioned"
-    report.action_taken = "warned"
-    report.reviewed_by = acting_admin_id
-    report.reviewed_at = datetime.utcnow()
-    log_admin_action(acting_admin_id, "content_report_warning_issued", target_type="user_warning", target_id=warning.id, details={"warned_user_id": warned_user_id, "reason": report.reason})
-    db.session.commit()
-
-    return jsonify({
-        "report": _serialize_content_report(report),
-        "warning_id": warning.id,
-        "content_removed": remove_content and report.target_type != "user",
-    })
-
-
-@app.route("/warnings")
-def list_my_warnings():
-    """Lets a student see their own warning history - what they did
-    wrong and the consequence, in their own words from the admin."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    warnings = (
-        UserWarning.query.filter_by(user_id=user_id)
-        .order_by(UserWarning.created_at.desc())
-        .all()
-    )
-    return jsonify({"warnings": [
-        {
-            "id": w.id,
-            "reason": w.reason,
-            "message": w.message,
-            "consequence": w.consequence,
-            "created_at": w.created_at.isoformat() if w.created_at else None,
-        }
-        for w in warnings
-    ]})
-
-
-@app.route("/admin/ai-usage")
-@require_admin
-def admin_ai_usage():
-    """
-    Rollup of AI usage/cost for the admin AI & Usage dashboard, sourced
-    from AiUsageLog (populated by ai_service.py on every AI call - both
-    document actions and forum Q&A share this table via request_type).
-
-    NOTE on gaps this endpoint deliberately does NOT paper over:
-      - AiUsageLog has no success/failure column, so a request-level
-        error rate can't be computed from it. failed_jobs/completed_jobs
-        below come from AiJob instead, which only covers the document
-        pipeline (text_extraction/summary/quiz/flashcards/podcast) -
-        forum Q&A failures aren't persisted anywhere today (ai_service
-        raises an exception, the route translates it to an HTTP error,
-        nothing is logged). Treat failed_jobs as a partial signal, not
-        a true platform-wide error rate.
-      - Average response time isn't tracked anywhere in the schema, so
-        it's omitted entirely rather than estimated.
-    """
-    try:
-        days = int(request.args.get("days", 30))
-    except ValueError:
-        days = 30
-    days = max(1, min(days, 365))
-    window_start = datetime.utcnow() - timedelta(days=days)
-
-    base = AiUsageLog.query.filter(AiUsageLog.created_at >= window_start)
-
-    total_requests = base.count()
-    totals_row = db.session.query(
-        func.coalesce(func.sum(AiUsageLog.cost_usd), 0),
-        func.coalesce(func.sum(AiUsageLog.input_tokens), 0),
-        func.coalesce(func.sum(AiUsageLog.output_tokens), 0),
-        func.coalesce(func.sum(AiUsageLog.cache_read_tokens), 0),
-        func.coalesce(func.sum(AiUsageLog.cache_creation_tokens), 0),
-    ).filter(AiUsageLog.created_at >= window_start).first()
-    total_cost_usd, total_input_tokens, total_output_tokens, total_cache_read, total_cache_creation = totals_row
-
-    by_feature_raw = (
-        db.session.query(
-            AiUsageLog.request_type,
-            func.count(AiUsageLog.id),
-            func.coalesce(func.sum(AiUsageLog.cost_usd), 0),
-        )
-        .filter(AiUsageLog.created_at >= window_start)
-        .group_by(AiUsageLog.request_type)
-        .order_by(func.count(AiUsageLog.id).desc())
-        .all()
-    )
-    by_feature = [
-        {"request_type": request_type, "requests": count, "cost_usd": float(cost)}
-        for request_type, count, cost in by_feature_raw
-    ]
-
-    daily_raw = (
-        db.session.query(
-            func.date(AiUsageLog.created_at).label("day"),
-            func.count(AiUsageLog.id),
-            func.coalesce(func.sum(AiUsageLog.cost_usd), 0),
-        )
-        .filter(AiUsageLog.created_at >= window_start)
-        .group_by(func.date(AiUsageLog.created_at))
-        .order_by(func.date(AiUsageLog.created_at))
-        .all()
-    )
-    daily_trend = [
-        {"date": day.isoformat(), "requests": count, "cost_usd": float(cost)}
-        for day, count, cost in daily_raw
-    ]
-
-    today = datetime.utcnow().date()
-    requests_today = AiUsageLog.query.filter(func.date(AiUsageLog.created_at) == today).count()
-
-    failed_jobs = AiJob.query.filter(
-        AiJob.status == "failed", AiJob.created_at >= window_start,
-    ).count()
-    completed_jobs = AiJob.query.filter(
-        AiJob.status == "completed", AiJob.created_at >= window_start,
-    ).count()
-
-    return jsonify({
-        "period_days": days,
-        "total_requests": total_requests,
-        "requests_today": requests_today,
-        "total_cost_usd": float(total_cost_usd),
-        "total_tokens": int(total_input_tokens) + int(total_output_tokens),
-        "input_tokens": int(total_input_tokens),
-        "output_tokens": int(total_output_tokens),
-        "cache_read_tokens": int(total_cache_read),
-        "cache_creation_tokens": int(total_cache_creation),
-        "by_feature": by_feature,
-        "daily_trend": daily_trend,
-        "document_pipeline_jobs": {
-            "completed": completed_jobs,
-            "failed": failed_jobs,
-            "note": "Covers text_extraction/summary/quiz/flashcards/podcast jobs only - forum Q&A failures aren't logged.",
-        },
-    })
-
-
-@app.route("/admin/ai-jobs")
-@require_admin
-def admin_list_ai_jobs():
-    """
-    Lists recent AiJob rows for admin visibility, optionally filtered
-    by status (?status=failed). Newest first.
-    """
-    status_filter = request.args.get("status")
-
-    query = AiJob.query
-    if status_filter:
-        query = query.filter_by(status=status_filter)
-
-    jobs = query.order_by(AiJob.created_at.desc()).limit(100).all()
-
-    return jsonify([
-        {
-            "id": j.id,
-            "document_content_id": j.document_content_id,
-            "feature": j.feature,
-            "status": j.status,
-            "started_at": j.started_at.isoformat() if j.started_at else None,
-            "completed_at": j.completed_at.isoformat() if j.completed_at else None,
-            "error_message": j.error_message,
-            "retry_count": j.retry_count,
-            "created_at": j.created_at.isoformat() if j.created_at else None,
-        }
-        for j in jobs
-    ])
-
-
-@app.route("/admin/ai-jobs/<int:job_id>/retry", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_retry_ai_job(job_id):
-    """
-    Re-runs a failed job synchronously (not backgrounded - admin is
-    waiting on the response) and increments retry_count regardless of
-    outcome, so repeated failures are visible in the job list.
-    """
-    job = db.session.get(AiJob, job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
-
-    if job.status not in ("failed", "completed"):
-        return jsonify({"error": f"Job is currently '{job.status}' - wait for it to finish before retrying"}), 400
-
-    job.retry_count = (job.retry_count or 0) + 1
-    db.session.commit()
-
-    try:
-        if job.feature == "text_extraction":
-            document_pipeline.process_document(job.document_content_id)
-        else:
-            return jsonify({"error": f"No retry handler for feature '{job.feature}' yet"}), 400
-    except Exception as e:
-        return jsonify({"error": f"Retry failed: {e}"}), 502
-
-    return jsonify({"message": "Retry completed", "job_id": job.id})
-
-
-@app.route("/admin/content", methods=["GET"])
-@require_admin
-def admin_list_content():
-    unit_id = request.args.get("unit_id", type=int)
-
-    query = ContentItem.query
-    if unit_id:
-        query = query.filter_by(unit_id=unit_id)
-
-    items = query.order_by(ContentItem.id.desc()).all()
-
-    result = []
-    for item in items:
-        unit = db.session.get(Unit, item.unit_id)
-        result.append({
-            "id": item.id,
-            "unit_id": item.unit_id,
-            "unit_code": unit.code if unit else None,
-            "content_type": item.content_type,
-            "title": item.title,
-            "file_url": item.file_url,
-            "paper_year": item.paper_year,
-            "is_downloadable": item.is_downloadable,
-            "price": get_price_for_type(item.content_type),
-        })
-
-    return jsonify({"content": result})
-
-
-@app.route("/admin/content", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_add_content():
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    unit_id = data.get("unit_id")
-    content_type = data.get("content_type")
-    title = data.get("title")
-    file_url = data.get("file_url")
-    paper_year = data.get("paper_year")
-
-    if not unit_id or not content_type or not title:
-        return jsonify({"error": "unit_id, content_type, and title are required"}), 400
-
-    if content_type not in ("past_paper", "notes", "qna"):
-        return jsonify({"error": "content_type must be past_paper, notes, or qna"}), 400
-
-    unit = db.session.get(Unit, unit_id)
-    if not unit:
-        return jsonify({"error": "Unit not found"}), 404
-
-    is_downloadable = False if content_type == "qna" else True
-
-    item = ContentItem(
-        unit_id=unit_id,
-        content_type=content_type,
-        title=title,
-        file_url=file_url,
-        paper_year=paper_year,
-        is_downloadable=is_downloadable,
-    )
-    db.session.add(item)
-    db.session.commit()
-
-    return jsonify({"message": "Content added", "content_id": item.id}), 201
-
-
-@app.route("/admin/content/<int:content_id>", methods=["PATCH"])
-@require_csrf
-@require_admin
-def admin_update_content(content_id):
-    item = db.session.get(ContentItem, content_id)
-    if not item:
-        return jsonify({"error": "Content not found"}), 404
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    if "title" in data:
-        item.title = data["title"]
-    if "file_url" in data:
-        item.file_url = data["file_url"]
-    if "paper_year" in data:
-        item.paper_year = data["paper_year"]
-
-    db.session.commit()
-
-    return jsonify({
-        "message": "Content updated",
-        "content_id": item.id,
-        "price": get_price_for_type(item.content_type),
-        "title": item.title,
-    })
-
-
-@app.route("/admin/payments", methods=["GET"])
-@require_admin
-def admin_list_payments():
-    status_filter = request.args.get("status")
-
-    query = Payment.query
-    if status_filter:
-        query = query.filter_by(status=status_filter)
-
-    payments = query.order_by(Payment.created_at.desc()).all()
-
-    result = []
-    for p in payments:
-        content_item = db.session.get(ContentItem, p.content_item_id) if p.content_item_id else None
-        user = db.session.get(User, p.user_id) if p.user_id else None
-        result.append({
-            "id": p.id,
-            "user_id": p.user_id,
-            "user_email": user.email if user else None,
-            "user_display_name": user.display_name if user else None,
-            "payment_type": p.payment_type,
-            "content_title": content_item.title if content_item else None,
-            "plan": p.plan,
-            "phone_number": p.phone_number,
-            "amount": p.amount,
-            "status": p.status,
-            "provider": p.provider,
-            "reference": p.reference,
-            "subscription_expires_at": p.subscription_expires_at.isoformat() if p.subscription_expires_at else None,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-        })
-
-    return jsonify({"payments": result})
-
-
-@app.route("/admin/analytics")
-@require_admin
-def admin_analytics():
-    total_revenue = db.session.query(
-        func.coalesce(func.sum(Payment.amount), 0)
-    ).filter(Payment.status == "success").scalar()
-
-    total_users = db.session.query(func.count(User.id)).scalar()
-
-    # "Active today" = any authenticated request today (login, browsing,
-    # chatting, studying - see track_last_active()), not just specific
-    # study actions.
-    today = datetime.utcnow().date()
-    active_today = db.session.query(
-        func.count(User.id)
-    ).filter(func.date(User.last_active_at) == today).scalar()
-
-    # Storage is summed off DocumentContent, not Document - DocumentContent
-    # is the deduplicated, one-row-per-unique-file table, so a document
-    # shared by many students' Document rows is only counted once.
-    storage_used_bytes = db.session.query(
-        func.coalesce(func.sum(DocumentContent.file_size_bytes), 0)
-    ).scalar()
-
-    total_units = db.session.query(func.count(Unit.id)).scalar()
-    total_content = db.session.query(func.count(ContentItem.id)).scalar()
-
-    content_by_type = dict(
-        db.session.query(ContentItem.content_type, func.count(ContentItem.id))
-        .group_by(ContentItem.content_type)
-        .all()
-    )
-
-    payments_by_status = dict(
-        db.session.query(Payment.status, func.count(Payment.id))
-        .group_by(Payment.status)
-        .all()
-    )
-
-    revenue_30d = db.session.query(
-        func.coalesce(func.sum(Payment.amount), 0)
-    ).filter(
-        Payment.status == "success",
-        Payment.created_at >= datetime.utcnow() - timedelta(days=30),
-    ).scalar()
-
-    trend_start = datetime.utcnow() - timedelta(days=30)
-
-    signups_raw = (
-        db.session.query(
-            func.date(User.created_at).label("day"),
-            func.count(User.id),
-        )
-        .filter(User.created_at >= trend_start)
-        .group_by(func.date(User.created_at))
-        .order_by(func.date(User.created_at))
-        .all()
-    )
-    signups_per_day = [
-        {"date": day.isoformat(), "count": count}
-        for day, count in signups_raw
-    ]
-
-    revenue_raw = (
-        db.session.query(
-            func.date(Payment.created_at).label("day"),
-            func.coalesce(func.sum(Payment.amount), 0),
-        )
-        .filter(
-            Payment.status == "success",
-            Payment.created_at >= trend_start,
-        )
-        .group_by(func.date(Payment.created_at))
-        .order_by(func.date(Payment.created_at))
-        .all()
-    )
-    revenue_per_day = [
-        {"date": day.isoformat(), "amount": amount}
-        for day, amount in revenue_raw
-    ]
-
-    top_content_raw = (
-        db.session.query(
-            ContentItem.id,
-            ContentItem.title,
-            ContentItem.content_type,
-            func.coalesce(func.sum(Payment.amount), 0).label("revenue"),
-            func.count(Payment.id).label("purchases"),
-        )
-        .join(Payment, Payment.content_item_id == ContentItem.id)
-        .filter(Payment.status == "success")
-        .group_by(ContentItem.id, ContentItem.title, ContentItem.content_type)
-        .order_by(func.coalesce(func.sum(Payment.amount), 0).desc())
-        .limit(10)
-        .all()
-    )
-    top_performing_content = [
-        {
-            "id": cid,
-            "title": title,
-            "content_type": content_type,
-            "revenue": revenue,
-            "purchases": purchases,
-        }
-        for cid, title, content_type, revenue, purchases in top_content_raw
-    ]
-
-    return jsonify({
-        "total_revenue": total_revenue,
-        "revenue_last_30d": revenue_30d,
-        "total_users": total_users,
-        "active_today": active_today,
-        "storage_used_bytes": int(storage_used_bytes),
-        "total_units": total_units,
-        "total_content_items": total_content,
-        "content_by_type": content_by_type,
-        "payments_by_status": payments_by_status,
-        "signups_per_day": signups_per_day,
-        "revenue_per_day": revenue_per_day,
-        "top_performing_content": top_performing_content,
-    })
-
-
-@app.route("/admin/analytics/universities")
-@require_admin
-def admin_analytics_universities():
-    """
-    Per-university engagement rollup for the admin Analytics tab.
-    Only includes universities with at least one signed-up student.
-    Engagement tier is a relative ranking (top/bottom quartile of a
-    combined documents+AI-requests score) among the universities
-    returned here, not an absolute scale - same reasoning as the
-    percentile-based work used elsewhere (e.g. XP leaderboards): with
-    a handful of universities, fixed thresholds like ">10000 requests
-    = Very High" would be meaningless noise, whereas relative ranking
-    stays useful regardless of platform size.
-
-    "Premium users" reuses the same latest-successful-subscription
-    dedup logic as GET /admin/users, just grouped by university
-    instead of returned per-user.
-    """
-    student_counts = dict(
-        db.session.query(User.university_id, func.count(User.id))
-        .filter(User.university_id.isnot(None))
-        .group_by(User.university_id)
-        .all()
-    )
-    if not student_counts:
-        return jsonify({"universities": []})
-
-    uni_ids = list(student_counts.keys())
-    universities = {u.id: u.name for u in University.query.filter(University.id.in_(uni_ids)).all()}
-
-    doc_counts = dict(
-        db.session.query(User.university_id, func.count(Document.id))
-        .select_from(Document)
-        .join(User, Document.user_id == User.id)
-        .filter(Document.is_removed.is_(False), User.university_id.in_(uni_ids))
-        .group_by(User.university_id)
-        .all()
-    )
-
-    ai_counts = dict(
-        db.session.query(User.university_id, func.count(AiUsageLog.id))
-        .select_from(AiUsageLog)
-        .join(User, AiUsageLog.user_id == User.id)
-        .filter(User.university_id.in_(uni_ids))
-        .group_by(User.university_id)
-        .all()
-    )
-
-    # Same active-subscription dedup as GET /admin/users, then grouped
-    # by university instead of returned per-user.
-    sub_rows = (
-        db.session.query(Payment.user_id, Payment.subscription_expires_at)
-        .join(User, Payment.user_id == User.id)
-        .filter(
-            User.university_id.in_(uni_ids),
-            Payment.payment_type == "subscription",
-            Payment.status == "success",
-            Payment.subscription_expires_at.isnot(None),
-        )
-        .all()
-    )
-    latest_expiry = {}
-    for uid, expires_at in sub_rows:
-        if uid not in latest_expiry or expires_at > latest_expiry[uid]:
-            latest_expiry[uid] = expires_at
-    now = datetime.utcnow()
-    active_user_ids = [uid for uid, expires_at in latest_expiry.items() if expires_at > now]
-    premium_counts = dict(
-        db.session.query(User.university_id, func.count(User.id))
-        .filter(User.id.in_(active_user_ids), User.university_id.in_(uni_ids))
-        .group_by(User.university_id)
-        .all()
-    ) if active_user_ids else {}
-
-    rows = []
-    for uid in uni_ids:
-        docs = doc_counts.get(uid, 0)
-        ai_reqs = ai_counts.get(uid, 0)
-        rows.append({
-            "university_id": uid,
-            "university_name": universities.get(uid, "Unknown"),
-            "students": student_counts.get(uid, 0),
-            "documents": docs,
-            "ai_requests": ai_reqs,
-            "premium_users": premium_counts.get(uid, 0),
-            "_score": docs + ai_reqs,
-        })
-
-    rows.sort(key=lambda r: r["_score"], reverse=True)
-    n = len(rows)
-    for i, r in enumerate(rows):
-        percentile = i / n
-        if percentile < 0.25:
-            r["engagement"] = "Very High"
-        elif percentile < 0.5:
-            r["engagement"] = "High"
-        elif percentile < 0.75:
-            r["engagement"] = "Medium"
-        else:
-            r["engagement"] = "Low"
-        del r["_score"]
-
-    return jsonify({"universities": rows})
-
-
-# Plan tiers a bootstrapped single-operator app can pick between on the
-# System tab - approximate published Supabase limits per tier. Not
-# fetched from a Supabase API (that would need a separate integration);
-# the admin just clicks which tier they're currently on, and it's
-# persisted in SystemSetting like other admin-editable values (see
-# admin_get_settings / admin_update_settings above for the same
-# pattern). Add a new key here if Supabase adds/changes a tier.
-SUPABASE_TIER_LIMITS = {
-    "free": {"db_size_bytes": 500 * 1024 * 1024, "storage_bytes": 1 * 1024 * 1024 * 1024, "connections": 60},
-    "pro": {"db_size_bytes": 8 * 1024 * 1024 * 1024, "storage_bytes": 100 * 1024 * 1024 * 1024, "connections": 200},
-    "team": {"db_size_bytes": 8 * 1024 * 1024 * 1024, "storage_bytes": 200 * 1024 * 1024 * 1024, "connections": 400},
-}
-SUPABASE_DEFAULT_TIER = "free"
-
-
-def _get_supabase_tier():
-    setting = SystemSetting.query.filter_by(key="supabase_tier").first()
-    tier = setting.value if setting and setting.value in SUPABASE_TIER_LIMITS else SUPABASE_DEFAULT_TIER
-    return tier
-
-
-@app.route("/admin/system/capacity")
-@require_admin
-def admin_system_capacity():
-    """
-    Capacity/budget tracking for a bootstrapped, single-operator app -
-    answers "am I about to outgrow my plan" and "what's my AI burn
-    rate," not "is SendGrid up right now" (that would need a real
-    health-check system with historical uptime storage, out of scope
-    here). Plan limits come from SUPABASE_TIER_LIMITS keyed by whichever
-    tier is currently selected in SystemSetting - see
-    /admin/system/capacity/tier to change it.
-    """
-    tier = _get_supabase_tier()
-    limits = SUPABASE_TIER_LIMITS[tier]
-
-    db_size_bytes = db.session.execute(
-        db.text("SELECT pg_database_size(current_database())")
-    ).scalar()
-
-    storage_used_bytes = db.session.query(
-        func.coalesce(func.sum(DocumentContent.file_size_bytes), 0)
-    ).scalar()
-
-    active_connections = db.session.execute(
-        db.text("SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()")
-    ).scalar()
-
-    now = datetime.utcnow()
-    month_start = datetime(now.year, now.month, 1)
-    ai_spend_mtd = db.session.query(
-        func.coalesce(func.sum(AiUsageLog.cost_usd), 0)
-    ).filter(AiUsageLog.created_at >= month_start).scalar()
-
-    days_elapsed = max((now - month_start).days + 1, 1)
-    if now.month == 12:
-        next_month_start = datetime(now.year + 1, 1, 1)
-    else:
-        next_month_start = datetime(now.year, now.month + 1, 1)
-    days_in_month = (next_month_start - month_start).days
-    ai_spend_projected = float(ai_spend_mtd) / days_elapsed * days_in_month
-
-    return jsonify({
-        "tier": tier,
-        "available_tiers": list(SUPABASE_TIER_LIMITS.keys()),
-        "db_size_bytes": int(db_size_bytes),
-        "db_size_limit_bytes": limits["db_size_bytes"],
-        "storage_used_bytes": int(storage_used_bytes),
-        "storage_limit_bytes": limits["storage_bytes"],
-        "active_connections": int(active_connections),
-        "connection_limit": limits["connections"],
-        "ai_spend_mtd_usd": float(ai_spend_mtd),
-        "ai_spend_projected_month_end_usd": round(ai_spend_projected, 2),
-        "days_elapsed_this_month": days_elapsed,
-        "days_in_month": days_in_month,
-    })
-
-
-@app.route("/admin/system/capacity/tier", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_set_supabase_tier():
-    """Switches which Supabase plan tier the capacity bars are measured against."""
-    data = request.get_json(silent=True) or {}
-    tier = data.get("tier")
-    if tier not in SUPABASE_TIER_LIMITS:
-        return jsonify({"error": "tier must be one of: " + ", ".join(SUPABASE_TIER_LIMITS.keys())}), 400
-
-    setting = SystemSetting.query.filter_by(key="supabase_tier").first()
-    if not setting:
-        setting = SystemSetting(key="supabase_tier", value=tier)
-        db.session.add(setting)
-    else:
-        setting.value = tier
-    db.session.commit()
-
-    return jsonify({"tier": tier})
-
-
-@app.route("/admin/payments/<int:payment_id>/refund", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_refund_payment(payment_id):
-    payment = db.session.get(Payment, payment_id)
-    if not payment:
-        return jsonify({"error": "Payment not found"}), 404
-
-    if payment.status != "success":
-        return jsonify({
-            "error": f"Only successful payments can be refunded (current status: {payment.status})"
-        }), 400
-
-    payment.status = "refunded"
-
-    if payment.payment_type == "subscription" and payment.user_id is not None:
-        recompute_subscription_expiries(payment.user_id)
-
-    referral = Referral.query.filter_by(first_payment_id=payment.id).first()
-    referral_commission_voided = False
-    if referral and referral.payout_id is None and referral.voided_at is None:
-        referral.voided_at = datetime.utcnow()
-        referral.void_reason = "Underlying payment refunded"
-        referral_commission_voided = True
-
-    db.session.commit()
-
-    return jsonify({
-        "message": "Payment marked as refunded. Access to this content has been revoked.",
-        "referral_commission_voided": referral_commission_voided,
-        "payment_id": payment.id,
-        "note": "This only updates records in Prepza. You must still send the actual M-Pesa refund manually.",
-    })
-
-
-# ---------- Admin: user management ----------
-
-ADMIN_USER_STATUS_VALUES = ("active", "suspended")
-ADMIN_USER_SUB_VALUES = ("free", "premium")
-
-
-@app.route("/admin/users")
-@require_admin
-def admin_list_users():
-    """
-    Lists users for the admin dashboard, optionally filtered by an
-    email/display_name substring, suspension status, and subscription
-    tier. Newest signups first; users with no created_at (pre-migration
-    accounts) sort last rather than first.
-
-    Each row is enriched with document count, AI request count, and
-    current subscription plan - all computed via grouped aggregate
-    queries up front (one query per metric) rather than per-user
-    lookups, so this stays cheap regardless of user count.
-    """
-    search = (request.args.get("search") or "").strip().lower()
-    status_filter = (request.args.get("status") or "").strip().lower()
-    sub_filter = (request.args.get("sub") or "").strip().lower()
-
-    if status_filter and status_filter not in ADMIN_USER_STATUS_VALUES:
-        return jsonify({"error": "status must be one of: " + ", ".join(ADMIN_USER_STATUS_VALUES)}), 400
-    if sub_filter and sub_filter not in ADMIN_USER_SUB_VALUES:
-        return jsonify({"error": "sub must be one of: " + ", ".join(ADMIN_USER_SUB_VALUES)}), 400
-
-    query = User.query
-    if search:
-        query = query.filter(
-            or_(
-                User.email.ilike(f"%{search}%"),
-                User.display_name.ilike(f"%{search}%"),
-            )
-        )
-    if status_filter == "active":
-        query = query.filter(User.is_suspended.is_(False))
-    elif status_filter == "suspended":
-        query = query.filter(User.is_suspended.is_(True))
-
-    users = query.all()
-    users.sort(key=lambda u: u.created_at or datetime.min, reverse=True)
-    user_ids = [u.id for u in users]
-
-    doc_counts = dict(
-        db.session.query(Document.user_id, func.count(Document.id))
-        .filter(Document.user_id.in_(user_ids), Document.is_removed.is_(False))
-        .group_by(Document.user_id)
-        .all()
-    ) if user_ids else {}
-
-    ai_counts = dict(
-        db.session.query(AiUsageLog.user_id, func.count(AiUsageLog.id))
-        .filter(AiUsageLog.user_id.in_(user_ids))
-        .group_by(AiUsageLog.user_id)
-        .all()
-    ) if user_ids else {}
-
-    # Latest successful subscription payment per user, so plan can be
-    # derived the same way get_user_subscription_status() does for a
-    # single user - done here as one grouped query instead of N calls.
-    sub_rows = (
-        db.session.query(Payment.user_id, Payment.plan, Payment.subscription_expires_at)
-        .filter(
-            Payment.user_id.in_(user_ids),
-            Payment.payment_type == "subscription",
-            Payment.status == "success",
-            Payment.subscription_expires_at.isnot(None),
-        )
-        .all()
-    ) if user_ids else []
-    latest_sub = {}
-    for uid, plan, expires_at in sub_rows:
-        existing = latest_sub.get(uid)
-        if existing is None or expires_at > existing[1]:
-            latest_sub[uid] = (plan, expires_at)
-
-    now = datetime.utcnow()
-    result = []
-    for u in users:
-        sub_entry = latest_sub.get(u.id)
-        is_sub_active = bool(sub_entry and sub_entry[1] > now)
-        plan = sub_entry[0] if (sub_entry and is_sub_active) else "free"
-
-        if sub_filter == "premium" and plan == "free":
-            continue
-        if sub_filter == "free" and plan != "free":
-            continue
-
-        university = db.session.get(University, u.university_id) if u.university_id else None
-        program = db.session.get(Program, u.program_id) if u.program_id else None
-
-        result.append({
-            "id": u.id,
-            "email": u.email,
-            "year": u.year,
-            "semester": u.semester,
-            "display_name": u.display_name,
-            "email_verified": u.email_verified,
-            "is_admin": u.is_admin,
-            "is_suspended": u.is_suspended,
-            "created_at": u.created_at.isoformat() if u.created_at else None,
-            "signup_source": u.signup_source,
-            "university_name": university.name if university else None,
-            "program_name": program.name if program else None,
-            "documents_count": doc_counts.get(u.id, 0),
-            "ai_requests_count": ai_counts.get(u.id, 0),
-            "subscription_plan": plan,
-            "subscription_active": is_sub_active,
-        })
-
-    return jsonify(result)
-
-
-@app.route("/admin/users/<int:user_id>", methods=["PATCH"])
-@require_csrf
-@require_admin
-def admin_update_user(user_id):
-    """
-    Lets an admin edit a student's year/semester, or toggle their
-    is_admin / is_suspended flags. Self-protection: the acting admin
-    cannot remove their own is_admin flag or suspend themselves here -
-    that would risk locking the only admin out with no recovery path
-    short of a direct DB edit.
-    """
-    acting_admin_id = session.get("user_id")
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    target_user = db.session.get(User, user_id)
-    if not target_user:
-        return jsonify({"error": "User not found"}), 404
-
-    if "year" in data:
-        year = data["year"]
-        if year is not None:
-            if not isinstance(year, int) or year < 1 or year > 4:
-                return jsonify({"error": "Year must be a number between 1 and 4"}), 400
-        target_user.year = year
-
-    if "semester" in data:
-        semester = data["semester"]
-        if semester is not None:
-            if not isinstance(semester, int) or semester not in (1, 2):
-                return jsonify({"error": "Semester must be 1 or 2"}), 400
-        target_user.semester = semester
-
-    if "is_admin" in data:
-        is_admin = data["is_admin"]
-        if not isinstance(is_admin, bool):
-            return jsonify({"error": "is_admin must be true or false"}), 400
-        if user_id == acting_admin_id and is_admin is False:
-            return jsonify({"error": "You can't remove your own admin access"}), 400
-        target_user.is_admin = is_admin
-
-    if "is_suspended" in data:
-        is_suspended = data["is_suspended"]
-        if not isinstance(is_suspended, bool):
-            return jsonify({"error": "is_suspended must be true or false"}), 400
-        if user_id == acting_admin_id and is_suspended is True:
-            return jsonify({"error": "You can't suspend your own account"}), 400
-        target_user.is_suspended = is_suspended
-
-    _audit_details = {}
-    if "is_admin" in data:
-        _audit_details["is_admin"] = target_user.is_admin
-    if "is_suspended" in data:
-        _audit_details["is_suspended"] = target_user.is_suspended
-    if _audit_details:
-        log_admin_action(acting_admin_id, "user_updated", target_type="user", target_id=target_user.id, details=_audit_details)
-    db.session.commit()
-
-    return jsonify({
-        "id": target_user.id,
-        "email": target_user.email,
-        "year": target_user.year,
-        "semester": target_user.semester,
-        "is_admin": target_user.is_admin,
-        "is_suspended": target_user.is_suspended,
-    })
-
-
-# ---------- Admin: universities & programs (Chunk 10) ----------
-
-UNIVERSITY_NAME_MAX = 150
-UNIVERSITY_SHORT_CODE_MAX = 20
-UNIVERSITY_COUNTRY_MAX = 80
-
-
-def _serialize_admin_university(university):
-    return {
-        "id": university.id,
-        "name": university.name,
-        "short_code": university.short_code,
-        "country": university.country,
-        "is_active": university.is_active,
-        "created_at": university.created_at.isoformat() if university.created_at else None,
-    }
-
-
-@app.route("/admin/universities", methods=["GET"])
-@require_admin
-def admin_list_universities():
-    """Lists ALL universities (active and inactive) for admin management -
-    unlike the public GET /universities, which only returns active ones."""
-    universities = University.query.order_by(University.name).all()
-    return jsonify({"universities": [_serialize_admin_university(u) for u in universities]})
-
-
-@app.route("/admin/universities", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_create_university():
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    name = (data.get("name") or "").strip()
-    short_code = (data.get("short_code") or "").strip().upper()
-    country = data.get("country")
-
-    if not name or len(name) > UNIVERSITY_NAME_MAX:
-        return jsonify({"error": f"name is required and must be {UNIVERSITY_NAME_MAX} characters or fewer"}), 400
-    if not short_code or len(short_code) > UNIVERSITY_SHORT_CODE_MAX:
-        return jsonify({
-            "error": f"short_code is required and must be {UNIVERSITY_SHORT_CODE_MAX} characters or fewer"
-        }), 400
-    if University.query.filter_by(short_code=short_code).first():
-        return jsonify({"error": "A university with this short_code already exists"}), 409
-
-    if country is not None:
-        if not isinstance(country, str):
-            return jsonify({"error": "country must be a string"}), 400
-        country = country.strip() or None
-        if country and len(country) > UNIVERSITY_COUNTRY_MAX:
-            return jsonify({"error": f"country must be {UNIVERSITY_COUNTRY_MAX} characters or fewer"}), 400
-
-    university = University(name=name, short_code=short_code, country=country)
-    db.session.add(university)
-    db.session.commit()
-
-    return jsonify(_serialize_admin_university(university)), 201
-
-
-@app.route("/admin/universities/<int:university_id>", methods=["PATCH"])
-@require_csrf
-@require_admin
-def admin_update_university(university_id):
-    """
-    Edits a university's fields and/or toggles is_active. Deactivating
-    hides it from the public /universities and
-    /universities/<id>/programs routes (and therefore from new student
-    signups) without deleting anything - same reactive kill-switch
-    pattern used throughout this file (Organisation.is_active,
-    Group.is_active, etc).
-    """
-    university = db.session.get(University, university_id)
-    if not university:
-        return jsonify({"error": "University not found"}), 404
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    if "name" in data:
-        name = (data.get("name") or "").strip()
-        if not name or len(name) > UNIVERSITY_NAME_MAX:
-            return jsonify({"error": f"name must be 1-{UNIVERSITY_NAME_MAX} characters"}), 400
-        university.name = name
-
-    if "short_code" in data:
-        short_code = (data.get("short_code") or "").strip().upper()
-        if not short_code or len(short_code) > UNIVERSITY_SHORT_CODE_MAX:
-            return jsonify({"error": f"short_code must be 1-{UNIVERSITY_SHORT_CODE_MAX} characters"}), 400
-        existing = University.query.filter_by(short_code=short_code).first()
-        if existing and existing.id != university.id:
-            return jsonify({"error": "A university with this short_code already exists"}), 409
-        university.short_code = short_code
-
-    if "country" in data:
-        country = data.get("country")
-        if country is not None:
-            if not isinstance(country, str):
-                return jsonify({"error": "country must be a string"}), 400
-            country = country.strip() or None
-            if country and len(country) > UNIVERSITY_COUNTRY_MAX:
-                return jsonify({"error": f"country must be {UNIVERSITY_COUNTRY_MAX} characters or fewer"}), 400
-        university.country = country
-
-    if "is_active" in data:
-        is_active = data["is_active"]
-        if not isinstance(is_active, bool):
-            return jsonify({"error": "is_active must be true or false"}), 400
-        university.is_active = is_active
-
-    db.session.commit()
-
-    return jsonify(_serialize_admin_university(university))
-
-
-PROGRAM_NAME_MAX = 150
-PROGRAM_DEGREE_LEVEL_MAX = 50
-PROGRAM_DISCIPLINE_CATEGORY_MAX = 80
-
-
-def _serialize_admin_program(program):
-    university = db.session.get(University, program.university_id)
-    return {
-        "id": program.id,
-        "university_id": program.university_id,
-        "university_name": university.name if university else None,
-        "name": program.name,
-        "degree_level": program.degree_level,
-        "discipline_category": program.discipline_category,
-        "is_active": program.is_active,
-        "created_at": program.created_at.isoformat() if program.created_at else None,
-    }
-
-
-@app.route("/admin/programs", methods=["GET"])
-@require_admin
-def admin_list_programs():
-    """Lists ALL programs (active and inactive), optionally filtered by
-    ?university_id= - for admin management, unlike the public
-    per-university GET /universities/<id>/programs, which only returns
-    active ones."""
-    query = Program.query
-    university_id = request.args.get("university_id", type=int)
-    if university_id:
-        query = query.filter_by(university_id=university_id)
-    programs = query.order_by(Program.name).all()
-    return jsonify({"programs": [_serialize_admin_program(p) for p in programs]})
-
-
-@app.route("/admin/programs", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_create_program():
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    university_id = data.get("university_id")
-    if not isinstance(university_id, int) or isinstance(university_id, bool):
-        return jsonify({"error": "university_id is required"}), 400
-    if not db.session.get(University, university_id):
-        return jsonify({"error": "University not found"}), 404
-
-    name = (data.get("name") or "").strip()
-    if not name or len(name) > PROGRAM_NAME_MAX:
-        return jsonify({"error": f"name is required and must be {PROGRAM_NAME_MAX} characters or fewer"}), 400
-
-    degree_level = data.get("degree_level")
-    if degree_level is not None:
-        if not isinstance(degree_level, str):
-            return jsonify({"error": "degree_level must be a string"}), 400
-        degree_level = degree_level.strip() or None
-        if degree_level and len(degree_level) > PROGRAM_DEGREE_LEVEL_MAX:
-            return jsonify({"error": f"degree_level must be {PROGRAM_DEGREE_LEVEL_MAX} characters or fewer"}), 400
-
-    discipline_category = data.get("discipline_category")
-    if discipline_category is not None:
-        if not isinstance(discipline_category, str):
-            return jsonify({"error": "discipline_category must be a string"}), 400
-        discipline_category = discipline_category.strip() or None
-        if discipline_category and len(discipline_category) > PROGRAM_DISCIPLINE_CATEGORY_MAX:
-            return jsonify({
-                "error": f"discipline_category must be {PROGRAM_DISCIPLINE_CATEGORY_MAX} characters or fewer"
-            }), 400
-
-    program = Program(
-        university_id=university_id, name=name,
-        degree_level=degree_level, discipline_category=discipline_category,
-    )
-    db.session.add(program)
-    db.session.commit()
-
-    return jsonify(_serialize_admin_program(program)), 201
-
-
-@app.route("/admin/programs/<int:program_id>", methods=["PATCH"])
-@require_csrf
-@require_admin
-def admin_update_program(program_id):
-    """
-    Edits a program's fields and/or toggles is_active. Deactivating
-    hides it from the public /universities/<id>/programs route (and
-    therefore from new student signups picking a course), without
-    deleting anything.
-    """
-    program = db.session.get(Program, program_id)
-    if not program:
-        return jsonify({"error": "Program not found"}), 404
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    if "name" in data:
-        name = (data.get("name") or "").strip()
-        if not name or len(name) > PROGRAM_NAME_MAX:
-            return jsonify({"error": f"name must be 1-{PROGRAM_NAME_MAX} characters"}), 400
-        program.name = name
-
-    if "degree_level" in data:
-        degree_level = data.get("degree_level")
-        if degree_level is not None:
-            if not isinstance(degree_level, str):
-                return jsonify({"error": "degree_level must be a string"}), 400
-            degree_level = degree_level.strip() or None
-            if degree_level and len(degree_level) > PROGRAM_DEGREE_LEVEL_MAX:
-                return jsonify({"error": f"degree_level must be {PROGRAM_DEGREE_LEVEL_MAX} characters or fewer"}), 400
-        program.degree_level = degree_level
-
-    if "discipline_category" in data:
-        discipline_category = data.get("discipline_category")
-        if discipline_category is not None:
-            if not isinstance(discipline_category, str):
-                return jsonify({"error": "discipline_category must be a string"}), 400
-            discipline_category = discipline_category.strip() or None
-            if discipline_category and len(discipline_category) > PROGRAM_DISCIPLINE_CATEGORY_MAX:
-                return jsonify({
-                    "error": f"discipline_category must be {PROGRAM_DISCIPLINE_CATEGORY_MAX} characters or fewer"
-                }), 400
-        program.discipline_category = discipline_category
-
-    if "is_active" in data:
-        is_active = data["is_active"]
-        if not isinstance(is_active, bool):
-            return jsonify({"error": "is_active must be true or false"}), 400
-        program.is_active = is_active
-
-    db.session.commit()
-
-    return jsonify(_serialize_admin_program(program))
-
-
-# ---------- Admin: groups (Chunk 10) ----------
-
-@app.route("/admin/groups")
-@require_admin
-def admin_list_groups():
-    """
-    Lists groups for the admin dashboard, optionally filtered by
-    ?search= (name substring) and ?status=active|inactive. Newest first.
-    """
-    search = (request.args.get("search") or "").strip()
-    status_filter = (request.args.get("status") or "").strip().lower()
-    if status_filter and status_filter not in ("active", "inactive"):
-        return jsonify({"error": "status must be 'active' or 'inactive'"}), 400
-
-    query = Group.query
-    if search:
-        query = query.filter(Group.name.ilike(f"%{search}%"))
-    if status_filter == "active":
-        query = query.filter(Group.is_active.is_(True))
-    elif status_filter == "inactive":
-        query = query.filter(Group.is_active.is_(False))
-
-    groups = query.order_by(Group.created_at.desc()).all()
-
-    return jsonify({"groups": [_serialize_group(g) for g in groups]})
-
-
-@app.route("/admin/groups/<int:group_id>", methods=["PATCH"])
-@require_csrf
-@require_admin
-def admin_update_group(group_id):
-    """
-    Admin kill-switch: activate/deactivate a group. Deactivating hides it
-    from browse/join and blocks new posts/comments/joins for existing
-    members too (see the is_active checks in join_group /
-    create_group_post / create_group_post_comment) - stricter than the
-    Organisation.is_active pattern, which only hides new opportunities
-    rather than blocking ongoing member activity.
-    """
-    group = db.session.get(Group, group_id)
-    if not group:
-        return jsonify({"error": "Group not found"}), 404
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    if "is_active" in data:
-        is_active = data["is_active"]
-        if not isinstance(is_active, bool):
-            return jsonify({"error": "is_active must be true or false"}), 400
-        group.is_active = is_active
-
-    db.session.commit()
-
-    return jsonify(_serialize_group(group))
-
-
-@app.route("/admin/settings", methods=["GET"])
-@require_admin
-def admin_get_settings():
-    settings = {s.key: s.value for s in SystemSetting.query.all()}
-
-    def price(key):
-        try:
-            return int(settings.get(key, "0") or "0")
-        except (TypeError, ValueError):
-            return 0
-
-    def daily_limit(key, default):
-        raw = settings.get(key)
-        if raw is None or raw == "":
-            return default
-        if raw.strip().lower() == "unlimited":
-            return None
-        try:
-            return int(raw)
-        except (TypeError, ValueError):
-            return default
-
-    def money(key, default_str):
-        try:
-            return float(settings.get(key, default_str) or default_str)
-        except (TypeError, ValueError):
-            return float(default_str)
-
-    return jsonify({
-        "maintenance_mode": settings.get("maintenance_mode", "false") == "true",
-        "maintenance_message": settings.get("maintenance_message", ""),
-        "prepza_control_enabled": settings.get("prepza_control_enabled", "false") == "true",
-        "price_notes": price("price_notes"),
-        "price_past_paper": price("price_past_paper"),
-        "price_qna": price("price_qna"),
-        "price_plan_semester": price("price_plan_semester") or 599,
-        "price_plan_annual": price("price_plan_annual") or 999,
-        "price_promotion_standard": price("price_promotion_standard"),
-        "price_promotion_featured": price("price_promotion_featured") or 300,
-        "price_promotion_sponsored": price("price_promotion_sponsored") or 800,
-        "ai_daily_limit_free": daily_limit("ai_daily_limit_free", 5),
-        "ai_daily_limit_plus": daily_limit("ai_daily_limit_plus", 15),
-        "ai_daily_limit_premium": daily_limit("ai_daily_limit_premium", None),
-        "ai_daily_tutor_limit_free": daily_limit("ai_daily_tutor_limit_free", 5),
-        "ai_daily_tutor_limit_plus": daily_limit("ai_daily_tutor_limit_plus", 20),
-        "ai_daily_tutor_limit_premium": daily_limit("ai_daily_tutor_limit_premium", 50),
-        "ai_monthly_budget_usd": money("ai_monthly_budget_usd", "300.00"),
-    })
-
-
-@app.route("/admin/settings", methods=["PATCH"])
-@require_csrf
-@require_admin
-def admin_update_settings():
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    if "maintenance_mode" in data:
-        value = data["maintenance_mode"]
-        if not isinstance(value, bool):
-            return jsonify({"error": "maintenance_mode must be true or false"}), 400
-        setting = SystemSetting.query.filter_by(key="maintenance_mode").first()
-        if not setting:
-            setting = SystemSetting(key="maintenance_mode", value="false")
-            db.session.add(setting)
-        setting.value = "true" if value else "false"
-
-    if "maintenance_message" in data:
-        message = data["maintenance_message"]
-        if not isinstance(message, str):
-            return jsonify({"error": "maintenance_message must be a string"}), 400
-        if len(message) > 500:
-            return jsonify({"error": "maintenance_message must be 500 characters or fewer"}), 400
-        setting = SystemSetting.query.filter_by(key="maintenance_message").first()
-        if not setting:
-            setting = SystemSetting(key="maintenance_message", value="")
-            db.session.add(setting)
-        setting.value = message
-
-    if "prepza_control_enabled" in data:
-        value = data["prepza_control_enabled"]
-        if not isinstance(value, bool):
-            return jsonify({"error": "prepza_control_enabled must be true or false"}), 400
-        setting = SystemSetting.query.filter_by(key="prepza_control_enabled").first()
-        if not setting:
-            setting = SystemSetting(key="prepza_control_enabled", value="false")
-            db.session.add(setting)
-        setting.value = "true" if value else "false"
-        log_admin_action(
-            session.get("user_id"),
-            "control_api_enabled" if value else "control_api_disabled",
-            target_type="control_api",
-            details={"enabled": value},
-        )
-
-    for price_key in ("price_notes", "price_past_paper", "price_qna", "price_plan_semester", "price_plan_annual", "price_promotion_standard", "price_promotion_featured", "price_promotion_sponsored"):
-        if price_key in data:
-            value = data[price_key]
-            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-                return jsonify({"error": f"{price_key} must be a non-negative integer"}), 400
-            setting = SystemSetting.query.filter_by(key=price_key).first()
-            if not setting:
-                setting = SystemSetting(key=price_key, value="0")
-                db.session.add(setting)
-            setting.value = str(value)
-
-    for tier_key in (
-        "ai_daily_limit_free", "ai_daily_limit_plus", "ai_daily_limit_premium",
-        "ai_daily_tutor_limit_free", "ai_daily_tutor_limit_plus", "ai_daily_tutor_limit_premium",
-    ):
-        if tier_key in data:
-            value = data[tier_key]
-            if value is None:
-                stored = "unlimited"
-            elif not isinstance(value, int) or isinstance(value, bool) or value < 0:
-                return jsonify({"error": f"{tier_key} must be a non-negative integer, or null for unlimited"}), 400
-            else:
-                stored = str(value)
-            setting = SystemSetting.query.filter_by(key=tier_key).first()
-            if not setting:
-                setting = SystemSetting(key=tier_key, value=stored)
-                db.session.add(setting)
-            else:
-                setting.value = stored
-
-    if "ai_monthly_budget_usd" in data:
-        value = data["ai_monthly_budget_usd"]
-        if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
-            return jsonify({"error": "ai_monthly_budget_usd must be a positive number"}), 400
-        setting = SystemSetting.query.filter_by(key="ai_monthly_budget_usd").first()
-        if not setting:
-            setting = SystemSetting(key="ai_monthly_budget_usd", value=str(value))
-            db.session.add(setting)
-        else:
-            setting.value = str(value)
-
-    db.session.commit()
-    _invalidate_maintenance_cache()
-
-    mode_setting = SystemSetting.query.filter_by(key="maintenance_mode").first()
-    message_setting = SystemSetting.query.filter_by(key="maintenance_message").first()
-    control_setting = SystemSetting.query.filter_by(key="prepza_control_enabled").first()
-    return jsonify({
-        "maintenance_mode": bool(mode_setting and mode_setting.value == "true"),
-        "maintenance_message": message_setting.value if message_setting else "",
-        "prepza_control_enabled": bool(control_setting and control_setting.value == "true"),
-    })
-
-
-# ---------- Organisations (Opportunities + Organisation portal) ----------
-
-ORGANISATION_NAME_MAX = 150
-ORGANISATION_DESCRIPTION_MAX = 1000
-ORGANISATION_WEBSITE_MAX = 500
-ORGANISATION_LOGO_URL_MAX = 500
-ORGANISATION_CONTACT_PHONE_MAX = 20
-
-
-def _serialize_organisation(org, membership=None):
-    return {
-        "id": org.id,
-        "name": org.name,
-        "description": org.description,
-        "website": org.website,
-        "logo_url": org.logo_url,
-        "contact_email": org.contact_email,
-        "contact_phone": org.contact_phone,
-        "verification_status": org.verification_status,
-        "verification_notes": org.verification_notes,
-        "is_active": org.is_active,
-        "created_by": org.created_by,
-        "created_at": org.created_at.isoformat() if org.created_at else None,
-        "updated_at": org.updated_at.isoformat() if org.updated_at else None,
-        "is_member": membership is not None,
-        "role": membership.role if membership else None,
-    }
-
-
-def _validate_organisation_fields(data, partial=False):
-    """
-    Shared validation for create + update. Returns (fields, error_response)
-    - fields is a dict of validated values to apply, error_response is
-    (jsonify(...), status) or None. In partial mode, a field is only
-    validated/included if present in data (PATCH semantics); in
-    non-partial mode name/contact_email are always required (POST semantics).
-    """
-    fields = {}
-
-    if not partial or "name" in data:
-        name = (data.get("name") or "").strip()
-        if not name or len(name) > ORGANISATION_NAME_MAX:
-            return None, (jsonify({
-                "error": f"name is required and must be {ORGANISATION_NAME_MAX} characters or fewer"
-            }), 400)
-        fields["name"] = name
-
-    if not partial or "contact_email" in data:
-        contact_email = (data.get("contact_email") or "").strip().lower()
-        if not contact_email or not EMAIL_REGEX.match(contact_email):
-            return None, (jsonify({"error": "A valid contact_email is required"}), 400)
-        fields["contact_email"] = contact_email
-
-    if "description" in data:
-        description = data.get("description")
-        if description is not None:
-            if not isinstance(description, str):
-                return None, (jsonify({"error": "description must be a string"}), 400)
-            description = description.strip() or None
-            if description and len(description) > ORGANISATION_DESCRIPTION_MAX:
-                return None, (jsonify({
-                    "error": f"description must be {ORGANISATION_DESCRIPTION_MAX} characters or fewer"
-                }), 400)
-        fields["description"] = description
-
-    if "website" in data:
-        website = data.get("website")
-        if website is not None:
-            if not isinstance(website, str):
-                return None, (jsonify({"error": "website must be a string"}), 400)
-            website = website.strip() or None
-            if website and len(website) > ORGANISATION_WEBSITE_MAX:
-                return None, (jsonify({
-                    "error": f"website must be {ORGANISATION_WEBSITE_MAX} characters or fewer"
-                }), 400)
-        fields["website"] = website
-
-    if "logo_url" in data:
-        logo_url = data.get("logo_url")
-        if logo_url is not None:
-            if not isinstance(logo_url, str):
-                return None, (jsonify({"error": "logo_url must be a string"}), 400)
-            logo_url = logo_url.strip() or None
-            if logo_url and len(logo_url) > ORGANISATION_LOGO_URL_MAX:
-                return None, (jsonify({
-                    "error": f"logo_url must be {ORGANISATION_LOGO_URL_MAX} characters or fewer"
-                }), 400)
-        fields["logo_url"] = logo_url
-
-    if "contact_phone" in data:
-        contact_phone = data.get("contact_phone")
-        if contact_phone is not None:
-            if not isinstance(contact_phone, str):
-                return None, (jsonify({"error": "contact_phone must be a string"}), 400)
-            contact_phone = contact_phone.strip() or None
-            if contact_phone and len(contact_phone) > ORGANISATION_CONTACT_PHONE_MAX:
-                return None, (jsonify({
-                    "error": f"contact_phone must be {ORGANISATION_CONTACT_PHONE_MAX} characters or fewer"
-                }), 400)
-        fields["contact_phone"] = contact_phone
-
-    return fields, None
-
-
-@app.route("/organisations", methods=["POST"])
-@require_csrf
-def create_organisation():
-    """
-    Registers a new Organisation and makes the creator its 'owner'.
-    New organisations start unverified (verification_status='pending') -
-    they can be staffed and edited immediately, but their opportunities
-    cannot be published until an admin verifies them (enforced in the
-    opportunities routes patch).
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    fields, error = _validate_organisation_fields(data, partial=False)
-    if error:
-        return error
-
-    org = Organisation(created_by=user_id, **fields)
-    db.session.add(org)
-    db.session.flush()  # assign org.id before the membership row references it
-
-    membership = OrganisationMember(organisation_id=org.id, user_id=user_id, role="owner")
-    db.session.add(membership)
-    db.session.commit()
-
-    return jsonify(_serialize_organisation(org, membership)), 201
-
-
-@app.route("/organisations/mine")
-def my_organisations():
-    """Lists every Organisation the caller is a member of, any role."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    memberships = OrganisationMember.query.filter_by(user_id=user_id).all()
-    result = []
-    for m in memberships:
-        org = db.session.get(Organisation, m.organisation_id)
-        if not org:
-            continue
-        result.append(_serialize_organisation(org, m))
-
-    return jsonify({"organisations": result})
-
-
-@app.route("/organisations/<int:organisation_id>")
-def get_organisation(organisation_id):
-    """
-    Full org profile - members and admins only. Non-members get a 404
-    (not a 403) so this can't be used to enumerate which organisations
-    exist or probe their contact details.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    membership = OrganisationMember.query.filter_by(
-        organisation_id=organisation_id, user_id=user_id
-    ).first()
-
-    viewer = db.session.get(User, user_id)
-    is_admin = bool(viewer and viewer.is_admin)
-
-    if not membership and not is_admin:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    return jsonify(_serialize_organisation(org, membership))
-
-
-@app.route("/organisations/<int:organisation_id>", methods=["PATCH"])
-@require_csrf
-def update_organisation(organisation_id):
-    """
-    Edits an org's own profile. Owner-only - per OrganisationMember's
-    role split, 'manager' can submit/edit opportunities but does not
-    manage the organisation account itself.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    membership = OrganisationMember.query.filter_by(
-        organisation_id=organisation_id, user_id=user_id
-    ).first()
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-    if membership.role != "owner":
-        return jsonify({"error": "Only the organisation owner can edit its profile"}), 403
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    fields, error = _validate_organisation_fields(data, partial=True)
-    if error:
-        return error
-
-    for key, value in fields.items():
-        setattr(org, key, value)
-    db.session.commit()
-
-    return jsonify(_serialize_organisation(org, membership))
-
-
-@app.route("/admin/organisations")
-@require_admin
-def admin_list_organisations():
-    """
-    Lists organisations for the admin dashboard, optionally filtered by
-    verification_status. Oldest-first, same "review queue" ordering as
-    admin_library_queue - whether or not a status filter is applied.
-    """
-    status_filter = request.args.get("verification_status")
-    query = Organisation.query
-    if status_filter:
-        if status_filter not in ORGANISATION_VERIFICATION_STATUSES:
-            return jsonify({
-                "error": "verification_status must be one of: " + ", ".join(ORGANISATION_VERIFICATION_STATUSES)
-            }), 400
-        query = query.filter_by(verification_status=status_filter)
-
-    orgs = query.order_by(Organisation.created_at.asc()).all()
-
-    result = []
-    for org in orgs:
-        owner_membership = OrganisationMember.query.filter_by(
-            organisation_id=org.id, role="owner"
-        ).first()
-        owner_user = db.session.get(User, owner_membership.user_id) if owner_membership else None
-        entry = _serialize_organisation(org)
-        entry["owner_email"] = owner_user.email if owner_user else None
-        result.append(entry)
-
-    return jsonify({"organisations": result})
-
-
-@app.route("/admin/organisations/<int:organisation_id>/verify", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_verify_organisation(organisation_id):
-    """Verifies a pending or previously-rejected organisation."""
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-    if org.verification_status == "verified":
-        return jsonify({"error": "Organisation is already verified"}), 400
-
-    org.verification_status = "verified"
-    org.verification_notes = None
-    db.session.commit()
-
-    return jsonify(_serialize_organisation(org))
-
-
-@app.route("/admin/organisations/<int:organisation_id>/reject", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_reject_organisation(organisation_id):
-    """
-    Rejects a pending organisation with a required reason. Refuses to
-    reject an already-verified org - revoking a verified org's standing
-    is a separate action (the is_active kill-switch below), not a
-    verification-flow rejection.
-    """
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-    if org.verification_status == "verified":
-        return jsonify({
-            "error": "Cannot reject an already-verified organisation - deactivate it instead"
-        }), 400
-
-    data = request.get_json(silent=True) or {}
-    reason = (data.get("reason") or "").strip()
-    if not reason or len(reason) > 500:
-        return jsonify({"error": "reason is required and must be 500 characters or fewer"}), 400
-
-    org.verification_status = "rejected"
-    org.verification_notes = reason
-    db.session.commit()
-
-    return jsonify(_serialize_organisation(org))
-
-
-@app.route("/admin/organisations/<int:organisation_id>", methods=["PATCH"])
-@require_csrf
-@require_admin
-def admin_update_organisation(organisation_id):
-    """Admin kill-switch: activate/deactivate an organisation. Deactivating
-    hides its opportunities without deleting anything (enforced in the
-    opportunities routes patch)."""
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    if "is_active" in data:
-        is_active = data["is_active"]
-        if not isinstance(is_active, bool):
-            return jsonify({"error": "is_active must be true or false"}), 400
-        org.is_active = is_active
-
-    db.session.commit()
-
-    return jsonify(_serialize_organisation(org))
-
-
-# ---------- Organisation staff management ----------
-# Lets an org 'owner' invite/remove 'manager' staff. Deliberately does NOT
-# support transferring ownership or promoting a manager to owner - every
-# Organisation has exactly one owner (the creator, set at POST
-# /organisations time) and that never changes here, same "no speculative
-# building" tradeoff as elsewhere in this file. A manager can submit/edit
-# opportunities (per the existing OrganisationMember role split) but has
-# no say over org staffing itself.
-
-def _serialize_org_member(membership):
-    user = db.session.get(User, membership.user_id)
-    return {
-        "user_id": membership.user_id,
-        "email": user.email if user else None,
-        "display_name": _display_name(user) if user else "Deleted user",
-        "role": membership.role,
-        "joined_at": membership.joined_at.isoformat() if membership.joined_at else None,
-    }
-
-
-@app.route("/organisations/<int:organisation_id>/members")
-def list_organisation_members(organisation_id):
-    """Any member (owner or manager) can view the staff list. Non-members
-    get a 404, same "don't confirm existence" pattern as get_organisation()."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    members = (
-        OrganisationMember.query.filter_by(organisation_id=organisation_id)
-        .order_by(OrganisationMember.joined_at.asc())
-        .all()
-    )
-    members.sort(key=lambda m: 0 if m.role == "owner" else 1)
-
-    return jsonify({"members": [_serialize_org_member(m) for m in members]})
-
-
-@app.route("/organisations/<int:organisation_id>/members", methods=["POST"])
-@require_csrf
-def add_organisation_member(organisation_id):
-    """
-    Owner-only: invites an existing Prepza user as a 'manager'. Takes a
-    user_id (not an email) - same "search then add" pattern as group
-    creation's member_user_ids, resolved client-side via the existing
-    GET /users/search picker rather than an email-invite flow, since
-    every staffer must already have a Prepza account to sign in as.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership or membership.role != "owner":
-        return jsonify({"error": "Only the organisation owner can add staff"}), 403
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    target_user_id = data.get("user_id")
-    if not isinstance(target_user_id, int) or isinstance(target_user_id, bool):
-        return jsonify({"error": "user_id is required"}), 400
-    if target_user_id == user_id:
-        return jsonify({"error": "You're already the owner of this organisation"}), 400
-
-    target_user = db.session.get(User, target_user_id)
-    if not target_user or target_user.is_suspended:
-        return jsonify({"error": "User not found"}), 404
-
-    existing = OrganisationMember.query.filter_by(
-        organisation_id=organisation_id, user_id=target_user_id
-    ).first()
-    if existing:
-        return jsonify({"message": "Already staff", "member": _serialize_org_member(existing)}), 200
-
-    new_member = OrganisationMember(organisation_id=organisation_id, user_id=target_user_id, role="manager")
-    db.session.add(new_member)
-    db.session.commit()
-
-    return jsonify(_serialize_org_member(new_member)), 201
-
-
-@app.route("/organisations/<int:organisation_id>/members/<int:target_user_id>", methods=["DELETE"])
-@require_csrf
-def remove_organisation_member(organisation_id, target_user_id):
-    """
-    Owner-only removal of a manager. Refuses to remove the owner (there's
-    no ownership-transfer flow, so removing the owner would strand the
-    org with no one able to manage staff or edit its profile) and refuses
-    self-removal for the same reason.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership or membership.role != "owner":
-        return jsonify({"error": "Only the organisation owner can remove staff"}), 403
-
-    if target_user_id == user_id:
-        return jsonify({"error": "The owner can't remove themselves"}), 400
-
-    target = OrganisationMember.query.filter_by(
-        organisation_id=organisation_id, user_id=target_user_id
-    ).first()
-    if not target:
-        return jsonify({"error": "Staff member not found"}), 404
-    if target.role == "owner":
-        return jsonify({"error": "Can't remove the organisation owner"}), 400
-
-    db.session.delete(target)
-    db.session.commit()
-
-    return jsonify({"message": "Staff member removed"})
-
-
-# ---------- Opportunities (organisation-side CRUD) ----------
-
-from datetime import timezone
-
-OPPORTUNITY_TITLE_MAX = 200
-OPPORTUNITY_DESCRIPTION_MAX = 5000
-OPPORTUNITY_LOCATION_MAX = 200
-OPPORTUNITY_APPLICATION_URL_MAX = 500
-OPPORTUNITY_INSTRUCTIONS_MAX = 3000
-OPPORTUNITY_EDITABLE_STATUSES = ("draft", "rejected")
-
-
-def _get_org_membership(organisation_id, user_id):
-    return OrganisationMember.query.filter_by(
-        organisation_id=organisation_id, user_id=user_id
-    ).first()
-
-
-def _parse_iso_datetime(value):
-    """
-    Parses an ISO-8601 string into a naive UTC datetime (matching the
-    naive datetime.utcnow() convention used throughout this file).
-    Returns None if value is missing/invalid rather than raising -
-    callers turn that into a 400.
-    """
-    if not isinstance(value, str) or not value.strip():
-        return None
-    v = value.strip()
-    if v.endswith("Z"):
-        v = v[:-1] + "+00:00"
-    try:
-        dt = datetime.fromisoformat(v)
-    except ValueError:
-        return None
-    if dt.tzinfo is not None:
-        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt
-
-
-def _serialize_opportunity(opp):
-    return {
-        "id": opp.id,
-        "organisation_id": opp.organisation_id,
-        "created_by": opp.created_by,
-        "title": opp.title,
-        "description": opp.description,
-        "opportunity_type": opp.opportunity_type,
-        "location": opp.location,
-        "is_remote": opp.is_remote,
-        "application_url": opp.application_url,
-        "application_instructions": opp.application_instructions,
-        "application_deadline": opp.application_deadline.isoformat() if opp.application_deadline else None,
-        "expiry_date": opp.expiry_date.isoformat() if opp.expiry_date else None,
-        "status": opp.status,
-        "rejection_reason": opp.rejection_reason,
-        "submitted_at": opp.submitted_at.isoformat() if opp.submitted_at else None,
-        "reviewed_at": opp.reviewed_at.isoformat() if opp.reviewed_at else None,
-        "published_at": opp.published_at.isoformat() if opp.published_at else None,
-        "view_count": opp.view_count,
-        "created_at": opp.created_at.isoformat() if opp.created_at else None,
-        "updated_at": opp.updated_at.isoformat() if opp.updated_at else None,
-    }
-
-
-def _validate_opportunity_fields(data, partial=False):
-    """
-    Shared validation for create + update. Returns (fields, error_response).
-    Does NOT validate the deadline/expiry cross-field ordering - callers
-    do that themselves once they know the row's effective final values
-    (needed because PATCH may only change one of the two dates).
-    """
-    fields = {}
-
-    if not partial or "title" in data:
-        title = (data.get("title") or "").strip()
-        if not title or len(title) > OPPORTUNITY_TITLE_MAX:
-            return None, (jsonify({
-                "error": f"title is required and must be {OPPORTUNITY_TITLE_MAX} characters or fewer"
-            }), 400)
-        fields["title"] = title
-
-    if not partial or "description" in data:
-        description = (data.get("description") or "").strip()
-        if not description or len(description) > OPPORTUNITY_DESCRIPTION_MAX:
-            return None, (jsonify({
-                "error": f"description is required and must be {OPPORTUNITY_DESCRIPTION_MAX} characters or fewer"
-            }), 400)
-        fields["description"] = description
-
-    if not partial or "opportunity_type" in data:
-        opportunity_type = (data.get("opportunity_type") or "").strip().lower()
-        if opportunity_type not in OPPORTUNITY_TYPES:
-            return None, (jsonify({
-                "error": "opportunity_type must be one of: " + ", ".join(OPPORTUNITY_TYPES)
-            }), 400)
-        fields["opportunity_type"] = opportunity_type
-
-    if "location" in data:
-        location = data.get("location")
-        if location is not None:
-            if not isinstance(location, str):
-                return None, (jsonify({"error": "location must be a string"}), 400)
-            location = location.strip() or None
-            if location and len(location) > OPPORTUNITY_LOCATION_MAX:
-                return None, (jsonify({
-                    "error": f"location must be {OPPORTUNITY_LOCATION_MAX} characters or fewer"
-                }), 400)
-        fields["location"] = location
-
-    if "is_remote" in data:
-        is_remote = data.get("is_remote")
-        if not isinstance(is_remote, bool):
-            return None, (jsonify({"error": "is_remote must be true or false"}), 400)
-        fields["is_remote"] = is_remote
-
-    if "application_url" in data:
-        application_url = data.get("application_url")
-        if application_url is not None:
-            if not isinstance(application_url, str):
-                return None, (jsonify({"error": "application_url must be a string"}), 400)
-            application_url = application_url.strip() or None
-            if application_url and len(application_url) > OPPORTUNITY_APPLICATION_URL_MAX:
-                return None, (jsonify({
-                    "error": f"application_url must be {OPPORTUNITY_APPLICATION_URL_MAX} characters or fewer"
-                }), 400)
-        fields["application_url"] = application_url
-
-    if "application_instructions" in data:
-        instructions = data.get("application_instructions")
-        if instructions is not None:
-            if not isinstance(instructions, str):
-                return None, (jsonify({"error": "application_instructions must be a string"}), 400)
-            instructions = instructions.strip() or None
-            if instructions and len(instructions) > OPPORTUNITY_INSTRUCTIONS_MAX:
-                return None, (jsonify({
-                    "error": f"application_instructions must be {OPPORTUNITY_INSTRUCTIONS_MAX} characters or fewer"
-                }), 400)
-        fields["application_instructions"] = instructions
-
-    if not partial or "application_deadline" in data:
-        deadline = _parse_iso_datetime(data.get("application_deadline"))
-        if not deadline:
-            return None, (jsonify({
-                "error": "application_deadline is required and must be a valid ISO datetime"
-            }), 400)
-        fields["application_deadline"] = deadline
-
-    if not partial or "expiry_date" in data:
-        expiry = _parse_iso_datetime(data.get("expiry_date"))
-        if not expiry:
-            return None, (jsonify({
-                "error": "expiry_date is required and must be a valid ISO datetime"
-            }), 400)
-        fields["expiry_date"] = expiry
-
-    return fields, None
-
-
-@app.route("/organisations/<int:organisation_id>/opportunities", methods=["POST"])
-@require_csrf
-def create_opportunity(organisation_id):
-    """
-    Creates a new Opportunity in status='draft'. Allowed even if the
-    organisation isn't verified yet - verification is only required to
-    submit for review (see submit_opportunity below), not to draft one.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    fields, error = _validate_opportunity_fields(data, partial=False)
-    if error:
-        return error
-
-    if fields["expiry_date"] <= fields["application_deadline"]:
-        return jsonify({"error": "expiry_date must be after application_deadline"}), 400
-    if fields["application_deadline"] <= datetime.utcnow():
-        return jsonify({"error": "application_deadline must be in the future"}), 400
-
-    opp = Opportunity(
-        organisation_id=organisation_id, created_by=user_id, status="draft", **fields
-    )
-    db.session.add(opp)
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity(opp)), 201
-
-
-@app.route("/organisations/<int:organisation_id>/opportunities")
-def list_org_opportunities(organisation_id):
-    """Lists this org's own opportunities, any status. ?status= filters
-    to one status (management view - not the public browse endpoint)."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    query = Opportunity.query.filter_by(organisation_id=organisation_id)
-
-    status_filter = request.args.get("status")
-    if status_filter:
-        if status_filter not in OPPORTUNITY_STATUSES:
-            return jsonify({
-                "error": "status must be one of: " + ", ".join(OPPORTUNITY_STATUSES)
-            }), 400
-        query = query.filter_by(status=status_filter)
-
-    opportunities = query.order_by(Opportunity.created_at.desc()).all()
-    return jsonify({"opportunities": [_serialize_opportunity(o) for o in opportunities]})
-
-
-@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>")
-def get_org_opportunity(organisation_id, opportunity_id):
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp or opp.organisation_id != organisation_id:
-        return jsonify({"error": "Opportunity not found"}), 404
-
-    return jsonify(_serialize_opportunity(opp))
-
-
-@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>", methods=["PATCH"])
-@require_csrf
-def update_opportunity(organisation_id, opportunity_id):
-    """
-    Edits an opportunity. Only allowed while status is 'draft' or
-    'rejected' - once it's in the review/published pipeline, the org
-    can't silently change it out from under an approval; they'd need to
-    withdraw and recreate, or (for rejected ones) fix it up here and
-    resubmit via /submit.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp or opp.organisation_id != organisation_id:
-        return jsonify({"error": "Opportunity not found"}), 404
-
-    if opp.status not in OPPORTUNITY_EDITABLE_STATUSES:
-        return jsonify({
-            "error": f"Cannot edit an opportunity with status '{opp.status}' - "
-                     f"only draft or rejected opportunities can be edited"
-        }), 400
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    fields, error = _validate_opportunity_fields(data, partial=True)
-    if error:
-        return error
-
-    effective_deadline = fields.get("application_deadline", opp.application_deadline)
-    effective_expiry = fields.get("expiry_date", opp.expiry_date)
-    if effective_expiry <= effective_deadline:
-        return jsonify({"error": "expiry_date must be after application_deadline"}), 400
-
-    for key, value in fields.items():
-        setattr(opp, key, value)
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity(opp))
-
-
-@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>/submit", methods=["POST"])
-@require_csrf
-def submit_opportunity(organisation_id, opportunity_id):
-    """
-    Moves draft/rejected -> pending_review. Requires the organisation to
-    be verified AND active (an unverified or deactivated org's postings
-    never enter the admin review queue), and requires the opportunity's
-    own dates to not already be in the past.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    org = db.session.get(Organisation, organisation_id)
-    if not org:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    if org.verification_status != "verified" or not org.is_active:
-        return jsonify({
-            "error": "Organisation must be verified and active before submitting opportunities for review"
-        }), 400
-
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp or opp.organisation_id != organisation_id:
-        return jsonify({"error": "Opportunity not found"}), 404
-
-    if opp.status not in OPPORTUNITY_EDITABLE_STATUSES:
-        return jsonify({
-            "error": f"Cannot submit an opportunity with status '{opp.status}'"
-        }), 400
-
-    now = datetime.utcnow()
-    if opp.application_deadline <= now or opp.expiry_date <= now:
-        return jsonify({
-            "error": "Cannot submit - application_deadline or expiry_date has already passed. "
-                     "Update the dates first."
-        }), 400
-
-    opp.status = "pending_review"
-    opp.submitted_at = now
-    opp.rejection_reason = None
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity(opp))
-
-
-@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>/archive", methods=["POST"])
-@require_csrf
-def archive_opportunity(organisation_id, opportunity_id):
-    """Org self-service archive - lets them retire a published or
-    already-expired posting without waiting on an admin."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp or opp.organisation_id != organisation_id:
-        return jsonify({"error": "Opportunity not found"}), 404
-
-    if opp.status not in ("published", "expired"):
-        return jsonify({
-            "error": f"Cannot archive an opportunity with status '{opp.status}'"
-        }), 400
-
-    opp.status = "archived"
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity(opp))
-
-
-@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>", methods=["DELETE"])
-@require_csrf
-def withdraw_opportunity(organisation_id, opportunity_id):
-    """Org withdraws its own opportunity at any point in its lifecycle
-    (except if already removed). Soft-delete via status='removed', same
-    pattern as Document.is_removed elsewhere in this file."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp or opp.organisation_id != organisation_id:
-        return jsonify({"error": "Opportunity not found"}), 404
-
-    if opp.status == "removed":
-        return jsonify({"message": "Already removed"}), 200
-
-    opp.status = "removed"
-    db.session.commit()
-
-    return jsonify({"message": "Opportunity withdrawn"})
-
-
-# ---------- Admin: Opportunity review ----------
-
-def _serialize_opportunity_admin(opp):
-    """Same shape as _serialize_opportunity() plus the organisation's
-    name/verification state, so the admin queue doesn't need a second
-    round trip per row."""
-    org = db.session.get(Organisation, opp.organisation_id)
-    entry = _serialize_opportunity(opp)
-    entry["organisation_name"] = org.name if org else None
-    entry["organisation_verification_status"] = org.verification_status if org else None
-    entry["organisation_is_active"] = org.is_active if org else None
-    return entry
-
-
-@app.route("/admin/opportunities")
-@require_admin
-def admin_list_opportunities():
-    """Review queue. Defaults to pending_review only (the actual queue);
-    pass status=all to see every opportunity regardless of status, or
-    a specific status to filter to just that one."""
-    status_filter = request.args.get("status", "pending_review")
-
-    query = Opportunity.query
-    if status_filter != "all":
-        if status_filter not in OPPORTUNITY_STATUSES:
-            return jsonify({
-                "error": "status must be 'all' or one of: " + ", ".join(OPPORTUNITY_STATUSES)
-            }), 400
-        query = query.filter_by(status=status_filter)
-
-    opportunities = query.order_by(Opportunity.submitted_at.asc().nullslast(), Opportunity.created_at.asc()).all()
-    return jsonify({"opportunities": [_serialize_opportunity_admin(o) for o in opportunities]})
-
-
-@app.route("/admin/opportunities/<int:opportunity_id>/approve", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_approve_opportunity(opportunity_id):
-    """
-    Approves a pending_review opportunity. Does NOT publish it - Publish
-    is a separate, deliberate action (see admin_publish_opportunity)
-    so an admin can approve now and schedule the actual go-live
-    separately. Re-checks the organisation is still verified and active,
-    since its standing could have changed since submission.
-    """
-    acting_admin_id = session.get("user_id")
-
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp:
-        return jsonify({"error": "Opportunity not found"}), 404
-    if opp.status != "pending_review":
-        return jsonify({"error": f"Opportunity is not pending review (status: {opp.status})"}), 400
-
-    org = db.session.get(Organisation, opp.organisation_id)
-    if not org or org.verification_status != "verified" or not org.is_active:
-        return jsonify({
-            "error": "The submitting organisation is no longer verified and active - "
-                     "resolve that before approving"
-        }), 400
-
-    opp.status = "approved"
-    opp.rejection_reason = None
-    opp.reviewed_by = acting_admin_id
-    opp.reviewed_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity_admin(opp))
-
-
-@app.route("/admin/opportunities/<int:opportunity_id>/reject", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_reject_opportunity(opportunity_id):
-    """Rejects a pending_review opportunity with a required reason. The
-    org can edit and resubmit via its own PATCH + /submit routes."""
-    acting_admin_id = session.get("user_id")
-
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp:
-        return jsonify({"error": "Opportunity not found"}), 404
-    if opp.status != "pending_review":
-        return jsonify({"error": f"Opportunity is not pending review (status: {opp.status})"}), 400
-
-    data = request.get_json(silent=True) or {}
-    reason = (data.get("reason") or "").strip()
-    if not reason or len(reason) > 500:
-        return jsonify({"error": "reason is required and must be 500 characters or fewer"}), 400
-
-    opp.status = "rejected"
-    opp.rejection_reason = reason
-    opp.reviewed_by = acting_admin_id
-    opp.reviewed_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity_admin(opp))
-
-
-@app.route("/admin/opportunities/<int:opportunity_id>/publish", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_publish_opportunity(opportunity_id):
-    """
-    Makes an approved opportunity live (visible to students - see the
-    browse routes patch). Re-checks the organisation's standing and the
-    opportunity's own dates one more time, since time may have passed
-    since approval.
-    """
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp:
-        return jsonify({"error": "Opportunity not found"}), 404
-    if opp.status != "approved":
-        return jsonify({"error": f"Opportunity is not approved (status: {opp.status})"}), 400
-
-    org = db.session.get(Organisation, opp.organisation_id)
-    if not org or org.verification_status != "verified" or not org.is_active:
-        return jsonify({
-            "error": "The submitting organisation is no longer verified and active - "
-                     "resolve that before publishing"
-        }), 400
-
-    now = datetime.utcnow()
-    if opp.application_deadline <= now or opp.expiry_date <= now:
-        return jsonify({
-            "error": "Cannot publish - application_deadline or expiry_date has already passed"
-        }), 400
-
-    opp.status = "published"
-    opp.published_at = now
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity_admin(opp))
-
-
-@app.route("/admin/opportunities/<int:opportunity_id>/archive", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_archive_opportunity(opportunity_id):
-    """Admin-side archive - broader than the org's own self-service
-    archive route (which only allows published/expired); admins can
-    also archive an approved-but-not-yet-published listing."""
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp:
-        return jsonify({"error": "Opportunity not found"}), 404
-    if opp.status not in ("approved", "published", "expired"):
-        return jsonify({
-            "error": f"Cannot archive an opportunity with status '{opp.status}'"
-        }), 400
-
-    opp.status = "archived"
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity_admin(opp))
-
-
-@app.route("/admin/opportunities/<int:opportunity_id>/remove", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_remove_opportunity(opportunity_id):
-    """
-    Admin takedown for a policy violation or similar, from any
-    non-removed state - broader than either self-service route. An
-    optional reason is stored in the same rejection_reason column used
-    by the reject flow (kept generic rather than adding a parallel
-    column for what is, functionally, the same "why did an admin act
-    on this" note).
-    """
-    acting_admin_id = session.get("user_id")
-
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp:
-        return jsonify({"error": "Opportunity not found"}), 404
-    if opp.status == "removed":
-        return jsonify({"message": "Already removed"}), 200
-
-    data = request.get_json(silent=True) or {}
-    reason = data.get("reason")
-    if reason is not None:
-        reason = reason.strip()
-        if len(reason) > 500:
-            return jsonify({"error": "reason must be 500 characters or fewer"}), 400
-        reason = reason or None
-
-    opp.status = "removed"
-    opp.rejection_reason = reason
-    opp.reviewed_by = acting_admin_id
-    opp.reviewed_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity_admin(opp))
-
-
-# ---------- Opportunity Promotions (Step 5b) ----------
-
-OPPORTUNITY_PROMOTION_EDITABLE_OPPORTUNITY_STATUSES = ("pending_review", "approved", "published")
-
-
-def get_promotion_prices():
-    """
-    Returns a dict of promotion_type -> price (KES), sourced from
-    SystemSetting rows (price_promotion_standard, price_promotion_featured,
-    price_promotion_sponsored) - same pattern as get_plan_prices() /
-    get_content_prices(). Missing or invalid settings fall back to the
-    defaults below.
-    """
-    keys = ("price_promotion_standard", "price_promotion_featured", "price_promotion_sponsored")
-    settings = {
-        s.key: s.value
-        for s in SystemSetting.query.filter(SystemSetting.key.in_(keys)).all()
-    }
-
-    def parse(key, default):
-        try:
-            return int(settings.get(key) or default)
-        except (TypeError, ValueError):
-            return default
-
-    return {
-        "standard": parse("price_promotion_standard", 0),
-        "featured": parse("price_promotion_featured", 300),
-        "sponsored": parse("price_promotion_sponsored", 800),
-    }
-
-
-def _serialize_opportunity_promotion(promo, include_context=False):
-    result = {
-        "id": promo.id,
-        "opportunity_id": promo.opportunity_id,
-        "organisation_id": promo.organisation_id,
-        "promotion_type": promo.promotion_type,
-        "start_date": promo.start_date.isoformat() if promo.start_date else None,
-        "end_date": promo.end_date.isoformat() if promo.end_date else None,
-        "price": promo.price,
-        "payment_status": promo.payment_status,
-        "payment_required": promo.price > 0,
-        "approval_status": promo.approval_status,
-        "reviewed_at": promo.reviewed_at.isoformat() if promo.reviewed_at else None,
-        "created_at": promo.created_at.isoformat() if promo.created_at else None,
-        "updated_at": promo.updated_at.isoformat() if promo.updated_at else None,
-    }
-    if include_context:
-        opp = db.session.get(Opportunity, promo.opportunity_id)
-        org = db.session.get(Organisation, promo.organisation_id)
-        result["opportunity_title"] = opp.title if opp else None
-        result["organisation_name"] = org.name if org else None
-    return result
-
-
-@app.route("/organisations/promotion-prices")
-def organisation_promotion_prices():
-    """Returns the current admin-configured promotion price catalogue.
-    Prices are informational; every promotion still snapshots its server-side
-    price when requested, so the client can never choose the charge amount."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-    prices = get_promotion_prices()
-    return jsonify({
-        "currency": "KES",
-        "prices": prices,
-        "billing_flow": "request -> server price snapshot -> Paystack checkout -> payment verification -> admin approval",
-    })
-
-
-@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>/promotions", methods=["POST"])
-@require_csrf
-def request_opportunity_promotion(organisation_id, opportunity_id):
-    """
-    Requests a promotion campaign for one of the org's own opportunities.
-    price is snapshotted at request time from admin-configurable
-    SystemSetting pricing (see get_promotion_prices()) - same reasoning
-    as Payment.amount. Deliberately does NOT touch payment_status here;
-    actual payment collection/webhook wiring belongs to the Payments
-    chunk, which hasn't wired into this yet - payment_status stays at
-    its 'unpaid' default until that lands.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp or opp.organisation_id != organisation_id:
-        return jsonify({"error": "Opportunity not found"}), 404
-
-    if opp.status not in OPPORTUNITY_PROMOTION_EDITABLE_OPPORTUNITY_STATUSES:
-        return jsonify({
-            "error": f"Cannot promote an opportunity with status '{opp.status}'"
-        }), 400
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    promotion_type = (data.get("promotion_type") or "").strip().lower()
-    if promotion_type not in OPPORTUNITY_PROMOTION_TYPES:
-        return jsonify({
-            "error": "promotion_type must be one of: " + ", ".join(OPPORTUNITY_PROMOTION_TYPES)
-        }), 400
-
-    start_date = _parse_iso_datetime(data.get("start_date"))
-    if not start_date:
-        return jsonify({"error": "start_date is required and must be a valid ISO datetime"}), 400
-
-    end_date = _parse_iso_datetime(data.get("end_date"))
-    if not end_date:
-        return jsonify({"error": "end_date is required and must be a valid ISO datetime"}), 400
-
-    now = datetime.utcnow()
-    if start_date < now:
-        return jsonify({"error": "start_date cannot be in the past"}), 400
-    if end_date <= start_date:
-        return jsonify({"error": "end_date must be after start_date"}), 400
-    if end_date > opp.expiry_date:
-        return jsonify({"error": "end_date cannot be after the opportunity's own expiry_date"}), 400
-
-    price = get_promotion_prices().get(promotion_type, 0)
-
-    promo = OpportunityPromotion(
-        opportunity_id=opportunity_id,
-        organisation_id=organisation_id,
-        promotion_type=promotion_type,
-        start_date=start_date,
-        end_date=end_date,
-        price=price,
-        payment_status="not_required" if price <= 0 else "unpaid",
-        approval_status="pending",
-    )
-    db.session.add(promo)
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity_promotion(promo)), 201
-
-
-@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>/promotions")
-def list_opportunity_promotions(organisation_id, opportunity_id):
-    """Lists the org's own promotion requests for one opportunity, any
-    approval_status, newest first."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-
-    opp = db.session.get(Opportunity, opportunity_id)
-    if not opp or opp.organisation_id != organisation_id:
-        return jsonify({"error": "Opportunity not found"}), 404
-
-    promotions = (
-        OpportunityPromotion.query.filter_by(
-            opportunity_id=opportunity_id, organisation_id=organisation_id
-        )
-        .order_by(OpportunityPromotion.created_at.desc())
-        .all()
-    )
-
-    return jsonify({"promotions": [_serialize_opportunity_promotion(p) for p in promotions]})
-
-
-@app.route("/admin/opportunity-promotions")
-@require_admin
-def admin_list_opportunity_promotions():
-    """
-    Admin queue for promotion requests. Defaults to pending only; pass
-    approval_status=all to see approved/rejected ones too. Each row
-    includes opportunity_title/organisation_name for admin readability.
-    """
-    status_filter = request.args.get("approval_status", "pending")
-    if status_filter != "all" and status_filter not in OPPORTUNITY_PROMOTION_APPROVAL_STATUSES:
-        return jsonify({
-            "error": "approval_status must be 'all' or one of: " + ", ".join(OPPORTUNITY_PROMOTION_APPROVAL_STATUSES)
-        }), 400
-
-    query = OpportunityPromotion.query
-    if status_filter != "all":
-        query = query.filter_by(approval_status=status_filter)
-
-    promotions = query.order_by(OpportunityPromotion.created_at.asc()).all()
-
-    return jsonify({
-        "promotions": [_serialize_opportunity_promotion(p, include_context=True) for p in promotions]
-    })
-
-
-@app.route("/organisations/<int:organisation_id>/opportunity-promotions/<int:promotion_id>/pay", methods=["POST"])
-@limiter.limit("1 per 20 seconds", key_func=lambda: f"org-promo-pay:{session.get('user_id', get_remote_address())}")
-@require_csrf
-def pay_for_opportunity_promotion(organisation_id, promotion_id):
-    """Create the one-time Paystack checkout for a paid promotion.
-
-    Billing is owner-only. Managers can create and manage opportunity content,
-    but cannot spend organisation funds. The promotion price is already a
-    server-side snapshot, so the client cannot choose its amount.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-    membership = _get_org_membership(organisation_id, user_id)
-    if not membership:
-        return jsonify({"error": "Organisation not found"}), 404
-    if membership.role != "owner":
-        return jsonify({"error": "Only the organisation owner can pay for promotions"}), 403
-
-    promo = db.session.get(OpportunityPromotion, promotion_id)
-    if not promo or promo.organisation_id != organisation_id:
-        return jsonify({"error": "Promotion request not found"}), 404
-    if promo.approval_status == "rejected":
-        return jsonify({"error": "This promotion request was rejected"}), 400
-    if promo.price <= 0:
-        promo.payment_status = "not_required"
-        db.session.commit()
-        return jsonify({"payment_required": False, "promotion": _serialize_opportunity_promotion(promo)})
-    if promo.payment_status == "success":
-        return jsonify({"payment_required": False, "promotion": _serialize_opportunity_promotion(promo)})
-
-    existing = Payment.query.filter_by(
-        opportunity_promotion_id=promo.id, status="pending"
-    ).order_by(Payment.created_at.desc()).first()
-    if existing:
-        try:
-            synced = sync_paystack_payment_status(existing.reference)
-            if synced and synced.status == "success":
-                return jsonify({"payment_required": False, "promotion": _serialize_opportunity_promotion(promo)})
-        except Exception:
-            pass
-
-    reference = f"PZA-promo-{promo.id}-{secrets.token_hex(6)}"
-    user = db.session.get(User, user_id)
-    try:
-        provider_reference, authorization_url = create_paystack_transaction(
-            reference, promo.price, f"Prepza promotion - {promo.promotion_type}", user
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
-
-    payment = Payment(
-        user_id=user_id,
-        organisation_id=organisation_id,
-        opportunity_promotion_id=promo.id,
-        amount=promo.price,
-        provider="paystack",
-        reference=reference,
-        provider_reference=provider_reference,
-        payment_type="promotion",
-        status="pending",
-    )
-    db.session.add(payment)
-    promo.payment_status = "pending"
-    db.session.commit()
-    return jsonify({
-        "payment_required": True,
-        "redirect_url": authorization_url,
-        "reference": reference,
-        "promotion": _serialize_opportunity_promotion(promo),
-    })
-
-
-@app.route("/admin/opportunity-promotions/<int:promotion_id>/approve", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_approve_opportunity_promotion(promotion_id):
-    """
-    Approves a pending promotion request. Deliberately does NOT check or
-    change payment_status - real payment collection/webhook wiring
-    belongs to the Payments chunk, which hasn't wired into this yet.
-    Approval here means "this promotion is allowed to run", not "it has
-    been paid for" - don't assume the two are the same thing.
-    """
-    acting_admin_id = session.get("user_id")
-
-    promo = db.session.get(OpportunityPromotion, promotion_id)
-    if not promo:
-        return jsonify({"error": "Promotion request not found"}), 404
-    if promo.approval_status != "pending":
-        return jsonify({
-            "error": f"Promotion request is not pending (approval_status: {promo.approval_status})"
-        }), 400
-    if promo.price > 0 and promo.payment_status != "success":
-        return jsonify({"error": "Promotion must be paid before it can be approved"}), 402
-
-    promo.approval_status = "approved"
-    promo.reviewed_by = acting_admin_id
-    promo.reviewed_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity_promotion(promo))
-
-
-@app.route("/admin/opportunity-promotions/<int:promotion_id>/reject", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_reject_opportunity_promotion(promotion_id):
-    """Rejects a pending promotion request. Reason is optional (unlike
-    Opportunity rejection) since promotions are a lower-stakes add-on,
-    not a content moderation decision."""
-    acting_admin_id = session.get("user_id")
-
-    promo = db.session.get(OpportunityPromotion, promotion_id)
-    if not promo:
-        return jsonify({"error": "Promotion request not found"}), 404
-    if promo.approval_status != "pending":
-        return jsonify({
-            "error": f"Promotion request is not pending (approval_status: {promo.approval_status})"
-        }), 400
-
-    promo.approval_status = "rejected"
-    promo.reviewed_by = acting_admin_id
-    promo.reviewed_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify(_serialize_opportunity_promotion(promo))
-
-
-
-# ---------- Opportunities (student-facing browse) (Step 6) ----------
-
-class SavedOpportunity(db.Model):
-    """A student bookmarking an Opportunity - same shape/reasoning as
-    SavedLibraryMaterial."""
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    opportunity_id = db.Column(db.Integer, db.ForeignKey("opportunity.id", ondelete="CASCADE"), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    __table_args__ = (
-        db.UniqueConstraint("user_id", "opportunity_id", name="uq_saved_opportunity_user_opp"),
-    )
-
-
-OPPORTUNITY_BROWSE_PAGE_SIZE = 20
-
-# sponsored > featured > standard - lower rank number surfaces first.
-_PROMOTION_TYPE_RANK = {"sponsored": 0, "featured": 1, "standard": 2}
-
-
-def _serialize_organisation_public(org):
-    """
-    Public-safe organisation fields only. Deliberately excludes
-    contact_email/contact_phone, which are org-management-only per the
-    existing _serialize_organisation() - students browsing Opportunities
-    must never see an org's contact details through this surface.
-    """
-    return {
-        "id": org.id,
-        "name": org.name,
-        "logo_url": org.logo_url,
-        "website": org.website,
-    }
-
-
-def _opportunity_publicly_visible_query():
-    """
-    Base query for opportunities a student is allowed to see: published,
-    not yet expired, AND the owning organisation is still verified and
-    active. The org re-check matters because an org can be deactivated
-    or have its verification revoked AFTER an opportunity was already
-    published - this keeps that opportunity from staying visible.
-    """
-    now = datetime.utcnow()
-    return (
-        Opportunity.query
-        .join(Organisation, Opportunity.organisation_id == Organisation.id)
-        .filter(
-            Opportunity.status == "published",
-            Opportunity.expiry_date > now,
-            Organisation.verification_status == "verified",
-            Organisation.is_active.is_(True),
-        )
-    )
-
-
-def _get_active_promotions_map(opportunity_ids):
-    """
-    Returns {opportunity_id: promotion_type} for the highest-ranked
-    currently-active, APPROVED promotion per opportunity (sponsored >
-    featured > standard). Computed in Python against the already-small,
-    already-filtered result set - same SQLAlchemy-version-safety
-    reasoning as the admin moderation queue's priority sort elsewhere in
-    this file, rather than a fragile SQL CASE/join. Read-only: never
-    mutates Opportunity itself - OpportunityPromotion stays the single
-    source of truth for promotion state, per the MVP spec.
-    """
-    if not opportunity_ids:
-        return {}
-    now = datetime.utcnow()
-    rows = OpportunityPromotion.query.filter(
-        OpportunityPromotion.opportunity_id.in_(opportunity_ids),
-        OpportunityPromotion.approval_status == "approved",
-        or_(OpportunityPromotion.price == 0, OpportunityPromotion.payment_status == "success"),
-        OpportunityPromotion.start_date <= now,
-        OpportunityPromotion.end_date >= now,
-    ).all()
-    best = {}
-    for r in rows:
-        rank = _PROMOTION_TYPE_RANK.get(r.promotion_type, 99)
-        current = best.get(r.opportunity_id)
-        if current is None or rank < current[0]:
-            best[r.opportunity_id] = (rank, r.promotion_type)
-    return {oid: promo_type for oid, (rank, promo_type) in best.items()}
-
-
-def _serialize_opportunity_public(opp, promotion_type=None, viewer_saved=None):
-    org = db.session.get(Organisation, opp.organisation_id)
-    result = {
-        "id": opp.id,
-        "title": opp.title,
-        "description": opp.description,
-        "opportunity_type": opp.opportunity_type,
-        "location": opp.location,
-        "is_remote": opp.is_remote,
-        "application_url": opp.application_url,
-        "application_instructions": opp.application_instructions,
-        "application_deadline": opp.application_deadline.isoformat() if opp.application_deadline else None,
-        "expiry_date": opp.expiry_date.isoformat() if opp.expiry_date else None,
-        "published_at": opp.published_at.isoformat() if opp.published_at else None,
-        "view_count": opp.view_count,
-        "organisation": _serialize_organisation_public(org) if org else None,
-        "promotion_type": promotion_type,
-    }
-    if viewer_saved is not None:
-        result["saved"] = viewer_saved
-    return result
-
-
-@app.route("/opportunities")
-def browse_opportunities():
-    """
-    Browse/search publicly visible opportunities. Login required, same
-    convention as /library and /groups (session-gated, not tied to the
-    viewer's own year/semester - any student can browse any opportunity).
-
-    Query params (all optional):
-      q               - substring match against title
-      opportunity_type - job | internship | scholarship | competition |
-                          volunteering | event | other
-      is_remote       - "true" or "false"
-      page            - 1-indexed, 20 per page
-
-    Currently-active promotions (sponsored > featured > standard) sort
-    to the top; newest-first within each tier and among unpromoted
-    listings.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    query = _opportunity_publicly_visible_query()
-
-    q = (request.args.get("q") or "").strip()
-    if q:
-        query = query.filter(Opportunity.title.ilike(f"%{q}%"))
-
-    opportunity_type = request.args.get("opportunity_type")
-    if opportunity_type:
-        if opportunity_type not in OPPORTUNITY_TYPES:
-            return jsonify({
-                "error": "opportunity_type must be one of: " + ", ".join(OPPORTUNITY_TYPES)
-            }), 400
-        query = query.filter(Opportunity.opportunity_type == opportunity_type)
-
-    is_remote_param = request.args.get("is_remote")
-    if is_remote_param is not None:
-        query = query.filter(Opportunity.is_remote.is_(is_remote_param.strip().lower() == "true"))
-
-    try:
-        page = max(1, int(request.args.get("page", 1)))
-    except ValueError:
-        page = 1
-    per_page = OPPORTUNITY_BROWSE_PAGE_SIZE
-
-    # Promotion-aware ordering needs the full matching set sorted before
-    # pagination, so this is done in Python rather than SQL OFFSET/LIMIT -
-    # same tradeoff as the admin content-reports priority sort. Volume
-    # here is bounded by "currently published, unexpired opportunities",
-    # not the whole table, so this stays cheap.
-    all_matching = query.order_by(Opportunity.created_at.desc()).all()
-    opportunity_ids = [o.id for o in all_matching]
-    promo_map = _get_active_promotions_map(opportunity_ids)
-    all_matching.sort(key=lambda o: _PROMOTION_TYPE_RANK.get(promo_map.get(o.id), 99))
-
-    page_items = all_matching[(page - 1) * per_page: page * per_page]
-
-    saved_ids = set()
-    if page_items:
-        saved_rows = SavedOpportunity.query.filter(
-            SavedOpportunity.user_id == user_id,
-            SavedOpportunity.opportunity_id.in_([o.id for o in page_items]),
-        ).all()
-        saved_ids = {r.opportunity_id for r in saved_rows}
-
-    return jsonify({
-        "page": page,
-        "opportunities": [
-            _serialize_opportunity_public(
-                o, promotion_type=promo_map.get(o.id), viewer_saved=(o.id in saved_ids)
-            )
-            for o in page_items
-        ],
-    })
-
-
-@app.route("/podcast-opportunities")
-def podcast_opportunities():
-    """Small, low-cost opportunity feed for the podcast player.
-    Uses the same verified/published/expiry rules as the main opportunities
-    feed, with active paid promotions ranked first. This is placement, not
-    a separate opportunity database.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    query = _opportunity_publicly_visible_query()
-    all_matching = query.order_by(Opportunity.created_at.desc()).all()
-    promo_map = _get_active_promotions_map([o.id for o in all_matching])
-    all_matching.sort(key=lambda o: (
-        _PROMOTION_TYPE_RANK.get(promo_map.get(o.id), 99),
-        -(o.published_at.timestamp() if o.published_at else 0),
-    ))
-
-    items = all_matching[:3]
-    saved_ids = set()
-    if items:
-        saved_ids = {
-            row.opportunity_id
-            for row in SavedOpportunity.query.filter(
-                SavedOpportunity.user_id == user_id,
-                SavedOpportunity.opportunity_id.in_([o.id for o in items]),
-            ).all()
-        }
-
-    return jsonify({
-        "opportunities": [
-            _serialize_opportunity_public(
-                o,
-                promotion_type=promo_map.get(o.id),
-                viewer_saved=o.id in saved_ids,
-            )
-            for o in items
-        ]
-    })
-
-
-@app.route("/opportunities/<int:opportunity_id>")
-def get_opportunity_public(opportunity_id):
-    """
-    Single opportunity detail. 404s (not 403) if the opportunity isn't
-    currently publicly visible, hiding existence - same pattern as
-    get_group()/get_organisation(). Increments view_count unconditionally
-    on every hit, matching the existing LibraryPublication.view_count
-    convention elsewhere in this file (a display/analytics counter, not
-    a security- or payout-sensitive one, so no per-user cap is needed).
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    opp = _opportunity_publicly_visible_query().filter(Opportunity.id == opportunity_id).first()
-    if not opp:
-        return jsonify({"error": "Opportunity not found"}), 404
-
-    opp.view_count = (opp.view_count or 0) + 1
-    db.session.commit()
-
-    promo_map = _get_active_promotions_map([opp.id])
-    saved = SavedOpportunity.query.filter_by(user_id=user_id, opportunity_id=opp.id).first() is not None
-
-    return jsonify(_serialize_opportunity_public(
-        opp, promotion_type=promo_map.get(opp.id), viewer_saved=saved
-    ))
-
-
-@app.route("/opportunities/<int:opportunity_id>/save", methods=["POST"])
-@require_csrf
-def save_opportunity(opportunity_id):
-    """
-    Bookmarks a publicly visible opportunity. Idempotent from the
-    caller's perspective - saving an already-saved item just returns
-    success, same pattern as save_library_item(). Only allows saving
-    currently-visible opportunities (published/unexpired/org in good
-    standing) - same gate as the detail route.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    opp = _opportunity_publicly_visible_query().filter(Opportunity.id == opportunity_id).first()
-    if not opp:
-        return jsonify({"error": "Opportunity not found"}), 404
-
-    existing = SavedOpportunity.query.filter_by(user_id=user_id, opportunity_id=opportunity_id).first()
-    if existing:
-        return jsonify({"message": "Already saved"}), 200
-
-    db.session.add(SavedOpportunity(user_id=user_id, opportunity_id=opportunity_id))
-    db.session.commit()
-
-    return jsonify({"message": "Saved"}), 201
-
-
-@app.route("/opportunities/<int:opportunity_id>/save", methods=["DELETE"])
-@require_csrf
-def unsave_opportunity(opportunity_id):
-    """
-    Removes a bookmark. Deliberately NOT gated on current visibility -
-    a student must always be able to remove their own bookmark, even for
-    an opportunity that has since expired/been withdrawn/had its org
-    deactivated, same reasoning as unsave_library_item().
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    existing = SavedOpportunity.query.filter_by(user_id=user_id, opportunity_id=opportunity_id).first()
-    if existing:
-        db.session.delete(existing)
-        db.session.commit()
-
-    return jsonify({"message": "Removed" if existing else "Not saved"})
-
-
-@app.route("/opportunities/saved")
-def list_saved_opportunities():
-    """
-    Lists the logged-in student's saved opportunities. Skips any saved
-    row whose opportunity is no longer publicly visible (expired,
-    withdrawn, org deactivated) rather than erroring - same pattern as
-    list_saved_library_items().
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    saved_rows = (
-        SavedOpportunity.query.filter_by(user_id=user_id)
-        .order_by(SavedOpportunity.created_at.desc())
-        .all()
-    )
-
-    now = datetime.utcnow()
-    result = []
-    opportunity_ids = [r.opportunity_id for r in saved_rows]
-    promo_map = _get_active_promotions_map(opportunity_ids)
-    for row in saved_rows:
-        opp = db.session.get(Opportunity, row.opportunity_id)
-        if not opp or opp.status != "published" or opp.expiry_date <= now:
-            continue
-        org = db.session.get(Organisation, opp.organisation_id)
-        if not org or org.verification_status != "verified" or not org.is_active:
-            continue
-        result.append(_serialize_opportunity_public(
-            opp, promotion_type=promo_map.get(opp.id), viewer_saved=True
-        ))
-
-    return jsonify({"saved": result})
-
-
-
-# ---------- Opportunity auto-expiry (Step 7) ----------
-
-def sweep_expired_opportunities():
-    """
-    Flips any Opportunity still marked 'published' whose expiry_date has
-    passed into 'expired'. Never trusts a frontend clock for this - per
-    the MVP spec, expiry is always computed server-side. Bulk UPDATE (no
-    per-row SELECT/commit loop) so this stays cheap even when called on
-    every health-check tick. Returns the number of rows updated.
-
-    Deliberately scoped to status='published' only - opportunities still
-    stuck in pending_review/approved past their own expiry_date never
-    went live, so 'expired' is the wrong terminal state for them; those
-    are left for an admin to handle manually via the existing
-    reject/remove routes rather than silently auto-expired here.
-    """
-    now = datetime.utcnow()
-    updated = Opportunity.query.filter(
-        Opportunity.status == "published",
-        Opportunity.expiry_date <= now,
-    ).update({"status": "expired"}, synchronize_session=False)
-    db.session.commit()
-    return updated
-
-
-def _sweep_expired_opportunities_safe():
-    """
-    Wraps sweep_expired_opportunities() for use inside /health - a sweep
-    failure must NEVER turn /health into a false-negative for the
-    GitHub Actions keep-alive ping, whose only job is preventing
-    Render's free tier from spinning down and Supabase's free tier from
-    auto-pausing. Swallows and logs, never raises or affects the
-    response.
-    """
-    try:
-        count = sweep_expired_opportunities()
-        if count:
-            print(f"INFO: swept {count} expired opportunity(ies) to status='expired'")
-    except Exception as e:
-        db.session.rollback()
-        print(f"WARNING: expired-opportunity sweep failed during health check: {e}")
-
-
-@app.route("/admin/opportunities/sweep-expired", methods=["POST"])
-@require_csrf
-@require_admin
-def admin_sweep_expired_opportunities():
-    """
-    Manual trigger for the expiry sweep - lets an admin force it on
-    demand (e.g. right after changing an expiry_date, or for testing)
-    rather than waiting for the next /health ping, which piggybacks the
-    same sweep on roughly a 10-minute cadence via the existing GitHub
-    Actions keep-alive workflow.
-    """
-    count = sweep_expired_opportunities()
-    return jsonify({"swept_count": count})
-
-
-
-# ---------- Audit Logging ----------
-# "Admin changes must be recorded in audit logs." / "Moderation actions
-# must be auditable." per the MVP spec's Admin Platform and Moderation
-# phases, and "Audit logs work" is a listed acceptance criterion.
-
-class AuditLog(db.Model):
-    """
-    Records administrative and moderation actions for accountability.
-    Append-only by convention - no UPDATE/DELETE route is exposed for
-    this table anywhere; a log that can be edited after the fact isn't
-    an audit trail.
-    """
-    id = db.Column(db.Integer, primary_key=True)
-    actor_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    # nullable to leave room for a future system-initiated entry (e.g.
-    # an automated sweep) without forcing a fake actor.
-    action = db.Column(db.String(60), nullable=False)
-    # short verb-based code, e.g. "user_updated", "content_report_dismissed"
-    target_type = db.Column(db.String(40), nullable=True)
-    target_id = db.Column(db.Integer, nullable=True)
-    details = db.Column(db.Text, nullable=True)
-    # optional JSON-serialized context (best-effort; falls back to str()
-    # for anything that isn't directly JSON-serializable)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-class PushSubscription(db.Model):
-    """
-    A single browser/device Web Push subscription for a user. One user can
-    have multiple rows (multiple devices/browsers) - no uniqueness on
-    user_id alone, only on endpoint (a device re-subscribing gets a fresh
-    endpoint from the browser, so upsert is keyed on endpoint, not user_id).
-    """
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    endpoint = db.Column(db.String(500), unique=True, nullable=False)
-    p256dh_key = db.Column(db.String(255), nullable=False)
-    auth_key = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-class UserKey(db.Model):
-    """
-    End-to-end encryption key material for a user's Chats identity
-    (Chats/Conversation/Message only - Study Groups and Forum are not
-    encrypted and never touch this table). public_key is shared with
-    other participants so they can wrap a per-conversation symmetric
-    key to this user (see ConversationKey, added in a later E2EE
-    chunk). encrypted_private_key + kdf_salt are reserved for the
-    passphrase-wrapped multi-device backup blob (Chunk 2) - both stay
-    NULL until that chunk lands; this chunk only registers the public
-    key. The server never has access to the passphrase or the raw
-    private key, only this ciphertext blob once Chunk 2 adds it.
-    """
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), unique=True, nullable=False)
-    public_key = db.Column(db.Text, nullable=False)
-    encrypted_private_key = db.Column(db.Text, nullable=True)
-    kdf_salt = db.Column(db.String(64), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-def send_push_notification(user_id, title, body, data=None):
-    """
-    Sends a Web Push notification to every subscribed device for a user.
-    Best-effort: never raises - a push failure must not break the calling
-    route (e.g. an admin announcement send). Auto-prunes subscriptions the
-    push service reports as gone (404/410 - expired or unsubscribed).
-    """
-    vapid_private_key = os.environ.get("VAPID_PRIVATE_KEY")
-    vapid_claims_email = os.environ.get("VAPID_CLAIMS_EMAIL")
-    if not vapid_private_key or not vapid_claims_email:
-        print("WARNING: VAPID keys not configured - skipping push send")
-        return
-
-    subscriptions = PushSubscription.query.filter_by(user_id=user_id).all()
-    for sub in subscriptions:
-        try:
-            webpush(
-                subscription_info={
-                    "endpoint": sub.endpoint,
-                    "keys": {"p256dh": sub.p256dh_key, "auth": sub.auth_key},
-                },
-                data=json.dumps({"title": title, "body": body, "data": data or {}}),
-                vapid_private_key=vapid_private_key,
-                vapid_claims={"sub": vapid_claims_email},
-            )
-        except WebPushException as e:
-            status_code = e.response.status_code if e.response is not None else None
-            if status_code in (404, 410):
-                db.session.delete(sub)
-                db.session.commit()
-            else:
-                print(f"WARNING: push send failed for user {user_id}: {e}")
-        except Exception as e:
-            print(f"WARNING: push send failed for user {user_id}: {e}")
-
-def log_admin_action(actor_id, action, target_type=None, target_id=None, details=None):
-    """
-    Stages one audit log row on the current session. Deliberately does
-    NOT call db.session.commit() itself - callers invoke this right
-    before their own existing commit, so the audit row lands atomically
-    together with the change it's describing, same transaction. If
-    details isn't JSON-serializable, falls back to str() rather than
-    raising - an audit-logging quirk must never break the admin action
-    it's describing.
-    """
-    payload = None
-    if details is not None:
-        try:
-            payload = json.dumps(details)
-        except (TypeError, ValueError):
-            payload = str(details)
-    db.session.add(AuditLog(
-        actor_id=actor_id, action=action, target_type=target_type,
-        target_id=target_id, details=payload,
-    ))
-
-
-@app.route("/admin/audit-logs")
-@require_admin
-def admin_list_audit_logs():
-    """
-    Lists audit log entries, newest first. Optional filters:
-    actor_id (exact match), action (substring match), target_type
-    (exact match), days (window, default 30, same convention as
-    /admin/ai-usage), page (1-indexed, 50 per page).
-    """
-    try:
-        days = int(request.args.get("days", 30))
-    except ValueError:
-        days = 30
-    days = max(1, min(days, 365))
-    window_start = datetime.utcnow() - timedelta(days=days)
-
-    query = AuditLog.query.filter(AuditLog.created_at >= window_start)
-
-    actor_id = request.args.get("actor_id", type=int)
-    if actor_id:
-        query = query.filter(AuditLog.actor_id == actor_id)
-
-    action_filter = (request.args.get("action") or "").strip()
-    if action_filter:
-        query = query.filter(AuditLog.action.ilike(f"%{action_filter}%"))
-
-    target_type = (request.args.get("target_type") or "").strip()
-    if target_type:
-        query = query.filter(AuditLog.target_type == target_type)
-
-    try:
-        page = max(1, int(request.args.get("page", 1)))
-    except ValueError:
-        page = 1
-    per_page = 50
-
-    entries = (
-        query.order_by(AuditLog.created_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
-
-    result = []
-    for e in entries:
-        actor = db.session.get(User, e.actor_id) if e.actor_id else None
-        parsed_details = None
-        if e.details:
-            try:
-                parsed_details = json.loads(e.details)
-            except (TypeError, ValueError):
-                parsed_details = e.details
-        result.append({
-            "id": e.id,
-            "actor_id": e.actor_id,
-            "actor_email": actor.email if actor else None,
-            "action": e.action,
-            "target_type": e.target_type,
-            "target_id": e.target_id,
-            "details": parsed_details,
-            "created_at": e.created_at.isoformat() if e.created_at else None,
-        })
-
-    return jsonify({"page": page, "logs": result})
-
-
-
-import chat_interactions
-
-from prepza_control import register_control_routes
-
-register_control_routes(
-    app,
-    db,
-    SystemSetting,
-    User,
-    Document,
-    DocumentContent,
-    GeneratedMaterial,
-    log_admin_action,
-    limiter,
-)
-
-from infrastructure_monitoring import register_infrastructure_monitoring
-
-register_infrastructure_monitoring(
-    app, db, require_admin, SystemSetting, User, DocumentContent,
-    AiUsageLog, Payment, StudyActivityLog, StudyTimeLog,
-)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
