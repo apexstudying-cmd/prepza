@@ -6,6 +6,8 @@ type Overview = { campaigns:number; active_campaigns:number; exhausted_campaigns
 type Campaign = { id:number; organisation_id:number; name:string; placement:string; status:string; budget_kes:number; bid_type:string; bid_kes:number; funding_status:string; funded_amount_minor:number; delivered_impressions:number; delivered_clicks:number; push_delivered:number; created_at:string|null }
 type Payment = { id:number; organisation_id:number; campaign_id:number|null; provider_reference:string; customer_amount_minor:number; campaign_amount_minor:number; processing_fee_minor:number; status:string; funding_status:string|null; created_at:string }
 type Recon = { payment_id:number; provider_reference:string; campaign_id:number; status:string; campaign_amount_minor:number; funding_amount_minor:number; ledger_funding_minor:number; reconciliation_status:string }
+type KycDoc = { id:number; organisation_id:number; document_type:string; file_name:string|null; status:string; admin_notes:string|null; created_at:string }
+type Invoice = { id:number; organisation_id:number; campaign_id:number|null; invoice_number:string; subtotal_minor:number; processing_fee_minor:number; total_minor:number; status:string; payment_method:string; due_at:string|null; paid_at:string|null; created_at:string }
 
 async function req<T>(path:string, options:RequestInit={}):Promise<T>{
   const r=await fetch(path,{credentials:'include',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}})
@@ -22,10 +24,13 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
   const [campaigns,setCampaigns]=useState<Campaign[]>([])
   const [payments,setPayments]=useState<Payment[]>([])
   const [recon,setRecon]=useState<Recon[]>([])
+  const [kyc,setKyc]=useState<KycDoc[]>([])
+  const [invoices,setInvoices]=useState<Invoice[]>([])
+  const [settling,setSettling]=useState<number|null>(null)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [saving,setSaving]=useState<number|null>(null)
-  const [tab,setTab]=useState<'overview'|'placements'|'campaigns'|'payments'|'reconciliation'>('overview')
+  const [tab,setTab]=useState<'overview'|'placements'|'campaigns'|'payments'|'reconciliation'|'verification'|'invoices'>('overview')
 
   const load=async()=>{
     setLoading(true);setError('')
@@ -35,9 +40,11 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
         req<{placements:Placement[]}>('/api/admin/b2b/placements'),
         req<{campaigns:Campaign[]}>('/api/admin/b2b/campaigns'),
         req<{payments:Payment[]}>('/api/admin/b2b/payments'),
-        req<{reconciliation:Recon[]}>('/api/admin/b2b/reconciliation')
+        req<{reconciliation:Recon[]}>('/api/admin/b2b/reconciliation'),
+        req<{documents:KycDoc[]}>('/api/admin/b2b/kyc'),
+        req<{invoices:Invoice[]}>('/api/admin/b2b/invoices')
       ])
-      setCsrf(me.csrf_token);setOverview(o);setPlacements(p.placements);setCampaigns(c.campaigns);setPayments(pm.payments);setRecon(r.reconciliation)
+      setCsrf(me.csrf_token);setOverview(o);setPlacements(p.placements);setCampaigns(c.campaigns);setPayments(pm.payments);setRecon(r.reconciliation);setKyc(k.documents);setInvoices(i.invoices)
     }catch(e){setError(e instanceof Error?e.message:'Could not load B2B finance.')}
     finally{setLoading(false)}
   }
@@ -57,7 +64,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
 
   if(loading)return <div style={{padding:30,color:T.textMuted}}>Loading B2B finance…</div>
   const card={background:T.card,borderRadius:14,padding:16,border:'1px solid '+T.border}
-  const tabs=['overview','placements','campaigns','payments','reconciliation'] as const
+  const tabs=['overview','placements','campaigns','payments','reconciliation','verification','invoices'] as const
 
   return <div style={{display:'flex',flexDirection:'column',gap:14}}>
     {error&&<div style={{background:'#FEE2E2',color:'#991B1B',borderRadius:10,padding:10,fontSize:12}}>{error}</div>}
@@ -105,6 +112,29 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
 
     {tab==='payments'&&<div style={card}><div style={{fontWeight:800,marginBottom:10}}>B2B payments</div><div style={{overflowX:'auto'}}><table style={{width:'100%',fontSize:11,borderCollapse:'collapse'}}><thead><tr>{['Reference','Campaign','Customer paid','Campaign value','Processing fee','Status','Funding'].map(x=><th key={x} style={{textAlign:'left',padding:7,borderBottom:'1px solid '+T.border}}>{x}</th>)}</tr></thead><tbody>{payments.map(p=><tr key={p.id}>{[p.provider_reference,p.campaign_id??'—',kes(p.customer_amount_minor),kes(p.campaign_amount_minor),kes(p.processing_fee_minor),p.status,p.funding_status??'—'].map((x,i)=><td key={i} style={{padding:7,borderBottom:'1px solid '+T.border,color:T.text}}>{x}</td>)}</tr>)}</tbody></table></div></div>}
 
-    {tab==='reconciliation'&&<div style={card}><div style={{fontWeight:800,marginBottom:10}}>Payment → funding → ledger reconciliation</div><div style={{overflowX:'auto'}}><table style={{width:'100%',fontSize:11,borderCollapse:'collapse'}}><thead><tr>{['Reference','Payment','Campaign value','Funding','Ledger','Result'].map(x=><th key={x} style={{textAlign:'left',padding:7,borderBottom:'1px solid '+T.border}}>{x}</th>)}</tr></thead><tbody>{recon.map(r=><tr key={r.payment_id}><td style={{padding:7}}>{r.provider_reference}</td><td style={{padding:7}}>{r.status}</td><td style={{padding:7}}>{kes(r.campaign_amount_minor)}</td><td style={{padding:7}}>{kes(r.funding_amount_minor)}</td><td style={{padding:7}}>{kes(r.ledger_funding_minor)}</td><td style={{padding:7,fontWeight:800,color:r.reconciliation_status==='matched'?'#16A34A':'#DC2626'}}>{r.reconciliation_status}</td></tr>)}</tbody></table></div></div>}
+    {tab==='verification'&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
+      <div style={card}><b>Organisation verification</b><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Review submitted documents here. Approving a document marks the organisation verified and unlocks paid sponsorship creation.</div></div>
+      {kyc.map(d=><div key={d.id} style={card}><div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:220}}><b>{d.file_name||'KYC document'}</b><div style={{fontSize:10,color:T.textMuted}}>Organisation #{d.organisation_id} · {d.document_type}</div></div>
+        <a href={'/api/admin/b2b/kyc/'+d.id+'/download'} target="_blank" rel="noreferrer" style={{fontSize:11,fontWeight:800,color:'#5570B7'}}>Open document</a>
+        <select value={d.status} onChange={e=>setKyc(v=>v.map(x=>x.id===d.id?{...x,status:e.target.value}:x))} style={{padding:7,border:'1px solid '+T.border,borderRadius:8,background:T.card,color:T.text}}>
+          <option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option>
+        </select>
+        <button onClick={async()=>{try{await req('/api/admin/b2b/kyc/'+d.id,{method:'PATCH',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({status:d.status,admin_notes:d.admin_notes||''})});await load()}catch(e){setError(e instanceof Error?e.message:'Could not update verification.')}}} style={{background:'#C9A84C',color:'#0B1437',border:0,borderRadius:8,padding:'8px 12px',fontWeight:800}}>Save</button>
+      </div></div>)}
+      {!kyc.length&&<div style={card}>No verification documents are awaiting review.</div>}
+    </div>}
+    {tab==='invoices'&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
+      <div style={card}><b>Pro-forma invoices & bank settlement</b><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Only settle after the bank funds have actually landed. Enter the bank reference and exact amount received; the system then creates the payment, funding and ledger records atomically.</div></div>
+      {invoices.map(i=><div key={i.id} style={card}><div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:220}}><b>{i.invoice_number}</b><div style={{fontSize:10,color:T.textMuted}}>Organisation #{i.organisation_id} · Campaign #{i.campaign_id??'—'} · {i.status}</div></div>
+        <strong>{kes(i.total_minor)}</strong>
+        {i.status!=='paid'&&<button disabled={settling===i.id} onClick={async()=>{const ref=window.prompt('Bank payment reference');if(!ref)return;const amount=window.prompt('Exact amount received in KES',String(Number(i.total_minor)/100));if(!amount)return;setSettling(i.id);try{await req('/api/admin/b2b/invoices/'+i.id+'/mark-paid',{method:'POST',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({payment_reference:ref,received_amount_minor:Math.round(Number(amount)*100)})});await load()}catch(e){setError(e instanceof Error?e.message:'Could not settle invoice.')}finally{setSettling(null)}}} style={{background:'#C9A84C',color:'#0B1437',border:0,borderRadius:8,padding:'8px 12px',fontWeight:800}}>{settling===i.id?'Saving…':'Mark bank payment received'}</button>}
+        <a href={'/api/organisations/'+i.organisation_id+'/billing/invoices/'+i.id+'/receipt.pdf'} target="_blank" rel="noreferrer" style={{fontSize:11,fontWeight:800,color:'#5570B7'}}>PDF</a>
+      </div></div>)}
+      {!invoices.length&&<div style={card}>No organisation invoices yet.</div>}
+    </div>}
+
+{tab==='reconciliation'&&<div style={card}><div style={{fontWeight:800,marginBottom:10}}>Payment → funding → ledger reconciliation</div><div style={{overflowX:'auto'}}><table style={{width:'100%',fontSize:11,borderCollapse:'collapse'}}><thead><tr>{['Reference','Payment','Campaign value','Funding','Ledger','Result'].map(x=><th key={x} style={{textAlign:'left',padding:7,borderBottom:'1px solid '+T.border}}>{x}</th>)}</tr></thead><tbody>{recon.map(r=><tr key={r.payment_id}><td style={{padding:7}}>{r.provider_reference}</td><td style={{padding:7}}>{r.status}</td><td style={{padding:7}}>{kes(r.campaign_amount_minor)}</td><td style={{padding:7}}>{kes(r.funding_amount_minor)}</td><td style={{padding:7}}>{kes(r.ledger_funding_minor)}</td><td style={{padding:7,fontWeight:800,color:r.reconciliation_status==='matched'?'#16A34A':'#DC2626'}}>{r.reconciliation_status}</td></tr>)}</tbody></table></div></div>}
   </div>
 }
