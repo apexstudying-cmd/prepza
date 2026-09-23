@@ -13247,7 +13247,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             </div>
             {amPill(`${dashboard.funnel.paying} paying`, AMB_COLORS.gold)}
           </div>
-/div>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, margin: '0 18px 14px' }}>
           {[['Pending', dashboard.earnings.pending_kes, AMB_COLORS.gray], ['Available', dashboard.earnings.available_kes, AMB_COLORS.green], ['Paid out', dashboard.earnings.paid_kes, AMB_COLORS.navy]].map(([label, val, color]) => (
             <div key={label as string} style={{ background: T.card, borderRadius: 14, padding: '12px 6px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
