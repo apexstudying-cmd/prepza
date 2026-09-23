@@ -108,7 +108,6 @@ def register_study_friend_streak_routes(app, db):
             # study minutes remain each student's own StudyTimeLog; this record
             # captures the social streak milestone without double-counting time.
             if streak and last_shared:
-                friend_id = row["user_b_id"] if row["user_a_id"] == row["user_b_id"] else row["user_a_id"]
                 db.session.execute(text("""
                     INSERT INTO study_friend_streak_activity
                     (id,streak_id,user_id,friend_user_id,activity_date,streak_day)
