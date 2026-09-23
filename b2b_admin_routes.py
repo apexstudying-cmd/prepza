@@ -40,7 +40,10 @@ def register_b2b_admin_routes(app, db):
 
     def is_admin():
         uid = session.get("user_id")
-        return bool(uid and (session.get("is_admin") is True or session.get("role") in ("admin", "superadmin")))
+        if not uid:
+            return False
+        row = db.session.execute(text('SELECT is_admin FROM "user" WHERE id=:uid'), {"uid": uid}).scalar()
+        return bool(row)
 
     @app.get("/api/admin/b2b/placements")
     def admin_b2b_placements():
