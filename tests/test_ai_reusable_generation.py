@@ -208,7 +208,7 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-flash", extracted_text="course notes", page_count=4)
     session = _FakeSession(content)
     fake_app = types.SimpleNamespace(
-        db=types.SimpleNamespace(session=session), DocumentContent=object, AiJob=_FakeAiJob
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
     )
 
     class FakeProviderError(Exception):
