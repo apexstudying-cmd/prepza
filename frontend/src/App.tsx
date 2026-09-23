@@ -14263,7 +14263,7 @@ export default function App() {
   // over to PaymentScreen the same way activeDocumentId etc. are - these
   // are two separate mounted components, not steps of one component, so
   // the selection has to be lifted here rather than living in either screen.
-  const [selectedPlan, setSelectedPlan] = useState('semester')
+  const [selectedPlan, setSelectedPlan] = useState('plus')
   // Which user's profile is open in StudentProfileScreen / whose followers-
   // following list is open in FollowListScreen. activeProfileName is a
   // best-effort label carried over from wherever the navigation started
