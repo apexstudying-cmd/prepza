@@ -1,22 +1,21 @@
 export type PrepzaUsage = {
-  plan: 'free' | 'premium' | 'plus' | 'pro'
+  plan: 'free' | 'plus' | 'pro' | 'premium'
   price_kes: number
   billing_period: string
   limits: {
-    summary_generations: number
-    summary_max_pages: number
-    podcast_generations: number
-    podcast_max_minutes: number
-    flashcard_generations: number
-    flashcard_max_cards: number
-    quiz_generations: number
-    quiz_max_questions: number
-    mind_map_generations: number
-    mind_map_max_nodes: number
-    tutor_messages: number
+    podcast_minutes: number
+    summary_pages: number
+    questions: number
+    mind_map_nodes: number
+    flashcards: number
+    offline_study: boolean
+    premium_library: boolean
+    study_hub_uploads: boolean
   }
-  usage: Record<string, { requests: number; units: number; remaining_units?: number; unit_limit?: number }>
+  usage: Record<string, { requests: number; units: number; remaining_units?: number; unit_limit?: number; max_units_per_generation?: number }>
   period_start: string
+  active_plans?: Array<'plus' | 'pro'>
+  offline_access_expires_at?: string | null
 }
 
 export async function fetchPrepzaUsage(): Promise<PrepzaUsage> {
@@ -32,36 +31,36 @@ export function canGenerate(
   units: number,
 ) {
   if (!usage || !Number.isFinite(units) || units <= 0) return false
-  const limits = usage.limits
-  const current = usage.usage[feature] || { requests: 0, units: 0 }
+  const limitKey = {
+    summary: 'summary_pages',
+    podcast: 'podcast_minutes',
+    flashcards: 'flashcards',
+    quiz: 'questions',
+    mind_map: 'mind_map_nodes',
+  } as const
+  const limit = Number(usage.limits[limitKey[feature]] || 0)
+  const current = usage.usage[feature] || { requests: 0, units: 0, remaining_units: limit }
+  const maxPerGeneration = Number(current.max_units_per_generation ?? limit)
+  // Overlapping paid entitlements stack their monthly wallet, while a single
+  // generation cannot exceed the largest individual entitlement's generation size.
+  return units <= maxPerGeneration && units <= Number(current.remaining_units ?? Math.max(0, limit - Number(current.units || 0)))
+}
 
-  const requestLimit =
-    feature === 'summary' ? limits.summary_generations :
-    feature === 'podcast' ? limits.podcast_generations :
-    feature === 'flashcards' ? limits.flashcard_generations :
-    feature === 'quiz' ? limits.quiz_generations :
-    limits.mind_map_generations
+export function remainingUnits(usage: PrepzaUsage | null, feature: 'summary' | 'podcast' | 'flashcards' | 'quiz' | 'mind_map') {
+  return Math.max(0, Number(usage?.usage?.[feature]?.remaining_units ?? 0))
+}
 
-  const unitLimit =
-    feature === 'summary' ? limits.summary_max_pages :
-    feature === 'podcast' ? limits.podcast_max_minutes :
-    feature === 'flashcards' ? limits.flashcard_max_cards :
-    feature === 'quiz' ? limits.quiz_max_questions :
-    limits.mind_map_max_nodes
-
-  // Requests are telemetry now. The actual quota is a spendable unit
-  // wallet, while unitLimit remains the maximum size of one generation.
-  const walletLimit = current.unit_limit ?? unitLimit * requestLimit
-  return units <= unitLimit && current.units + units <= walletLimit
+export function usageExhausted(usage: PrepzaUsage | null, feature: 'summary' | 'podcast' | 'flashcards' | 'quiz' | 'mind_map') {
+  return usage != null && remainingUnits(usage, feature) <= 0
 }
 
 export function usageLabel(usage: PrepzaUsage | null) {
   if (!usage) return ''
   return usage.plan === 'pro'
-    ? 'Pro · full generation limits'
+    ? 'Pro · expanded generation allowance'
     : usage.plan === 'plus'
-      ? 'Plus · expanded generation limits'
+      ? 'Plus · expanded generation allowance'
       : usage.plan === 'premium'
-        ? 'Premium · full generation limits'
-        : 'Free · limited generation'
+        ? 'Premium · expanded generation allowance'
+        : 'Free · limited generation allowance'
 }
