@@ -151,7 +151,7 @@ def patch_flashcards(text, path):
 def patch_summary(text, path):
     if 'SummaryGenerationScreen' not in text or '// Offline summary restore' in text:
         return text
-    anchor = "  useEffect(() => {\n    if (activeDocumentId == null) return\n    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string }>(`/documents/${activeDocumentId}`)])"
+    anchor = "  useEffect(() => {\n    if (activeDocumentId == null) return\n    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string }>(`/documents/${activeDocumentId}`), fetchPrepzaUsage()])"
     positions = [m.start() for m in re.finditer(re.escape(anchor), text)]
     if not positions:
         raise SystemExit(f'Offline generation: summary document effect anchor missing in {path.name}')
