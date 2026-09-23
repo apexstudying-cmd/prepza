@@ -109,16 +109,18 @@ export async function importPeerPublicKey(value: string): Promise<CryptoKey> {
 }
 
 /** Persists the current device's identity keypair to IndexedDB. */
-export async function storeIdentityKeyPair(keyPair: CryptoKeyPair): Promise<void> {
-  await idbSet(STORE_NAME, RECORD_KEY, keyPair)
+export async function storeIdentityKeyPair(userId: number, keyPair: CryptoKeyPair): Promise<void> {
+  if (!Number.isInteger(userId) || userId <= 0) throw new Error('Invalid user id.')
+  await idbSet(STORE_NAME, `${RECORD_KEY_PREFIX}${userId}`, keyPair)
 }
 
 /**
  * Loads this device's identity keypair from IndexedDB, or null if none
  * has been generated yet on this device/browser.
  */
-export async function loadIdentityKeyPair(): Promise<CryptoKeyPair | null> {
-  const record = await idbGet<CryptoKeyPair>(STORE_NAME, RECORD_KEY)
+export async function loadIdentityKeyPair(userId: number): Promise<CryptoKeyPair | null> {
+  if (!Number.isInteger(userId) || userId <= 0) throw new Error('Invalid user id.')
+  const record = await idbGet<CryptoKeyPair>(STORE_NAME, `${RECORD_KEY_PREFIX}${userId}`)
   return record ?? null
 }
 
@@ -129,15 +131,15 @@ export async function loadIdentityKeyPair(): Promise<CryptoKeyPair | null> {
  * POST /keys/register - this function deliberately does not make that call
  * itself, keeping this module network-free per Chunk 1's scope.
  */
-export async function getOrCreateIdentityKeyPair(): Promise<{
+export async function getOrCreateIdentityKeyPair(userId: number): Promise<{
   keyPair: CryptoKeyPair
   isNew: boolean
 }> {
-  const existing = await loadIdentityKeyPair()
+  const existing = await loadIdentityKeyPair(userId)
   if (existing) {
     return { keyPair: existing, isNew: false }
   }
   const keyPair = await generateIdentityKeyPair()
-  await storeIdentityKeyPair(keyPair, userId)
+  await storeIdentityKeyPair(userId, keyPair)
   return { keyPair, isNew: true }
 }
