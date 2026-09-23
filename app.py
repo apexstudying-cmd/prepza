@@ -8948,6 +8948,7 @@ def ambassador_status():
     return jsonify({
         "enrolled": True,
         "status": ambassador.status,
+        "program_enabled": get_ambassador_settings()["enabled"],
         "referral_code": ambassador.referral_code,
         "applied_at": ambassador.applied_at.isoformat() if ambassador.applied_at else None,
         "rejection_reason": ambassador.rejection_reason if ambassador.status == "rejected" else None,
@@ -12408,10 +12409,10 @@ def admin_get_settings():
         "support_email": settings.get("support_email", ""),
         "support_phone": settings.get("support_phone", ""),
         "support_message": settings.get("support_message", "Contact Prepza support and our team will get back to you."),
-        "ambassador_program_enabled": settings.get("ambassador_program_enabled", "true") == "true",
-        "ambassador_payout_hold_days": max(0, int(settings.get("ambassador_payout_hold_days", AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT) or AMBASSADOR_PAYOUT_HOLD_DAYS_DEFAULT)),
-        "ambassador_min_payout_kes": max(AMBASSADOR_MIN_PAYOUT_KES, int(settings.get("ambassador_min_payout_kes", AMBASSADOR_MIN_PAYOUT_KES) or AMBASSADOR_MIN_PAYOUT_KES)),
-        "ambassador_pitch": settings.get("ambassador_pitch", AMBASSADOR_PITCH_DEFAULT),
+        "ambassador_program_enabled": get_ambassador_settings()["enabled"],
+        "ambassador_payout_hold_days": get_ambassador_settings()["payout_hold_days"],
+        "ambassador_min_payout_kes": get_ambassador_settings()["min_payout_kes"],
+        "ambassador_pitch": get_ambassador_settings()["pitch"],
     })
 
 
