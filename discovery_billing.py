@@ -26,7 +26,8 @@ PUSH_CAP_PER_48_HOURS = 1
 PUSH_CAP_PER_7_DAYS = 3
 
 
-def register_discovery(app, db):
+def _register_discovery_schema(db):
+
     if db.engine.dialect.name == "sqlite":
         return
     db.session.execute(text("""
@@ -139,6 +140,11 @@ def register_discovery(app, db):
             SELECT role FROM organisation_member
             WHERE organisation_id = :oid AND user_id = :uid LIMIT 1
         """), {"oid": org_id, "uid": user_id}).scalar_one_or_none()
+
+
+def register_discovery(app, db):
+    with app.app_context():
+        _register_discovery_schema(db)
 
     def org_access(org_id, user_id, owner_only=False):
         role = member_role(org_id, user_id)
