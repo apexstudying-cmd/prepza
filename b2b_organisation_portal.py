@@ -397,7 +397,7 @@ def register_b2b_organisation_portal(app, db):
     @app.get("/api/admin/b2b/invoices")
     def admin_invoices():
         if not admin_user(): return jsonify({"error":"Admin access required"}),403
-        rows=db.session.execute(text("SELECT id,organisation_id,campaign_id,invoice_number,subtotal_minor,processing_fee_minor,total_minor,status,payment_method,due_at,paid_at,created_at FROM b2b_invoice ORDER BY created_at DESC LIMIT 500")).mappings().all()
+        rows=db.session.execute(text("SELECT id,organisation_id,campaign_id,invoice_number,subtotal_minor,processing_fee_minor,total_minor,status,payment_method,due_at,paid_at,etims_status,etims_invoice_number,etims_control_code,etims_issued_at,created_at FROM b2b_invoice ORDER BY created_at DESC LIMIT 500")).mappings().all()
         return jsonify({"invoices":[dict(x) for x in rows]})
 
     @app.post("/api/admin/b2b/invoices/<int:invoice_id>/mark-paid")
@@ -407,6 +407,10 @@ def register_b2b_organisation_portal(app, db):
         inv=db.session.execute(text("SELECT * FROM b2b_invoice WHERE id=:i FOR UPDATE"),{"i":invoice_id}).mappings().first()
         if not inv:return jsonify({"error":"Invoice not found"}),404
         if inv["status"]=="paid":return jsonify({"ok":True,"duplicate":True})
+        if inv["status"] not in ("pro_forma","pending_payment"):
+            return jsonify({"error":"Only an outstanding pro-forma invoice can be settled."}),409
+        if not inv["campaign_id"]:
+            return jsonify({"error":"Invoice is not linked to a campaign and cannot fund delivery."}),409
         data=request.get_json(silent=True) or {}
         ref=str(data.get("payment_reference") or "").strip()[:120]
         try:
