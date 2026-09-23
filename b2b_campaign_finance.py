@@ -5,6 +5,8 @@ from flask import jsonify, session
 from sqlalchemy import text
 
 def register_b2b_campaign_finance(app, db):
+    if db.engine.dialect.name == "sqlite":
+        return
     db.session.execute(text("""
         ALTER TABLE discovery_campaign
         ADD COLUMN IF NOT EXISTS currency VARCHAR(3) NOT NULL DEFAULT 'KES',
