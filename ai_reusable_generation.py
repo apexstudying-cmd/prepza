@@ -222,8 +222,8 @@ def generate_document_material(*, material_type, document_content_id, triggering
             # The resolved size becomes part of the fingerprint, so changing
             # the admin limit creates a new generation family rather than
             # silently reusing an artifact built for the old size.
-            from usage_billing import _active_student_entitlements
-            active_entitlements = _active_student_entitlements(db, triggering_user_id)
+            from ai_economics import get_active_entitlements
+            active_entitlements = get_active_entitlements(db, triggering_user_id)
             if active_entitlements:
                 plans = [get_plan(db, row["plan"]) for row in active_entitlements]
                 plans = [plan for plan in plans if plan]
