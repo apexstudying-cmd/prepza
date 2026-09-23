@@ -401,6 +401,13 @@ def register_discovery(app, db):
             return jsonify({"error": "Invalid targeting criteria"}), 400
         if not name or placement not in ("feed", "push", "feed_push"):
             return jsonify({"error": "Campaign name and valid placement are required"}), 400
+        opportunity_id = data.get("opportunity_id")
+        if opportunity_id is not None:
+            try: opportunity_id = int(opportunity_id)
+            except (TypeError, ValueError): return jsonify({"error":"Invalid opportunity"}), 400
+            opp = db.session.execute(text("SELECT id,status,organisation_id,expiry_date FROM opportunity WHERE id=:id AND organisation_id=:oid"), {"id": opportunity_id, "oid": organisation_id}).mappings().first()
+            if not opp or opp["status"] != "published" or opp["expiry_date"] <= datetime.utcnow():
+                return jsonify({"error":"Only a published, active organisation opportunity can be sponsored"}), 400
         if objective not in ("reach", "traffic", "applications"):
             return jsonify({"error": "Invalid campaign objective"}), 400
         if placement == "push":
@@ -434,7 +441,7 @@ def register_discovery(app, db):
                  budget_kes, bid_type, bid_kes, target_json, starts_at, ends_at)
             VALUES (:oid, :opp, :name, :objective, :placement, 'draft',
                     :budget, :bid_type, :bid, CAST(:target AS jsonb), :starts, :ends)
-        """), {"oid": organisation_id, "opp": data.get("opportunity_id"), "name": name,
+        """), {"oid": organisation_id, "opp": opportunity_id, "name": name,
                "objective": objective, "placement": placement, "budget": budget,
                "bid_type": bid_type, "bid": bid, "target": json.dumps({**target, "billing_modes": billing_modes}),
                "starts": start, "ends": end})
