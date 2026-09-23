@@ -5439,8 +5439,30 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             } catch { /* keep the previous value if saving fails */ }
             finally { setPrivacyBusy(false) }
           }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.profilePublic)}</div>} sub={priv.profilePublic ? 'Public' : 'Private'} />
-          <Row label="Who can message me" right={<div onClick={() => setPriv(p => ({ ...p, whoMessages: !p.whoMessages }))}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
-          <Row label="Who can follow me" right={<div onClick={() => setPriv(p => ({ ...p, whoFollows: !p.whoFollows }))}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
+          <Row label="Who can message me" right={<div onClick={async e => {
+            e.stopPropagation()
+            if (privacyBusy) return
+            const next = !priv.whoMessages
+            setPrivacyBusy(true)
+            try {
+              const me = await api<{ year: number; semester: number }>('/me')
+              await api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ year: me.year, semester: me.semester, who_can_message: next ? 'everyone' : 'followers' }) })
+              setPriv(p => ({ ...p, whoMessages: next }))
+            } catch { /* keep previous value */ }
+            finally { setPrivacyBusy(false) }
+          }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
+          <Row label="Who can follow me" right={<div onClick={async e => {
+            e.stopPropagation()
+            if (privacyBusy) return
+            const next = !priv.whoFollows
+            setPrivacyBusy(true)
+            try {
+              const me = await api<{ year: number; semester: number }>('/me')
+              await api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ year: me.year, semester: me.semester, who_can_follow: next ? 'everyone' : 'approval_required' }) })
+              setPriv(p => ({ ...p, whoFollows: next }))
+            } catch { /* keep previous value */ }
+            finally { setPrivacyBusy(false) }
+          }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
           <Row label="Read receipts" sub={priv.readReceipts ? 'Enabled' : 'Disabled'} right={<div onClick={async e => {
             e.stopPropagation()
             if (privacyBusy) return
