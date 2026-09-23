@@ -51,6 +51,33 @@ def register_b2b_admin_routes(app, db):
         """)).mappings().all()
         return jsonify({"placements":[dict(r) for r in rows]})
 
+    @app.post("/api/admin/b2b/placements")
+    def admin_b2b_create_placement():
+        if not is_admin(): return jsonify({"error":"Admin access required"}),403
+        data=request.get_json(silent=True) or {}
+        key=str(data.get("placement_key") or "").strip().lower().replace(" ","_")[:80]
+        label=str(data.get("label") or "").strip()[:160]
+        modes=data.get("allowed_billing_modes") or ["cpm","cpc"]
+        try:
+            cpm=None if data.get("cpm_amount_minor") is None else int(data["cpm_amount_minor"])
+            cpc=None if data.get("cpc_amount_minor") is None else int(data["cpc_amount_minor"])
+        except (TypeError,ValueError):
+            return jsonify({"error":"Invalid placement pricing"}),400
+        if not key or not label or not isinstance(modes,list) or not set(modes).issubset({"cpm","cpc"}) or not modes:
+            return jsonify({"error":"Valid placement key, label and billing modes are required"}),400
+        try:
+            row=db.session.execute(text("""
+                INSERT INTO b2b_placement_config
+                    (placement_key,label,allowed_billing_modes,cpm_amount_minor,cpc_amount_minor)
+                VALUES (:key,:label,CAST(:modes AS jsonb),:cpm,:cpc)
+                RETURNING id
+            """),{"key":key,"label":label,"modes":json.dumps(modes),"cpm":cpm,"cpc":cpc}).scalar_one()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            return jsonify({"error":"Placement key already exists or could not be created"}),409
+        return jsonify({"ok":True,"id":int(row)}),201
+
     @app.patch("/api/admin/b2b/placements/<int:placement_id>")
     def admin_b2b_update_placement(placement_id):
         if not is_admin(): return jsonify({"error":"Admin access required"}),403
