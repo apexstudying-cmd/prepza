@@ -2178,6 +2178,16 @@ def send_reset_email(to_email, token):
     response.raise_for_status()
 
 
+
+def login_required(f):
+    """Require an authenticated Prepza session for protected read/write routes."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("user_id"):
+            return jsonify({"error": "Not logged in"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
 def require_admin(f):
     @wraps(f)
     def decorated(*args, **kwargs):
