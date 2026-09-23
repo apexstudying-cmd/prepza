@@ -304,6 +304,53 @@ def register_discovery(app, db):
             out.append({"user_id": int(r[0]), "endpoint": r[1], "keys": keys})
         return out
 
+    @app.get("/api/opportunities/preferences")
+    def opportunity_discovery_preferences():
+        uid = session.get("user_id")
+        if not uid:
+            return jsonify({"error": "Not logged in"}), 401
+        row = db.session.execute(text("""
+            SELECT discoverable, consent_version, updated_at
+            FROM student_opportunity_discovery
+            WHERE user_id=:uid
+        """), {"uid": uid}).mappings().first()
+        return jsonify({
+            "relevant_opportunities_enabled": bool(row and row["discoverable"]),
+            "consent_version": row["consent_version"] if row else "g5-v1",
+            "updated_at": row["updated_at"].isoformat() if row and row["updated_at"] else None,
+        })
+
+    @app.patch("/api/opportunities/preferences")
+    def update_opportunity_discovery_preferences():
+        uid = session.get("user_id")
+        if not uid:
+            return jsonify({"error": "Not logged in"}), 401
+        if not csrf_ok():
+            return jsonify({"error": "Valid CSRF token required"}), 403
+        data = request.get_json(silent=True) or {}
+        enabled = data.get("relevant_opportunities_enabled")
+        if not isinstance(enabled, bool):
+            return jsonify({"error": "relevant_opportunities_enabled must be a boolean"}), 400
+        db.session.execute(text("""
+            INSERT INTO student_opportunity_discovery (user_id, discoverable, consent_version)
+            VALUES (:uid, :enabled, 'g5-v1')
+            ON CONFLICT (user_id) DO UPDATE
+            SET discoverable=EXCLUDED.discoverable,
+                consent_version=EXCLUDED.consent_version,
+                updated_at=CURRENT_TIMESTAMP
+        """), {"uid": uid, "enabled": enabled})
+        db.session.execute(text("""
+            INSERT INTO student_opportunity_discovery_audit
+                (user_id, discoverable, consent_version, source)
+            VALUES (:uid, :enabled, 'g5-v1', 'settings')
+        """), {"uid": uid, "enabled": enabled})
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "relevant_opportunities_enabled": enabled,
+            "consent_version": "g5-v1",
+        })
+
     @app.get("/api/organisations/<int:organisation_id>/discovery/pricing")
     def discovery_pricing(organisation_id):
         uid = session.get("user_id")
