@@ -80,13 +80,20 @@ def patch_api(text, path):
             if needle not in text:
                 raise SystemExit(f'Offline generation: replay fallback anchor missing in {path.name}')
             text = text.replace(needle, replacement, 1)
-    success = "  if (!res.ok) throw new GenerationApiError(body?.error || body?.message || `Request failed (${res.status})`, res.status)"
-    if success not in text:
-        success = "  if (!res.ok) throw new Error(body?.error || body?.message || `Request failed (${res.status})`)"
-    if success not in text:
+    success_candidates = [
+        r"^\\s*if \(!res\\.ok\) throw new GenerationApiError\\([^\\n]+\\)$",
+        r"^\\s*if \(!res\\.ok\) throw new Error\\([^\\n]+\\)$",
+    ]
+    success = None
+    for pattern in success_candidates:
+        match = re.search(pattern, text, flags=re.MULTILINE)
+        if match:
+            success = match.group(0).strip()
+            break
+    if success is None:
         raise SystemExit(f'Offline generation: API success anchor missing in {path.name}')
-    if "// Offline generated-material persistence\n" not in text:
-        addition = success + "\n  // Offline generated-material persistence\n  if (typeof body === 'object' && body !== null && (requestMethod === 'GET' || requestMethod === 'POST')) {\n    void saveGeneratedMaterialOffline(path, requestBody, body)\n    if (requestMethod === 'GET' && path.endsWith('/podcast-audio') && body.audio_status === 'ready' && body.audio_url) void cacheGeneratedAudioOffline(String(body.audio_url))\n  }\n"
+    if "// Offline generated-material persistence\\n" not in text:
+        addition = success + "\\n  // Offline generated-material persistence\\n  if (typeof body === 'object' && body !== null && (requestMethod === 'GET' || requestMethod === 'POST')) {\\n    void saveGeneratedMaterialOffline(path, requestBody, body)\\n    if (requestMethod === 'GET' && path.endsWith('/podcast-audio') && body.audio_status === 'ready' && body.audio_url) void cacheGeneratedAudioOffline(String(body.audio_url))\\n  }\\n"
         text = text.replace(success, addition, 1)
     return text
 
