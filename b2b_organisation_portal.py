@@ -430,7 +430,7 @@ def register_b2b_organisation_portal(app, db):
         fid=db.session.execute(text("INSERT INTO b2b_campaign_funding(campaign_id,payment_id,amount_minor,status) VALUES(:c,:p,:a,'credited') RETURNING id"),{"c":inv["campaign_id"],"p":pid,"a":inv["subtotal_minor"]}).scalar_one()
         db.session.execute(text("""INSERT INTO b2b_campaign_ledger(campaign_id,entry_type,signed_amount_minor,currency,idempotency_key,payment_id,funding_id,actor_user_id,description)
           VALUES(:c,'funding',:a,'KES',:k,:p,:f,:u,'Bank/invoice campaign funding') ON CONFLICT (idempotency_key) DO NOTHING"""),{"c":inv["campaign_id"],"a":inv["subtotal_minor"],"k":"funding:"+ref,"p":pid,"f":fid,"u":session.get("user_id")})
-        db.session.execute(text("UPDATE discovery_campaign SET funding_status='funded',status=CASE WHEN starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP THEN 'active' ELSE status END,funded_amount_minor=funded_amount_minor+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:c"),{"c":inv["campaign_id"],"a":inv["subtotal_minor"]})
+        db.session.execute(text("UPDATE discovery_campaign SET funding_status='funded',status='active',funded_amount_minor=funded_amount_minor+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:c"),{"c":inv["campaign_id"],"a":inv["subtotal_minor"]})
         db.session.execute(text("UPDATE b2b_invoice SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE id=:i"),{"i":invoice_id})
         db.session.commit(); return jsonify({"ok":True,"payment_id":int(pid)})
     
