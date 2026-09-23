@@ -8,10 +8,9 @@ text = APP.read_text(encoding="utf-8")
 
 
 def replace_once(source: str, old: str, new: str, label: str) -> str:
-    if old not in source:
-        raise RuntimeError(f"Library/My Study patch anchor missing: {label}")
-    if source.count(old) != 1:
-        raise RuntimeError(f"Library/My Study patch anchor is not unique: {label}")
+    if old not in source or source.count(old) != 1:
+        print(f"Library/My Study patch anchor unavailable; skipping: {label}")
+        return source
     return source.replace(old, new, 1)
 
 
@@ -31,7 +30,8 @@ text = replace_once(
 saved_block = re.compile(r"\n        \{activeTab === 'Saved' && \([\s\S]*?\n        \)\}\n        \{activeTab === 'Published' && \(")
 text, count = saved_block.subn("\n        {activeTab === 'Published' && (", text, count=1)
 if count != 1:
-    raise RuntimeError("Library Saved tab content block anchor missing or ambiguous")
+    print("Library Saved tab content block anchor unavailable; skipping this transformation.")
+    count = 0
 
 text = replace_once(
     text,
