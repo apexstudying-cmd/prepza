@@ -192,3 +192,6 @@ def remove_chat_group_member(conversation_id, target_user_id):
         "removed_user_id": target_user_id,
         "key_epoch": new_epoch,
     })
+
+# E2EE lifecycle contract: The E2EE membership mapper rotates once per transaction.
+# Do not also bump the epoch here; prepza_control owns the transactional rotation.
