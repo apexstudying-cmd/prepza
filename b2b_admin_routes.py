@@ -4,7 +4,8 @@ import json
 from flask import jsonify, request, session
 from sqlalchemy import text
 
-def register_b2b_admin_routes(app, db):
+def _register_b2b_admin_schema(db):
+
     if db.engine.dialect.name == "sqlite":
         return
     db.session.execute(text("""
@@ -37,6 +38,11 @@ def register_b2b_admin_routes(app, db):
             VALUES (:key,:label,:cpm,:cpc) ON CONFLICT (placement_key) DO NOTHING
         """),{"key":key,"label":label,"cpm":cpm,"cpc":cpc})
     db.session.commit()
+
+
+def register_b2b_admin_routes(app, db):
+    with app.app_context():
+        _register_b2b_admin_schema(db)
 
     def is_admin():
         uid = session.get("user_id")
