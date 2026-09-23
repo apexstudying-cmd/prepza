@@ -24,7 +24,9 @@ PUSH_CAP_PER_7_DAYS = 3
 
 
 def register_discovery(app, db):
-    db.session.execute(text("""
+    with app.app_context():
+        if db.engine.dialect.name == "postgresql":
+            db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS discovery_campaign (
             id BIGSERIAL PRIMARY KEY,
             organisation_id INTEGER NOT NULL,
