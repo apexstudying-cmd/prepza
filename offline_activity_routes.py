@@ -7,6 +7,10 @@ same request after an ambiguous network failure therefore cannot double-count
 the same offline study time.
 """
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+NAIROBI = ZoneInfo('Africa/Nairobi')
+def _today(): return datetime.now(NAIROBI).date()
 
 from flask import jsonify, request, session
 
@@ -28,7 +32,7 @@ def register_offline_activity_routes(app, db):
                 activity_date = datetime.strptime(value, '%Y-%m-%d').date()
             except (TypeError, ValueError):
                 continue
-            if activity_date > datetime.utcnow().date() or activity_date < datetime.utcnow().date() - timedelta(days=366):
+            if activity_date > _today() or activity_date < datetime.utcnow().date() - timedelta(days=366):
                 continue
             dates.append(activity_date)
         dates = sorted(set(dates))
@@ -103,15 +107,14 @@ def register_offline_activity_routes(app, db):
                 row.study_time_seconds += delta
                 row.last_heartbeat_at = None
 
-                activity = StudyActivityLog.query.filter_by(
-                    user_id=user_id, document_content_id=None, activity_date=activity_date
-                ).first()
-                if not activity:
-                    db.session.add(StudyActivityLog(
-                        user_id=user_id,
-                        document_content_id=None,
-                        activity_date=activity_date,
-                    ))
+                if new_total >= 10 * 60:
+                    activity = StudyActivityLog.query.filter_by(
+                        user_id=user_id, document_content_id=None, activity_date=activity_date
+                    ).first()
+                    if not activity:
+                        db.session.add(StudyActivityLog(
+                            user_id=user_id, document_content_id=None, activity_date=activity_date,
+                        ))
 
             server_totals[raw_date] = new_total
             # This is the amount by which the server advanced during this
