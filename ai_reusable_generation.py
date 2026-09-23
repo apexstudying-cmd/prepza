@@ -169,16 +169,19 @@ def generate_document_material(*, material_type, document_content_id, triggering
     if not content.extracted_text:
         raise ai_service.AIProviderError("This document's text hasn't finished processing yet - try again shortly.")
     scope, owner_user_id = _content_scope(document_content_id, triggering_user_id)
-    source_document = (
-        db.session.query(Document)
-        .filter(
-            Document.user_id == triggering_user_id,
-            Document.document_content_id == document_content_id,
-            Document.is_removed.is_(False),
+    source_document = None
+    session_query = getattr(db.session, "query", None)
+    if session_query is not None:
+        source_document = (
+            session_query(Document)
+            .filter(
+                Document.user_id == triggering_user_id,
+                Document.document_content_id == document_content_id,
+                Document.is_removed.is_(False),
+            )
+            .order_by(Document.id.desc())
+            .first()
         )
-        .order_by(Document.id.desc())
-        .first()
-    )
     document_title = source_document.title if source_document else "Study document"
     prompt_version = PROMPT_VERSIONS[material_type]
     schema_version = SCHEMA_VERSIONS[material_type]
