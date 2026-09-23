@@ -5,6 +5,37 @@ from flask import jsonify, request, session
 from sqlalchemy import text
 
 def register_b2b_admin_routes(app, db):
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS b2b_placement_config (
+            id BIGSERIAL PRIMARY KEY,
+            placement_key VARCHAR(80) NOT NULL UNIQUE,
+            label VARCHAR(160) NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            allowed_billing_modes JSONB NOT NULL DEFAULT '[\"cpm\",\"cpc\"]'::jsonb,
+            cpm_amount_minor BIGINT,
+            cpc_amount_minor BIGINT,
+            inventory_limit INTEGER,
+            frequency_cap_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            version VARCHAR(80) NOT NULL DEFAULT 'launch-v1',
+            updated_by_user_id INTEGER,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    placement_defaults=[
+        ("home_carousel","Home carousel",35000,2000),
+        ("explore_university","Explore / university discovery",35000,2000),
+        ("opportunities_feed","Opportunities feed",35000,2000),
+        ("podcast_banner","Podcast-player banner",35000,2000),
+    ]
+    for key,label,cpm,cpc in placement_defaults:
+        db.session.execute(text("""
+            INSERT INTO b2b_placement_config
+                (placement_key,label,cpm_amount_minor,cpc_amount_minor)
+            VALUES (:key,:label,:cpm,:cpc) ON CONFLICT (placement_key) DO NOTHING
+        """),{"key":key,"label":label,"cpm":cpm,"cpc":cpc})
+    db.session.commit()
+
     def is_admin():
         uid = session.get("user_id")
         return bool(uid and (session.get("is_admin") is True or session.get("role") in ("admin", "superadmin")))
