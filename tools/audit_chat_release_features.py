@@ -19,7 +19,7 @@ for needle, label in [
     ("recordingVoice", "voice recording state"),
     ("startVoiceRecording", "voice recording handler"),
     ('aria-label=\"Record voice note\"', "voice-note button"),
-    ("Recording voice note ·", "recording UI"),
+    ('aria-label="Stop recording voice note"', "recording UI"),
     ('<audio controls', "voice-note playback"),
     ("Voice message", "voice-message chat preview"),
     ('import CallExperience from \'./CallExperience\'', "call experience import"),
