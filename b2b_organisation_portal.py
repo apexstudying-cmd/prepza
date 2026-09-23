@@ -247,10 +247,10 @@ def register_b2b_organisation_portal(app, db):
         number="PZ-"+datetime.utcnow().strftime("%Y%m%d")+"-"+uuid.uuid4().hex[:8].upper()
         amount=int(c["budget_kes"])*100
         db.session.execute(text("""INSERT INTO b2b_invoice(organisation_id,campaign_id,invoice_number,subtotal_minor,total_minor,status,payment_method,due_at)
-          VALUES(:o,:c,:n,:a,:a,'issued','bank_transfer',NULL)"""),{"o":oid,"c":cid,"n":number,"a":amount})
+          VALUES(:o,:c,:n,:a,:a,'pro_forma','bank_transfer',NULL)"""),{"o":oid,"c":cid,"n":number,"a":amount})
         db.session.execute(text("UPDATE discovery_campaign SET status='pending_payment',updated_at=CURRENT_TIMESTAMP WHERE id=:i"),{"i":cid})
         db.session.commit()
-        return jsonify({"ok":True,"invoice_number":number,"amount_minor":amount,"status":"issued"}),201
+        return jsonify({"ok":True,"invoice_number":number,"amount_minor":amount,"status":"pro_forma"}),201
 
     def pdf(title,ref,org,campaign,amount,status,filename):
         doc=fitz.open();page=doc.new_page();y=65
