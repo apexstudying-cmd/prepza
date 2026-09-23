@@ -289,7 +289,6 @@ class Payment(db.Model):
     # Organisation promotion billing. Nullable so existing student/content/subscription
     # payments remain unchanged.
     organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id"), nullable=True)
-    opportunity_promotion_id = db.Column(db.Integer, db.ForeignKey("opportunity_promotion.id"), nullable=True)
 
 
 class SystemSetting(db.Model):
@@ -2247,11 +2246,6 @@ def sync_paystack_payment_status(reference):
             _student_order_helpers["mark_failed"](payment.id)
         else:
             payment.status = "success"
-            if payment.payment_type == "promotion" and payment.opportunity_promotion_id:
-                promo = db.session.get(OpportunityPromotion, payment.opportunity_promotion_id)
-                if promo:
-                    promo.payment_status = "success"
-
             # Student subscriptions are only activated after the durable order
             # ledger confirms that the payment matches the exact checkout
             # snapshot. A successful provider transaction without a valid
@@ -2282,10 +2276,6 @@ def sync_paystack_payment_status(reference):
         # A payment that definitively failed cannot fulfill the order.
         _student_order_helpers["mark_failed"](payment.id)
         payment.status = "failed"
-        if payment.payment_type == "promotion" and payment.opportunity_promotion_id:
-            promo = db.session.get(OpportunityPromotion, payment.opportunity_promotion_id)
-            if promo and promo.payment_status != "success":
-                promo.payment_status = "failed"
     # else: still processing on Paystack's side, leave as pending
 
     db.session.commit()
