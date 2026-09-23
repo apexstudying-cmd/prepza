@@ -19,6 +19,9 @@ from app import app, db, SystemSetting  # noqa: E402
 DEFAULTS = {
     "maintenance_mode": "false",
     "maintenance_message": "Prepza is temporarily down for maintenance. Please check back shortly.",
+    "support_email": "",
+    "support_phone": "",
+    "support_message": "Need help? Contact the Prepza support team.",
 }
 
 
