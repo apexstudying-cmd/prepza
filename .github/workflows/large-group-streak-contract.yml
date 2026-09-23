@@ -19,3 +19,9 @@ jobs:
           python-version: "3.12"
       - run: python -m py_compile app.py study_friend_streak_routes.py scripts/test_large_group_streak_contract.py
       - run: python scripts/test_large_group_streak_contract.py
+      - name: Frontend build
+        working-directory: frontend
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm build
