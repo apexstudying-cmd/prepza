@@ -128,7 +128,7 @@ def patch_podcast(text, path):
 def patch_flashcards(text, path):
     if 'FlashcardsGenerationScreen' not in text or '// Offline flashcards restore' in text:
         return text
-    anchor = "  useEffect(() => {\n    if (activeDocumentId == null) return\n    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string }>(`/documents/${activeDocumentId}`)])"
+    anchor = "  useEffect(() => {\n    if (activeDocumentId == null) return\n    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string }>(`/documents/${activeDocumentId}`), fetchPrepzaUsage()])"
     if anchor not in text:
         raise SystemExit(f'Offline generation: flashcard document effect anchor missing in {path.name}')
     restore = """  // Offline flashcards restore
