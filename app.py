@@ -3082,6 +3082,7 @@ def google_auth_callback():
 
 
 @app.route("/logout", methods=["POST"])
+@require_csrf
 def logout():
     session.pop("user_id", None)
     return jsonify({"message": "Logged out successfully"})
