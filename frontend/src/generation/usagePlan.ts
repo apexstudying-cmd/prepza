@@ -1,5 +1,5 @@
 export type PrepzaUsage = {
-  plan: 'free' | 'plus' | 'pro' | 'premium'
+  plan: 'free' | 'plus' | 'pro'
   price_kes: number
   billing_period: string
   limits: {
@@ -60,7 +60,5 @@ export function usageLabel(usage: PrepzaUsage | null) {
     ? 'Pro · expanded generation allowance'
     : usage.plan === 'plus'
       ? 'Plus · expanded generation allowance'
-      : usage.plan === 'premium'
-        ? 'Premium · expanded generation allowance'
-        : 'Free · limited generation allowance'
+      : 'Free · limited generation allowance'
 }
