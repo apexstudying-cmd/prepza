@@ -25,80 +25,80 @@ PUSH_CAP_PER_7_DAYS = 3
 
 def register_discovery(app, db):
     with app.app_context():
-        if db.engine.dialect.name == "postgresql":
-            db.session.execute(text("""
-        CREATE TABLE IF NOT EXISTS discovery_campaign (
-            id BIGSERIAL PRIMARY KEY,
-            organisation_id INTEGER NOT NULL,
-            opportunity_id INTEGER,
-            name VARCHAR(200) NOT NULL,
-            objective VARCHAR(30) NOT NULL DEFAULT 'reach',
-            placement VARCHAR(30) NOT NULL DEFAULT 'feed',
-            status VARCHAR(30) NOT NULL DEFAULT 'draft',
-            budget_kes INTEGER NOT NULL DEFAULT 0,
-            bid_type VARCHAR(20) NOT NULL DEFAULT 'cpm',
-            bid_kes INTEGER NOT NULL DEFAULT 350,
-            target_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-            delivered_impressions INTEGER NOT NULL DEFAULT 0,
-            delivered_clicks INTEGER NOT NULL DEFAULT 0,
-            delivered_applications INTEGER NOT NULL DEFAULT 0,
-            push_delivered INTEGER NOT NULL DEFAULT 0,
-            starts_at TIMESTAMP,
-            ends_at TIMESTAMP,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-    """))
-    db.session.execute(text("""
-        CREATE TABLE IF NOT EXISTS discovery_event (
-            id BIGSERIAL PRIMARY KEY,
-            campaign_id BIGINT NOT NULL,
-            user_id INTEGER NOT NULL,
-            event_key VARCHAR(180) NOT NULL UNIQUE,
-            event_type VARCHAR(30) NOT NULL,
-            placement VARCHAR(30) NOT NULL,
-            amount_kes INTEGER NOT NULL DEFAULT 0,
-            metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-    """))
-    db.session.execute(text("""
-        CREATE INDEX IF NOT EXISTS ix_discovery_event_campaign_created
-        ON discovery_event (campaign_id, created_at)
-    """))
-    db.session.execute(text("""
-        CREATE INDEX IF NOT EXISTS ix_discovery_event_user_type_created
-        ON discovery_event (user_id, event_type, created_at)
-    """))
-    db.session.execute(text("""
-        CREATE TABLE IF NOT EXISTS organisation_usage_invoice (
-            id BIGSERIAL PRIMARY KEY,
-            organisation_id INTEGER NOT NULL,
-            period_start DATE NOT NULL,
-            period_end DATE NOT NULL,
-            usage_type VARCHAR(40) NOT NULL DEFAULT 'discovery',
-            amount_kes INTEGER NOT NULL DEFAULT 0,
-            status VARCHAR(30) NOT NULL DEFAULT 'pending',
-            payment_reference VARCHAR(120),
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            paid_at TIMESTAMP,
-            UNIQUE (organisation_id, period_start, period_end, usage_type)
-        )
-    """))
-    db.session.execute(text("""
-        CREATE TABLE IF NOT EXISTS discovery_push_delivery (
-            id BIGSERIAL PRIMARY KEY,
-            campaign_id BIGINT NOT NULL,
-            user_id INTEGER NOT NULL,
-            subscription_endpoint TEXT,
-            status VARCHAR(20) NOT NULL DEFAULT 'queued',
-            provider_response TEXT,
-            sent_at TIMESTAMP,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (campaign_id, user_id)
-        )
-    """))
-    db.session.commit()
+            if db.engine.dialect.name == "postgresql":
+                db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS discovery_campaign (
+                id BIGSERIAL PRIMARY KEY,
+                organisation_id INTEGER NOT NULL,
+                opportunity_id INTEGER,
+                name VARCHAR(200) NOT NULL,
+                objective VARCHAR(30) NOT NULL DEFAULT 'reach',
+                placement VARCHAR(30) NOT NULL DEFAULT 'feed',
+                status VARCHAR(30) NOT NULL DEFAULT 'draft',
+                budget_kes INTEGER NOT NULL DEFAULT 0,
+                bid_type VARCHAR(20) NOT NULL DEFAULT 'cpm',
+                bid_kes INTEGER NOT NULL DEFAULT 350,
+                target_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                delivered_impressions INTEGER NOT NULL DEFAULT 0,
+                delivered_clicks INTEGER NOT NULL DEFAULT 0,
+                delivered_applications INTEGER NOT NULL DEFAULT 0,
+                push_delivered INTEGER NOT NULL DEFAULT 0,
+                starts_at TIMESTAMP,
+                ends_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS discovery_event (
+                id BIGSERIAL PRIMARY KEY,
+                campaign_id BIGINT NOT NULL,
+                user_id INTEGER NOT NULL,
+                event_key VARCHAR(180) NOT NULL UNIQUE,
+                event_type VARCHAR(30) NOT NULL,
+                placement VARCHAR(30) NOT NULL,
+                amount_kes INTEGER NOT NULL DEFAULT 0,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_discovery_event_campaign_created
+            ON discovery_event (campaign_id, created_at)
+        """))
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_discovery_event_user_type_created
+            ON discovery_event (user_id, event_type, created_at)
+        """))
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS organisation_usage_invoice (
+                id BIGSERIAL PRIMARY KEY,
+                organisation_id INTEGER NOT NULL,
+                period_start DATE NOT NULL,
+                period_end DATE NOT NULL,
+                usage_type VARCHAR(40) NOT NULL DEFAULT 'discovery',
+                amount_kes INTEGER NOT NULL DEFAULT 0,
+                status VARCHAR(30) NOT NULL DEFAULT 'pending',
+                payment_reference VARCHAR(120),
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                paid_at TIMESTAMP,
+                UNIQUE (organisation_id, period_start, period_end, usage_type)
+            )
+        """))
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS discovery_push_delivery (
+                id BIGSERIAL PRIMARY KEY,
+                campaign_id BIGINT NOT NULL,
+                user_id INTEGER NOT NULL,
+                subscription_endpoint TEXT,
+                status VARCHAR(20) NOT NULL DEFAULT 'queued',
+                provider_response TEXT,
+                sent_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (campaign_id, user_id)
+            )
+        """))
+        db.session.commit()
 
     def csrf_ok():
         return bool(session.get("csrf_token") and request.headers.get("X-CSRF-Token")
