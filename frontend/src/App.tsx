@@ -217,6 +217,7 @@ type DocumentDetail = {
   file_type: string | null; file_size_bytes: number | null; page_count: number | null
   error_message: string | null; view_url: string | null
   materials: { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]; created_at: string | null
+  content_hash?: string | null
 }
 
 // Payload shape inside `summary`/`quiz`/`flashcards`/`mindmap` below is
@@ -301,6 +302,9 @@ const Ic = {
   pause:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>,
   settings: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>,
   eye:      (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>,
+  message:  (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v16l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>,
+  paperclip:(s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a1.5 1.5 0 0 0 3 0V5a1 1 0 0 0-3 0v12.5a3.5 3.5 0 0 0 7 0V6h-1.5z"/></svg>,
+  download: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M5 20h14v-2H5v2zm7-18L5.33 8.67l1.41 1.41L11 5.83V16h2V5.83l4.26 4.25 1.41-1.41L12 2z"/></svg>,
   attach:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>,
   edit:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>,
   logout:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>,
@@ -317,6 +321,8 @@ const Ic = {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+type Participant = { user_id: number; display_name?: string | null }
+
 type Screen =
   | 'splash' | 'login' | 'forgot-password' | 'signup' | 'check-email' | 'complete-profile' | 'reset-password' | 'verify-confirm'
   | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'
@@ -954,11 +960,6 @@ function SkeletonExplore() {
   const { tokens: T } = useTheme()
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
-      {saveNotice && (
-        <div style={{ position: 'fixed', left: 16, right: 16, bottom: 18, zIndex: 80, background: T.card, border: `1px solid ${N.gold}55`, borderRadius: 14, padding: '12px 14px', boxShadow: '0 8px 30px rgba(0,0,0,0.18)', color: T.text, fontSize: 12, fontWeight: 700, textAlign: 'center' }}>
-          {saveNotice}
-        </div>
-      )}
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <Sk w={80} h={20} dark style={{ marginBottom: 12 }} />
         <Sk h={44} r={13} dark style={{ marginBottom: 12 }} />
@@ -2125,7 +2126,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
     const cached = DOC_CACHE[activeDocumentId]
     if (cached) { setDoc(cached); setRenameVal(cached.title) }
     api<DocumentDetail>(`/documents/${activeDocumentId}`)
-      .then(d => {
+      .then(async d => {
         if (cancelled) return
         const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
         let localUrl: string | null = null
@@ -2181,20 +2182,6 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
   }, [])
-
-  useEffect(() => {
-    if (stage !== 'ready') return
-    let cancelled = false
-    api<{ opportunities: OpportunityPublic[] }>('/podcast-opportunities')
-      .then(res => {
-        if (!cancelled) {
-          setPlayerOpportunities(res.opportunities || [])
-          setPlayerOppIndex(0)
-        }
-      })
-      .catch(() => { if (!cancelled) setPlayerOpportunities([]) })
-    return () => { cancelled = true }
-  }, [stage])
 
   // Study-time heartbeat: only while actually reading the document
   // (tab === 'doc') and the browser tab is visible - backgrounding
@@ -3620,6 +3607,8 @@ function setChatDraft(conversationId: number, value: string) {
   window.dispatchEvent(new CustomEvent('prepza-chat-draft-changed', { detail: { conversationId } }))
 }
 function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void; setActiveGroupId?: (id: number) => void }) {
+  const setActiveProfileUserId = (_id: number) => {}
+  const setActiveProfileName = (_name: string | null) => {}
   const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'Chats'|'Groups'|'Requests'>('Chats')
   const [search, setSearch] = useState('')
@@ -3643,6 +3632,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
   const [requestsError, setRequestsError] = useState('')
   const [requestBusy, setRequestBusy] = useState<Record<string, boolean>>({})
   const [csrfToken, setCsrfToken] = useState('')
+  const [draftVersion, setDraftVersion] = useState(0)
   const [currentUserId, setCurrentUserId] = useState<number | null>(null)
 
   useEffect(() => {
