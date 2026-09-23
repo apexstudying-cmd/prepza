@@ -437,6 +437,14 @@ def register_discovery(app, db):
         plan_code, status, expires_at = org_plan(organisation_id)
         if status in ("suspended", "expired", "past_due"):
             return jsonify({"error": "Organisation billing is not active"}), 402
+        plan_limits = ORGANISATION_PLANS.get(plan_code, ORGANISATION_PLANS["launch"])
+        active_sponsorships = db.session.execute(text("""
+            SELECT COUNT(*) FROM discovery_campaign
+            WHERE organisation_id=:oid
+              AND status IN ('draft','pending_payment','active','paused')
+        """), {"oid": organisation_id}).scalar_one()
+        if int(active_sponsorships) >= int(plan_limits.get("sponsored_campaigns", 1)):
+            return jsonify({"error": f"Your {plan_code.title()} organisation plan has reached its sponsored-campaign capacity. Upgrade your plan or finish an existing campaign first."}), 403
         audience = eligible_users(target)
         if len(audience) < 10:
             return jsonify({"error": "Target audience must contain at least 10 consented eligible students"}), 400
