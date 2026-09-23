@@ -10,6 +10,7 @@ import re
 from flask import jsonify, request, session, send_from_directory
 from sqlalchemy import text
 
+from app import get_ai_plan_tier
 from ai_service import (
     AIRequest,
     AIBudgetExceededError,
@@ -167,7 +168,7 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
             if not shared:
                 return jsonify({"error": "Shared chat document not available"}), 404
 
-        allowed, used, limit = check_daily_tutor_limit(user_id, plan_tier="free")
+        allowed, used, limit = check_daily_tutor_limit(user_id, plan_tier=get_ai_plan_tier(user_id))
         if not allowed:
             return jsonify({"error": "Daily Ada limit reached", "used": used, "limit": limit}), 429
         if is_spend_cap_reached():
