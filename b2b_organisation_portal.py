@@ -1,6 +1,6 @@
 """B2B organisation portal: dashboard, opportunity analytics, free distribution caps and billing documents."""
 from __future__ import annotations
-import io, os, uuid
+import io, os, uuid, secrets
 import requests
 from datetime import datetime
 from flask import jsonify, request, session, send_file
@@ -11,7 +11,8 @@ FREE_ORGANIC_IMPRESSION_CAP = 5000
 FREE_ORGANIC_PER_STUDENT_CAP = 3
 CAMPAIGN_MAX_DAYS = (7, 30, 90)
 
-def register_b2b_organisation_portal(app, db):
+def _register_b2b_schema(db):
+
     db.session.execute(text("""
       ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS organic_free_impression_cap INTEGER NOT NULL DEFAULT 5000;
       ALTER TABLE opportunity ADD COLUMN IF NOT EXISTS organic_free_cap_reached_at TIMESTAMP;
@@ -32,13 +33,18 @@ def register_b2b_organisation_portal(app, db):
         id BIGSERIAL PRIMARY KEY, organisation_id INTEGER NOT NULL, campaign_id BIGINT,
         invoice_number VARCHAR(80) NOT NULL UNIQUE, currency VARCHAR(3) NOT NULL DEFAULT 'KES',
         subtotal_minor BIGINT NOT NULL, processing_fee_minor BIGINT NOT NULL DEFAULT 0,
-        total_minor BIGINT NOT NULL, status VARCHAR(30) NOT NULL DEFAULT 'issued',
+        total_minor BIGINT NOT NULL, status VARCHAR(30) NOT NULL DEFAULT 'pro_forma',
         payment_method VARCHAR(30) NOT NULL DEFAULT 'bank_transfer', due_at TIMESTAMP,
         paid_at TIMESTAMP, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS ix_b2b_invoice_org_created ON b2b_invoice(organisation_id,created_at DESC);
     """))
     db.session.commit()
+
+
+def register_b2b_organisation_portal(app, db):
+    with app.app_context():
+        _register_b2b_schema(db)
 
     @app.before_request
     def sweep_b2b_campaign_windows():
@@ -147,7 +153,7 @@ def register_b2b_organisation_portal(app, db):
     def public_opportunity_detail_capped(opportunity_id):
         return record_organic_view(opportunity_id)
 
-    @app.post("/api/opportunities/<int:opp_id>/organic-view")
+    @app.route("/api/opportunities/<int:opp_id>/organic-view", methods=["GET", "POST"])
     def record_organic_view(opp_id):
         uid=session.get("user_id")
         if not uid:return jsonify({"error":"Not logged in"}),401
@@ -166,6 +172,32 @@ def register_b2b_organisation_portal(app, db):
         mine=db.session.execute(text("SELECT COUNT(*) FROM opportunity_view_event WHERE opportunity_id=:i AND user_id=:u AND source='organic'"),{"i":opp_id,"u":uid}).scalar_one()
         if source=='paid' and not paid:
             db.session.rollback(); return jsonify({"error":"Sponsored delivery is no longer active."}),410
+        if source=='paid':
+            campaign = db.session.execute(text("""
+              SELECT id, placement, status, funding_status
+              FROM discovery_campaign
+              WHERE opportunity_id=:i AND organisation_id=:o AND status='active'
+                AND funding_status IN ('funded','credited')
+                AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
+                AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
+              ORDER BY updated_at DESC, id DESC LIMIT 1
+              FOR UPDATE
+            """), {"i":opp_id,"o":row["organisation_id"]}).mappings().first()
+            if not campaign:
+                db.session.rollback(); return jsonify({"error":"Sponsored delivery is no longer active."}),410
+            from b2b_campaign_metering import record_billable_event
+            meter = record_billable_event(
+                db, int(campaign["id"]), int(uid), "impression",
+                str(campaign["placement"]),
+                f"detail:{int(campaign['id'])}:{int(uid)}:{secrets.token_hex(12)}"
+            )
+            if not meter.get("ok"):
+                db.session.rollback()
+                if meter.get("reason") == "campaign_budget_exhausted":
+                    return jsonify({"error":"Sponsored campaign budget is exhausted.","campaign_exhausted":True}),410
+                if meter.get("reason") == "student_frequency_cap":
+                    return jsonify({"error":"Sponsored delivery frequency limit reached."}),429
+                return jsonify({"error":"Sponsored delivery is unavailable."}),410
         if source=='organic' and row["organic_free_cap_reached_at"]:
             db.session.rollback();return jsonify({"error":"This opportunity has reached its free 5,000-view limit.","cap_reached":True}),410
         if source=='organic' and int(total)>=5000:
@@ -201,7 +233,7 @@ def register_b2b_organisation_portal(app, db):
         number="PZ-"+datetime.utcnow().strftime("%Y%m%d")+"-"+uuid.uuid4().hex[:8].upper()
         amount=int(c["budget_kes"])*100
         db.session.execute(text("""INSERT INTO b2b_invoice(organisation_id,campaign_id,invoice_number,subtotal_minor,total_minor,status,payment_method,due_at)
-          VALUES(:o,:c,:n,:a,:a,'issued','bank_transfer',CURRENT_TIMESTAMP+INTERVAL '14 days')"""),{"o":oid,"c":cid,"n":number,"a":amount})
+          VALUES(:o,:c,:n,:a,:a,'issued','bank_transfer',NULL)"""),{"o":oid,"c":cid,"n":number,"a":amount})
         db.session.execute(text("UPDATE discovery_campaign SET status='pending_payment',updated_at=CURRENT_TIMESTAMP WHERE id=:i"),{"i":cid})
         db.session.commit()
         return jsonify({"ok":True,"invoice_number":number,"amount_minor":amount,"status":"issued"}),201
@@ -221,7 +253,8 @@ def register_b2b_organisation_portal(app, db):
         if not uid or not access(oid,uid):return jsonify({"error":"Organisation membership required"}),403
         x=db.session.execute(text("SELECT i.*,o.name organisation_name,c.name campaign_name FROM b2b_invoice i JOIN organisation o ON o.id=i.organisation_id LEFT JOIN discovery_campaign c ON c.id=i.campaign_id WHERE i.id=:i AND i.organisation_id=:o"),{"i":iid,"o":oid}).mappings().first()
         if not x:return jsonify({"error":"Invoice not found"}),404
-        return pdf("PREPZA INVOICE",x["invoice_number"],x["organisation_name"],x["campaign_name"],x["total_minor"],str(x["status"]).upper(),"invoice-"+x["invoice_number"]+".pdf")
+        title = "PREPZA PRO FORMA INVOICE" if str(x["status"]) != "paid" else "PREPZA PAYMENT RECEIPT"
+        return pdf(title,x["invoice_number"],x["organisation_name"],x["campaign_name"],x["total_minor"],str(x["status"]).upper(),"invoice-"+x["invoice_number"]+".pdf")
 
     @app.get("/api/organisations/<int:oid>/billing/payments/<int:pid>/receipt.pdf")
     def payment_pdf(oid,pid):
@@ -291,17 +324,26 @@ def register_b2b_organisation_portal(app, db):
         inv=db.session.execute(text("SELECT * FROM b2b_invoice WHERE id=:i FOR UPDATE"),{"i":invoice_id}).mappings().first()
         if not inv:return jsonify({"error":"Invoice not found"}),404
         if inv["status"]=="paid":return jsonify({"ok":True,"duplicate":True})
-        ref="invoice-"+str(inv["invoice_number"])
+        data=request.get_json(silent=True) or {}
+        ref=str(data.get("payment_reference") or "").strip()[:120]
+        try:
+            received_minor=int(data.get("received_amount_minor"))
+        except (TypeError,ValueError):
+            received_minor=0
+        if not ref or received_minor != int(inv["total_minor"]):
+            return jsonify({"error":"Payment reference and exact received amount are required before bank settlement."}),400
         existing=db.session.execute(text("SELECT id FROM b2b_payment WHERE provider_reference=:r"),{"r":ref}).scalar_one_or_none()
         if existing:
-            db.session.execute(text("UPDATE b2b_invoice SET status='paid',paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP) WHERE id=:i"),{"i":invoice_id});db.session.commit()
-            return jsonify({"ok":True,"duplicate":True})
+            existing_invoice = db.session.execute(text("SELECT id FROM b2b_invoice WHERE status='paid' AND id=:i"),{"i":invoice_id}).scalar_one_or_none()
+            if existing_invoice:
+                return jsonify({"ok":True,"duplicate":True})
+            return jsonify({"error":"Payment reference is already recorded."}),409
         pid=db.session.execute(text("""INSERT INTO b2b_payment(organisation_id,campaign_id,provider,provider_reference,currency,customer_amount_minor,campaign_amount_minor,processing_fee_minor,status,purpose,paid_at)
           VALUES(:o,:c,'invoice',:r,'KES',:total,:subtotal,0,'paid','sponsored_campaign',CURRENT_TIMESTAMP) RETURNING id"""),{"o":inv["organisation_id"],"c":inv["campaign_id"],"r":ref,"total":inv["total_minor"],"subtotal":inv["subtotal_minor"]}).scalar_one()
         fid=db.session.execute(text("INSERT INTO b2b_campaign_funding(campaign_id,payment_id,amount_minor,status) VALUES(:c,:p,:a,'credited') RETURNING id"),{"c":inv["campaign_id"],"p":pid,"a":inv["subtotal_minor"]}).scalar_one()
         db.session.execute(text("""INSERT INTO b2b_campaign_ledger(campaign_id,entry_type,signed_amount_minor,currency,idempotency_key,payment_id,funding_id,actor_user_id,description)
           VALUES(:c,'funding',:a,'KES',:k,:p,:f,:u,'Bank/invoice campaign funding') ON CONFLICT (idempotency_key) DO NOTHING"""),{"c":inv["campaign_id"],"a":inv["subtotal_minor"],"k":"funding:"+ref,"p":pid,"f":fid,"u":session.get("user_id")})
-        db.session.execute(text("UPDATE discovery_campaign SET funding_status='funded',funded_amount_minor=funded_amount_minor+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:c"),{"c":inv["campaign_id"],"a":inv["subtotal_minor"]})
+        db.session.execute(text("UPDATE discovery_campaign SET funding_status='funded',status=CASE WHEN starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP THEN 'active' ELSE status END,funded_amount_minor=funded_amount_minor+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:c"),{"c":inv["campaign_id"],"a":inv["subtotal_minor"]})
         db.session.execute(text("UPDATE b2b_invoice SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE id=:i"),{"i":invoice_id})
         db.session.commit(); return jsonify({"ok":True,"payment_id":int(pid)})
     
