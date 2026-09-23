@@ -150,20 +150,46 @@ def register_discovery(app, db):
             return "launch", "trial", None
         return str(row["plan_code"]), str(row["status"]), row["expires_at"]
 
+    ALLOWED_TARGET_KEYS = {"university_ids", "program_ids", "years", "active_days"}
+
+    def normalize_target(raw_target):
+        if not isinstance(raw_target, dict):
+            return {}
+        if set(raw_target.keys()) - ALLOWED_TARGET_KEYS:
+            raise ValueError("Unsupported targeting criteria")
+        target = {}
+        for key in ("university_ids", "program_ids", "years"):
+            values = raw_target.get(key)
+            if values is None:
+                continue
+            if not isinstance(values, list):
+                raise ValueError(f"{key} must be a list")
+            cleaned = sorted({int(x) for x in values if str(x).isdigit()})
+            if len(cleaned) > 100:
+                raise ValueError(f"{key} contains too many values")
+            target[key] = cleaned
+        if raw_target.get("active_days") is not None:
+            days = int(raw_target["active_days"])
+            if not 1 <= days <= 90:
+                raise ValueError("active_days must be between 1 and 90")
+            target["active_days"] = days
+        return target
+
     def eligible_users(target):
+        target = normalize_target(target)
         clauses = []
         params = {}
         if target.get("university_ids"):
             clauses.append("u.university_id = ANY(:university_ids)")
-            params["university_ids"] = [int(x) for x in target["university_ids"] if str(x).isdigit()]
+            params["university_ids"] = target["university_ids"]
         if target.get("program_ids"):
             clauses.append("u.program_id = ANY(:program_ids)")
-            params["program_ids"] = [int(x) for x in target["program_ids"] if str(x).isdigit()]
+            params["program_ids"] = target["program_ids"]
         if target.get("years"):
             clauses.append("u.year = ANY(:years)")
-            params["years"] = [int(x) for x in target["years"] if str(x).isdigit()]
-        if target.get("discoverable") is not False:
-            clauses.append("COALESCE(sd.discoverable, FALSE) = TRUE")
+            params["years"] = target["years"]
+        # Explicit consent is mandatory; an organisation cannot opt a student in.
+        clauses.append("COALESCE(sd.discoverable, FALSE) = TRUE")
         days = max(1, min(90, int(target.get("active_days", 30) or 30)))
         params["since_date"] = date.today() - timedelta(days=days - 1)
         clauses.append("""
