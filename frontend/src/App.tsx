@@ -5710,6 +5710,7 @@ type GroupSummary = {
   id: number; name: string; description: string | null; privacy: GroupPrivacy
   university_id: number | null; program_id: number | null; unit_id: number | null; unit_code: string | null
   year: number | null; member_count: number; created_by: number; created_at: string | null
+  mode?: 'community' | 'broadcast'; history_visible?: boolean; allow_member_posts?: boolean
   is_member: boolean; role: 'admin' | 'member' | null
 }
 type GroupPostData = {
