@@ -234,17 +234,19 @@ def register_discovery(app, db):
         """), {"id": campaign_id}).mappings().first()
 
     def target_matches(user_id, target):
+        target = normalize_target(target)
         clauses = ["u.id = :uid"]
         params = {"uid": user_id}
         if target.get("university_ids"):
             clauses.append("u.university_id = ANY(:university_ids)")
-            params["university_ids"] = [int(x) for x in target["university_ids"]]
+            params["university_ids"] = target["university_ids"]
         if target.get("program_ids"):
             clauses.append("u.program_id = ANY(:program_ids)")
-            params["program_ids"] = [int(x) for x in target["program_ids"]]
+            params["program_ids"] = target["program_ids"]
         if target.get("years"):
             clauses.append("u.year = ANY(:years)")
-            params["years"] = [int(x) for x in target["years"]]
+            params["years"] = target["years"]
+        # Re-check consent at delivery time; stale clients cannot bypass it.
         clauses.append("COALESCE(sd.discoverable, FALSE) = TRUE")
         params["since_date"] = date.today() - timedelta(days=max(1, min(90, int(target.get("active_days", 30) or 30))) - 1)
         clauses.append("""EXISTS (
