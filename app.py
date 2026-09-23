@@ -74,6 +74,8 @@ from b2b_admin_routes import register_b2b_admin_routes
 register_b2b_admin_routes(app, db)
 from b2b_campaign_payments import register_b2b_campaign_payments
 register_b2b_campaign_payments(app, db)
+from b2b_organisation_portal import register_b2b_organisation_portal
+register_b2b_organisation_portal(app, db)
 
 # Offline chat retries need a server-side idempotency record. The client keeps
 # one stable UUID for a queued send; this table lets a retry return the
