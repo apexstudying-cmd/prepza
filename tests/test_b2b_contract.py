@@ -56,3 +56,25 @@ def test_etims_tax_invoice_is_fail_closed_until_reconciled():
     assert "etims_status" in source
     assert "etims_invoice_number" in source
     assert "The eTIMS tax invoice has not been reconciled by Prepza yet." in source
+
+
+def test_b2b_refund_freezes_campaign_until_provider_confirmation():
+    source = Path("b2b_campaign_payments.py").read_text(encoding="utf-8")
+    assert 'status=\'refund_pending\'' in source
+    assert 'refund.processed' in source
+    assert 'refund.failed' in source
+    assert 'status=\'refunded\'' in source
+
+
+def test_b2b_refund_reverses_only_unused_prepaid_campaign_value():
+    source = Path("b2b_campaign_payments.py").read_text(encoding="utf-8")
+    assert "refund_available_balance" in source
+    assert "campaign_refund = min(amount, available)" in source
+    assert "Prepaid campaign value reversed after processed refund" in source
+
+
+def test_b2b_refund_is_admin_and_csrf_protected():
+    source = Path("b2b_campaign_payments.py").read_text(encoding="utf-8")
+    assert "@app.post(\"/api/admin/b2b/payments/<int:payment_id>/refund\")" in source
+    assert "if not admin_allowed():" in source
+    assert "if not csrf_ok():" in source
