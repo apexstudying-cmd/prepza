@@ -7971,6 +7971,57 @@ def should_notify(user_id, category):
     return getattr(prefs, f"{category}_enabled", True)
 
 
+@app.route("/api/opportunity-discovery", methods=["GET", "POST"])
+@require_csrf if False else (lambda f: f)
+def opportunity_discovery_preference():
+    """Get or update whether the student allows organisation opportunity discovery.
+
+    This preference is stored separately from profile visibility so changing
+    public-profile privacy cannot accidentally change organisation discovery.
+    The small per-user table is created lazily for existing deployments.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    try:
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS student_opportunity_discovery (
+                user_id INTEGER PRIMARY KEY,
+                discoverable BOOLEAN NOT NULL DEFAULT FALSE,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Could not initialize opportunity discovery settings"}), 500
+
+    if request.method == "GET":
+        row = db.session.execute(
+            text("SELECT discoverable FROM student_opportunity_discovery WHERE user_id = :user_id"),
+            {"user_id": user_id},
+        ).first()
+        return jsonify({"discoverable": bool(row[0]) if row else False})
+
+    provided = request.headers.get("X-CSRF-Token")
+    expected = session.get("csrf_token")
+    if not provided or not expected or not hmac.compare_digest(provided, expected):
+        return jsonify({"error": "Missing or invalid CSRF token"}), 403
+    data = request.get_json(silent=True) or {}
+    discoverable = data.get("discoverable")
+    if not isinstance(discoverable, bool):
+        return jsonify({"error": "discoverable must be a boolean"}), 400
+    db.session.execute(text("""
+        INSERT INTO student_opportunity_discovery (user_id, discoverable, updated_at)
+        VALUES (:user_id, :discoverable, CURRENT_TIMESTAMP)
+        ON CONFLICT (user_id) DO UPDATE SET
+            discoverable = EXCLUDED.discoverable,
+            updated_at = CURRENT_TIMESTAMP
+    """), {"user_id": user_id, "discoverable": discoverable})
+    db.session.commit()
+    return jsonify({"discoverable": discoverable})
+
 @app.route("/notification-preferences")
 def get_notification_preferences():
     user_id = session.get("user_id")
