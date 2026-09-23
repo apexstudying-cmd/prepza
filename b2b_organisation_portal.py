@@ -40,6 +40,19 @@ def register_b2b_organisation_portal(app, db):
     """))
     db.session.commit()
 
+    @app.before_request
+    def sweep_b2b_campaign_windows():
+        if request.path.startswith("/api/discovery") or request.path.startswith("/api/organisations"):
+            db.session.execute(text("""
+              UPDATE discovery_campaign
+              SET status='completed', updated_at=CURRENT_TIMESTAMP
+              WHERE status='active' AND (
+                (ends_at IS NOT NULL AND ends_at <= CURRENT_TIMESTAMP)
+                OR funding_status='exhausted'
+              )
+            """))
+            db.session.commit()
+
     def role(oid,uid):
         return db.session.execute(text("SELECT role FROM organisation_member WHERE organisation_id=:o AND user_id=:u LIMIT 1"),{"o":oid,"u":uid}).scalar_one_or_none()
     def access(oid,uid,owner=False):
