@@ -510,9 +510,11 @@ def register_discovery(app, db):
             return jsonify({"error": "Campaign not found"}), 404
         if row["placement"] not in ("push", "feed_push") or row["status"] != "active":
             return jsonify({"error": "Campaign is not active push inventory"}), 400
+        if str(row["funding_status"] or "") not in ("funded", "credited"):
+            return jsonify({"error": "Campaign is not funded"}), 402
+
         target = row["target_json"] or {}
         user_ids = eligible_users(target)
-        now = datetime.utcnow()
         allowed_ids = []
         for user_id in user_ids:
             recent = db.session.execute(text("""
@@ -529,8 +531,6 @@ def register_discovery(app, db):
                 allowed_ids.append(user_id)
 
         subscriptions = push_subscription_rows(allowed_ids)
-        # Queue first; an external worker/payment provider can call this endpoint
-        # again safely because (campaign,user) is unique.
         queued = 0
         for sub in subscriptions:
             inserted = db.session.execute(text("""
@@ -543,43 +543,81 @@ def register_discovery(app, db):
             if inserted:
                 queued += 1
         db.session.commit()
+
         sent = 0
+        failed = 0
+        skipped = 0
         vapid_private = os.environ.get("VAPID_PRIVATE_KEY")
         vapid_public = os.environ.get("VAPID_PUBLIC_KEY")
         vapid_email = os.environ.get("VAPID_CLAIMS_EMAIL")
+        key_by_endpoint = {sub["endpoint"]: sub.get("keys") for sub in subscriptions}
+
         if vapid_private and vapid_public and vapid_email and queued:
-            try:
-                from pywebpush import webpush
-                pending = db.session.execute(text("""
-                    SELECT id,user_id,subscription_endpoint FROM discovery_push_delivery
-                    WHERE campaign_id=:cid AND status='queued' LIMIT 500
-                """), {"cid": campaign_id}).mappings().all()
-                payload = json.dumps({"title": row["name"], "body": "A new opportunity matched your Prepza interests.", "campaign_id": campaign_id})
-                for item in pending:
-                    try:
-                        keys = item.get("keys") or {}
-                        if isinstance(keys, str):
-                            try: keys = json.loads(keys)
-                            except Exception: keys = {}
-                        webpush(subscription_info={"endpoint": item["subscription_endpoint"], "keys": keys}, data=payload,
-                                vapid_private_key=vapid_private, vapid_claims={"sub": vapid_email})
-                    except Exception:
-                        continue
+            pending = db.session.execute(text("""
+                SELECT id,user_id,subscription_endpoint FROM discovery_push_delivery
+                WHERE campaign_id=:cid AND status='queued' LIMIT 500
+            """), {"cid": campaign_id}).mappings().all()
+            payload = json.dumps({"title": row["name"], "body": "A new opportunity matched your Prepza interests.", "campaign_id": campaign_id})
+
+            for item in pending:
+                event_key = f"push:{campaign_id}:{int(item['user_id'])}:{int(item['id'])}"
+                reserve = record_billable_event(
+                    db, campaign_id, int(item["user_id"]), "push_delivery",
+                    row["placement"], event_key
+                )
+                if not reserve.get("ok"):
+                    db.session.rollback()
                     db.session.execute(text("""
-                        UPDATE discovery_push_delivery SET status='sent', sent_at=CURRENT_TIMESTAMP WHERE id=:id
-                    """), {"id": item["id"]})
-                    sent += 1
-                if sent:
+                        UPDATE discovery_push_delivery
+                        SET status='budget_exhausted', provider_response=:reason
+                        WHERE id=:id AND status='queued'
+                    """), {"id": int(item["id"]), "reason": reserve.get("reason", "meter_rejected")})
+                    db.session.commit()
+                    skipped += 1
+                    continue
+
+                try:
+                    keys = key_by_endpoint.get(item["subscription_endpoint"]) or {}
+                    if isinstance(keys, str):
+                        try:
+                            keys = json.loads(keys)
+                        except Exception:
+                            keys = {}
+                    webpush(subscription_info={
+                        "endpoint": item["subscription_endpoint"], "keys": keys
+                    }, data=payload, vapid_private_key=vapid_private,
+                    vapid_claims={"sub": vapid_email})
+                except Exception as exc:
+                    db.session.rollback()
+                    reverse_billable_event(db, event_key, "push_delivery_failed")
                     db.session.execute(text("""
-                        UPDATE discovery_campaign SET push_delivered=push_delivered+:sent, updated_at=CURRENT_TIMESTAMP WHERE id=:cid
-                    """), {"cid": campaign_id, "sent": sent})
+                        UPDATE discovery_push_delivery
+                        SET status='failed', provider_response=:response
+                        WHERE id=:id AND status='queued'
+                    """), {"id": int(item["id"]), "response": str(exc)[:500]})
+                    db.session.commit()
+                    failed += 1
+                    continue
+
+                db.session.execute(text("""
+                    UPDATE discovery_push_delivery
+                    SET status='sent', sent_at=CURRENT_TIMESTAMP
+                    WHERE id=:id AND status='queued'
+                """), {"id": int(item["id"])})
                 db.session.commit()
-                sync_org_invoice(organisation_id)
-            except Exception:
-                # Queue remains intact; a worker can deliver later when VAPID is configured.
-                pass
-        return jsonify({"ok": True, "eligible_recipients": len(allowed_ids),
-                        "queued": queued, "sent": sent, "note": "Delivery is frequency-capped and billed by delivered recipient."})
+                sent += 1
+
+        return jsonify({
+            "ok": True,
+            "eligible_recipients": len(allowed_ids),
+            "queued": queued,
+            "sent": sent,
+            "failed": failed,
+            "skipped": skipped,
+            "billing": "atomic prepaid delivery metering",
+            "note": "Each successful push delivery consumes prepaid campaign balance and is frequency-capped."
+        })
+
 
     @app.get("/api/opportunity-discovery")
     def legacy_discovery_preference_get():
