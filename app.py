@@ -6479,7 +6479,7 @@ def study_time_heartbeat():
         db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
     ).filter(
         StudyTimeLog.user_id == user_id,
-        StudyTimeLog.activity_date == datetime.utcnow().date(),
+        StudyTimeLog.activity_date == _study_local_date(),
         StudyTimeLog.feature == feature,
     ).scalar() or 0)
 
@@ -6489,7 +6489,7 @@ def study_time_heartbeat():
         db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
     ).filter(
         StudyTimeLog.user_id == user_id,
-        StudyTimeLog.activity_date == datetime.utcnow().date(),
+        StudyTimeLog.activity_date == _study_local_date(),
         StudyTimeLog.feature == feature,
     ).scalar() or 0)
 
@@ -6497,7 +6497,7 @@ def study_time_heartbeat():
     # A study day requires 10 cumulative active minutes across all study
     # features. Opening a document or completing a generation is not enough.
     feature_session_seconds = after_feature_seconds
-    today = datetime.utcnow().date()
+    today = _study_local_date()
     total_today = int(db.session.query(
         db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
     ).filter(
