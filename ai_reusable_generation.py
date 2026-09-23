@@ -159,7 +159,7 @@ def _podcast_payload(parsed):
 
 def generate_document_material(*, material_type, document_content_id, triggering_user_id, plan_tier="free", parameters=None):
     import ai_service
-    from app import db, DocumentContent, AiJob, Document
+    from app import db, DocumentContent, AiJob
     if material_type not in PROMPT_VERSIONS:
         raise ValueError(f"Unsupported AI material type: {material_type}")
     params = normalize_parameters(material_type, parameters)
@@ -171,7 +171,9 @@ def generate_document_material(*, material_type, document_content_id, triggering
     scope, owner_user_id = _content_scope(document_content_id, triggering_user_id)
     source_document = None
     session_query = getattr(db.session, "query", None)
-    if session_query is not None:
+    app_module = __import__("app")
+    Document = getattr(app_module, "Document", None)
+    if session_query is not None and Document is not None:
         source_document = (
             session_query(Document)
             .filter(
