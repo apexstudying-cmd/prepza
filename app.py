@@ -5005,6 +5005,27 @@ LIBRARY_MATERIAL_TYPES = {"lecture_notes", "past_paper", "summary", "other"}
 LIBRARY_TITLE_MAX = 200
 LIBRARY_DESCRIPTION_MAX = 1000
 LIBRARY_ACTIVE_STATUSES = ("pending", "approved")
+FREE_LIBRARY_DOCUMENT_LIMIT = 3
+
+def _free_library_publication_ids(user_id):
+    """Return the deterministic first three approved Library docs for the student's metadata cohort."""
+    user=db.session.get(User,user_id)
+    if not user: return set()
+    query=(LibraryPublication.query
+        .join(Unit,LibraryPublication.unit_id==Unit.id)
+        .filter(LibraryPublication.status=="approved",Unit.university_id==user.university_id,
+                Unit.year==user.year,Unit.semester==user.semester))
+    if user.program_id:
+        query=query.join(UnitProgram,UnitProgram.unit_id==Unit.id).filter(UnitProgram.program_id==user.program_id)
+    flagged=_flagged_document_ids()
+    if flagged: query=query.filter(~LibraryPublication.document_id.in_(flagged))
+    rows=query.order_by(LibraryPublication.created_at.asc(),LibraryPublication.id.asc()).limit(FREE_LIBRARY_DOCUMENT_LIMIT).all()
+    return {int(row.id) for row in rows}
+
+def _student_has_premium_library(user_id):
+    from ai_economics import get_active_entitlements
+    return bool(get_active_entitlements(db,user_id))
+
 
 
 def _document_content_has_flagged_material(document_content_id):
@@ -5199,6 +5220,9 @@ def browse_library():
         return jsonify({"error": "Not logged in"}), 401
 
     query = LibraryPublication.query.filter_by(status="approved")
+    if not _student_has_premium_library(user_id):
+        free_ids=_free_library_publication_ids(user_id)
+        query=query.filter(LibraryPublication.id.in_(free_ids)) if free_ids else query.filter(db.literal(False))
     flagged_document_ids = _flagged_document_ids()
     if flagged_document_ids:
         query = query.filter(~LibraryPublication.document_id.in_(flagged_document_ids))
@@ -5267,6 +5291,11 @@ def _ensure_studyhub_document_for_publication(user_id, publication):
     receives their own Document row, so title/delete/read-progress state is
     personal and cannot mutate the publisher's Document row.
     """
+    if not _student_has_premium_library(user_id):
+        free_ids=_free_library_publication_ids(user_id)
+        if publication_id not in free_ids:
+            return jsonify({"error":"This Library item is outside your Free plan cohort allowance. Upgrade to Plus or Pro for premium Library access."}),403
+
     source = db.session.get(Document, publication.document_id)
     if not source or source.is_removed or not source.document_content_id:
         return None
