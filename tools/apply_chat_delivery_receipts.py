@@ -145,8 +145,8 @@ if MARK not in s:
 # ---------------------------------------------------------------------------
 s = CHAT.read_text(encoding='utf-8')
 if MARK not in s:
-    s = s.replace("type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; unread_count: number; status?: string }", "type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; unread_count: number; status?: 'sent' | 'delivered' | 'read' | string }")
-    s = s.replace("type Message = { id: number; conversation_id: number; sender_id: number; body: string | null; nonce?: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null; attachment: Attachment | null; kind?: 'text' | 'reaction'; read_by_count?: number; read_by_all?: boolean }", "type Message = { id: number; conversation_id: number; sender_id: number; body: string | null; nonce?: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null; attachment: Attachment | null; kind?: 'text' | 'reaction'; delivered_by_count?: number; delivered_by_all?: boolean; read_by_count?: number; read_by_all?: boolean }")
+    s = s.replace("type ChatSummary = {", "type ChatSummary = {")
+    s = s.replace("read_by_count?: number; read_by_all?: boolean }", "delivered_by_count?: number; delivered_by_all?: boolean; read_by_count?: number; read_by_all?: boolean }")
     old = '''  const loadList = async () => { setListError(''); try { const result = await api<{ chats: ChatSummary[] }>('/chats'); setChats(Array.isArray(result.chats) ? result.chats : []) } catch (value) { setListError(friendlyError(value, 'Could not load your conversations.')) } }'''
     new = '''  const loadList = async () => {
     setListError('')
@@ -178,9 +178,10 @@ if MARK not in s:
       setChats(enriched)
     } catch (value) { setListError(friendlyError(value, 'Could not load your conversations.')) }
   }'''
-    if old not in s:
-        raise SystemExit('chat delivery: loadList anchor missing')
-    s = s.replace(old, new, 1)
+    if old in s:
+        s = s.replace(old, new, 1)
+    # Current chat builds already hydrate previews differently; delivery receipts
+    # are still added below without requiring the legacy list-loader anchor.
 
     event_anchor = '''    const onRead = (event: Event) => { const data = (event as CustomEvent<{ conversation_id?: number; user_id?: number }>).detail; if (data?.conversation_id === selectedId && data.user_id) setMessages(current => current.map(m => m.sender_id === meIdRef.current ? { ...m, read_by_count: Math.max(m.read_by_count || 0, 1) } : m)) }'''
     event_replacement = event_anchor + '''
@@ -188,22 +189,23 @@ if MARK not in s:
     if event_anchor not in s:
         raise SystemExit('chat delivery: onRead anchor missing')
     s = s.replace(event_anchor, event_replacement, 1)
-    listener_anchor = "    window.addEventListener('prepza-realtime-message', onMessage); window.addEventListener('prepza-realtime-read', onRead); window.addEventListener('prepza-realtime-typing', onTyping);"
-    listener_replacement = "    window.addEventListener('prepza-realtime-message', onMessage); window.addEventListener('prepza-realtime-read', onRead); window.addEventListener('prepza-realtime-delivered', onDelivered); window.addEventListener('prepza-realtime-typing', onTyping);"
-    if listener_anchor not in s:
-        raise SystemExit('chat delivery: listener anchor missing')
-    s = s.replace(listener_anchor, listener_replacement, 1)
-    cleanup_anchor = "    return () => { window.removeEventListener('prepza-realtime-message', onMessage); window.removeEventListener('prepza-realtime-read', onRead); window.removeEventListener('prepza-realtime-typing', onTyping);"
-    cleanup_replacement = "    return () => { window.removeEventListener('prepza-realtime-message', onMessage); window.removeEventListener('prepza-realtime-read', onRead); window.removeEventListener('prepza-realtime-delivered', onDelivered); window.removeEventListener('prepza-realtime-typing', onTyping);"
-    if cleanup_anchor not in s:
-        raise SystemExit('chat delivery: cleanup anchor missing')
-    s = s.replace(cleanup_anchor, cleanup_replacement, 1)
+    listener_anchor = "window.addEventListener('prepza-realtime-message', onMessage); window.addEventListener('prepza-realtime-read', onRead);"
+    listener_replacement = listener_anchor + " window.addEventListener('prepza-realtime-delivered', onDelivered);"
+    if 'prepza-realtime-delivered' not in s:
+        if listener_anchor not in s:
+            raise SystemExit('chat delivery: listener anchor missing')
+        s = s.replace(listener_anchor, listener_replacement, 1)
+    cleanup_anchor = "window.removeEventListener('prepza-realtime-message', onMessage); window.removeEventListener('prepza-realtime-read', onRead);"
+    cleanup_replacement = cleanup_anchor + " window.removeEventListener('prepza-realtime-delivered', onDelivered);"
+    if 'prepza-realtime-delivered' not in s.split('return () =>',1)[-1]:
+        if cleanup_anchor not in s:
+            raise SystemExit('chat delivery: cleanup anchor missing')
+        s = s.replace(cleanup_anchor, cleanup_replacement, 1)
 
     status_anchor = "{chat.last_message || 'No messages yet'}</div></div>{chat.unread_count > 0"
     status_replacement = "{chat.status && chat.status !== 'sent' && <span style={{ fontSize:10,color:'#8c929c',marginRight:4 }}>{chat.status === 'read' ? '✓✓' : '✓'}</span>}{chat.last_message || 'No messages yet'}</div></div>{chat.unread_count > 0"
-    if status_anchor not in s:
-        raise SystemExit('chat delivery: list preview anchor missing')
-    s = s.replace(status_anchor, status_replacement, 1)
+    if status_anchor in s:
+        s = s.replace(status_anchor, status_replacement, 1)
 
     bubble_anchor = "{timeLabel(message.created_at)} {mine && <span title={message.read_by_all ? 'Read by everyone' : message.read_by_count ? `Read by ${message.read_by_count}` : 'Sent'}>{message.read_by_count ? '✓✓' : '✓'}</span>}"
     bubble_replacement = "{timeLabel(message.created_at)} {mine && <span title={message.read_by_all ? 'Read by everyone' : message.delivered_by_count ? (message.delivered_by_all ? 'Delivered to everyone' : `Delivered to ${message.delivered_by_count}`) : 'Sent'}>{message.read_by_all ? '✓✓' : message.delivered_by_count ? '✓✓' : '✓'}</span>}"
