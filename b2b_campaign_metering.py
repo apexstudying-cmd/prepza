@@ -8,13 +8,21 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 from sqlalchemy import text
+from datetime import datetime
 
 EVENT_TYPES = {"impression", "click", "push_delivery"}
 
 def _unit_price_minor(campaign, event_type):
-    bid_kes = int(campaign["bid_kes"] or 0)
     placement = str(campaign["placement"] or "")
     bid_type = str(campaign["bid_type"] or "")
+    snapshot = campaign["pricing_snapshot"] or {}
+    if event_type == "push_delivery":
+        snap = ((snapshot.get("push_delivery_cpm") or {}).get("value") or {}).get("amount_kes")
+    elif event_type == "impression":
+        snap = ((snapshot.get("home_impression_cpm") or {}).get("value") or {}).get("amount_kes")
+    else:
+        snap = ((snapshot.get("click_cpc") or {}).get("value") or {}).get("amount_kes")
+    bid_kes = int(snap if snap is not None else (campaign["bid_kes"] or 0))
     if event_type == "click":
         if bid_type != "cpc":
             return 0
@@ -43,9 +51,9 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             return {"ok": False, "reason": "campaign_inactive"}
         if str(campaign["funding_status"] or "") not in ("funded", "credited"):
             return {"ok": False, "reason": "campaign_not_funded"}
-        if campaign["starts_at"] and campaign["starts_at"] > __import__("datetime").datetime.utcnow():
+        if campaign["starts_at"] and campaign["starts_at"] > datetime.utcnow():
             return {"ok": False, "reason": "campaign_not_started"}
-        if campaign["ends_at"] and campaign["ends_at"] < __import__("datetime").datetime.utcnow():
+        if campaign["ends_at"] and campaign["ends_at"] < datetime.utcnow():
             return {"ok": False, "reason": "campaign_ended"}
 
         price = _unit_price_minor(campaign, event_type)
@@ -61,6 +69,20 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
         if existing:
             return {"ok": True, "duplicate": True, "amount_minor": int(existing["amount_kes"] or 0) * 100}
 
+        # Serialize events for the same student so a rolling frequency cap
+        # cannot be bypassed by two simultaneous requests.
+        if event_type in ("impression", "push_delivery"):
+            db.session.execute(text('SELECT id FROM "user" WHERE id=:uid FOR UPDATE'), {"uid": user_id})
+            cap = 3
+            count_type = "impression" if event_type == "impression" else "push_delivery"
+            recent_count = db.session.execute(text("""
+                SELECT COUNT(*) FROM discovery_event
+                WHERE user_id=:uid AND event_type=:etype
+                  AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+            """), {"uid": user_id, "etype": count_type}).scalar_one()
+            if int(recent_count) >= cap:
+                return {"ok": False, "reason": "student_frequency_cap"}
+
         spent = db.session.execute(text("""
             SELECT COALESCE(SUM(signed_amount_minor),0)
             FROM b2b_campaign_ledger
@@ -71,11 +93,11 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
         if remaining < price:
             db.session.execute(text("""
                 UPDATE discovery_campaign
-                SET funding_status=CASE WHEN :remaining <= 0 THEN 'exhausted' ELSE funding_status END,
-                    exhausted_at=CASE WHEN :remaining <= 0 THEN COALESCE(exhausted_at,CURRENT_TIMESTAMP) ELSE exhausted_at END,
+                SET funding_status='exhausted',
+                    exhausted_at=COALESCE(exhausted_at,CURRENT_TIMESTAMP),
                     updated_at=CURRENT_TIMESTAMP
                 WHERE id=:cid
-            """), {"cid": campaign_id, "remaining": remaining})
+            """), {"cid": campaign_id})
             return {"ok": False, "reason": "campaign_budget_exhausted", "remaining_minor": max(0, remaining)}
 
         amount_kes = Decimal(price) / Decimal(100)
