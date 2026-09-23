@@ -76,3 +76,5 @@ export async function openDirectSession(conversationId: number, currentUserId: n
   const peerPublicKey = await importPeerPublicKey(await fetchUserPublicKey(peerUserId))
   return deriveDirectChatKey(keyPair.privateKey, peerPublicKey, conversationId, currentUserId, peerUserId)
 }
+  return identityReadyPromise
+}
