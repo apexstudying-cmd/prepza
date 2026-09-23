@@ -4,6 +4,9 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 IMPORT = "import OfflineStatusBanner from './offline/OfflineStatusBanner'\n"
 text = APP.read_text(encoding='utf-8')
+if '<OfflineStatusBanner />' in text:
+    print('Offline connection/sync status UI already applied.')
+    raise SystemExit(0)
 
 if IMPORT not in text:
     anchor = "import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'\n"
