@@ -315,6 +315,18 @@ def register_b2b_organisation_portal(app, db):
         rows=db.session.execute(text("SELECT id,organisation_id,document_type,file_name,status,admin_notes,created_at,reviewed_at,reviewed_by FROM organisation_kyc_document ORDER BY created_at DESC LIMIT 500")).mappings().all()
         return jsonify({"documents":[dict(x) for x in rows]})
 
+    @app.get("/api/admin/b2b/kyc/<int:doc_id>/download")
+    def admin_kyc_download(doc_id):
+        if not admin_user(): return jsonify({"error":"Admin access required"}),403
+        doc=db.session.execute(text("SELECT file_name,storage_path FROM organisation_kyc_document WHERE id=:i"),{"i":doc_id}).mappings().first()
+        if not doc:return jsonify({"error":"KYC document not found"}),404
+        base=os.environ.get("SUPABASE_URL","").strip(); key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY","").strip()
+        if not base or not key:return jsonify({"error":"Private document storage is not configured"}),503
+        bucket="organisation-kyc"
+        res=requests.get(base+"/storage/v1/object/"+bucket+"/"+str(doc["storage_path"]),headers={"Authorization":"Bearer "+key,"apikey":key},timeout=30)
+        if not res.ok:return jsonify({"error":"KYC document could not be retrieved"}),502
+        return send_file(io.BytesIO(res.content),mimetype=res.headers.get("Content-Type","application/octet-stream"),as_attachment=True,download_name=str(doc["file_name"] or "kyc-document"))
+
     @app.patch("/api/admin/b2b/kyc/<int:doc_id>")
     def admin_update_kyc(doc_id):
         if not admin_user(): return jsonify({"error":"Admin access required"}),403
@@ -322,7 +334,15 @@ def register_b2b_organisation_portal(app, db):
         if status not in ("approved","rejected","pending"): return jsonify({"error":"Invalid KYC status"}),400
         notes=str(data.get("admin_notes") or "").strip()[:2000]
         uid=session.get("user_id")
+        doc=db.session.execute(text("SELECT organisation_id FROM organisation_kyc_document WHERE id=:i"),{"i":doc_id}).mappings().first()
+        if not doc:return jsonify({"error":"KYC document not found"}),404
         db.session.execute(text("UPDATE organisation_kyc_document SET status=:s,admin_notes=:n,reviewed_at=CASE WHEN :s='pending' THEN NULL ELSE CURRENT_TIMESTAMP END,reviewed_by=CASE WHEN :s='pending' THEN NULL ELSE :u END WHERE id=:i"),{"s":status,"n":notes or None,"u":uid,"i":doc_id})
+        if status=="approved":
+            db.session.execute(text("UPDATE organisation SET verification_status='verified',verification_notes=:n WHERE id=:o"),{"n":notes or "Verification approved by Prepza.","o":doc["organisation_id"]})
+        elif status=="rejected":
+            db.session.execute(text("UPDATE organisation SET verification_status='rejected',verification_notes=:n WHERE id=:o"),{"n":notes or "Verification document rejected by Prepza.","o":doc["organisation_id"]})
+        else:
+            db.session.execute(text("UPDATE organisation SET verification_status='pending' WHERE id=:o AND verification_status <> 'verified'"),{"o":doc["organisation_id"]})
         db.session.commit(); return jsonify({"ok":True,"status":status})
 
     @app.get("/api/admin/b2b/invoices")
