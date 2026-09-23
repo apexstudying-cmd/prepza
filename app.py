@@ -6348,7 +6348,7 @@ def _ensure_large_group_schema():
                 CREATE TABLE IF NOT EXISTS group_post_reaction (
                     id BIGSERIAL PRIMARY KEY,
                     post_id INTEGER NOT NULL REFERENCES group_post(id) ON DELETE CASCADE,
-                    user_id INTEGER NOT NULL REFERENCES user(id),
+                    user_id INTEGER NOT NULL REFERENCES "user"(id),
                     reaction VARCHAR(16) NOT NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     CONSTRAINT uq_group_post_reaction_user UNIQUE(post_id, user_id)
