@@ -177,6 +177,14 @@ def register_b2b_campaign_payments(app, db):
             return jsonify({"error": "Campaign not found"}), 404
         if campaign["status"] not in ("draft", "pending_payment"):
             return jsonify({"error": "Campaign is not available for payment in its current state"}), 409
+        if campaign["funding_status"] == "payment_pending":
+            pending = db.session.execute(text("""
+                SELECT provider_reference FROM b2b_payment
+                WHERE campaign_id=:cid AND status='pending'
+                ORDER BY id DESC LIMIT 1
+            """), {"cid": campaign_id}).scalar_one_or_none()
+            if pending:
+                return jsonify({"error": "A campaign payment is already pending", "reference": pending}), 409
         if campaign["funding_status"] in ("funded", "credited"):
             return jsonify({"error": "Campaign is already funded"}), 409
 
