@@ -429,6 +429,9 @@ def register_discovery(app, db):
             base_start = _dt.fromisoformat(str(start).replace('Z','+00:00')) if start else _dt.utcnow()
             if getattr(base_start, 'tzinfo', None): base_start = base_start.replace(tzinfo=None)
             end = (base_start + _td(days=duration_days)).isoformat()
+        org_state = db.session.execute(text("SELECT verification_status,is_active FROM organisation WHERE id=:oid"), {"oid": organisation_id}).mappings().first()
+        if not org_state or org_state["verification_status"] != "verified" or not org_state["is_active"]:
+            return jsonify({"error":"Organisation verification must be complete before paid sponsorships can be created"}), 403
         plan_code, status, expires_at = org_plan(organisation_id)
         if status in ("suspended", "expired", "past_due"):
             return jsonify({"error": "Organisation billing is not active"}), 402
