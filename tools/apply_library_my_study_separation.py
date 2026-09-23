@@ -8,7 +8,11 @@ text = APP.read_text(encoding="utf-8")
 
 # The current App architecture already contains the Library/My Study separation.
 # Keep this prebuild transform idempotent when older anchors are no longer present.
-if "const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')" not in text:
+if (
+    "const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')" not in text
+    or "savedLibrary" in text
+    or "Saved from Prepza Library" in text
+):
     print("Library/My Study separation: current App architecture already applied; skipping safely.")
     raise SystemExit(0)
 
