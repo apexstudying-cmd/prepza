@@ -43,6 +43,7 @@ export default function StudyActivityScreen({ setScreen }: Props) {
   const [months, setMonths] = useState<MonthResponse[]>([])
   const [week, setWeek] = useState(0)
   const [monthTotal, setMonthTotal] = useState(0)
+  const [todayTotal, setTodayTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedDay, setSelectedDay] = useState<{date:string; seconds:number} | null>(null)
@@ -57,12 +58,14 @@ export default function StudyActivityScreen({ setScreen }: Props) {
     Promise.all([
       ...keys.map(k => api<MonthResponse>(`/streak?month=${k}`)),
       api<any>('/study-time?period=week'),
-      api<any>('/study-time?period=month')
+      api<any>('/study-time?period=month'),
+      api<any>('/study-time?period=day')
     ]).then(results => {
       if (dead) return
       setMonths(results.slice(0,6) as MonthResponse[])
       setWeek(results[6]?.total_seconds || 0)
       setMonthTotal(results[7]?.total_seconds || 0)
+      setTodayTotal(results[8]?.total_seconds || 0)
     }).catch(e => { if (!dead) setError(e?.message || 'Could not load study activity.') })
       .finally(() => { if (!dead) setLoading(false) })
     return () => { dead = true }
@@ -145,6 +148,21 @@ export default function StudyActivityScreen({ setScreen }: Props) {
           <div style={{background:'rgba(255,255,255,.08)',borderRadius:16,padding:'15px 12px'}}>
             <div style={{fontSize:10,color:'rgba(255,255,255,.58)',fontWeight:700}}>LONGEST</div>
             <div style={{fontSize:25,fontWeight:800,marginTop:12}}>{longest}d</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{padding:'0 14px 4px'}}>
+        <div style={{background:'#fff',borderRadius:16,padding:'13px 14px',boxShadow:'0 3px 14px rgba(11,20,55,.05)'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontSize:10,color:'#9299A9',fontWeight:800,letterSpacing:.5}}>TODAY'S STUDY GOAL</div>
+              <div style={{fontSize:12,fontWeight:800,color:N.navy,marginTop:4}}>10 minutes to qualify for your streak</div>
+            </div>
+            <div style={{fontSize:13,fontWeight:800,color:todayTotal >= 600 ? '#2F8F5B' : N.gold}}>{fmt(todayTotal)} / 10m</div>
+          </div>
+          <div style={{height:6,borderRadius:99,background:'#EEF0F4',overflow:'hidden',marginTop:10}}>
+            <div style={{height:'100%',width:`${Math.min(100,Math.round((todayTotal / 600) * 100))}%`,background:todayTotal >= 600 ? '#2F8F5B' : N.gold,borderRadius:99,transition:'width .3s ease'}} />
           </div>
         </div>
       </div>
