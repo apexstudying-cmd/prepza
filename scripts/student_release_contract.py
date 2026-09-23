@@ -39,7 +39,7 @@ require("started = False" in STREAK and "elif started:" in STREAK, "shared strea
 # Settings must be real end-to-end controls, not local-only toggles.
 require('who_can_message: next ? \'everyone\' : \'followers\'' in FRONTEND, "message privacy toggle must persist through /profile")
 require('who_can_follow: next ? \'everyone\' : \'approval_required\'' in FRONTEND, "follow privacy toggle must persist through /profile")
-require("@app.route(\"/api/opportunity-discovery\", methods=[\"GET\", \"POST\"])") in APP, "opportunity discovery endpoint missing")
+require('@app.route("/api/opportunity-discovery", methods=["GET", "POST"])' in APP, "opportunity discovery endpoint missing")
 require("CREATE TABLE IF NOT EXISTS student_opportunity_discovery" in APP, "opportunity discovery persistence bootstrap missing")
 require("/api/opportunity-discovery" in FRONTEND and "method: 'POST'" in FRONTEND, "opportunity discovery setting is not wired to the backend")
 require("setPhoneNumber(me.phone_number || '')" in FRONTEND, "settings does not load the saved phone number")
