@@ -64,7 +64,7 @@ def register_study_friend_streak_routes(app, db):
         peer = db.session.get(User, pid)
         today = datetime.utcnow().date()
         you, friend = studied(viewer_id, today), studied(pid, today)
-        return {"id": row["id"], "status": row["status"], "peer_id": pid, "peer_name": getattr(peer, "name", None) or getattr(peer, "full_name", None) or "Study partner", "current_streak": refresh(row), "longest_streak": int(row["longest_streak"] or 0), "today": {"you_studied": you, "friend_studied": friend, "both_studied": you and friend}, "minimum_minutes": MIN_SHARED_STUDY_MINUTES}
+        return {"id": row["id"], "status": row["status"], "can_accept": row["status"] == "pending" and int(row["invited_by"]) != int(viewer_id), "peer_id": pid, "peer_name": getattr(peer, "name", None) or getattr(peer, "full_name", None) or "Study partner", "current_streak": refresh(row), "longest_streak": int(row["longest_streak"] or 0), "today": {"you_studied": you, "friend_studied": friend, "both_studied": you and friend}, "minimum_minutes": MIN_SHARED_STUDY_MINUTES}
 
     @app.get("/chats/<int:conversation_id>/study-streak")
     def get_study_streak(conversation_id):
