@@ -34,11 +34,30 @@ replace_once(
     "complete academic context validation",
 )
 
-replace_once(
-    'LIBRARY_ACTIVE_STATUSES = ("pending", "approved")\n\n\ndef _document_content_has_flagged_material',
-    'LIBRARY_ACTIVE_STATUSES = ("pending", "approved")\n\n\ndef _library_context_matches(viewer, publication):\n    """Return True only for an exact university/course/year/semester match."""\n    if not viewer or not publication:\n        return False\n    values = (viewer.university_id, viewer.program_id, viewer.year, viewer.semester, publication.university_id, publication.program_id, publication.year, publication.semester)\n    return all(value is not None for value in values) and (\n        viewer.university_id == publication.university_id\n        and viewer.program_id == publication.program_id\n        and viewer.year == publication.year\n        and viewer.semester == publication.semester\n    )\n\n\ndef _document_content_has_flagged_material',
-    "exact academic match helper",
-)
+if "_library_context_matches(viewer, publication)" not in text:
+    marker = 'LIBRARY_ACTIVE_STATUSES = ("pending", "approved")'
+    if text.count(marker) != 1:
+        raise SystemExit(f"FAIL CLOSED: Library active-status anchor: expected 1 match, found {text.count(marker)}")
+    helper = '''LIBRARY_ACTIVE_STATUSES = ("pending", "approved")
+
+def _library_context_matches(viewer, publication):
+    """Return True only for an exact university/course/year/semester match."""
+    if not viewer or not publication:
+        return False
+    values = (
+        viewer.university_id, viewer.program_id, viewer.year, viewer.semester,
+        publication.university_id, publication.program_id, publication.year, publication.semester,
+    )
+    return all(value is not None for value in values) and (
+        viewer.university_id == publication.university_id
+        and viewer.program_id == publication.program_id
+        and viewer.year == publication.year
+        and viewer.semester == publication.semester
+    )
+'''
+    text = text.replace(marker, helper, 1)
+
+
 
 replace_once(
     '    query = LibraryPublication.query.filter_by(status="approved")\n    flagged_document_ids = _flagged_document_ids()',
