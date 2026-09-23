@@ -1,0 +1,40 @@
+name: Student Release Contract
+
+'on':
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'frontend/src/App.tsx'
+      - 'frontend/src/crypto/groupProvisioning.ts'
+      - 'e2ee_chat_routes.py'
+      - 'study_friend_streak_routes.py'
+      - 'scripts/student_release_contract.py'
+      - '.github/workflows/student-release-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  student-release-contract:
+    name: Student release contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact event commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Assert exact commit under test
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Run student release contract
+        run: python scripts/student_release_contract.py
