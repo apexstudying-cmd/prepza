@@ -26,6 +26,8 @@ PUSH_CAP_PER_7_DAYS = 3
 
 
 def register_discovery(app, db):
+    if db.engine.dialect.name == "sqlite":
+        return
     db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS discovery_campaign (
             id BIGSERIAL PRIMARY KEY,
