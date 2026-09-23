@@ -225,6 +225,8 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
     return () => { cancelled = true; leaveRealtimeChat(selectedId) }
   }, [visible, view, selectedId])
 
+  useEffect(() => { if (!visible || view !== 'detail' || selectedId == null || !detail || detail.is_group) { if (view !== 'detail') setStudyStreak(null); return } void loadStudyStreak() }, [visible, view, selectedId, detail?.id, detail?.is_group])
+
   useEffect(() => {
     if (!visible || view !== 'detail' || selectedId == null || !csrfToken || readReceiptsEnabled !== true) return
     void api(`/chats/${selectedId}/read`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }).then(() => { void loadList() }).catch(() => {})
