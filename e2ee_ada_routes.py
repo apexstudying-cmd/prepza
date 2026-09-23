@@ -10,7 +10,7 @@ import re
 from flask import jsonify, request, session, send_from_directory
 from sqlalchemy import text
 
-from app import get_ai_plan_tier
+from app import get_ai_plan_tier, require_csrf
 from ai_service import (
     AIRequest,
     AIBudgetExceededError,
@@ -211,6 +211,7 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
         }), 200
 
     @app.post("/chats/<int:conversation_id>/ada/mention")
+    @require_csrf
     def scoped_ada_mention(conversation_id):
         """Answer an explicit @Ada question without reading encrypted chat history."""
         user_id = session.get("user_id")
