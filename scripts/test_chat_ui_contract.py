@@ -21,7 +21,7 @@ def test_chat_surface_contains_whatsapp_core_interactions():
         "group creation": "New study group",
         "reply": "Reply",
         "reactions": "React",
-        "attachments": "Document / image",
+        "attachments": "Attach document or image",
         "typing": "typing…",
         "read receipts": "read_by_count",
         "presence": "onlineUsers",
