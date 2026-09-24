@@ -554,7 +554,7 @@ def route_and_generate_batch(task, items, on_batch_created=None):
 
     provider, provider_name = _get_provider()
     model = task_config["primary"]
-    max_tokens = task_config["max_tokens"]
+    max_tokens = min(int(task_config["max_tokens"]), output_token_limit)
 
     batch_requests = [
         {"custom_id": custom_id, "params": _build_message_params(model, ai_request, max_tokens)}
@@ -2159,11 +2159,23 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             "but your existing conversation is still here."
         )
 
-    allowed, used, limit = check_daily_tutor_limit(triggering_user_id, plan_tier=plan_tier)
-    if not allowed:
-        raise AIRateLimitExceededError(
-            f"You've sent {used}/{limit} tutor messages today - try again tomorrow."
-        )
+    from usage_billing import reserve_ada_tokens, finalize_ada_tokens, refund_ada_reservation, get_ada_limits
+    ent, ada_limits = get_ada_limits(db, triggering_user_id)
+    output_token_limit = int(ada_limits["output"])
+
+    # Reserve a conservative token budget before the provider call. This is
+    # entitlement-scoped, atomic, and independent from document-generation wallets.
+    history_preview = _fetch_tutor_history(conversation_id)
+    estimated_input_chars = len(content.extracted_text or "") + len(user_message_text)
+    estimated_input_chars += sum(len(row.content or "") for row in history_preview)
+    estimated_tokens = max(1, int((estimated_input_chars + 2) / 3)) + output_token_limit
+    ada_allowed, ada_meta = reserve_ada_tokens(
+        db, triggering_user_id, estimated_tokens, output_token_limit
+    )
+    if not ada_allowed:
+        raise AIRateLimitExceededError(ada_meta.get("error", "Ada token limit reached."))
+    ada_reserved_tokens = estimated_tokens
+    ada_entitlement_id = int(ada_meta["entitlement_id"])
 
     # Persist the student's message now, before the AI call, so it
     # survives even if generation below fails.
@@ -2171,7 +2183,7 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
     db.session.add(user_row)
     db.session.commit()
 
-    history_rows = _fetch_tutor_history(conversation_id)
+    history_rows = history_preview
     messages = [{"role": row.role, "content": row.content} for row in history_rows]
 
     task_config = AI_TASKS["TUTORING"]
@@ -2246,6 +2258,7 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             messages=messages,
         )
     except Exception as e:  # noqa: BLE001 - genuinely want to catch any provider failure
+        refund_ada_reservation(db, triggering_user_id, ada_entitlement_id, ada_reserved_tokens)
         raise AIProviderError(f"Tutor reply generation failed: {e}")
     latency_ms = int((time.monotonic() - start) * 1000)  # noqa: F841 - kept for future observability wiring
 
@@ -2260,6 +2273,16 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
     ai_usage.cost_usd = compute_cost_usd(
         model, ai_usage.input_tokens, ai_usage.output_tokens,
         ai_usage.cache_read_tokens, ai_usage.cache_creation_tokens,
+    )
+
+    actual_ada_tokens = int(getattr(usage, "input_tokens", 0) or 0) + int(getattr(usage, "output_tokens", 0) or 0)
+    if actual_ada_tokens > ada_reserved_tokens:
+        # The conservative reservation should normally prevent this; if a
+        # provider tokenizer differs, keep the accounting honest by recording
+        # actual usage rather than silently under-counting.
+        actual_ada_tokens = int(actual_ada_tokens)
+    finalize_ada_tokens(
+        db, triggering_user_id, ada_entitlement_id, ada_reserved_tokens, actual_ada_tokens
     )
 
     reply_text, concept_name, prerequisite_name = _parse_tutor_reply(raw_text)
