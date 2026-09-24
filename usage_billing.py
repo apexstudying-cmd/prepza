@@ -116,6 +116,19 @@ def _ensure_schema(db):
         )
     """))
     db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS student_ada_usage (
+            user_id INTEGER NOT NULL,
+            entitlement_id BIGINT NOT NULL DEFAULT 0,
+            day_start DATE NOT NULL,
+            month_start DATE NOT NULL,
+            reserved_tokens BIGINT NOT NULL DEFAULT 0,
+            actual_tokens BIGINT NOT NULL DEFAULT 0,
+            requests INTEGER NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, entitlement_id)
+        )
+    """))
+    db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS student_ai_usage (
             user_id INTEGER NOT NULL,
             period_start DATE NOT NULL,
@@ -355,6 +368,111 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
         "max_units_per_generation": max_units, "period_start": period,
     })
 
+
+
+ADA_TOKEN_LIMITS = {
+    "free": {"daily": 20000, "monthly": 500000, "output": 800},
+    "plus": {"daily": 100000, "monthly": 2500000, "output": 1200},
+    "pro": {"daily": 250000, "monthly": 6000000, "output": 1600},
+}
+
+
+def get_ada_limits(db, user_id):
+    ent = _current_student_entitlement(db, user_id)
+    return ent, ADA_TOKEN_LIMITS[ent["plan"]]
+
+
+def reserve_ada_tokens(db, user_id, estimated_tokens, output_limit):
+    """Atomically reserve an Ada token budget before calling the provider."""
+    estimated_tokens = max(1, int(estimated_tokens))
+    ent, limits = get_ada_limits(db, user_id)
+    if int(output_limit) > limits["output"]:
+        return False, {"error": "Ada output limit exceeds this plan.", "code": "ada_output_limit"}
+    now = datetime.utcnow()
+    day_start = now.date()
+    month_start = date(now.year, now.month, 1)
+    db.session.execute(text("""
+        INSERT INTO student_ada_usage
+            (user_id, entitlement_id, day_start, month_start, reserved_tokens, actual_tokens, requests, updated_at)
+        VALUES (:uid, :eid, :day, :month, 0, 0, 0, CURRENT_TIMESTAMP)
+        ON CONFLICT (user_id, entitlement_id)
+        DO UPDATE SET day_start = EXCLUDED.day_start, month_start = EXCLUDED.month_start
+    """), {"uid": user_id, "eid": ent["entitlement_id"], "day": day_start, "month": month_start})
+    row = db.session.execute(text("""
+        SELECT reserved_tokens, actual_tokens, requests
+        FROM student_ada_usage
+        WHERE user_id = :uid AND entitlement_id = :eid
+        FOR UPDATE
+    """), {"uid": user_id, "eid": ent["entitlement_id"]}).mappings().first()
+    reserved = int(row["reserved_tokens"] or 0)
+    # Reservations from a previous day/month are harmless only if they were
+    # released; reset counters at the boundary while preserving the entitlement.
+    db.session.execute(text("""
+        UPDATE student_ada_usage
+        SET reserved_tokens = CASE WHEN day_start = :day THEN reserved_tokens ELSE 0 END,
+            actual_tokens = CASE WHEN month_start = :month THEN actual_tokens ELSE 0 END,
+            day_start = :day, month_start = :month, updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = :uid AND entitlement_id = :eid
+    """), {"uid": user_id, "eid": ent["entitlement_id"], "day": day_start, "month": month_start})
+    row = db.session.execute(text("""
+        SELECT reserved_tokens, actual_tokens
+        FROM student_ada_usage
+        WHERE user_id = :uid AND entitlement_id = :eid
+        FOR UPDATE
+    """), {"uid": user_id, "eid": ent["entitlement_id"]}).mappings().first()
+    reserved = int(row["reserved_tokens"] or 0)
+    actual = int(row["actual_tokens"] or 0)
+    if reserved + estimated_tokens > limits["daily"]:
+        db.session.rollback()
+        return False, {"error": "You've reached Ada's daily token limit.", "code": "ada_daily_limit", "daily_limit": limits["daily"]}
+    if actual + reserved + estimated_tokens > limits["monthly"]:
+        db.session.rollback()
+        return False, {"error": "You've reached Ada's monthly token limit.", "code": "ada_monthly_limit", "monthly_limit": limits["monthly"]}
+    db.session.execute(text("""
+        UPDATE student_ada_usage
+        SET reserved_tokens = reserved_tokens + :tokens,
+            requests = requests + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = :uid AND entitlement_id = :eid
+    """), {"uid": user_id, "eid": ent["entitlement_id"], "tokens": estimated_tokens})
+    db.session.commit()
+    return True, {"entitlement_id": ent["entitlement_id"], "reserved_tokens": estimated_tokens}
+
+
+def finalize_ada_tokens(db, user_id, entitlement_id, reserved_tokens, actual_tokens):
+    reserved_tokens = max(0, int(reserved_tokens))
+    actual_tokens = max(0, int(actual_tokens))
+    row = db.session.execute(text("""
+        SELECT reserved_tokens, actual_tokens
+        FROM student_ada_usage
+        WHERE user_id = :uid AND entitlement_id = :eid
+        FOR UPDATE
+    """), {"uid": user_id, "eid": int(entitlement_id)}).mappings().first()
+    if not row:
+        return
+    current_reserved = int(row["reserved_tokens"] or 0)
+    current_actual = int(row["actual_tokens"] or 0)
+    release = min(current_reserved, reserved_tokens)
+    db.session.execute(text("""
+        UPDATE student_ada_usage
+        SET reserved_tokens = GREATEST(0, reserved_tokens - :release),
+            actual_tokens = actual_tokens + :actual,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = :uid AND entitlement_id = :eid
+    """), {"uid": user_id, "eid": int(entitlement_id), "release": release, "actual": actual_tokens})
+    db.session.commit()
+
+
+def refund_ada_reservation(db, user_id, entitlement_id, reserved_tokens):
+    reserved_tokens = max(0, int(reserved_tokens))
+    db.session.execute(text("""
+        UPDATE student_ada_usage
+        SET reserved_tokens = GREATEST(0, reserved_tokens - :tokens),
+            requests = GREATEST(0, requests - 1),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = :uid AND entitlement_id = :eid
+    """), {"uid": user_id, "eid": int(entitlement_id), "tokens": reserved_tokens})
+    db.session.commit()
 
 
 def reserve_generation_variant(db, user_id, base_fingerprint, feature, base_parameters=None, pool_size=4):
