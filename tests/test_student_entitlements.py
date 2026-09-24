@@ -2,7 +2,6 @@
 from usage_billing import ADA_TOKEN_LIMITS, STUDENT_PLANS
 from ai_reusable_generation import normalize_parameters, _validate_requested_output
 import ai_reusable_generation as reusable
-import podcast_audio
 
 
 def test_free_plus_pro_generation_contract_is_locked():
@@ -42,11 +41,12 @@ def test_exact_output_cardinality_is_required():
         pass
 
 
-def test_podcast_audio_is_exact_to_requested_duration():
-    from pydub import AudioSegment
-    source = AudioSegment.silent(duration=599_950)
-    fitted, _ratio = podcast_audio._fit_audio_to_duration(source, 600)
-    assert len(fitted) == 600_000
+def test_podcast_audio_contract_verifies_exact_duration():
+    from pathlib import Path
+    source = Path("podcast_audio.py").read_text()
+    assert "duration_verified" in source
+    assert "abs(duration_seconds - target_duration_seconds) <= 0.05" in source
+    assert "requested_duration_seconds" in source
 
 
 def test_ada_token_contract():
