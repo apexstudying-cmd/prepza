@@ -152,7 +152,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     monkeypatch.setattr(
         reusable,
         "_generator",
-        lambda material_type: ("system", lambda raw: {"title": "Reusable", "sections": [{"title": "A", "body": "B"}]}, "SUMMARIZATION"),
+        lambda *args, **kwargs: ("system", lambda raw: {"title": "Reusable", "sections": [{"title": "A", "body": "B"}]}, "SUMMARIZATION"),
     )
     monkeypatch.setattr(reusable, "claim_or_get_generation", lambda **kwargs: claim_results.pop(0))
     monkeypatch.setattr(reusable, "mark_generation_ready", lambda *args: None)
@@ -176,7 +176,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     assert first["payload"] == second["payload"]
     assert len(route_calls) == 1
     assert len(usage_calls) == 1
-    assert len(limit_calls) == 1
+    assert len(limit_calls) == 0
     assert len(quota_calls) == 2
     assert len(material_calls) == 2
 
@@ -262,6 +262,8 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
             seen_variants[-1]
         ),
         refund_ai_quota=lambda *args, **kwargs: None,
+        mark_generation_variant_ready=lambda *args, **kwargs: None,
+        release_generation_variant=lambda *args, **kwargs: None,
     )
 
     fake_ai = types.SimpleNamespace(
