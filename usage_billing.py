@@ -26,30 +26,30 @@ from sqlalchemy import text
 STUDENT_PLANS = {
     "free": {
         "price_kes": 0, "billing_period": "month", "quota_period": "month",
-        "summary_generations": 10, "summary_max_pages": 10, "summary_monthly_pages": 10,
-        "podcast_generations": 1, "podcast_max_minutes": 50, "podcast_monthly_minutes": 10,
-        "flashcard_generations": 10, "flashcard_max_cards": 50, "flashcard_monthly_cards": 100,
-        "quiz_generations": 2, "quiz_max_questions": 50, "quiz_monthly_questions": 20,
-        "mind_map_generations": 3, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 30,
-        "tutor_messages": 20,
+        "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 10,
+        "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 10,
+        "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 100,
+        "quiz_generations": 0, "quiz_max_questions": 50, "quiz_monthly_questions": 20,
+        "mind_map_generations": 0, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 30,
+        "tutor_messages": 0,
     },
     "plus": {
-        "price_kes": 399, "billing_period": "month", "quota_period": "month",
-        "summary_generations": 40, "summary_max_pages": 10, "summary_monthly_pages": 40,
-        "podcast_generations": 12, "podcast_max_minutes": 50, "podcast_monthly_minutes": 120,
-        "flashcard_generations": 30, "flashcard_max_cards": 50, "flashcard_monthly_cards": 300,
-        "quiz_generations": 10, "quiz_max_questions": 50, "quiz_monthly_questions": 100,
-        "mind_map_generations": 15, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 150,
-        "tutor_messages": 20,
+        "price_kes": 399, "billing_period": "month", "quota_period": "subscription",
+        "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 40,
+        "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 120,
+        "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 300,
+        "quiz_generations": 0, "quiz_max_questions": 50, "quiz_monthly_questions": 100,
+        "mind_map_generations": 0, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 150,
+        "tutor_messages": 0,
     },
     "pro": {
-        "price_kes": 699, "billing_period": "month", "quota_period": "month",
-        "summary_generations": 100, "summary_max_pages": 10, "summary_monthly_pages": 100,
-        "podcast_generations": 35, "podcast_max_minutes": 50, "podcast_monthly_minutes": 350,
-        "flashcard_generations": 60, "flashcard_max_cards": 50, "flashcard_monthly_cards": 600,
-        "quiz_generations": 21, "quiz_max_questions": 50, "quiz_monthly_questions": 210,
-        "mind_map_generations": 35, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 350,
-        "tutor_messages": 50,
+        "price_kes": 699, "billing_period": "month", "quota_period": "subscription",
+        "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 100,
+        "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 350,
+        "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 600,
+        "quiz_generations": 0, "quiz_max_questions": 50, "quiz_monthly_questions": 210,
+        "mind_map_generations": 0, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 350,
+        "tutor_messages": 0,
     },
 }
 
@@ -103,6 +103,18 @@ DEFAULT_GENERATION_UNITS = {
 
 
 def _ensure_schema(db):
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS student_ai_entitlement_usage (
+            user_id INTEGER NOT NULL,
+            entitlement_id BIGINT NOT NULL DEFAULT 0,
+            period_start DATE NOT NULL,
+            feature VARCHAR(40) NOT NULL,
+            units INTEGER NOT NULL DEFAULT 0,
+            requests INTEGER NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, entitlement_id, feature)
+        )
+    """))
     db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS student_ai_usage (
             user_id INTEGER NOT NULL,
@@ -230,23 +242,14 @@ def _ensure_schema(db):
 
 
 def _period_start(plan):
-    """Return the quota period start without tying usage to billing cadence."""
     now = datetime.utcnow()
-    if plan.get("quota_period") == "annual":
-        return date(now.year, 1, 1)
     return date(now.year, now.month, 1)
 
 
-def _csrf_ok():
-    expected = session.get("csrf_token")
-    supplied = request.headers.get("X-CSRF-Token")
-    return bool(expected and supplied and expected == supplied)
-
-
-def _current_student_plan(db, user_id):
-    """Return the highest active monthly subscription tier."""
+def _current_student_entitlement(db, user_id):
+    """Return the highest active paid entitlement, or the free entitlement."""
     rows = db.session.execute(text("""
-        SELECT plan, subscription_expires_at
+        SELECT id, plan, created_at, subscription_expires_at
         FROM payment
         WHERE user_id = :uid
           AND payment_type = 'subscription'
@@ -254,25 +257,37 @@ def _current_student_plan(db, user_id):
           AND subscription_expires_at > CURRENT_TIMESTAMP
           AND plan IN ('plus', 'pro')
         ORDER BY CASE plan WHEN 'pro' THEN 2 WHEN 'plus' THEN 1 ELSE 0 END DESC,
-                 created_at DESC
+                 created_at DESC, id DESC
     """), {"uid": user_id}).mappings().all()
-    return str(rows[0]["plan"]) if rows else "free"
+    if rows:
+        row = rows[0]
+        return {
+            "entitlement_id": int(row["id"]),
+            "plan": str(row["plan"]),
+            "period_start": (row["created_at"] or datetime.utcnow()).date(),
+            "expires_at": row["subscription_expires_at"],
+        }
+    return {
+        "entitlement_id": 0,
+        "plan": "free",
+        "period_start": _period_start(STUDENT_PLANS["free"]),
+        "expires_at": None,
+    }
+
 
 def _usage_row(db, user_id, feature):
-    plan_code = _current_student_plan(db, user_id)
-    plan = STUDENT_PLANS[plan_code]
+    ent = _current_student_entitlement(db, user_id)
     return db.session.execute(text("""
         SELECT units, requests
-        FROM student_ai_usage
-        WHERE user_id = :uid AND period_start = :period AND feature = :feature
-    """), {"uid": user_id, "period": _period_start(plan), "feature": feature}).mappings().first()
+        FROM student_ai_entitlement_usage
+        WHERE user_id = :uid AND entitlement_id = :eid AND feature = :feature
+    """), {"uid": user_id, "eid": ent["entitlement_id"], "feature": feature}).mappings().first()
 
 
 def check_and_consume_ai_quota(db, user_id, feature, units):
-    """Atomically consume a generation allowance before an AI call."""
+    """Atomically consume a generation allowance from the student's active entitlement."""
     if feature not in FEATURES:
         return True, {"feature": feature}
-
     try:
         units = int(units)
     except (TypeError, ValueError):
@@ -280,80 +295,67 @@ def check_and_consume_ai_quota(db, user_id, feature, units):
     if units <= 0:
         return False, {"error": "Generation amount must be positive"}
 
-    plan_code = _current_student_plan(db, user_id)
+    ent = _current_student_entitlement(db, user_id)
+    plan_code = ent["plan"]
     plan = STUDENT_PLANS[plan_code]
     request_limit_key, unit_limit_key, monthly_unit_key = FEATURES[feature]
-    max_requests = int(plan[request_limit_key]) if request_limit_key else 0
     max_units = int(plan[unit_limit_key])
-    monthly_units = int(plan[monthly_unit_key])
+    total_unit_limit = int(plan[monthly_unit_key])
 
     if units > max_units:
         return False, {
             "error": f"This plan supports at most {max_units} {('pages' if feature == 'summary' else 'minutes' if feature == 'podcast' else 'cards' if feature == 'flashcards' else 'questions' if feature == 'quiz' else 'nodes')} per generation.",
-            "code": "generation_size_limit",
-            "feature": feature,
-            "plan": plan_code,
+            "code": "generation_size_limit", "feature": feature, "plan": plan_code,
             "max_units": max_units,
         }
 
-    period = _period_start(plan)
+    if ent["entitlement_id"] == 0:
+        # Free is calendar-month allowance; paid entitlements are purchase-scoped.
+        period = ent["period_start"]
+    else:
+        period = ent["period_start"]
+
     db.session.execute(text("""
-        INSERT INTO student_ai_usage
-            (user_id, period_start, feature, units, requests, updated_at)
-        VALUES (:uid, :period, :feature, 0, 0, CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id, period_start, feature) DO NOTHING
-    """), {"uid": user_id, "period": period, "feature": feature})
+        INSERT INTO student_ai_entitlement_usage
+            (user_id, entitlement_id, period_start, feature, units, requests, updated_at)
+        VALUES (:uid, :eid, :period, :feature, 0, 0, CURRENT_TIMESTAMP)
+        ON CONFLICT (user_id, entitlement_id, feature) DO NOTHING
+    """), {"uid": user_id, "eid": ent["entitlement_id"], "period": period, "feature": feature})
 
     row = db.session.execute(text("""
         SELECT units, requests
-        FROM student_ai_usage
-        WHERE user_id = :uid AND period_start = :period AND feature = :feature
+        FROM student_ai_entitlement_usage
+        WHERE user_id = :uid AND entitlement_id = :eid AND feature = :feature
         FOR UPDATE
-    """), {"uid": user_id, "period": period, "feature": feature}).mappings().first()
-
-    used_requests = int(row["requests"] or 0)
+    """), {"uid": user_id, "eid": ent["entitlement_id"], "feature": feature}).mappings().first()
     used_units = int(row["units"] or 0)
-    # Requests are telemetry, not a second hard quota. The allowance is a
-    # spendable unit wallet derived from the plan's maximum generation size.
-    total_unit_limit = monthly_units
-    remaining_units = max(0, total_unit_limit - used_units)
-
+    used_requests = int(row["requests"] or 0)
     if used_units + units > total_unit_limit:
         db.session.rollback()
         return False, {
             "error": "You have used up this plan's generation allowance.",
-            "code": "generation_quota_exhausted",
-            "feature": feature,
-            "plan": plan_code,
-            "used_requests": used_requests,
-            "request_limit": max_requests,
-            "used_units": used_units,
-            "unit_limit": total_unit_limit,
-            "remaining_units": remaining_units,
+            "code": "generation_quota_exhausted", "feature": feature, "plan": plan_code,
+            "used_requests": used_requests, "used_units": used_units,
+            "unit_limit": total_unit_limit, "remaining_units": max(0, total_unit_limit - used_units),
         }
 
     db.session.execute(text("""
-        UPDATE student_ai_usage
-        SET units = units + :units,
-            requests = requests + 1,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND period_start = :period AND feature = :feature
-    """), {
-        "uid": user_id, "period": period, "feature": feature, "units": units,
-    })
+        UPDATE student_ai_entitlement_usage
+        SET units = units + :units, requests = requests + 1, updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = :uid AND entitlement_id = :eid AND feature = :feature
+    """), {"uid": user_id, "eid": ent["entitlement_id"], "feature": feature, "units": units})
     db.session.commit()
+    return {
+        "ok": True
+    } if False else (True, {
+        "feature": feature, "plan": plan_code, "entitlement_id": ent["entitlement_id"],
+        "used_requests": used_requests + 1, "request_limit": None,
+        "used_units": used_units + units, "unit_limit": total_unit_limit,
+        "remaining_units": max(0, total_unit_limit - used_units - units),
+        "max_units_per_generation": max_units, "period_start": period,
+    })
 
-    return True, {
-        "feature": feature,
-        "plan": plan_code,
-        "used_requests": used_requests + 1,
-        "request_limit": max_requests,
-        "used_units": used_units + units,
-        "unit_limit": total_unit_limit,
-        "remaining_units": max(0, total_unit_limit - (used_units + units)),
-        "max_units_per_generation": max_units,
-        "period_start": period,
-    }
+
 
 def reserve_generation_variant(db, user_id, base_fingerprint, feature, base_parameters=None, pool_size=4):
     """Reserve the first shared variant this student has not seen.
