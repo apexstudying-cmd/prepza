@@ -189,6 +189,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
     quota_feature = material_type
     quota_units = 0
     quota_period = None
+    quota_entitlement_id = None
     from usage_billing import (
         FEATURES,
         check_and_consume_ai_quota,
@@ -219,6 +220,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
+        quota_entitlement_id = quota_meta.get("entitlement_id")
 
     base_parameters = dict(params)
     base_parameters.pop("variant", None)
@@ -262,6 +264,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 )
             quota_reserved = True
             quota_period = quota_meta.get("period_start")
+            quota_entitlement_id = quota_meta.get("entitlement_id")
         if variant_pool_feature:
             mark_generation_variant_ready(
                 db, triggering_user_id, base_fingerprint, variant, lookup.artifact_id
@@ -288,7 +291,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             if variant_pool_feature:
                 release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
             if quota_reserved:
-                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period)
+                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_id=quota_entitlement_id)
             raise ai_service.AIProviderError("AI generation failed - please try again.")
         if variant_pool_feature:
             release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
@@ -321,9 +324,8 @@ def generate_document_material(*, material_type, document_content_id, triggering
             raise ai_service.AIBudgetExceededError(
                 f"Prepza AI has reached its monthly budget - fresh {material_type} generation is paused, but existing material is still available."
             )
-        allowed, used, limit = ai_service.check_daily_limit(triggering_user_id, plan_tier=plan_tier)
-        if not allowed:
-            raise ai_service.AIRateLimitExceededError(f"You've used {used}/{limit} AI generations today - try again tomorrow.")
+        # Document-material limits are entitlement-unit wallets, not daily request caps.
+        # Ada has its own token-based daily limit in the tutor pipeline.
         job = AiJob(
             document_content_id=document_content_id,
             feature=material_type,
