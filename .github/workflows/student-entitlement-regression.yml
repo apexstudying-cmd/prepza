@@ -1,0 +1,44 @@
+name: Student entitlement regression
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'usage_billing.py'
+      - 'ai_reusable_generation.py'
+      - 'ai_service.py'
+      - 'podcast_audio.py'
+      - 'tests/test_student_entitlements.py'
+      - '.github/workflows/student-entitlement-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  student-entitlement-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install focused test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest flask flask-sqlalchemy sqlalchemy requests anthropic pydub
+      - name: Compile student billing/generation modules
+        run: |
+          python -m py_compile usage_billing.py ai_service.py ai_reusable_generation.py podcast_audio.py
+      - name: Run student entitlement regression suite
+        env:
+          PYTHONPATH: .
+        run: pytest -q tests/test_student_entitlements.py tests/test_ai_artifact_fingerprint.py tests/test_ai_reusable_generation.py
