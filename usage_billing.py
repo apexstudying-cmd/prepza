@@ -785,12 +785,13 @@ def register_usage_billing(app, db):
         if not user_id:
             return jsonify({"error": "Not logged in"}), 401
 
-        plan_code = _current_student_plan(db, user_id)
+        entitlement = _current_student_entitlement(db, user_id)
+        plan_code = entitlement["plan"]
         plan = STUDENT_PLANS[plan_code]
         usage = {}
         for feature in FEATURES:
             row = _usage_row(db, user_id, feature)
-            request_key, unit_key, monthly_key = FEATURES[feature]
+            _request_key, unit_key, monthly_key = FEATURES[feature]
             max_units_per_generation = int(plan[unit_key])
             wallet_limit = int(plan[monthly_key])
             used_units = int(row["units"]) if row else 0
@@ -807,7 +808,9 @@ def register_usage_billing(app, db):
             "billing_period": plan["billing_period"],
             "limits": plan,
             "usage": usage,
-            "period_start": _period_start(plan).isoformat(),
+            "period_start": entitlement["period_start"].isoformat(),
+            "subscription_expires_at": entitlement["expires_at"].isoformat() if entitlement["expires_at"] else None,
+            "entitlement_id": entitlement["entitlement_id"],
         })
 
     @app.get("/api/student-plans")
