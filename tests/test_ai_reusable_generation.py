@@ -279,14 +279,14 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
         )),
         log_usage=lambda *args, **kwargs: None,
         FLASHCARDS_JSON_SYSTEM_PROMPT="system",
-        _parse_flashcards_json=lambda raw: {"cards": [{"q": "Q", "a": "A"}]},
+        _parse_flashcards_json=lambda raw: {"cards": [{"q": f"Q{i}", "a": "A"} for i in range(20)]},
     )
 
     monkeypatch.setitem(sys.modules, "app", fake_app)
     monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
     monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
-    monkeypatch.setattr(reusable, "_generator", lambda *args, **kwargs: ("system", lambda raw: {"cards": [{"q": "Q", "a": "A"}]}, "FLASHCARDS"))
+    monkeypatch.setattr(reusable, "_generator", lambda *args, **kwargs: ("system", lambda raw: {"cards": [{"q": f"Q{i}", "a": "A"} for i in range(20)]}, "FLASHCARDS"))
     monkeypatch.setattr(
         reusable,
         "build_generation_fingerprint",
