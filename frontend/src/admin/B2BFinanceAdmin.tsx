@@ -9,6 +9,7 @@ type Recon = { payment_id:number; provider_reference:string; campaign_id:number;
 type KycDoc = { id:number; organisation_id:number; document_type:string; file_name:string|null; status:string; admin_notes:string|null; created_at:string }
 type Invoice = { id:number; organisation_id:number; campaign_id:number|null; invoice_number:string; subtotal_minor:number; processing_fee_minor:number; total_minor:number; status:string; payment_method:string; due_at:string|null; paid_at:string|null; created_at:string }
 type Pricing = { config_key:string; value_json:Record<string,number>; currency:string; version:string; updated_by_user_id:number|null; updated_at:string|null }
+type OrganisationPlan = { plan_code:string; monthly_fee_kes:number; active_user_cap:number; active_opportunities:number; sponsored_campaigns:number; candidate_search_window_days:number; analytics_retention_days:number; is_active:boolean; version:number; updated_at:string|null }
 
 async function req<T>(path:string, options:RequestInit={}):Promise<T>{
   const r=await fetch(path,{credentials:'include',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}})
@@ -28,12 +29,14 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
   const [kyc,setKyc]=useState<KycDoc[]>([])
   const [invoices,setInvoices]=useState<Invoice[]>([])
   const [pricing,setPricing]=useState<Pricing[]>([])
+  const [organisationPlans,setOrganisationPlans]=useState<OrganisationPlan[]>([])
+  const [savingOrganisationPlan,setSavingOrganisationPlan]=useState<string|null>(null)
   const [settling,setSettling]=useState<number|null>(null)
   const [savingPricing,setSavingPricing]=useState<string|null>(null)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [saving,setSaving]=useState<number|null>(null)
-  const [tab,setTab]=useState<'overview'|'pricing'|'placements'|'campaigns'|'payments'|'reconciliation'|'verification'|'invoices'>('overview')
+  const [tab,setTab]=useState<'overview'|'organisation-plans'|'pricing'|'placements'|'campaigns'|'payments'|'reconciliation'|'verification'|'invoices'>('overview')
 
   const load=async()=>{
     setLoading(true);setError('')
@@ -46,9 +49,10 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
         req<{reconciliation:Recon[]}>('/api/admin/b2b/reconciliation'),
         req<{documents:KycDoc[]}>('/api/admin/b2b/kyc'),
         req<{invoices:Invoice[]}>('/api/admin/b2b/invoices'),
-        req<{pricing:Pricing[]}>('/api/admin/b2b/pricing')
+        req<{pricing:Pricing[]}>('/api/admin/b2b/pricing'),
+        req<{plans:OrganisationPlan[]}>('/api/admin/b2b/organisation-plans')
       ])
-      setCsrf(me.csrf_token);setOverview(o);setPlacements(p.placements);setCampaigns(c.campaigns);setPayments(pm.payments);setRecon(r.reconciliation);setKyc(k.documents);setInvoices(i.invoices);setPricing(pr.pricing)
+      setCsrf(me.csrf_token);setOverview(o);setPlacements(p.placements);setCampaigns(c.campaigns);setPayments(pm.payments);setRecon(r.reconciliation);setKyc(k.documents);setInvoices(i.invoices);setPricing(pr.pricing);setOrganisationPlans(op.plans)
     }catch(e){setError(e instanceof Error?e.message:'Could not load B2B finance.')}
     finally{setLoading(false)}
   }
@@ -62,6 +66,19 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
       await load()
     }catch(e){setError(e instanceof Error?e.message:'Could not save pricing.')}
     finally{setSavingPricing(null)}
+  }
+
+  const saveOrganisationPlan=async(plan:OrganisationPlan)=>{
+    setSavingOrganisationPlan(plan.plan_code);setError('')
+    try{
+      await req('/api/admin/b2b/organisation-plans/'+encodeURIComponent(plan.plan_code),{method:'PATCH',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({
+        monthly_fee_kes:plan.monthly_fee_kes,active_user_cap:plan.active_user_cap,active_opportunities:plan.active_opportunities,
+        sponsored_campaigns:plan.sponsored_campaigns,candidate_search_window_days:plan.candidate_search_window_days,
+        analytics_retention_days:plan.analytics_retention_days,is_active:plan.is_active
+      })})
+      await load()
+    }catch(e){setError(e instanceof Error?e.message:'Could not save organisation plan.')}
+    finally{setSavingOrganisationPlan(null)}
   }
 
   const savePlacement=async(p:Placement)=>{
@@ -78,7 +95,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
 
   if(loading)return <div style={{padding:30,color:T.textMuted}}>Loading B2B finance…</div>
   const card={background:T.card,borderRadius:14,padding:16,border:'1px solid '+T.border}
-  const tabs=['overview','pricing','placements','campaigns','payments','reconciliation','verification','invoices'] as const
+  const tabs=['overview','organisation-plans','pricing','placements','campaigns','payments','reconciliation','verification','invoices'] as const
 
   return <div style={{display:'flex',flexDirection:'column',gap:14}}>
     {error&&<div style={{background:'#FEE2E2',color:'#991B1B',borderRadius:10,padding:10,fontSize:12}}>{error}</div>}
@@ -107,6 +124,17 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
       </div>
       <div style={card}><b>Operational controls</b><div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,marginTop:8}}>Exhausted campaigns: {overview.exhausted_campaigns}. Reconciliation flags payment/funding/ledger mismatches for review. No student-level audience list is exposed here.</div></div>
     </>}
+
+    {tab==='organisation-plans'&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
+      <div style={card}><b>Organisation subscription plans</b><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Canonical monthly plan catalog. Changes affect future purchases and plan enforcement; historical payment records remain unchanged.</div></div>
+      {organisationPlans.map(p=><div key={p.plan_code} style={card}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(150px,1fr))',gap:10}}>
+          <div><b>{p.plan_code}</b><div style={{fontSize:10,color:T.textMuted}}>v{p.version} · {p.updated_at||'—'}</div></div>
+          {([['monthly_fee_kes','Monthly KES'],['active_user_cap','Active-user cap'],['active_opportunities','Opportunities'],['sponsored_campaigns','Sponsored campaigns'],['candidate_search_window_days','Search days'],['analytics_retention_days','Analytics days']] as const).map(([key,label])=><label key={key} style={{fontSize:10,color:T.textMuted}}>{label}<input type="number" min="0" value={Number(p[key])} onChange={e=>setOrganisationPlans(v=>v.map(x=>x.plan_code===p.plan_code?{...x,[key]:Number(e.target.value)}:x))} style={{display:'block',width:'100%',boxSizing:'border-box',padding:7}}/></label>)}
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}><label style={{fontSize:11}}><input type="checkbox" checked={p.is_active} onChange={e=>setOrganisationPlans(v=>v.map(x=>x.plan_code===p.plan_code?{...x,is_active:e.target.checked}:x))}/> Active</label><button disabled={savingOrganisationPlan===p.plan_code} onClick={()=>saveOrganisationPlan(p)} style={{background:'#C9A84C',color:'#0B1437',border:0,borderRadius:8,padding:'8px 12px',fontWeight:800}}>{savingOrganisationPlan===p.plan_code?'Saving…':'Save plan'}</button></div>
+      </div>}
+    </div>}
 
     {tab==='pricing'&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div style={card}><b>Canonical B2B pricing</b><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>These values are the single live commercial source for new sponsored campaigns and delivery metering. Changes do not rewrite existing campaign pricing snapshots.</div></div>
