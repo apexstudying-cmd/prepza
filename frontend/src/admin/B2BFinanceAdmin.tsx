@@ -125,11 +125,10 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
         <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
           <div style={{flex:1,minWidth:220}}><input value={p.label} onChange={e=>setPlacements(v=>v.map(x=>x.id===p.id?{...x,label:e.target.value}:x))} style={{width:'100%',boxSizing:'border-box',padding:9,border:'1px solid '+T.border,borderRadius:8,background:T.card,color:T.text}}/><div style={{fontSize:10,color:T.textMuted,marginTop:4}}>{p.placement_key}</div></div>
           <label style={{fontSize:11}}><input type="checkbox" checked={p.is_active} onChange={e=>setPlacements(v=>v.map(x=>x.id===p.id?{...x,is_active:e.target.checked}:x))}/> Active</label>
-          <label style={{fontSize:11}}>CPM <input type="number" value={p.cpm_amount_minor??0} onChange={e=>setPlacements(v=>v.map(x=>x.id===p.id?{...x,cpm_amount_minor:Number(e.target.value)}:x))} style={{width:90,padding:7}}/></label>
-          <label style={{fontSize:11}}>CPC <input type="number" value={p.cpc_amount_minor??0} onChange={e=>setPlacements(v=>v.map(x=>x.id===p.id?{...x,cpc_amount_minor:Number(e.target.value)}:x))} style={{width:90,padding:7}}/></label>
+          <div style={{fontSize:11,color:T.textMuted}}>Pricing: use the Canonical Pricing tab</div>
           <button disabled={saving===p.id} onClick={()=>savePlacement(p)} style={{background:'#C9A84C',color:'#0B1437',border:0,borderRadius:8,padding:'8px 12px',fontWeight:800}}>{saving===p.id?'Saving…':'Save'}</button>
         </div>
-        <div style={{fontSize:10,color:T.textMuted,marginTop:8}}>Rates are stored in minor units. Current launch values correspond to KES 350 CPM and KES 20 CPC.</div>
+        <div style={{fontSize:10,color:T.textMuted,marginTop:8}}>Placement settings control inventory and availability. Commercial rates are maintained only in the Canonical Pricing tab.</div>
       </div>)}
     </div>}
 
