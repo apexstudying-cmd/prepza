@@ -13,7 +13,7 @@ from flask import jsonify, request, session
 from sqlalchemy import text
 from pywebpush import webpush
 from b2b_campaign_metering import record_billable_event, reverse_billable_event
-from usage_billing import ORGANISATION_PLANS
+from usage_billing import get_organisation_plans
 
 PUSH_CAP_PER_48_HOURS = 1
 PUSH_CAP_PER_7_DAYS = 3
@@ -465,7 +465,7 @@ def register_discovery(app, db):
         plan_code, status, expires_at = org_plan(organisation_id)
         if status in ("suspended", "expired", "past_due"):
             return jsonify({"error": "Organisation billing is not active"}), 402
-        plan_limits = ORGANISATION_PLANS.get(plan_code, ORGANISATION_PLANS["launch"])
+        plan_limits = get_organisation_plans(db).get(plan_code, get_organisation_plans(db).get("launch", {}))
         active_sponsorships = db.session.execute(text("""
             SELECT COUNT(*) FROM discovery_campaign
             WHERE organisation_id=:oid
