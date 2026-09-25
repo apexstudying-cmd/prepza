@@ -2065,23 +2065,34 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             "but your existing conversation is still here."
         )
 
-    from usage_billing import reserve_ada_tokens, finalize_ada_tokens, refund_ada_reservation, get_ada_limits
-    ent, ada_limits = get_ada_limits(db, triggering_user_id)
-    output_token_limit = int(ada_limits["output"])
+    from ai_economics import (
+        get_user_plan_code, get_plan, calculate_ada_units,
+        reserve_ada_budget, refund_ada_budget, record_ada_usage,
+    )
+    plan_code = get_user_plan_code(db, triggering_user_id)
+    plan_config = get_plan(db, plan_code)
+    if not plan_config:
+        raise AIRateLimitExceededError("Ada is temporarily unavailable for your plan.")
+    output_token_limit = min(int(AI_TASKS["TUTORING"]["max_tokens"]), int(plan_config["ada_max_output_tokens"]))
 
-    # Reserve a conservative token budget before the provider call. This is
-    # entitlement-scoped, atomic, and independent from document-generation wallets.
     history_preview = _fetch_tutor_history(conversation_id)
     estimated_input_chars = len(content.extracted_text or "") + len(user_message_text)
     estimated_input_chars += sum(len(row.content or "") for row in history_preview)
-    estimated_tokens = max(1, int((estimated_input_chars + 2) / 3)) + output_token_limit
-    ada_allowed, ada_meta = reserve_ada_tokens(
-        db, triggering_user_id, estimated_tokens, output_token_limit
+    estimated_input_tokens = max(1, int((estimated_input_chars + 2) / 3))
+    estimated_units = calculate_ada_units(
+        input_tokens=estimated_input_tokens,
+        cache_write_tokens=estimated_input_tokens,
+        output_tokens=output_token_limit,
+    )
+    ada_allowed, ada_meta = reserve_ada_budget(
+        db, triggering_user_id, plan_code, estimated_units
     )
     if not ada_allowed:
-        raise AIRateLimitExceededError(ada_meta.get("error", "Ada token limit reached."))
-    ada_reserved_tokens = estimated_tokens
-    ada_entitlement_id = int(ada_meta["entitlement_id"])
+        if ada_meta.get("code") == "ada_daily_limit":
+            raise AIRateLimitExceededError("You've reached Ada's safety limit for today. Your monthly allowance is still available; please try again later.")
+        if ada_meta.get("code") == "ada_monthly_limit":
+            raise AIRateLimitExceededError("You've used your Ada allowance for this month. Upgrade your plan for more Ada usage, or wait for the monthly reset.")
+        raise AIRateLimitExceededError("Ada is temporarily unavailable for your plan. Please try again shortly.")
 
     # Persist the student's message now, before the AI call, so it
     # survives even if generation below fails.
@@ -2154,6 +2165,8 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
         })
 
     provider, provider_name = _get_provider()
+    max_tokens = output_token_limit
+    prompt_cache_key = f"prepza-ada-doc-{getattr(content, 'content_hash', content.id)}"
 
     start = time.monotonic()
     try:
@@ -2162,9 +2175,13 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             system_messages=system,
             messages=messages,
             max_tokens=max_tokens,
+            prompt_cache_key=prompt_cache_key,
         )
     except Exception as e:  # noqa: BLE001
-        refund_ada_reservation(db, triggering_user_id, ada_entitlement_id, ada_reserved_tokens)
+        refund_ada_budget(
+            db, triggering_user_id, plan_code, estimated_units,
+            entitlement_payment_id=ada_meta.get("entitlement_payment_id"),
+        )
         raise AIProviderError(f"Tutor reply generation failed: {e}")
     latency_ms = int((time.monotonic() - start) * 1000)
     reply_text, concept_name, prerequisite_name = _parse_tutor_reply(raw_text)
@@ -2173,12 +2190,12 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
     db.session.add(assistant_row)
     db.session.flush()  # assign assistant_row.id before the LearningEvent FK below references it
 
-    log_usage(
-        triggering_user_id,
-        request_type="tutor_message",
-        model=model,
-        provider=provider_name,
-        usage=ai_usage,
+    record_ada_usage(
+        db, triggering_user_id, plan_code, model, provider_name,
+        ai_usage.input_tokens, ai_usage.cache_read_tokens,
+        ai_usage.cache_creation_tokens, ai_usage.output_tokens,
+        cost_usd=ai_usage.cost_usd, reserved_units=estimated_units,
+        entitlement_payment_id=ada_meta.get("entitlement_payment_id"),
     )
 
     if concept_name:
