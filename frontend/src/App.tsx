@@ -14012,11 +14012,16 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
   const cap = audience?.billing?.active_user_cap
   const mau = audience?.audience?.mau || 0
   const capPct = cap ? Math.min(100, Math.round((mau / cap) * 100)) : 0
-  const orgPlans = [
-    { code: 'launch', label: 'Launch', price: 2500, cap: 250, opportunities: 2, campaigns: 1, window: '7-day', retention: '30-day' },
-    { code: 'growth', label: 'Growth', price: 7500, cap: 1000, opportunities: 10, campaigns: 3, window: '30-day', retention: '90-day' },
-    { code: 'scale', label: 'Scale', price: 15000, cap: 3000, opportunities: 50, campaigns: 10, window: '30-day', retention: '1-year' },
-  ]
+  const orgPlans = Object.entries((billing?.plans || {}) as Record<string, any>).map(([code, cfg]) => ({
+    code,
+    label: String(code).replace(/^./, c => c.toUpperCase()),
+    price: Number(cfg.monthly_fee_kes || 0),
+    cap: Number(cfg.active_user_cap || 0),
+    opportunities: Number(cfg.active_opportunities || 0),
+    campaigns: Number(cfg.sponsored_campaigns || 0),
+    window: cfg.candidate_search_window_days ? String(Number(cfg.candidate_search_window_days)) + '-day' : '—',
+    retention: cfg.analytics_retention_days ? (Number(cfg.analytics_retention_days) >= 365 ? '1-year' : String(Number(cfg.analytics_retention_days)) + '-day') : '—',
+  }))
 
   const buyPlan = async (code: string) => {
     if (!isOwner || billingBusy) return
