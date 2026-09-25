@@ -29,7 +29,6 @@ from urllib.parse import urlencode
 load_dotenv()
 
 sentry_dsn = os.environ.get("SENTRY_DSN")
-anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY")
@@ -596,9 +595,9 @@ class AiJob(db.Model):
     generation_parameters = db.Column(db.JSON, nullable=False, default=dict)
     # Notification row to finalize when a background generation completes.
     notification_id = db.Column(db.Integer, db.ForeignKey("notification.id"), nullable=True)
-    # Anthropic Message Batch id, when this job's AI call(s) went through
+    # legacy provider Message Batch id, when this job's AI call(s) went through
     # the Batch API instead of a synchronous call - lets an admin look up
-    # the batch directly in the Anthropic Console if a job seems stuck.
+    # the batch directly in the legacy provider Console if a job seems stuck.
 
 
 # ---------- Ada Phase 1 (tutor chat + learning foundation) ----------
