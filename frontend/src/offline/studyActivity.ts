@@ -9,9 +9,16 @@ type ActivityState = { screens: Record<string, ScreenEntry>; serverBaselines: Re
 function storageKey(): string {
   try { return `${KEY_PREFIX}:${localStorage.getItem(USER_KEY) || 'unknown'}` } catch { return `${KEY_PREFIX}:unknown` }
 }
+const PREPZA_TIMEZONE = 'Africa/Nairobi'
 function todayKey(date = new Date()): string {
-  const y = date.getFullYear(), m = String(date.getMonth() + 1).padStart(2, '0'), d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: PREPZA_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
 }
 function screenKey(documentId: number, feature: string): string { return `${Number(documentId)}:${String(feature || 'reading')}` }
 function load(): ActivityState {
