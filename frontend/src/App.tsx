@@ -13991,12 +13991,13 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
       api(`/api/organisations/${orgId}/audience`),
       api(`/api/organisations/${orgId}/candidates?days=7`),
       api(`/api/organisations/${orgId}/billing`),
+      api<{ plans: Array<any> }>('/api/organisations/plans'),
     ])
-      .then(([oppRes, audienceRes, candidateRes, billingRes]) => {
+      .then(([oppRes, audienceRes, candidateRes, billingRes, planRes]) => {
         setItems(oppRes.opportunities)
         setAudience(audienceRes)
         setCandidates(candidateRes.candidates || [])
-        setBilling(billingRes)
+        setBilling({ ...(billingRes as any), plans: Object.fromEntries((planRes.plans || []).map((p: any) => [p.plan_code, p])) })
       })
       .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load analytics.'))
       .finally(() => setLoading(false))
