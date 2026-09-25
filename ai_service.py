@@ -88,16 +88,14 @@ class AIRateLimitExceededError(Exception):
 # 2. TASK-BASED MODEL ROUTING
 # ============================================================
 # Central config so nothing downstream hard-codes a model name.
-# Only Sonnet 5 / Haiku 4.5 exist today (single provider: legacy provider).
+# Current Prepza routing is OpenAI-first with GPT-5 Mini and GPT-5.6 Luna.
 # Adding a second provider later means adding entries here, not
 # touching call sites. Routing choices below follow the locked
-# decisions (Sonnet for real academic reasoning, Haiku for cheap/
+# decisions (GPT-5 Mini for real academic reasoning, GPT-5 Mini for cheap/
 # mechanical generation) - tune with real usage data later per the
 # cost doc's "model evaluation harness" (not built yet, deliberately
 # out of scope for this pass).
 
-MODEL_SONNET_5 = "claude-sonnet-5"
-MODEL_HAIKU_4_5 = "claude-haiku-4-5-20251001"
 
 MODEL_GEMINI_FLASH_LITE = "gemini:gemini-2.5-flash-lite"
 MODEL_GEMINI_FLASH = "gemini:gemini-2.5-flash"
@@ -110,21 +108,21 @@ def _configured_model(task_name, default):
 AI_TASKS = {
     # Wired and in use this chunk:
     "FORUM_ANSWER": {
-        "primary": MODEL_SONNET_5,
+        "primary": MODEL_OPENAI_GPT5_MINI,
         "fallback": None,
         "max_tokens": 1024,
         "notes": "Ask Prepza AI in the forum - real academic reasoning needed.",
     },
     "THREAD_SUMMARY": {
-        "primary": MODEL_HAIKU_4_5,
-        "fallback": MODEL_SONNET_5,
+        "primary": MODEL_OPENAI_GPT5_MINI,
+        "fallback": MODEL_OPENAI_GPT5_MINI,
         "max_tokens": 512,
         "notes": "Summarizing an existing forum thread on request.",
     },
 
     "OCR_TRANSCRIBE": {
-        "primary": MODEL_HAIKU_4_5,
-        "fallback": MODEL_SONNET_5,
+        "primary": MODEL_OPENAI_GPT5_MINI,
+        "fallback": MODEL_OPENAI_GPT5_MINI,
         "max_tokens": 2048,
         "notes": "Vision transcription of a scanned/image-only document page.",
     },
@@ -139,38 +137,38 @@ AI_TASKS = {
         "notes": "AI Tutor chat, grounded in a student's document once extraction exists.",
     },
     "SUMMARIZATION": {
-        "primary": _configured_model("summarization", MODEL_HAIKU_4_5),
-        "fallback": MODEL_SONNET_5,
+        "primary": _configured_model("summarization", MODEL_OPENAI_GPT5_MINI),
+        "fallback": MODEL_OPENAI_GPT5_MINI,
         "max_tokens": 1536,
         "notes": "Condensed notes from a document; provider can be switched after quality benchmarking.",
     },
     "FLASHCARDS": {
-        "primary": _configured_model("flashcards", MODEL_HAIKU_4_5),
-        "fallback": MODEL_SONNET_5,
+        "primary": _configured_model("flashcards", MODEL_OPENAI_GPT5_MINI),
+        "fallback": MODEL_OPENAI_GPT5_MINI,
         "max_tokens": 2048,
         "notes": "Structured Q/A generation; provider can be switched after quality benchmarking.",
     },
     "QUIZZES": {
-        "primary": _configured_model("quizzes", MODEL_SONNET_5),
-        "fallback": MODEL_SONNET_5,
+        "primary": _configured_model("quizzes", MODEL_OPENAI_GPT5_MINI),
+        "fallback": MODEL_OPENAI_GPT5_MINI,
         "max_tokens": 2048,
         "notes": "Needs correct distractors/answers; use a cheaper model only after quality validation.",
     },
     "DOCUMENT_ANALYSIS": {
-        "primary": MODEL_SONNET_5,
+        "primary": MODEL_OPENAI_GPT5_MINI,
         "fallback": None,
         "max_tokens": 2048,
         "notes": "Classifying/understanding an uploaded document as a whole.",
     },
     "PODCAST_SCRIPT": {
-        "primary": MODEL_SONNET_5,
+        "primary": MODEL_OPENAI_GPT5_MINI,
         "fallback": None,
         "max_tokens": 3072,
         "notes": "Longer-form generation, benefits from a stronger model.",
     },
     "MIND_MAP": {
-        "primary": _configured_model("mind_map", MODEL_HAIKU_4_5),
-        "fallback": MODEL_SONNET_5,
+        "primary": _configured_model("mind_map", MODEL_OPENAI_GPT5_MINI),
+        "fallback": MODEL_OPENAI_GPT5_MINI,
         "max_tokens": 1536,
         "notes": "Structural generation; provider can be switched after quality benchmarking.",
     },
@@ -179,7 +177,7 @@ AI_TASKS = {
 
 # ============================================================
 # 3. PRICING (per MTok, USD) - keyed by effective date since legacy provider
-#    has an announced Sonnet 5 price change on 2026-08-31.
+#    has an announced GPT-5 Mini 5 price change on 2026-08-31.
 #    Re-verify against platform.claude.com/docs if this drifts far
 #    from today's date. Cache multipliers apply to the INPUT price only.
 # ============================================================
@@ -188,12 +186,12 @@ _PRICING_SCHEDULE = {
     MODEL_GEMINI_FLASH_LITE: [(datetime(2000, 1, 1), Decimal("0.10"), Decimal("0.40"))],
     MODEL_GEMINI_FLASH: [(datetime(2000, 1, 1), Decimal("0.30"), Decimal("2.50"))],
     MODEL_OPENAI_LUNA: [(datetime(2000, 1, 1), Decimal("0.20"), Decimal("1.20"))],
-    MODEL_SONNET_5: [
+    MODEL_OPENAI_GPT5_MINI: [
         # legacy provider's current official price is $2/$10 per MTok. The
         # previously announced Sep-2026 increase to $3/$15 was cancelled.
         (datetime(2000, 1, 1), Decimal("2.00"), Decimal("10.00")),
     ],
-    MODEL_HAIKU_4_5: [
+    MODEL_OPENAI_GPT5_MINI: [
         (datetime(2000, 1, 1), Decimal("1.00"), Decimal("5.00")),
     ],
 }
@@ -217,8 +215,8 @@ def _pricing_for(model, at=None):
 # since both models' batch rates have only ever been this one price -
 # re-verify against platform.claude.com/docs if that changes.
 _BATCH_PRICING = {
-    MODEL_SONNET_5: (Decimal("1.00"), Decimal("5.00")),
-    MODEL_HAIKU_4_5: (Decimal("0.50"), Decimal("2.50")),
+    MODEL_OPENAI_GPT5_MINI: (Decimal("1.00"), Decimal("5.00")),
+    MODEL_OPENAI_GPT5_MINI: (Decimal("0.50"), Decimal("2.50")),
 }
 
 
@@ -1123,7 +1121,7 @@ def _legacy_generate_document_summary(document_content_id, triggering_user_id, p
 # Same shape as generate_document_summary() (cache check -> spend cap ->
 # rate limit -> generate -> log -> persist), keyed on
 # GeneratedMaterial(material_type='quiz'). Uses the QUIZZES task
-# (Sonnet 5, no fallback - "needs correct distractors/answers, not just
+# (GPT-5 Mini 5, no fallback - "needs correct distractors/answers, not just
 # plausible-looking ones" per AI_TASKS' own note) and the same
 # continuation-retry path as summaries, since a quiz truncated mid-JSON
 # is just as broken as a truncated summary.
@@ -1292,7 +1290,7 @@ def _legacy_generate_document_quiz(document_content_id, triggering_user_id, plan
 # Same shape as generate_document_quiz() (cache check -> spend cap ->
 # rate limit -> generate -> log -> persist), keyed on
 # GeneratedMaterial(material_type='flashcards'). Uses the FLASHCARDS
-# task (Haiku primary, Sonnet fallback - "mechanical extraction of Q/A
+# task (GPT-5 Mini primary, GPT-5 Mini fallback - "mechanical extraction of Q/A
 # pairs from source text" per AI_TASKS' own note) and the same
 # continuation-retry path as summaries/quizzes.
 #
@@ -1965,7 +1963,7 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
          - it must survive even if generation below fails, same
          "human content survives AI failure" posture as
          _trigger_ai_reply() in the forum feature
-      4. Call Sonnet directly with a cacheable system prompt (the
+      4. Call GPT-5 Mini directly with a cacheable system prompt (the
          document text) + the last TUTOR_HISTORY_MESSAGE_LIMIT messages
       5. Strip the trailing concept marker, persist the assistant's
          reply, log usage, and - if a real concept was named - upsert
@@ -2220,7 +2218,7 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
 # Same shape as generate_document_flashcards() (cache check -> spend cap
 # -> rate limit -> generate -> log -> persist), keyed on
 # GeneratedMaterial(material_type='mind_map'). Uses the MIND_MAP task
-# (Haiku primary, Sonnet fallback - "structural extraction (nodes/
+# (GPT-5 Mini primary, GPT-5 Mini fallback - "structural extraction (nodes/
 # edges), not deep reasoning" per AI_TASKS' own note) and the same
 # continuation-retry path as the other document materials.
 #
