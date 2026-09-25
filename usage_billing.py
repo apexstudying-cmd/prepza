@@ -26,32 +26,25 @@ from sqlalchemy import text
 
 # Organisation subscription is audience-access pricing, not ad RPM.
 # Sponsored inventory is separately priced on a CPM basis.
-ORGANISATION_PLANS = {
-    "launch": {
-        "monthly_fee_kes": 2500,
-        "active_user_cap": 250,
-        "active_opportunities": 2,
-        "sponsored_campaigns": 1,
-        "candidate_search_window_days": 7,
-        "analytics_retention_days": 30,
-    },
-    "growth": {
-        "monthly_fee_kes": 7500,
-        "active_user_cap": 1000,
-        "active_opportunities": 10,
-        "sponsored_campaigns": 3,
-        "candidate_search_window_days": 30,
-        "analytics_retention_days": 90,
-    },
-    "scale": {
-        "monthly_fee_kes": 15000,
-        "active_user_cap": 3000,
-        "active_opportunities": 50,
-        "sponsored_campaigns": 10,
-        "candidate_search_window_days": 30,
-        "analytics_retention_days": 365,
-    },
-}
+def get_organisation_plans(db):
+    rows = db.session.execute(text("""
+        SELECT plan_code, monthly_fee_kes, active_user_cap, active_opportunities,
+               sponsored_campaigns, candidate_search_window_days, analytics_retention_days
+        FROM organisation_plan_config
+        WHERE is_active=TRUE
+        ORDER BY CASE plan_code WHEN 'launch' THEN 1 WHEN 'growth' THEN 2 WHEN 'scale' THEN 3 ELSE 99 END
+    """)).mappings().all()
+    return {
+        str(r["plan_code"]): {
+            "monthly_fee_kes": int(r["monthly_fee_kes"]),
+            "active_user_cap": int(r["active_user_cap"]),
+            "active_opportunities": int(r["active_opportunities"]),
+            "sponsored_campaigns": int(r["sponsored_campaigns"]),
+            "candidate_search_window_days": int(r["candidate_search_window_days"]),
+            "analytics_retention_days": int(r["analytics_retention_days"]),
+        } for r in rows
+    }
+
 
 
 def _canonical_sponsored_pricing(db):
@@ -595,7 +588,7 @@ def register_usage_billing(app, db):
         if billing_row and billing_row["status"] == "pending":
             return jsonify({"error": "Complete organisation plan payment before accessing candidate discovery", "code": "organisation_plan_pending"}), 402
         plan_code = str((billing_row or {}).get("plan_code") or "launch")
-        plan = ORGANISATION_PLANS.get(plan_code, ORGANISATION_PLANS["launch"])
+        plan = get_organisation_plans(db).get(plan_code, get_organisation_plans(db).get("launch", {}))
         candidate_limit = int(plan["active_user_cap"] or 5000)
 
         rows = db.session.execute(text("""
