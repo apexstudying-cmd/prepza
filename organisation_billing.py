@@ -67,6 +67,18 @@ def register_organisation_billing(app, db):
             and session.get("csrf_token") == request.headers.get("X-CSRF-Token")
         )
 
+    @app.get("/api/organisations/plans")
+    def organisation_plan_options():
+        rows = db.session.execute(text("""
+            SELECT plan_code, monthly_fee_kes, active_user_cap, active_opportunities,
+                   sponsored_campaigns, candidate_search_window_days,
+                   analytics_retention_days
+            FROM organisation_plan_config
+            WHERE is_active=TRUE
+            ORDER BY CASE plan_code WHEN 'launch' THEN 1 WHEN 'growth' THEN 2 WHEN 'scale' THEN 3 ELSE 99 END
+        """)).mappings().all()
+        return jsonify({"plans": [dict(r) for r in rows]})
+
     @app.post("/api/organisations/<int:organisation_id>/plan/checkout")
     def organisation_plan_checkout(organisation_id):
         user_id = session.get("user_id")
