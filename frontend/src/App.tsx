@@ -3143,6 +3143,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   const [error, setError] = useState('')
   const [generationPercent, setGenerationPercent] = useState(0)
   const [generationStage, setGenerationStage] = useState('Preparing your podcast…')
+  const [estimatedWaitMinutes, setEstimatedWaitMinutes] = useState<number | null>(null)
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
   const [playerOpportunities, setPlayerOpportunities] = useState<OpportunityPublic[]>([])
   const [playerOppIndex, setPlayerOppIndex] = useState(0)
@@ -3195,7 +3196,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
     let cancelled = false
     const run = async () => {
       try {
-        const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
+        const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string; estimated_wait_minutes?: number | null }>(podcastAudioPath)
         if (cancelled) return
         if (existing.audio_status === 'ready' && existing.audio_url) {
           setAudioUrl(existing.audio_url)
@@ -3209,13 +3210,15 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
         if (existing.audio_status === 'processing') {
           setGenerationPercent(Number(existing.progress_percent || 0))
           setGenerationStage(existing.progress_stage || 'Generating audio…')
+          setEstimatedWaitMinutes(existing.estimated_wait_minutes ?? null)
           setStage('audio')
           const pollExisting = async () => {
             if (cancelled) return
-            const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
+            const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string; estimated_wait_minutes?: number | null }>(podcastAudioPath)
             if (cancelled) return
             setGenerationPercent(Math.max(0, Math.min(100, Number(status.progress_percent || 0))))
             setGenerationStage(status.progress_stage || 'Generating audio…')
+            setEstimatedWaitMinutes(status.estimated_wait_minutes ?? null)
             if (status.audio_status === 'ready' && status.audio_url) {
               setAudioUrl(status.audio_url)
               setDuration(status.duration_seconds || 0)
@@ -3243,6 +3246,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
         if (cancelled) return
         setGenerationPercent(5)
         setGenerationStage('Generating audio…')
+        setEstimatedWaitMinutes(null)
         setStage('audio')
 
         await api(podcastAudioPath, {
@@ -3251,7 +3255,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
 
         const poll = async () => {
           if (cancelled) return
-          const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
+          const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string; estimated_wait_minutes?: number | null }>(podcastAudioPath)
           if (cancelled) return
           setGenerationPercent(Math.max(0, Math.min(100, Number(status.progress_percent || 0))))
           setGenerationStage(status.progress_stage || 'Generating audio…')
@@ -3374,6 +3378,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
             <div style={{ color: N.gold, fontSize: 10, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase' }}>Prepza Podcast</div>
             <div style={{ color: T.text, fontSize: 19, fontWeight: 800, marginTop: 8 }}>{stage === 'loading' ? 'Opening your podcast' : 'Generating your podcast'}</div>
             <div style={{ color: T.textMuted, fontSize: 12, lineHeight: 1.55, marginTop: 5 }}>{generationStage}</div>
+            {estimatedWaitMinutes != null && <div style={{ color: T.textMuted, fontSize: 11, marginTop: 5 }}>Estimated wait: about {estimatedWaitMinutes} minute{estimatedWaitMinutes === 1 ? '' : 's'}. You can leave Prepza; we'll notify you when it's ready.</div>}
             <div style={{ height: 9, background: T.border, borderRadius: 99, overflow: 'hidden', marginTop: 22 }}>
               <div style={{ width: `${generationPercent}%`, height: '100%', background: `linear-gradient(90deg,${N.gold},${N.goldL})`, transition: 'width .5s ease' }} />
             </div>
@@ -9591,6 +9596,27 @@ type AdminInfrastructure = {
   upgrade_policy: { automatic_billing: boolean; message: string }
 }
 
+type AdminCapacityPlan = {
+  inputs: {
+    daily_active_users: number
+    peak_concurrency: number
+    requests_per_active_user_per_day: number
+    peak_multiplier: number
+    cpu_seconds_per_request: number
+    memory_mb_per_concurrent_request: number
+    base_ram_gb: number
+    ram_headroom: number
+  }
+  avg_rps: number
+  peak_rps: number
+  cpu_cores_required: number
+  cpu_cores_with_headroom: number
+  ram_gb_required: number
+  render_fit: { plan: string; cpu: number; ram_gb: number; fits: boolean }[]
+  assumptions: string[]
+  one_thousand_dau_baseline: any
+}
+
 type AdminSystemCapacity = {
   tier: string
   available_tiers: string[]
@@ -10309,6 +10335,10 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     api<AdminUserRow[]>('/admin/users').then(res => setDashRecentUsers(res.slice(0, 5))).catch(() => {})
   }, [section])
 
+  const [capacityPlan, setCapacityPlan] = useState<AdminCapacityPlan | null>(null)
+  const [capacityPlanLoading, setCapacityPlanLoading] = useState(true)
+  const [capacityPlanError, setCapacityPlanError] = useState('')
+
   const [infrastructure, setInfrastructure] = useState<AdminInfrastructure | null>(null)
   const [infrastructureLoading, setInfrastructureLoading] = useState(true)
   const [infrastructureError, setInfrastructureError] = useState('')
@@ -10352,6 +10382,13 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
   useEffect(() => {
     if (section !== 'system') return
+    setCapacityPlanLoading(true)
+    setCapacityPlanError('')
+    api<AdminCapacityPlan>('/admin/infrastructure/capacity?dau=1000&concurrency=100')
+      .then(setCapacityPlan)
+      .catch(e => setCapacityPlanError(e instanceof ApiError ? e.message : 'Could not load capacity planning.'))
+      .finally(() => setCapacityPlanLoading(false))
+
     setInfrastructureLoading(true)
     setInfrastructureError('')
     api<AdminInfrastructure>('/admin/infrastructure')
@@ -11285,6 +11322,52 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
           </div>
         </AdminCard>
       )}
+      {capacityPlanLoading ? (
+        <AdminCard title="Render application capacity">
+          <div style={{ padding: '18px', color: T.textMuted, fontSize: 12 }}>Calculating from the current planning model…</div>
+        </AdminCard>
+      ) : capacityPlanError ? (
+        <AdminCard title="Render application capacity"><div style={{ padding: '18px', color: '#DC2626', fontSize: 12 }}>{capacityPlanError}</div></AdminCard>
+      ) : capacityPlan && (() => {
+        const required = capacityPlan.render_fit.find(p => p.fits)
+        const baseline = capacityPlan.one_thousand_dau_baseline?.render_fit?.find((p: any) => p.fits)
+        return (
+          <AdminCard title="Render application capacity">
+            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.55 }}>
+                This is a transparent sizing model, not a provider guarantee. It uses measured inputs later as telemetry replaces the planning assumptions.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 8 }}>
+                {[
+                  ['Peak RPS', capacityPlan.peak_rps.toFixed(2)],
+                  ['CPU needed', capacityPlan.cpu_cores_with_headroom.toFixed(2) + ' cores'],
+                  ['RAM needed', capacityPlan.ram_gb_required.toFixed(2) + ' GB'],
+                  ['Starting plan', required?.plan || '—'],
+                ].map(([label,value]) => (
+                  <div key={label} style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 11 }}>
+                    <div style={{ fontSize: 10, color: T.textMuted }}>{label}</div>
+                    <div style={{ fontSize: 17, fontWeight: 800, color: T.text, marginTop: 4 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: T.textMuted }}>
+                Baseline: 1,000 DAU, 100 peak concurrent requests, 60 requests/user/day, 10× peak multiplier, 50ms CPU/request, 0.5MB incremental RAM/request, 50% RAM headroom.
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {capacityPlan.render_fit.map(p => (
+                  <span key={p.plan} style={{ border: p.fits ? '1px solid #16A34A' : '1px solid ' + T.border, color: p.fits ? '#16A34A' : T.textMuted, borderRadius: 8, padding: '6px 9px', fontSize: 10, fontWeight: 700 }}>
+                    {p.plan} · {p.cpu} CPU · {p.ram_gb}GB {p.fits ? 'fits' : 'too small'}
+                  </span>
+                ))}
+              </div>
+              {baseline && <div style={{ fontSize: 11, color: T.text, background: 'rgba(201,168,76,.08)', borderRadius: 9, padding: '9px 11px' }}>
+                Current 1,000-DAU baseline maps to <strong>{baseline.plan}</strong>. Recalculate this card after real CPU/RAM/latency telemetry is connected before paying for a larger plan.
+              </div>}
+            </div>
+          </AdminCard>
+        )
+      })()}
+
       {systemCapacityLoading ? (
         <div style={{ padding: '24px 0', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading capacity data…</div>
       ) : systemCapacityError ? (
