@@ -1,7 +1,7 @@
 """Canonical B2B sponsored-campaign financial foundation for G1."""
 from __future__ import annotations
 import json
-from flask import jsonify, session
+from flask import jsonify, request, session
 from sqlalchemy import text
 
 def _register_b2b_campaign_finance_schema(db):
