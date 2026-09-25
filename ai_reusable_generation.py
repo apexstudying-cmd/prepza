@@ -7,6 +7,17 @@ from datetime import datetime
 from ai_artifact_fingerprint import GENERATION_VERSION, build_generation_fingerprint
 from ai_generation_store import claim_or_get_generation, mark_generation_failed, mark_generation_ready, wait_for_generation
 
+# Per-request product ceilings are intentionally separate from monthly plan allowances.
+# A Pro student can spend 100 summary pages/month, for example, but one request
+# cannot ask the provider for a 100-page summary. This protects cost, latency,
+# output quality, and the documented UI contract.
+GENERATION_MAXIMA = {
+    "summary": {"max_pages": 10},
+    "podcast": {"duration_minutes": 50},
+    "flashcards": {"card_count": 50},
+    "mind_map": {"node_count": 50},
+}
+
 PROMPT_VERSIONS = {key: f"{key}-v2" for key in ("summary", "quiz", "flashcards", "mind_map")}
 PROMPT_VERSIONS["podcast"] = "podcast-v3"
 SCHEMA_VERSIONS = {key: "schema-v2" for key in PROMPT_VERSIONS}
@@ -37,6 +48,9 @@ def normalize_parameters(material_type: str, parameters: dict | None) -> dict:
         if key in {"max_pages", "question_count", "card_count", "duration_minutes", "node_count"}:
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                 raise ValueError(f"{key} must be a positive integer")
+            maximum = (GENERATION_MAXIMA.get(material_type) or {}).get(key)
+            if maximum is not None and value > maximum:
+                raise ValueError(f"{key} cannot exceed {maximum} per generation")
             normalized[key] = value
         else:
             if not isinstance(value, str) or not value.strip():
