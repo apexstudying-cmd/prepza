@@ -436,7 +436,7 @@ def register_discovery(app, db):
         bid_type = "both" if len(billing_modes) == 2 else billing_modes[0]
         pricing = _canonical_discovery_pricing(db)
         if budget < pricing["minimum_campaign_kes"]:
-            return jsonify({"error": f"Minimum campaign budget is KES {DISCOVERY_PRICING['minimum_campaign_kes']:,}"}), 400
+            return jsonify({"error": f"Minimum campaign budget is KES {pricing["minimum_campaign_kes"]:,}"}), 400
         bid = pricing["push_cpm_kes"] if placement == "push" else pricing["feed_cpm_kes"]
         start = data.get("starts_at")
         end = data.get("ends_at")
