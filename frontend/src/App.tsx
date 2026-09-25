@@ -14384,6 +14384,17 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
+  useEffect(() => {
+    const onExternalDocument = (event: Event) => {
+      const documentId = Number((event as CustomEvent<{ documentId?: number }>).detail?.documentId || 0)
+      if (!Number.isInteger(documentId) || documentId <= 0) return
+      setActiveDocumentId(documentId)
+      setScreen('document-study')
+    }
+    window.addEventListener('prepza:open-document', onExternalDocument)
+    return () => window.removeEventListener('prepza:open-document', onExternalDocument)
+  }, [])
+
   const [adminMode, setAdminMode] = useState(false)
   const [orgPortalMode, setOrgPortalMode] = useState(false)
   useEffect(() => {
