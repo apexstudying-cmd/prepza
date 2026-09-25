@@ -182,11 +182,14 @@ def register_organisation_billing(app, db):
             FROM organisation_billing
             WHERE organisation_id = :oid
         """), {"oid": organisation_id}).mappings().first()
-        return jsonify({"billing": dict(row) if row else {
+        if row:
+            return jsonify({"billing": dict(row)})
+        launch = organisation_plan("launch")
+        return jsonify({"billing": {
             "plan_code": "launch",
             "status": "trial",
-            "monthly_fee_kes": 2500,
-            "active_user_cap": 250,
+            "monthly_fee_kes": int(launch["monthly_fee_kes"]) if launch else 0,
+            "active_user_cap": int(launch["active_user_cap"]) if launch else 0,
         }})
 
     @app.post("/api/payments/paystack/organisation-webhook")
