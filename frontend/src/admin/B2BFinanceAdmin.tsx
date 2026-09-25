@@ -8,6 +8,7 @@ type Payment = { id:number; organisation_id:number; campaign_id:number|null; pro
 type Recon = { payment_id:number; provider_reference:string; campaign_id:number; status:string; campaign_amount_minor:number; funding_amount_minor:number; ledger_funding_minor:number; reconciliation_status:string }
 type KycDoc = { id:number; organisation_id:number; document_type:string; file_name:string|null; status:string; admin_notes:string|null; created_at:string }
 type Invoice = { id:number; organisation_id:number; campaign_id:number|null; invoice_number:string; subtotal_minor:number; processing_fee_minor:number; total_minor:number; status:string; payment_method:string; due_at:string|null; paid_at:string|null; created_at:string }
+type Pricing = { config_key:string; value_json:Record<string,number>; currency:string; version:string; updated_by_user_id:number|null; updated_at:string|null }
 
 async function req<T>(path:string, options:RequestInit={}):Promise<T>{
   const r=await fetch(path,{credentials:'include',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}})
@@ -26,7 +27,9 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
   const [recon,setRecon]=useState<Recon[]>([])
   const [kyc,setKyc]=useState<KycDoc[]>([])
   const [invoices,setInvoices]=useState<Invoice[]>([])
+  const [pricing,setPricing]=useState<Pricing[]>([])
   const [settling,setSettling]=useState<number|null>(null)
+  const [savingPricing,setSavingPricing]=useState<string|null>(null)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [saving,setSaving]=useState<number|null>(null)
@@ -35,20 +38,31 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
   const load=async()=>{
     setLoading(true);setError('')
     try{
-      const [me,o,p,c,pm,r,k,i]=await Promise.all([
+      const [me,o,p,c,pm,r,k,i,pr]=await Promise.all([
         req<{csrf_token:string}>('/me'),req<Overview>('/api/admin/b2b/overview'),
         req<{placements:Placement[]}>('/api/admin/b2b/placements'),
         req<{campaigns:Campaign[]}>('/api/admin/b2b/campaigns'),
         req<{payments:Payment[]}>('/api/admin/b2b/payments'),
         req<{reconciliation:Recon[]}>('/api/admin/b2b/reconciliation'),
         req<{documents:KycDoc[]}>('/api/admin/b2b/kyc'),
-        req<{invoices:Invoice[]}>('/api/admin/b2b/invoices')
+        req<{invoices:Invoice[]}>('/api/admin/b2b/invoices'),
+        req<{pricing:Pricing[]}>('/api/admin/b2b/pricing')
       ])
-      setCsrf(me.csrf_token);setOverview(o);setPlacements(p.placements);setCampaigns(c.campaigns);setPayments(pm.payments);setRecon(r.reconciliation);setKyc(k.documents);setInvoices(i.invoices)
+      setCsrf(me.csrf_token);setOverview(o);setPlacements(p.placements);setCampaigns(c.campaigns);setPayments(pm.payments);setRecon(r.reconciliation);setKyc(k.documents);setInvoices(i.invoices);setPricing(pr.pricing)
     }catch(e){setError(e instanceof Error?e.message:'Could not load B2B finance.')}
     finally{setLoading(false)}
   }
   useEffect(()=>{void load()},[])
+
+  const savePricing=async(item:Pricing, amount:number)=>{
+    setSavingPricing(item.config_key);setError('')
+    try{
+      const value={...item.value_json,amount_kes:amount}
+      await req('/api/admin/b2b/pricing/'+encodeURIComponent(item.config_key),{method:'PATCH',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({value})})
+      await load()
+    }catch(e){setError(e instanceof Error?e.message:'Could not save pricing.')}
+    finally{setSavingPricing(null)}
+  }
 
   const savePlacement=async(p:Placement)=>{
     setSaving(p.id);setError('')
@@ -64,7 +78,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
 
   if(loading)return <div style={{padding:30,color:T.textMuted}}>Loading B2B finance…</div>
   const card={background:T.card,borderRadius:14,padding:16,border:'1px solid '+T.border}
-  const tabs=['overview','placements','campaigns','payments','reconciliation','verification','invoices'] as const
+  const tabs=['overview','pricing','placements','campaigns','payments','reconciliation','verification','invoices'] as const
 
   return <div style={{display:'flex',flexDirection:'column',gap:14}}>
     {error&&<div style={{background:'#FEE2E2',color:'#991B1B',borderRadius:10,padding:10,fontSize:12}}>{error}</div>}
@@ -93,6 +107,17 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
       </div>
       <div style={card}><b>Operational controls</b><div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,marginTop:8}}>Exhausted campaigns: {overview.exhausted_campaigns}. Reconciliation flags payment/funding/ledger mismatches for review. No student-level audience list is exposed here.</div></div>
     </>}
+
+    {tab==='pricing'&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
+      <div style={card}><b>Canonical B2B pricing</b><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>These values are the single live commercial source for new sponsored campaigns and delivery metering. Changes do not rewrite existing campaign pricing snapshots.</div></div>
+      {pricing.map(item=><div key={item.config_key} style={card}>
+        <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:220}}><b>{item.config_key}</b><div style={{fontSize:10,color:T.textMuted}}>Version {item.version} · {item.updated_at||'—'}</div></div>
+          {'amount_kes' in item.value_json&&<label style={{fontSize:11}}>KES <input type="number" value={Number(item.value_json.amount_kes||0)} onChange={e=>setPricing(v=>v.map(x=>x.config_key===item.config_key?{...x,value_json:{...x.value_json,amount_kes:Number(e.target.value)}}:x))} style={{width:110,padding:7}}/></label>}
+          <button disabled={savingPricing===item.config_key||!('amount_kes' in item.value_json)} onClick={()=>savePricing(item,Number(item.value_json.amount_kes||0))} style={{background:'#C9A84C',color:'#0B1437',border:0,borderRadius:8,padding:'8px 12px',fontWeight:800}}>{savingPricing===item.config_key?'Saving…':'Save'}</button>
+        </div>
+      </div>)}
+    </div>
 
     {tab==='placements'&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div style={{...card,fontSize:12,color:T.textMuted}}>Placement inventory and commercial rates are admin-controlled. Campaigns should use the frozen pricing snapshot created at purchase; changing these settings affects future campaigns, not already-funded campaigns.</div>
