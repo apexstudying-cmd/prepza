@@ -5,7 +5,7 @@ This module is the ONLY place in the codebase that should ever call an
 AI provider's SDK directly. Every feature (forum "Ask Prepza AI", and
 later the AI Tutor / Summaries / Quizzes / Flashcards / Podcasts / Mind
 maps) is expected to call the functions in this module rather than
-touching `anthropic` (or any future provider SDK) itself. That is what
+touching `legacy_provider` (or any future provider SDK) itself. That is what
 makes it possible to add/swap providers later without rewriting every
 feature that uses AI - see PREPZA AI COST OPTIMIZATION & MULTI-MODEL
 ROUTING doc.
@@ -31,7 +31,6 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
-import anthropic
 import requests
 
 
@@ -39,8 +38,8 @@ import requests
 # 1. PROVIDER-AGNOSTIC REQUEST / RESPONSE / USAGE SHAPES
 # ============================================================
 # Per the cost-optimization doc: features build an AIRequest and get
-# back an AIResponse. Nothing here is Anthropic-specific by name, even
-# though AnthropicProvider is currently the only implementation.
+# back an AIResponse. Nothing here is legacy provider-specific by name, even
+# though legacy providerProvider is currently the only implementation.
 
 @dataclass
 class AIRequest:
@@ -89,7 +88,7 @@ class AIRateLimitExceededError(Exception):
 # 2. TASK-BASED MODEL ROUTING
 # ============================================================
 # Central config so nothing downstream hard-codes a model name.
-# Only Sonnet 5 / Haiku 4.5 exist today (single provider: Anthropic).
+# Only Sonnet 5 / Haiku 4.5 exist today (single provider: legacy provider).
 # Adding a second provider later means adding entries here, not
 # touching call sites. Routing choices below follow the locked
 # decisions (Sonnet for real academic reasoning, Haiku for cheap/
@@ -179,7 +178,7 @@ AI_TASKS = {
 
 
 # ============================================================
-# 3. PRICING (per MTok, USD) - keyed by effective date since Anthropic
+# 3. PRICING (per MTok, USD) - keyed by effective date since legacy provider
 #    has an announced Sonnet 5 price change on 2026-08-31.
 #    Re-verify against platform.claude.com/docs if this drifts far
 #    from today's date. Cache multipliers apply to the INPUT price only.
@@ -190,7 +189,7 @@ _PRICING_SCHEDULE = {
     MODEL_GEMINI_FLASH: [(datetime(2000, 1, 1), Decimal("0.30"), Decimal("2.50"))],
     MODEL_OPENAI_LUNA: [(datetime(2000, 1, 1), Decimal("0.20"), Decimal("1.20"))],
     MODEL_SONNET_5: [
-        # Anthropic's current official price is $2/$10 per MTok. The
+        # legacy provider's current official price is $2/$10 per MTok. The
         # previously announced Sep-2026 increase to $3/$15 was cancelled.
         (datetime(2000, 1, 1), Decimal("2.00"), Decimal("10.00")),
     ],
@@ -214,7 +213,7 @@ def _pricing_for(model, at=None):
 
 
 # Message Batches API pricing (flat 50% off standard rates, per
-# Anthropic's docs). Not date-scheduled like _PRICING_SCHEDULE above,
+# legacy provider's docs). Not date-scheduled like _PRICING_SCHEDULE above,
 # since both models' batch rates have only ever been this one price -
 # re-verify against platform.claude.com/docs if that changes.
 _BATCH_PRICING = {
@@ -229,7 +228,7 @@ def compute_cost_usd(model, input_tokens, output_tokens,
     """
     Computes cost in USD from real token counts (never estimates).
     `input_tokens` here should be the NON-cached portion only - callers
-    pass the API response's input_tokens field, which Anthropic already
+    pass the API response's input_tokens field, which legacy provider already
     reports net of cache reads/writes. Pass batch=True for requests that
     went through route_and_generate_batch (Message Batches API pricing).
     """
@@ -255,67 +254,16 @@ def compute_cost_usd(model, input_tokens, output_tokens,
 
 
 # ============================================================
-# 4. PROVIDER (Anthropic) + ROUTER (primary -> fallback escalation)
+# 4. PROVIDER + ROUTER
 # ============================================================
 
-class AnthropicProvider:
-    """Thin wrapper around the Anthropic SDK. Not imported/used outside this file."""
-
-    def __init__(self, api_key):
-        if not api_key:
-            raise AIProviderError("ANTHROPIC_API_KEY is not configured")
-        self._client = anthropic.Anthropic(api_key=api_key)
-
-    def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False,
-              image_b64=None, image_media_type=None):
-        if cacheable_system:
-            system = [{
-                "type": "text",
-                "text": system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }]
-        else:
-            system = system_prompt
-
-        if image_b64:
-            user_content = [
-                {
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": image_media_type, "data": image_b64},
-                },
-                {"type": "text", "text": user_message},
-            ]
-        else:
-            user_content = user_message
-
-        response = self._client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user_content}],
-        )
-
-        text = "".join(block.text for block in response.content if block.type == "text")
-        usage = response.usage
-
-        return text, AIUsage(
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
-            cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
-        )
-
-
-
 class MultiProvider:
-    """Provider adapter for Anthropic, Gemini REST, and OpenAI REST.
+    """Provider adapter for legacy provider, Gemini REST, and OpenAI REST.
 
     Keys are read only from the server environment. They must never be
     committed to the repository or sent through chat.
     """
 
-    def __init__(self):
-        self._anthropic = AnthropicProvider(os.environ.get("ANTHROPIC_API_KEY")) if os.environ.get("ANTHROPIC_API_KEY") else None
 
     @staticmethod
     def _gemini(model, system_prompt, user_message, max_tokens):
@@ -445,13 +393,7 @@ class MultiProvider:
             if image_b64:
                 raise AIProviderError("OpenAI adapter currently supports text-only generation")
             return self._openai(model, system_prompt, user_message, max_tokens)
-        if not self._anthropic:
-            raise AIProviderError("ANTHROPIC_API_KEY is not configured")
-        return self._anthropic.call(
-            model, system_prompt, user_message, max_tokens,
-            cacheable_system=cacheable_system,
-            image_b64=image_b64, image_media_type=image_media_type,
-        )
+        raise AIProviderError(f"Unsupported AI model '{model}'")
 
     @staticmethod
     def provider_name(model):
@@ -459,7 +401,7 @@ class MultiProvider:
             return "google"
         if model.startswith("openai:"):
             return "openai"
-        return "anthropic"
+        raise AIProviderError(f"Unsupported AI model '{model}'")
 
 
 def _get_provider():
@@ -521,149 +463,6 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
             continue
 
     raise AIProviderError(f"All models failed for task '{ai_request.task}': {last_error}")
-
-
-# ============================================================
-# 4b. MESSAGE BATCHES API (50% cheaper, async) - for background/non-
-#     real-time work only. Never call this from a request handler; it
-#     blocks the calling thread while polling, so it must only ever be
-#     called from a background thread (e.g. document_pipeline.py's
-#     extraction thread) so a slow batch never holds up a user request.
-# ============================================================
-
-# How often to poll an in-progress batch, and the longest this call
-# will wait before giving up and raising. Batches "often finish in
-# minutes" per Anthropic's docs even though the SLA is 24h, so this
-# cap is deliberately much shorter than the SLA - a batch still running
-# past this point is treated as unusually slow, not waited out further.
-# The batch itself keeps processing on Anthropic's side regardless;
-# callers that give up here can check back later via the batch_id.
-BATCH_POLL_INTERVAL_SECONDS = 15
-BATCH_MAX_WAIT_SECONDS = 20 * 60
-
-
-def _build_message_params(model, ai_request, max_tokens):
-    """
-    Builds the request-shape dict for one Messages API call, used by
-    the batch path below. (Mirrors AnthropicProvider.call's shape -
-    kept as a separate small function rather than refactoring .call()
-    itself, to avoid touching the already-working synchronous path.)
-    """
-    if ai_request.cacheable_system:
-        system = [{
-            "type": "text",
-            "text": ai_request.system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        }]
-    else:
-        system = ai_request.system_prompt
-
-    if ai_request.image_b64:
-        user_content = [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": ai_request.image_media_type,
-                    "data": ai_request.image_b64,
-                },
-            },
-            {"type": "text", "text": ai_request.user_message},
-        ]
-    else:
-        user_content = ai_request.user_message
-
-    return {
-        "model": model,
-        "max_tokens": max_tokens,
-        "system": system,
-        "messages": [{"role": "user", "content": user_content}],
-    }
-
-
-def route_and_generate_batch(task, items, on_batch_created=None):
-    """
-    Submits multiple AIRequests for the same task as a single Anthropic
-    Message Batch (50% cheaper than synchronous calls - see
-    _BATCH_PRICING). `items` is a list of (custom_id, AIRequest) tuples.
-
-    `on_batch_created`, if given, is called with the batch's id right
-    after submission (before polling starts) - callers can use this to
-    persist the id somewhere (e.g. AiJob.batch_id) so it's inspectable
-    even if this call is interrupted before finishing.
-
-    Returns (batch_id, results) where results is a dict of
-    {custom_id: AIResponse} for succeeded items and
-    {custom_id: AIProviderError} for anything errored/expired/canceled -
-    callers decide whether to retry those synchronously.
-
-    Unlike route_and_generate, there is no primary/fallback escalation
-    here - all items in a batch use the task's primary model. A failed
-    item should be retried (synchronously, or in a future batch), not
-    silently escalated.
-    """
-    task_config = AI_TASKS.get(task)
-    if not task_config:
-        raise ValueError(f"Unknown AI task '{task}'")
-
-    provider, provider_name = _get_provider()
-    model = task_config["primary"]
-    max_tokens = task_config["max_tokens"]
-
-    batch_requests = [
-        {"custom_id": custom_id, "params": _build_message_params(model, ai_request, max_tokens)}
-        for custom_id, ai_request in items
-    ]
-
-    batch = provider._client.messages.batches.create(requests=batch_requests)
-    batch_id = batch.id
-
-    if on_batch_created:
-        on_batch_created(batch_id)
-
-    elapsed = 0
-    while True:
-        batch = provider._client.messages.batches.retrieve(batch_id)
-        if batch.processing_status == "ended":
-            break
-        time.sleep(BATCH_POLL_INTERVAL_SECONDS)
-        elapsed += BATCH_POLL_INTERVAL_SECONDS
-        if elapsed >= BATCH_MAX_WAIT_SECONDS:
-            raise AIProviderError(
-                f"Batch {batch_id} for task '{task}' did not finish within "
-                f"{BATCH_MAX_WAIT_SECONDS}s (status: {batch.processing_status}). "
-                f"It will keep processing on Anthropic's side - check the "
-                f"Anthropic Console with this batch id if needed."
-            )
-
-    results = {}
-    for result in provider._client.messages.batches.results(batch_id):
-        custom_id = result.custom_id
-        if result.result.type == "succeeded":
-            message = result.result.message
-            text = "".join(block.text for block in message.content if block.type == "text")
-            usage = message.usage
-            ai_usage = AIUsage(
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
-                cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
-            )
-            ai_usage.cost_usd = compute_cost_usd(
-                model, ai_usage.input_tokens, ai_usage.output_tokens,
-                ai_usage.cache_read_tokens, ai_usage.cache_creation_tokens,
-                batch=True,
-            )
-            results[custom_id] = AIResponse(
-                text=text, model_used=model, provider=provider_name,
-                usage=ai_usage, latency_ms=0,
-            )
-        else:
-            results[custom_id] = AIProviderError(
-                f"Batch item '{custom_id}' ended as '{result.result.type}'"
-            )
-
-    return batch_id, results
 
 
 # ============================================================
@@ -1055,7 +854,7 @@ def answer_forum_question(question_text, unit, triggering_user_id, plan_tier="fr
 # ============================================================
 # 10. CONTINUATION-RETRY CALL (summarization only)
 # ============================================================
-# route_and_generate()/AnthropicProvider.call() intentionally discard
+# route_and_generate()/legacy providerProvider.call() intentionally discard
 # stop_reason - fine for forum answers, which rarely truncate. Summaries
 # are longer and JSON-structured, so a max_tokens cutoff mid-JSON is a
 # real failure mode. This function is a separate, low-level path used
@@ -1902,7 +1701,7 @@ def _legacy_generate_document_podcast_script(document_content_id, triggering_use
 #
 # Unlike every other generate_document_*() function above, this talks
 # to provider._client.messages.create() directly instead of going
-# through AnthropicProvider.call() - .call() only supports a single
+# through legacy providerProvider.call() - .call() only supports a single
 # user message, not a growing multi-turn history. Mirrors how
 # _call_with_continuation() already bypasses .call() for its own
 # reasons; same "add a parallel low-level path, don't touch the
@@ -1915,7 +1714,7 @@ def _legacy_generate_document_podcast_script(document_content_id, triggering_use
 # stable. The growing conversation history goes in the `messages` list
 # instead, uncached, capped at the last TUTOR_HISTORY_MESSAGE_LIMIT
 # messages so an unbounded conversation doesn't get expensive purely
-# from history length (the Anthropic API is stateless - full history
+# from history length (the legacy provider API is stateless - full history
 # is resent every turn).
 #
 # Deliberately NOT using continuation-retry (_call_with_continuation)
