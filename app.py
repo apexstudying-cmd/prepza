@@ -2242,6 +2242,11 @@ def require_csrf(f):
     return decorated
 
 
+# Reconciled student order fulfillment routes from the completed payment contract.
+from student_orders import register_student_orders
+_student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
+
+
 def get_content_prices():
     """
     Returns a dict of content_type -> price (KES), sourced from
