@@ -2374,6 +2374,11 @@ def require_csrf(f):
 
 _student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
 
+from student_subscription_billing import register_student_subscription_billing
+_student_subscription_billing = register_student_subscription_billing(
+    app, db, Payment, User, require_csrf, require_admin, paystack_request
+)
+
 
 def get_content_prices():
     """
