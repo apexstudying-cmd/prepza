@@ -179,7 +179,7 @@ AI_TASKS = {
 # ============================================================
 # 3. PRICING (per MTok, USD) - keyed by effective date since legacy provider
 #    has an announced GPT-5 Mini 5 price change on 2026-08-31.
-#    Re-verify against platform.claude.com/docs if this drifts far
+#    Re-verify against platform.openai.com/docs if this drifts far
 #    from today's date. Cache multipliers apply to the INPUT price only.
 # ============================================================
 
@@ -214,7 +214,7 @@ def _pricing_for(model, at=None):
 # Message Batches API pricing (flat 50% off standard rates, per
 # legacy provider's docs). Not date-scheduled like _PRICING_SCHEDULE above,
 # since both models' batch rates have only ever been this one price -
-# re-verify against platform.claude.com/docs if that changes.
+# re-verify against platform.openai.com/docs if that changes.
 _BATCH_PRICING = {
     MODEL_OPENAI_GPT5_MINI: (Decimal("1.00"), Decimal("5.00")),
     MODEL_OPENAI_GPT5_MINI: (Decimal("0.50"), Decimal("2.50")),
