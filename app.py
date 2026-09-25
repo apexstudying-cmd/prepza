@@ -2249,6 +2249,13 @@ from student_orders import register_student_orders
 _student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
 
 
+# Reconciled subscription lifecycle/refund contract.
+from student_subscription_billing import register_student_subscription_billing
+_student_subscription_billing = register_student_subscription_billing(
+    app, db, Payment, User, require_csrf, require_admin, paystack_request
+)
+
+
 def get_content_prices():
     """
     Returns a dict of content_type -> price (KES), sourced from
