@@ -24,12 +24,6 @@ from flask import jsonify, request, session
 from sqlalchemy import text
 
 
-STUDENT_PLANS = {
-    "free": {"price_kes": 0, "billing_period": "month", "quota_period": "month"},
-    "plus": {"price_kes": 499, "billing_period": "month", "quota_period": "month"},
-    "pro": {"price_kes": 999, "billing_period": "month", "quota_period": "month"},
-}
-
 # Organisation subscription is audience-access pricing, not ad RPM.
 # Sponsored inventory is separately priced on a CPM basis.
 ORGANISATION_PLANS = {
@@ -243,8 +237,10 @@ def _current_student_plan(db, user_id):
     return get_user_plan_code(db, user_id)
 
 def _usage_row(db, user_id, feature):
+    # Keep quota-period lookup on the canonical admin-configured plan table.
+    from ai_economics import get_plan
     plan_code = _current_student_plan(db, user_id)
-    plan = STUDENT_PLANS[plan_code]
+    plan = get_plan(db, plan_code) or {"quota_period": "month"}
     return db.session.execute(text("""
         SELECT units, requests
         FROM student_ai_usage
