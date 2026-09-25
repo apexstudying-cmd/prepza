@@ -26,6 +26,7 @@ import os
 import json
 import re
 import time
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -130,7 +131,7 @@ AI_TASKS = {
     # must land first) - present now so routes/features can be added
     # later without another routing-config change.
     "TUTORING": {
-        "primary": _configured_model("tutoring", MODEL_OPENAI_LUNA),
+        "primary": _configured_model("tutoring", MODEL_OPENAI_GPT5_MINI),
         "fallback": MODEL_OPENAI_LUNA,
         "max_tokens": 1024,
         "notes": "Ada uses OpenAI only: GPT-5 mini normally, GPT-5.6 Luna as same-provider fallback.",
@@ -268,6 +269,42 @@ class MultiProvider:
     _openai_semaphore = threading.BoundedSemaphore(max(1, int(os.environ.get("PREPZA_OPENAI_MAX_CONCURRENCY", "8"))))
     _openai_cooldown_until = 0.0
     _openai_cooldown_lock = threading.Lock()
+    _openai_rate_limit = {
+        "requests_limit": None, "requests_remaining": None, "requests_reset": None,
+        "tokens_limit": None, "tokens_remaining": None, "tokens_reset": None,
+        "last_429_at": None, "last_retry_after_seconds": None, "429_count": 0,
+    }
+    _openai_rate_limit_lock = threading.Lock()
+
+    @classmethod
+    def _record_openai_rate_headers(cls, response):
+        headers = response.headers
+        mapping = {
+            "requests_limit": "x-ratelimit-limit-requests",
+            "requests_remaining": "x-ratelimit-remaining-requests",
+            "requests_reset": "x-ratelimit-reset-requests",
+            "tokens_limit": "x-ratelimit-limit-tokens",
+            "tokens_remaining": "x-ratelimit-remaining-tokens",
+            "tokens_reset": "x-ratelimit-reset-tokens",
+        }
+        with cls._openai_rate_limit_lock:
+            for key, header in mapping.items():
+                value = headers.get(header)
+                if value is not None:
+                    cls._openai_rate_limit[key] = value
+            if response.status_code == 429:
+                cls._openai_rate_limit["last_429_at"] = datetime.utcnow().isoformat() + "Z"
+                retry_after = headers.get("retry-after")
+                try:
+                    cls._openai_rate_limit["last_retry_after_seconds"] = float(retry_after)
+                except (TypeError, ValueError):
+                    cls._openai_rate_limit["last_retry_after_seconds"] = None
+                cls._openai_rate_limit["429_count"] += 1
+
+    @classmethod
+    def rate_limit_snapshot(cls):
+        with cls._openai_rate_limit_lock:
+            return dict(cls._openai_rate_limit)
 
     @classmethod
     def _openai(cls, model, system_prompt, user_message, max_tokens):
@@ -293,6 +330,7 @@ class MultiProvider:
                     json=payload,
                     timeout=120,
                 )
+            cls._record_openai_rate_headers(response)
             if response.status_code != 429:
                 response.raise_for_status()
                 break
@@ -358,6 +396,7 @@ class MultiProvider:
                     headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                     json=payload, timeout=120,
                 )
+            cls._record_openai_rate_headers(response)
             if response.status_code != 429:
                 break
             retry_after = response.headers.get("retry-after")
