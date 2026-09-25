@@ -494,26 +494,31 @@ def release_generation_variant(db, user_id, base_fingerprint, variant):
     db.session.commit()
 
 
-def refund_ai_quota(db, user_id, feature, units, period_start=None, entitlement_id=None):
-    """Return a reservation to the exact entitlement that originally consumed it."""
+def refund_ai_quota(db, user_id, feature, units, period_start=None, entitlement_payment_id=None):
+    """Return a failed generation reservation to the exact wallet used."""
     if feature not in FEATURES:
         return
     try:
-        units = max(1, int(units))
-    except (TypeError, ValueError):
+        units=max(1,int(units))
+    except (TypeError,ValueError):
         return
-    if entitlement_id is None:
-        ent = _current_student_entitlement(db, user_id)
-        entitlement_id = ent["entitlement_id"]
-        period_start = period_start or ent["period_start"]
-    period = period_start or _period_start(STUDENT_PLANS["free"])
+    if entitlement_payment_id:
+        db.session.execute(text("""
+            DELETE FROM student_entitlement_usage
+            WHERE id=(SELECT id FROM student_entitlement_usage
+                      WHERE user_id=:uid AND payment_id=:pid AND feature=:feature
+                        AND units=:units
+                        AND COALESCE(metadata->>'provisional','false')='true'
+                      ORDER BY id DESC LIMIT 1)
+        """),{"uid":user_id,"pid":int(entitlement_payment_id),"feature":feature,"units":units})
+        db.session.commit()
+        return
+    period=period_start or date.today().replace(day=1)
     db.session.execute(text("""
-        UPDATE student_ai_entitlement_usage
-        SET units = GREATEST(0, units - :units),
-            requests = GREATEST(0, requests - 1),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND entitlement_id = :eid AND feature = :feature
-    """), {"uid": user_id, "eid": int(entitlement_id), "feature": feature, "units": units})
+        UPDATE student_ai_usage SET units=GREATEST(0,units-:units),
+            requests=GREATEST(0,requests-1),updated_at=CURRENT_TIMESTAMP
+        WHERE user_id=:uid AND period_start=:period AND feature=:feature
+    """),{"uid":user_id,"period":period,"feature":feature,"units":units})
     db.session.commit()
 
 def _active_user_ids(db, since_date):
