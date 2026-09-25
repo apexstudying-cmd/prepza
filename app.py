@@ -24,6 +24,7 @@ import document_pipeline
 import podcast_audio
 from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
+from infrastructure_capacity import thousand_dau_baseline, estimate_capacity, CapacityInputs, render_fit
 
 load_dotenv()
 
@@ -14581,6 +14582,30 @@ register_infrastructure_monitoring(
     app, db, require_admin, SystemSetting, User, DocumentContent,
     AiUsageLog, Payment, StudyActivityLog, StudyTimeLog,
 )
+
+
+
+@app.route("/admin/infrastructure/capacity", methods=["GET"])
+@require_admin
+def admin_infrastructure_capacity():
+    """Return transparent capacity-planning assumptions for the admin dashboard."""
+    dau = request.args.get("dau", type=int) or 1000
+    concurrency = request.args.get("concurrency", type=int) or max(1, min(dau, 100))
+    inputs = CapacityInputs(
+        daily_active_users=max(1, dau),
+        peak_concurrency=max(1, concurrency),
+        requests_per_active_user_per_day=max(0.1, request.args.get("requests_per_user_day", type=float) or 60.0),
+        peak_multiplier=max(1.0, request.args.get("peak_multiplier", type=float) or 10.0),
+        cpu_seconds_per_request=max(0.001, request.args.get("cpu_seconds_per_request", type=float) or 0.05),
+        memory_mb_per_concurrent_request=max(0.01, request.args.get("memory_mb_per_request", type=float) or 0.5),
+        base_ram_gb=max(0.05, request.args.get("base_ram_gb", type=float) or 0.35),
+        ram_headroom=max(0.0, request.args.get("ram_headroom", type=float) or 0.50),
+    )
+    estimate = estimate_capacity(inputs)
+    estimate["render_fit"] = render_fit(estimate["cpu_cores_with_headroom"], estimate["ram_gb_required"])
+    estimate["one_thousand_dau_baseline"] = thousand_dau_baseline()
+    return jsonify(estimate)
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
