@@ -33,7 +33,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [saving,setSaving]=useState<number|null>(null)
-  const [tab,setTab]=useState<'overview'|'placements'|'campaigns'|'payments'|'reconciliation'|'verification'|'invoices'>('overview')
+  const [tab,setTab]=useState<'overview'|'pricing'|'placements'|'campaigns'|'payments'|'reconciliation'|'verification'|'invoices'>('overview')
 
   const load=async()=>{
     setLoading(true);setError('')
