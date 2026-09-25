@@ -220,8 +220,8 @@ def generate_document_material(*, material_type, document_content_id, triggering
     if material_type in FEATURES and variant_pool_feature:
         quota_units = params.get(unit_keys[material_type])
         if quota_units is None:
-            from usage_billing import _active_student_entitlements
-            active_entitlements = _active_student_entitlements(db, triggering_user_id)
+            from ai_economics import get_active_entitlements
+            active_entitlements = get_active_entitlements(db, triggering_user_id)
             if active_entitlements:
                 plans = [get_plan(db, row["plan"]) for row in active_entitlements]
                 plans = [plan for plan in plans if plan]
