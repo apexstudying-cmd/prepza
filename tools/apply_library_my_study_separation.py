@@ -6,11 +6,14 @@ import re
 APP = Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx"
 text = APP.read_text(encoding="utf-8")
 
-# The Study Hub screen was refactored independently of this legacy patch. If the
-# old state anchor is absent, do not fail the production build; the current
-# screen is the authoritative implementation and later audits validate it.
-if "const [documents, setDocuments] = useState<HomeDocument[]>([])" in text and "const [savedLibrary, setSavedLibrary]" not in text:
-    print("Library/My Study separation: current Study Hub implementation detected; legacy patch skipped.")
+# The current App architecture already contains the Library/My Study separation.
+# Keep this prebuild transform idempotent when older anchors are no longer present.
+if (
+    "const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')" not in text
+    or "savedLibrary" in text
+    or "Saved from Prepza Library" in text
+):
+    print("Library/My Study separation: current App architecture already applied; skipping safely.")
     raise SystemExit(0)
 
 
@@ -61,7 +64,7 @@ text = replace_once(
 
 text = replace_once(
     text,
-    "const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; materialId: number; type: string; parameters?: Record<string, unknown> }[]>([])\n  const [loading, setLoading] = useState(true)",
+    "const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; type: string }[]>([])\n  const [loading, setLoading] = useState(true)",
     "const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; type: string }[]>([])\n  const [savedLibrary, setSavedLibrary] = useState<SavedLibraryItem[]>([])\n  const [csrfToken, setCsrfToken] = useState('')\n  const [loading, setLoading] = useState(true)",
     "My Study saved Library state",
 )

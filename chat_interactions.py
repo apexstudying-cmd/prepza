@@ -59,9 +59,8 @@ def ensure_chat_metadata_schema():
                 db.session.commit()
             _SCHEMA_READY = True
         except Exception:
-            with app.app_context():
-                db.session.rollback()
-                app.logger.exception("Could not initialize chat metadata schema")
+            db.session.rollback()
+            app.logger.exception("Could not initialize chat metadata schema")
 
 
 def _message_kind_map(message_ids):

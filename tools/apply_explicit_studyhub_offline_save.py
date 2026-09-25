@@ -15,11 +15,9 @@ if IMPORT_ANCHOR not in s:
     raise SystemExit('Offline wiring: import anchor not found')
 anchor = IMPORT_ANCHOR
 for line in IMPORTS:
-    symbols_match = re.search(r"import \{([^}]+)\}", line)
-    symbols = [item.strip() for item in symbols_match.group(1).split(",")] if symbols_match else []
-    if not all(symbol in s for symbol in symbols):
+    if line not in s:
         s = s.replace(anchor, anchor + line, 1)
-        anchor = line
+    anchor = line
 
 # O2/O3 have already produced the final API helper by this stage. Find the
 # method declaration rather than depending on whitespace from an earlier

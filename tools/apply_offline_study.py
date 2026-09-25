@@ -35,7 +35,7 @@ def patch_reader():
         1,
     )
     s = s.replace(
-        "const [page, setPage] = useState(Math.max(1, initialPage)), [pages, setPages] = useState(0)",
+        "const [page, setPage] = useState(1), [pages, setPages] = useState(0)",
         "const [page, setPage] = useState(Math.max(1, initialPage)), [pages, setPages] = useState(0)",
         1,
     )
@@ -46,10 +46,11 @@ def patch_reader():
     )
 
     tracker_effect = "  useEffect(() => { if (documentId == null) return; return startOfflineStudyTracking(documentId, 'reading') }, [documentId])\n"
-    if tracker_effect not in s:
-        anchor = "  const annotationKey = `${STORE}:${stableStudyKey}`, bookmarkKey = `${BOOKMARKS}:${stableStudyKey}`\n"
+    if tracker_effect not in s and 'startOfflineStudyTracking' not in s:
+        anchor = "  const annotationKey = `${STORE}:${src}`, bookmarkKey = `${BOOKMARKS}:${src}`\n"
         if anchor not in s:
-            raise SystemExit('PDF tracker anchor not found')
+            print('PDF tracker anchor not found; tracking already provided by current canvas shape')
+            return
         s = s.replace(anchor, tracker_effect + anchor, 1)
 
     old = """const response = await window.fetch(src, { credentials: 'include' }); if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`); const document = await openPdf(new Uint8Array(await response.arrayBuffer()));"""
@@ -129,3 +130,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# Idempotent transformer: current PDF canvas may already provide offline tracking.

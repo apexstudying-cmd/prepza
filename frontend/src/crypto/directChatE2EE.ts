@@ -109,7 +109,7 @@ async function directConversationKey(
     const detail = await fetchConversationDetail(nativeFetch, conversationId)
     const peerId = peerUserId(detail)
     const peerPublicKey = await fetchUserPublicKey(peerId)
-    const { keyPair } = await getOrCreateIdentityKeyPair(currentUserId!)
+    const { keyPair } = await getOrCreateIdentityKeyPair()
     return deriveConversationKey(
       keyPair.privateKey,
       await importPeerPublicKey(peerPublicKey),

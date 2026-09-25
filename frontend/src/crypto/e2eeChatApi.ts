@@ -1,9 +1,8 @@
 import { decryptGroupMessage, encryptGroupMessage, type GroupKeyEnvelope } from './group'
 import { openGroupE2EESession, type GroupE2EEState } from './groupSession'
-import { exportPublicKeyBase64Url, getOrCreateIdentityKeyPair, importPeerPublicKey } from './keys'
-import { deriveDirectChatKey } from './direct'
+import { exportPublicKeyBase64Url, getOrCreateIdentityKeyPair } from './keys'
 
-let identityReadyPromise: Promise<number> | null = null
+let identityReadyPromise: Promise<void> | null = null
 
 async function jsonFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { credentials: 'include', ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } })
@@ -29,18 +28,16 @@ export async function registerUserPublicKey(publicKey: string, csrfToken?: strin
   await jsonFetch('/keys/register', { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ public_key: publicKey }) })
 }
 
-export async function ensureE2EEIdentityReady(): Promise<number> {
+export async function ensureE2EEIdentityReady(): Promise<void> {
   if (identityReadyPromise) return identityReadyPromise
   identityReadyPromise = (async () => {
     const me = await jsonFetch<{ id: number; csrf_token: string }>('/me')
     if (!me?.id) throw new Error('Authentication required')
     if (!me?.csrf_token) throw new Error('CSRF token is unavailable; please refresh the session')
-    const { keyPair } = await getOrCreateIdentityKeyPair(me.id)
+    const { keyPair } = await getOrCreateIdentityKeyPair()
     await registerUserPublicKey(await exportPublicKeyBase64Url(keyPair.publicKey), me.csrf_token)
-    return me.id
   })()
   try { await identityReadyPromise } catch (error) { identityReadyPromise = null; throw error }
-  return identityReadyPromise
 }
 
 export async function fetchUserPublicKey(userId: number): Promise<string> {
@@ -57,8 +54,8 @@ export async function fetchUserPublicKey(userId: number): Promise<string> {
   throw lastError instanceof Error ? lastError : new Error('Secure conversation is temporarily unavailable')
 }
 
-export async function openGroupSession(conversationId: number, currentUserId: number): Promise<GroupE2EEState> {
-  return openGroupE2EESession(conversationId, fetchGroupKeyEnvelopes, fetchUserPublicKey, undefined, currentUserId)
+export async function openGroupSession(conversationId: number): Promise<GroupE2EEState> {
+  return openGroupE2EESession(conversationId, fetchGroupKeyEnvelopes, fetchUserPublicKey)
 }
 
 export async function encryptGroupText(key: CryptoKey, plaintext: string, conversationId?: number, keyEpoch?: number) {
@@ -67,13 +64,4 @@ export async function encryptGroupText(key: CryptoKey, plaintext: string, conver
 
 export async function decryptGroupText(key: CryptoKey, body: string, nonce: string, conversationId?: number, keyEpoch?: number) {
   return decryptGroupMessage(key, body, nonce, conversationId, keyEpoch)
-}
-
-export async function openDirectSession(conversationId: number, currentUserId: number, peerUserId: number): Promise<CryptoKey> {
-  if (!Number.isInteger(currentUserId) || currentUserId <= 0) throw new Error('Invalid current user id')
-  if (!Number.isInteger(peerUserId) || peerUserId <= 0 || peerUserId === currentUserId) throw new Error('Invalid peer user id')
-  await ensureE2EEIdentityReady()
-  const { keyPair } = await getOrCreateIdentityKeyPair(currentUserId)
-  const peerPublicKey = await importPeerPublicKey(await fetchUserPublicKey(peerUserId))
-  return deriveDirectChatKey(keyPair.privateKey, peerPublicKey, conversationId, currentUserId, peerUserId)
 }

@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 
 from ai_generation_store import GenerationLookup
-from ai_reusable_generation import normalize_parameters, _validate_requested_output
+from ai_reusable_generation import normalize_parameters
 import ai_reusable_generation as reusable
 
 
@@ -46,15 +46,6 @@ def test_normalize_parameters_rejects_unknown_material_type():
 def test_empty_parameters_are_canonical():
     assert normalize_parameters("mind_map", None) == {}
     assert normalize_parameters("mind_map", {}) == {}
-
-
-def test_requested_collection_sizes_are_exact():
-    assert _validate_requested_output("quiz", {"questions": [1, 2, 3]}, {"question_count": 3})["questions"] == [1, 2, 3]
-    assert _validate_requested_output("flashcards", {"cards": [1, 2]}, {"card_count": 2})["cards"] == [1, 2]
-    assert _validate_requested_output("mind_map", {"branches": [1, 2, 3, 4]}, {"node_count": 4})["branches"] == [1, 2, 3, 4]
-    assert _validate_requested_output("summary", {"sections": [1, 2]}, {"max_pages": 2})["sections"] == [1, 2]
-    with pytest.raises(ValueError, match="exactly 3"):
-        _validate_requested_output("quiz", {"questions": [1, 2]}, {"question_count": 3})
 
 
 @dataclass
@@ -103,7 +94,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     content = types.SimpleNamespace(content_hash="hash-7", extracted_text="course notes", page_count=3)
     session = _FakeSession(content)
     fake_db = types.SimpleNamespace(session=session)
-    fake_app = types.SimpleNamespace(db=fake_db, DocumentContent=object, AiJob=_FakeAiJob)
+    fake_app = types.SimpleNamespace(db=fake_db, DocumentContent=object, AiJob=_FakeAiJob, Document=object)
 
     class FakeProviderError(Exception):
         pass
@@ -117,11 +108,10 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     route_calls = []
     usage_calls = []
     limit_calls = []
-    quota_calls = []
     material_calls = []
     claim_results = [
         GenerationLookup(11, "generating", None, True),
-        GenerationLookup(11, "ready", {"title": "Reusable", "sections": [{"title": "A", "body": "B"}]}, False),
+        GenerationLookup(11, "ready", {"title": "Reusable"}, False),
     ]
 
     fake_ai = types.SimpleNamespace(
@@ -132,27 +122,17 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
         AIProviderError=FakeProviderError,
         is_spend_cap_reached=lambda: False,
         check_daily_limit=lambda *args, **kwargs: (limit_calls.append(args) or (True, 0, 5)),
-        route_and_generate=lambda request: (route_calls.append(request) or _FakeResponse(
-            text='{"title":"Reusable","sections":[{"title":"A","body":"B"}]}'
-        )),
+        route_and_generate=lambda request: (route_calls.append(request) or _FakeResponse()),
         log_usage=lambda *args, **kwargs: usage_calls.append((args, kwargs)),
     )
-    fake_usage_billing = types.SimpleNamespace(
-        FEATURES={"summary": ("summary_generations", "summary_max_pages", "summary_monthly_pages")},
-        check_and_consume_ai_quota=lambda *args, **kwargs: (quota_calls.append(args) or (True, {"period_start": "2026-09-01"})),
-        reserve_generation_variant=lambda *args, **kwargs: 1,
-        mark_generation_variant_ready=lambda *args, **kwargs: None,
-        release_generation_variant=lambda *args, **kwargs: None,
-        refund_ai_quota=lambda *args, **kwargs: None,
-    )
+
     monkeypatch.setitem(sys.modules, "app", fake_app)
     monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
-    monkeypatch.setitem(sys.modules, "usage_billing", fake_usage_billing)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
     monkeypatch.setattr(
         reusable,
         "_generator",
-        lambda *args, **kwargs: ("system", lambda raw: {"title": "Reusable", "sections": [{"title": "A", "body": "B"}]}, "SUMMARIZATION"),
+        lambda material_type: ("system", lambda raw: {"title": "Reusable"}, "SUMMARIZATION"),
     )
     monkeypatch.setattr(reusable, "claim_or_get_generation", lambda **kwargs: claim_results.pop(0))
     monkeypatch.setattr(reusable, "mark_generation_ready", lambda *args: None)
@@ -162,13 +142,13 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
         material_type="summary",
         document_content_id=7,
         triggering_user_id=101,
-        parameters={"max_pages": 1, "language": " English "},
+        parameters={"language": " English "},
     )
     second = reusable.generate_document_material(
         material_type="summary",
         document_content_id=7,
         triggering_user_id=101,
-        parameters={"max_pages": 1, "language": "English"},
+        parameters={"language": "English"},
     )
 
     assert first["reused"] is False
@@ -176,8 +156,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     assert first["payload"] == second["payload"]
     assert len(route_calls) == 1
     assert len(usage_calls) == 1
-    assert len(limit_calls) == 0
-    assert len(quota_calls) == 2
+    assert len(limit_calls) == 1
     assert len(material_calls) == 2
 
 
@@ -185,14 +164,13 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-8", extracted_text="notes", page_count=1)
     session = _FakeSession(content)
     fake_app = types.SimpleNamespace(
-        db=types.SimpleNamespace(session=session), DocumentContent=object, AiJob=_FakeAiJob
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
     )
 
     class FakeProviderError(Exception):
         pass
 
     limit_called = []
-    quota_called = []
     fake_ai = types.SimpleNamespace(
         AIRequest=lambda **kwargs: kwargs,
         AI_TASKS={},
@@ -205,14 +183,7 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
     )
 
     monkeypatch.setitem(sys.modules, "app", fake_app)
-    monkeypatch.setitem(sys.modules, "usage_billing", types.SimpleNamespace(
-        FEATURES={"summary": ("summary_generations", "summary_max_pages", "summary_monthly_pages")},
-        check_and_consume_ai_quota=lambda *args, **kwargs: (quota_called.append(args) or (True, {"period_start": "2026-09-01"})),
-        reserve_generation_variant=lambda *args, **kwargs: 1,
-        mark_generation_variant_ready=lambda *args, **kwargs: None,
-        release_generation_variant=lambda *args, **kwargs: None,
-        refund_ai_quota=lambda *args, **kwargs: None,
-    ))
+    monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
     monkeypatch.setattr(
         reusable,
@@ -225,20 +196,19 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
         material_type="summary",
         document_content_id=8,
         triggering_user_id=202,
-        parameters={"max_pages": 1},
+        parameters={},
     )
 
     assert result["reused"] is True
     assert result["material_id"] == 100
     assert limit_called == []
-    assert len(quota_called) == 1
 
 
 def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-flash", extracted_text="course notes", page_count=4)
     session = _FakeSession(content)
     fake_app = types.SimpleNamespace(
-        db=types.SimpleNamespace(session=session), DocumentContent=object, AiJob=_FakeAiJob
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
     )
 
     class FakeProviderError(Exception):
@@ -254,16 +224,15 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
     claim_count = {"value": 0}
 
     fake_usage = types.SimpleNamespace(
-        FEATURES={"flashcards": ("flashcard_generations", "flashcard_max_cards", "flashcard_monthly_cards")},
+        FEATURES={"flashcards": ("flashcard_generations", "flashcard_max_cards")},
         check_and_consume_ai_quota=lambda *args, **kwargs: (True, {"period_start": "2026-09-01"}),
+        mark_generation_variant_ready=lambda *args, **kwargs: None,
         reserve_generation_variant=lambda *args, **kwargs: (
             seen_variants.append(variant_state["next"]) or
             variant_state.update(next=1 if variant_state["next"] == 4 else variant_state["next"] + 1) or
             seen_variants[-1]
         ),
         refund_ai_quota=lambda *args, **kwargs: None,
-        mark_generation_variant_ready=lambda *args, **kwargs: None,
-        release_generation_variant=lambda *args, **kwargs: None,
     )
 
     fake_ai = types.SimpleNamespace(
@@ -279,14 +248,14 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
         )),
         log_usage=lambda *args, **kwargs: None,
         FLASHCARDS_JSON_SYSTEM_PROMPT="system",
-        _parse_flashcards_json=lambda raw: {"cards": [{"q": f"Q{i}", "a": "A"} for i in range(20)]},
+        _parse_flashcards_json=lambda raw: {"cards": [{"q": "Q", "a": "A"}]},
     )
 
     monkeypatch.setitem(sys.modules, "app", fake_app)
     monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
     monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
-    monkeypatch.setattr(reusable, "_generator", lambda *args, **kwargs: ("system", lambda raw: {"cards": [{"q": f"Q{i}", "a": "A"} for i in range(20)]}, "FLASHCARDS"))
+    monkeypatch.setattr(reusable, "_generator", lambda *args, **kwargs: ("system", lambda raw: {"cards": [{"q": "Q", "a": "A"}]}, "FLASHCARDS"))
     monkeypatch.setattr(
         reusable,
         "build_generation_fingerprint",

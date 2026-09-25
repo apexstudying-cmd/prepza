@@ -53,7 +53,7 @@ export async function provisionInitialGroupKey(
   const creator = members.find(member => member.userId === creatorUserId)
   if (!creator) throw new Error('The creator must be included in the active member key list.')
 
-  const { keyPair } = await getOrCreateIdentityKeyPair(creatorUserId)
+  const { keyPair } = await getOrCreateIdentityKeyPair()
   const groupKey = await createGroupConversationKey()
   const envelopes: GroupKeyEnvelope[] = []
 
@@ -96,7 +96,7 @@ export async function provisionRotatedGroupKey(
   const sender = members.find(member => member.userId === senderUserId)
   if (!sender) throw new Error('The rotating member must still be active.')
 
-  const { keyPair } = await getOrCreateIdentityKeyPair(senderUserId)
+  const { keyPair } = await getOrCreateIdentityKeyPair()
   const groupKey = await createGroupConversationKey()
   const envelopes: GroupKeyEnvelope[] = []
 

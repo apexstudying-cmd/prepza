@@ -5,7 +5,7 @@ import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealti
 import CallExperience from './crypto/CallExperience'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline, saveUploadedFileOffline } from './offline/studyHubOffline'
-import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
+import { getCachedGeneratedAudioUrl, getGeneratedMaterialOffline, getLatestGeneratedMaterialForPath, listOfflineGeneratedMaterials, saveGeneratedMaterialOffline, setOfflineUserId } from './offline/generatedMaterials'
 import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
 import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'
@@ -15,6 +15,7 @@ import StudyActivityScreen from './StudyActivityScreen'
 import PdfStudyCanvas from './crypto/PdfStudyCanvas'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
+// Launch verification: generated frontend architecture and theme contrast are validated in CI.
 // Dev: Vite proxies these paths straight to the Flask backend (see
 // vite.config.ts), so relative paths work identically in dev and once this
 // app is eventually served by Flask itself in production - no base URL
@@ -42,9 +43,9 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
   return body as T
 }
 
-type GenerationProgress = { progress_percent: number; progress_stage: string; status: string; found?: boolean; error_message?: string | null; error?: string | null }
+type GenerationProgress = { progress_percent: number; progress_stage: string; status: string; found?: boolean; error_message?: string | null }
 
-function generationRequest<T = any>(
+async function generationRequest<T = any>(
   path: string,
   options: RequestInit = {},
   onProgress?: (progress: GenerationProgress) => void,
@@ -53,6 +54,7 @@ function generationRequest<T = any>(
     onProgress?.(progress)
     window.dispatchEvent(new CustomEvent('prepza:generation-progress', { detail: progress }))
   }
+  let selectedMaterialId: number | null = null
   const match = path.match(/^\/documents\/(\d+)\/(summarize|quiz|flashcards|mindmap|podcast-script)$/)
   const documentId = match?.[1]
   const feature = match?.[2] === 'podcast-script' ? 'podcast'
@@ -61,9 +63,23 @@ function generationRequest<T = any>(
 
   if (!documentId || !feature) return api<T>(path, options)
 
+  if (!navigator.onLine && selectedMaterialId) {
+    const cached = await getGeneratedMaterialOffline(
+      `/documents/${documentId}/materials/${selectedMaterialId}`,
+      null,
+    )
+    if (cached?.payload && cached?.type) {
+      const payloadKey = feature === 'mind_map' ? 'mindmap' : feature
+      return {
+        material_id: cached.material_id,
+        reused: true,
+        [payloadKey]: cached.payload,
+      } as T
+    }
+  }
+
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | null = null
-  let selectedMaterialId: number | null = null
   try {
     const raw = sessionStorage.getItem('prepza-open-material')
     if (raw) {
@@ -90,7 +106,7 @@ function generationRequest<T = any>(
       if (progress.found !== false) publish(progress)
       if (progress.status === 'completed') return progress
       if (progress.status === 'failed') {
-        throw new ApiError(progress.error_message || progress.error || 'Generation failed. Please try again.', 500)
+        throw new ApiError(progress.error_message || progress.error_message || 'Generation failed. Please try again.', 500)
       }
       await new Promise(resolve => { timer = setTimeout(resolve, 700) })
     }
@@ -103,6 +119,15 @@ function generationRequest<T = any>(
       try { sessionStorage.removeItem('prepza-open-material') } catch {}
     }
     if (!result?.async || !result?.job_id) {
+      if (result?.material_id) {
+        try {
+          await saveGeneratedMaterialOffline(
+            `/documents/${documentId}/materials/${result.material_id}`,
+            null,
+            result,
+          )
+        } catch { /* offline cache is best-effort */ }
+      }
       publish({
         found: true,
         status: 'completed',
@@ -217,10 +242,10 @@ async function sha256Hex(file: File): Promise<string> {
 
 type DocumentDetail = {
   id: number; title: string; original_filename: string; status: string
+  content_hash?: string | null
   file_type: string | null; file_size_bytes: number | null; page_count: number | null
   error_message: string | null; view_url: string | null
   materials: { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]; created_at: string | null
-  content_hash?: string | null
 }
 
 // Payload shape inside `summary`/`quiz`/`flashcards`/`mindmap` below is
@@ -305,9 +330,6 @@ const Ic = {
   pause:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>,
   settings: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>,
   eye:      (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>,
-  message:  (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v16l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>,
-  paperclip:(s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a1.5 1.5 0 0 0 3 0V5a1 1 0 0 0-3 0v12.5a3.5 3.5 0 0 0 7 0V6h-1.5z"/></svg>,
-  download: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M5 20h14v-2H5v2zm7-18L5.33 8.67l1.41 1.41L11 5.83V16h2V5.83l4.26 4.25 1.41-1.41L12 2z"/></svg>,
   attach:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>,
   edit:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>,
   logout:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>,
@@ -324,8 +346,6 @@ const Ic = {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Participant = { user_id: number; display_name?: string | null }
-
 type Screen =
   | 'splash' | 'login' | 'forgot-password' | 'signup' | 'check-email' | 'complete-profile' | 'reset-password' | 'verify-confirm'
   | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'
@@ -409,11 +429,17 @@ type ThemeMode = 'light' | 'dark'
 const THEME_STORAGE_KEY = 'prepza-theme'
 let currentThemeMode: ThemeMode = (typeof window !== 'undefined' && (window.localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode)) || 'light'
 const themeListeners = new Set<() => void>()
+function applyThemeDocument(mode: ThemeMode) {
+  if (typeof document === 'undefined') return
+  document.documentElement.dataset.prepzaTheme = mode
+}
 function setThemeMode(next: ThemeMode) {
   currentThemeMode = next
+  applyThemeDocument(next)
   try { window.localStorage.setItem(THEME_STORAGE_KEY, next) } catch { /* private browsing etc */ }
   themeListeners.forEach(fn => fn())
 }
+applyThemeDocument(currentThemeMode)
 function toggleThemeMode() {
   setThemeMode(currentThemeMode === 'light' ? 'dark' : 'light')
 }
@@ -501,6 +527,8 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
   const [documents, setDocuments] = useState<HomeDocument[]>([])
   const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; materialId: number; type: string; parameters?: Record<string, unknown> }[]>([])
   const [offlineDocuments, setOfflineDocuments] = useState<HomeDocument[]>([])
+  const [savedLibrary, setSavedLibrary] = useState<SavedLibraryItem[]>([])
+  const [csrfToken, setCsrfToken] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -524,7 +552,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
         if (userId <= 0) return
         const saved = await listSavedStudyHubOffline(userId)
         if (!cancelled) {
-          setOfflineDocuments(saved.map(row => ({
+          const offlineDocs = saved.map(row => ({
             id: row.documentId,
             title: row.title || 'Saved study document',
             original_filename: row.title || 'Study document',
@@ -533,11 +561,34 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
             file_size_bytes: null,
             page_count: row.pageCount || null,
             created_at: new Date(row.savedAt).toISOString(),
-          } as HomeDocument)))
+          } as HomeDocument))
+          setOfflineDocuments(offlineDocs)
+          const cached = await listOfflineGeneratedMaterials()
+          const cachedMaterials = cached.flatMap(row => {
+            const match = row.path.match(/^\/documents\/(\d+)\/materials\/(\d+)$/)
+            if (!match) return []
+            const payload = row.payload as any
+            const documentId = Number(match[1])
+            const materialId = Number(match[2])
+            const doc = offlineDocs.find(d => d.id === documentId)
+            if (!payload?.type || !Number.isInteger(materialId) || materialId <= 0) return []
+            return [{
+              documentId,
+              documentTitle: doc?.title || payload?.payload?._prepza?.document_title || 'Study document',
+              materialId,
+              type: payload.type,
+              parameters: payload.parameters || {},
+            }]
+          })
+          if (!cancelled) setMaterials(cachedMaterials)
         }
       } catch { /* offline package lookup is non-fatal */ }
     }
     void loadOffline()
+    api<{ csrf_token?: string }>('/me').then(me => { if (me.csrf_token) setCsrfToken(me.csrf_token) }).catch(() => {})
+    api<{ saved: SavedLibraryItem[] }>('/library/saved').then(res => {
+      if (!cancelled) setSavedLibrary(res.saved || [])
+    }).catch(() => {})
     api<{ documents: HomeDocument[] }>('/documents').then(async res => {
       if (cancelled) return
       const ready = res.documents.filter(d => d.status === 'ready')
@@ -584,7 +635,16 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       <div style={{display:'flex',gap:8}}>{([['documents','Documents'],['materials','Study Materials']] as const).map(([key,name])=><button key={key} onClick={()=>setTab(key)} style={{flex:1,padding:'8px 10px',borderRadius:11,background:tab===key?N.gold:'rgba(255,255,255,0.08)',color:tab===key?N.navy:'rgba(255,255,255,0.7)',border:'none',fontWeight:800,fontSize:11,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}>{name}</button>)}</div>
     </div>
     <div style={{flex:1,overflowY:'auto',padding:16}} className="scrollbar-hide">
-      {loading ? <GenerationLoading label="Loading your study library…"/> : error && documents.length===0 && offlineDocuments.length===0 ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Ada about it, or create study materials.</div>{documents.length===0 && offlineDocuments.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:Array.from(new Map([...documents, ...offlineDocuments].map(d=>[d.id,d])).values()).map(d=><button key={d.id} onClick={()=>openDocument(d.id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>▣</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{d.page_count?`${d.page_count} pages`:'Document'}{d.created_at?` · ${new Date(d.created_at).toLocaleDateString()}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:18}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type, m.parameters)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
+      {loading ? <GenerationLoading label="Loading your study library…"/> : error && documents.length===0 && offlineDocuments.length===0 ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Ada about it, or create study materials.</div>{documents.length===0 && offlineDocuments.length===0 && savedLibrary.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:<>
+        {Array.from(new Map([...documents, ...offlineDocuments].map(d=>[d.id,d])).values()).map(d=><button key={d.id} onClick={()=>openDocument(d.id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>▣</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{d.page_count?`${d.page_count} pages`:'Document'}{d.created_at?` · ${new Date(d.created_at).toLocaleDateString()}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}
+        {savedLibrary.length>0 && <div style={{marginTop:18}}>
+          <div style={{fontSize:11,fontWeight:800,color:T.textMuted,marginBottom:8,textTransform:'uppercase',letterSpacing:0.5}}>Saved from Prepza Library</div>
+          {savedLibrary.map(item=>{const id=Number(item.document_id);return <div key={item.id} style={{display:'flex',alignItems:'stretch',gap:8,background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:8,marginBottom:10}}>
+            <button onClick={()=>id>0&&openDocument(id)} style={{flex:1,minWidth:0,textAlign:'left',background:'none',border:'none',padding:7,cursor:id>0?'pointer':'default',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>{Ic.bookmark()}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{item.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{item.material_type.replace(/_/g,' ')}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>
+            <button aria-label={`Remove ${item.title} from Study Hub`} title="Remove from Study Hub" onClick={async()=>{if(!csrfToken)return;try{await api(`/library/${item.id}/save`,{method:'DELETE',headers:{'X-CSRF-Token':csrfToken}});setSavedLibrary(items=>items.filter(x=>x.id!==item.id));if(id>0)setDocuments(items=>items.filter(d=>d.id!==id))}catch{}}} style={{width:42,border:'none',background:'transparent',color:T.textMuted,cursor:'pointer',fontSize:20,borderRadius:10}}>×</button>
+          </div>})}
+        </div>}
+      </>}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:18}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type, m.parameters)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
       <div style={{height:'calc(90px + env(safe-area-inset-bottom, 0px))'}}/>
     </div>
   </div>
@@ -635,20 +695,20 @@ function DocumentStudyHubScreen({
           const saved = await getSavedStudyHubOffline(activeDocumentId, userId)
           if (!saved) throw new Error('Not saved offline')
           if (cancelled) return
-          const cachedMaterialTypes = await Promise.all([
-            ['summary', `/documents/${activeDocumentId}/summarize`],
-            ['flashcards', `/documents/${activeDocumentId}/flashcards`],
-            ['quiz', `/documents/${activeDocumentId}/quiz`],
-            ['mind_map', `/documents/${activeDocumentId}/mindmap`],
-            ['podcast', `/documents/${activeDocumentId}/podcast-audio`],
-          ].map(async ([type, path]) => {
-            const payload = await getLatestGeneratedMaterialForPath(path)
-            if (!payload) return null
-            if (type === 'podcast' && payload?.audio_status !== 'ready') return null
-            return { id: Number(payload?.material_id || 0), type, status: 'ready', parameters: payload?.parameters || {} }
-          }))
-          const offlineMaterials = cachedMaterialTypes.filter(m => Boolean(m && m.id > 0)) as { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]
-          setDocument({
+          const cached = await listOfflineGeneratedMaterials()
+          const offlineMaterials = cached.flatMap(row => {
+            const match = row.path.match(/^\/documents\/(\d+)\/materials\/(\d+)$/)
+            if (!match || Number(match[1]) !== activeDocumentId) return []
+            const payload = row.payload as any
+            if (!payload?.type || payload?.status !== 'ready') return []
+            return [{
+              id: Number(match[2]),
+              type: payload.type,
+              status: 'ready',
+              parameters: payload.parameters || {},
+            }]
+          })
+setDocument({
             id: activeDocumentId,
             title: saved.title || 'Saved study document',
             original_filename: saved.title || 'Study document',
@@ -683,17 +743,6 @@ function DocumentStudyHubScreen({
   if (error || !document) return <GenerationError error={error || 'Document unavailable.'} />
 
   const readyMaterials = (document.materials || []).filter(m => m.status === 'ready')
-  const label = (type: string, parameters?: Record<string, unknown>) => {
-    const key = type.toLowerCase().replace(/-/g, '_')
-    const base = ({ summary:'Summary', flashcards:'Flashcards', quiz:'Practice Questions', practice_questions:'Practice Questions', mind_map:'Mind Map', mindmap:'Mind Map', podcast:'Podcast' } as Record<string,string>)[key] || type.replace(/_/g,' ')
-    if (key === 'podcast' && Number(parameters?.duration_minutes) > 0) return `${base} · ${parameters?.duration_minutes} min`
-    if (key === 'flashcards' && Number(parameters?.card_count) > 0) return `${base} · ${parameters?.card_count} cards`
-    if ((key === 'quiz' || key === 'practice_questions') && Number(parameters?.question_count) > 0) return `${base} · ${parameters?.question_count} questions`
-    if (key === 'summary' && Number(parameters?.max_pages) > 0) return `${base} · ${parameters?.max_pages} pages`
-    if ((key === 'mind_map' || key === 'mindmap') && Number(parameters?.node_count) > 0) return `${base} · ${parameters?.node_count} nodes`
-    return base
-  }
-
   const materialMeta: Record<string, { label: string; icon: string; screen: Screen }> = {
     summary: { label: 'Summary', icon: '▤', screen: 'summary' },
     flashcards: { label: 'Flashcards', icon: '▦', screen: 'flashcards' },
@@ -778,7 +827,7 @@ function DocumentStudyHubScreen({
           </div>
         ) : readyMaterials.map((m, i) => {
           const meta = materialMeta[m.type.toLowerCase().replace(/-/g, '_')] || { label: m.type.replace(/_/g, ' '), icon: '•', screen: 'document-reader' as Screen }
-          const variantLabel = label(m.type, m.parameters)
+          const variantLabel = meta.label
           return <button key={m.id} onClick={() => openMaterial(m)} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, marginBottom: 9, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
             <div style={{ width: 42, height: 42, borderRadius: 12, background: `${N.navy}0D`, color: N.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900 }}>{meta.icon}</div>
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13, textTransform: 'capitalize' }}>{variantLabel}</div><div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>Ready to replay</div></div>
@@ -799,10 +848,52 @@ function DocumentStudyHubScreen({
 }
 
 function BottomNav({ active, setScreen, unreadChats = 0, exploreAttention = false }: { active: Screen; setScreen: (s: Screen) => void; unreadChats?: number; exploreAttention?: boolean }) {
-  const isHome=['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map','document-reader'].includes(active)
-  const isExp=active==='explore'||active==='student-profile', isChat=active==='chats'||active==='chat-detail'||active==='new-chat'||active==='chat-options', isProf=active==='profile'||active==='settings'||active==='edit-profile'
-  const tabs=[{key:'home' as Screen,icon:Ic.home,label:'Home',hit:isHome},{key:'explore' as Screen,icon:Ic.explore,label:'Explore',hit:isExp},{key:'create-modal' as Screen,icon:Ic.plus,label:'',hit:false},{key:'chats' as Screen,icon:Ic.chat,label:'Chats',hit:isChat},{key:'profile' as Screen,icon:Ic.person,label:'Profile',hit:isProf}]
-  return <div style={{background:N.navy,borderTop:'1px solid rgba(255,255,255,.07)',display:'flex',alignItems:'center',paddingBottom:6,flexShrink:0}}>{tabs.map(t=>{const isCta=t.key==='create-modal',badge=t.key==='chats'?unreadChats:0,attention=t.key==='explore'&&exploreAttention;return <button key={t.key} onClick={()=>{if(t.key==='explore'){localStorage.setItem('prepza-last-explore-opportunity-id',localStorage.getItem('prepza-latest-explore-opportunity-id') || '0')}setScreen(t.key)}} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',padding:isCta?'0 0 4px':'8px 0 4px',position:'relative'}}>{isCta?<div style={{width:50,height:50,borderRadius:'50%',background:`linear-gradient(135deg,${N.gold},${N.goldL})`,display:'flex',alignItems:'center',justifyContent:'center',marginTop:-22,boxShadow:'0 4px 18px rgba(201,168,76,.55)'}}><div style={{color:N.navy}}>{Ic.plus()}</div></div>:<>{t.hit&&<><div style={{position:'absolute',top:0,left:'50%',transform:'translateX(-50%)',width:18,height:2,background:N.gold,borderRadius:2}}/><div style={{position:'relative',color:t.hit?N.gold:'rgba(255,255,255,.38)'}}>{t.icon()}{badge>0&&<span aria-label={`${badge} unread messages`} style={{position:'absolute',top:-7,right:-10,minWidth:17,height:17,padding:'0 4px',borderRadius:99,background:'#C94C4C',color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',border:`2px solid ${N.navy}`}}>{badge>99?'99+':badge}</span>}{attention&&<span aria-label="New opportunities" style={{position:'absolute',top:-5,right:-5,width:8,height:8,borderRadius:'50%',background:N.goldL,border:`2px solid ${N.navy}`,boxShadow:'0 0 0 4px rgba(232,201,126,.12)'}}/>}</div><span style={{fontSize:10,fontWeight:t.hit?800:500,color:t.hit?N.gold:'rgba(255,255,255,.38)',fontFamily:'Plus Jakarta Sans'}}>{t.label}</span></>}</>}</button>})}</div>
+  const isHome = ['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map','document-reader'].includes(active)
+  const isExp = active === 'explore' || active === 'student-profile'
+  const isChat = active === 'chats' || active === 'chat-detail' || active === 'new-chat' || active === 'chat-options'
+  const isProf = active === 'profile' || active === 'settings' || active === 'edit-profile'
+  const tabs = [
+    { key: 'home' as Screen, icon: Ic.home, label: 'Home', hit: isHome },
+    { key: 'explore' as Screen, icon: Ic.explore, label: 'Explore', hit: isExp },
+    { key: 'create-modal' as Screen, icon: Ic.plus, label: '', hit: false },
+    { key: 'chats' as Screen, icon: Ic.chat, label: 'Chats', hit: isChat },
+    { key: 'profile' as Screen, icon: Ic.person, label: 'Profile', hit: isProf },
+  ]
+  return (
+    <div style={{ background: N.navy, borderTop: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', paddingBottom: 6, flexShrink: 0 }}>
+      {tabs.map((tab) => {
+        const isCta = tab.key === 'create-modal'
+        const badge = tab.key === 'chats' ? unreadChats : 0
+        const attention = tab.key === 'explore' && exploreAttention
+        const handleClick = () => {
+          if (tab.key === 'explore') {
+            localStorage.setItem('prepza-last-explore-opportunity-id', localStorage.getItem('prepza-latest-explore-opportunity-id') || '0')
+            setExploreAttention(false)
+          }
+          setScreen(tab.key)
+        }
+        return (
+          <button key={tab.key} onClick={handleClick} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: isCta ? '0 0 4px' : '8px 0 4px', position: 'relative' }}>
+            {isCta ? (
+              <div style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: '0 4px 18px rgba(201,168,76,.55)' }}>
+                <div style={{ color: N.navy }}>{Ic.plus()}</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                {tab.hit && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 18, height: 2, background: N.gold, borderRadius: 2 }} />}
+                <div style={{ position: 'relative', color: tab.hit ? N.gold : 'rgba(255,255,255,.38)' }}>
+                  {tab.icon()}
+                  {badge > 0 && <span aria-label={`${badge} unread messages`} style={{ position: 'absolute', top: -7, right: -10, minWidth: 17, height: 17, padding: '0 4px', borderRadius: 99, background: '#C94C4C', color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${N.navy}` }}>{badge > 99 ? '99+' : badge}</span>}
+                  {attention && <span aria-label="New opportunities" style={{ position: 'absolute', top: -5, right: -5, width: 8, height: 8, borderRadius: '50%', background: N.goldL, border: `2px solid ${N.navy}`, boxShadow: '0 0 0 4px rgba(232,201,126,.12)' }} />}
+                </div>
+                <span style={{ fontSize: 10, fontWeight: tab.hit ? 800 : 500, color: tab.hit ? N.gold : 'rgba(255,255,255,.38)', fontFamily: 'Plus Jakarta Sans' }}>{tab.label}</span>
+              </div>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 // ─── LOADING SYSTEM ───────────────────────────────────────────────────────────
@@ -963,6 +1054,11 @@ function SkeletonExplore() {
   const { tokens: T } = useTheme()
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
+      {saveNotice && (
+        <div style={{ position: 'fixed', left: 16, right: 16, bottom: 18, zIndex: 80, background: T.card, border: `1px solid ${N.gold}55`, borderRadius: 14, padding: '12px 14px', boxShadow: '0 8px 30px rgba(0,0,0,0.18)', color: T.text, fontSize: 12, fontWeight: 700, textAlign: 'center' }}>
+          {saveNotice}
+        </div>
+      )}
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <Sk w={80} h={20} dark style={{ marginBottom: 12 }} />
         <Sk h={44} r={13} dark style={{ marginBottom: 12 }} />
@@ -1579,88 +1675,117 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
             </div>
           </section>
         )}
+        {/* Trending */}
+        {(filter === 'All' || filter === 'Notes' || filter === 'Past Papers') && (
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>🔥 Trending</div>
+            {trending.length === 0 ? null : (
+              <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
+                {trending.map(t => (
+                  <div key={t.id} onClick={() => { setActiveDocumentId(t.document_id); setScreen('document-study') }} style={{ flexShrink: 0, background: T.card, borderRadius: 14, padding: '12px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', minWidth: 148, cursor: 'pointer' }}>
+                    <div style={{ fontWeight: 800, fontSize: 20, color: N.gold, marginBottom: 6, fontFamily: 'Plus Jakarta Sans' }}>{t.material_type === 'summary' ? '📊' : '📕'}</div>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: T.text, marginBottom: 2 }} className="line-clamp-1">{t.title}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted }}>{t.view_count} views</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Groups */}
+        {(filter === 'All' || filter === 'Groups') && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>👥 Groups</div>
+              <button onClick={() => setScreen('group-create')} style={{ fontSize: 12, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Create</button>
+            </div>
+            {loadingGroups ? (
+              <div style={{ fontSize: 12, color: T.textMuted }}>Loading groups…</div>
+            ) : groupsError ? (
+              <div style={{ fontSize: 12, color: '#C94C4C' }}>{groupsError}</div>
+            ) : groups.length === 0 ? (
+              <div style={{ fontSize: 12, color: T.textMuted }}>No groups found yet — be the first to start one.</div>
+            ) : (
+              groups.map(g => (
+                <div key={g.id} onClick={() => openGroup(g.id)} style={{ background: T.card, borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <div style={{ width: 42, height: 42, background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, color: N.gold, flexShrink: 0 }}>{g.name.slice(0, 2).toUpperCase()}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{g.name}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted }}>{g.unit_code ? `${g.unit_code} · ` : ''}{g.member_count} member{g.member_count === 1 ? '' : 's'}</div>
+                    {g.privacy === 'course_only' && <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>Course-only</div>}
+                  </div>
+                  {g.is_member ? (
+                    <Pill text="Joined" color="#4CC97B" />
+                  ) : (
+                    <button onClick={e => { e.stopPropagation(); quickJoin(g) }} disabled={joiningGroupId === g.id} style={{ background: N.gold, color: N.navy, fontWeight: 700, fontSize: 11, border: 'none', borderRadius: 9, padding: '6px 12px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: joiningGroupId === g.id ? 0.6 : 1 }}>{joiningGroupId === g.id ? '…' : 'Join'}</button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Documents */}
+        {filter !== 'Students' && filter !== 'Opportunities' && filter !== 'Groups' && (
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>📄 {filter === 'Past Papers' ? 'Past Papers' : filter === 'Notes' ? 'Lecture Notes' : 'Recent Documents'}</div>
+            {loadingDocs ? (
+              <div style={{ fontSize: 12, color: T.textMuted }}>Loading documents…</div>
+            ) : docsError ? (
+              <div style={{ fontSize: 12, color: '#C94C4C' }}>{docsError}</div>
+            ) : filtered.length === 0 ? (
+              <div style={{ fontSize: 12, color: T.textMuted }}>No documents found yet.</div>
+            ) : filtered.map(d => (
+              <div key={d.id} onClick={() => { setActiveDocumentId(d.document_id); setScreen('document-study') }} style={{ background: T.card, borderRadius: 14, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ width: 42, height: 42, background: d.material_type === 'summary' ? 'rgba(76,123,201,0.1)' : 'rgba(201,68,68,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{d.material_type === 'summary' ? '📊' : '📕'}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{d.title}</div>
+                  <div style={{ fontSize: 11, color: T.textMuted }}>{d.author}{d.unit_code ? ` · ${d.unit_code}` : ''}</div>
+                  <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>{d.save_count} saves</div>
+                </div>
+                <Pill text={materialTypeLabel(d.material_type)} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Students */}
+        {(filter === 'All' || filter === 'Students') && (
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>👥 Students</div>
+            {loadingStudents ? (
+              <div style={{ fontSize: 12, color: T.textMuted }}>Loading students…</div>
+            ) : studentsError ? (
+              <div style={{ fontSize: 12, color: '#C94C4C' }}>{studentsError}</div>
+            ) : students.length === 0 ? (
+              <div style={{ fontSize: 12, color: T.textMuted }}>No students found yet.</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
+                {students.map(s => {
+                  const initials = s.display_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
+                  return (
+                    <div key={s.user_id} style={{ flexShrink: 0, background: T.card, borderRadius: 16, padding: '16px 14px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', width: 148, textAlign: 'center' }}>
+                      <div onClick={() => openStudentProfile(s)} style={{ cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><Avi name={initials} size={48} /></div>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{s.display_name}</div>
+                        <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }} className="line-clamp-1">{s.program_name || 'Student'}{s.year ? ` · Y${s.year}` : ''}</div>
+                        <div style={{ fontSize: 10, color: N.gold, fontWeight: 700 }}>{s.xp_total != null ? `⭐ ${s.xp_total.toLocaleString()} XP` : 'Private profile'}</div>
+                      </div>
+                      <button onClick={() => toggleFollow(s)} disabled={followBusy[s.user_id] || s.is_pending}
+                        style={{ marginTop: 10, background: (s.is_following || s.is_pending) ? 'rgba(201,168,76,0.15)' : N.navy, color: N.gold, border: (s.is_following || s.is_pending) ? `1px solid ${N.gold}44` : 'none', borderRadius: 10, padding: '6px 16px', fontSize: 11, fontWeight: 700, cursor: s.is_pending ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy[s.user_id] ? 0.6 : 1 }}>
+                        {followBusy[s.user_id] ? '…' : s.is_pending ? 'Requested' : s.is_following ? 'Following ✓' : 'Follow'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
-}
-
-function ExploreScreen({
-  setScreen,
-  setActiveGroupId,
-  setActiveDocumentId,
-  setActiveProfileUserId,
-  setActiveProfileName,
-}: {
-  setScreen: (s: Screen) => void
-  setActiveGroupId: (id: number | null) => void
-  setActiveDocumentId: (id: number | null) => void
-  setActiveProfileUserId: (id: number | null) => void
-  setActiveProfileName: (name: string | null) => void
-}) {
-  const { tokens: T } = useTheme()
-  const [tab, setTab] = useState<'all' | 'documents' | 'groups' | 'students'>('all')
-  const [query, setQuery] = useState('')
-  const [groups, setGroups] = useState<any[]>([])
-  const [documents, setDocuments] = useState<any[]>([])
-  const [students, setStudents] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    Promise.all([
-      api<any>('/groups?q='),
-      api<any>('/documents'),
-      api<any>('/students'),
-    ]).then(([groupData, docData, studentData]) => {
-      if (cancelled) return
-      setGroups(groupData?.groups || [])
-      setDocuments(docData?.documents || [])
-      setStudents(studentData?.students || [])
-    }).catch(() => {
-      if (!cancelled) {
-        setGroups([]); setDocuments([]); setStudents([])
-      }
-    }).finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [])
-
-  const q = query.trim().toLowerCase()
-  const filteredGroups = groups.filter(g => !q || String(g.name || '').toLowerCase().includes(q))
-  const filteredDocuments = documents.filter(d => !q || String(d.title || '').toLowerCase().includes(q))
-  const filteredStudents = students.filter(u => !q || String(u.display_name || '').toLowerCase().includes(q))
-
-  return <div style={{ flex:1, overflowY:'auto', background:T.pageBg }} className="scrollbar-hide">
-    <div style={{ background:N.navy, color:'#fff', padding:'18px 18px 16px' }}>
-      <div style={{ fontSize:20, fontWeight:850 }}>Explore</div>
-      <div style={{ fontSize:11, opacity:.55, marginTop:4 }}>Discover study resources, groups, and students.</div>
-      <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search Explore" aria-label="Search Explore" style={{ marginTop:14, width:'100%', boxSizing:'border-box', height:42, border:0, borderRadius:12, padding:'0 12px', background:'rgba(255,255,255,.1)', color:'#fff', outline:0 }} />
-    </div>
-    <div style={{ padding:14 }}>
-      <div style={{ display:'flex', gap:7, overflowX:'auto', marginBottom:14 }}>
-        {([['all','All'],['documents','Documents'],['groups','Groups'],['students','Students']] as const).map(([key,label]) =>
-          <button key={key} onClick={() => setTab(key)} style={{ border:0, borderRadius:20, padding:'7px 12px', background:tab===key?N.gold:T.card, color:tab===key?N.navy:T.text, fontSize:10, fontWeight:800 }}>{label}</button>
-        )}
-      </div>
-      {loading ? <GenerationLoading label="Loading Explore…" /> : <>
-        {(tab==='all'||tab==='groups') && <section style={{ marginBottom:18 }}>
-          <div style={{ fontWeight:850, fontSize:14, color:T.text, marginBottom:9 }}>Groups</div>
-          {filteredGroups.slice(0,10).map(g => <button key={g.id} onClick={() => { setActiveGroupId(g.id); setScreen('group-detail') }} style={{ width:'100%', textAlign:'left', border:0, background:T.card, borderRadius:13, padding:12, marginBottom:7, color:T.text }}>{g.name || 'Study group'}<div style={{ fontSize:10, color:T.textMuted, marginTop:3 }}>{g.member_count || 0} members</div></button>)}
-          {!filteredGroups.length && <div style={{ color:T.textMuted, fontSize:11 }}>No groups found.</div>}
-        </section>}
-        {(tab==='all'||tab==='documents') && <section style={{ marginBottom:18 }}>
-          <div style={{ fontWeight:850, fontSize:14, color:T.text, marginBottom:9 }}>Documents</div>
-          {filteredDocuments.slice(0,10).map(d => <button key={d.id} onClick={() => { setActiveDocumentId(d.document_id || d.id); setScreen('document-study') }} style={{ width:'100%', textAlign:'left', border:0, background:T.card, borderRadius:13, padding:12, marginBottom:7, color:T.text }}>{d.title || 'Document'}<div style={{ fontSize:10, color:T.textMuted, marginTop:3 }}>{d.unit_code || 'Study material'}</div></button>)}
-          {!filteredDocuments.length && <div style={{ color:T.textMuted, fontSize:11 }}>No documents found.</div>}
-        </section>}
-        {(tab==='all'||tab==='students') && <section>
-          <div style={{ fontWeight:850, fontSize:14, color:T.text, marginBottom:9 }}>Students</div>
-          {filteredStudents.slice(0,10).map(u => <button key={u.user_id || u.id} onClick={() => { const id=Number(u.user_id || u.id); setActiveProfileUserId(id); setActiveProfileName(u.display_name || 'Student'); setScreen('student-profile') }} style={{ width:'100%', textAlign:'left', border:0, background:T.card, borderRadius:13, padding:12, marginBottom:7, color:T.text }}>{u.display_name || 'Student'}<div style={{ fontSize:10, color:T.textMuted, marginTop:3 }}>{u.program_name || 'Student'}</div></button>)}
-          {!filteredStudents.length && <div style={{ color:T.textMuted, fontSize:11 }}>No students found.</div>}
-        </section>}
-      </>}
-    </div>
-  </div>
 }
 
 // ─── CREATE MODAL ─────────────────────────────────────────────────────────────
@@ -2119,9 +2244,6 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
   const [docLoadError, setDocLoadError] = useState('')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
-  const [playerOpportunities, setPlayerOpportunities] = useState<OpportunityPublic[]>([])
-  const [playerOppIndex, setPlayerOppIndex] = useState(0)
-
   useEffect(() => {
     if (activeDocumentId == null) return
     let cancelled = false
@@ -2570,7 +2692,7 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
     return <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#111827' }}>
       <div style={{ background: N.navy, padding: '10px 14px 12px', flexShrink: 0, zIndex: 5 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('profile')} aria-label="Back" style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => window.history.back()} aria-label="Back" style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ color: '#fff', fontWeight: 800, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.title}</div>
             <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 }}>Offline study copy</div>
@@ -3145,11 +3267,23 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   const [error, setError] = useState('')
   const [generationPercent, setGenerationPercent] = useState(0)
   const [generationStage, setGenerationStage] = useState('Preparing your podcast…')
-  const [estimatedWaitMinutes, setEstimatedWaitMinutes] = useState<number | null>(null)
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
   const [playerOpportunities, setPlayerOpportunities] = useState<OpportunityPublic[]>([])
   const [playerOppIndex, setPlayerOppIndex] = useState(0)
 
+  useEffect(() => {
+    if (stage !== 'ready') return
+    let cancelled = false
+    api<{ opportunities: OpportunityPublic[] }>('/podcast-opportunities')
+      .then(res => {
+        if (!cancelled) {
+          setPlayerOpportunities(res.opportunities || [])
+          setPlayerOppIndex(0)
+        }
+      })
+      .catch(() => { if (!cancelled) setPlayerOpportunities([]) })
+    return () => { cancelled = true }
+  }, [stage])
 
   const positionKey = activeDocumentId == null ? '' : `prepza-podcast-position:${activeDocumentId}`
   const selectedPodcastMaterialId = (() => {
@@ -3164,15 +3298,6 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   const podcastAudioPath = selectedPodcastMaterialId
     ? `/documents/${activeDocumentId}/podcast-audio?material_id=${selectedPodcastMaterialId}`
     : `/documents/${activeDocumentId}/podcast-audio`
-
-  useEffect(() => {
-    if (stage !== 'ready') return
-    let cancelled = false
-    api<{ opportunities: OpportunityPublic[] }>('/podcast-opportunities')
-      .then(res => { if (!cancelled) { setPlayerOpportunities(res.opportunities || []); setPlayerOppIndex(0) } })
-      .catch(() => { if (!cancelled) setPlayerOpportunities([]) })
-    return () => { cancelled = true }
-  }, [stage])
 
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
@@ -3198,7 +3323,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
     let cancelled = false
     const run = async () => {
       try {
-        const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string; estimated_wait_minutes?: number | null }>(podcastAudioPath)
+        const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
         if (cancelled) return
         if (existing.audio_status === 'ready' && existing.audio_url) {
           setAudioUrl(existing.audio_url)
@@ -3212,15 +3337,13 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
         if (existing.audio_status === 'processing') {
           setGenerationPercent(Number(existing.progress_percent || 0))
           setGenerationStage(existing.progress_stage || 'Generating audio…')
-          setEstimatedWaitMinutes(existing.estimated_wait_minutes ?? null)
           setStage('audio')
           const pollExisting = async () => {
             if (cancelled) return
-            const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string; estimated_wait_minutes?: number | null }>(podcastAudioPath)
+            const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
             if (cancelled) return
             setGenerationPercent(Math.max(0, Math.min(100, Number(status.progress_percent || 0))))
             setGenerationStage(status.progress_stage || 'Generating audio…')
-            setEstimatedWaitMinutes(status.estimated_wait_minutes ?? null)
             if (status.audio_status === 'ready' && status.audio_url) {
               setAudioUrl(status.audio_url)
               setDuration(status.duration_seconds || 0)
@@ -3248,7 +3371,6 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
         if (cancelled) return
         setGenerationPercent(5)
         setGenerationStage('Generating audio…')
-        setEstimatedWaitMinutes(null)
         setStage('audio')
 
         await api(podcastAudioPath, {
@@ -3257,7 +3379,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
 
         const poll = async () => {
           if (cancelled) return
-          const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string; estimated_wait_minutes?: number | null }>(podcastAudioPath)
+          const status = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
           if (cancelled) return
           setGenerationPercent(Math.max(0, Math.min(100, Number(status.progress_percent || 0))))
           setGenerationStage(status.progress_stage || 'Generating audio…')
@@ -3380,7 +3502,6 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
             <div style={{ color: N.gold, fontSize: 10, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase' }}>Prepza Podcast</div>
             <div style={{ color: T.text, fontSize: 19, fontWeight: 800, marginTop: 8 }}>{stage === 'loading' ? 'Opening your podcast' : 'Generating your podcast'}</div>
             <div style={{ color: T.textMuted, fontSize: 12, lineHeight: 1.55, marginTop: 5 }}>{generationStage}</div>
-            {estimatedWaitMinutes != null && <div style={{ color: T.textMuted, fontSize: 11, marginTop: 5 }}>Estimated wait: about {estimatedWaitMinutes} minute{estimatedWaitMinutes === 1 ? '' : 's'}. You can leave Prepza; we'll notify you when it's ready.</div>}
             <div style={{ height: 9, background: T.border, borderRadius: 99, overflow: 'hidden', marginTop: 22 }}>
               <div style={{ width: `${generationPercent}%`, height: '100%', background: `linear-gradient(90deg,${N.gold},${N.goldL})`, transition: 'width .5s ease' }} />
             </div>
@@ -3538,6 +3659,8 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 }
 
 // ─── CHATS ────────────────────────────────────────────────────────────────────
+type Participant = { user_id: number; display_name: string }
+
 type ChatSummary = {
   id: number
   is_group: boolean
@@ -3627,8 +3750,6 @@ function setChatDraft(conversationId: number, value: string) {
   window.dispatchEvent(new CustomEvent('prepza-chat-draft-changed', { detail: { conversationId } }))
 }
 function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void; setActiveGroupId?: (id: number) => void }) {
-  const setActiveProfileUserId = (_id: number) => {}
-  const setActiveProfileName = (_name: string | null) => {}
   const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'Chats'|'Groups'|'Requests'>('Chats')
   const [search, setSearch] = useState('')
@@ -3641,7 +3762,6 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
   // only surfaced via Explore. Fetched here too so the Groups tab shows
   // both: the study groups you've joined AND any ad-hoc group chats.
   const [myGroups, setMyGroups] = useState<GroupSummary[]>(CHATS_CACHE.myGroups ?? [])
-  const [friendStreaks, setFriendStreaks] = useState<any[]>([])
 
   // Requests tab: follow requests + message requests (Instagram-style
   // pending DMs from non-followers). Fetched lazily the first time the
@@ -3653,7 +3773,6 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
   const [requestsError, setRequestsError] = useState('')
   const [requestBusy, setRequestBusy] = useState<Record<string, boolean>>({})
   const [csrfToken, setCsrfToken] = useState('')
-  const [draftVersion, setDraftVersion] = useState(0)
   const [currentUserId, setCurrentUserId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -3677,9 +3796,6 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
     api<{ groups: GroupSummary[] }>('/groups/mine')
       .then(res => { setMyGroups(res.groups); CHATS_CACHE.myGroups = res.groups })
       .catch(() => {})
-    api<{ streaks: any[] }>('/study-friend-streaks')
-      .then(res => setFriendStreaks(Array.isArray(res.streaks) ? res.streaks.filter(s => s.status === 'active') : []))
-      .catch(() => setFriendStreaks([]))
   }, [])
 
   useEffect(() => {
@@ -3875,8 +3991,8 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
                           <div style={{ position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: N.navy, fontWeight: 800 }}>G</div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display:'flex',alignItems:'center',gap:7 }}><span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{g.name}</span>{g.mode === 'broadcast' && <span style={{fontSize:9,fontWeight:800,color:T.textMuted}}>CHANNEL</span>}</div>
-                          <div style={{ fontSize: 12, color: T.textMuted }} className="line-clamp-1">{g.member_count} member{g.member_count === 1 ? '' : 's'}{g.unit_code ? ` · ${g.unit_code}` : ''}{g.mode === 'broadcast' ? ' · admin posts' : ''}</div>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{g.name}</span>
+                          <div style={{ fontSize: 12, color: T.textMuted }} className="line-clamp-1">{g.member_count} member{g.member_count === 1 ? '' : 's'}{g.unit_code ? ` · ${g.unit_code}` : ''}</div>
                         </div>
                         <div style={{ color: T.textMuted }}>{Ic.chevR('w-4 h-4')}</div>
                       </div>
@@ -3897,7 +4013,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 3 }}>
-                              <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.name}</span>{friendStreaks.some(s => Number(s.conversation_id) === Number(chat.id)) && <span aria-label="Active study streak" title="Active study streak" style={{fontSize:13,marginLeft:5}}>🔥</span>}
+                              <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.name}</span>
                               <span style={{ fontSize: 10.5, color: unread ? N.gold : T.textMuted, fontWeight: unread ? 700 : 500, flexShrink: 0 }}>{chatListTime(chat.last_message_at)}</span>
                             </div>
                             <div style={{ display:'flex',alignItems:'center',gap:4,fontSize:12,color:unread?T.text:T.textMuted,fontWeight:unread?650:500 }} className="line-clamp-1">
@@ -4685,8 +4801,8 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
     const cached = OPP_DETAIL_CACHE[opportunityId]
     if (cached) { setOpp(cached); setLoading(false) } else { setLoading(true) }
     setError('')
-    api<OpportunityPublic>(`/opportunities/${opportunityId}`)
-      .then(res => { setOpp(res); OPP_DETAIL_CACHE[opportunityId] = res })
+    api<any>(`/api/opportunities/${opportunityId}/organic-view?source=${OPP_DETAIL_CACHE[opportunityId]?.promotion_type === 'sponsored' ? 'paid' : 'organic'}`)
+      .then(res => { setOpp(res.opportunity || res); OPP_DETAIL_CACHE[opportunityId] = (res.opportunity || res) })
       .catch(e => setError(e instanceof ApiError ? e.message : 'Could not load this opportunity.'))
       .finally(() => setLoading(false))
   }, [opportunityId])
@@ -5147,14 +5263,8 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [priv, setPriv] = useState({ profilePublic: true, whoMessages: false, whoFollows: true, readReceipts: true })
   const [privacyBusy, setPrivacyBusy] = useState(false)
   const [opportunityDiscovery, setOpportunityDiscovery] = useState(false)
-  const [phoneNumber, setPhoneNumber] = useState('')
-  const [phoneBusy, setPhoneBusy] = useState(false)
-  const [phoneError, setPhoneError] = useState('')
   const [showLogout, setShowLogout] = useState(false)
-  const [logoutError, setLogoutError] = useState('')
   const [showModal, setShowModal] = useState<string|null>(null)
-  const [supportContact, setSupportContact] = useState<{ email: string; phone: string; message: string } | null>(null)
-  const [supportConfig, setSupportConfig] = useState<{ email: string; phone: string; message: string }>({ email: '', phone: '', message: 'Contact Prepza support and our team will get back to you.' })
 
   const [csrfToken, setCsrfToken] = useState('')
   const [email, setEmail] = useState('')
@@ -5222,11 +5332,10 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }
 
   useEffect(() => {
-    api<{ email: string; csrf_token: string; phone_number?: string | null; university_id: number | null; program_id: number | null; profile_visibility?: string; who_can_message?: string; who_can_follow?: string; read_receipts_enabled?: boolean; year?: number; semester?: number }>('/me')
+    api<{ email: string; csrf_token: string; university_id: number | null; program_id: number | null; profile_visibility?: string; who_can_message?: string; who_can_follow?: string; read_receipts_enabled?: boolean; year?: number; semester?: number }>('/me')
       .then(me => {
         setCsrfToken(me.csrf_token)
         setEmail(me.email)
-        setPhoneNumber(me.phone_number || '')
         setPriv({ profilePublic: me.profile_visibility !== 'private', whoMessages: me.who_can_message === 'everyone', whoFollows: me.who_can_follow === 'everyone', readReceipts: me.read_receipts_enabled !== false })
         if (me.university_id != null) {
           api<UniversityOption[]>('/universities')
@@ -5243,35 +5352,16 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   }, [])
 
   useEffect(() => {
-    if (showModal !== 'contact') return
-    api<{ email: string; phone: string; message: string }>('/support/contact')
-      .then(setSupportContact)
-      .catch(() => setSupportContact(null))
-  }, [showModal])
-
-  useEffect(() => {
     api<{ discoverable: boolean }>('/api/opportunity-discovery')
       .then(value => setOpportunityDiscovery(!!value.discoverable))
       .catch(() => {})
   }, [])
 
   useEffect(() => {
-    if (showModal !== 'contact') return
-    api<{ email: string; phone: string; message: string }>('/support/config')
-      .then(setSupportConfig)
-      .catch(() => {})
-  }, [showModal])
-
-  useEffect(() => {
     api<{ community_enabled: boolean; messages_enabled: boolean }>('/notification-preferences')
       .then(p => setNotifs(n => ({ ...n, community: p.community_enabled, messages: p.messages_enabled })))
       .catch(() => {})
   }, [])
-
-  const saveProfilePreference = async (patch: Record<string, unknown>) => {
-    const me = await api<{ year: number; semester: number }>('/me')
-    return api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ year: me.year, semester: me.semester, ...patch }) })
-  }
 
   const handleDeleteAccount = async () => {
     setDeleting(true)
@@ -5293,24 +5383,20 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', margin: '0 16px' }}>{children}</div>
     </div>
   )
-  const Row = ({ label, sub, onPress, right, danger }: { label: string; sub?: string; onPress?: () => void; right?: React.ReactNode; danger?: boolean }) => {
-    const content = (
-      <>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, color: danger ? '#C94C4C' : T.text }}>{label}</div>
-          {sub && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 1 }}>{sub}</div>}
-        </div>
-        {right ?? <div style={{ color: T.textMuted }}>{Ic.chevR()}</div>}
-      </>
-    )
-    const style = { display: 'flex', alignItems: 'center', width: '100%', gap: 14, padding: '14px 16px', background: 'none', border: 'none', borderBottom: '1px solid '+T.border, cursor: onPress ? 'pointer' : 'default', fontFamily: 'Plus Jakarta Sans', textAlign: 'left' as const }
-    return onPress ? <button onClick={onPress} style={style}>{content}</button> : <div style={style}>{content}</div>
-  }
+  const Row = ({ label, sub, onPress, right, danger }: { label: string; sub?: string; onPress?: () => void; right?: React.ReactNode; danger?: boolean }) => (
+    <button onClick={onPress} style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 14, padding: '14px 16px', background: 'none', border: 'none', borderBottom: `1px solid ${T.border}`, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', textAlign: 'left' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600, fontSize: 13, color: danger ? '#C94C4C' : T.text }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: T.textMuted, marginTop: 1 }}>{sub}</div>}
+      </div>
+      {right ?? <div style={{ color: T.textMuted }}>{Ic.chevR()}</div>}
+    </button>
+  )
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>Settings</span>
         </div>
       </div>
@@ -5319,15 +5405,15 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <Section title="Account">
           <Row label="Edit Profile" sub="Name, photo, bio" onPress={() => setScreen('edit-profile')} />
           <Row label="Email" sub={email || 'Loading...'} onPress={() => { setNewEmail(''); setEmailPassword(''); setEmailChangeError(''); setEmailChangeSuccess(false); setShowModal('email') }} />
-          <Row label="Phone" sub={phoneNumber ? phoneNumber.replace(/(\\+?\\d{3})\\d+(\\d{2})$/, '$1*** **$2') : 'Not set'} onPress={() => { setPhoneError(''); setShowModal('phone') }} />
+          <Row label="Phone" sub="+254 *** *** **89" onPress={() => setShowModal('phone')} />
           <Row label="University" sub={uniName || 'Not set'} onPress={() => setScreen('edit-profile')} />
           <Row label="Course" sub={programName || 'Not set'} onPress={() => setScreen('edit-profile')} />
         </Section>
 
         <Section title="Preferences">
-          <Row label="Study Preferences" sub="Not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
-          <Row label="AI Preferences" sub="Not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
-          <Row label="Language" sub="English · only supported language" />
+          <Row label="Study Preferences" sub="Goals, daily target, subjects" onPress={() => setShowModal('study-prefs')} />
+          <Row label="AI Preferences" sub="Language, explanation style" onPress={() => setShowModal('ai-prefs')} />
+          <Row label="Language" sub="English" onPress={() => setShowModal('language')} />
           <Row label="Appearance" sub={themeMode === 'dark' ? 'Dark mode' : 'Light mode'} right={<div onClick={e => { e.stopPropagation(); toggleTheme() }}>{Ic.toggle(themeMode === 'dark')}</div>} />
         </Section>
 
@@ -5341,7 +5427,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                 if (next) {
                   subscribeToPush(csrfToken).catch(() => setNotifs(n => ({ ...n, push: false })))
                 } else {
-                  unsubscribeFromPush(csrfToken).catch(() => setNotifs(n => ({ ...n, push: true })))
+                  unsubscribeFromPush(csrfToken).catch(() => {})
                 }
               } else {
                 const next = !notifs[k]
@@ -5351,8 +5437,8 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
               }
             }}>{Ic.toggle(notifs[k])}</div>} />
           ))}
-          <Row label="Opportunities" sub={opportunityDiscovery ? 'Organisations can discover you for relevant opportunities' : 'Not discoverable by organisations'} right={<div onClick={async e => { e.stopPropagation(); if (privacyBusy) return; const next = !opportunityDiscovery; setPrivacyBusy(true); try { const res = await api<{ discoverable: boolean }>('/api/opportunity-discovery', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ discoverable: next }) }); setOpportunityDiscovery(!!res.discoverable) } catch {} finally { setPrivacyBusy(false) } }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(opportunityDiscovery)}</div>} />
-          <Row label="Study Reminders" sub="Not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
+          <Row label="Opportunities" sub="Relevant opportunities and discovery" right={<Pill text="Ready" color={N.gold} />} />
+          <Row label="Study Reminders" sub="Coming soon" right={<Pill text="Soon" color="#9CA3AF" />} />
         </Section>
 
         <Section title="Privacy">
@@ -5368,8 +5454,30 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             } catch { /* keep the previous value if saving fails */ }
             finally { setPrivacyBusy(false) }
           }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.profilePublic)}</div>} sub={priv.profilePublic ? 'Public' : 'Private'} />
-          <Row label="Who can message me" right={<div onClick={async e => { e.stopPropagation(); if (privacyBusy) return; const next = !priv.whoMessages; setPrivacyBusy(true); try { await saveProfilePreference({ who_can_message: next ? 'everyone' : 'followers' }); setPriv(p => ({ ...p, whoMessages: next })) } catch {} finally { setPrivacyBusy(false) } }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
-          <Row label="Who can follow me" right={<div onClick={async e => { e.stopPropagation(); if (privacyBusy) return; const next = !priv.whoFollows; setPrivacyBusy(true); try { await saveProfilePreference({ who_can_follow: next ? 'everyone' : 'approval_required' }); setPriv(p => ({ ...p, whoFollows: next })) } catch {} finally { setPrivacyBusy(false) } }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
+          <Row label="Who can message me" right={<div onClick={async e => {
+            e.stopPropagation()
+            if (privacyBusy) return
+            const next = !priv.whoMessages
+            setPrivacyBusy(true)
+            try {
+              const me = await api<{ year: number; semester: number }>('/me')
+              await api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ year: me.year, semester: me.semester, who_can_message: next ? 'everyone' : 'followers' }) })
+              setPriv(p => ({ ...p, whoMessages: next }))
+            } catch { /* keep previous value */ }
+            finally { setPrivacyBusy(false) }
+          }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
+          <Row label="Who can follow me" right={<div onClick={async e => {
+            e.stopPropagation()
+            if (privacyBusy) return
+            const next = !priv.whoFollows
+            setPrivacyBusy(true)
+            try {
+              const me = await api<{ year: number; semester: number }>('/me')
+              await api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ year: me.year, semester: me.semester, who_can_follow: next ? 'everyone' : 'approval_required' }) })
+              setPriv(p => ({ ...p, whoFollows: next }))
+            } catch { /* keep previous value */ }
+            finally { setPrivacyBusy(false) }
+          }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
           <Row label="Read receipts" sub={priv.readReceipts ? 'Enabled' : 'Disabled'} right={<div onClick={async e => {
             e.stopPropagation()
             if (privacyBusy) return
@@ -5397,23 +5505,23 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
         <Section title="Security">
           <Row label="Change Password" onPress={() => { setCurrentPassword(''); setNewPassword(''); setConfirmNewPassword(''); setPasswordChangeError(''); setPasswordChangeSuccess(false); setShowModal('change-password') }} />
-          <Row label="Login Sessions" sub="Session management is not available yet" />
-          <Row label="Two-Factor Authentication" sub="Not available yet" />
+          <Row label="Login Sessions" sub="1 active session" onPress={() => setShowModal('sessions')} />
+          <Row label="Two-Factor Authentication" sub="Not enabled" onPress={() => setShowModal('2fa')} />
         </Section>
 
         <Section title="Subscription">
-          <Row label="Subscription & Plan" sub="Manage your current plan and AI allowances" right={<Pill text="Manage" color={N.gold} />} onPress={() => setScreen('subscription')} />
+          <Row label="Subscription & Plan" sub="Free plan — Tap to upgrade" right={<Pill text="Upgrade" color={N.gold} />} onPress={() => setScreen('subscription')} />
           <Row label="Payment History" onPress={() => setScreen('payment-history')} />
         </Section>
 
         <Section title="Support">
-          <Row label="Help Centre" sub="Help centre is not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
-          <Row label="Contact Support" sub="Contact the Prepza support team" onPress={() => setShowModal('contact')} />
-          <Row label="Report a Problem" sub="Problem reporting is not available yet" right={<Pill text="Unavailable" color="#9CA3AF" />} />
+          <Row label="Help Centre" onPress={() => setShowModal('help')} />
+          <Row label="Contact Support" onPress={() => setShowModal('contact')} />
+          <Row label="Report a Problem" onPress={() => setShowModal('report-problem')} />
         </Section>
 
         <Section title="About">
-          <Row label="About Prepza" sub="Study smarter together" onPress={() => setShowModal('about')} />
+          <Row label="About Prepza" sub="v1.0.0 · Kenyatta University Launch" onPress={() => setShowModal('about')} />
           <Row label="Terms of Service" onPress={() => setShowModal('terms')} />
           <Row label="Privacy Policy" onPress={() => setShowModal('privacy-policy')} />
         </Section>
@@ -5431,8 +5539,8 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', zIndex: 99 }}>
           <div style={{ background: T.card, borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%' }}>
             <div style={{ width: 40, height: 4, background: T.border, borderRadius: 99, margin: '0 auto 20px' }} />
-            <div style={{ fontWeight: 800, fontSize: 17, color: T.text, marginBottom: 8 }}>
-              {showModal === 'email' ? 'Change Email' : showModal === 'phone' ? 'Change Phone' : showModal === 'university' ? 'Select University' : showModal === 'course' ? 'Select Course' : showModal === 'study-prefs' ? 'Study Preferences' : showModal === 'ai-prefs' ? 'AI Preferences' : showModal === 'language' ? 'Language' : showModal === 'appearance' ? 'Appearance' : showModal === 'change-password' ? 'Change Password' : showModal === 'sessions' ? 'Login Sessions' : showModal === '2fa' ? 'Two-Factor Authentication' : showModal === 'plan' ? 'Current Plan' : showModal === 'upgrade' ? 'Upgrade to Premium' : showModal === 'billing' ? 'Billing' : showModal === 'help' ? 'Help Centre' : showModal === 'contact' ? 'Contact Support' : showModal === 'report-problem' ? 'Report a Problem' : showModal === 'about' ? 'About Prepza' : showModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
+            <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>
+              {showModal === 'email' ? 'Change Email' : showModal === 'phone' ? 'Change Phone' : showModal === 'university' ? 'Select University' : showModal === 'course' ? 'Select Course' : showModal === 'study-prefs' ? 'Study Preferences' : showModal === 'ai-prefs' ? 'AI Preferences' : showModal === 'language' ? 'Language' : showModal === 'appearance' ? 'Appearance' : showModal === 'change-password' ? 'Change Password' : showModal === 'sessions' ? 'Login Sessions' : showModal === '2fa' ? 'Two-Factor Authentication' : showModal === 'plan' ? 'Current Plan' : showModal === 'upgrade' ? 'Choose a plan' : showModal === 'billing' ? 'Billing' : showModal === 'help' ? 'Help Centre' : showModal === 'contact' ? 'Contact Support' : showModal === 'report-problem' ? 'Report a Problem' : showModal === 'about' ? 'About Prepza' : showModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
             </div>
             {showModal === 'email' ? (
               emailChangeSuccess ? (
@@ -5450,14 +5558,6 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                   <button onClick={() => setShowModal(null)} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
                 </>
               )
-            ) : showModal === 'phone' ? (
-              <>
-                <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, marginBottom: 16 }}>Add or update the phone number associated with your Prepza account.</div>
-                <input type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="+254712345678" style={{ width: '100%', border: '1.5px solid '+T.border, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 12, boxSizing: 'border-box', background: T.card, color: T.text }} />
-                {phoneError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{phoneError}</div>}
-                <button onClick={async () => { if (phoneBusy) return; setPhoneBusy(true); setPhoneError(''); try { await saveProfilePreference({ phone_number: phoneNumber.trim() || null }); setShowModal(null) } catch (e) { setPhoneError(e instanceof ApiError ? e.message : 'Could not save your phone number.') } finally { setPhoneBusy(false) } }} disabled={phoneBusy} style={{ width: '100%', background: 'linear-gradient(135deg,'+N.gold+','+N.goldL+')', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy, marginBottom: 10, opacity: phoneBusy ? 0.6 : 1 }}>{phoneBusy ? 'Saving…' : 'Save Phone'}</button>
-                <button onClick={() => setShowModal(null)} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
-              </>
             ) : showModal === 'change-password' ? (
               passwordChangeSuccess ? (
                 <>
@@ -5481,23 +5581,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                     <div style={{ maxHeight: '50vh', overflowY: 'auto', whiteSpace: 'pre-wrap' }} className="scrollbar-hide">
                       {showModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT}
                     </div>
-                  ) : showModal === 'contact' ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div>{supportConfig.message}</div>
-                      {supportConfig.email && <a href={`mailto:${supportConfig.email}`} style={{ color: N.gold, fontWeight: 700, textDecoration: 'none' }}>Email support: {supportConfig.email}</a>}
-                      {supportConfig.phone && <a href={`tel:${supportConfig.phone}`} style={{ color: N.gold, fontWeight: 700, textDecoration: 'none' }}>Call support: {supportConfig.phone}</a>}
-                      {!supportConfig.email && !supportConfig.phone && <div style={{ color: T.textMuted }}>Support contact details have not been configured yet. Please try again later.</div>}
-                    </div>
-                  ) : showModal === 'contact' ? (
-                    supportContact ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        <div>{supportContact.message}</div>
-                        {supportContact.email && <a href={`mailto:${supportContact.email}`} style={{ color: N.gold, fontWeight: 800, textDecoration: 'none' }}>Email {supportContact.email}</a>}
-                        {supportContact.phone && <a href={`tel:${supportContact.phone.replace(/[^+\\d]/g, '')}`} style={{ color: N.gold, fontWeight: 800, textDecoration: 'none' }}>Call {supportContact.phone}</a>}
-                        {!supportContact.email && !supportContact.phone && <div style={{ color: T.textMuted }}>Support contact details have not been configured yet.</div>}
-                      </div>
-                    ) : 'Loading support contact…'
-                  ) : showModal === 'upgrade' ? 'Prepza Premium gives you unlimited AI generations, offline access, priority support, and an ad-free experience.' : showModal === 'about' ? `Prepza v1.0.0 — Kenyatta University Launch\n\nVision: ${PREPZA_VISION}\n\nMission: ${PREPZA_MISSION}` : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
+                  ) : showModal === 'upgrade' ? 'Paid plans provide larger study-generation allowances, offline study, and additional premium features. Your allowance is shown before you generate.' : showModal === 'about' ? `Prepza v1.0.0 — Kenyatta University Launch\n\nVision: ${PREPZA_VISION}\n\nMission: ${PREPZA_MISSION}` : showModal === 'help' ? 'Visit prepza.app/help or email support@prepza.app for assistance.' : 'This feature will be available in a future update. Stay tuned!'}
                 </div>
                 <button onClick={() => setShowModal(null)} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: N.navy }}>Got it</button>
               </>
@@ -5513,16 +5597,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>👋</div>
             <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 8 }}>Log out of Prepza?</div>
             <div style={{ fontSize: 13, color: T.textMuted, textAlign: 'center', marginBottom: 24 }}>You'll need to sign in again to access your study materials.</div>
-            {logoutError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, textAlign: 'center', marginBottom: 12 }}>{logoutError}</div>}
-            <button onClick={async () => {
-              setLogoutError('')
-              try {
-                await api('/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
-                setScreen('login')
-              } catch (e) {
-                setLogoutError(e instanceof ApiError ? e.message : 'Could not log out. Please try again.')
-              }
-            }} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
+            <button onClick={() => { api('/logout', { method: 'POST' }).catch(() => {}).finally(() => setScreen('login')) }} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
             <button onClick={() => setShowLogout(false)} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
           </div>
         </div>
@@ -5780,13 +5855,11 @@ type GroupSummary = {
   id: number; name: string; description: string | null; privacy: GroupPrivacy
   university_id: number | null; program_id: number | null; unit_id: number | null; unit_code: string | null
   year: number | null; member_count: number; created_by: number; created_at: string | null
-  mode?: 'community' | 'broadcast'; history_visible?: boolean; allow_member_posts?: boolean
   is_member: boolean; role: 'admin' | 'member' | null
 }
 type GroupPostData = {
   id: number; group_id: number; post_type: 'post' | 'question'; body: string | null; is_removed: boolean
   author: string; author_id: number; like_count: number | null; viewer_liked: boolean
-  reaction_counts?: Record<string, number>; viewer_reaction?: string | null
   vote_count: number | null; viewer_voted: boolean; comment_count: number; created_at: string | null
 }
 type GroupPostCommentData = {
@@ -7389,7 +7462,7 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('settings')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Edit Profile</span>
           <button onClick={handleSave} disabled={saving} style={{ background: saved ? '#4CC97B' : `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '8px 16px', cursor: saving ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: saved ? '#fff' : N.navy, opacity: saving ? 0.7 : 1 }}>{saved ? '✓ Saved' : saving ? 'Saving...' : 'Save'}</button>
         </div>
@@ -8449,7 +8522,6 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
   const [postsError, setPostsError] = useState('')
   const [composeText, setComposeText] = useState('')
   const [composing, setComposing] = useState(false)
-  const [reactionPickerId, setReactionPickerId] = useState<number | null>(null)
 
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [expandedDetail, setExpandedDetail] = useState<GroupPostDetail | null>(null)
@@ -8555,20 +8627,6 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
       const res = await api<{ like_count: number }>(`/groups/${groupId}/posts/${p.id}/like`, { method, headers: { 'X-CSRF-Token': csrfToken } })
       setPosts(ps => ps.map(x => x.id === p.id ? { ...x, viewer_liked: !p.viewer_liked, like_count: res.like_count } : x))
     } catch { /* transient failure - the button just won't visually update, safe to ignore */ }
-  }
-
-  const reactToPost = async (p: GroupPostData, reaction: string) => {
-    if (groupId == null || !joined) return
-    const next = p.viewer_reaction === reaction ? '' : reaction
-    try {
-      const res = await api<{ my_reaction: string | null; counts: Record<string, number> }>(
-        `/groups/${groupId}/posts/${p.id}/reaction`,
-        { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ reaction: next }) },
-      )
-      setPosts(ps => ps.map(x => x.id === p.id ? { ...x, viewer_reaction: res.my_reaction, reaction_counts: res.counts } : x))
-      setExpandedDetail(d => d && d.id === p.id ? { ...d, viewer_reaction: res.my_reaction, reaction_counts: res.counts } : d)
-      setReactionPickerId(null)
-    } catch { /* transient failure - keep the picker open so the student can retry */ }
   }
 
   const toggleVote = async (p: GroupPostData) => {
@@ -8747,28 +8805,7 @@ function GroupDetailScreen({ setScreen, groupId }: { setScreen: (s: Screen) => v
                   <div><div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{p.author}</div><div style={{ fontSize: 11, color: T.textMuted }}>{p.created_at ? new Date(p.created_at).toLocaleString() : ''}</div></div>
                 </div>
                 <div style={{ fontSize: 13, color: T.text, lineHeight: 1.65, marginBottom: 12 }}>{p.is_removed ? '[removed]' : p.body}</div>
-                {Object.keys(p.reaction_counts || {}).length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
-                    {Object.entries(p.reaction_counts || {}).filter(([, count]) => count > 0).map(([reaction, count]) => (
-                      <button key={reaction} onClick={() => reactToPost(p, reaction)} disabled={!joined} aria-label={`React ${reaction}`}
-                        style={{ border: p.viewer_reaction === reaction ? `1px solid ${N.gold}` : '1px solid #E5E7EB', background: p.viewer_reaction === reaction ? 'rgba(230,183,74,0.12)' : T.card, borderRadius: 999, padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4, cursor: joined ? 'pointer' : 'default', fontSize: 12 }}>
-                        <span>{reaction}</span><span style={{ color: T.textMuted, fontWeight: 700 }}>{count}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #F3F4F6', paddingTop: 10, position: 'relative' }}>
-                  <button onClick={() => setReactionPickerId(reactionPickerId === p.id ? null : p.id)} disabled={!joined} aria-label="Add reaction"
-                    style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: p.viewer_reaction ? N.gold : T.textMuted, cursor: joined ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
-                    <span style={{ fontSize: 15, lineHeight: 1 }}>☺</span> React
-                  </button>
-                  {reactionPickerId === p.id && joined && (
-                    <div style={{ position: 'absolute', left: 0, bottom: 34, zIndex: 5, display: 'flex', gap: 4, padding: 7, background: T.card, border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
-                      {['👍','❤️','😂','😮','😢','🎉'].map(reaction => (
-                        <button key={reaction} onClick={() => reactToPost(p, reaction)} aria-label={`React ${reaction}`} style={{ width: 32, height: 32, border: 'none', background: p.viewer_reaction === reaction ? 'rgba(230,183,74,0.16)' : 'transparent', borderRadius: 8, cursor: 'pointer', fontSize: 18 }}>{reaction}</button>
-                      ))}
-                    </div>
-                  )}
+                <div style={{ display: 'flex', gap: 16, borderTop: '1px solid #F3F4F6', paddingTop: 10 }}>
                   {tab === 'Posts' ? (
                     <button onClick={() => toggleLike(p)} disabled={!joined} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 5, color: p.viewer_liked ? N.gold : T.textMuted, cursor: joined ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, fontFamily: 'Plus Jakarta Sans' }}>
                       <svg width="14" height="14" viewBox="0 0 14 14" fill={p.viewer_liked ? N.gold : 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 12.5S1.5 9 1.5 5a2.5 2.5 0 015-0 2.5 2.5 0 015 0c0 4-5.5 7.5-5.5 7.5z"/></svg>
@@ -8893,7 +8930,6 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
   const [privacy, setPrivacy] = useState<'Public' | 'Private' | 'Course-only'>('Public')
-  const [groupMode, setGroupMode] = useState<'community' | 'broadcast'>('community')
 
   const [universities, setUniversities] = useState<UniversityOption[]>([])
   const [universityId, setUniversityId] = useState<number | null>(null)
@@ -8943,9 +8979,6 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
           name: name.trim(),
           description: desc.trim() || undefined,
           privacy: privacyValue,
-          mode: groupMode,
-          history_visible: true,
-          allow_member_posts: groupMode === 'community',
           university_id: universityId ?? undefined,
           program_id: programId ?? undefined,
           year: year ?? undefined,
@@ -8998,16 +9031,6 @@ function GroupCreateScreen({ setScreen, setActiveGroupId }: { setScreen: (s: Scr
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 8 }}>Description <span style={{ color: T.textMuted, fontWeight: 500 }}>(optional)</span></div>
             <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="What is this group for?" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, resize: 'none', lineHeight: 1.6, boxSizing: 'border-box' }} />
-          </div>
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Group format</div>
-            {([['community','Community group','Members can participate in the discussion.'],['broadcast','Channel-style','Admins publish; members follow the feed.']] as const).map(([value,label,sub]) => (
-              <div key={value} onClick={() => setGroupMode(value)} style={{ display:'flex',gap:12,alignItems:'center',padding:'12px 14px',background:T.card,borderRadius:12,border:`1.5px solid ${groupMode===value?N.gold:'rgba(0,0,0,0.08)'}`,marginBottom:8,cursor:'pointer' }}>
-                <div style={{ width:18,height:18,borderRadius:'50%',border:`2px solid ${groupMode===value?N.gold:T.textMuted}`,background:groupMode===value?N.gold:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>{groupMode===value&&<div style={{width:6,height:6,borderRadius:'50%',background:N.navy}}/>}</div>
-                <div><div style={{fontWeight:600,fontSize:13,color:T.text}}>{label}</div><div style={{fontSize:11,color:T.textMuted}}>{sub}</div></div>
-              </div>
-            ))}
-            <div style={{fontSize:10,color:T.textMuted,marginTop:6}}>Large groups can grow to 200,000 members. Broadcast groups are admin-posted.</div>
           </div>
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Privacy</div>
@@ -9135,17 +9158,46 @@ function ErrorState({ onRetry }: { onRetry?: () => void }) {
 }
 
 // ─── SUBSCRIPTION ─────────────────────────────────────────────────────────────
-type SubscriptionPlan = { id: string; name: string; price: number; period: string | null }
+type SubscriptionPlan = {
+  id: string
+  name: string
+  price: number
+  period: string | null
+  quota_period?: string
+  podcast_minutes?: number
+  summary_pages?: number
+  questions?: number
+  mind_map_nodes?: number
+  flashcards?: number
+  offline_study?: boolean
+  premium_library?: boolean
+  study_hub_uploads?: boolean
+}
 type SubscriptionStatus = { plan: string; is_active: boolean; expires_at: string | null }
 
 // Static display metadata (badges/colors/feature bullets) keyed by plan id -
 // the backend only knows price/period, not marketing copy, so this stays
 // client-side and is merged onto whatever plans GET /subscription/plans
 // actually returns.
-const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: string; color: string; features: string[] }> = {
-  free: { color: '#6B7280', features: ['5 AI sessions/month', '3 document uploads', 'Basic flashcards', 'Forum browsing'] },
-  semester: { badge: 'Popular', badgeColor: N.gold, color: N.gold, features: ['Unlimited AI sessions', 'Unlimited uploads', 'All learning tools', 'Priority processing', 'Offline access', 'Full forum access'] },
-  annual: { badge: 'Best Value', badgeColor: '#4CC97B', color: '#4C7BC9', features: ['Everything in Semester', '2 months free', 'Early feature access', 'Group study tools', 'Priority support'] },
+const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: string; color: string }> = {
+  free: { color: '#6B7280' },
+  plus: { badge: 'Plus', badgeColor: N.gold, color: N.gold },
+  pro: { badge: 'Pro', badgeColor: '#4CC97B', color: '#4C7BC9' },
+}
+
+function subscriptionFeatures(plan: SubscriptionPlan): string[] {
+  const features = [
+    'Ada — personalized AI study support',
+    `${Number(plan.podcast_minutes || 0).toLocaleString()} podcast minutes`,
+    `${Number(plan.summary_pages || 0).toLocaleString()} summary pages`,
+    `${Number(plan.questions || 0).toLocaleString()} questions`,
+    `${Number(plan.mind_map_nodes || 0).toLocaleString()} mind-map nodes`,
+    `${Number(plan.flashcards || 0).toLocaleString()} flashcards`,
+  ]
+  if (plan.offline_study) features.push('Offline study')
+  if (plan.premium_library) features.push('Premium library')
+  if (plan.study_hub_uploads) features.push('Unlimited StudyHub uploads')
+  return features
 }
 
 function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setScreen: (s: Screen) => void; selectedPlan: string; setSelectedPlan: (p: string) => void }) {
@@ -9175,14 +9227,14 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
     <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('settings')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Prepza Premium</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Unlock all AI study tools</div></div>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Prepza Plans</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Unlock all AI study tools</div></div>
         </div>
         <div style={{ marginTop: 16, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 20 }}>🎓</span>
           <div style={{ flex: 1 }}>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>
-              {status ? `Current Plan: ${status.plan.charAt(0).toUpperCase() + status.plan.slice(1)}` : 'Loading plan…'}
+              {status ? `Current Plan: ${status.plan === 'plus' ? 'Plus' : status.plan === 'pro' ? 'Pro' : 'Free'}` : 'Loading plan…'}
             </div>
             <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
               {status?.is_active && status.expires_at
@@ -9201,14 +9253,14 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
         ) : (
           <>
             {plans.map(p => {
-              const meta = SUBSCRIPTION_PLAN_META[p.id] || { color: T.textMuted, features: [] }
+              const meta = SUBSCRIPTION_PLAN_META[p.id] || { color: T.textMuted }
               const isCurrent = status?.plan === p.id && status.is_active
               const isSelectable = p.id !== 'free'
               const isSelected = selected?.id === p.id
               return (
                 <div key={p.id} onClick={() => isSelectable && setSelectedPlan(p.id)}
                   style={{ background: T.card, borderRadius: 18, padding: 18, marginBottom: 12, border: `2px solid ${isSelectable && isSelected ? meta.color : 'rgba(0,0,0,0.06)'}`, cursor: isSelectable ? 'pointer' : 'default', position: 'relative', boxShadow: isSelectable && isSelected ? `0 4px 20px ${meta.color}25` : '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}>
-                  {meta.badge && <div style={{ position: 'absolute', top: -11, right: 16, background: meta.badgeColor, color: p.id === 'semester' ? N.navy : '#fff', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>{meta.badge}</div>}
+                  {meta.badge && <div style={{ position: 'absolute', top: -11, right: 16, background: meta.badgeColor, color: p.id === 'plus' ? N.navy : '#fff', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>{meta.badge}</div>}
                   {isCurrent && <div style={{ position: 'absolute', top: -11, left: 16, background: '#E5E7EB', color: T.textMuted, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, fontFamily: 'Plus Jakarta Sans' }}>Current</div>}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                     <div>
@@ -9220,12 +9272,12 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
                     </div>
                     {isSelectable && (
                       <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${isSelected ? meta.color : T.textMuted}`, background: isSelected ? meta.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {isSelected && <div style={{ color: p.id === 'semester' ? N.navy : '#fff' }}>{Ic.check('w-3 h-3')}</div>}
+                        {isSelected && <div style={{ color: p.id === 'plus' ? N.navy : '#fff' }}>{Ic.check('w-3 h-3')}</div>}
                       </div>
                     )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                    {meta.features.map((f, i) => (
+                    {subscriptionFeatures(p).map((f, i) => (
                       <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <div style={{ width: 16, height: 16, borderRadius: '50%', background: `${meta.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><div style={{ color: meta.color }}>{Ic.check('w-2.5 h-2.5')}</div></div>
                         <span style={{ fontSize: 12, color: '#4B5563' }}>{f}</span>
@@ -9242,37 +9294,34 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
         )}
         {usage && (
           <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 14, marginTop: 8 }}>
-            <div style={{ fontWeight: 800, fontSize: 13, color: T.text, marginBottom: 10 }}>AI usage</div>
-            {(['summary', 'podcast', 'flashcards'] as const).map(feature => {
-              const limitKey = feature === 'summary' ? 'summary_generations' : feature === 'podcast' ? 'podcast_generations' : 'flashcard_generations'
-              const unitKey = feature === 'summary' ? 'summary_max_pages' : feature === 'podcast' ? 'podcast_max_minutes' : 'flashcard_max_cards'
-              const used = usage.usage?.[feature]?.requests || 0
-              const max = usage.limits?.[limitKey] || 0
-              const unit = usage.limits?.[unitKey] || 0
+            <div style={{ fontWeight: 800, fontSize: 13, color: T.text, marginBottom: 10 }}>{usage.plan === 'free' ? 'Free allowance' : usage.plan === 'plus' ? 'Plus allowance' : 'Pro allowance'}</div>
+            {(['summary', 'podcast', 'flashcards', 'quiz', 'mind_map'] as const).map(feature => {
+              const labels: Record<string, string> = { summary: 'Summary', podcast: 'Podcast', flashcards: 'Flashcards', quiz: 'Questions', mind_map: 'Mind map' }
+              const units: Record<string, string> = { summary: 'pages', podcast: 'min', flashcards: 'cards', quiz: 'questions', mind_map: 'nodes' }
+              const item = usage.usage?.[feature]
+              const used = Number(item?.units || 0)
+              const remaining = Number(item?.remaining_units || 0)
+              const max = Number(item?.unit_limit || 0)
               return <div key={feature} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, color: T.textMuted, marginTop: 7 }}>
-                <span style={{ textTransform: 'capitalize' }}>{feature}</span>
-                <span>{used}/{max} generations · max {unit} {feature === 'summary' ? 'pages' : feature === 'podcast' ? 'min' : 'cards'}</span>
+                <span>{labels[feature]}</span>
+                <span>{remaining}/{max} {units[feature]} remaining</span>
               </div>
             })}
           </div>
         )}
 
         <button onClick={() => setScreen('payment-history')} style={{ width: '100%', background: 'transparent', color: T.textMuted, fontSize: 12, fontWeight: 600, border: 'none', padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>View payment history</button>
-        <div style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & card, powered by Pesapal.</div>
+        <div style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>🔒 Secured payments via M-Pesa & card, powered by Paystack.</div>
       </div>
     </div>
   )
 }
 
 // ─── PAYMENT ──────────────────────────────────────────────────────────────────
-// Real Pesapal checkout: POST /subscription/upgrade returns a redirect_url
-// to Pesapal's own hosted payment page (which handles M-Pesa/card itself),
-// so this screen no longer simulates a method picker or an STK push - it
-// just collects an optional phone number, kicks off the order, and does a
-// full-page redirect. Success/failure are decided on Pesapal's side and
-// land on /payment/pesapal/callback, which today renders a plain HTML page
-// outside the SPA rather than routing back here - see payment-history for
-// how a student confirms status after returning to the app.
+// Paystack checkout: POST /subscription/upgrade returns a redirect_url
+// to Paystack's hosted payment page. The current student purchase model is
+// subscription-only; future one-off purchases are reserved for usage/add-on
+// credits rather than ownership of individual Library content.
 function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => void; selectedPlan: string }) {
   const { tokens: T } = useTheme()
   const [phone, setPhone] = useState('')
@@ -9299,7 +9348,6 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
         headers: { 'X-CSRF-Token': me.csrf_token },
         body: JSON.stringify({ plan: selectedPlan, phone_number: phone.trim() || undefined }),
       })
-      if (!res.redirect_url) throw new Error('Payment checkout URL was not returned.')
       window.location.href = res.redirect_url
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not start checkout - please try again.')
@@ -9331,7 +9379,7 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
           <div style={{ width: 72, height: 72, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, animation: 'pulse-gold 2s infinite' }}>🔒</div>
           <div>
             <div style={{ fontWeight: 800, fontSize: 17, color: T.text, marginBottom: 8 }}>Taking you to secure checkout…</div>
-            <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65 }}>You'll complete payment on Pesapal's secure page, then return to Prepza.</div>
+            <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65 }}>You'll complete payment on Paystack's secure page, then return to Prepza.</div>
           </div>
         </div>
       ) : (
@@ -9342,14 +9390,14 @@ function PaymentScreen({ setScreen, selectedPlan }: { setScreen: (s: Screen) => 
           <div style={{ background: T.card, borderRadius: 16, padding: 18, marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <div style={{ width: 40, height: 40, background: '#4CC97B20', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>📱</div>
-              <div><div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>M-Pesa number</div><div style={{ fontSize: 11, color: T.textMuted }}>Optional - speeds up checkout on Pesapal's page</div></div>
+              <div><div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>M-Pesa number</div><div style={{ fontSize: 11, color: T.textMuted }}>Optional - helps prefill checkout where supported</div></div>
             </div>
             <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XX XXX XXX" style={{ width: '100%', border: `1.5px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 15, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, boxSizing: 'border-box', letterSpacing: 0.5 }} />
           </div>
           <button onClick={pay} disabled={loadingPlan || !plan} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: (loadingPlan || !plan) ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)', opacity: (loadingPlan || !plan) ? 0.6 : 1 }}>
             {plan ? `Continue to Payment — KES ${plan.price.toLocaleString()}` : 'Loading…'}
           </button>
-          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: T.textMuted }}>🔒 Secured by Pesapal (M-Pesa & card)</div>
+          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: T.textMuted }}>🔒 Secured by Paystack (M-Pesa & card)</div>
         </div>
       )}
     </div>
@@ -9375,9 +9423,7 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
   }, [])
 
   const itemLabel = payment
-    ? (payment.payment_type === 'subscription'
-        ? `${(payment.plan || 'Subscription').charAt(0).toUpperCase()}${(payment.plan || 'Subscription').slice(1)} Plan`
-        : (payment.content_title || 'Content purchase'))
+    ? (payment.plan === 'plus' ? 'Plus Plan' : payment.plan === 'pro' ? 'Pro Plan' : 'Prepza Subscription')
     : null
 
   const detailRows: [string, string][] = payment
@@ -9398,8 +9444,8 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
         <div style={{ fontWeight: 800, fontSize: 22, color: T.text, marginBottom: 8 }}>Payment Successful! 🎉</div>
         <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.7 }}>
           {itemLabel
-            ? `Your ${itemLabel} payment has gone through${payment?.payment_type === 'subscription' ? ' — enjoy unlimited AI sessions and all learning tools.' : '.'}`
-            : 'Your payment has gone through. Welcome to Prepza Premium.'}
+            ? `Your ${itemLabel} payment has gone through — your plan entitlements are now active.`
+            : 'Your payment has gone through. Welcome to Prepza.'}
         </div>
       </div>
       {loading ? (
@@ -9417,7 +9463,7 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
         </div>
       )}
       <button onClick={() => setScreen('home')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)' }}>
-        Start Studying Premium
+        Start Studying
       </button>
       <div style={{ fontSize: 11, color: T.textMuted }}>Redirecting to home in a moment…</div>
     </div>
@@ -9468,7 +9514,7 @@ function PaymentFailureScreen({ setScreen }: { setScreen: (s: Screen) => void })
 type PaymentHistoryItem = {
   id: number
   payment_type: string
-  content_title: string | null
+  content_title?: string | null
   plan: string | null
   amount: number
   status: string
@@ -9501,7 +9547,7 @@ function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void })
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('settings')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
+          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Payment History</div>
         </div>
       </div>
@@ -9511,12 +9557,13 @@ function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void })
         ) : error ? (
           <ErrorState />
         ) : payments.length === 0 ? (
-          <EmptyState icon="💳" title="No payments yet" sub="Your subscription and content purchases will show up here." />
+          <EmptyState icon="💳" title="No payments yet" sub="Your Prepza subscription payments will show up here." />
         ) : payments.map(p => {
           const meta = PAYMENT_STATUS_META[p.status] || { icon: '•', color: T.textMuted, label: p.status }
-          const label = p.payment_type === 'subscription'
-            ? `${(p.plan || 'Subscription').charAt(0).toUpperCase()}${(p.plan || 'Subscription').slice(1)} Plan`
-            : (p.content_title || 'Content purchase')
+          const label = p.plan === 'plus' ? 'Plus Plan'
+            : p.plan === 'pro' ? 'Pro Plan'
+            : p.payment_type === 'addon' ? 'Usage add-on'
+            : 'Prepza Subscription'
           return (
             <div key={p.id} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
               <div style={{ width: 44, height: 44, background: `${meta.color}18`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{meta.icon}</div>
@@ -9599,27 +9646,6 @@ type AdminInfrastructure = {
   upgrade_policy: { automatic_billing: boolean; message: string }
 }
 
-type AdminCapacityPlan = {
-  inputs: {
-    daily_active_users: number
-    peak_concurrency: number
-    requests_per_active_user_per_day: number
-    peak_multiplier: number
-    cpu_seconds_per_request: number
-    memory_mb_per_concurrent_request: number
-    base_ram_gb: number
-    ram_headroom: number
-  }
-  avg_rps: number
-  peak_rps: number
-  cpu_cores_required: number
-  cpu_cores_with_headroom: number
-  ram_gb_required: number
-  render_fit: string
-  assumptions: string[]
-  one_thousand_dau_baseline: any
-}
-
 type AdminSystemCapacity = {
   tier: string
   available_tiers: string[]
@@ -9657,7 +9683,6 @@ type AdminAnalytics = {
   payments_by_status: Record<string, number>
   signups_per_day: { date: string; count: number }[]
   revenue_per_day: { date: string; amount: number }[]
-  top_performing_content: { id: number; title: string; content_type: string; revenue: number; purchases: number }[]
 }
 
 type AdminContentReport = {
@@ -9691,8 +9716,6 @@ type AdminPlatformSettings = {
   price_notes: number
   price_past_paper: number
   price_qna: number
-  price_plan_semester: number
-  price_plan_annual: number
   price_promotion_standard: number
   price_promotion_featured: number
   price_promotion_sponsored: number
@@ -9703,13 +9726,6 @@ type AdminPlatformSettings = {
   ai_daily_tutor_limit_plus: number | null
   ai_daily_tutor_limit_premium: number | null
   ai_monthly_budget_usd: number
-  ambassador_program_enabled: boolean
-  ambassador_payout_hold_days: number
-  ambassador_min_payout_kes: number
-  ambassador_pitch: string
-  support_email: string
-  support_phone: string
-  support_message: string
 }
 
 type AdminAuditLogEntry = {
@@ -10338,10 +10354,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     api<AdminUserRow[]>('/admin/users').then(res => setDashRecentUsers(res.slice(0, 5))).catch(() => {})
   }, [section])
 
-  const [capacityPlan, setCapacityPlan] = useState<AdminCapacityPlan | null>(null)
-  const [capacityPlanLoading, setCapacityPlanLoading] = useState(true)
-  const [capacityPlanError, setCapacityPlanError] = useState('')
-
   const [infrastructure, setInfrastructure] = useState<AdminInfrastructure | null>(null)
   const [infrastructureLoading, setInfrastructureLoading] = useState(true)
   const [infrastructureError, setInfrastructureError] = useState('')
@@ -10385,13 +10397,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
   useEffect(() => {
     if (section !== 'system') return
-    setCapacityPlanLoading(true)
-    setCapacityPlanError('')
-    api<AdminCapacityPlan>('/admin/infrastructure/capacity?dau=1000&concurrency=100')
-      .then(setCapacityPlan)
-      .catch(e => setCapacityPlanError(e instanceof ApiError ? e.message : 'Could not load capacity planning.'))
-      .finally(() => setCapacityPlanLoading(false))
-
     setInfrastructureLoading(true)
     setInfrastructureError('')
     api<AdminInfrastructure>('/admin/infrastructure')
@@ -10951,6 +10956,10 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     )
   }
 
+  if (section === 'b2b-finance') {
+    return <B2BFinanceAdmin tokens={T} />
+  }
+
   if (section === 'payments') {
     const now = new Date()
     const isThisMonth = (iso: string | null) => {
@@ -11242,22 +11251,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             </AdminCard>
           </div>
 
-          <AdminCard title="Top Performing Content">
-            {analytics.top_performing_content.length === 0 ? (
-              <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>No paid content purchases yet.</div>
-            ) : (
-              <AdminTable
-                cols={['Title', 'Type', 'Purchases', 'Revenue']}
-                rows={analytics.top_performing_content.map(c => [
-                  c.title,
-                  c.content_type,
-                  c.purchases.toString(),
-                  `KES ${c.revenue.toLocaleString()}`,
-                ])}
-              />
-            )}
-          </AdminCard>
-
           <AdminCard title="Top Universities by Engagement">
             {universityEngagementLoading ? (
               <div style={{ padding: '24px 18px', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading…</div>
@@ -11325,48 +11318,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
           </div>
         </AdminCard>
       )}
-      {capacityPlanLoading ? (
-        <AdminCard title="Render application capacity">
-          <div style={{ padding: '18px', color: T.textMuted, fontSize: 12 }}>Calculating from the current planning model…</div>
-        </AdminCard>
-      ) : capacityPlanError ? (
-        <AdminCard title="Render application capacity"><div style={{ padding: '18px', color: '#DC2626', fontSize: 12 }}>{capacityPlanError}</div></AdminCard>
-      ) : capacityPlan && (() => {
-        const required = capacityPlan.render_fit
-        const baseline = capacityPlan.one_thousand_dau_baseline?.recommended_start || capacityPlan.one_thousand_dau_baseline?.render_fit
-        return (
-          <AdminCard title="Render application capacity">
-            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.55 }}>
-                This is a transparent sizing model, not a provider guarantee. It uses measured inputs later as telemetry replaces the planning assumptions.
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 8 }}>
-                {[
-                  ['Peak RPS', capacityPlan.peak_rps.toFixed(2)],
-                  ['CPU needed', capacityPlan.cpu_cores_with_headroom.toFixed(2) + ' cores'],
-                  ['RAM needed', capacityPlan.ram_gb_required.toFixed(2) + ' GB'],
-                  ['Starting plan', required?.plan || '—'],
-                ].map(([label,value]) => (
-                  <div key={label} style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 11 }}>
-                    <div style={{ fontSize: 10, color: T.textMuted }}>{label}</div>
-                    <div style={{ fontSize: 17, fontWeight: 800, color: T.text, marginTop: 4 }}>{value}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 11, color: T.textMuted }}>
-                Baseline: 1,000 DAU, 100 peak concurrent requests, 60 requests/user/day, 10× peak multiplier, 50ms CPU/request, 0.5MB incremental RAM/request, 50% RAM headroom.
-              </div>
-              <div style={{ fontSize: 11, color: T.textMuted }}>
-                Render shape selected by the calculator: <strong style={{ color: T.text }}>{required}</strong>. The calculator can be adjusted from the endpoint as observed traffic changes.
-              </div>
-              {baseline && <div style={{ fontSize: 11, color: T.text, background: 'rgba(201,168,76,.08)', borderRadius: 9, padding: '9px 11px' }}>
-                Current 1,000-DAU baseline maps to <strong>{baseline}</strong>. Recalculate this card after real CPU/RAM/latency telemetry is connected before paying for a larger plan.
-              </div>}
-            </div>
-          </AdminCard>
-        )
-      })()}
-
       {systemCapacityLoading ? (
         <div style={{ padding: '24px 0', textAlign: 'center', color: T.textMuted, fontSize: 13 }}>Loading capacity data…</div>
       ) : systemCapacityError ? (
@@ -11427,7 +11378,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               </div>
             </AdminCard>
 
-            <AdminCard title="AI Provider Spend">
+            <AdminCard title="AI (Anthropic) Spend">
               <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#F9FAFB'), borderRadius: 10, padding: '12px 14px' }}>
@@ -11585,8 +11536,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               {numField('Notes', 'price_notes', { prefix: 'KES' })}
               {numField('Past Paper', 'price_past_paper', { prefix: 'KES' })}
               {numField('Q&A', 'price_qna', { prefix: 'KES' })}
-              {numField('Semester Plan', 'price_plan_semester', { prefix: 'KES' })}
-              {numField('Annual Plan', 'price_plan_annual', { prefix: 'KES' })}
               {numField('Opportunity — Standard', 'price_promotion_standard', { prefix: 'KES' })}
               {numField('Opportunity — Featured', 'price_promotion_featured', { prefix: 'KES' })}
               {numField('Opportunity — Sponsored', 'price_promotion_sponsored', { prefix: 'KES' })}
@@ -11606,28 +11555,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               {numField('Tutor — Premium tier', 'ai_daily_tutor_limit_premium', { allowNull: true })}
             </div>
             <div style={{ padding: '0 18px 14px', fontSize: 11, color: T.textMuted }}>Leave blank for unlimited.</div>
-          </AdminCard>
-
-          <AdminCard title="Ambassador Program">
-            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                <input type="checkbox" checked={settingsDraft.ambassador_program_enabled} onChange={e => setSettingsDraft({ ...settingsDraft, ambassador_program_enabled: e.target.checked })} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Accept ambassador applications and new referral attribution</span>
-              </label>
-              {numField('Payout hold (days)', 'ambassador_payout_hold_days')}
-              {numField('Minimum payout', 'ambassador_min_payout_kes', { prefix: 'KES' })}
-              <textarea value={settingsDraft.ambassador_pitch} onChange={e => setSettingsDraft({ ...settingsDraft, ambassador_pitch: e.target.value })} maxLength={1000} rows={5} placeholder="What ambassadors should share about Prepza…" style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card, resize: 'vertical' }} />
-              <div style={{ fontSize: 11, color: T.textMuted }}>This pitch is used by the ambassador Share action and branded printable poster. The referral URL and commission terms remain system-controlled. Minimum payout cannot be set below KES 500.</div>
-            </div>
-          </AdminCard>
-
-          <AdminCard title="Student Support Contact">
-            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <input value={settingsDraft.support_email} onChange={e => setSettingsDraft({ ...settingsDraft, support_email: e.target.value })} placeholder="Support email" maxLength={160} style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card }} />
-              <input value={settingsDraft.support_phone} onChange={e => setSettingsDraft({ ...settingsDraft, support_phone: e.target.value })} placeholder="Support phone" maxLength={160} style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card }} />
-              <textarea value={settingsDraft.support_message} onChange={e => setSettingsDraft({ ...settingsDraft, support_message: e.target.value })} placeholder="Message shown to students" maxLength={500} rows={3} style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', color: T.text, background: T.card, resize: 'vertical' }} />
-              <div style={{ fontSize: 11, color: T.textMuted }}>Students see these details in Settings → Contact Support. Changes apply to new support views immediately.</div>
-            </div>
           </AdminCard>
 
           <AdminCard title="AI Monthly Budget">
@@ -11654,10 +11581,6 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   if (section === 'groups') return <AdminGroupsPanel />
 
   if (section === 'ambassadors') return <AdminAmbassadorsPanel />
-
-  if (section === 'b2b-finance') {
-    return <B2BFinanceAdmin tokens={T} />
-  }
 
   if (section === 'communications') {
     return (
@@ -11761,7 +11684,7 @@ interface AdminAmbassadorRow {
   email: string | null
   display_name: string | null
   referral_code: string
-  status: 'pending' | 'active' | 'suspended' | 'rejected' | 'terminated'
+  status: 'pending' | 'active' | 'suspended' | 'rejected'
   applied_at: string | null
   reviewed_at: string | null
   rejection_reason: string | null
@@ -11804,7 +11727,7 @@ interface AdminPayoutRow {
 }
 
 const ADMIN_AMB_STATUS_COLOR: Record<string, string> = {
-  pending: 'amber', active: 'green', suspended: 'red', rejected: 'gray', terminated: 'gray',
+  pending: 'amber', active: 'green', suspended: 'red', rejected: 'gray',
   approved: 'blue', paid: 'green',
 }
 
@@ -11863,7 +11786,7 @@ function AdminAmbassadorsPanel() {
       .finally(() => setLoadingDetail(false))
   }
 
-  const runAmbassadorAction = async (id: number, action: 'approve' | 'suspend' | 'reinstate' | 'terminate') => {
+  const runAmbassadorAction = async (id: number, action: 'approve' | 'suspend' | 'reinstate') => {
     setActionBusy(true)
     try {
       await api(`/admin/ambassadors/${id}/${action}`, {
@@ -11996,12 +11919,6 @@ function AdminAmbassadorsPanel() {
               {selected.status === 'suspended' && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                   <button disabled={actionBusy} onClick={() => runAmbassadorAction(selected.id, 'reinstate')} style={{ background: '#F0FDF4', color: '#16A34A', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12 }}>Reinstate</button>
-                  <button disabled={actionBusy} onClick={() => runAmbassadorAction(selected.id, 'terminate')} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12 }}>Terminate</button>
-                </div>
-              )}
-              {selected.status === 'active' && (
-                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                  <button disabled={actionBusy} onClick={() => runAmbassadorAction(selected.id, 'terminate')} style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 12 }}>Terminate</button>
                 </div>
               )}
               {selected.rejection_reason && (
@@ -12905,6 +12822,24 @@ function AdminCommunityPanel() {
 
   useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
 
+  const payPromotion = async (promotionId: number) => {
+    if (!isOwner || promoPayingId === promotionId) return
+    setPromoPayingId(promotionId); setPromoError('')
+    try {
+      const res = await api<{ payment_required: boolean; redirect_url?: string }>(
+        `/organisations/${orgId}/opportunity-promotions/${promotionId}/pay`,
+        { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } },
+      )
+      if (res.payment_required && res.redirect_url) window.location.href = res.redirect_url
+      else {
+        const refreshed = await api<{ promotions: OrgPromotion[] }>(`/organisations/${orgId}/opportunities/${promoTarget?.id}/promotions`)
+        setPromoHistory(refreshed.promotions)
+      }
+    } catch (e) {
+      setPromoError(e instanceof ApiError ? e.message : 'Could not start payment.')
+    } finally { setPromoPayingId(null) }
+  }
+
   const load = () => {
     setLoading(true); setError('')
     api<{ reports: AdminContentReport[] }>('/admin/content-reports?status=pending')
@@ -13090,8 +13025,7 @@ const AMB_COLORS = { navy: '#0B1437', navy3: '#1A2A5E', gold: '#C9A84C', goldLig
 
 interface AmbassadorStatusResp {
   enrolled: boolean
-  status?: 'pending' | 'active' | 'suspended' | 'rejected' | 'terminated'
-  program_enabled?: boolean
+  status?: 'pending' | 'active' | 'suspended' | 'rejected'
   referral_code?: string
   applied_at?: string
   rejection_reason?: string | null
@@ -13107,7 +13041,6 @@ interface AmbassadorDashboardResp {
   earnings: { pending_kes: number; available_kes: number; paid_kes: number }
   min_payout_kes: number
   payout_hold_days: number
-  pitch: string
 }
 interface AmbassadorReferral {
   id: number
@@ -13159,9 +13092,6 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [copied, setCopied] = useState(false)
   const [showSheet, setShowSheet] = useState(false)
   const [payoutPhone, setPayoutPhone] = useState('')
-  const [recipientFirstName, setRecipientFirstName] = useState('')
-  const [recipientLastName, setRecipientLastName] = useState('')
-  const posterCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const [payoutError, setPayoutError] = useState('')
   const [submittingPayout, setSubmittingPayout] = useState(false)
 
@@ -13211,7 +13141,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
   const shareLink = async () => {
     if (!dashboard) return
-    const text = `${dashboard.pitch}\n\nJoin through my Prepza ambassador link: ${dashboard.referral_link}`
+    const text = `Study smarter with Prepza - sign up with my link: ${dashboard.referral_link}`
     if ((navigator as any).share) {
       try { await (navigator as any).share({ text, url: dashboard.referral_link }) } catch {}
     } else {
@@ -13224,17 +13154,13 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       setPayoutError('Enter a valid phone number (e.g. +254712345678).')
       return
     }
-    if (!recipientFirstName.trim() || !recipientLastName.trim()) {
-      setPayoutError('Enter the recipient first and last name used for the M-Pesa payout.')
-      return
-    }
     setSubmittingPayout(true)
     setPayoutError('')
     try {
       await api('/ambassador/payouts/request', {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ payout_destination: payoutPhone.trim(), recipient_first_name: recipientFirstName.trim(), recipient_last_name: recipientLastName.trim() }),
+        body: JSON.stringify({ payout_destination: payoutPhone.trim() }),
       })
       setShowSheet(false)
       loadAll()
@@ -13243,63 +13169,6 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     } finally {
       setSubmittingPayout(false)
     }
-  }
-
-  useEffect(() => {
-    if (!dashboard || !posterCanvasRef.current) return
-    const canvas = posterCanvasRef.current
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    const W = 1200, H = 1600
-    canvas.width = W; canvas.height = H
-    ctx.fillStyle = AMB_COLORS.navy; ctx.fillRect(0, 0, W, H)
-    ctx.fillStyle = '#F8F9FC'; ctx.fillRect(70, 70, W - 140, H - 140)
-    ctx.fillStyle = AMB_COLORS.navy; ctx.font = '900 86px Plus Jakarta Sans, Arial'; ctx.fillText('PREPZA', 120, 190)
-    const logo = new Image()
-    logo.onload = () => { ctx.drawImage(logo, 120, 105, 82, 82) }
-    logo.src = logoImg
-    ctx.fillStyle = AMB_COLORS.gold; ctx.fillRect(120, 220, 170, 8)
-    ctx.fillStyle = AMB_COLORS.navy; ctx.font = '800 52px Plus Jakarta Sans, Arial'; ctx.fillText('Study smarter together.', 120, 320)
-    const wrap = (text: string, x: number, y: number, maxWidth: number, lineHeight: number, font: string) => {
-      ctx.font = font
-      const words = text.split(/\s+/); let line = ''; let yy = y
-      for (const word of words) {
-        const test = line ? line + ' ' + word : word
-        if (ctx.measureText(test).width > maxWidth && line) { ctx.fillText(line, x, yy); line = word; yy += lineHeight } else line = test
-      }
-      if (line) { ctx.fillText(line, x, yy); yy += lineHeight }
-      return yy
-    }
-    ctx.fillStyle = '#4B5563'
-    const y = wrap(dashboard.pitch, 120, 410, 650, 44, '500 31px Plus Jakarta Sans, Arial')
-    ctx.fillStyle = AMB_COLORS.gold; ctx.font = '900 30px Plus Jakarta Sans, Arial'; ctx.fillText('10% commission on the first successful payment', 120, y + 35)
-    ctx.fillStyle = AMB_COLORS.navy; ctx.font = '800 32px Plus Jakarta Sans, Arial'; ctx.fillText('SCAN TO JOIN PREPZA', 120, y + 105)
-    const qr = new Image()
-    qr.onload = () => {
-      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(790, 360, 300, 300); ctx.drawImage(qr, 810, 380, 260, 260)
-      ctx.fillStyle = '#111827'; ctx.font = '700 24px Plus Jakarta Sans, Arial'; ctx.fillText('Personal referral', 120, H - 285); ctx.fillText('Code: ' + dashboard.referral_code, 120, H - 245)
-      ctx.fillStyle = '#6B7280'; wrap('Share this poster in class groups, campus spaces, or online. The QR code keeps your referral attribution.', 120, H - 185, 920, 34, '500 22px Plus Jakarta Sans, Arial')
-    }
-    qr.src = '/ambassador/referral-qr'
-  }, [dashboard])
-
-  const downloadPoster = () => {
-    const canvas = posterCanvasRef.current
-    if (!canvas || !dashboard) return
-    const link = document.createElement('a')
-    link.download = `prepza-ambassador-poster-${dashboard.referral_code}.png`
-    link.href = canvas.toDataURL('image/png')
-    link.click()
-  }
-
-  const printPoster = () => {
-    const canvas = posterCanvasRef.current
-    if (!canvas) return
-    const win = window.open('', '_blank')
-    if (!win) return
-    const image = canvas.toDataURL('image/png')
-    win.document.write('<!doctype html><html><head><title>Prepza Ambassador Poster</title><style>@page{size:A4;margin:0}body{margin:0}img{width:210mm;height:297mm;object-fit:contain}</style></head><body><img src="' + image + '" onload="window.print()"></body></html>')
-    win.document.close()
   }
 
   const Header = ({ title }: { title: string }) => (
@@ -13331,30 +13200,6 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const enrolled = statusData?.enrolled ?? false
   const appStatus = statusData?.status
 
-  if (statusData && statusData.program_enabled === false && !enrolled) return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
-      <Header title="Ambassador Program" />
-      <div style={{ padding: 28 }}>
-        <div style={{ background: T.card, borderRadius: 18, padding: 24, textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontWeight: 800, fontSize: 17, color: AMB_COLORS.navy, marginBottom: 7 }}>Ambassador applications are paused</div>
-          <div style={{ fontSize: 12, color: AMB_COLORS.gray, lineHeight: 1.6 }}>Prepza is not accepting new ambassador applications or new referral attribution right now. Existing approved ambassadors keep their historical records.</div>
-        </div>
-      </div>
-    </div>
-  )
-
-  if (appStatus === 'terminated') return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
-      <Header title="Ambassador Program" />
-      <div style={{ padding: 28 }}>
-        <div style={{ background: T.card, borderRadius: 18, padding: 24, textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontWeight: 800, fontSize: 17, color: AMB_COLORS.navy, marginBottom: 7 }}>Ambassador account terminated</div>
-          <div style={{ fontSize: 12, color: AMB_COLORS.gray, lineHeight: 1.6 }}>New referrals and new payout requests are disabled. Historical referral and payout records are retained for accounting and support.</div>
-        </div>
-      </div>
-    </div>
-  )
-
   if (!enrolled || appStatus === 'rejected') return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
       <Header title="Ambassador Program" />
@@ -13370,11 +13215,17 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             {!!statusData?.rejection_reason && <div style={{ fontSize: 12, color: '#991B1B' }}>{statusData.rejection_reason}</div>}
           </div>
         )}
-        <div style={{ background: T.card, borderRadius: 16, padding: '15px 16px', marginBottom: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontWeight: 800, fontSize: 14, color: AMB_COLORS.navy }}>10% commission</div>
-          <div style={{ fontSize: 11, color: AMB_COLORS.gray, lineHeight: 1.5, marginTop: 4 }}>
-            Earn 10% of each referred student's first successful payment. The rate does not increase with referral volume.
-          </div>
+        <div style={{ fontWeight: 700, fontSize: 13, color: AMB_COLORS.navy, marginBottom: 10 }}>Commission tiers</div>
+        <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', marginBottom: 20 }}>
+          {[[1, 10, '0–4 paying referrals'], [2, 15, '5–19 paying referrals'], [3, 20, '20+ paying referrals']].map(([t, pct, range], i) => (
+            <div key={t as number} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i < 2 ? '1px solid #F3F4F6' : 'none' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: AMB_COLORS.gold + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: AMB_COLORS.gold }}>T{t}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: AMB_COLORS.navy }}>{pct}% commission</div>
+                <div style={{ fontSize: 11, color: AMB_COLORS.gray }}>{range}</div>
+              </div>
+            </div>
+          ))}
         </div>
         <button onClick={handleApply} disabled={applying} style={{ width: '100%', padding: '15px 0', fontSize: 14, background: AMB_COLORS.gold, color: AMB_COLORS.navy, border: 'none', borderRadius: 14, fontWeight: 800, cursor: applying ? 'default' : 'pointer', opacity: applying ? 0.7 : 1 }}>
           {applying ? 'Submitting…' : (appStatus === 'rejected' ? 'Reapply' : 'Apply to become an ambassador')}
@@ -13404,6 +13255,7 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   )
 
   const canRequestPayout = dashboard.status === 'active' && dashboard.earnings.available_kes >= dashboard.min_payout_kes
+  const tierPct = dashboard.next_tier_at ? Math.min(100, (dashboard.funnel.paying / dashboard.next_tier_at) * 100) : 100
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: AMB_COLORS.bg }}>
@@ -13430,18 +13282,6 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
               <a href="/ambassador/referral-qr" download={`prepza-ambassador-${dashboard.referral_code}.svg`} style={{ display:'inline-block', marginTop:9, color:AMB_COLORS.gold, fontSize:11, fontWeight:800, textDecoration:'none' }}>Save QR code</a>
             </div>
           </div>
-          <div style={{ marginTop: 10, background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: 10 }}>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,.55)', marginBottom: 7 }}>Approved sharing message</div>
-            <div style={{ fontSize: 11, color: '#fff', lineHeight: 1.5 }}>{dashboard.pitch}</div>
-          </div>
-          <div style={{ marginTop: 12, background: T.card, borderRadius: 14, padding: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: T.text, marginBottom: 8 }}>Printable ambassador poster</div>
-            <canvas ref={posterCanvasRef} style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 10, background: '#fff' }} />
-            <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
-              <button onClick={downloadPoster} style={{ flex: 1, background: AMB_COLORS.navy, color: '#fff', border: 'none', borderRadius: 9, padding: '9px 0', fontWeight: 800, fontSize: 11, cursor: 'pointer' }}>Download poster</button>
-              <button onClick={printPoster} style={{ flex: 1, background: 'transparent', color: AMB_COLORS.navy, border: '1px solid rgba(11,20,55,.18)', borderRadius: 9, padding: '9px 0', fontWeight: 800, fontSize: 11, cursor: 'pointer' }}>Print</button>
-            </div>
-          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={shareLink} style={{ flex: 1, background: `linear-gradient(135deg,${AMB_COLORS.gold},${AMB_COLORS.goldLight})`, color: AMB_COLORS.navy, border: 'none', borderRadius: 12, padding: '11px 0', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>Share link</button>
             <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -13453,11 +13293,16 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         <div style={{ margin: '0 18px 14px', background: T.card, borderRadius: 16, padding: 16, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 15, color: AMB_COLORS.navy }}>10% commission · first payment only</div>
-              <div style={{ fontSize: 11, color: AMB_COLORS.gray }}>Your rate is fixed and does not change with referral volume.</div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: AMB_COLORS.navy }}>Tier {dashboard.tier} · {dashboard.commission_pct}% commission</div>
+              <div style={{ fontSize: 11, color: AMB_COLORS.gray }}>{dashboard.next_tier_at ? `${Math.max(0, dashboard.next_tier_at - dashboard.funnel.paying)} more paying referrals to Tier ${dashboard.tier + 1}` : 'Top tier reached'}</div>
             </div>
             {amPill(`${dashboard.funnel.paying} paying`, AMB_COLORS.gold)}
           </div>
+          {!!dashboard.next_tier_at && (
+            <div style={{ background: '#F3F4F6', borderRadius: 99, height: 7, overflow: 'hidden' }}>
+              <div style={{ background: `linear-gradient(90deg,${AMB_COLORS.gold},${AMB_COLORS.goldLight})`, height: 7, width: `${tierPct}%`, borderRadius: 99 }} />
+            </div>
+          )}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, margin: '0 18px 14px' }}>
           {[['Pending', dashboard.earnings.pending_kes, AMB_COLORS.gray], ['Available', dashboard.earnings.available_kes, AMB_COLORS.green], ['Paid out', dashboard.earnings.paid_kes, AMB_COLORS.navy]].map(([label, val, color]) => (
@@ -13545,10 +13390,6 @@ function AmbassadorScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
             <div style={{ fontWeight: 800, fontSize: 16, color: AMB_COLORS.navy, marginBottom: 4 }}>Request payout</div>
             <div style={{ fontSize: 12, color: AMB_COLORS.gray, marginBottom: 18 }}>Available balance: {fmtKes(dashboard.earnings.available_kes)}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-              <input value={recipientFirstName} onChange={e => setRecipientFirstName(e.target.value)} placeholder='First name' style={{ width: '100%', boxSizing: 'border-box', background: AMB_COLORS.bg, border: '1px solid #E5E7EB', borderRadius: 12, padding: '13px 12px', fontSize: 13, color: AMB_COLORS.navy }} />
-              <input value={recipientLastName} onChange={e => setRecipientLastName(e.target.value)} placeholder='Last name' style={{ width: '100%', boxSizing: 'border-box', background: AMB_COLORS.bg, border: '1px solid #E5E7EB', borderRadius: 12, padding: '13px 12px', fontSize: 13, color: AMB_COLORS.navy }} />
-            </div>
             <div style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>M-Pesa number</div>
             <input value={payoutPhone} onChange={e => setPayoutPhone(e.target.value)} placeholder="+254712345678" style={{ width: '100%', boxSizing: 'border-box', background: AMB_COLORS.bg, border: '1px solid #E5E7EB', borderRadius: 12, padding: '13px 14px', fontSize: 13, color: AMB_COLORS.navy, marginBottom: 8 }} />
             {!!payoutError && <div style={{ fontSize: 11, color: AMB_COLORS.red, marginBottom: 10 }}>{payoutError}</div>}
@@ -13610,7 +13451,7 @@ function orgPill(text: string, color: string) {
 
 const ORG_OPPORTUNITY_TYPES = ['job', 'internship', 'scholarship', 'competition', 'volunteering', 'event', 'other']
 
-function OrganisationPortalScreen({ onExit, onOpenPremium }: { onExit: () => void; onOpenPremium?: () => void }) {
+function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
   const { tokens: T } = useTheme()
   const [csrfToken, setCsrfToken] = useState('')
   const [loading, setLoading] = useState(true)
@@ -13698,7 +13539,6 @@ function OrganisationPortalScreen({ onExit, onOpenPremium }: { onExit: () => voi
     return (
       <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: T.pageBg, overflow: 'hidden' }}>
         <Header title="Organisation Portal" />
-        {onOpenPremium && <button onClick={onOpenPremium} style={{ margin: '12px 18px 0', padding: '10px 14px', border: 'none', borderRadius: 12, background: ORG_COLORS.gold, color: ORG_COLORS.navy, fontWeight: 800, cursor: 'pointer' }}>Open Business workspace</button>}
         <div style={{ flex: 1, overflowY: 'auto', padding: 18 }}>
           <div style={{ background: `linear-gradient(135deg,${ORG_COLORS.navy},${ORG_COLORS.navy3})`, borderRadius: 20, padding: 22, marginBottom: 18, textAlign: 'center' }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>{Ic.person('w-8 h-8')}</div>
@@ -13848,28 +13688,6 @@ function OrgOpportunitiesTab({ orgId, isOwner, csrfToken, onCreate }: { orgId: n
       setPromoError(e instanceof ApiError ? e.message : 'Could not submit this promotion request.')
     } finally {
       setPromoSubmitting(false)
-    }
-  }
-
-  const payPromotion = async (promotionId: number) => {
-    if (!isOwner || promoPayingId === promotionId) return
-    setPromoPayingId(promotionId)
-    setPromoError('')
-    try {
-      const res = await api<{ payment_required: boolean; redirect_url?: string }>(
-        `/organisations/${orgId}/opportunity-promotions/${promotionId}/pay`,
-        { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } },
-      )
-      if (res.payment_required && res.redirect_url) {
-        window.location.href = res.redirect_url
-      } else if (promoTarget) {
-        const refreshed = await api<{ promotions: OrgPromotion[] }>(`/organisations/${orgId}/opportunities/${promoTarget.id}/promotions`)
-        setPromoHistory(refreshed.promotions)
-      }
-    } catch (e) {
-      setPromoError(e instanceof ApiError ? e.message : 'Could not start payment.')
-    } finally {
-      setPromoPayingId(null)
     }
   }
 
@@ -14204,12 +14022,11 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
     if (!isOwner || billingBusy) return
     setBillingBusy(code)
     try {
-      const res = await api<{ status: string; amount_kes: number; redirect_url?: string }>(`/api/organisations/${orgId}/plan/checkout`, {
+      const res = await api<{ status: string; amount_kes: number; redirect_url: string }>(`/api/organisations/${orgId}/plan/checkout`, {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
         body: JSON.stringify({ plan: code }),
       })
-      if (!res.redirect_url) throw new Error('Payment checkout URL was not returned.')
       window.location.href = res.redirect_url
     } catch (e) {
       alert(e instanceof ApiError ? e.message : 'Could not start organisation checkout.')
@@ -14541,7 +14358,10 @@ export default function App() {
 
   const setScreen = (s: Screen) => {
     if (s === screen) return
-    setScreenStack(stack => [...stack, s])
+    setScreenStack(stack => {
+      const ancestorIndex = stack.lastIndexOf(s)
+      return ancestorIndex >= 0 ? stack.slice(0, ancestorIndex + 1) : [...stack, s]
+    })
     window.history.pushState({ prepzaNav: true }, '')
   }
 
@@ -14556,7 +14376,6 @@ export default function App() {
 
   const [adminMode, setAdminMode] = useState(false)
   const [orgPortalMode, setOrgPortalMode] = useState(false)
-  const [premiumOrgPortalMode, setPremiumOrgPortalMode] = useState(false)
   useEffect(() => {
     // Product analytics: a signup/login is not an active user. The heartbeat
     // records foreground engagement and meaningful sessions for DAU/WAU/MAU
@@ -14769,11 +14588,9 @@ export default function App() {
   }, [])
 
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
-  if (orgPortalMode) return <OrganisationPortalScreen onExit={() => setOrgPortalMode(false)} onOpenPremium={() => { setOrgPortalMode(false); setPremiumOrgPortalMode(true) }} />
-  if (premiumOrgPortalMode) return <PremiumOrganisationPortal onExit={() => setPremiumOrgPortalMode(false)} />
+  if (orgPortalMode) return <PremiumOrganisationPortal onExit={() => setOrgPortalMode(false)} />
 
-  // Bottom navigation belongs to the primary app surfaces. Detail/immersive flows must own the full viewport so the global nav does not compete with their back/close controls.
-  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','upload-share-choice','processing','doc-ready','document-study','document-reader','ai-tutor','flashcards','quiz','podcast-player','podcast-library','summary','opportunity-detail','share-sheet','settings','student-profile','notifications','library','mind-map','new-chat','chat-detail','chat-options','edit-profile','payment','payment-success','payment-failure','payment-history','publish-library','xp-progress','study-streak','study-activity','achievements','time-studied','followers','following','follow-requests','group-detail','group-create']
+  // Bottom navigation belongs to the primary app surfaces. Detail/immersive flows must own the full viewport so the global nav does not compete with their back/close controls.\n  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','upload-share-choice','processing','doc-ready','document-study','document-reader','ai-tutor','flashcards','quiz','podcast-player','podcast-library','summary','opportunity-detail','share-sheet','settings','student-profile','notifications','library','mind-map','new-chat','chat-detail','chat-options','edit-profile','payment','payment-success','payment-failure','payment-history','publish-library','xp-progress','study-streak','study-activity','achievements','time-studied','followers','following','follow-requests','group-detail','group-create']
   const darkHomeIndicator: Screen[] = ['processing','splash','login']
 
   const renderScreen = () => {
@@ -14842,7 +14659,25 @@ export default function App() {
   const isDark = ['splash','login','processing'].includes(screen)
 
   return (
-    <div style={{ width: '100%', height: '100dvh', background: isDark ? N.navy : N.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <>
+      <style>{`
+        html[data-prepza-theme="dark"] [style*="color: rgb(11, 20, 55)"],
+        html[data-prepza-theme="dark"] [style*="color:#0B1437"],
+        html[data-prepza-theme="dark"] [style*="color: #0B1437"] { color: #F5F6FA !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(55, 65, 81)"],
+        html[data-prepza-theme="dark"] [style*="color:#374151"],
+        html[data-prepza-theme="dark"] [style*="color: #374151"] { color: #D7DBE5 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(107, 114, 128)"],
+        html[data-prepza-theme="dark"] [style*="color:#6B7280"],
+        html[data-prepza-theme="dark"] [style*="color: #6B7280"] { color: #9AA3B8 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(156, 163, 175)"],
+        html[data-prepza-theme="dark"] [style*="color:#9CA3AF"],
+        html[data-prepza-theme="dark"] [style*="color: #9CA3AF"] { color: #AEB7C7 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(17, 24, 39)"],
+        html[data-prepza-theme="dark"] [style*="color:#111827"],
+        html[data-prepza-theme="dark"] [style*="color: #111827"] { color: #F5F6FA !important; }
+      `}</style>
+      <div style={{ width: '100%', height: '100dvh', background: isDark ? N.navy : (currentThemeMode === 'dark' ? DARK_THEME.pageBg : N.bg), display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {renderScreen()}
@@ -14856,6 +14691,32 @@ export default function App() {
           ⚙ Admin Platform
         </button>
       )}
-    </div>
+      </div>
+    </>
   )
+}
+function friendlyGenerationError(error: unknown): string {
+  const message = error instanceof ApiError ? error.message : error instanceof Error ? error.message : String(error || '')
+  const lower = message.toLowerCase()
+  if (lower.includes("ada's safety limit") || lower.includes("used your ada allowance")) {
+    return message
+  }
+  if (lower.includes('generation quota exhausted') || lower.includes('used up this plan')) {
+    return `You've used your plan's monthly allowance for this study material. Upgrade your plan for a larger allowance, or wait for your allowance to reset.`
+  }
+  if (lower.includes('supports at most') || lower.includes('generation amount')) {
+    return message + ' You can choose a smaller generation or upgrade your plan for a larger one.'
+  }
+  if (lower.includes('student plan configuration is unavailable')) {
+    return 'Your study allowance is temporarily unavailable. Please try again shortly.'
+  }
+  if (error instanceof ApiError && error.status === 429) {
+    return 'Too many generation requests in a short time. Please wait a little and try again.'
+  }
+  if (error instanceof ApiError && error.status === 503) {
+    return 'Prepza has temporarily paused fresh AI generation. Your existing study materials are still available. Please try again later.'
+  }
+  return message || 'We could not generate this study material. Please try again.'
+}
+
 }

@@ -17,7 +17,7 @@
 const DB_NAME = 'prepza-e2ee'
 const DB_VERSION = 1
 const STORE_NAME = 'identity-keys'
-const RECORD_KEY_PREFIX = 'account:' // one identity keypair per Prepza account on this browser
+const RECORD_KEY = 'self' // single identity keypair per device for now
 
 export interface IdentityKeyRecord {
   publicKey: CryptoKey
@@ -109,18 +109,16 @@ export async function importPeerPublicKey(value: string): Promise<CryptoKey> {
 }
 
 /** Persists the current device's identity keypair to IndexedDB. */
-export async function storeIdentityKeyPair(userId: number, keyPair: CryptoKeyPair): Promise<void> {
-  if (!Number.isInteger(userId) || userId <= 0) throw new Error('Invalid user id.')
-  await idbSet(STORE_NAME, `${RECORD_KEY_PREFIX}${userId}`, keyPair)
+export async function storeIdentityKeyPair(keyPair: CryptoKeyPair): Promise<void> {
+  await idbSet(STORE_NAME, RECORD_KEY, keyPair)
 }
 
 /**
  * Loads this device's identity keypair from IndexedDB, or null if none
  * has been generated yet on this device/browser.
  */
-export async function loadIdentityKeyPair(userId: number): Promise<CryptoKeyPair | null> {
-  if (!Number.isInteger(userId) || userId <= 0) throw new Error('Invalid user id.')
-  const record = await idbGet<CryptoKeyPair>(STORE_NAME, `${RECORD_KEY_PREFIX}${userId}`)
+export async function loadIdentityKeyPair(): Promise<CryptoKeyPair | null> {
+  const record = await idbGet<CryptoKeyPair>(STORE_NAME, RECORD_KEY)
   return record ?? null
 }
 
@@ -131,15 +129,15 @@ export async function loadIdentityKeyPair(userId: number): Promise<CryptoKeyPair
  * POST /keys/register - this function deliberately does not make that call
  * itself, keeping this module network-free per Chunk 1's scope.
  */
-export async function getOrCreateIdentityKeyPair(userId: number): Promise<{
+export async function getOrCreateIdentityKeyPair(): Promise<{
   keyPair: CryptoKeyPair
   isNew: boolean
 }> {
-  const existing = await loadIdentityKeyPair(userId)
+  const existing = await loadIdentityKeyPair()
   if (existing) {
     return { keyPair: existing, isNew: false }
   }
   const keyPair = await generateIdentityKeyPair()
-  await storeIdentityKeyPair(userId, keyPair)
+  await storeIdentityKeyPair(keyPair)
   return { keyPair, isNew: true }
 }

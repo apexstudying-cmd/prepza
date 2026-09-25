@@ -89,7 +89,7 @@ async function fetchGroupDetail(conversationId: number): Promise<any> {
 async function ensureIdentityKeyRegistered(csrfToken: string): Promise<void> {
   if (identityRegistrationPromise) return identityRegistrationPromise
   identityRegistrationPromise = (async () => {
-    const { keyPair } = await getOrCreateIdentityKeyPair(currentUserId!)
+    const { keyPair } = await getOrCreateIdentityKeyPair()
     const publicKey = await exportPublicKeyBase64Url(keyPair.publicKey)
     const response = await window.fetch('/keys/register', {
       method: 'POST',
@@ -188,10 +188,10 @@ async function provisionCurrentEpochIfElected(conversationId: number): Promise<v
 }
 
 async function openCurrentGroupSession(conversationId: number) {
-  try { return await openGroupSession(conversationId, currentUserId!) }
+  try { return await openGroupSession(conversationId) }
   catch {
     await provisionCurrentEpochIfElected(conversationId)
-    return openGroupSession(conversationId, currentUserId!)
+    return openGroupSession(conversationId)
   }
 }
 

@@ -5,7 +5,7 @@ This module is the ONLY place in the codebase that should ever call an
 AI provider's SDK directly. Every feature (forum "Ask Prepza AI", and
 later the AI Tutor / Summaries / Quizzes / Flashcards / Podcasts / Mind
 maps) is expected to call the functions in this module rather than
-touching `provider` (or any future provider SDK) itself. That is what
+touching `anthropic` (or any future provider SDK) itself. That is what
 makes it possible to add/swap providers later without rewriting every
 feature that uses AI - see PREPZA AI COST OPTIMIZATION & MULTI-MODEL
 ROUTING doc.
@@ -26,12 +26,12 @@ import os
 import json
 import re
 import time
-import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
+import anthropic
 import requests
 
 
@@ -39,8 +39,8 @@ import requests
 # 1. PROVIDER-AGNOSTIC REQUEST / RESPONSE / USAGE SHAPES
 # ============================================================
 # Per the cost-optimization doc: features build an AIRequest and get
-# back an AIResponse. Nothing here is Provider-specific by name, even
-# though ProviderAdapter is currently the only implementation.
+# back an AIResponse. Nothing here is Anthropic-specific by name, even
+# though AnthropicProvider is currently the only implementation.
 
 @dataclass
 class AIRequest:
@@ -89,14 +89,17 @@ class AIRateLimitExceededError(Exception):
 # 2. TASK-BASED MODEL ROUTING
 # ============================================================
 # Central config so nothing downstream hard-codes a model name.
-# Provider routing is centralized here. Ada/TUTORING is OpenAI-first;
-# OpenAI is the locked provider for Ada; GPT-5 mini and GPT-5.6 Luna are the only Ada models. Adding another
-# provider should only require routing/config changes here, not feature call-site changes. Routing choices below use the locked OpenAI model split: GPT-5 mini for
-# high-volume structured work and GPT-5.6 Luna for stronger reasoning. - tune with real usage data later per the
+# Only Sonnet 5 / Haiku 4.5 exist today (single provider: Anthropic).
+# Adding a second provider later means adding entries here, not
+# touching call sites. Routing choices below follow the locked
+# decisions (Sonnet for real academic reasoning, Haiku for cheap/
+# mechanical generation) - tune with real usage data later per the
 # cost doc's "model evaluation harness" (not built yet, deliberately
 # out of scope for this pass).
 
-MODEL_OPENAI_GPT5_MINI = "openai:gpt-5-mini"
+MODEL_SONNET_5 = "claude-sonnet-5"
+MODEL_HAIKU_4_5 = "claude-haiku-4-5-20251001"
+
 MODEL_GEMINI_FLASH_LITE = "gemini:gemini-2.5-flash-lite"
 MODEL_GEMINI_FLASH = "gemini:gemini-2.5-flash"
 MODEL_OPENAI_LUNA = "openai:gpt-5.6-luna"
@@ -108,21 +111,21 @@ def _configured_model(task_name, default):
 AI_TASKS = {
     # Wired and in use this chunk:
     "FORUM_ANSWER": {
-        "primary": MODEL_OPENAI_LUNA,
+        "primary": MODEL_SONNET_5,
         "fallback": None,
         "max_tokens": 1024,
         "notes": "Ask Prepza AI in the forum - real academic reasoning needed.",
     },
     "THREAD_SUMMARY": {
-        "primary": MODEL_OPENAI_GPT5_MINI,
-        "fallback": MODEL_OPENAI_LUNA,
+        "primary": MODEL_HAIKU_4_5,
+        "fallback": MODEL_SONNET_5,
         "max_tokens": 512,
         "notes": "Summarizing an existing forum thread on request.",
     },
 
     "OCR_TRANSCRIBE": {
-        "primary": MODEL_OPENAI_GPT5_MINI,
-        "fallback": MODEL_OPENAI_LUNA,
+        "primary": MODEL_HAIKU_4_5,
+        "fallback": MODEL_SONNET_5,
         "max_tokens": 2048,
         "notes": "Vision transcription of a scanned/image-only document page.",
     },
@@ -131,44 +134,44 @@ AI_TASKS = {
     # must land first) - present now so routes/features can be added
     # later without another routing-config change.
     "TUTORING": {
-        "primary": _configured_model("tutoring", MODEL_OPENAI_GPT5_MINI),
-        "fallback": MODEL_OPENAI_LUNA,
+        "primary": MODEL_OPENAI_LUNA,
+        "fallback": None,
         "max_tokens": 1600,
-        "notes": "Ada uses OpenAI only: GPT-5 mini normally, GPT-5.6 Luna as same-provider fallback.",
+        "notes": "AI Tutor chat, grounded in a student's document once extraction exists.",
     },
     "SUMMARIZATION": {
-        "primary": _configured_model("summarization", MODEL_OPENAI_GPT5_MINI),
-        "fallback": MODEL_OPENAI_LUNA,
+        "primary": _configured_model("summarization", MODEL_HAIKU_4_5),
+        "fallback": MODEL_SONNET_5,
         "max_tokens": 1536,
         "notes": "Condensed notes from a document; provider can be switched after quality benchmarking.",
     },
     "FLASHCARDS": {
-        "primary": _configured_model("flashcards", MODEL_OPENAI_GPT5_MINI),
-        "fallback": MODEL_OPENAI_LUNA,
+        "primary": _configured_model("flashcards", MODEL_HAIKU_4_5),
+        "fallback": MODEL_SONNET_5,
         "max_tokens": 2048,
         "notes": "Structured Q/A generation; provider can be switched after quality benchmarking.",
     },
     "QUIZZES": {
-        "primary": _configured_model("quizzes", MODEL_OPENAI_LUNA),
-        "fallback": MODEL_OPENAI_LUNA,
+        "primary": _configured_model("quizzes", MODEL_SONNET_5),
+        "fallback": MODEL_SONNET_5,
         "max_tokens": 2048,
         "notes": "Needs correct distractors/answers; use a cheaper model only after quality validation.",
     },
     "DOCUMENT_ANALYSIS": {
-        "primary": MODEL_OPENAI_LUNA,
+        "primary": MODEL_SONNET_5,
         "fallback": None,
         "max_tokens": 2048,
         "notes": "Classifying/understanding an uploaded document as a whole.",
     },
     "PODCAST_SCRIPT": {
-        "primary": MODEL_OPENAI_LUNA,
+        "primary": MODEL_SONNET_5,
         "fallback": None,
         "max_tokens": 3072,
         "notes": "Longer-form generation, benefits from a stronger model.",
     },
     "MIND_MAP": {
-        "primary": _configured_model("mind_map", MODEL_OPENAI_GPT5_MINI),
-        "fallback": MODEL_OPENAI_LUNA,
+        "primary": _configured_model("mind_map", MODEL_HAIKU_4_5),
+        "fallback": MODEL_SONNET_5,
         "max_tokens": 1536,
         "notes": "Structural generation; provider can be switched after quality benchmarking.",
     },
@@ -176,13 +179,26 @@ AI_TASKS = {
 
 
 # ============================================================
-# 3. PRICING (per MTok, USD)
+# 3. PRICING (per MTok, USD) - keyed by effective date since Anthropic
+#    has an announced Sonnet 5 price change on 2026-08-31.
+#    Re-verify against platform.claude.com/docs if this drifts far
+#    from today's date. Cache multipliers apply to the INPUT price only.
+# ============================================================
+
 _PRICING_SCHEDULE = {
-    MODEL_OPENAI_GPT5_MINI: [(datetime(2000, 1, 1), Decimal("0.25"), Decimal("2.00"))],
-    MODEL_OPENAI_LUNA: [(datetime(2000, 1, 1), Decimal("0.20"), Decimal("1.20"))],
     MODEL_GEMINI_FLASH_LITE: [(datetime(2000, 1, 1), Decimal("0.10"), Decimal("0.40"))],
     MODEL_GEMINI_FLASH: [(datetime(2000, 1, 1), Decimal("0.30"), Decimal("2.50"))],
+    MODEL_OPENAI_LUNA: [(datetime(2000, 1, 1), Decimal("0.20"), Decimal("1.20"))],
+    MODEL_SONNET_5: [
+        # Anthropic's current official price is $2/$10 per MTok. The
+        # previously announced Sep-2026 increase to $3/$15 was cancelled.
+        (datetime(2000, 1, 1), Decimal("2.00"), Decimal("10.00")),
+    ],
+    MODEL_HAIKU_4_5: [
+        (datetime(2000, 1, 1), Decimal("1.00"), Decimal("5.00")),
+    ],
 }
+
 CACHE_READ_MULTIPLIER = Decimal("0.1")
 CACHE_WRITE_5MIN_MULTIPLIER = Decimal("1.25")
 CACHE_WRITE_1HOUR_MULTIPLIER = Decimal("2.0")
@@ -197,19 +213,33 @@ def _pricing_for(model, at=None):
     return applicable[-1] if applicable else schedule[0]
 
 
+# Message Batches API pricing (flat 50% off standard rates, per
+# Anthropic's docs). Not date-scheduled like _PRICING_SCHEDULE above,
+# since both models' batch rates have only ever been this one price -
+# re-verify against platform.claude.com/docs if that changes.
+_BATCH_PRICING = {
+    MODEL_SONNET_5: (Decimal("1.00"), Decimal("5.00")),
+    MODEL_HAIKU_4_5: (Decimal("0.50"), Decimal("2.50")),
+}
+
+
 def compute_cost_usd(model, input_tokens, output_tokens,
                       cache_read_tokens=0, cache_creation_tokens=0,
                       cache_ttl="5m", at=None, batch=False):
     """
     Computes cost in USD from real token counts (never estimates).
     `input_tokens` here should be the NON-cached portion only - callers
-    pass the API response's input_tokens field, which Provider already
+    pass the API response's input_tokens field, which Anthropic already
     reports net of cache reads/writes. Pass batch=True for requests that
     went through route_and_generate_batch (Message Batches API pricing).
     """
     if batch:
-        raise ValueError("Batch generation is not enabled for the current provider contract")
-    _, input_rate, output_rate = _pricing_for(model, at=at)
+        pricing = _BATCH_PRICING.get(model)
+        if not pricing:
+            raise ValueError(f"No batch pricing configured for model '{model}'")
+        input_rate, output_rate = pricing
+    else:
+        _, input_rate, output_rate = _pricing_for(model, at=at)
 
     cost = Decimal(input_tokens) * input_rate / Decimal(1_000_000)
     cost += Decimal(output_tokens) * output_rate / Decimal(1_000_000)
@@ -225,18 +255,67 @@ def compute_cost_usd(model, input_tokens, output_tokens,
 
 
 # ============================================================
-# 4. PROVIDER ROUTER (OpenAI + Gemini; Ada is OpenAI-only)
+# 4. PROVIDER (Anthropic) + ROUTER (primary -> fallback escalation)
 # ============================================================
 
+class AnthropicProvider:
+    """Thin wrapper around the Anthropic SDK. Not imported/used outside this file."""
+
+    def __init__(self, api_key):
+        if not api_key:
+            raise AIProviderError("ANTHROPIC_API_KEY is not configured")
+        self._client = anthropic.Anthropic(api_key=api_key)
+
+    def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False,
+              image_b64=None, image_media_type=None):
+        if cacheable_system:
+            system = [{
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }]
+        else:
+            system = system_prompt
+
+        if image_b64:
+            user_content = [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": image_media_type, "data": image_b64},
+                },
+                {"type": "text", "text": user_message},
+            ]
+        else:
+            user_content = user_message
+
+        response = self._client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user_content}],
+        )
+
+        text = "".join(block.text for block in response.content if block.type == "text")
+        usage = response.usage
+
+        return text, AIUsage(
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+            cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        )
+
+
+
 class MultiProvider:
-    """Provider adapter for Provider, Gemini REST, and OpenAI REST.
+    """Provider adapter for Anthropic, Gemini REST, and OpenAI REST.
 
     Keys are read only from the server environment. They must never be
     committed to the repository or sent through chat.
     """
 
     def __init__(self):
-        pass
+        self._anthropic = AnthropicProvider(os.environ.get("ANTHROPIC_API_KEY")) if os.environ.get("ANTHROPIC_API_KEY") else None
 
     @staticmethod
     def _gemini(model, system_prompt, user_message, max_tokens):
@@ -266,83 +345,24 @@ class MultiProvider:
             output_tokens=int(meta.get("candidatesTokenCount", 0) or 0),
         )
 
-    _openai_semaphore = threading.BoundedSemaphore(max(1, int(os.environ.get("PREPZA_OPENAI_MAX_CONCURRENCY", "8"))))
-    _openai_cooldown_until = 0.0
-    _openai_cooldown_lock = threading.Lock()
-    _openai_rate_limit = {
-        "requests_limit": None, "requests_remaining": None, "requests_reset": None,
-        "tokens_limit": None, "tokens_remaining": None, "tokens_reset": None,
-        "last_429_at": None, "last_retry_after_seconds": None, "429_count": 0,
-    }
-    _openai_rate_limit_lock = threading.Lock()
-
-    @classmethod
-    def _record_openai_rate_headers(cls, response):
-        headers = response.headers
-        mapping = {
-            "requests_limit": "x-ratelimit-limit-requests",
-            "requests_remaining": "x-ratelimit-remaining-requests",
-            "requests_reset": "x-ratelimit-reset-requests",
-            "tokens_limit": "x-ratelimit-limit-tokens",
-            "tokens_remaining": "x-ratelimit-remaining-tokens",
-            "tokens_reset": "x-ratelimit-reset-tokens",
-        }
-        with cls._openai_rate_limit_lock:
-            for key, header in mapping.items():
-                value = headers.get(header)
-                if value is not None:
-                    cls._openai_rate_limit[key] = value
-            if response.status_code == 429:
-                cls._openai_rate_limit["last_429_at"] = datetime.utcnow().isoformat() + "Z"
-                retry_after = headers.get("retry-after")
-                try:
-                    cls._openai_rate_limit["last_retry_after_seconds"] = float(retry_after)
-                except (TypeError, ValueError):
-                    cls._openai_rate_limit["last_retry_after_seconds"] = None
-                cls._openai_rate_limit["429_count"] += 1
-
-    @classmethod
-    def rate_limit_snapshot(cls):
-        with cls._openai_rate_limit_lock:
-            return dict(cls._openai_rate_limit)
-
-    @classmethod
-    def _openai(cls, model, system_prompt, user_message, max_tokens):
+    @staticmethod
+    def _openai(model, system_prompt, user_message, max_tokens):
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
             raise AIProviderError("OPENAI_API_KEY is not configured")
         model_id = model.split(":", 1)[1]
-        payload = {
-            "model": model_id,
-            "instructions": system_prompt,
-            "input": user_message,
-            "max_output_tokens": max_tokens,
-        }
-        for attempt in range(3):
-            with cls._openai_cooldown_lock:
-                cooldown = max(0.0, cls._openai_cooldown_until - time.time())
-            if cooldown:
-                time.sleep(min(cooldown, 10.0))
-            with cls._openai_semaphore:
-                response = requests.post(
-                    "https://api.openai.com/v1/responses",
-                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                    json=payload,
-                    timeout=120,
-                )
-            cls._record_openai_rate_headers(response)
-            if response.status_code != 429:
-                response.raise_for_status()
-                break
-            retry_after = response.headers.get("retry-after")
-            try:
-                wait = float(retry_after)
-            except (TypeError, ValueError):
-                wait = min(2 ** attempt, 8)
-            with cls._openai_cooldown_lock:
-                cls._openai_cooldown_until = max(cls._openai_cooldown_until, time.time() + wait)
-            if attempt == 2:
-                raise AIProviderError("OpenAI rate limit reached after bounded retries")
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": model_id,
+                "instructions": system_prompt,
+                "input": user_message,
+                "max_output_tokens": max_tokens,
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
         data = response.json()
         text = data.get("output_text") or ""
         if not text:
@@ -361,91 +381,59 @@ class MultiProvider:
             output_tokens=int(usage.get("output_tokens", 0) or 0),
         )
 
-    @classmethod
-    def chat(cls, model, system_messages, messages, max_tokens, return_meta=False, prompt_cache_key=None):
+    @staticmethod
+    def _openai_responses_messages(model, system_blocks, messages, max_tokens, prompt_cache_key=None):
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
             raise AIProviderError("OPENAI_API_KEY is not configured")
-        if not model.startswith("openai:"):
-            raise AIProviderError("Ada chat requires an OpenAI model")
         model_id = model.split(":", 1)[1]
-        normalized = []
+        input_items = []
+        for index, block in enumerate(system_blocks):
+            content = [{"type": "input_text", "text": block.get("text", "")}]
+            if index == 0:
+                content[0]["prompt_cache_breakpoint"] = {"mode": "explicit"}
+            input_items.append({"role": "developer", "content": content})
         for message in messages:
-            if isinstance(message, dict):
-                role = message.get("role", "user")
-                content = message.get("content", "")
-            else:
-                role, content = message
-            normalized.append({"role": role, "content": content})
-        for item in system_messages or []:
-            if isinstance(item, dict):
-                text_value = item.get("text", "")
-            else:
-                text_value = str(item)
-            if text_value:
-                normalized.insert(0, {"role": "system", "content": text_value})
+            input_items.append({"role": message["role"], "content": message["content"]})
+        payload = {
+            "model": model_id,
+            "input": input_items,
+            "max_output_tokens": max_tokens,
+            "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
+            "store": False,
+        }
         if prompt_cache_key:
-            input_items = []
-            for index, item in enumerate(system_messages or []):
-                text_value = item.get("text", "") if isinstance(item, dict) else str(item)
-                block = {"type": "input_text", "text": text_value}
-                if index == 0:
-                    block["prompt_cache_breakpoint"] = {"mode": "explicit"}
-                input_items.append({"role": "developer", "content": [block]})
-            input_items.extend(normalized)
-            payload = {
-                "model": model_id,
-                "input": input_items,
-                "max_output_tokens": max_tokens,
-                "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
-                "store": False,
-                "prompt_cache_key": str(prompt_cache_key)[:64],
-            }
-        else:
-            payload = {"model": model_id, "input": normalized, "max_output_tokens": max_tokens}
-        for attempt in range(3):
-            with cls._openai_cooldown_lock:
-                cooldown = max(0.0, cls._openai_cooldown_until - time.time())
-            if cooldown:
-                time.sleep(min(cooldown, 10.0))
-            with cls._openai_semaphore:
-                response = requests.post(
-                    "https://api.openai.com/v1/responses",
-                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                    json=payload, timeout=120,
-                )
-            cls._record_openai_rate_headers(response)
-            if response.status_code != 429:
-                break
-            retry_after = response.headers.get("retry-after")
-            try:
-                wait = float(retry_after)
-            except (TypeError, ValueError):
-                wait = min(2 ** attempt, 8)
-            with cls._openai_cooldown_lock:
-                cls._openai_cooldown_until = max(cls._openai_cooldown_until, time.time() + wait)
-            if attempt == 2:
-                raise AIRateLimitExceededError("OpenAI rate limit reached after bounded retries")
+            payload["prompt_cache_key"] = prompt_cache_key[:64]
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=120,
+        )
         response.raise_for_status()
         data = response.json()
         text_value = data.get("output_text") or ""
         if not text_value:
-            raise AIProviderError("OpenAI returned no tutor text")
+            chunks = []
+            for item in data.get("output", []) or []:
+                for block in item.get("content", []) or []:
+                    if isinstance(block, dict) and block.get("type") == "output_text":
+                        chunks.append(block.get("text", ""))
+            text_value = "".join(chunks)
+        if not text_value:
+            raise AIProviderError("OpenAI returned no text")
         usage = data.get("usage") or {}
         details = usage.get("input_tokens_details") or usage.get("prompt_tokens_details") or {}
-        cached_tokens = int(details.get("cached_tokens", 0) or 0)
-        cache_write_tokens = int(details.get("cache_write_tokens", 0) or details.get("cache_creation_tokens", 0) or 0)
+        cached = int(details.get("cached_tokens", 0) or 0)
+        cache_write = int(details.get("cache_write_tokens", 0) or details.get("cache_creation_tokens", 0) or 0)
         total_input = int(usage.get("input_tokens", 0) or 0)
-        ai_usage = AIUsage(
-            input_tokens=max(0, total_input - cached_tokens - cache_write_tokens),
+        normal_input = max(0, total_input - cached - cache_write)
+        return text_value, AIUsage(
+            input_tokens=normal_input,
             output_tokens=int(usage.get("output_tokens", 0) or 0),
-            cache_read_tokens=cached_tokens,
-            cache_creation_tokens=cache_write_tokens,
+            cache_read_tokens=cached,
+            cache_creation_tokens=cache_write,
         )
-        ai_usage.cost_usd = compute_cost_usd(model, ai_usage.input_tokens, ai_usage.output_tokens)
-        if return_meta:
-            return text_value, ai_usage, data
-        return text_value, ai_usage
 
     def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False,
              image_b64=None, image_media_type=None):
@@ -457,7 +445,13 @@ class MultiProvider:
             if image_b64:
                 raise AIProviderError("OpenAI adapter currently supports text-only generation")
             return self._openai(model, system_prompt, user_message, max_tokens)
-        raise AIProviderError(f"Unsupported AI model '{model}'")
+        if not self._anthropic:
+            raise AIProviderError("ANTHROPIC_API_KEY is not configured")
+        return self._anthropic.call(
+            model, system_prompt, user_message, max_tokens,
+            cacheable_system=cacheable_system,
+            image_b64=image_b64, image_media_type=image_media_type,
+        )
 
     @staticmethod
     def provider_name(model):
@@ -465,7 +459,7 @@ class MultiProvider:
             return "google"
         if model.startswith("openai:"):
             return "openai"
-        raise AIProviderError(f"Unsupported AI model '{model}'")
+        return "anthropic"
 
 
 def _get_provider():
@@ -529,6 +523,153 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
     raise AIProviderError(f"All models failed for task '{ai_request.task}': {last_error}")
 
 
+# ============================================================
+# 4b. MESSAGE BATCHES API (50% cheaper, async) - for background/non-
+#     real-time work only. Never call this from a request handler; it
+#     blocks the calling thread while polling, so it must only ever be
+#     called from a background thread (e.g. document_pipeline.py's
+#     extraction thread) so a slow batch never holds up a user request.
+# ============================================================
+
+# How often to poll an in-progress batch, and the longest this call
+# will wait before giving up and raising. Batches "often finish in
+# minutes" per Anthropic's docs even though the SLA is 24h, so this
+# cap is deliberately much shorter than the SLA - a batch still running
+# past this point is treated as unusually slow, not waited out further.
+# The batch itself keeps processing on Anthropic's side regardless;
+# callers that give up here can check back later via the batch_id.
+BATCH_POLL_INTERVAL_SECONDS = 15
+BATCH_MAX_WAIT_SECONDS = 20 * 60
+
+
+def _build_message_params(model, ai_request, max_tokens):
+    """
+    Builds the request-shape dict for one Messages API call, used by
+    the batch path below. (Mirrors AnthropicProvider.call's shape -
+    kept as a separate small function rather than refactoring .call()
+    itself, to avoid touching the already-working synchronous path.)
+    """
+    if ai_request.cacheable_system:
+        system = [{
+            "type": "text",
+            "text": ai_request.system_prompt,
+            "cache_control": {"type": "ephemeral"},
+        }]
+    else:
+        system = ai_request.system_prompt
+
+    if ai_request.image_b64:
+        user_content = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": ai_request.image_media_type,
+                    "data": ai_request.image_b64,
+                },
+            },
+            {"type": "text", "text": ai_request.user_message},
+        ]
+    else:
+        user_content = ai_request.user_message
+
+    return {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": user_content}],
+    }
+
+
+def route_and_generate_batch(task, items, on_batch_created=None):
+    """
+    Submits multiple AIRequests for the same task as a single Anthropic
+    Message Batch (50% cheaper than synchronous calls - see
+    _BATCH_PRICING). `items` is a list of (custom_id, AIRequest) tuples.
+
+    `on_batch_created`, if given, is called with the batch's id right
+    after submission (before polling starts) - callers can use this to
+    persist the id somewhere (e.g. AiJob.batch_id) so it's inspectable
+    even if this call is interrupted before finishing.
+
+    Returns (batch_id, results) where results is a dict of
+    {custom_id: AIResponse} for succeeded items and
+    {custom_id: AIProviderError} for anything errored/expired/canceled -
+    callers decide whether to retry those synchronously.
+
+    Unlike route_and_generate, there is no primary/fallback escalation
+    here - all items in a batch use the task's primary model. A failed
+    item should be retried (synchronously, or in a future batch), not
+    silently escalated.
+    """
+    task_config = AI_TASKS.get(task)
+    if not task_config:
+        raise ValueError(f"Unknown AI task '{task}'")
+
+    provider, provider_name = _get_provider()
+    model = task_config["primary"]
+    max_tokens = task_config["max_tokens"]
+
+    batch_requests = [
+        {"custom_id": custom_id, "params": _build_message_params(model, ai_request, max_tokens)}
+        for custom_id, ai_request in items
+    ]
+
+    batch = provider._client.messages.batches.create(requests=batch_requests)
+    batch_id = batch.id
+
+    if on_batch_created:
+        on_batch_created(batch_id)
+
+    elapsed = 0
+    while True:
+        batch = provider._client.messages.batches.retrieve(batch_id)
+        if batch.processing_status == "ended":
+            break
+        time.sleep(BATCH_POLL_INTERVAL_SECONDS)
+        elapsed += BATCH_POLL_INTERVAL_SECONDS
+        if elapsed >= BATCH_MAX_WAIT_SECONDS:
+            raise AIProviderError(
+                f"Batch {batch_id} for task '{task}' did not finish within "
+                f"{BATCH_MAX_WAIT_SECONDS}s (status: {batch.processing_status}). "
+                f"It will keep processing on Anthropic's side - check the "
+                f"Anthropic Console with this batch id if needed."
+            )
+
+    results = {}
+    for result in provider._client.messages.batches.results(batch_id):
+        custom_id = result.custom_id
+        if result.result.type == "succeeded":
+            message = result.result.message
+            text = "".join(block.text for block in message.content if block.type == "text")
+            usage = message.usage
+            ai_usage = AIUsage(
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+                cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+            )
+            ai_usage.cost_usd = compute_cost_usd(
+                model, ai_usage.input_tokens, ai_usage.output_tokens,
+                ai_usage.cache_read_tokens, ai_usage.cache_creation_tokens,
+                batch=True,
+            )
+            results[custom_id] = AIResponse(
+                text=text, model_used=model, provider=provider_name,
+                usage=ai_usage, latency_ms=0,
+            )
+        else:
+            results[custom_id] = AIProviderError(
+                f"Batch item '{custom_id}' ended as '{result.result.type}'"
+            )
+
+    return batch_id, results
+
+
+# ============================================================
+# 5. USAGE LOGGING
+# ============================================================
+
 def log_usage(user_id, request_type, model=None, provider=None,
                usage: Optional[AIUsage] = None, forum_reply_id=None):
     """
@@ -566,13 +707,13 @@ def log_usage(user_id, request_type, model=None, provider=None,
 DAILY_FRESH_GENERATION_LIMITS = {
     "free": 5,
     "plus": 15,
-    "pro": 50,
+    "premium": None,  # None = unlimited
 }
 
 _DAILY_LIMIT_SETTING_KEYS = {
     "free": "ai_daily_limit_free",
     "plus": "ai_daily_limit_plus",
-    "pro": "ai_daily_limit_pro",
+    "premium": "ai_daily_limit_premium",
 }
 
 
@@ -652,7 +793,7 @@ def check_daily_limit(user_id, plan_tier="free"):
 DAILY_FRESH_TUTOR_LIMITS = {
     "free": 5,
     "plus": 20,
-    "pro": 50,
+    "premium": 50,
     # premium is a soft abuse-guard here, not a real cost ceiling - see
     # the ai_monthly_budget_usd global circuit breaker below for that.
 }
@@ -660,7 +801,7 @@ DAILY_FRESH_TUTOR_LIMITS = {
 _DAILY_TUTOR_LIMIT_SETTING_KEYS = {
     "free": "ai_daily_tutor_limit_free",
     "plus": "ai_daily_tutor_limit_plus",
-    "pro": "ai_daily_tutor_limit_pro",
+    "premium": "ai_daily_tutor_limit_premium",
 }
 
 
@@ -914,7 +1055,7 @@ def answer_forum_question(question_text, unit, triggering_user_id, plan_tier="fr
 # ============================================================
 # 10. CONTINUATION-RETRY CALL (summarization only)
 # ============================================================
-# route_and_generate()/ProviderAdapter.call() intentionally discard
+# route_and_generate()/AnthropicProvider.call() intentionally discard
 # stop_reason - fine for forum answers, which rarely truncate. Summaries
 # are longer and JSON-structured, so a max_tokens cutoff mid-JSON is a
 # real failure mode. This function is a separate, low-level path used
@@ -969,18 +1110,23 @@ def _call_with_continuation(task, system_prompt, user_message, max_tokens=None, 
         else:
             messages = [{"role": "user", "content": user_message}]
 
-        chunk_text, usage, metadata = provider.chat(
+        response = provider._client.messages.create(
             model=model,
-            system_messages=system,
-            messages=messages,
             max_tokens=resolved_max_tokens,
-            return_meta=True,
+            system=system,
+            messages=messages,
         )
+
+        chunk_text = "".join(block.text for block in response.content if block.type == "text")
         accumulated_text += chunk_text
+
+        usage = response.usage
         total_usage.input_tokens += usage.input_tokens
         total_usage.output_tokens += usage.output_tokens
-        if not (metadata.get("status") == "incomplete" and
-                (metadata.get("incomplete_details") or {}).get("reason") == "max_output_tokens"):
+        total_usage.cache_read_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
+        total_usage.cache_creation_tokens += getattr(usage, "cache_creation_input_tokens", 0) or 0
+
+        if response.stop_reason != "max_tokens":
             break
 
     latency_ms = int((time.monotonic() - start) * 1000)
@@ -1346,7 +1492,9 @@ def _legacy_generate_document_quiz(document_content_id, triggering_user_id, plan
 # ============================================================
 # Same shape as generate_document_quiz() (cache check -> spend cap ->
 # rate limit -> generate -> log -> persist), keyed on
-# GeneratedMaterial(material_type='flashcards'). Uses the FLASHCARDS task with the locked OpenAI routing configuration and the same
+# GeneratedMaterial(material_type='flashcards'). Uses the FLASHCARDS
+# task (Haiku primary, Sonnet fallback - "mechanical extraction of Q/A
+# pairs from source text" per AI_TASKS' own note) and the same
 # continuation-retry path as summaries/quizzes.
 #
 # Payload shape wraps the card list in {title, subtitle, cards} for
@@ -1754,7 +1902,7 @@ def _legacy_generate_document_podcast_script(document_content_id, triggering_use
 #
 # Unlike every other generate_document_*() function above, this talks
 # to provider._client.messages.create() directly instead of going
-# through ProviderAdapter.call() - .call() only supports a single
+# through AnthropicProvider.call() - .call() only supports a single
 # user message, not a growing multi-turn history. Mirrors how
 # _call_with_continuation() already bypasses .call() for its own
 # reasons; same "add a parallel low-level path, don't touch the
@@ -1767,7 +1915,7 @@ def _legacy_generate_document_podcast_script(document_content_id, triggering_use
 # stable. The growing conversation history goes in the `messages` list
 # instead, uncached, capped at the last TUTOR_HISTORY_MESSAGE_LIMIT
 # messages so an unbounded conversation doesn't get expensive purely
-# from history length (the Provider API is stateless - full history
+# from history length (the Anthropic API is stateless - full history
 # is resent every turn).
 #
 # Deliberately NOT using continuation-retry (_call_with_continuation)
@@ -2065,34 +2213,8 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             "but your existing conversation is still here."
         )
 
-    from ai_economics import (
-        get_user_plan_code, get_plan, calculate_ada_units,
-        reserve_ada_budget, refund_ada_budget, record_ada_usage,
-    )
-    plan_code = get_user_plan_code(db, triggering_user_id)
-    plan_config = get_plan(db, plan_code)
-    if not plan_config:
-        raise AIRateLimitExceededError("Ada is temporarily unavailable for your plan.")
-    output_token_limit = min(int(AI_TASKS["TUTORING"]["max_tokens"]), int(plan_config["ada_max_output_tokens"]))
-
-    history_preview = _fetch_tutor_history(conversation_id)
-    estimated_input_chars = len(content.extracted_text or "") + len(user_message_text)
-    estimated_input_chars += sum(len(row.content or "") for row in history_preview)
-    estimated_input_tokens = max(1, int((estimated_input_chars + 2) / 3))
-    estimated_units = calculate_ada_units(
-        input_tokens=estimated_input_tokens,
-        cache_write_tokens=estimated_input_tokens,
-        output_tokens=output_token_limit,
-    )
-    ada_allowed, ada_meta = reserve_ada_budget(
-        db, triggering_user_id, plan_code, estimated_units
-    )
-    if not ada_allowed:
-        if ada_meta.get("code") == "ada_daily_limit":
-            raise AIRateLimitExceededError("You've reached Ada's safety limit for today. Your monthly allowance is still available; please try again later.")
-        if ada_meta.get("code") == "ada_monthly_limit":
-            raise AIRateLimitExceededError("You've used your Ada allowance for this month. Upgrade your plan for more Ada usage, or wait for the monthly reset.")
-        raise AIRateLimitExceededError("Ada is temporarily unavailable for your plan. Please try again shortly.")
+    # Ada is now metered by real token economics below; the legacy message-count cap
+    # is intentionally no longer a student entitlement.
 
     # Persist the student's message now, before the AI call, so it
     # survives even if generation below fails.
@@ -2100,7 +2222,7 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
     db.session.add(user_row)
     db.session.commit()
 
-    history_rows = history_preview
+    history_rows = _fetch_tutor_history(conversation_id)
     messages = [{"role": row.role, "content": row.content} for row in history_rows]
 
     task_config = AI_TASKS["TUTORING"]
@@ -2164,38 +2286,80 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             "text": _format_spaced_review_instruction(review_due),
         })
 
-    provider, provider_name = _get_provider()
-    max_tokens = output_token_limit
-    prompt_cache_key = f"prepza-ada-doc-{getattr(content, 'content_hash', content.id)}"
+    from ai_economics import (
+        get_user_plan_code, get_plan, calculate_ada_units,
+        reserve_ada_budget, refund_ada_budget, record_ada_usage,
+    )
 
+    plan_code = get_user_plan_code(db, triggering_user_id)
+    plan_config = get_plan(db, plan_code)
+    max_tokens = min(max_tokens, int(plan_config["ada_max_output_tokens"]))
+
+    estimated_input_tokens = max(
+        1, (len(system_prompt) + sum(len(str(m["content"])) for m in messages)) // 3
+    )
+    estimated_units = calculate_ada_units(
+        input_tokens=estimated_input_tokens,
+        cache_write_tokens=estimated_input_tokens,
+        output_tokens=max_tokens,
+    )
+    reserved_ok, reserve_info = reserve_ada_budget(
+        db, triggering_user_id, plan_code, estimated_units
+    )
+    if not reserved_ok:
+        if reserve_info.get("code") == "ada_daily_limit":
+            raise AIRateLimitExceededError(
+                "You've reached Ada's safety limit for today. Your monthly allowance is still available; please try again later."
+            )
+        if reserve_info.get("code") == "ada_monthly_limit":
+            raise AIRateLimitExceededError(
+                "You've used your Ada allowance for this month. Upgrade your plan for more Ada usage, or wait for the monthly reset."
+            )
+        raise AIRateLimitExceededError(
+            "Ada is temporarily unavailable for your plan. Please try again shortly."
+        )
+
+    prompt_cache_key = f"prepza-ada-doc-{getattr(content, 'content_hash', content.id)}"
     start = time.monotonic()
     try:
-        raw_text, ai_usage = provider.chat(
-            model=model,
-            system_messages=system,
-            messages=messages,
-            max_tokens=max_tokens,
-            prompt_cache_key=prompt_cache_key,
+        provider, provider_name = _get_provider()
+        if not model.startswith("openai:"):
+            raise AIProviderError("Ada tutoring is configured for the OpenAI Responses provider")
+        raw_text, ai_usage = provider._openai_responses_messages(
+            model=model, system_blocks=system, messages=messages,
+            max_tokens=max_tokens, prompt_cache_key=prompt_cache_key,
         )
-    except Exception as e:  # noqa: BLE001
-        refund_ada_budget(
-            db, triggering_user_id, plan_code, estimated_units,
-            entitlement_payment_id=ada_meta.get("entitlement_payment_id"),
-        )
+    except Exception as e:
+        refund_ada_budget(db, triggering_user_id, plan_code, estimated_units, entitlement_payment_id=reserve_info.get("entitlement_payment_id"))
+        if isinstance(e, AIProviderError):
+            raise
         raise AIProviderError(f"Tutor reply generation failed: {e}")
     latency_ms = int((time.monotonic() - start) * 1000)
+
+    ai_usage.cost_usd = compute_cost_usd(
+        model, ai_usage.input_tokens, ai_usage.output_tokens,
+        ai_usage.cache_read_tokens, ai_usage.cache_creation_tokens,
+    )
+    record_ada_usage(
+        db, triggering_user_id, plan_code, model, provider_name,
+        ai_usage.input_tokens, ai_usage.cache_read_tokens,
+        ai_usage.cache_creation_tokens, ai_usage.output_tokens,
+        cost_usd=ai_usage.cost_usd, reserved_units=estimated_units,
+        entitlement_payment_id=reserve_info.get("entitlement_payment_id"),
+    )
+
     reply_text, concept_name, prerequisite_name = _parse_tutor_reply(raw_text)
 
     assistant_row = TutorMessage(conversation_id=conversation_id, role="assistant", content=reply_text)
     db.session.add(assistant_row)
     db.session.flush()  # assign assistant_row.id before the LearningEvent FK below references it
 
-    record_ada_usage(
-        db, triggering_user_id, plan_code, model, provider_name,
-        ai_usage.input_tokens, ai_usage.cache_read_tokens,
-        ai_usage.cache_creation_tokens, ai_usage.output_tokens,
-        cost_usd=ai_usage.cost_usd, reserved_units=estimated_units,
-        entitlement_payment_id=ada_meta.get("entitlement_payment_id"),
+    log_usage(
+        triggering_user_id,
+        request_type="tutor_message",
+        model=model,
+        provider=provider_name,
+        usage=ai_usage,
     )
 
     if concept_name:

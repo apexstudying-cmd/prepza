@@ -18,39 +18,16 @@ from __future__ import annotations
 
 import re
 import os
+import json
 from datetime import datetime, timedelta, date
 from flask import jsonify, request, session
 from sqlalchemy import text
 
 
 STUDENT_PLANS = {
-    "free": {
-        "price_kes": 0, "billing_period": "month", "quota_period": "month",
-        "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 10,
-        "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 10,
-        "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 100,
-        "quiz_generations": 0, "quiz_max_questions": 50, "quiz_monthly_questions": 20,
-        "mind_map_generations": 0, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 30,
-        "tutor_messages": 0,
-    },
-    "plus": {
-        "price_kes": 499, "billing_period": "month", "quota_period": "subscription",
-        "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 40,
-        "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 120,
-        "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 300,
-        "quiz_generations": 0, "quiz_max_questions": 50, "quiz_monthly_questions": 100,
-        "mind_map_generations": 0, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 150,
-        "tutor_messages": 0,
-    },
-    "pro": {
-        "price_kes": 999, "billing_period": "month", "quota_period": "subscription",
-        "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 100,
-        "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 350,
-        "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 600,
-        "quiz_generations": 0, "quiz_max_questions": 50, "quiz_monthly_questions": 210,
-        "mind_map_generations": 0, "mind_map_max_nodes": 50, "mind_map_monthly_nodes": 350,
-        "tutor_messages": 0,
-    },
+    "free": {"price_kes": 0, "billing_period": "month", "quota_period": "month"},
+    "plus": {"price_kes": 499, "billing_period": "month", "quota_period": "month"},
+    "pro": {"price_kes": 999, "billing_period": "month", "quota_period": "month"},
 }
 
 # Organisation subscription is audience-access pricing, not ad RPM.
@@ -86,11 +63,11 @@ SPONSORED_CPM_KES = 250
 SPONSORED_MIN_CAMPAIGN_KES = 2500
 
 FEATURES = {
-    "summary": ("summary_generations", "summary_max_pages", "summary_monthly_pages"),
-    "podcast": ("podcast_generations", "podcast_max_minutes", "podcast_monthly_minutes"),
-    "flashcards": ("flashcard_generations", "flashcard_max_cards", "flashcard_monthly_cards"),
-    "quiz": ("quiz_generations", "quiz_max_questions", "quiz_monthly_questions"),
-    "mind_map": ("mind_map_generations", "mind_map_max_nodes", "mind_map_monthly_nodes"),
+    "summary": ("summary_generations", "summary_max_pages"),
+    "podcast": ("podcast_generations", "podcast_max_minutes"),
+    "flashcards": ("flashcard_generations", "flashcard_max_cards"),
+    "quiz": ("quiz_generations", "quiz_max_questions"),
+    "mind_map": ("mind_map_generations", "mind_map_max_nodes"),
 }
 
 DEFAULT_GENERATION_UNITS = {
@@ -103,31 +80,8 @@ DEFAULT_GENERATION_UNITS = {
 
 
 def _ensure_schema(db):
-    db.session.execute(text("""
-        CREATE TABLE IF NOT EXISTS student_ai_entitlement_usage (
-            user_id INTEGER NOT NULL,
-            entitlement_id BIGINT NOT NULL DEFAULT 0,
-            period_start DATE NOT NULL,
-            feature VARCHAR(40) NOT NULL,
-            units INTEGER NOT NULL DEFAULT 0,
-            requests INTEGER NOT NULL DEFAULT 0,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, entitlement_id, feature)
-        )
-    """))
-    db.session.execute(text("""
-        CREATE TABLE IF NOT EXISTS student_ada_usage (
-            user_id INTEGER NOT NULL,
-            entitlement_id BIGINT NOT NULL DEFAULT 0,
-            day_start DATE NOT NULL,
-            month_start DATE NOT NULL,
-            reserved_tokens BIGINT NOT NULL DEFAULT 0,
-            actual_tokens BIGINT NOT NULL DEFAULT 0,
-            requests INTEGER NOT NULL DEFAULT 0,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, entitlement_id)
-        )
-    """))
+    if db.engine.dialect.name == 'sqlite':
+        return
     db.session.execute(text("""
         CREATE TABLE IF NOT EXISTS student_ai_usage (
             user_id INTEGER NOT NULL,
@@ -255,46 +209,31 @@ def _ensure_schema(db):
 
 
 def _period_start(plan):
+    """Return the quota period start without tying usage to billing cadence."""
     now = datetime.utcnow()
+    if plan.get("quota_period") == "annual":
+        return date(now.year, 1, 1)
     return date(now.year, now.month, 1)
 
 
-def _current_student_entitlement(db, user_id):
-    """Return the highest active paid entitlement, or the free entitlement."""
-    rows = db.session.execute(text("""
-        SELECT id, plan, created_at, subscription_expires_at
-        FROM payment
-        WHERE user_id = :uid
-          AND payment_type = 'subscription'
-          AND status = 'success'
-          AND subscription_expires_at > CURRENT_TIMESTAMP
-          AND plan IN ('plus', 'pro')
-        ORDER BY CASE plan WHEN 'pro' THEN 2 WHEN 'plus' THEN 1 ELSE 0 END DESC,
-                 created_at DESC, id DESC
-    """), {"uid": user_id}).mappings().all()
-    if rows:
-        row = rows[0]
-        return {
-            "entitlement_id": int(row["id"]),
-            "plan": str(row["plan"]),
-            "period_start": (row["created_at"] or datetime.utcnow()).date(),
-            "expires_at": row["subscription_expires_at"],
-        }
-    return {
-        "entitlement_id": 0,
-        "plan": "free",
-        "period_start": _period_start(STUDENT_PLANS["free"]),
-        "expires_at": None,
-    }
+def _csrf_ok():
+    expected = session.get("csrf_token")
+    supplied = request.headers.get("X-CSRF-Token")
+    return bool(expected and supplied and expected == supplied)
 
+
+def _current_student_plan(db, user_id):
+    from ai_economics import get_user_plan_code
+    return get_user_plan_code(db, user_id)
 
 def _usage_row(db, user_id, feature):
-    ent = _current_student_entitlement(db, user_id)
+    plan_code = _current_student_plan(db, user_id)
+    plan = STUDENT_PLANS[plan_code]
     return db.session.execute(text("""
         SELECT units, requests
-        FROM student_ai_entitlement_usage
-        WHERE user_id = :uid AND entitlement_id = :eid AND feature = :feature
-    """), {"uid": user_id, "eid": ent["entitlement_id"], "feature": feature}).mappings().first()
+        FROM student_ai_usage
+        WHERE user_id = :uid AND period_start = :period AND feature = :feature
+    """), {"uid": user_id, "period": _period_start(plan), "feature": feature}).mappings().first()
 
 
 def check_and_consume_ai_quota(db, user_id, feature, units):
@@ -543,11 +482,9 @@ def _online_user_count(db):
 
 
 def register_usage_billing(app, db):
-    # Schema setup uses PostgreSQL-specific JSONB/DDL. Push an application
-    # context during startup, but skip it for SQLite-based CI unit tests.
+    # Route registration happens during app import, so schema bootstrap must own its context.
     with app.app_context():
-        if db.engine.dialect.name == "postgresql":
-            _ensure_schema(db)
+        _ensure_schema(db)
 
     @app.post("/api/analytics/heartbeat")
     def analytics_heartbeat():
@@ -701,46 +638,76 @@ def register_usage_billing(app, db):
 
     @app.get("/api/usage/me")
     def usage_me():
-        user_id = session.get("user_id")
-        if not user_id:
-            return jsonify({"error": "Not logged in"}), 401
-
-        entitlement = _current_student_entitlement(db, user_id)
-        plan_code = entitlement["plan"]
-        plan = STUDENT_PLANS[plan_code]
-        usage = {}
-        for feature in FEATURES:
-            row = _usage_row(db, user_id, feature)
-            _request_key, unit_key, monthly_key = FEATURES[feature]
-            max_units_per_generation = int(plan[unit_key])
-            wallet_limit = int(plan[monthly_key])
-            used_units = int(row["units"]) if row else 0
-            usage[feature] = {
-                "requests": int(row["requests"]) if row else 0,
-                "units": used_units,
-                "remaining_units": max(0, wallet_limit - used_units),
-                "unit_limit": wallet_limit,
-                "max_units_per_generation": max_units_per_generation,
-            }
+        user_id=session.get("user_id")
+        if not user_id: return jsonify({"error":"Not logged in"}),401
+        from ai_economics import get_plan,get_user_plan_code,get_active_entitlements
+        plan_code=get_user_plan_code(db,user_id)
+        plan=get_plan(db,plan_code) or get_plan(db,"free")
+        active=get_active_entitlements(db,user_id)
+        feature_keys={"summary":"summary_pages","podcast":"podcast_minutes","flashcards":"flashcards","quiz":"questions","mind_map":"mind_map_nodes"}
+        usage={}
+        if active:
+            limits_by_payment={}
+            for ent in active:
+                cfg=get_plan(db,ent["plan"]) or {}
+                limits_by_payment[int(ent["id"])]={
+                    feature:int(cfg.get(key) or 0) for feature,key in feature_keys.items()
+                }
+            rows=db.session.execute(text("""
+                SELECT payment_id,feature,COALESCE(SUM(units),0) AS units
+                FROM student_entitlement_usage
+                WHERE user_id=:uid AND payment_id IS NOT NULL
+                GROUP BY payment_id,feature
+            """),{"uid":user_id}).mappings().all()
+            used={(int(row["payment_id"]),row["feature"]):int(row["units"] or 0) for row in rows}
+            for feature in feature_keys:
+                total=sum(v[feature] for v in limits_by_payment.values())
+                spent=sum(used.get((pid,feature),0) for pid in limits_by_payment)
+                largest=max((v[feature] for v in limits_by_payment.values()),default=0)
+                usage[feature]={"requests":0,"units":spent,"remaining_units":max(0,total-spent),
+                                "unit_limit":total,"max_units_per_generation":largest}
+        else:
+            period=date.today().replace(day=1)
+            rows=db.session.execute(text("""
+                SELECT feature,units,requests FROM student_ai_usage
+                WHERE user_id=:uid AND period_start=:period
+            """),{"uid":user_id,"period":period}).mappings().all()
+            free_usage={row["feature"]:row for row in rows}
+            for feature,key in feature_keys.items():
+                limit=int(plan.get(key) or 0)
+                row=free_usage.get(feature)
+                spent=int(row["units"] or 0) if row else 0
+                usage[feature]={"requests":int(row["requests"] or 0) if row else 0,
+                                "units":spent,"remaining_units":max(0,limit-spent),
+                                "unit_limit":limit,"max_units_per_generation":limit}
         return jsonify({
-            "plan": plan_code,
-            "price_kes": plan["price_kes"],
-            "billing_period": plan["billing_period"],
-            "limits": plan,
-            "usage": usage,
-            "period_start": entitlement["period_start"].isoformat(),
-            "subscription_expires_at": entitlement["expires_at"].isoformat() if entitlement["expires_at"] else None,
-            "entitlement_id": entitlement["entitlement_id"],
+            "plan":plan_code,"price_kes":int(plan["price_kes"]),
+            "billing_period":plan["billing_period"] if plan_code!="free" else None,
+            "limits":{k:int(plan[k]) for k in ("podcast_minutes","summary_pages","questions","mind_map_nodes","flashcards","ada_monthly_units","ada_daily_units","ada_max_output_tokens")},
+            "usage":usage,"offline_study":True,"premium_library":bool(plan["premium_library"]),
+            "study_hub_uploads":bool(plan["study_hub_uploads"]),
+            "active_plans":[x["plan"] for x in active],
+            "active_entitlements":[{"payment_id":int(x["id"]),"plan":x["plan"],
+                "starts_at":x["subscription_starts_at"].isoformat(),"expires_at":x["subscription_expires_at"].isoformat()} for x in active],
+            "period_start":date.today().replace(day=1).isoformat()
         })
 
     @app.get("/api/student-plans")
     def student_plans():
-        # These defaults match the current student subscription UI pricing:
-        # KES 599/semester and KES 999/annual. The current student checkout
-        # is a hosted payment flow; keep pricing in one server-owned layer
-        # before adding another payment provider.
-        plans = [{"code": code, **plan} for code, plan in STUDENT_PLANS.items()]
-        return jsonify({"currency": "KES", "plans": plans})
+        from ai_economics import get_plans
+        plans=[]
+        for plan in get_plans(db):
+            plans.append({
+                "code":plan["plan_code"],"name":plan["display_name"],"price_kes":int(plan["price_kes"]),
+                "billing_period":plan["billing_period"] if plan["plan_code"]!="free" else None,
+                "quota_period":plan["quota_period"],"podcast_minutes":int(plan["podcast_minutes"]),
+                "summary_pages":int(plan["summary_pages"]),"questions":int(plan["questions"]),
+                "mind_map_nodes":int(plan["mind_map_nodes"]),"flashcards":int(plan["flashcards"]),
+                "ada_monthly_units":int(plan["ada_monthly_units"]),"ada_daily_units":int(plan["ada_daily_units"]),
+                "ada_max_output_tokens":int(plan["ada_max_output_tokens"]),"offline_study":True,
+                "premium_library":bool(plan["premium_library"]),"study_hub_uploads":bool(plan["study_hub_uploads"])
+            })
+        return jsonify({"currency":"KES","plans":plans})
 
     # Enforce the existing generation endpoints without requiring the
     # frontend to invent a second billing API. The request is rejected before
@@ -1215,3 +1182,4 @@ def register_usage_billing(app, db):
         return jsonify({"ok": True, "billing": _org_plan(organisation_id)})
 
     return None
+

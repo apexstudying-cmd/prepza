@@ -11,6 +11,9 @@ import secrets
 from datetime import datetime, timedelta, date
 from flask import jsonify, request, session
 from sqlalchemy import text
+from pywebpush import webpush
+from b2b_campaign_metering import record_billable_event, reverse_billable_event
+from usage_billing import ORGANISATION_PLANS
 
 DISCOVERY_PRICING = {
     "feed_cpm_kes": 350,
@@ -23,82 +26,110 @@ PUSH_CAP_PER_48_HOURS = 1
 PUSH_CAP_PER_7_DAYS = 3
 
 
-def register_discovery(app, db):
-    with app.app_context():
-        if db.engine.dialect.name == "postgresql":
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS discovery_campaign (
-                    id BIGSERIAL PRIMARY KEY,
-                    organisation_id INTEGER NOT NULL,
-                    opportunity_id INTEGER,
-                    name VARCHAR(200) NOT NULL,
-                    objective VARCHAR(30) NOT NULL DEFAULT 'reach',
-                    placement VARCHAR(30) NOT NULL DEFAULT 'feed',
-                    status VARCHAR(30) NOT NULL DEFAULT 'draft',
-                    budget_kes INTEGER NOT NULL DEFAULT 0,
-                    bid_type VARCHAR(20) NOT NULL DEFAULT 'cpm',
-                    bid_kes INTEGER NOT NULL DEFAULT 350,
-                    target_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-                    delivered_impressions INTEGER NOT NULL DEFAULT 0,
-                    delivered_clicks INTEGER NOT NULL DEFAULT 0,
-                    delivered_applications INTEGER NOT NULL DEFAULT 0,
-                    push_delivered INTEGER NOT NULL DEFAULT 0,
-                    starts_at TIMESTAMP,
-                    ends_at TIMESTAMP,
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            """))
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS discovery_event (
-                    id BIGSERIAL PRIMARY KEY,
-                    campaign_id BIGINT NOT NULL,
-                    user_id INTEGER NOT NULL,
-                    event_key VARCHAR(180) NOT NULL UNIQUE,
-                    event_type VARCHAR(30) NOT NULL,
-                    placement VARCHAR(30) NOT NULL,
-                    amount_kes INTEGER NOT NULL DEFAULT 0,
-                    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            """))
-            db.session.execute(text("""
-                CREATE INDEX IF NOT EXISTS ix_discovery_event_campaign_created
-                ON discovery_event (campaign_id, created_at)
-            """))
-            db.session.execute(text("""
-                CREATE INDEX IF NOT EXISTS ix_discovery_event_user_type_created
-                ON discovery_event (user_id, event_type, created_at)
-            """))
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS organisation_usage_invoice (
-                    id BIGSERIAL PRIMARY KEY,
-                    organisation_id INTEGER NOT NULL,
-                    period_start DATE NOT NULL,
-                    period_end DATE NOT NULL,
-                    usage_type VARCHAR(40) NOT NULL DEFAULT 'discovery',
-                    amount_kes INTEGER NOT NULL DEFAULT 0,
-                    status VARCHAR(30) NOT NULL DEFAULT 'pending',
-                    payment_reference VARCHAR(120),
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    paid_at TIMESTAMP,
-                    UNIQUE (organisation_id, period_start, period_end, usage_type)
-                )
-            """))
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS discovery_push_delivery (
-                    id BIGSERIAL PRIMARY KEY,
-                    campaign_id BIGINT NOT NULL,
-                    user_id INTEGER NOT NULL,
-                    subscription_endpoint TEXT,
-                    status VARCHAR(20) NOT NULL DEFAULT 'queued',
-                    provider_response TEXT,
-                    sent_at TIMESTAMP,
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE (campaign_id, user_id)
-                )
-            """))
-            db.session.commit()
+def _register_discovery_schema(db):
+
+    if db.engine.dialect.name == "sqlite":
+        return
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS discovery_campaign (
+            id BIGSERIAL PRIMARY KEY,
+            organisation_id INTEGER NOT NULL,
+            opportunity_id INTEGER,
+            name VARCHAR(200) NOT NULL,
+            objective VARCHAR(30) NOT NULL DEFAULT 'reach',
+            placement VARCHAR(30) NOT NULL DEFAULT 'feed',
+            status VARCHAR(30) NOT NULL DEFAULT 'draft',
+            budget_kes INTEGER NOT NULL DEFAULT 0,
+            bid_type VARCHAR(20) NOT NULL DEFAULT 'cpm',
+            bid_kes INTEGER NOT NULL DEFAULT 350,
+            target_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            delivered_impressions INTEGER NOT NULL DEFAULT 0,
+            delivered_clicks INTEGER NOT NULL DEFAULT 0,
+            delivered_applications INTEGER NOT NULL DEFAULT 0,
+            push_delivered INTEGER NOT NULL DEFAULT 0,
+            starts_at TIMESTAMP,
+            ends_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS discovery_event (
+            id BIGSERIAL PRIMARY KEY,
+            campaign_id BIGINT NOT NULL,
+            user_id INTEGER NOT NULL,
+            event_key VARCHAR(180) NOT NULL UNIQUE,
+            event_type VARCHAR(30) NOT NULL,
+            placement VARCHAR(30) NOT NULL,
+            amount_kes NUMERIC(12,4) NOT NULL DEFAULT 0,
+            metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    db.session.execute(text("""
+        CREATE INDEX IF NOT EXISTS ix_discovery_event_campaign_created
+        ON discovery_event (campaign_id, created_at)
+    """))
+    db.session.execute(text("""
+        CREATE INDEX IF NOT EXISTS ix_discovery_event_user_type_created
+        ON discovery_event (user_id, event_type, created_at)
+    """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS organisation_usage_invoice (
+            id BIGSERIAL PRIMARY KEY,
+            organisation_id INTEGER NOT NULL,
+            period_start DATE NOT NULL,
+            period_end DATE NOT NULL,
+            usage_type VARCHAR(40) NOT NULL DEFAULT 'discovery',
+            amount_kes INTEGER NOT NULL DEFAULT 0,
+            status VARCHAR(30) NOT NULL DEFAULT 'pending',
+            payment_reference VARCHAR(120),
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            paid_at TIMESTAMP,
+            UNIQUE (organisation_id, period_start, period_end, usage_type)
+        )
+    """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS discovery_push_delivery (
+            id BIGSERIAL PRIMARY KEY,
+            campaign_id BIGINT NOT NULL,
+            user_id INTEGER NOT NULL,
+            subscription_endpoint TEXT,
+            status VARCHAR(20) NOT NULL DEFAULT 'queued',
+            provider_response TEXT,
+            sent_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (campaign_id, user_id)
+        )
+    """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS student_opportunity_discovery (
+            user_id INTEGER PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
+            discoverable BOOLEAN NOT NULL DEFAULT FALSE,
+            consent_version VARCHAR(40) NOT NULL DEFAULT 'g5-v1',
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS student_opportunity_discovery_audit (
+            id BIGSERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+            discoverable BOOLEAN NOT NULL,
+            consent_version VARCHAR(40) NOT NULL,
+            source VARCHAR(40) NOT NULL DEFAULT 'settings',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    db.session.execute(text("""
+        CREATE INDEX IF NOT EXISTS ix_student_opportunity_discovery_audit_user_created
+        ON student_opportunity_discovery (user_id, updated_at)
+    """))
+    db.session.execute(text("""
+        CREATE INDEX IF NOT EXISTS ix_student_opportunity_discovery_audit_log_user_created
+        ON student_opportunity_discovery_audit (user_id, created_at)
+    """))
+
+    db.session.commit()
 
     def csrf_ok():
         return bool(session.get("csrf_token") and request.headers.get("X-CSRF-Token")
@@ -109,6 +140,11 @@ def register_discovery(app, db):
             SELECT role FROM organisation_member
             WHERE organisation_id = :oid AND user_id = :uid LIMIT 1
         """), {"oid": org_id, "uid": user_id}).scalar_one_or_none()
+
+
+def register_discovery(app, db):
+    with app.app_context():
+        _register_discovery_schema(db)
 
     def org_access(org_id, user_id, owner_only=False):
         role = member_role(org_id, user_id)
@@ -123,20 +159,46 @@ def register_discovery(app, db):
             return "launch", "trial", None
         return str(row["plan_code"]), str(row["status"]), row["expires_at"]
 
+    ALLOWED_TARGET_KEYS = {"university_ids", "program_ids", "years", "active_days"}
+
+    def normalize_target(raw_target):
+        if not isinstance(raw_target, dict):
+            return {}
+        if set(raw_target.keys()) - ALLOWED_TARGET_KEYS:
+            raise ValueError("Unsupported targeting criteria")
+        target = {}
+        for key in ("university_ids", "program_ids", "years"):
+            values = raw_target.get(key)
+            if values is None:
+                continue
+            if not isinstance(values, list):
+                raise ValueError(f"{key} must be a list")
+            cleaned = sorted({int(x) for x in values if str(x).isdigit()})
+            if len(cleaned) > 100:
+                raise ValueError(f"{key} contains too many values")
+            target[key] = cleaned
+        if raw_target.get("active_days") is not None:
+            days = int(raw_target["active_days"])
+            if not 1 <= days <= 90:
+                raise ValueError("active_days must be between 1 and 90")
+            target["active_days"] = days
+        return target
+
     def eligible_users(target):
+        target = normalize_target(target)
         clauses = []
         params = {}
         if target.get("university_ids"):
             clauses.append("u.university_id = ANY(:university_ids)")
-            params["university_ids"] = [int(x) for x in target["university_ids"] if str(x).isdigit()]
+            params["university_ids"] = target["university_ids"]
         if target.get("program_ids"):
             clauses.append("u.program_id = ANY(:program_ids)")
-            params["program_ids"] = [int(x) for x in target["program_ids"] if str(x).isdigit()]
+            params["program_ids"] = target["program_ids"]
         if target.get("years"):
             clauses.append("u.year = ANY(:years)")
-            params["years"] = [int(x) for x in target["years"] if str(x).isdigit()]
-        if target.get("discoverable") is not False:
-            clauses.append("COALESCE(sd.discoverable, FALSE) = TRUE")
+            params["years"] = target["years"]
+        # Explicit consent is mandatory; an organisation cannot opt a student in.
+        clauses.append("COALESCE(sd.discoverable, FALSE) = TRUE")
         days = max(1, min(90, int(target.get("active_days", 30) or 30)))
         params["since_date"] = date.today() - timedelta(days=days - 1)
         clauses.append("""
@@ -165,46 +227,15 @@ def register_discovery(app, db):
         return (int(row["delivered_impressions"] or 0) * int(row["bid_kes"]) + 999) // 1000
 
     def sync_org_invoice(organisation_id):
-        now = datetime.utcnow()
-        period_start = date(now.year, now.month, 1)
-        next_month = date(now.year + (1 if now.month == 12 else 0), 1 if now.month == 12 else now.month + 1, 1)
-        period_end = next_month - timedelta(days=1)
+        # G3: sponsored campaigns are prepaid. Never create a second monthly
+        # usage invoice for delivery events; the canonical campaign ledger is
+        # the billing source of truth. Organisation subscription billing remains
+        # separate.
         base = db.session.execute(text("""
-            SELECT COALESCE(monthly_fee_kes, 0) FROM organisation_billing WHERE organisation_id=:oid
+            SELECT COALESCE(monthly_fee_kes,0)
+            FROM organisation_billing WHERE organisation_id=:oid
         """), {"oid": organisation_id}).scalar_one_or_none() or 0
-        rows = db.session.execute(text("""
-            SELECT id,bid_type,bid_kes,placement,budget_kes,delivered_impressions,delivered_clicks,push_delivered
-            FROM discovery_campaign WHERE organisation_id=:oid AND created_at >= :period
-        """), {"oid": organisation_id, "period": datetime.combine(period_start, datetime.min.time())}).mappings().all()
-        usage = sum(min(campaign_usage(r), int(r["budget_kes"])) for r in rows)
-        total = int(base) + int(usage)
-        existing = db.session.execute(text("""
-            SELECT status FROM organisation_invoice
-            WHERE organisation_id=:oid AND period_start=:start AND period_end=:end
-        """), {"oid":organisation_id,"start":period_start,"end":period_end}).scalar_one_or_none()
-        if existing == "paid":
-            db.session.execute(text("""
-                INSERT INTO organisation_usage_invoice
-                    (organisation_id,period_start,period_end,usage_type,amount_kes,status)
-                VALUES (:oid,:start,:end,'discovery',:usage,'pending')
-                ON CONFLICT (organisation_id,period_start,period_end,usage_type)
-                DO UPDATE SET amount_kes=:usage,
-                    status=CASE WHEN organisation_usage_invoice.status='paid' THEN 'paid' ELSE 'pending' END
-            """), {"oid":organisation_id,"start":period_start,"end":period_end,"usage":int(usage)})
-            db.session.commit()
-            usage_status = db.session.execute(text("""SELECT status FROM organisation_usage_invoice WHERE organisation_id=:oid AND period_start=:start AND period_end=:end AND usage_type='discovery'"""), {"oid":organisation_id,"start":period_start,"end":period_end}).scalar_one_or_none()
-            return total, usage, usage_status == "paid"
-        db.session.execute(text("""
-            INSERT INTO organisation_invoice
-                (organisation_id,period_start,period_end,plan_code,amount_kes,status)
-            VALUES (:oid,:start,:end,
-                    COALESCE((SELECT plan_code FROM organisation_billing WHERE organisation_id=:oid),'launch'),
-                    :amount,'pending')
-            ON CONFLICT (organisation_id,period_start,period_end)
-            DO UPDATE SET amount_kes=:amount, status=CASE WHEN organisation_invoice.status='paid' THEN 'paid' ELSE 'pending' END
-        """), {"oid":organisation_id,"start":period_start,"end":period_end,"amount":total})
-        db.session.commit()
-        return total, usage, False
+        return int(base), 0, False
 
     def campaign_row(campaign_id):
         return db.session.execute(text("""
@@ -212,17 +243,19 @@ def register_discovery(app, db):
         """), {"id": campaign_id}).mappings().first()
 
     def target_matches(user_id, target):
+        target = normalize_target(target)
         clauses = ["u.id = :uid"]
         params = {"uid": user_id}
         if target.get("university_ids"):
             clauses.append("u.university_id = ANY(:university_ids)")
-            params["university_ids"] = [int(x) for x in target["university_ids"]]
+            params["university_ids"] = target["university_ids"]
         if target.get("program_ids"):
             clauses.append("u.program_id = ANY(:program_ids)")
-            params["program_ids"] = [int(x) for x in target["program_ids"]]
+            params["program_ids"] = target["program_ids"]
         if target.get("years"):
             clauses.append("u.year = ANY(:years)")
-            params["years"] = [int(x) for x in target["years"]]
+            params["years"] = target["years"]
+        # Re-check consent at delivery time; stale clients cannot bypass it.
         clauses.append("COALESCE(sd.discoverable, FALSE) = TRUE")
         params["since_date"] = date.today() - timedelta(days=max(1, min(90, int(target.get("active_days", 30) or 30))) - 1)
         clauses.append("""EXISTS (
@@ -280,6 +313,53 @@ def register_discovery(app, db):
             out.append({"user_id": int(r[0]), "endpoint": r[1], "keys": keys})
         return out
 
+    @app.get("/api/opportunities/preferences")
+    def opportunity_discovery_preferences():
+        uid = session.get("user_id")
+        if not uid:
+            return jsonify({"error": "Not logged in"}), 401
+        row = db.session.execute(text("""
+            SELECT discoverable, consent_version, updated_at
+            FROM student_opportunity_discovery
+            WHERE user_id=:uid
+        """), {"uid": uid}).mappings().first()
+        return jsonify({
+            "relevant_opportunities_enabled": bool(row and row["discoverable"]),
+            "consent_version": row["consent_version"] if row else "g5-v1",
+            "updated_at": row["updated_at"].isoformat() if row and row["updated_at"] else None,
+        })
+
+    @app.patch("/api/opportunities/preferences")
+    def update_opportunity_discovery_preferences():
+        uid = session.get("user_id")
+        if not uid:
+            return jsonify({"error": "Not logged in"}), 401
+        if not csrf_ok():
+            return jsonify({"error": "Valid CSRF token required"}), 403
+        data = request.get_json(silent=True) or {}
+        enabled = data.get("relevant_opportunities_enabled")
+        if not isinstance(enabled, bool):
+            return jsonify({"error": "relevant_opportunities_enabled must be a boolean"}), 400
+        db.session.execute(text("""
+            INSERT INTO student_opportunity_discovery (user_id, discoverable, consent_version)
+            VALUES (:uid, :enabled, 'g5-v1')
+            ON CONFLICT (user_id) DO UPDATE
+            SET discoverable=EXCLUDED.discoverable,
+                consent_version=EXCLUDED.consent_version,
+                updated_at=CURRENT_TIMESTAMP
+        """), {"uid": uid, "enabled": enabled})
+        db.session.execute(text("""
+            INSERT INTO student_opportunity_discovery_audit
+                (user_id, discoverable, consent_version, source)
+            VALUES (:uid, :enabled, 'g5-v1', 'settings')
+        """), {"uid": uid, "enabled": enabled})
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "relevant_opportunities_enabled": enabled,
+            "consent_version": "g5-v1",
+        })
+
     @app.get("/api/organisations/<int:organisation_id>/discovery/pricing")
     def discovery_pricing(organisation_id):
         uid = session.get("user_id")
@@ -295,12 +375,17 @@ def register_discovery(app, db):
         if not uid or not org_access(organisation_id, uid):
             return jsonify({"error":"Organisation membership required"}), 403
         data = request.get_json(silent=True) or {}
-        target = data.get("target") if isinstance(data.get("target"), dict) else {}
+        raw_target = data.get("target") if isinstance(data.get("target"), dict) else {}
         try:
+            target = normalize_target(raw_target)
             count = len(eligible_users(target))
-        except Exception:
-            count = 0
-        return jsonify({"audience_estimate": count, "target": target})
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid targeting criteria"}), 400
+        return jsonify({
+            "audience_estimate": count if count >= 10 else None,
+            "audience_estimate_available": count >= 10,
+            "target": target,
+        })
 
     @app.post("/api/organisations/<int:organisation_id>/discovery/campaigns")
     def create_discovery_campaign(organisation_id):
@@ -313,38 +398,80 @@ def register_discovery(app, db):
         name = str(data.get("name") or "").strip()[:200]
         placement = str(data.get("placement") or "feed").lower()
         objective = str(data.get("objective") or "reach").lower()
-        bid_type = str(data.get("bid_type") or "cpm").lower()
+        billing_modes = ["cpm", "cpc"]
         try:
             budget = int(data.get("budget_kes") or 0)
         except (TypeError, ValueError):
             budget = 0
-        target = data.get("target") if isinstance(data.get("target"), dict) else {}
+        raw_target = data.get("target") if isinstance(data.get("target"), dict) else {}
+        try:
+            target = normalize_target(raw_target)
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid targeting criteria"}), 400
         if not name or placement not in ("feed", "push", "feed_push"):
             return jsonify({"error": "Campaign name and valid placement are required"}), 400
+        opportunity_id = data.get("opportunity_id")
+        if opportunity_id is not None:
+            try: opportunity_id = int(opportunity_id)
+            except (TypeError, ValueError): return jsonify({"error":"Invalid opportunity"}), 400
+            opp = db.session.execute(text("SELECT id,status,organisation_id,expiry_date FROM opportunity WHERE id=:id AND organisation_id=:oid"), {"id": opportunity_id, "oid": organisation_id}).mappings().first()
+            if not opp or opp["status"] != "published" or opp["expiry_date"] <= datetime.utcnow():
+                return jsonify({"error":"Only a published, active organisation opportunity can be sponsored"}), 400
         if objective not in ("reach", "traffic", "applications"):
             return jsonify({"error": "Invalid campaign objective"}), 400
-        if bid_type not in ("cpm", "cpc"):
-            return jsonify({"error": "Invalid billing type"}), 400
+        if placement == "push":
+            billing_modes = ["cpm"]
+        bid_type = "both" if len(billing_modes) == 2 else billing_modes[0]
         if budget < DISCOVERY_PRICING["minimum_campaign_kes"]:
             return jsonify({"error": f"Minimum campaign budget is KES {DISCOVERY_PRICING['minimum_campaign_kes']:,}"}), 400
-        if placement in ("push", "feed_push") and bid_type != "cpm":
-            return jsonify({"error": "Push inventory uses delivered-recipient CPM"}), 400
         bid = DISCOVERY_PRICING["push_cpm_kes"] if placement == "push" else DISCOVERY_PRICING["feed_cpm_kes"]
         start = data.get("starts_at")
         end = data.get("ends_at")
+        try:
+            duration_days = int(data.get("duration_days") or data.get("active_days") or 30)
+        except (TypeError, ValueError):
+            duration_days = 30
+        if duration_days not in (7, 30, 90):
+            return jsonify({"error":"Campaign maximum delivery window must be 7, 30, or 90 days"}), 400
+        from datetime import datetime as _dt, timedelta as _td
+        base_start = _dt.fromisoformat(str(start).replace('Z','+00:00')) if start else _dt.utcnow()
+        if getattr(base_start, 'tzinfo', None): base_start = base_start.replace(tzinfo=None)
+        canonical_end = base_start + _td(days=duration_days)
+        if end:
+            try:
+                supplied_end = _dt.fromisoformat(str(end).replace('Z','+00:00'))
+                if getattr(supplied_end, 'tzinfo', None): supplied_end = supplied_end.replace(tzinfo=None)
+            except ValueError:
+                return jsonify({"error":"Invalid campaign end time"}), 400
+            if supplied_end != canonical_end:
+                return jsonify({"error":"Campaign end must match the selected 7, 30, or 90-day window"}), 400
+        end = canonical_end.isoformat()
+        org_state = db.session.execute(text("SELECT verification_status,is_active FROM organisation WHERE id=:oid"), {"oid": organisation_id}).mappings().first()
+        if not org_state or org_state["verification_status"] != "verified" or not org_state["is_active"]:
+            return jsonify({"error":"Organisation verification must be complete before paid sponsorships can be created"}), 403
         plan_code, status, expires_at = org_plan(organisation_id)
         if status in ("suspended", "expired", "past_due"):
             return jsonify({"error": "Organisation billing is not active"}), 402
+        plan_limits = ORGANISATION_PLANS.get(plan_code, ORGANISATION_PLANS["launch"])
+        active_sponsorships = db.session.execute(text("""
+            SELECT COUNT(*) FROM discovery_campaign
+            WHERE organisation_id=:oid
+              AND status IN ('draft','pending_payment','active','paused')
+        """), {"oid": organisation_id}).scalar_one()
+        if int(active_sponsorships) >= int(plan_limits.get("sponsored_campaigns", 1)):
+            return jsonify({"error": f"Your {plan_code.title()} organisation plan has reached its sponsored-campaign capacity. Upgrade your plan or finish an existing campaign first."}), 403
         audience = eligible_users(target)
+        if len(audience) < 10:
+            return jsonify({"error": "Target audience must contain at least 10 consented eligible students"}), 400
         db.session.execute(text("""
             INSERT INTO discovery_campaign
                 (organisation_id, opportunity_id, name, objective, placement, status,
                  budget_kes, bid_type, bid_kes, target_json, starts_at, ends_at)
             VALUES (:oid, :opp, :name, :objective, :placement, 'draft',
                     :budget, :bid_type, :bid, CAST(:target AS jsonb), :starts, :ends)
-        """), {"oid": organisation_id, "opp": data.get("opportunity_id"), "name": name,
+        """), {"oid": organisation_id, "opp": opportunity_id, "name": name,
                "objective": objective, "placement": placement, "budget": budget,
-               "bid_type": bid_type, "bid": bid, "target": json.dumps(target),
+               "bid_type": bid_type, "bid": bid, "target": json.dumps({**target, "billing_modes": billing_modes}),
                "starts": start, "ends": end})
         db.session.commit()
         return jsonify({"ok": True, "audience_estimate": len(audience), "campaign": dict(campaign_row(
@@ -375,8 +502,13 @@ def register_discovery(app, db):
         """), {"cid": campaign_id, "oid": organisation_id}).mappings().first()
         if not row:
             return jsonify({"error": "Campaign not found"}), 404
-        target = row["target_json"] or {}
-        return jsonify({"campaign": dict(row), "audience_estimate": len(eligible_users(target))})
+        target = normalize_target(row["target_json"] or {})
+        count = len(eligible_users(target))
+        return jsonify({
+            "campaign": dict(row),
+            "audience_estimate": count if count >= 10 else None,
+            "audience_estimate_available": count >= 10,
+        })
 
     @app.patch("/api/organisations/<int:organisation_id>/discovery/campaigns/<int:campaign_id>")
     def update_discovery_campaign(organisation_id, campaign_id):
@@ -384,19 +516,58 @@ def register_discovery(app, db):
         if not uid or not csrf_ok() or not org_access(organisation_id, uid, owner_only=True):
             return jsonify({"error": "Organisation owner and valid CSRF token required"}), 403
         data = request.get_json(silent=True) or {}
-        allowed = {"draft", "pending_payment", "active", "paused", "completed", "cancelled"}
-        status = str(data.get("status") or "").lower()
-        if status not in allowed:
-            return jsonify({"error": "Invalid campaign status"}), 400
+        requested = str(data.get("status") or "").lower()
         row = campaign_row(campaign_id)
         if not row or int(row["organisation_id"]) != organisation_id:
             return jsonify({"error": "Campaign not found"}), 404
-        db.session.execute(text("""
-            UPDATE discovery_campaign SET status=:status, updated_at=CURRENT_TIMESTAMP
-            WHERE id=:cid AND organisation_id=:oid
-        """), {"status": status, "cid": campaign_id, "oid": organisation_id})
+
+        current = str(row["status"] or "draft")
+        funding = str(row["funding_status"] or "unfunded")
+        transitions = {
+            "draft": {"pending_payment", "cancelled"},
+            "pending_payment": {"draft", "cancelled"},
+            "active": {"paused", "completed", "cancelled"},
+            "paused": {"active", "completed", "cancelled"},
+            "completed": set(),
+            "cancelled": set(),
+        }
+        if requested not in transitions.get(current, set()):
+            return jsonify({"error": f"Invalid state transition: {current} -> {requested}"}), 409
+
+        if requested == "active" and funding not in ("funded", "credited"):
+            return jsonify({"error": "Campaign must be fully funded before activation"}), 409
+        if requested == "active":
+            try:
+                if len(eligible_users(normalize_target(row["target_json"] or {}))) < 10:
+                    return jsonify({"error": "Campaign cannot activate with fewer than 10 consented eligible students"}), 409
+            except (ValueError, TypeError):
+                return jsonify({"error": "Campaign targeting is invalid"}), 409
+
+        if requested == "active":
+            now = datetime.utcnow()
+            db.session.execute(text("""
+                UPDATE discovery_campaign
+                SET status='active', activated_at=COALESCE(activated_at,:now), updated_at=CURRENT_TIMESTAMP
+                WHERE id=:cid AND organisation_id=:oid AND funding_status IN ('funded','credited')
+                  AND status='paused'
+            """), {"cid": campaign_id, "oid": organisation_id, "now": now})
+        elif requested == "paused":
+            db.session.execute(text("""
+                UPDATE discovery_campaign SET status='paused', updated_at=CURRENT_TIMESTAMP
+                WHERE id=:cid AND organisation_id=:oid AND status='active'
+            """), {"cid": campaign_id, "oid": organisation_id})
+        elif requested in ("completed", "cancelled"):
+            db.session.execute(text("""
+                UPDATE discovery_campaign SET status=:status, updated_at=CURRENT_TIMESTAMP
+                WHERE id=:cid AND organisation_id=:oid AND status IN ('active','paused','pending_payment','draft')
+            """), {"status": requested, "cid": campaign_id, "oid": organisation_id})
+        else:
+            db.session.execute(text("""
+                UPDATE discovery_campaign SET status=:status, updated_at=CURRENT_TIMESTAMP
+                WHERE id=:cid AND organisation_id=:oid AND status=:current
+            """), {"status": requested, "cid": campaign_id, "oid": organisation_id, "current": current})
         db.session.commit()
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "from": current, "to": requested})
 
     @app.post("/api/discovery/campaigns/<int:campaign_id>/impression")
     def discovery_impression(campaign_id):
@@ -404,32 +575,26 @@ def register_discovery(app, db):
         if not uid:
             return jsonify({"error": "Not logged in"}), 401
         row = campaign_row(campaign_id)
-        if not row or row["status"] != "active":
+        if not row:
             return jsonify({"error": "Campaign unavailable"}), 404
-        if campaign_usage(row) >= int(row["budget_kes"]):
-            return jsonify({"eligible": False, "code": "campaign_budget_exhausted"}), 200
         target = row["target_json"] or {}
         if not target_matches(uid, target):
             return jsonify({"eligible": False}), 200
-        day = date.today().isoformat()
-        event_key = f"imp:{campaign_id}:{uid}:{day}:{row['placement']}"
-        inserted = db.session.execute(text("""
-            INSERT INTO discovery_event
-                (campaign_id,user_id,event_key,event_type,placement,amount_kes,metadata)
-            VALUES (:cid,:uid,:key,'impression',:placement,0,CAST(:meta AS jsonb))
-            ON CONFLICT (event_key) DO NOTHING
-            RETURNING id
-        """), {"cid": campaign_id, "uid": uid, "key": event_key,
-               "placement": row["placement"], "meta": json.dumps({"verified": True})}).first()
-        if inserted:
-            db.session.execute(text("""
-                UPDATE discovery_campaign
-                SET delivered_impressions=delivered_impressions+1, updated_at=CURRENT_TIMESTAMP
-                WHERE id=:cid
-            """), {"cid": campaign_id})
+        data = request.get_json(silent=True) or {}
+        supplied_key = str(data.get("event_id") or "").strip()
+        event_key = f"imp:{campaign_id}:{uid}:{supplied_key[:100]}" if supplied_key else f"imp:{campaign_id}:{uid}:{secrets.token_hex(16)}"
+        result = record_billable_event(db, campaign_id, uid, "impression", row["placement"], event_key)
+        if result.get("ok"):
             db.session.commit()
-            sync_org_invoice(int(row["organisation_id"]))
-        return jsonify({"eligible": True, "recorded": bool(inserted)})
+            return jsonify({"eligible": True, "recorded": not result.get("duplicate"), "amount_minor": result.get("amount_minor", 0),
+                            "remaining_minor": result.get("remaining_minor")}), 200
+        db.session.rollback()
+        if result.get("reason") in ("campaign_budget_exhausted", "campaign_not_funded", "student_frequency_cap"):
+            return jsonify({"eligible": False, "code": result["reason"], "remaining_minor": result.get("remaining_minor", 0)}), 200
+        if result.get("reason") == "campaign_inactive":
+            return jsonify({"error": "Campaign unavailable"}), 404
+        return jsonify({"eligible": False, "code": result.get("reason", "meter_rejected")}), 200
+
 
     @app.post("/api/discovery/campaigns/<int:campaign_id>/click")
     def discovery_click(campaign_id):
@@ -437,27 +602,23 @@ def register_discovery(app, db):
         if not uid:
             return jsonify({"error": "Not logged in"}), 401
         row = campaign_row(campaign_id)
-        if not row or row["status"] != "active":
+        if not row:
             return jsonify({"error": "Campaign unavailable"}), 404
         if not target_matches(uid, row["target_json"] or {}):
             return jsonify({"eligible": False}), 200
-        if campaign_usage(row) >= int(row["budget_kes"]):
-            return jsonify({"eligible": False, "code": "campaign_budget_exhausted"}), 200
-        key = f"click:{campaign_id}:{uid}:{secrets.token_hex(8)}"
-        amount = int(row["bid_kes"]) if row["bid_type"] == "cpc" else 0
-        db.session.execute(text("""
-            INSERT INTO discovery_event
-                (campaign_id,user_id,event_key,event_type,placement,amount_kes,metadata)
-            VALUES (:cid,:uid,:key,'click',:placement,:amount,CAST(:meta AS jsonb))
-        """), {"cid": campaign_id, "uid": uid, "key": key, "placement": row["placement"],
-               "amount": amount, "meta": json.dumps({"billable": row["bid_type"] == "cpc"})})
-        db.session.execute(text("""
-            UPDATE discovery_campaign SET delivered_clicks=delivered_clicks+1,
-              updated_at=CURRENT_TIMESTAMP WHERE id=:cid
-        """), {"cid": campaign_id})
-        db.session.commit()
-        sync_org_invoice(int(row["organisation_id"]))
-        return jsonify({"eligible": True, "recorded": True})
+        event_key = f"click:{campaign_id}:{uid}:{secrets.token_hex(16)}"
+        result = record_billable_event(db, campaign_id, uid, "click", row["placement"], event_key)
+        if result.get("ok"):
+            db.session.commit()
+            return jsonify({"eligible": True, "recorded": True, "amount_minor": result.get("amount_minor", 0),
+                            "remaining_minor": result.get("remaining_minor")}), 200
+        db.session.rollback()
+        if result.get("reason") in ("campaign_budget_exhausted", "campaign_not_funded"):
+            return jsonify({"eligible": False, "code": result["reason"], "remaining_minor": result.get("remaining_minor", 0)}), 200
+        if result.get("reason") == "campaign_inactive":
+            return jsonify({"error": "Campaign unavailable"}), 404
+        return jsonify({"eligible": False, "code": result.get("reason", "meter_rejected")}), 200
+
 
     @app.post("/api/discovery/campaigns/<int:campaign_id>/application")
     def discovery_application(campaign_id):
@@ -469,19 +630,20 @@ def register_discovery(app, db):
             return jsonify({"error": "Campaign unavailable"}), 404
         if not target_matches(uid, row["target_json"] or {}):
             return jsonify({"eligible": False}), 200
-        key = f"application:{campaign_id}:{uid}:{secrets.token_hex(8)}"
+        key = f"application:{campaign_id}:{uid}:{secrets.token_hex(16)}"
         db.session.execute(text("""
             INSERT INTO discovery_event
                 (campaign_id,user_id,event_key,event_type,placement,amount_kes,metadata)
             VALUES (:cid,:uid,:key,'application',:placement,0,CAST(:meta AS jsonb))
         """), {"cid": campaign_id, "uid": uid, "key": key, "placement": row["placement"],
-               "amount": 0, "meta": json.dumps({"verified": True})})
+               "meta": json.dumps({"verified": True, "billable": False})})
         db.session.execute(text("""
             UPDATE discovery_campaign SET delivered_applications=delivered_applications+1,
               updated_at=CURRENT_TIMESTAMP WHERE id=:cid
         """), {"cid": campaign_id})
         db.session.commit()
         return jsonify({"eligible": True, "recorded": True})
+
 
     @app.get("/api/organisations/<int:organisation_id>/discovery/billing-preview")
     def discovery_billing_preview(organisation_id):
@@ -500,15 +662,20 @@ def register_discovery(app, db):
         row = campaign_row(campaign_id)
         if not row or int(row["organisation_id"]) != organisation_id:
             return jsonify({"error": "Campaign not found"}), 404
-        impressions = int(row["delivered_impressions"] or 0)
-        clicks = int(row["delivered_clicks"] or 0)
-        push = int(row["push_delivered"] or 0)
-        usage = campaign_usage(row)
+        ledger_net_minor = db.session.execute(text("""
+            SELECT COALESCE(SUM(signed_amount_minor),0)
+            FROM b2b_campaign_ledger WHERE campaign_id=:cid
+        """), {"cid": campaign_id}).scalar_one()
+        funded_minor = int(row["funded_amount_minor"] or 0)
+        remaining_minor = max(0, funded_minor + int(ledger_net_minor))
+        spent_minor = max(0, -int(ledger_net_minor))
         return jsonify({
-            "currency": "KES", "usage_charge_kes": min(max(0, usage), int(row["budget_kes"])),
+            "currency": "KES",
+            "spent_kes": spent_minor / 100,
             "budget_kes": int(row["budget_kes"]),
-            "remaining_kes": max(0, int(row["budget_kes"]) - usage),
-            "billing_basis": "verified delivery events",
+            "funded_kes": funded_minor / 100,
+            "remaining_kes": remaining_minor / 100,
+            "billing_basis": "append-only prepaid campaign ledger",
         })
 
     @app.post("/api/organisations/<int:organisation_id>/discovery/campaigns/<int:campaign_id>/push")
@@ -521,27 +688,17 @@ def register_discovery(app, db):
             return jsonify({"error": "Campaign not found"}), 404
         if row["placement"] not in ("push", "feed_push") or row["status"] != "active":
             return jsonify({"error": "Campaign is not active push inventory"}), 400
+        if str(row["funding_status"] or "") not in ("funded", "credited"):
+            return jsonify({"error": "Campaign is not funded"}), 402
+
         target = row["target_json"] or {}
         user_ids = eligible_users(target)
-        now = datetime.utcnow()
-        allowed_ids = []
-        for user_id in user_ids:
-            recent = db.session.execute(text("""
-                SELECT COUNT(*) FROM discovery_push_delivery
-                WHERE user_id=:uid AND status='sent'
-                  AND sent_at >= CURRENT_TIMESTAMP - INTERVAL '48 hours'
-            """), {"uid": user_id}).scalar_one()
-            weekly = db.session.execute(text("""
-                SELECT COUNT(*) FROM discovery_push_delivery
-                WHERE user_id=:uid AND status='sent'
-                  AND sent_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
-            """), {"uid": user_id}).scalar_one()
-            if int(recent) < PUSH_CAP_PER_48_HOURS and int(weekly) < PUSH_CAP_PER_7_DAYS:
-                allowed_ids.append(user_id)
+        # Final frequency enforcement happens inside the atomic metering
+        # transaction. Keep all otherwise eligible recipients in the queue so
+        # concurrent campaigns cannot bypass or accidentally double-apply caps.
+        allowed_ids = list(user_ids)
 
         subscriptions = push_subscription_rows(allowed_ids)
-        # Queue first; an external worker/payment provider can call this endpoint
-        # again safely because (campaign,user) is unique.
         queued = 0
         for sub in subscriptions:
             inserted = db.session.execute(text("""
@@ -554,43 +711,81 @@ def register_discovery(app, db):
             if inserted:
                 queued += 1
         db.session.commit()
+
         sent = 0
+        failed = 0
+        skipped = 0
         vapid_private = os.environ.get("VAPID_PRIVATE_KEY")
         vapid_public = os.environ.get("VAPID_PUBLIC_KEY")
         vapid_email = os.environ.get("VAPID_CLAIMS_EMAIL")
+        key_by_endpoint = {sub["endpoint"]: sub.get("keys") for sub in subscriptions}
+
         if vapid_private and vapid_public and vapid_email and queued:
-            try:
-                from pywebpush import webpush
-                pending = db.session.execute(text("""
-                    SELECT id,user_id,subscription_endpoint FROM discovery_push_delivery
-                    WHERE campaign_id=:cid AND status='queued' LIMIT 500
-                """), {"cid": campaign_id}).mappings().all()
-                payload = json.dumps({"title": row["name"], "body": "A new opportunity matched your Prepza interests.", "campaign_id": campaign_id})
-                for item in pending:
-                    try:
-                        keys = item.get("keys") or {}
-                        if isinstance(keys, str):
-                            try: keys = json.loads(keys)
-                            except Exception: keys = {}
-                        webpush(subscription_info={"endpoint": item["subscription_endpoint"], "keys": keys}, data=payload,
-                                vapid_private_key=vapid_private, vapid_claims={"sub": vapid_email})
-                    except Exception:
-                        continue
+            pending = db.session.execute(text("""
+                SELECT id,user_id,subscription_endpoint FROM discovery_push_delivery
+                WHERE campaign_id=:cid AND status='queued' LIMIT 500
+            """), {"cid": campaign_id}).mappings().all()
+            payload = json.dumps({"title": row["name"], "body": "A new opportunity matched your Prepza interests.", "campaign_id": campaign_id})
+
+            for item in pending:
+                event_key = f"push:{campaign_id}:{int(item['user_id'])}:{int(item['id'])}"
+                reserve = record_billable_event(
+                    db, campaign_id, int(item["user_id"]), "push_delivery",
+                    row["placement"], event_key
+                )
+                if not reserve.get("ok"):
+                    db.session.rollback()
                     db.session.execute(text("""
-                        UPDATE discovery_push_delivery SET status='sent', sent_at=CURRENT_TIMESTAMP WHERE id=:id
-                    """), {"id": item["id"]})
-                    sent += 1
-                if sent:
+                        UPDATE discovery_push_delivery
+                        SET status='budget_exhausted', provider_response=:reason
+                        WHERE id=:id AND status='queued'
+                    """), {"id": int(item["id"]), "reason": reserve.get("reason", "meter_rejected")})
+                    db.session.commit()
+                    skipped += 1
+                    continue
+
+                try:
+                    keys = key_by_endpoint.get(item["subscription_endpoint"]) or {}
+                    if isinstance(keys, str):
+                        try:
+                            keys = json.loads(keys)
+                        except Exception:
+                            keys = {}
+                    webpush(subscription_info={
+                        "endpoint": item["subscription_endpoint"], "keys": keys
+                    }, data=payload, vapid_private_key=vapid_private,
+                    vapid_claims={"sub": vapid_email})
+                except Exception as exc:
+                    db.session.rollback()
+                    reverse_billable_event(db, event_key, "push_delivery_failed")
                     db.session.execute(text("""
-                        UPDATE discovery_campaign SET push_delivered=push_delivered+:sent, updated_at=CURRENT_TIMESTAMP WHERE id=:cid
-                    """), {"cid": campaign_id, "sent": sent})
+                        UPDATE discovery_push_delivery
+                        SET status='failed', provider_response=:response
+                        WHERE id=:id AND status='queued'
+                    """), {"id": int(item["id"]), "response": str(exc)[:500]})
+                    db.session.commit()
+                    failed += 1
+                    continue
+
+                db.session.execute(text("""
+                    UPDATE discovery_push_delivery
+                    SET status='sent', sent_at=CURRENT_TIMESTAMP
+                    WHERE id=:id AND status='queued'
+                """), {"id": int(item["id"])})
                 db.session.commit()
-                sync_org_invoice(organisation_id)
-            except Exception:
-                # Queue remains intact; a worker can deliver later when VAPID is configured.
-                pass
-        return jsonify({"ok": True, "eligible_recipients": len(allowed_ids),
-                        "queued": queued, "sent": sent, "note": "Delivery is frequency-capped and billed by delivered recipient."})
+                sent += 1
+
+        return jsonify({
+            "ok": True,
+            "eligible_recipients": len(allowed_ids),
+            "queued": queued,
+            "sent": sent,
+            "failed": failed,
+            "skipped": skipped,
+            "billing": "atomic prepaid delivery metering",
+            "note": "Each successful push delivery consumes prepaid campaign balance and is frequency-capped."
+        })
+
 
     @app.get("/api/opportunity-discovery")
     def legacy_discovery_preference_get():
@@ -646,6 +841,7 @@ def register_discovery(app, db):
                    bid_type, bid_kes, target_json
             FROM discovery_campaign
             WHERE status='active'
+              AND funding_status IN ('funded','credited')
               AND placement IN ('feed','feed_push')
               AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
               AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
@@ -684,11 +880,28 @@ def register_discovery(app, db):
                    delivered_impressions,delivered_clicks,delivered_applications,push_delivered
             FROM discovery_campaign WHERE organisation_id=:oid ORDER BY created_at DESC
         """), {"oid": organisation_id}).mappings().all()
-        total_spend = 0
+        total_spend_minor = 0
+        enriched = []
         for r in rows:
-            charge = campaign_usage(r)
-            total_spend += min(charge, int(r["budget_kes"]))
+            net = db.session.execute(text("""
+                SELECT COALESCE(SUM(signed_amount_minor),0)
+                FROM b2b_campaign_ledger WHERE campaign_id=:cid
+            """), {"cid": int(r["id"])}).scalar_one()
+            funded = db.session.execute(text("""
+                SELECT COALESCE(funded_amount_minor,0)
+                FROM discovery_campaign WHERE id=:cid
+            """), {"cid": int(r["id"])}).scalar_one() or 0
+            spent_minor = max(0, -int(net))
+            remaining_minor = max(0, int(funded) + int(net))
+            item = dict(r)
+            item.update({
+                "funded_kes": int(funded) / 100,
+                "spent_kes": spent_minor / 100,
+                "remaining_kes": remaining_minor / 100,
+            })
+            enriched.append(item)
+            total_spend_minor += spent_minor
         return jsonify({"currency": "KES", "pricing": DISCOVERY_PRICING,
-                        "campaigns": [dict(r) for r in rows], "estimated_usage_spend_kes": total_spend})
+                        "campaigns": enriched, "prepaid_ledger_spend_kes": total_spend_minor / 100})
 
     return None

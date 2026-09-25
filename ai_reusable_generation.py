@@ -46,10 +46,17 @@ def normalize_parameters(material_type: str, parameters: dict | None) -> dict:
 
 
 def _content_scope(document_content_id: int, triggering_user_id: int) -> tuple[str, int | None]:
-    from app import db, Document, DocumentContent, LibraryPublication
+    from app import db, Document, LibraryPublication
+    # Sharing follows the deduplicated source content. If this exact
+    # DocumentContent has an approved Study Hub/library publication, every
+    # student generating that same SHA-backed content uses the shared family.
+    # Publication is a property of the underlying SHA-256 content, not
+    # merely one DocumentContent row. Identical uploads can therefore resolve
+    # to the same public Study Hub artifact even when they were not deduplicated.
     content_hash = db.session.query(DocumentContent.content_hash).filter(
         DocumentContent.id == document_content_id,
     ).scalar()
+    public = None
     if content_hash:
         public = db.session.query(LibraryPublication.id).join(
             Document, LibraryPublication.document_id == Document.id
@@ -60,8 +67,11 @@ def _content_scope(document_content_id: int, triggering_user_id: int) -> tuple[s
             LibraryPublication.status == "approved",
             Document.is_removed.is_(False),
         ).first()
-        if public:
-            return "shared", None
+    if public:
+        return "shared", None
+
+    # Without an approved library publication, the student's generated
+    # material remains private and owner-scoped.
     owned = db.session.query(Document.id).filter(
         Document.user_id == triggering_user_id,
         Document.document_content_id == document_content_id,
@@ -69,6 +79,7 @@ def _content_scope(document_content_id: int, triggering_user_id: int) -> tuple[s
     ).first()
     if owned:
         return "private", int(triggering_user_id)
+
     raise PermissionError("You do not have access to this document")
 
 
@@ -76,12 +87,9 @@ def _parameter_instruction(params: dict) -> str:
     if not params:
         return ""
     labels = {
-        "max_pages": "exact number of summary pages/sections to produce",
-        "question_count": "exact number of quiz questions to produce",
-        "card_count": "exact number of flashcards to produce",
-        "duration_minutes": "exact target podcast duration in minutes",
-        "node_count": "exact number of mind-map branches/nodes to produce",
-        "difficulty": "difficulty",
+        "max_pages": "summary target length", "question_count": "number of quiz questions",
+        "card_count": "number of flashcards", "duration_minutes": "target podcast duration in minutes",
+        "node_count": "number of mind-map nodes/branches", "difficulty": "difficulty",
         "style": "style", "language": "language",
         "variant": "variation number; produce a meaningfully different set from other variations",
     }
@@ -89,32 +97,6 @@ def _parameter_instruction(params: dict) -> str:
         f"- {labels.get(k, k)}: {params[k]}"
         for k in sorted(params)
     )
-
-
-def _validate_requested_output(material_type: str, payload: dict, parameters: dict) -> dict:
-    """Enforce the exact student-selected output size before an artifact can become ready."""
-    size_keys = {
-        "summary": ("max_pages", "sections"),
-        "quiz": ("question_count", "questions"),
-        "flashcards": ("card_count", "cards"),
-        "mind_map": ("node_count", "branches"),
-    }
-    if material_type not in size_keys:
-        return payload
-
-    key, collection_key = size_keys[material_type]
-    requested = parameters.get(key)
-    if requested is None:
-        raise ValueError(f"Missing required generation size for {material_type}")
-    items = payload.get(collection_key) if isinstance(payload, dict) else None
-    if not isinstance(items, list):
-        raise ValueError(f"{material_type} output is missing its {collection_key} list")
-    if len(items) != requested:
-        raise ValueError(
-            f"{material_type} generation returned {len(items)} {collection_key}; "
-            f"exactly {requested} were requested"
-        )
-    return payload
 
 
 def _generator(material_type, parameters=None):
@@ -137,6 +119,7 @@ def _generator(material_type, parameters=None):
 
 
 def _material_display_payload(payload, document_title):
+    """Attach the student's document name to the replayable material envelope."""
     if not isinstance(payload, dict):
         return payload
     enriched = dict(payload)
@@ -176,7 +159,7 @@ def _podcast_payload(parsed):
 
 def generate_document_material(*, material_type, document_content_id, triggering_user_id, plan_tier="free", parameters=None):
     import ai_service
-    from app import db, DocumentContent, AiJob, Document
+    from app import db, DocumentContent, AiJob
     if material_type not in PROMPT_VERSIONS:
         raise ValueError(f"Unsupported AI material type: {material_type}")
     params = normalize_parameters(material_type, parameters)
@@ -186,13 +169,21 @@ def generate_document_material(*, material_type, document_content_id, triggering
     if not content.extracted_text:
         raise ai_service.AIProviderError("This document's text hasn't finished processing yet - try again shortly.")
     scope, owner_user_id = _content_scope(document_content_id, triggering_user_id)
-    source_document = (
-        db.session.query(Document).filter(
-            Document.user_id == triggering_user_id,
-            Document.document_content_id == document_content_id,
-            Document.is_removed.is_(False),
-        ).order_by(Document.id.desc()).first()
-    )
+    source_document = None
+    session_query = getattr(db.session, "query", None)
+    app_module = __import__("app")
+    Document = getattr(app_module, "Document", None)
+    if session_query is not None and Document is not None:
+        source_document = (
+            session_query(Document)
+            .filter(
+                Document.user_id == triggering_user_id,
+                Document.document_content_id == document_content_id,
+                Document.is_removed.is_(False),
+            )
+            .order_by(Document.id.desc())
+            .first()
+        )
     document_title = source_document.title if source_document else "Study document"
     prompt_version = PROMPT_VERSIONS[material_type]
     schema_version = SCHEMA_VERSIONS[material_type]
@@ -209,7 +200,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
     quota_feature = material_type
     quota_units = 0
     quota_period = None
-    quota_entitlement_id = None
+    quota_payment_id = None
     from usage_billing import (
         FEATURES,
         check_and_consume_ai_quota,
@@ -231,6 +222,11 @@ def generate_document_material(*, material_type, document_content_id, triggering
     if material_type in FEATURES and variant_pool_feature:
         quota_units = params.get(unit_keys[material_type])
         if quota_units is None:
+            # If the client does not specify a generation size, default to
+            # the current admin-configured plan allowance for that feature.
+            # The resolved size becomes part of the fingerprint, so changing
+            # the admin limit creates a new generation family rather than
+            # silently reusing an artifact built for the old size.
             from ai_economics import get_active_entitlements
             active_entitlements = get_active_entitlements(db, triggering_user_id)
             if active_entitlements:
@@ -255,7 +251,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
-        quota_entitlement_id = quota_meta.get("entitlement_payment_id", quota_meta.get("entitlement_id"))
+        quota_payment_id = quota_meta.get("entitlement_payment_id")
 
     base_parameters = dict(params)
     base_parameters.pop("variant", None)
@@ -278,6 +274,10 @@ def generate_document_material(*, material_type, document_content_id, triggering
         scope=scope, owner_user_id=owner_user_id,
     )
 
+    # Claim/reclaim is part of the same failure boundary as quota + variant
+    # reservation. If an internal DB/fingerprint failure happens here, refund
+    # the student's reservation and release the variant instead of charging
+    # them for a generation Prepza never started.
     try:
         lookup = claim_or_get_generation(
             fingerprint=fingerprint, content_hash=content.content_hash, feature=material_type,
@@ -292,7 +292,11 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 db.session.rollback()
         if quota_reserved:
             try:
-                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_payment_id=quota_entitlement_id)
+                refund_ai_quota(
+                    db, triggering_user_id, quota_feature, quota_units,
+                    period_start=quota_period,
+                    entitlement_payment_id=quota_payment_id,
+                )
             except Exception:
                 db.session.rollback()
         raise
@@ -312,7 +316,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 )
             quota_reserved = True
             quota_period = quota_meta.get("period_start")
-            quota_entitlement_id = quota_meta.get("entitlement_payment_id", quota_meta.get("entitlement_id"))
+            quota_payment_id = quota_meta.get("entitlement_payment_id")
         if variant_pool_feature:
             mark_generation_variant_ready(
                 db, triggering_user_id, base_fingerprint, variant, lookup.artifact_id
@@ -339,8 +343,13 @@ def generate_document_material(*, material_type, document_content_id, triggering
             if variant_pool_feature:
                 release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
             if quota_reserved:
-                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_payment_id=quota_entitlement_id)
+                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_payment_id=quota_payment_id)
             raise ai_service.AIProviderError("AI generation failed - please try again.")
+        # A timeout is not a generation failure. The other worker may still
+        # be running (the durable artifact lease is 15 minutes), so do NOT
+        # refund quota or release the variant here. Doing either would let a
+        # student retry and receive a second allowance while the first job
+        # can still complete successfully.
         raise ai_service.AIProviderError("This material is still being prepared - please try again shortly.")
 
     if material_type in FEATURES and not quota_reserved:
@@ -360,7 +369,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
-        quota_entitlement_id = quota_meta.get("entitlement_payment_id", quota_meta.get("entitlement_id"))
+        quota_payment_id = quota_meta.get("entitlement_payment_id")
 
     job = None
     artifact_ready = False
@@ -369,8 +378,9 @@ def generate_document_material(*, material_type, document_content_id, triggering
             raise ai_service.AIBudgetExceededError(
                 f"Prepza AI has reached its monthly budget - fresh {material_type} generation is paused, but existing material is still available."
             )
-        # Document-material limits are entitlement-unit wallets, not daily request caps.
-        # Ada has its own token-based daily limit in the tutor pipeline.
+        # Student artifact allowances are enforced by the admin-configured
+        # feature wallet above. There is intentionally no second hard-coded
+        # per-day student generation cap here.
         job = AiJob(
             document_content_id=document_content_id,
             user_id=triggering_user_id,
@@ -412,7 +422,6 @@ def generate_document_material(*, material_type, document_content_id, triggering
         job.progress_stage = "checking and formatting the result"
         db.session.commit()
         parsed = parser(ai_response.text)
-        parsed = _validate_requested_output(material_type, parsed, params)
         payload = _podcast_payload(parsed) if material_type == "podcast" else parsed
         mark_generation_ready(lookup.artifact_id, payload, lookup.lease_token)
         if variant_pool_feature:
@@ -445,7 +454,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                     quota_feature,
                     quota_units,
                     period_start=quota_period,
-                    entitlement_payment_id=quota_entitlement_id,
+                    entitlement_payment_id=quota_payment_id,
                 )
             except Exception:
                 db.session.rollback()

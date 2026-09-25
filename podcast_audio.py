@@ -40,7 +40,6 @@ import threading
 import subprocess
 import tempfile
 from datetime import datetime
-from sqlalchemy.exc import IntegrityError
 
 import requests
 from pydub import AudioSegment
@@ -144,16 +143,7 @@ def process_podcast_audio(material_id, notification_id=None):
     if envelope.get("audio_status") == "ready":
         return  # already done - avoid redoing work if triggered twice
 
-    job, owns_job = _create_job(
-        material.document_content_id,
-        feature="podcast_audio",
-        notification_id=notification_id,
-        material_id=material.id,
-    )
-    if not owns_job:
-        # Another request already owns the durable generation job for this exact
-        # material. Never synthesize the same artifact twice.
-        return
+    job = _create_job(material.document_content_id, feature="podcast_audio", notification_id=notification_id)
 
     envelope["audio_status"] = "processing"
     material.payload = json.dumps(envelope)
@@ -339,58 +329,20 @@ def _update_job_progress(job, percent, stage):
     db.session.commit()
 
 
-_PODCAST_JOB_INDEX_READY = False
-_PODCAST_JOB_INDEX_LOCK = threading.Lock()
-
-
-def _ensure_podcast_job_index(db):
-    global _PODCAST_JOB_INDEX_READY
-    if _PODCAST_JOB_INDEX_READY:
-        return
-    with _PODCAST_JOB_INDEX_LOCK:
-        if _PODCAST_JOB_INDEX_READY:
-            return
-        from sqlalchemy import text
-        # One active audio job per material. Application checks alone are not
-        # sufficient when two requests arrive at the same time.
-        db.session.execute(text("""
-            CREATE UNIQUE INDEX IF NOT EXISTS uq_prepza_active_podcast_audio_job
-            ON ai_job (material_id, feature)
-            WHERE feature = 'podcast_audio' AND status IN ('pending', 'processing')
-        """))
-        db.session.commit()
-        _PODCAST_JOB_INDEX_READY = True
-
-
-def _create_job(document_content_id, feature, notification_id=None, material_id=None):
+def _create_job(document_content_id, feature, notification_id=None):
     from app import db, AiJob
-    _ensure_podcast_job_index(db)
     job = AiJob(
         document_content_id=document_content_id,
         feature=feature,
         status="processing",
         notification_id=notification_id,
-        material_id=material_id,
         started_at=datetime.utcnow(),
         progress_percent=0,
         progress_stage="queued",
     )
     db.session.add(job)
-    try:
-        db.session.commit()
-        return job, True
-    except IntegrityError:
-        db.session.rollback()
-        existing = (
-            AiJob.query
-            .filter_by(material_id=material_id, feature=feature)
-            .filter(AiJob.status.in_(["pending", "processing"]))
-            .order_by(AiJob.id.desc())
-            .first()
-        )
-        if not existing:
-            raise
-        return existing, False
+    db.session.commit()
+    return job
 
 
 def _complete_job(job, success, error_message=None):

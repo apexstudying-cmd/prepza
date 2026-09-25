@@ -194,13 +194,19 @@ def persist_navigation_across_restarts(text: str) -> str:
     return text
 
 
+PATCH_MARKER = "// prepza: study-navigation-polish-v2"
+
 def main():
     text = APP.read_text(encoding='utf-8')
+    if PATCH_MARKER in text:
+        print('study navigation polish already applied')
+        return
     text = replace_mind_map(text)
     text = harden_document_navigation(text)
     text = remove_document_opening_interstitials(text)
     text = harden_offline_startup(text)
     text = persist_navigation_across_restarts(text)
+    text = text.rstrip() + "\n" + PATCH_MARKER + "\n"
     APP.write_text(text, encoding='utf-8')
     print('study navigation polish applied')
 
