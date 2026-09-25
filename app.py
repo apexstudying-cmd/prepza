@@ -6550,7 +6550,7 @@ def study_time_offline_baselines():
     dates = []
     for raw in raw_dates:
         value = raw.strip()
-        if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", value):
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
             try:
                 parsed = datetime.strptime(value, "%Y-%m-%d").date()
             except ValueError:
@@ -6595,7 +6595,7 @@ def study_time_offline_sync():
         if not isinstance(entry, dict):
             continue
         date_text = str(entry.get("date") or "").strip()
-        if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", date_text):
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_text):
             continue
         try:
             activity_date = datetime.strptime(date_text, "%Y-%m-%d").date()
