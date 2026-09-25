@@ -255,7 +255,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
-        quota_entitlement_id = quota_meta.get("entitlement_id")
+        quota_entitlement_id = quota_meta.get("entitlement_payment_id", quota_meta.get("entitlement_id"))
 
     base_parameters = dict(params)
     base_parameters.pop("variant", None)
@@ -312,7 +312,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 )
             quota_reserved = True
             quota_period = quota_meta.get("period_start")
-            quota_entitlement_id = quota_meta.get("entitlement_id")
+            quota_entitlement_id = quota_meta.get("entitlement_payment_id", quota_meta.get("entitlement_id"))
         if variant_pool_feature:
             mark_generation_variant_ready(
                 db, triggering_user_id, base_fingerprint, variant, lookup.artifact_id
@@ -360,7 +360,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         quota_reserved = True
         quota_period = quota_meta.get("period_start")
-        quota_entitlement_id = quota_meta.get("entitlement_id")
+        quota_entitlement_id = quota_meta.get("entitlement_payment_id", quota_meta.get("entitlement_id"))
 
     job = None
     artifact_ready = False
