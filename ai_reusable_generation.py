@@ -46,28 +46,29 @@ def normalize_parameters(material_type: str, parameters: dict | None) -> dict:
 
 
 def _content_scope(document_content_id: int, triggering_user_id: int) -> tuple[str, int | None]:
-    from app import db, Document, LibraryPublication
+    from app import db, Document, DocumentContent, LibraryPublication
+    content_hash = db.session.query(DocumentContent.content_hash).filter(
+        DocumentContent.id == document_content_id,
+    ).scalar()
+    if content_hash:
+        public = db.session.query(LibraryPublication.id).join(
+            Document, LibraryPublication.document_id == Document.id
+        ).join(
+            DocumentContent, Document.document_content_id == DocumentContent.id
+        ).filter(
+            DocumentContent.content_hash == content_hash,
+            LibraryPublication.status == "approved",
+            Document.is_removed.is_(False),
+        ).first()
+        if public:
+            return "shared", None
     owned = db.session.query(Document.id).filter(
         Document.user_id == triggering_user_id,
         Document.document_content_id == document_content_id,
         Document.is_removed.is_(False),
     ).first()
     if owned:
-        approved = db.session.query(LibraryPublication.id).filter(
-            LibraryPublication.document_id == owned.id,
-            LibraryPublication.status == "approved",
-        ).first()
-        if approved:
-            return "shared", None
         return "private", int(triggering_user_id)
-    public = db.session.query(LibraryPublication.id).join(
-        Document, LibraryPublication.document_id == Document.id
-    ).filter(
-        Document.document_content_id == document_content_id,
-        LibraryPublication.status == "approved",
-    ).first()
-    if public:
-        return "shared", None
     raise PermissionError("You do not have access to this document")
 
 
@@ -174,6 +175,14 @@ def generate_document_material(*, material_type, document_content_id, triggering
     if not content.extracted_text:
         raise ai_service.AIProviderError("This document's text hasn't finished processing yet - try again shortly.")
     scope, owner_user_id = _content_scope(document_content_id, triggering_user_id)
+    source_document = (
+        db.session.query(Document).filter(
+            Document.user_id == triggering_user_id,
+            Document.document_content_id == document_content_id,
+            Document.is_removed.is_(False),
+        ).order_by(Document.id.desc()).first()
+    )
+    document_title = source_document.title if source_document else "Study document"
     prompt_version = PROMPT_VERSIONS[material_type]
     schema_version = SCHEMA_VERSIONS[material_type]
 
@@ -198,6 +207,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
         release_generation_variant,
         refund_ai_quota,
     )
+    from ai_economics import get_plan, get_user_plan_code
 
     unit_keys = {
         "summary": "max_pages",
@@ -210,7 +220,21 @@ def generate_document_material(*, material_type, document_content_id, triggering
     if material_type in FEATURES and variant_pool_feature:
         quota_units = params.get(unit_keys[material_type])
         if quota_units is None:
-            raise ValueError(f"Missing required generation size for {material_type}")
+            from usage_billing import _active_student_entitlements
+            active_entitlements = _active_student_entitlements(db, triggering_user_id)
+            if active_entitlements:
+                plans = [get_plan(db, row["plan"]) for row in active_entitlements]
+                plans = [plan for plan in plans if plan]
+                quota_units = max((int(plan[unit_keys[material_type]] or 0) for plan in plans), default=0)
+            else:
+                plan_code = get_user_plan_code(db, triggering_user_id)
+                plan = get_plan(db, plan_code)
+                quota_units = int(plan[unit_keys[material_type]] or 0) if plan else 0
+            if quota_units <= 0:
+                raise ai_service.AIRateLimitExceededError(
+                    f"{material_type.replace('_', ' ').title()} generation is unavailable on this plan."
+                )
+            params = {**params, unit_keys[material_type]: quota_units}
         allowed, quota_meta = check_and_consume_ai_quota(
             db, triggering_user_id, material_type, quota_units
         )
@@ -243,11 +267,24 @@ def generate_document_material(*, material_type, document_content_id, triggering
         scope=scope, owner_user_id=owner_user_id,
     )
 
-    lookup = claim_or_get_generation(
-        fingerprint=fingerprint, content_hash=content.content_hash, feature=material_type,
-        parameters=params, prompt_version=prompt_version, schema_version=schema_version,
-        scope=scope, owner_user_id=owner_user_id,
-    )
+    try:
+        lookup = claim_or_get_generation(
+            fingerprint=fingerprint, content_hash=content.content_hash, feature=material_type,
+            parameters=params, prompt_version=prompt_version, schema_version=schema_version,
+            scope=scope, owner_user_id=owner_user_id,
+        )
+    except Exception:
+        if variant_pool_feature and variant is not None:
+            try:
+                release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
+            except Exception:
+                db.session.rollback()
+        if quota_reserved:
+            try:
+                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_id=quota_entitlement_id)
+            except Exception:
+                db.session.rollback()
+        raise
 
     if lookup.status == "ready" and lookup.payload:
         # Pooled requests are deliberately charged even when the selected
@@ -271,9 +308,9 @@ def generate_document_material(*, material_type, document_content_id, triggering
             )
         material = _material_from_payload(
             document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
-            payload=lookup.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
+            payload=lookup.payload, scope=scope, owner_user_id=owner_user_id, parameters=params, document_title=document_title,
         )
-        return {"payload": lookup.payload, "material_id": material.id, "reused": True, "model_used": None}
+        return {"payload": json.loads(material.payload), "material_id": material.id, "reused": True, "model_used": None}
 
     if not lookup.owner:
         waited = wait_for_generation(fingerprint)
@@ -284,19 +321,15 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 )
             material = _material_from_payload(
                 document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
-                payload=waited.payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
+                payload=waited.payload, scope=scope, owner_user_id=owner_user_id, parameters=params, document_title=document_title,
             )
-            return {"payload": waited.payload, "material_id": material.id, "reused": True, "model_used": None}
+            return {"payload": json.loads(material.payload), "material_id": material.id, "reused": True, "model_used": None}
         if waited.status == "failed":
             if variant_pool_feature:
                 release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
             if quota_reserved:
                 refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_id=quota_entitlement_id)
             raise ai_service.AIProviderError("AI generation failed - please try again.")
-        if variant_pool_feature:
-            release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
-        if quota_reserved:
-            refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_id=quota_entitlement_id)
         raise ai_service.AIProviderError("This material is still being prepared - please try again shortly.")
 
     if material_type in FEATURES and not quota_reserved:
@@ -329,6 +362,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
         # Ada has its own token-based daily limit in the tutor pipeline.
         job = AiJob(
             document_content_id=document_content_id,
+            user_id=triggering_user_id,
             feature=material_type,
             status="processing",
             started_at=datetime.utcnow(),
@@ -420,6 +454,6 @@ def generate_document_material(*, material_type, document_content_id, triggering
 
     material = _material_from_payload(
         document_content_id=document_content_id, material_type=material_type, fingerprint=fingerprint,
-        payload=payload, scope=scope, owner_user_id=owner_user_id, parameters=params,
+        payload=payload, scope=scope, owner_user_id=owner_user_id, parameters=params, document_title=document_title,
     )
-    return {"payload": payload, "material_id": material.id, "reused": False, "model_used": ai_response.model_used}
+    return {"payload": json.loads(material.payload), "material_id": material.id, "reused": False, "model_used": ai_response.model_used}
