@@ -26,10 +26,10 @@ def _register_b2b_admin_schema(db):
         )
     """))
     placement_defaults=[
-        ("home_carousel","Home carousel",35000,2000),
-        ("explore_university","Explore / university discovery",35000,2000),
-        ("opportunities_feed","Opportunities feed",35000,2000),
-        ("podcast_banner","Podcast-player banner",35000,2000),
+        ("home_carousel","Home carousel",None,None),
+        ("explore_university","Explore / university discovery",None,None),
+        ("opportunities_feed","Opportunities feed",None,None),
+        ("podcast_banner","Podcast-player banner",None,None),
     ]
     for key,label,cpm,cpc in placement_defaults:
         db.session.execute(text("""
