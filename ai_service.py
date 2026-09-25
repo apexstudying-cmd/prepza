@@ -1322,9 +1322,7 @@ def _legacy_generate_document_quiz(document_content_id, triggering_user_id, plan
 # ============================================================
 # Same shape as generate_document_quiz() (cache check -> spend cap ->
 # rate limit -> generate -> log -> persist), keyed on
-# GeneratedMaterial(material_type='flashcards'). Uses the FLASHCARDS
-# task (Haiku primary, Sonnet fallback - "mechanical extraction of Q/A
-# pairs from source text" per AI_TASKS' own note) and the same
+# GeneratedMaterial(material_type='flashcards'). Uses the FLASHCARDS task with the locked OpenAI routing configuration and the same
 # continuation-retry path as summaries/quizzes.
 #
 # Payload shape wraps the card list in {title, subtitle, cards} for
