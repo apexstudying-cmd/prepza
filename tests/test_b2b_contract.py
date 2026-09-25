@@ -78,3 +78,27 @@ def test_b2b_refund_is_admin_and_csrf_protected():
     assert "@app.post(\"/api/admin/b2b/payments/<int:payment_id>/refund\")" in source
     assert "if not admin_allowed():" in source
     assert "if not csrf_ok():" in source
+
+
+def test_b2b_pricing_has_one_canonical_admin_update_path():
+    finance = Path("b2b_campaign_finance.py").read_text(encoding="utf-8")
+    discovery = Path("discovery_billing.py").read_text(encoding="utf-8")
+    usage = Path("usage_billing.py").read_text(encoding="utf-8")
+    payments = Path("b2b_campaign_payments.py").read_text(encoding="utf-8")
+    assert '@app.patch("/api/admin/b2b/pricing/<string:config_key>")' in finance
+    assert "UPDATE b2b_pricing_config" in finance
+    assert "b2b_pricing_config" in discovery
+    assert "b2b_pricing_config" in usage
+    assert "pricing_versions = sorted" in payments
+    assert '"version": "launch-v1"' not in payments
+    assert "SPONSORED_CPM_KES" not in usage
+    assert "SPONSORED_MIN_CAMPAIGN_KES" not in usage
+
+
+def test_placement_admin_does_not_define_authoritative_rates():
+    source = Path("b2b_admin_routes.py").read_text(encoding="utf-8")
+    frontend = Path("frontend/src/admin/B2BFinanceAdmin.tsx").read_text(encoding="utf-8")
+    assert "cpm_amount_minor=:cpm" not in source
+    assert "cpc_amount_minor=:cpc" not in source
+    assert "Canonical B2B pricing" in frontend
+    assert "Canonical Pricing tab" in frontend
