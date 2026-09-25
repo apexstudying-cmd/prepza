@@ -17,6 +17,7 @@ import { installGlobalPullRefresh } from './crypto/globalPullRefresh'
 import { installOfflineBootstrap } from './offline/bootstrap'
 import { installActivityHeartbeat } from './activityHeartbeat'
 import App from './App'
+import ExternalDocumentImport from './ExternalDocumentImport'
 import './index.css'
 
 type BootstrapError = Error & { digest?: string }
@@ -77,6 +78,7 @@ root.render(
   <React.StrictMode>
     <StartupErrorBoundary>
       <App />
+      <ExternalDocumentImport />
       <InChatAdaEnhancer />
       <DirectInChatAdaEnhancer />
       <ChatStudyDocumentReader />
@@ -101,3 +103,22 @@ installSafely('offline bootstrap', installOfflineBootstrap)
 installSafely('active-user heartbeat', installActivityHeartbeat)
 
 void ensureE2EEIdentityReady().catch((error) => console.warn('[Prepza] E2EE identity setup deferred', error))
+
+// Android/Chromium File Handling API: when Prepza is installed and the
+// operating system offers "Open with Prepza", forward the selected file to
+// the same import surface used by in-app uploads.
+try {
+  const launchQueueApi = (window as Window & { launchQueue?: { setConsumer: (consumer: (params: { files: FileSystemFileHandle[] }) => void) => void } }).launchQueue
+  launchQueueApi?.setConsumer(async ({ files }) => {
+    for (const handle of files || []) {
+      try {
+        const file = await handle.getFile()
+        window.dispatchEvent(new CustomEvent('prepza:external-document', { detail: { file } }))
+      } catch (error) {
+        console.warn('[Prepza] could not read an OS-opened file', error)
+      }
+    }
+  })
+} catch (error) {
+  console.warn('[Prepza] file-handler registration unavailable', error)
+}
