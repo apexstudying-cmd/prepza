@@ -105,6 +105,11 @@ def register_b2b_campaign_finance(app, db):
         row = db.session.execute(text('SELECT is_admin FROM "user" WHERE id=:uid'), {"uid": uid}).scalar()
         return bool(row)
 
+    def csrf_ok():
+        token = session.get("csrf_token")
+        supplied = request.headers.get("X-CSRF-Token")
+        return bool(token and supplied and token == supplied)
+
     @app.get("/api/admin/b2b/organisation-plans")
     def admin_b2b_organisation_plans():
         if not session.get("is_admin"):
