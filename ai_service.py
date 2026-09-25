@@ -324,7 +324,7 @@ class MultiProvider:
         )
 
     @classmethod
-    def chat(cls, model, system_messages, messages, max_tokens):
+    def chat(cls, model, system_messages, messages, max_tokens, return_meta=False):
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
             raise AIProviderError("OPENAI_API_KEY is not configured")
@@ -380,6 +380,8 @@ class MultiProvider:
             output_tokens=int(usage.get("output_tokens", 0) or 0),
         )
         ai_usage.cost_usd = compute_cost_usd(model, ai_usage.input_tokens, ai_usage.output_tokens)
+        if return_meta:
+            return text_value, ai_usage, data
         return text_value, ai_usage
 
     def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False,
@@ -904,23 +906,18 @@ def _call_with_continuation(task, system_prompt, user_message, max_tokens=None, 
         else:
             messages = [{"role": "user", "content": user_message}]
 
-        response = provider._client.messages.create(
+        chunk_text, usage, metadata = provider.chat(
             model=model,
-            max_tokens=resolved_max_tokens,
-            system=system,
+            system_messages=system,
             messages=messages,
+            max_tokens=resolved_max_tokens,
+            return_meta=True,
         )
-
-        chunk_text = "".join(block.text for block in response.content if block.type == "text")
         accumulated_text += chunk_text
-
-        usage = response.usage
         total_usage.input_tokens += usage.input_tokens
         total_usage.output_tokens += usage.output_tokens
-        total_usage.cache_read_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
-        total_usage.cache_creation_tokens += getattr(usage, "cache_creation_input_tokens", 0) or 0
-
-        if response.stop_reason != "max_tokens":
+        if not (metadata.get("status") == "incomplete" and
+                (metadata.get("incomplete_details") or {}).get("reason") == "max_output_tokens"):
             break
 
     latency_ms = int((time.monotonic() - start) * 1000)
