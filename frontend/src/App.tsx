@@ -14028,13 +14028,13 @@ function OrgAnalyticsTab({ orgId, isOwner, csrfToken }: { orgId: number; isOwner
     if (!isOwner || billingBusy) return
     setBillingBusy(code)
     try {
-      await api<{ status: string; amount_kes: number; next_step: string }>(`/api/organisations/${orgId}/billing/manual-checkout`, {
+      const checkout = await api<{ ok: boolean; amount_kes: number; redirect_url: string }>(`/api/organisations/${orgId}/plan/checkout`, {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ plan_code: code }),
+        body: JSON.stringify({ plan: code }),
       })
-      await new Promise(resolve => setTimeout(resolve, 250))
-      window.location.reload()
+      if (!checkout.redirect_url) throw new Error('Checkout URL was not returned.')
+      window.location.href = checkout.redirect_url
     } catch (e) {
       alert(e instanceof ApiError ? e.message : 'Could not start organisation checkout.')
     } finally {
