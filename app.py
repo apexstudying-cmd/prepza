@@ -1790,8 +1790,6 @@ class AmbassadorPayout(db.Model):
 # ---------- Student orders / exact fulfillment ----------
 from student_orders import register_student_orders
 
-_student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
-
 
 # ---------- Paystack (Chunk 8, migrated from Pesapal) ----------
 # Docs: paystack.com/docs/payments/accept-payments /
@@ -2347,6 +2345,17 @@ def require_admin(f):
     return decorated
 
 
+def login_required(f):
+    """Require an authenticated Prepza session for protected routes."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
 def require_csrf(f):
     """
     Requires a valid X-CSRF-Token header matching this session's token.
@@ -2361,6 +2370,8 @@ def require_csrf(f):
             return jsonify({"error": "Missing or invalid CSRF token"}), 403
         return f(*args, **kwargs)
     return decorated
+
+_student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
 
 
 def get_content_prices():

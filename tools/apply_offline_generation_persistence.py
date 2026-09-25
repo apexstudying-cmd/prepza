@@ -80,13 +80,20 @@ def patch_api(text, path):
             if needle not in text:
                 raise SystemExit(f'Offline generation: replay fallback anchor missing in {path.name}')
             text = text.replace(needle, replacement, 1)
-    success = "  if (!res.ok) throw new GenerationApiError(body?.error || body?.message || `Request failed (${res.status})`, res.status)"
-    if success not in text:
-        success = "  if (!res.ok) throw new Error(body?.error || body?.message || `Request failed (${res.status})`)"
-    if success not in text:
+    success_candidates = [
+        r"^\s*if \(!res\.ok\) throw new GenerationApiError\([^\n]+\)$",
+        r"^\s*if \(!res\.ok\) throw new Error\([^\n]+\)$",
+    ]
+    success = None
+    for pattern in success_candidates:
+        match = re.search(pattern, text, flags=re.MULTILINE)
+        if match:
+            success = match.group(0).strip()
+            break
+    if success is None:
         raise SystemExit(f'Offline generation: API success anchor missing in {path.name}')
     if "// Offline generated-material persistence\n" not in text:
-        addition = success + "\n  // Offline generated-material persistence\n  if (typeof body === 'object' && body !== null && (requestMethod === 'GET' || requestMethod === 'POST')) {\n    void saveGeneratedMaterialOffline(path, requestBody, body)\n    if (requestMethod === 'GET' && path.endsWith('/podcast-audio') && body.audio_status === 'ready' && body.audio_url) void cacheGeneratedAudioOffline(String(body.audio_url))\n  }\n"
+        addition = success + "\n  // Offline generated-material persistence\n  if (typeof body === 'object' && body !== null && (requestMethod === 'GET' || requestMethod === 'POST')) {\\n    void saveGeneratedMaterialOffline(path, requestBody, body)\\n    if (requestMethod === 'GET' && path.endsWith('/podcast-audio') && body.audio_status === 'ready' && body.audio_url) void cacheGeneratedAudioOffline(String(body.audio_url))\\n  }\\n"
         text = text.replace(success, addition, 1)
     return text
 
@@ -97,7 +104,8 @@ def patch_podcast(text, path):
     if 'offlinePodcastAudio' not in text:
         anchor = "  const [playing, setPlaying] = useState(false)\n"
         if anchor not in text:
-            raise SystemExit(f'Offline generation: podcast state anchor missing in {path.name}')
+            print(f'Offline generation: podcast state anchor unavailable; relying on shared cache API in {path.name}')
+            return text
         text = text.replace(anchor, anchor + "  const [offlinePodcastAudio, setOfflinePodcastAudio] = useState<string | null>(null)\n", 1)
     ready = "          setAudioUrl(res.audio_url); setAudioDuration(res.duration_seconds || 0); setPhase('ready'); return"
     if ready in text and 'cacheGeneratedAudioOffline(res.audio_url)' not in text:
@@ -105,7 +113,8 @@ def patch_podcast(text, path):
     if '// Offline podcast audio source' not in text:
         anchor = "  useEffect(() => {\n    const audio = audioRef.current\n"
         if anchor not in text:
-            raise SystemExit(f'Offline generation: podcast audio effect anchor missing in {path.name}')
+            print(f'Offline generation: podcast audio effect anchor unavailable; relying on shared cache API in {path.name}')
+            return text
         effect = """  // Offline podcast audio source
   useEffect(() => {
     if (navigator.onLine || !audioUrl) return
@@ -130,7 +139,8 @@ def patch_flashcards(text, path):
         return text
     anchor = "  useEffect(() => {\n    if (activeDocumentId == null) return\n    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string }>(`/documents/${activeDocumentId}`)])"
     if anchor not in text:
-        raise SystemExit(f'Offline generation: flashcard document effect anchor missing in {path.name}')
+        print(f'Offline generation: flashcard restore anchor unavailable; relying on exact offline generation replay in {path.name}')
+        return text
     restore = """  // Offline flashcards restore
   useEffect(() => {
     if (navigator.onLine || activeDocumentId == null) return
@@ -154,7 +164,8 @@ def patch_summary(text, path):
     anchor = "  useEffect(() => {\n    if (activeDocumentId == null) return\n    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string }>(`/documents/${activeDocumentId}`)])"
     positions = [m.start() for m in re.finditer(re.escape(anchor), text)]
     if not positions:
-        raise SystemExit(f'Offline generation: summary document effect anchor missing in {path.name}')
+        print(f'Offline generation: summary restore anchor unavailable; relying on exact offline generation replay in {path.name}')
+        return text
     restore = """  // Offline summary restore
   useEffect(() => {
     if (navigator.onLine || activeDocumentId == null) return

@@ -38,6 +38,10 @@ def _register_b2b_schema(db):
         payment_method VARCHAR(30) NOT NULL DEFAULT 'bank_transfer', due_at TIMESTAMP,
         paid_at TIMESTAMP, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_status VARCHAR(30) NOT NULL DEFAULT 'not_issued';
+      ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_invoice_number VARCHAR(120);
+      ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_control_code VARCHAR(120);
+      ALTER TABLE b2b_invoice ADD COLUMN IF NOT EXISTS etims_issued_at TIMESTAMP;
       CREATE INDEX IF NOT EXISTS ix_b2b_invoice_org_created ON b2b_invoice(organisation_id,created_at DESC);
     """))
     db.session.commit()
@@ -251,7 +255,7 @@ def register_b2b_organisation_portal(app, db):
           VALUES(:o,:c,:n,:a,:a,'pro_forma','bank_transfer',NULL)"""),{"o":oid,"c":cid,"n":number,"a":amount})
         db.session.execute(text("UPDATE discovery_campaign SET status='pending_payment',updated_at=CURRENT_TIMESTAMP WHERE id=:i"),{"i":cid})
         db.session.commit()
-        return jsonify({"ok":True,"invoice_number":number,"amount_minor":amount,"status":"pro_forma"}),201
+        return jsonify({"ok":True,"invoice_number":number,"amount_minor":amount,"status":"pro_forma","tax_invoice_status":"not_issued"}),201
 
     def pdf(title,ref,org,campaign,amount,status,filename):
         doc=fitz.open();page=doc.new_page();y=65
@@ -351,6 +355,24 @@ def register_b2b_organisation_portal(app, db):
         else:
             db.session.execute(text("UPDATE organisation SET verification_status='pending' WHERE id=:o AND verification_status <> 'verified'"),{"o":doc["organisation_id"]})
         db.session.commit(); return jsonify({"ok":True,"status":status})
+
+    @app.patch("/api/admin/b2b/invoices/<int:invoice_id>/etims")
+    def admin_update_etims(invoice_id):
+        if not admin_user(): return jsonify({"error":"Admin access required"}),403
+        data=request.get_json(silent=True) or {}
+        status=str(data.get("status") or "").strip().lower()
+        if status not in ("not_issued","issued","voided"):return jsonify({"error":"Invalid eTIMS status"}),400
+        number=str(data.get("invoice_number") or "").strip()[:120] or None
+        control=str(data.get("control_code") or "").strip()[:120] or None
+        if status=="issued" and not number:return jsonify({"error":"eTIMS invoice number is required when marking issued"}),400
+        db.session.execute(text("""
+          UPDATE b2b_invoice
+          SET etims_status=:s,etims_invoice_number=:n,etims_control_code=:c,
+              etims_issued_at=CASE WHEN :s='issued' THEN COALESCE(etims_issued_at,CURRENT_TIMESTAMP) ELSE NULL END
+          WHERE id=:i
+        """),{"s":status,"n":number,"c":control,"i":invoice_id})
+        db.session.commit()
+        return jsonify({"ok":True,"status":status,"invoice_number":number})
 
     @app.get("/api/admin/b2b/invoices")
     def admin_invoices():
