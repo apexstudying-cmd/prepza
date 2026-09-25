@@ -15,15 +15,27 @@ from pywebpush import webpush
 from b2b_campaign_metering import record_billable_event, reverse_billable_event
 from usage_billing import ORGANISATION_PLANS
 
-DISCOVERY_PRICING = {
-    "feed_cpm_kes": 350,
-    "click_cpc_kes": 20,
-    "push_cpm_kes": 1500,
-    "minimum_campaign_kes": 5000,
-}
-
 PUSH_CAP_PER_48_HOURS = 1
 PUSH_CAP_PER_7_DAYS = 3
+
+
+def _canonical_discovery_pricing(db):
+    """Read sponsored-campaign economics from the canonical B2B pricing table."""
+    rows = db.session.execute(text("""
+        SELECT config_key, value_json
+        FROM b2b_pricing_config
+        WHERE is_active = TRUE
+          AND config_key IN ('sponsored_campaign_minimum','home_impression_cpm','click_cpc','push_delivery_cpm')
+    """)).mappings().all()
+    values = {str(r["config_key"]): (r["value_json"] if isinstance(r["value_json"], dict) else {}) for r in rows}
+    def amount(key):
+        return int((values.get(key) or {}).get("amount_kes") or 0)
+    return {
+        "feed_cpm_kes": amount("home_impression_cpm"),
+        "click_cpc_kes": amount("click_cpc"),
+        "push_cpm_kes": amount("push_delivery_cpm"),
+        "minimum_campaign_kes": amount("sponsored_campaign_minimum"),
+    }
 
 
 def _register_discovery_schema(db):
@@ -365,7 +377,7 @@ def register_discovery(app, db):
         uid = session.get("user_id")
         if not uid or not org_access(organisation_id, uid):
             return jsonify({"error": "Organisation membership required"}), 403
-        return jsonify({"currency": "KES", "pricing": DISCOVERY_PRICING,
+        return jsonify({"currency": "KES", "pricing": _canonical_discovery_pricing(db),
                         "push_frequency": {"max_per_48_hours": PUSH_CAP_PER_48_HOURS,
                                            "max_per_7_days": PUSH_CAP_PER_7_DAYS}})
 
@@ -422,9 +434,10 @@ def register_discovery(app, db):
         if placement == "push":
             billing_modes = ["cpm"]
         bid_type = "both" if len(billing_modes) == 2 else billing_modes[0]
-        if budget < DISCOVERY_PRICING["minimum_campaign_kes"]:
+        pricing = _canonical_discovery_pricing(db)
+        if budget < pricing["minimum_campaign_kes"]:
             return jsonify({"error": f"Minimum campaign budget is KES {DISCOVERY_PRICING['minimum_campaign_kes']:,}"}), 400
-        bid = DISCOVERY_PRICING["push_cpm_kes"] if placement == "push" else DISCOVERY_PRICING["feed_cpm_kes"]
+        bid = pricing["push_cpm_kes"] if placement == "push" else pricing["feed_cpm_kes"]
         start = data.get("starts_at")
         end = data.get("ends_at")
         try:
@@ -868,7 +881,7 @@ def register_discovery(app, db):
         configured = {int(x.strip()) for x in os.environ.get("PREPZA_ADMIN_USER_IDS","").split(",") if x.strip().isdigit()}
         if not uid or not (allowed or int(uid) in configured):
             return jsonify({"error":"Admin access required"}), 403
-        return jsonify({"pricing": DISCOVERY_PRICING, "push_caps": {"48h": PUSH_CAP_PER_48_HOURS, "7d": PUSH_CAP_PER_7_DAYS}})
+        return jsonify({"pricing": _canonical_discovery_pricing(db), "push_caps": {"48h": PUSH_CAP_PER_48_HOURS, "7d": PUSH_CAP_PER_7_DAYS}})
 
     @app.get("/api/organisations/<int:organisation_id>/discovery/summary")
     def discovery_summary(organisation_id):
@@ -901,7 +914,7 @@ def register_discovery(app, db):
             })
             enriched.append(item)
             total_spend_minor += spent_minor
-        return jsonify({"currency": "KES", "pricing": DISCOVERY_PRICING,
+        return jsonify({"currency": "KES", "pricing": _canonical_discovery_pricing(db),
                         "campaigns": enriched, "prepaid_ledger_spend_kes": total_spend_minor / 100})
 
     return None
