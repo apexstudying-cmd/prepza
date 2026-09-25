@@ -1,6 +1,6 @@
 const KEY_PREFIX = 'prepza-offline-study-activity-v4'
 const USER_KEY = 'prepza-offline-user-id'
-const MAX_DAILY_SECONDS = 8 * 60 * 60
+const MAX_DAILY_SECONDS = 12 * 60 * 60
 
 type DayEntry = { seconds: number; syncedSeconds: number }
 type ScreenEntry = { documentId: number; feature: string; days: Record<string, DayEntry> }
@@ -60,27 +60,62 @@ export function recordOfflineStudySeconds(documentId: number, feature: string, s
 
 export function startOfflineStudyTracking(documentId: number, feature = 'reading'): () => void {
   if (!Number.isInteger(documentId) || documentId <= 0) return () => {}
-  let last = performance.now(), active = document.visibilityState === 'visible', stopped = false, fractionalSeconds = 0
+  let last = performance.now()
+  let visible = document.visibilityState === 'visible'
+  let interactedAt = visible ? performance.now() : 0
+  let active = visible
+  let stopped = false
+  let fractionalSeconds = 0
+  const INTERACTION_WINDOW_MS = 15000
+  const markInteraction = () => {
+    if (stopped) return
+    interactedAt = performance.now()
+    active = visible
+  }
   const tick = () => {
     if (stopped) return
     const now = performance.now()
-    if (active) {
+    const genuinelyActive = visible && active && (now - interactedAt <= INTERACTION_WINDOW_MS)
+    if (genuinelyActive) {
       fractionalSeconds += Math.min(30, Math.max(0, (now - last) / 1000))
       const wholeSeconds = Math.floor(fractionalSeconds)
-      if (wholeSeconds > 0) { recordOfflineStudySeconds(documentId, feature, wholeSeconds); fractionalSeconds -= wholeSeconds }
+      if (wholeSeconds > 0) {
+        recordOfflineStudySeconds(documentId, feature, wholeSeconds)
+        fractionalSeconds -= wholeSeconds
+      }
+    } else if (fractionalSeconds >= 1) {
+      recordOfflineStudySeconds(documentId, feature, Math.floor(fractionalSeconds))
+      fractionalSeconds %= 1
     }
     last = now
   }
-  const onVisibility = () => { tick(); active = document.visibilityState === 'visible'; last = performance.now() }
+  const onVisibility = () => {
+    tick()
+    visible = document.visibilityState === 'visible'
+    active = visible
+    interactedAt = visible ? performance.now() : 0
+    last = performance.now()
+  }
+  const onInteraction = () => markInteraction()
   document.addEventListener('visibilitychange', onVisibility)
+  window.addEventListener('pointerdown', onInteraction, { passive: true })
+  window.addEventListener('keydown', onInteraction, { passive: true })
+  window.addEventListener('touchstart', onInteraction, { passive: true })
+  window.addEventListener('scroll', onInteraction, { passive: true })
   const interval = window.setInterval(tick, 5000)
   window.addEventListener('pagehide', tick)
   return () => {
     if (stopped) return
     tick()
-    if (fractionalSeconds >= 0.5) recordOfflineStudySeconds(documentId, feature, fractionalSeconds)
-    fractionalSeconds = 0; stopped = true
-    window.clearInterval(interval); document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('pagehide', tick)
+    fractionalSeconds = 0
+    stopped = true
+    window.clearInterval(interval)
+    document.removeEventListener('visibilitychange', onVisibility)
+    window.removeEventListener('pointerdown', onInteraction)
+    window.removeEventListener('keydown', onInteraction)
+    window.removeEventListener('touchstart', onInteraction)
+    window.removeEventListener('scroll', onInteraction)
+    window.removeEventListener('pagehide', tick)
   }
 }
 
