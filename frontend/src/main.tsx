@@ -108,7 +108,7 @@ void ensureE2EEIdentityReady().catch((error) => console.warn('[Prepza] E2EE iden
 // operating system offers "Open with Prepza", forward the selected file to
 // the same import surface used by in-app uploads.
 try {
-  const launchQueueApi = (window as Window & { launchQueue?: { setConsumer: (consumer: (params: { files: FileSystemFileHandle[] }) => void) => void } }).launchQueue
+  const launchQueueApi = (window as any).launchQueue
   launchQueueApi?.setConsumer(async ({ files }) => {
     for (const handle of files || []) {
       try {
