@@ -99,24 +99,20 @@ def register_b2b_admin_routes(app, db):
         if not isinstance(modes,list) or not set(modes).issubset({"cpm","cpc"}) or not modes:
             return jsonify({"error":"Billing modes must contain cpm and/or cpc"}),400
         try:
-            cpm=None if data.get("cpm_amount_minor") is None else int(data["cpm_amount_minor"])
-            cpc=None if data.get("cpc_amount_minor") is None else int(data["cpc_amount_minor"])
             inventory=None if data.get("inventory_limit") is None else int(data["inventory_limit"])
         except (TypeError,ValueError):
-            return jsonify({"error":"Invalid placement pricing"}),400
-        if "cpm" in modes and (cpm is None or cpm < 0): return jsonify({"error":"CPM rate required"}),400
-        if "cpc" in modes and (cpc is None or cpc < 0): return jsonify({"error":"CPC rate required"}),400
+            return jsonify({"error":"Invalid inventory limit"}),400
         uid=session.get("user_id")
         row=db.session.execute(text("SELECT placement_key FROM b2b_placement_config WHERE id=:id"),{"id":placement_id}).mappings().first()
         if not row: return jsonify({"error":"Placement not found"}),404
         db.session.execute(text("""
             UPDATE b2b_placement_config
             SET label=:label,is_active=:active,allowed_billing_modes=CAST(:modes AS jsonb),
-                cpm_amount_minor=:cpm,cpc_amount_minor=:cpc,inventory_limit=:inventory,
-                version='admin-v1',updated_by_user_id=:uid,updated_at=CURRENT_TIMESTAMP
+                inventory_limit=:inventory,version='admin-v1',updated_by_user_id=:uid,
+                updated_at=CURRENT_TIMESTAMP
             WHERE id=:id
         """),{"label":label,"active":bool(data.get("is_active",True)),"modes":json.dumps(modes),
-              "cpm":cpm,"cpc":cpc,"inventory":inventory,"uid":uid,"id":placement_id})
+              "inventory":inventory,"uid":uid,"id":placement_id})
         db.session.execute(text("""
             INSERT INTO b2b_audit_log(action,actor_user_id,metadata)
             VALUES ('placement_config_updated',:uid,CAST(:meta AS jsonb))
