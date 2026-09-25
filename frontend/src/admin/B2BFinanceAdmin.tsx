@@ -69,7 +69,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
     try{
       await req('/api/admin/b2b/placements/'+p.id,{method:'PATCH',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({
         label:p.label,is_active:p.is_active,allowed_billing_modes:p.allowed_billing_modes,
-        cpm_amount_minor:p.cpm_amount_minor,cpc_amount_minor:p.cpc_amount_minor,inventory_limit:p.inventory_limit
+        inventory_limit:p.inventory_limit
       })})
       await load()
     }catch(e){setError(e instanceof Error?e.message:'Could not save placement.')}
