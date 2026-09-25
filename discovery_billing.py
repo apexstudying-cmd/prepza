@@ -53,7 +53,7 @@ def _register_discovery_schema(db):
             status VARCHAR(30) NOT NULL DEFAULT 'draft',
             budget_kes INTEGER NOT NULL DEFAULT 0,
             bid_type VARCHAR(20) NOT NULL DEFAULT 'cpm',
-            bid_kes INTEGER NOT NULL DEFAULT 350,
+            bid_kes INTEGER NOT NULL DEFAULT 0,
             target_json JSONB NOT NULL DEFAULT '{}'::jsonb,
             delivered_impressions INTEGER NOT NULL DEFAULT 0,
             delivered_clicks INTEGER NOT NULL DEFAULT 0,
