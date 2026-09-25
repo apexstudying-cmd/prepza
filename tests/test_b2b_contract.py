@@ -102,3 +102,9 @@ def test_placement_admin_does_not_define_authoritative_rates():
     assert "cpc_amount_minor=:cpc" not in source
     assert "Canonical B2B pricing" in frontend
     assert "Canonical Pricing tab" in frontend
+
+def test_organisation_portal_uses_backend_billing_plan_source():
+    source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    assert "Object.entries((billing?.plans || {})" in source
+    assert "/api/organisations/${orgId}/plan/checkout" not in source
+    assert "/billing/manual-checkout" not in source or "manual-checkout" in source
