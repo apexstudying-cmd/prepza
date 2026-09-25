@@ -105,6 +105,53 @@ def register_b2b_campaign_finance(app, db):
         row = db.session.execute(text('SELECT is_admin FROM "user" WHERE id=:uid'), {"uid": uid}).scalar()
         return bool(row)
 
+    @app.get("/api/admin/b2b/organisation-plans")
+    def admin_b2b_organisation_plans():
+        if not session.get("is_admin"):
+            return jsonify({"error": "Admin required"}), 403
+        rows = db.session.execute(text("""
+            SELECT plan_code, monthly_fee_kes, active_user_cap, active_opportunities,
+                   sponsored_campaigns, candidate_search_window_days,
+                   analytics_retention_days, is_active, version, updated_at
+            FROM organisation_plan_config ORDER BY plan_code
+        """)).mappings().all()
+        return jsonify({"plans": [dict(r) for r in rows]})
+
+    @app.patch("/api/admin/b2b/organisation-plans/<string:plan_code>")
+    def admin_update_b2b_organisation_plan(plan_code):
+        if not session.get("is_admin"):
+            return jsonify({"error": "Admin required"}), 403
+        if not csrf_ok():
+            return jsonify({"error": "Invalid CSRF token"}), 403
+        data = request.get_json(silent=True) or {}
+        allowed = ("monthly_fee_kes","active_user_cap","active_opportunities",
+                   "sponsored_campaigns","candidate_search_window_days","analytics_retention_days")
+        values = {}
+        for key in allowed:
+            if key in data:
+                try:
+                    values[key] = max(0, int(data[key]))
+                except (TypeError, ValueError):
+                    return jsonify({"error": key + " must be an integer"}), 400
+        if not values:
+            return jsonify({"error": "No supported fields supplied"}), 400
+        row = db.session.execute(text("""
+            SELECT plan_code, version FROM organisation_plan_config
+            WHERE plan_code=:plan FOR UPDATE
+        """), {"plan": plan_code.lower()}).mappings().first()
+        if not row:
+            return jsonify({"error": "Organisation plan not found"}), 404
+        sets = ", ".join([key + "=:" + key for key in values])
+        sets += ", version=version+1, updated_at=CURRENT_TIMESTAMP"
+        db.session.execute(text("UPDATE organisation_plan_config SET " + sets + " WHERE plan_code=:plan"),
+                           {"plan": plan_code.lower(), **values})
+        db.session.execute(text("""
+            INSERT INTO b2b_audit_log (event_type, actor_user_id, metadata)
+            VALUES ('organisation_plan_config_updated', :uid, CAST(:metadata AS jsonb))
+        """), {"uid": session.get("user_id"), "metadata": json.dumps({"plan_code": plan_code.lower(), "changes": values})})
+        db.session.commit()
+        return jsonify({"ok": True, "plan_code": plan_code.lower(), "changes": values})
+
     @app.get("/api/admin/b2b/pricing")
     def admin_b2b_pricing():
         if not is_admin(): return jsonify({"error": "Admin access required"}), 403
