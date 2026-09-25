@@ -4682,6 +4682,46 @@ def get_podcast_audio(document_id):
         document_content_id=document.document_content_id,
         feature="podcast_audio",
     ).order_by(AiJob.created_at.desc()).first()
+
+    # Estimate wait from observed Prepza podcast jobs rather than exposing
+    # queue internals. RTF is wall-clock generation time / requested audio
+    # duration. Only completed jobs with a linked material are eligible.
+    estimated_wait_minutes = None
+    try:
+        completed = (
+            AiJob.query
+            .filter(
+                AiJob.feature == "podcast_audio",
+                AiJob.status == "completed",
+                AiJob.material_id.isnot(None),
+                AiJob.started_at.isnot(None),
+                AiJob.completed_at.isnot(None),
+            )
+            .order_by(AiJob.completed_at.desc())
+            .limit(20)
+            .all()
+        )
+        rtfs = []
+        for completed_job in completed:
+            if not completed_job.material_id or not completed_job.started_at or not completed_job.completed_at:
+                continue
+            completed_material = db.session.get(GeneratedMaterial, completed_job.material_id)
+            if not completed_material:
+                continue
+            completed_payload = json.loads(completed_material.payload or "{}")
+            requested = float(completed_payload.get("requested_duration_seconds") or 0)
+            wall = (completed_job.completed_at - completed_job.started_at).total_seconds()
+            if requested > 0 and wall > 0:
+                rtfs.append(max(0.05, min(5.0, wall / requested)))
+        if rtfs:
+            rtfs.sort()
+            median_rtf = rtfs[len(rtfs) // 2]
+            target_seconds = float(envelope.get("requested_duration_seconds") or 0)
+            if target_seconds > 0:
+                estimated_wait_minutes = max(1, round((target_seconds * median_rtf) / 60))
+    except Exception:
+        db.session.rollback()
+
     return jsonify({
         "audio_status": audio_status,
         "audio_url": audio_url,
@@ -4690,6 +4730,7 @@ def get_podcast_audio(document_id):
         "duration_verified": envelope.get("duration_verified", False),
         "progress_percent": int((latest_job.progress_percent if latest_job else (100 if audio_status == "ready" else 0)) or 0),
         "progress_stage": latest_job.progress_stage if latest_job else ("ready" if audio_status == "ready" else "queued"),
+        "estimated_wait_minutes": estimated_wait_minutes,
     })
 
 @app.route("/podcasts")
