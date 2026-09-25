@@ -445,6 +445,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                     quota_feature,
                     quota_units,
                     period_start=quota_period,
+                    entitlement_payment_id=quota_entitlement_id,
                 )
             except Exception:
                 db.session.rollback()
