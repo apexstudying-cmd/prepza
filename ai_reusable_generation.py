@@ -136,15 +136,26 @@ def _generator(material_type, parameters=None):
     return specs[material_type]
 
 
-def _material_from_payload(*, document_content_id, material_type, fingerprint, payload, scope, owner_user_id, parameters):
+def _material_display_payload(payload, document_title):
+    if not isinstance(payload, dict):
+        return payload
+    enriched = dict(payload)
+    meta = dict(enriched.get("_prepza") or {})
+    meta["document_title"] = document_title or "Study document"
+    enriched["_prepza"] = meta
+    return enriched
+
+
+def _material_from_payload(*, document_content_id, material_type, fingerprint, payload, scope, owner_user_id, parameters, document_title=None):
     from app import db, GeneratedMaterial
     from sqlalchemy.exc import IntegrityError
     material = GeneratedMaterial.query.filter_by(generation_fingerprint=fingerprint).first()
     if material:
         return material
+    stored_payload = _material_display_payload(payload, document_title)
     material = GeneratedMaterial(
         document_content_id=document_content_id, material_type=material_type, status="ready",
-        payload=json.dumps(payload, ensure_ascii=False), generation_fingerprint=fingerprint,
+        payload=json.dumps(stored_payload, ensure_ascii=False), generation_fingerprint=fingerprint,
         generation_parameters=parameters, generation_version=GENERATION_VERSION,
         scope=scope, owner_user_id=owner_user_id,
     )
