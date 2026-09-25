@@ -6154,7 +6154,7 @@ def _document_study_event_id(user_id, document_content_id):
 
 
 MAX_HEARTBEAT_INTERVAL_SECONDS = 30
-MAX_STUDY_TIME_SECONDS_PER_DAY = 8 * 60 * 60  # anti-gaming ceiling, 8h/day
+MAX_STUDY_TIME_SECONDS_PER_DAY = 12 * 60 * 60  # anti-gaming ceiling, 8h/day
 MIN_QUALIFYING_STUDY_SECONDS = 10 * 60  # 10 cumulative active minutes/day
 PREPZA_STUDY_TIMEZONE = os.environ.get("PREPZA_TIMEZONE", "Africa/Nairobi")
 try:
