@@ -97,6 +97,7 @@ class AIRateLimitExceededError(Exception):
 # out of scope for this pass).
 
 
+MODEL_OPENAI_GPT5_MINI = "openai:gpt-5-mini"
 MODEL_GEMINI_FLASH_LITE = "gemini:gemini-2.5-flash-lite"
 MODEL_GEMINI_FLASH = "gemini:gemini-2.5-flash"
 MODEL_OPENAI_LUNA = "openai:gpt-5.6-luna"
