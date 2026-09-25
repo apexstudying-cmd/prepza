@@ -34,7 +34,7 @@ STUDENT_PLANS = {
         "tutor_messages": 0,
     },
     "plus": {
-        "price_kes": 399, "billing_period": "month", "quota_period": "subscription",
+        "price_kes": 499, "billing_period": "month", "quota_period": "subscription",
         "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 40,
         "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 120,
         "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 300,
@@ -43,7 +43,7 @@ STUDENT_PLANS = {
         "tutor_messages": 0,
     },
     "pro": {
-        "price_kes": 699, "billing_period": "month", "quota_period": "subscription",
+        "price_kes": 999, "billing_period": "month", "quota_period": "subscription",
         "summary_generations": 0, "summary_max_pages": 10, "summary_monthly_pages": 100,
         "podcast_generations": 0, "podcast_max_minutes": 50, "podcast_monthly_minutes": 350,
         "flashcard_generations": 0, "flashcard_max_cards": 50, "flashcard_monthly_cards": 600,
