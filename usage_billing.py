@@ -60,6 +60,24 @@ ORGANISATION_PLANS = {
 }
 
 
+def _canonical_sponsored_pricing(db):
+    rows = db.session.execute(text("""
+        SELECT config_key, value_json
+        FROM b2b_pricing_config
+        WHERE is_active = TRUE
+          AND config_key IN ('sponsored_campaign_minimum','home_impression_cpm','click_cpc','push_delivery_cpm')
+    """)).mappings().all()
+    values = {str(r["config_key"]): (r["value_json"] if isinstance(r["value_json"], dict) else {}) for r in rows}
+    def amount(key):
+        return int((values.get(key) or {}).get("amount_kes") or 0)
+    return {
+        "cpm_kes": amount("home_impression_cpm"),
+        "cpc_kes": amount("click_cpc"),
+        "push_cpm_kes": amount("push_delivery_cpm"),
+        "minimum_campaign_kes": amount("sponsored_campaign_minimum"),
+    }
+
+
 FEATURES = {
     "summary": ("summary_generations", "summary_max_pages"),
     "podcast": ("podcast_generations", "podcast_max_minutes"),
@@ -759,8 +777,10 @@ def register_usage_billing(app, db):
             "pricing_model": {
                 "basis": "active_user_band_plus_campaign_spend",
                 "subscription_is_not_per_signup": True,
-                "sponsored_cpm_kes": SPONSORED_CPM_KES,
-                "sponsored_min_campaign_kes": SPONSORED_MIN_CAMPAIGN_KES,
+                "sponsored_cpm_kes": _canonical_sponsored_pricing(db)["cpm_kes"],
+                "sponsored_cpc_kes": _canonical_sponsored_pricing(db)["cpc_kes"],
+                "sponsored_push_cpm_kes": _canonical_sponsored_pricing(db)["push_cpm_kes"],
+                "sponsored_min_campaign_kes": _canonical_sponsored_pricing(db)["minimum_campaign_kes"],
                 "plans": ORGANISATION_PLANS,
                 "note": "Organisation subscription buys audience access, candidate discovery and analytics capacity. Sponsored campaigns are metered separately by verified impressions; CPM is the advertiser metric, while RPM is publisher-side revenue.",
             },
@@ -906,7 +926,7 @@ def register_usage_billing(app, db):
                 "clicks": int(meter["clicks"]) if meter else 0,
                 "applications": int(meter["applications"]) if meter else 0,
                 "sponsored_spend_basis": "verified impressions",
-                "cpm_kes": SPONSORED_CPM_KES,
+                "cpm_kes": _canonical_sponsored_pricing(db)["cpm_kes"],
             },
         })
 
