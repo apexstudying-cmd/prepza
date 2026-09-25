@@ -59,8 +59,6 @@ ORGANISATION_PLANS = {
     },
 }
 
-SPONSORED_CPM_KES = 250
-SPONSORED_MIN_CAMPAIGN_KES = 2500
 
 FEATURES = {
     "summary": ("summary_generations", "summary_max_pages"),
