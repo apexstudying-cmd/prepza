@@ -89,10 +89,9 @@ class AIRateLimitExceededError(Exception):
 # ============================================================
 # Central config so nothing downstream hard-codes a model name.
 # Provider routing is centralized here. Ada/TUTORING is OpenAI-first;
-# Provider remains an explicit fallback for resilience. Adding another
-# provider should only require routing/config changes here, not feature call-site changes. Routing choices below follow the locked
-# decisions (Sonnet for real academic reasoning, Haiku for cheap/
-# mechanical generation) - tune with real usage data later per the
+# OpenAI is the locked provider for Ada; GPT-5 mini and GPT-5.6 Luna are the only Ada models. Adding another
+# provider should only require routing/config changes here, not feature call-site changes. Routing choices below use the locked OpenAI model split: GPT-5 mini for
+# high-volume structured work and GPT-5.6 Luna for stronger reasoning. - tune with real usage data later per the
 # cost doc's "model evaluation harness" (not built yet, deliberately
 # out of scope for this pass).
 
@@ -333,7 +332,12 @@ class MultiProvider:
             raise AIProviderError("Ada chat requires an OpenAI model")
         model_id = model.split(":", 1)[1]
         normalized = []
-        for role, content in messages:
+        for message in messages:
+            if isinstance(message, dict):
+                role = message.get("role", "user")
+                content = message.get("content", "")
+            else:
+                role, content = message
             normalized.append({"role": role, "content": content})
         for item in system_messages or []:
             if isinstance(item, dict):
@@ -343,14 +347,28 @@ class MultiProvider:
             if text_value:
                 normalized.insert(0, {"role": "system", "content": text_value})
         payload = {"model": model_id, "input": normalized, "max_output_tokens": max_tokens}
-        with cls._openai_semaphore:
-            response = requests.post(
-                "https://api.openai.com/v1/responses",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json=payload, timeout=120,
-            )
-        if response.status_code == 429:
-            raise AIRateLimitExceededError("OpenAI rate limit reached; retry through the request controller")
+        for attempt in range(3):
+            with cls._openai_cooldown_lock:
+                cooldown = max(0.0, cls._openai_cooldown_until - time.time())
+            if cooldown:
+                time.sleep(min(cooldown, 10.0))
+            with cls._openai_semaphore:
+                response = requests.post(
+                    "https://api.openai.com/v1/responses",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json=payload, timeout=120,
+                )
+            if response.status_code != 429:
+                break
+            retry_after = response.headers.get("retry-after")
+            try:
+                wait = float(retry_after)
+            except (TypeError, ValueError):
+                wait = min(2 ** attempt, 8)
+            with cls._openai_cooldown_lock:
+                cls._openai_cooldown_until = max(cls._openai_cooldown_until, time.time() + wait)
+            if attempt == 2:
+                raise AIRateLimitExceededError("OpenAI rate limit reached after bounded retries")
         response.raise_for_status()
         data = response.json()
         text_value = data.get("output_text") or ""
