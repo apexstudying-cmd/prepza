@@ -89,9 +89,9 @@ class AIRateLimitExceededError(Exception):
 # 2. TASK-BASED MODEL ROUTING
 # ============================================================
 # Central config so nothing downstream hard-codes a model name.
-# Only Sonnet 5 / Haiku 4.5 exist today (single provider: Anthropic).
-# Adding a second provider later means adding entries here, not
-# touching call sites. Routing choices below follow the locked
+# Provider routing is centralized here. Ada/TUTORING is OpenAI-first;
+# Anthropic remains an explicit fallback for resilience. Adding another
+# provider should only require routing/config changes here, not feature call-site changes. Routing choices below follow the locked
 # decisions (Sonnet for real academic reasoning, Haiku for cheap/
 # mechanical generation) - tune with real usage data later per the
 # cost doc's "model evaluation harness" (not built yet, deliberately
@@ -134,10 +134,10 @@ AI_TASKS = {
     # must land first) - present now so routes/features can be added
     # later without another routing-config change.
     "TUTORING": {
-        "primary": MODEL_SONNET_5,
-        "fallback": None,
+        "primary": _configured_model("tutoring", MODEL_OPENAI_LUNA),
+        "fallback": MODEL_SONNET_5,
         "max_tokens": 1024,
-        "notes": "AI Tutor chat, grounded in a student's document once extraction exists.",
+        "notes": "Ada: OpenAI-first for cost-sensitive interactive tutoring; Anthropic is the failure fallback.",
     },
     "SUMMARIZATION": {
         "primary": _configured_model("summarization", MODEL_HAIKU_4_5),
