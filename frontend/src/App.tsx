@@ -688,6 +688,9 @@ function DocumentStudyHubScreen({
         if (cancelled) return
         setDocument(data)
         setReadingPage(Math.max(0, progress.page_num || 0))
+        // Study Hub is the student's offline study space: opening a document
+        // here automatically persists the complete source file locally.
+        void saveStudyHubDocumentOffline(activeDocumentId).catch(() => {})
       } catch (err) {
         try {
           const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
