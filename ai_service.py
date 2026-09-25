@@ -236,6 +236,8 @@ class MultiProvider:
     """
 
     def __init__(self):
+        pass
+
     @staticmethod
     def _gemini(model, system_prompt, user_message, max_tokens):
         key = os.environ.get("GEMINI_API_KEY")
@@ -322,6 +324,46 @@ class MultiProvider:
             output_tokens=int(usage.get("output_tokens", 0) or 0),
         )
 
+    @classmethod
+    def chat(cls, model, system_messages, messages, max_tokens):
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key:
+            raise AIProviderError("OPENAI_API_KEY is not configured")
+        if not model.startswith("openai:"):
+            raise AIProviderError("Ada chat requires an OpenAI model")
+        model_id = model.split(":", 1)[1]
+        normalized = []
+        for role, content in messages:
+            normalized.append({"role": role, "content": content})
+        for item in system_messages or []:
+            if isinstance(item, dict):
+                text_value = item.get("text", "")
+            else:
+                text_value = str(item)
+            if text_value:
+                normalized.insert(0, {"role": "system", "content": text_value})
+        payload = {"model": model_id, "input": normalized, "max_output_tokens": max_tokens}
+        with cls._openai_semaphore:
+            response = requests.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json=payload, timeout=120,
+            )
+        if response.status_code == 429:
+            raise AIRateLimitExceededError("OpenAI rate limit reached; retry through the request controller")
+        response.raise_for_status()
+        data = response.json()
+        text_value = data.get("output_text") or ""
+        if not text_value:
+            raise AIProviderError("OpenAI returned no tutor text")
+        usage = data.get("usage") or {}
+        ai_usage = AIUsage(
+            input_tokens=int(usage.get("input_tokens", 0) or 0),
+            output_tokens=int(usage.get("output_tokens", 0) or 0),
+        )
+        ai_usage.cost_usd = compute_cost_usd(model, ai_usage.input_tokens, ai_usage.output_tokens)
+        return text_value, ai_usage
+
     def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False,
              image_b64=None, image_media_type=None):
         if model.startswith("gemini:"):
@@ -403,153 +445,6 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
 
     raise AIProviderError(f"All models failed for task '{ai_request.task}': {last_error}")
 
-
-# ============================================================
-# 4b. MESSAGE BATCHES API (50% cheaper, async) - for background/non-
-#     real-time work only. Never call this from a request handler; it
-#     blocks the calling thread while polling, so it must only ever be
-#     called from a background thread (e.g. document_pipeline.py's
-#     extraction thread) so a slow batch never holds up a user request.
-# ============================================================
-
-# How often to poll an in-progress batch, and the longest this call
-# will wait before giving up and raising. Batches "often finish in
-# minutes" per Provider's docs even though the SLA is 24h, so this
-# cap is deliberately much shorter than the SLA - a batch still running
-# past this point is treated as unusually slow, not waited out further.
-# The batch itself keeps processing on Provider's side regardless;
-# callers that give up here can check back later via the batch_id.
-BATCH_POLL_INTERVAL_SECONDS = 15
-BATCH_MAX_WAIT_SECONDS = 20 * 60
-
-
-def _build_message_params(model, ai_request, max_tokens):
-    """
-    Builds the request-shape dict for one Messages API call, used by
-    the batch path below. (Mirrors ProviderAdapter.call's shape -
-    kept as a separate small function rather than refactoring .call()
-    itself, to avoid touching the already-working synchronous path.)
-    """
-    if ai_request.cacheable_system:
-        system = [{
-            "type": "text",
-            "text": ai_request.system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        }]
-    else:
-        system = ai_request.system_prompt
-
-    if ai_request.image_b64:
-        user_content = [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": ai_request.image_media_type,
-                    "data": ai_request.image_b64,
-                },
-            },
-            {"type": "text", "text": ai_request.user_message},
-        ]
-    else:
-        user_content = ai_request.user_message
-
-    return {
-        "model": model,
-        "max_tokens": max_tokens,
-        "system": system,
-        "messages": [{"role": "user", "content": user_content}],
-    }
-
-
-def route_and_generate_batch(task, items, on_batch_created=None):
-    """
-    Submits multiple AIRequests for the same task as a single Provider
-    Message Batch (50% cheaper than synchronous calls - see
-    _BATCH_PRICING). `items` is a list of (custom_id, AIRequest) tuples.
-
-    `on_batch_created`, if given, is called with the batch's id right
-    after submission (before polling starts) - callers can use this to
-    persist the id somewhere (e.g. AiJob.batch_id) so it's inspectable
-    even if this call is interrupted before finishing.
-
-    Returns (batch_id, results) where results is a dict of
-    {custom_id: AIResponse} for succeeded items and
-    {custom_id: AIProviderError} for anything errored/expired/canceled -
-    callers decide whether to retry those synchronously.
-
-    Unlike route_and_generate, there is no primary/fallback escalation
-    here - all items in a batch use the task's primary model. A failed
-    item should be retried (synchronously, or in a future batch), not
-    silently escalated.
-    """
-    task_config = AI_TASKS.get(task)
-    if not task_config:
-        raise ValueError(f"Unknown AI task '{task}'")
-
-    provider, provider_name = _get_provider()
-    model = task_config["primary"]
-    max_tokens = min(int(task_config["max_tokens"]), output_token_limit)
-
-    batch_requests = [
-        {"custom_id": custom_id, "params": _build_message_params(model, ai_request, max_tokens)}
-        for custom_id, ai_request in items
-    ]
-
-    batch = provider._client.messages.batches.create(requests=batch_requests)
-    batch_id = batch.id
-
-    if on_batch_created:
-        on_batch_created(batch_id)
-
-    elapsed = 0
-    while True:
-        batch = provider._client.messages.batches.retrieve(batch_id)
-        if batch.processing_status == "ended":
-            break
-        time.sleep(BATCH_POLL_INTERVAL_SECONDS)
-        elapsed += BATCH_POLL_INTERVAL_SECONDS
-        if elapsed >= BATCH_MAX_WAIT_SECONDS:
-            raise AIProviderError(
-                f"Batch {batch_id} for task '{task}' did not finish within "
-                f"{BATCH_MAX_WAIT_SECONDS}s (status: {batch.processing_status}). "
-                f"It will keep processing on Provider's side - check the "
-                f"Provider Console with this batch id if needed."
-            )
-
-    results = {}
-    for result in provider._client.messages.batches.results(batch_id):
-        custom_id = result.custom_id
-        if result.result.type == "succeeded":
-            message = result.result.message
-            text = "".join(block.text for block in message.content if block.type == "text")
-            usage = message.usage
-            ai_usage = AIUsage(
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
-                cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
-            )
-            ai_usage.cost_usd = compute_cost_usd(
-                model, ai_usage.input_tokens, ai_usage.output_tokens,
-                ai_usage.cache_read_tokens, ai_usage.cache_creation_tokens,
-                batch=True,
-            )
-            results[custom_id] = AIResponse(
-                text=text, model_used=model, provider=provider_name,
-                usage=ai_usage, latency_ms=0,
-            )
-        else:
-            results[custom_id] = AIProviderError(
-                f"Batch item '{custom_id}' ended as '{result.result.type}'"
-            )
-
-    return batch_id, results
-
-
-# ============================================================
-# 5. USAGE LOGGING
-# ============================================================
 
 def log_usage(user_id, request_type, model=None, provider=None,
                usage: Optional[AIUsage] = None, forum_reply_id=None):
@@ -2186,40 +2081,16 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
 
     start = time.monotonic()
     try:
-        response = provider._client.messages.create(
+        raw_text, ai_usage = provider.chat(
             model=model,
-            max_tokens=max_tokens,
-            system=system,
+            system_messages=system,
             messages=messages,
+            max_tokens=max_tokens,
         )
-    except Exception as e:  # noqa: BLE001 - genuinely want to catch any provider failure
+    except Exception as e:  # noqa: BLE001
         refund_ada_reservation(db, triggering_user_id, ada_entitlement_id, ada_reserved_tokens)
         raise AIProviderError(f"Tutor reply generation failed: {e}")
-    latency_ms = int((time.monotonic() - start) * 1000)  # noqa: F841 - kept for future observability wiring
-
-    raw_text = "".join(block.text for block in response.content if block.type == "text")
-    usage = response.usage
-    ai_usage = AIUsage(
-        input_tokens=usage.input_tokens,
-        output_tokens=usage.output_tokens,
-        cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
-        cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
-    )
-    ai_usage.cost_usd = compute_cost_usd(
-        model, ai_usage.input_tokens, ai_usage.output_tokens,
-        ai_usage.cache_read_tokens, ai_usage.cache_creation_tokens,
-    )
-
-    actual_ada_tokens = int(getattr(usage, "input_tokens", 0) or 0) + int(getattr(usage, "output_tokens", 0) or 0)
-    if actual_ada_tokens > ada_reserved_tokens:
-        # The conservative reservation should normally prevent this; if a
-        # provider tokenizer differs, keep the accounting honest by recording
-        # actual usage rather than silently under-counting.
-        actual_ada_tokens = int(actual_ada_tokens)
-    finalize_ada_tokens(
-        db, triggering_user_id, ada_entitlement_id, ada_reserved_tokens, actual_ada_tokens
-    )
-
+    latency_ms = int((time.monotonic() - start) * 1000)
     reply_text, concept_name, prerequisite_name = _parse_tutor_reply(raw_text)
 
     assistant_row = TutorMessage(conversation_id=conversation_id, role="assistant", content=reply_text)
