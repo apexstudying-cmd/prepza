@@ -292,7 +292,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 db.session.rollback()
         if quota_reserved:
             try:
-                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_id=quota_entitlement_id)
+                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_payment_id=quota_entitlement_id)
             except Exception:
                 db.session.rollback()
         raise
@@ -339,7 +339,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
             if variant_pool_feature:
                 release_generation_variant(db, triggering_user_id, base_fingerprint, variant)
             if quota_reserved:
-                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_id=quota_entitlement_id)
+                refund_ai_quota(db, triggering_user_id, quota_feature, quota_units, period_start=quota_period, entitlement_payment_id=quota_entitlement_id)
             raise ai_service.AIProviderError("AI generation failed - please try again.")
         raise ai_service.AIProviderError("This material is still being prepared - please try again shortly.")
 
