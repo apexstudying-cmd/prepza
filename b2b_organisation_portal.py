@@ -239,7 +239,7 @@ def register_b2b_organisation_portal(app, db):
         uid=session.get("user_id")
         if not uid or not access(oid,uid):return jsonify({"error":"Organisation membership required"}),403
         p=db.session.execute(text("SELECT id,provider,provider_reference,currency,customer_amount_minor,campaign_amount_minor,processing_fee_minor,status,purpose,paid_at,created_at FROM b2b_payment WHERE organisation_id=:o ORDER BY created_at DESC LIMIT 200"),{"o":oid}).mappings().all()
-        i=db.session.execute(text("SELECT id,invoice_number,campaign_id,currency,subtotal_minor,processing_fee_minor,total_minor,status,payment_method,due_at,paid_at,created_at FROM b2b_invoice WHERE organisation_id=:o ORDER BY created_at DESC LIMIT 100"),{"o":oid}).mappings().all()
+        i=db.session.execute(text("SELECT id,invoice_number,campaign_id,currency,subtotal_minor,processing_fee_minor,total_minor,status,payment_method,due_at,paid_at,etims_status,etims_invoice_number,etims_control_code,etims_issued_at,created_at FROM b2b_invoice WHERE organisation_id=:o ORDER BY created_at DESC LIMIT 100"),{"o":oid}).mappings().all()
         return jsonify({"payments":[dict(x) for x in p],"invoices":[dict(x) for x in i]})
 
     @app.post("/api/organisations/<int:oid>/discovery/campaigns/<int:cid>/invoice")
@@ -274,6 +274,26 @@ def register_b2b_organisation_portal(app, db):
         if not x:return jsonify({"error":"Invoice not found"}),404
         title = "PREPZA PRO FORMA INVOICE" if str(x["status"]) != "paid" else "PREPZA PAYMENT RECORD — NOT AN eTIMS TAX INVOICE"
         return pdf(title,x["invoice_number"],x["organisation_name"],x["campaign_name"],x["total_minor"],str(x["status"]).upper(),"invoice-"+x["invoice_number"]+".pdf")
+
+    @app.get("/api/organisations/<int:oid>/billing/invoices/<int:iid>/tax-invoice.pdf")
+    def etims_tax_invoice_copy(oid,iid):
+        uid=session.get("user_id")
+        if not uid or not access(oid,uid):return jsonify({"error":"Organisation membership required"}),403
+        x=db.session.execute(text("""SELECT i.*,o.name organisation_name,c.name campaign_name
+          FROM b2b_invoice i JOIN organisation o ON o.id=i.organisation_id
+          LEFT JOIN discovery_campaign c ON c.id=i.campaign_id
+          WHERE i.id=:i AND i.organisation_id=:o"""),{"i":iid,"o":oid}).mappings().first()
+        if not x:return jsonify({"error":"Invoice not found"}),404
+        if str(x["etims_status"]) != "issued" or not x["etims_invoice_number"]:
+            return jsonify({"error":"The eTIMS tax invoice has not been reconciled by Prepza yet.","etims_status":x["etims_status"]}),409
+        doc=fitz.open();page=doc.new_page();y=55
+        page.insert_text((55,y),"PREPZA — eTIMS TAX INVOICE COPY",fontsize=19,color=(0.04,0.08,0.22));y+=32
+        fields=[("Organisation",x["organisation_name"]),("Prepza reference",x["invoice_number"]),("eTIMS invoice number",x["etims_invoice_number"]),("eTIMS control code",x["etims_control_code"] or "—"),("Campaign",x["campaign_name"] or "—"),("Amount",f"KES {int(x['total_minor'])/100:,.2f}"),("eTIMS status","Issued / reconciled"),("Reconciled at",x["etims_issued_at"].strftime("%d %b %Y %H:%M UTC") if x["etims_issued_at"] else "—")]
+        for k,v in fields:
+            page.insert_text((55,y),f"{k}: {v}",fontsize=10);y+=21
+        page.insert_text((55,y+12),"This PDF is a copy of the eTIMS identifiers recorded by Prepza; it does not itself transmit an invoice to KRA.",fontsize=8,color=(0.35,0.38,0.45))
+        data=doc.tobytes();doc.close()
+        return send_file(io.BytesIO(data),mimetype="application/pdf",as_attachment=True,download_name="etims-"+str(x["etims_invoice_number"])+".pdf")
 
     @app.get("/api/organisations/<int:oid>/billing/payments/<int:pid>/receipt.pdf")
     def payment_pdf(oid,pid):
@@ -359,6 +379,7 @@ def register_b2b_organisation_portal(app, db):
     @app.patch("/api/admin/b2b/invoices/<int:invoice_id>/etims")
     def admin_update_etims(invoice_id):
         if not admin_user(): return jsonify({"error":"Admin access required"}),403
+        if not csrf(): return jsonify({"error":"Valid CSRF token required"}),403
         data=request.get_json(silent=True) or {}
         status=str(data.get("status") or "").strip().lower()
         if status not in ("not_issued","issued","voided"):return jsonify({"error":"Invalid eTIMS status"}),400
@@ -377,7 +398,7 @@ def register_b2b_organisation_portal(app, db):
     @app.get("/api/admin/b2b/invoices")
     def admin_invoices():
         if not admin_user(): return jsonify({"error":"Admin access required"}),403
-        rows=db.session.execute(text("SELECT id,organisation_id,campaign_id,invoice_number,subtotal_minor,processing_fee_minor,total_minor,status,payment_method,due_at,paid_at,created_at FROM b2b_invoice ORDER BY created_at DESC LIMIT 500")).mappings().all()
+        rows=db.session.execute(text("SELECT id,organisation_id,campaign_id,invoice_number,subtotal_minor,processing_fee_minor,total_minor,status,payment_method,due_at,paid_at,etims_status,etims_invoice_number,etims_control_code,etims_issued_at,created_at FROM b2b_invoice ORDER BY created_at DESC LIMIT 500")).mappings().all()
         return jsonify({"invoices":[dict(x) for x in rows]})
 
     @app.post("/api/admin/b2b/invoices/<int:invoice_id>/mark-paid")
@@ -387,6 +408,10 @@ def register_b2b_organisation_portal(app, db):
         inv=db.session.execute(text("SELECT * FROM b2b_invoice WHERE id=:i FOR UPDATE"),{"i":invoice_id}).mappings().first()
         if not inv:return jsonify({"error":"Invoice not found"}),404
         if inv["status"]=="paid":return jsonify({"ok":True,"duplicate":True})
+        if inv["status"] not in ("pro_forma","pending_payment"):
+            return jsonify({"error":"Only an outstanding pro-forma invoice can be settled."}),409
+        if not inv["campaign_id"]:
+            return jsonify({"error":"Invoice is not linked to a campaign and cannot fund delivery."}),409
         data=request.get_json(silent=True) or {}
         ref=str(data.get("payment_reference") or "").strip()[:120]
         try:
@@ -406,7 +431,7 @@ def register_b2b_organisation_portal(app, db):
         fid=db.session.execute(text("INSERT INTO b2b_campaign_funding(campaign_id,payment_id,amount_minor,status) VALUES(:c,:p,:a,'credited') RETURNING id"),{"c":inv["campaign_id"],"p":pid,"a":inv["subtotal_minor"]}).scalar_one()
         db.session.execute(text("""INSERT INTO b2b_campaign_ledger(campaign_id,entry_type,signed_amount_minor,currency,idempotency_key,payment_id,funding_id,actor_user_id,description)
           VALUES(:c,'funding',:a,'KES',:k,:p,:f,:u,'Bank/invoice campaign funding') ON CONFLICT (idempotency_key) DO NOTHING"""),{"c":inv["campaign_id"],"a":inv["subtotal_minor"],"k":"funding:"+ref,"p":pid,"f":fid,"u":session.get("user_id")})
-        db.session.execute(text("UPDATE discovery_campaign SET funding_status='funded',status=CASE WHEN starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP THEN 'active' ELSE status END,funded_amount_minor=funded_amount_minor+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:c"),{"c":inv["campaign_id"],"a":inv["subtotal_minor"]})
+        db.session.execute(text("UPDATE discovery_campaign SET funding_status='funded',status='active',funded_amount_minor=funded_amount_minor+:a,updated_at=CURRENT_TIMESTAMP WHERE id=:c"),{"c":inv["campaign_id"],"a":inv["subtotal_minor"]})
         db.session.execute(text("UPDATE b2b_invoice SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE id=:i"),{"i":invoice_id})
         db.session.commit(); return jsonify({"ok":True,"payment_id":int(pid)})
     

@@ -159,7 +159,7 @@ def _podcast_payload(parsed):
 
 def generate_document_material(*, material_type, document_content_id, triggering_user_id, plan_tier="free", parameters=None):
     import ai_service
-    from app import db, DocumentContent, AiJob, Document
+    from app import db, DocumentContent, AiJob
     if material_type not in PROMPT_VERSIONS:
         raise ValueError(f"Unsupported AI material type: {material_type}")
     params = normalize_parameters(material_type, parameters)
@@ -169,16 +169,21 @@ def generate_document_material(*, material_type, document_content_id, triggering
     if not content.extracted_text:
         raise ai_service.AIProviderError("This document's text hasn't finished processing yet - try again shortly.")
     scope, owner_user_id = _content_scope(document_content_id, triggering_user_id)
-    source_document = (
-        db.session.query(Document)
-        .filter(
-            Document.user_id == triggering_user_id,
-            Document.document_content_id == document_content_id,
-            Document.is_removed.is_(False),
+    source_document = None
+    session_query = getattr(db.session, "query", None)
+    app_module = __import__("app")
+    Document = getattr(app_module, "Document", None)
+    if session_query is not None and Document is not None:
+        source_document = (
+            session_query(Document)
+            .filter(
+                Document.user_id == triggering_user_id,
+                Document.document_content_id == document_content_id,
+                Document.is_removed.is_(False),
+            )
+            .order_by(Document.id.desc())
+            .first()
         )
-        .order_by(Document.id.desc())
-        .first()
-    )
     document_title = source_document.title if source_document else "Study document"
     prompt_version = PROMPT_VERSIONS[material_type]
     schema_version = SCHEMA_VERSIONS[material_type]
@@ -222,8 +227,8 @@ def generate_document_material(*, material_type, document_content_id, triggering
             # The resolved size becomes part of the fingerprint, so changing
             # the admin limit creates a new generation family rather than
             # silently reusing an artifact built for the old size.
-            from usage_billing import _active_student_entitlements
-            active_entitlements = _active_student_entitlements(db, triggering_user_id)
+            from ai_economics import get_active_entitlements
+            active_entitlements = get_active_entitlements(db, triggering_user_id)
             if active_entitlements:
                 plans = [get_plan(db, row["plan"]) for row in active_entitlements]
                 plans = [plan for plan in plans if plan]

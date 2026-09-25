@@ -527,6 +527,8 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
   const [documents, setDocuments] = useState<HomeDocument[]>([])
   const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; materialId: number; type: string; parameters?: Record<string, unknown> }[]>([])
   const [offlineDocuments, setOfflineDocuments] = useState<HomeDocument[]>([])
+  const [savedLibrary, setSavedLibrary] = useState<SavedLibraryItem[]>([])
+  const [csrfToken, setCsrfToken] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -583,6 +585,10 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       } catch { /* offline package lookup is non-fatal */ }
     }
     void loadOffline()
+    api<{ csrf_token?: string }>('/me').then(me => { if (me.csrf_token) setCsrfToken(me.csrf_token) }).catch(() => {})
+    api<{ saved: SavedLibraryItem[] }>('/library/saved').then(res => {
+      if (!cancelled) setSavedLibrary(res.saved || [])
+    }).catch(() => {})
     api<{ documents: HomeDocument[] }>('/documents').then(async res => {
       if (cancelled) return
       const ready = res.documents.filter(d => d.status === 'ready')
@@ -629,7 +635,16 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       <div style={{display:'flex',gap:8}}>{([['documents','Documents'],['materials','Study Materials']] as const).map(([key,name])=><button key={key} onClick={()=>setTab(key)} style={{flex:1,padding:'8px 10px',borderRadius:11,background:tab===key?N.gold:'rgba(255,255,255,0.08)',color:tab===key?N.navy:'rgba(255,255,255,0.7)',border:'none',fontWeight:800,fontSize:11,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}>{name}</button>)}</div>
     </div>
     <div style={{flex:1,overflowY:'auto',padding:16}} className="scrollbar-hide">
-      {loading ? <GenerationLoading label="Loading your study library…"/> : error && documents.length===0 && offlineDocuments.length===0 ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Ada about it, or create study materials.</div>{documents.length===0 && offlineDocuments.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:Array.from(new Map([...documents, ...offlineDocuments].map(d=>[d.id,d])).values()).map(d=><button key={d.id} onClick={()=>openDocument(d.id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>▣</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{d.page_count?`${d.page_count} pages`:'Document'}{d.created_at?` · ${new Date(d.created_at).toLocaleDateString()}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:18}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type, m.parameters)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
+      {loading ? <GenerationLoading label="Loading your study library…"/> : error && documents.length===0 && offlineDocuments.length===0 ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Ada about it, or create study materials.</div>{documents.length===0 && offlineDocuments.length===0 && savedLibrary.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:<>
+        {Array.from(new Map([...documents, ...offlineDocuments].map(d=>[d.id,d])).values()).map(d=><button key={d.id} onClick={()=>openDocument(d.id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>▣</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{d.page_count?`${d.page_count} pages`:'Document'}{d.created_at?` · ${new Date(d.created_at).toLocaleDateString()}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}
+        {savedLibrary.length>0 && <div style={{marginTop:18}}>
+          <div style={{fontSize:11,fontWeight:800,color:T.textMuted,marginBottom:8,textTransform:'uppercase',letterSpacing:0.5}}>Saved from Prepza Library</div>
+          {savedLibrary.map(item=>{const id=Number(item.document_id);return <div key={item.id} style={{display:'flex',alignItems:'stretch',gap:8,background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:8,marginBottom:10}}>
+            <button onClick={()=>id>0&&openDocument(id)} style={{flex:1,minWidth:0,textAlign:'left',background:'none',border:'none',padding:7,cursor:id>0?'pointer':'default',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.gold}18`,color:N.gold,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>{Ic.bookmark()}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{item.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{item.material_type.replace(/_/g,' ')}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>
+            <button aria-label={`Remove ${item.title} from Study Hub`} title="Remove from Study Hub" onClick={async()=>{if(!csrfToken)return;try{await api(`/library/${item.id}/save`,{method:'DELETE',headers:{'X-CSRF-Token':csrfToken}});setSavedLibrary(items=>items.filter(x=>x.id!==item.id));if(id>0)setDocuments(items=>items.filter(d=>d.id!==id))}catch{}}} style={{width:42,border:'none',background:'transparent',color:T.textMuted,cursor:'pointer',fontSize:20,borderRadius:10}}>×</button>
+          </div>})}
+        </div>}
+      </>}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:18}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type, m.parameters)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
       <div style={{height:'calc(90px + env(safe-area-inset-bottom, 0px))'}}/>
     </div>
   </div>
@@ -5439,8 +5454,30 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             } catch { /* keep the previous value if saving fails */ }
             finally { setPrivacyBusy(false) }
           }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.profilePublic)}</div>} sub={priv.profilePublic ? 'Public' : 'Private'} />
-          <Row label="Who can message me" right={<div onClick={() => setPriv(p => ({ ...p, whoMessages: !p.whoMessages }))}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
-          <Row label="Who can follow me" right={<div onClick={() => setPriv(p => ({ ...p, whoFollows: !p.whoFollows }))}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
+          <Row label="Who can message me" right={<div onClick={async e => {
+            e.stopPropagation()
+            if (privacyBusy) return
+            const next = !priv.whoMessages
+            setPrivacyBusy(true)
+            try {
+              const me = await api<{ year: number; semester: number }>('/me')
+              await api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ year: me.year, semester: me.semester, who_can_message: next ? 'everyone' : 'followers' }) })
+              setPriv(p => ({ ...p, whoMessages: next }))
+            } catch { /* keep previous value */ }
+            finally { setPrivacyBusy(false) }
+          }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.whoMessages)}</div>} sub={priv.whoMessages ? 'Everyone' : 'Followers only'} />
+          <Row label="Who can follow me" right={<div onClick={async e => {
+            e.stopPropagation()
+            if (privacyBusy) return
+            const next = !priv.whoFollows
+            setPrivacyBusy(true)
+            try {
+              const me = await api<{ year: number; semester: number }>('/me')
+              await api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify({ year: me.year, semester: me.semester, who_can_follow: next ? 'everyone' : 'approval_required' }) })
+              setPriv(p => ({ ...p, whoFollows: next }))
+            } catch { /* keep previous value */ }
+            finally { setPrivacyBusy(false) }
+          }} style={{ opacity: privacyBusy ? 0.6 : 1 }}>{Ic.toggle(priv.whoFollows)}</div>} sub={priv.whoFollows ? 'Everyone' : 'Approval required'} />
           <Row label="Read receipts" sub={priv.readReceipts ? 'Enabled' : 'Disabled'} right={<div onClick={async e => {
             e.stopPropagation()
             if (privacyBusy) return
@@ -5503,7 +5540,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           <div style={{ background: T.card, borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%' }}>
             <div style={{ width: 40, height: 4, background: T.border, borderRadius: 99, margin: '0 auto 20px' }} />
             <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, marginBottom: 8 }}>
-              {showModal === 'email' ? 'Change Email' : showModal === 'phone' ? 'Change Phone' : showModal === 'university' ? 'Select University' : showModal === 'course' ? 'Select Course' : showModal === 'study-prefs' ? 'Study Preferences' : showModal === 'ai-prefs' ? 'AI Preferences' : showModal === 'language' ? 'Language' : showModal === 'appearance' ? 'Appearance' : showModal === 'change-password' ? 'Change Password' : showModal === 'sessions' ? 'Login Sessions' : showModal === '2fa' ? 'Two-Factor Authentication' : showModal === 'plan' ? 'Current Plan' : showModal === 'upgrade' ? 'Upgrade to Premium' : showModal === 'billing' ? 'Billing' : showModal === 'help' ? 'Help Centre' : showModal === 'contact' ? 'Contact Support' : showModal === 'report-problem' ? 'Report a Problem' : showModal === 'about' ? 'About Prepza' : showModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
+              {showModal === 'email' ? 'Change Email' : showModal === 'phone' ? 'Change Phone' : showModal === 'university' ? 'Select University' : showModal === 'course' ? 'Select Course' : showModal === 'study-prefs' ? 'Study Preferences' : showModal === 'ai-prefs' ? 'AI Preferences' : showModal === 'language' ? 'Language' : showModal === 'appearance' ? 'Appearance' : showModal === 'change-password' ? 'Change Password' : showModal === 'sessions' ? 'Login Sessions' : showModal === '2fa' ? 'Two-Factor Authentication' : showModal === 'plan' ? 'Current Plan' : showModal === 'upgrade' ? 'Choose a plan' : showModal === 'billing' ? 'Billing' : showModal === 'help' ? 'Help Centre' : showModal === 'contact' ? 'Contact Support' : showModal === 'report-problem' ? 'Report a Problem' : showModal === 'about' ? 'About Prepza' : showModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
             </div>
             {showModal === 'email' ? (
               emailChangeSuccess ? (
@@ -9191,7 +9228,7 @@ function SubscriptionScreen({ setScreen, selectedPlan, setSelectedPlan }: { setS
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Prepza Premium</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Unlock all AI study tools</div></div>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Prepza Plans</div><div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Unlock all AI study tools</div></div>
         </div>
         <div style={{ marginTop: 16, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 20 }}>🎓</span>
@@ -9426,7 +9463,7 @@ function PaymentSuccessScreen({ setScreen }: { setScreen: (s: Screen) => void })
         </div>
       )}
       <button onClick={() => setScreen('home')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 6px 24px rgba(201,168,76,0.4)' }}>
-        Start Studying Premium
+        Start Studying
       </button>
       <div style={{ fontSize: 11, color: T.textMuted }}>Redirecting to home in a moment…</div>
     </div>

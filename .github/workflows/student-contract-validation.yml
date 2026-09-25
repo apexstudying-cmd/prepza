@@ -1,4 +1,4 @@
-name: AI economics validation
+name: Student contract validation
 
 on:
   pull_request:
@@ -10,29 +10,24 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  student-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
       - name: Install focused test dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pytest sqlalchemy Flask
-
-      - name: Compile changed Python modules
+      - name: Compile student billing modules
         run: |
-          python -m py_compile ai_economics.py ai_generation_store.py ai_artifact_fingerprint.py ai_reusable_generation.py ai_service.py usage_billing.py
-
-      - name: Run focused economics and reuse tests
+          python -m py_compile app.py student_orders.py student_subscription_billing.py ai_economics.py usage_billing.py ai_reusable_generation.py
+      - name: Run student order and subscription contract tests
         env:
           PYTHONPATH: .
-        run: |
-          pytest -q tests/test_ai_economics.py tests/test_ai_reusable_generation.py
+        run: pytest -q tests/test_student_orders.py tests/test_student_subscription_billing.py tests/test_ai_economics.py scripts/test_chat_ui_contract.py

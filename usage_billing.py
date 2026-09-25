@@ -18,44 +18,16 @@ from __future__ import annotations
 
 import re
 import os
+import json
 from datetime import datetime, timedelta, date
 from flask import jsonify, request, session
 from sqlalchemy import text
 
 
 STUDENT_PLANS = {
-    "free": {
-        "price_kes": 0,
-        "billing_period": "month",
-        "quota_period": "month",
-        "summary_generations": 3,
-        "summary_max_pages": 2,
-        "podcast_generations": 1,
-        "podcast_max_minutes": 10,
-        "flashcard_generations": 3,
-        "flashcard_max_cards": 10,
-        "quiz_generations": 2,
-        "quiz_max_questions": 10,
-        "mind_map_generations": 2,
-        "mind_map_max_nodes": 10,
-        "tutor_messages": 20,
-    },
-    "premium": {
-        "price_kes": 599,
-        "billing_period": "semester",
-        "quota_period": "month",
-        "summary_generations": 30,
-        "summary_max_pages": 10,
-        "podcast_generations": 4,
-        "podcast_max_minutes": 50,
-        "flashcard_generations": 30,
-        "flashcard_max_cards": 50,
-        "quiz_generations": 20,
-        "quiz_max_questions": 50,
-        "mind_map_generations": 20,
-        "mind_map_max_nodes": 50,
-        "tutor_messages": 300,
-    },
+    "free": {"price_kes": 0, "billing_period": "month", "quota_period": "month"},
+    "plus": {"price_kes": 499, "billing_period": "month", "quota_period": "month"},
+    "pro": {"price_kes": 999, "billing_period": "month", "quota_period": "month"},
 }
 
 # Organisation subscription is audience-access pricing, not ad RPM.
@@ -251,20 +223,8 @@ def _csrf_ok():
 
 
 def _current_student_plan(db, user_id):
-    row = db.session.execute(text("""
-        SELECT plan, subscription_expires_at
-        FROM payment
-        WHERE user_id = :uid
-          AND payment_type = 'subscription'
-          AND status = 'success'
-          AND subscription_expires_at IS NOT NULL
-        ORDER BY subscription_expires_at DESC
-        LIMIT 1
-    """), {"uid": user_id}).mappings().first()
-    if row and row["subscription_expires_at"] and row["subscription_expires_at"] > datetime.utcnow():
-        return "premium"
-    return "free"
-
+    from ai_economics import get_user_plan_code
+    return get_user_plan_code(db, user_id)
 
 def _usage_row(db, user_id, feature):
     plan_code = _current_student_plan(db, user_id)
@@ -277,90 +237,97 @@ def _usage_row(db, user_id, feature):
 
 
 def check_and_consume_ai_quota(db, user_id, feature, units):
-    """Atomically consume a generation allowance before an AI call."""
+    """Consume the canonical monthly generation allowance before an AI call."""
     if feature not in FEATURES:
         return True, {"feature": feature}
-
     try:
-        units = int(units)
-    except (TypeError, ValueError):
-        return False, {"error": "Invalid generation amount"}
-    if units <= 0:
-        return False, {"error": "Generation amount must be positive"}
+        units=int(units)
+    except (TypeError,ValueError):
+        return False, {"error":"Invalid generation amount"}
+    if units<=0:
+        return False, {"error":"Generation amount must be positive"}
+    from ai_economics import get_plan,get_active_entitlements,get_user_plan_code
+    allowance_keys={"summary":"summary_pages","podcast":"podcast_minutes",
+                    "flashcards":"flashcards","quiz":"questions","mind_map":"mind_map_nodes"}
+    allowance_key=allowance_keys[feature]
+    active=get_active_entitlements(db,user_id)
 
-    plan_code = _current_student_plan(db, user_id)
-    plan = STUDENT_PLANS[plan_code]
-    request_limit_key, unit_limit_key = FEATURES[feature]
-    max_requests = int(plan[request_limit_key])
-    max_units = int(plan[unit_limit_key])
+    if not active:
+        plan=get_plan(db,"free") or {}
+        max_units=int(plan.get(allowance_key) or 0)
+        if units>max_units:
+            return False, {"error":"Requested generation exceeds the Free plan limit.",
+                            "code":"generation_size_limit","feature":feature,"plan":"free","max_units":max_units}
+        period=date.today().replace(day=1)
+        db.session.execute(text("""
+            INSERT INTO student_ai_usage (user_id,period_start,feature,units,requests,updated_at)
+            VALUES (:uid,:period,:feature,0,0,CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id,period_start,feature) DO NOTHING
+        """),{"uid":user_id,"period":period,"feature":feature})
+        row=db.session.execute(text("""
+            SELECT units,requests FROM student_ai_usage
+            WHERE user_id=:uid AND period_start=:period AND feature=:feature FOR UPDATE
+        """),{"uid":user_id,"period":period,"feature":feature}).mappings().first()
+        used=int(row["units"] or 0)
+        if used+units>max_units:
+            db.session.rollback()
+            return False, {"error":"You have used up this plan's generation allowance.",
+                            "code":"generation_quota_exhausted","feature":feature,"plan":"free",
+                            "used_units":used,"unit_limit":max_units,"remaining_units":max(0,max_units-used)}
+        db.session.execute(text("""
+            UPDATE student_ai_usage SET units=units+:units,requests=requests+1,updated_at=CURRENT_TIMESTAMP
+            WHERE user_id=:uid AND period_start=:period AND feature=:feature
+        """),{"uid":user_id,"period":period,"feature":feature,"units":units})
+        db.session.commit()
+        return True, {"feature":feature,"plan":"free","used_units":used+units,"unit_limit":max_units,
+                      "remaining_units":max(0,max_units-used-units),"max_units_per_generation":max_units,
+                      "period_start":period}
 
-    if units > max_units:
-        return False, {
-            "error": f"This plan supports at most {max_units} {('pages' if feature == 'summary' else 'minutes' if feature == 'podcast' else 'cards' if feature == 'flashcards' else 'questions' if feature == 'quiz' else 'nodes')} per generation.",
-            "code": "generation_size_limit",
-            "feature": feature,
-            "plan": plan_code,
-            "max_units": max_units,
-        }
+    # Serialize quota reservations for this student's active entitlement
+    # payments so two simultaneous generation requests cannot both spend the
+    # same remaining allowance.
+    for ent in active:
+        db.session.execute(text("SELECT id FROM payment WHERE id=:pid FOR UPDATE"),
+                           {"pid":int(ent["id"])}).first()
 
-    period = _period_start(plan)
-    db.session.execute(text("""
-        INSERT INTO student_ai_usage
-            (user_id, period_start, feature, units, requests, updated_at)
-        VALUES (:uid, :period, :feature, 0, 0, CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id, period_start, feature) DO NOTHING
-    """), {"uid": user_id, "period": period, "feature": feature})
-
-    row = db.session.execute(text("""
-        SELECT units, requests
-        FROM student_ai_usage
-        WHERE user_id = :uid AND period_start = :period AND feature = :feature
-        FOR UPDATE
-    """), {"uid": user_id, "period": period, "feature": feature}).mappings().first()
-
-    used_requests = int(row["requests"] or 0)
-    used_units = int(row["units"] or 0)
-    # Requests are telemetry, not a second hard quota. The allowance is a
-    # spendable unit wallet derived from the plan's maximum generation size.
-    total_unit_limit = max_units * max_requests
-    remaining_units = max(0, total_unit_limit - used_units)
-
-    if used_units + units > total_unit_limit:
+    plan_map={row["plan"]:get_plan(db,row["plan"]) for row in active}
+    limits={int(row["id"]):int((plan_map.get(row["plan"]) or {}).get(allowance_key) or 0) for row in active}
+    usage_rows=db.session.execute(text("""
+        SELECT payment_id,COALESCE(SUM(units),0) AS units
+        FROM student_entitlement_usage
+        WHERE user_id=:uid AND feature=:feature AND payment_id IS NOT NULL
+        GROUP BY payment_id
+    """),{"uid":user_id,"feature":feature}).mappings().all()
+    used_by_payment={int(row["payment_id"]):int(row["units"] or 0) for row in usage_rows}
+    total_limit=sum(limits.values())
+    total_used=sum(used_by_payment.get(pid,0) for pid in limits)
+    max_generation=max(limits.values(),default=0)
+    if units>max_generation:
+        return False, {"error":"Requested generation exceeds the largest active plan allowance.",
+                        "code":"generation_size_limit","feature":feature,
+                        "plan":get_user_plan_code(db,user_id),"max_units":max_generation}
+    if total_used+units>total_limit:
         db.session.rollback()
-        return False, {
-            "error": "You have used up this plan's generation allowance.",
-            "code": "generation_quota_exhausted",
-            "feature": feature,
-            "plan": plan_code,
-            "used_requests": used_requests,
-            "request_limit": max_requests,
-            "used_units": used_units,
-            "unit_limit": total_unit_limit,
-            "remaining_units": remaining_units,
-        }
-
+        return False, {"error":"You have used up this plan stack's generation allowance.",
+                        "code":"generation_quota_exhausted","feature":feature,
+                        "used_units":total_used,"unit_limit":total_limit,
+                        "remaining_units":max(0,total_limit-total_used)}
+    candidates=sorted([(limits[pid]-used_by_payment.get(pid,0),pid) for pid in limits],reverse=True)
+    remaining,payment_id=candidates[0] if candidates else (0,None)
+    if payment_id is None or remaining<units:
+        db.session.rollback()
+        return False, {"error":"This generation is larger than any single remaining entitlement wallet.",
+                        "code":"generation_request_too_large","remaining_units":max(0,total_limit-total_used)}
     db.session.execute(text("""
-        UPDATE student_ai_usage
-        SET units = units + :units,
-            requests = requests + 1,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND period_start = :period AND feature = :feature
-    """), {
-        "uid": user_id, "period": period, "feature": feature, "units": units,
-    })
+        INSERT INTO student_entitlement_usage (user_id,payment_id,feature,units,request_count,metadata)
+        VALUES (:uid,:pid,:feature,:units,1,CAST(:metadata AS jsonb))
+    """),{"uid":user_id,"pid":payment_id,"feature":feature,"units":units,
+           "metadata":json.dumps({"provisional":True,"active_entitlement_stack":[int(row["id"]) for row in active]})})
     db.session.commit()
-
-    return True, {
-        "feature": feature,
-        "plan": plan_code,
-        "used_requests": used_requests + 1,
-        "request_limit": max_requests,
-        "used_units": used_units + units,
-        "unit_limit": total_unit_limit,
-        "remaining_units": max(0, total_unit_limit - (used_units + units)),
-        "max_units_per_generation": max_units,
-        "period_start": period,
-    }
+    return True, {"feature":feature,"plan":get_user_plan_code(db,user_id),"used_units":total_used+units,
+                  "unit_limit":total_limit,"remaining_units":max(0,total_limit-total_used-units),
+                  "max_units_per_generation":max_generation,"period_start":active[0]["subscription_starts_at"].date(),
+                  "entitlement_payment_id":payment_id,"entitlement_payment_ids":[int(row["id"]) for row in active]}
 
 def reserve_generation_variant(db, user_id, base_fingerprint, feature, base_parameters=None, pool_size=4):
     """Reserve the first shared variant this student has not seen.
@@ -466,26 +433,32 @@ def release_generation_variant(db, user_id, base_fingerprint, variant):
     db.session.commit()
 
 
-def refund_ai_quota(db, user_id, feature, units, period_start=None):
-    """Return a previously reserved generation allowance after a failed call."""
+def refund_ai_quota(db, user_id, feature, units, period_start=None, entitlement_payment_id=None):
+    """Return a failed generation reservation to the exact wallet used."""
     if feature not in FEATURES:
         return
     try:
-        units = max(1, int(units))
-    except (TypeError, ValueError):
+        units=max(1,int(units))
+    except (TypeError,ValueError):
         return
-    plan_code = _current_student_plan(db, user_id)
-    plan = STUDENT_PLANS[plan_code]
-    period = period_start or _period_start(plan)
+    if entitlement_payment_id:
+        db.session.execute(text("""
+            DELETE FROM student_entitlement_usage
+            WHERE id=(SELECT id FROM student_entitlement_usage
+                      WHERE user_id=:uid AND payment_id=:pid AND feature=:feature
+                        AND units=:units
+                        AND COALESCE(metadata->>'provisional','false')='true'
+                      ORDER BY id DESC LIMIT 1)
+        """),{"uid":user_id,"pid":int(entitlement_payment_id),"feature":feature,"units":units})
+        db.session.commit()
+        return
+    period=period_start or date.today().replace(day=1)
     db.session.execute(text("""
-        UPDATE student_ai_usage
-        SET units = GREATEST(0, units - :units),
-            requests = GREATEST(0, requests - 1),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND period_start = :period AND feature = :feature
-    """), {"uid": user_id, "period": period, "feature": feature, "units": units})
+        UPDATE student_ai_usage SET units=GREATEST(0,units-:units),
+            requests=GREATEST(0,requests-1),updated_at=CURRENT_TIMESTAMP
+        WHERE user_id=:uid AND period_start=:period AND feature=:feature
+    """),{"uid":user_id,"period":period,"feature":feature,"units":units})
     db.session.commit()
-
 
 def _active_user_ids(db, since_date):
     rows = db.session.execute(text("""
@@ -665,53 +638,76 @@ def register_usage_billing(app, db):
 
     @app.get("/api/usage/me")
     def usage_me():
-        user_id = session.get("user_id")
-        if not user_id:
-            return jsonify({"error": "Not logged in"}), 401
-
-        plan_code = _current_student_plan(db, user_id)
-        plan = STUDENT_PLANS[plan_code]
-        usage = {}
-        for feature in FEATURES:
-            row = _usage_row(db, user_id, feature)
-            request_key, unit_key = FEATURES[feature]
-            max_units_per_generation = int(plan[unit_key])
-            wallet_limit = max_units_per_generation * int(plan[request_key])
-            used_units = int(row["units"]) if row else 0
-            usage[feature] = {
-                "requests": int(row["requests"]) if row else 0,
-                "units": used_units,
-                "remaining_units": max(0, wallet_limit - used_units),
-                "unit_limit": wallet_limit,
-                "max_units_per_generation": max_units_per_generation,
-            }
+        user_id=session.get("user_id")
+        if not user_id: return jsonify({"error":"Not logged in"}),401
+        from ai_economics import get_plan,get_user_plan_code,get_active_entitlements
+        plan_code=get_user_plan_code(db,user_id)
+        plan=get_plan(db,plan_code) or get_plan(db,"free")
+        active=get_active_entitlements(db,user_id)
+        feature_keys={"summary":"summary_pages","podcast":"podcast_minutes","flashcards":"flashcards","quiz":"questions","mind_map":"mind_map_nodes"}
+        usage={}
+        if active:
+            limits_by_payment={}
+            for ent in active:
+                cfg=get_plan(db,ent["plan"]) or {}
+                limits_by_payment[int(ent["id"])]={
+                    feature:int(cfg.get(key) or 0) for feature,key in feature_keys.items()
+                }
+            rows=db.session.execute(text("""
+                SELECT payment_id,feature,COALESCE(SUM(units),0) AS units
+                FROM student_entitlement_usage
+                WHERE user_id=:uid AND payment_id IS NOT NULL
+                GROUP BY payment_id,feature
+            """),{"uid":user_id}).mappings().all()
+            used={(int(row["payment_id"]),row["feature"]):int(row["units"] or 0) for row in rows}
+            for feature in feature_keys:
+                total=sum(v[feature] for v in limits_by_payment.values())
+                spent=sum(used.get((pid,feature),0) for pid in limits_by_payment)
+                largest=max((v[feature] for v in limits_by_payment.values()),default=0)
+                usage[feature]={"requests":0,"units":spent,"remaining_units":max(0,total-spent),
+                                "unit_limit":total,"max_units_per_generation":largest}
+        else:
+            period=date.today().replace(day=1)
+            rows=db.session.execute(text("""
+                SELECT feature,units,requests FROM student_ai_usage
+                WHERE user_id=:uid AND period_start=:period
+            """),{"uid":user_id,"period":period}).mappings().all()
+            free_usage={row["feature"]:row for row in rows}
+            for feature,key in feature_keys.items():
+                limit=int(plan.get(key) or 0)
+                row=free_usage.get(feature)
+                spent=int(row["units"] or 0) if row else 0
+                usage[feature]={"requests":int(row["requests"] or 0) if row else 0,
+                                "units":spent,"remaining_units":max(0,limit-spent),
+                                "unit_limit":limit,"max_units_per_generation":limit}
         return jsonify({
-            "plan": plan_code,
-            "price_kes": plan["price_kes"],
-            "billing_period": plan["billing_period"],
-            "limits": plan,
-            "usage": usage,
-            "period_start": _period_start(plan).isoformat(),
+            "plan":plan_code,"price_kes":int(plan["price_kes"]),
+            "billing_period":plan["billing_period"] if plan_code!="free" else None,
+            "limits":{k:int(plan[k]) for k in ("podcast_minutes","summary_pages","questions","mind_map_nodes","flashcards","ada_monthly_units","ada_daily_units","ada_max_output_tokens")},
+            "usage":usage,"offline_study":True,"premium_library":bool(plan["premium_library"]),
+            "study_hub_uploads":bool(plan["study_hub_uploads"]),
+            "active_plans":[x["plan"] for x in active],
+            "active_entitlements":[{"payment_id":int(x["id"]),"plan":x["plan"],
+                "starts_at":x["subscription_starts_at"].isoformat(),"expires_at":x["subscription_expires_at"].isoformat()} for x in active],
+            "period_start":date.today().replace(day=1).isoformat()
         })
 
     @app.get("/api/student-plans")
     def student_plans():
-        # These defaults match the current student subscription UI pricing:
-        # KES 599/semester and KES 999/annual. The current student checkout
-        # is a hosted payment flow; keep pricing in one server-owned layer
-        # before adding another payment provider.
-        plans = [
-            {"code": "free", **STUDENT_PLANS["free"]},
-            {
-                "code": "premium",
-                **STUDENT_PLANS["premium"],
-                "price_options": {
-                    "semester": 599,
-                    "annual": 999,
-                },
-            },
-        ]
-        return jsonify({"currency": "KES", "plans": plans})
+        from ai_economics import get_plans
+        plans=[]
+        for plan in get_plans(db):
+            plans.append({
+                "code":plan["plan_code"],"name":plan["display_name"],"price_kes":int(plan["price_kes"]),
+                "billing_period":plan["billing_period"] if plan["plan_code"]!="free" else None,
+                "quota_period":plan["quota_period"],"podcast_minutes":int(plan["podcast_minutes"]),
+                "summary_pages":int(plan["summary_pages"]),"questions":int(plan["questions"]),
+                "mind_map_nodes":int(plan["mind_map_nodes"]),"flashcards":int(plan["flashcards"]),
+                "ada_monthly_units":int(plan["ada_monthly_units"]),"ada_daily_units":int(plan["ada_daily_units"]),
+                "ada_max_output_tokens":int(plan["ada_max_output_tokens"]),"offline_study":True,
+                "premium_library":bool(plan["premium_library"]),"study_hub_uploads":bool(plan["study_hub_uploads"])
+            })
+        return jsonify({"currency":"KES","plans":plans})
 
     # Enforce the existing generation endpoints without requiring the
     # frontend to invent a second billing API. The request is rejected before

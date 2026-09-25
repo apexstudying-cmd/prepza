@@ -61,7 +61,7 @@ def _register_discovery_schema(db):
             event_key VARCHAR(180) NOT NULL UNIQUE,
             event_type VARCHAR(30) NOT NULL,
             placement VARCHAR(30) NOT NULL,
-            amount_kes INTEGER NOT NULL DEFAULT 0,
+            amount_kes NUMERIC(12,4) NOT NULL DEFAULT 0,
             metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
@@ -433,11 +433,19 @@ def register_discovery(app, db):
             duration_days = 30
         if duration_days not in (7, 30, 90):
             return jsonify({"error":"Campaign maximum delivery window must be 7, 30, or 90 days"}), 400
-        if not end:
-            from datetime import datetime as _dt, timedelta as _td
-            base_start = _dt.fromisoformat(str(start).replace('Z','+00:00')) if start else _dt.utcnow()
-            if getattr(base_start, 'tzinfo', None): base_start = base_start.replace(tzinfo=None)
-            end = (base_start + _td(days=duration_days)).isoformat()
+        from datetime import datetime as _dt, timedelta as _td
+        base_start = _dt.fromisoformat(str(start).replace('Z','+00:00')) if start else _dt.utcnow()
+        if getattr(base_start, 'tzinfo', None): base_start = base_start.replace(tzinfo=None)
+        canonical_end = base_start + _td(days=duration_days)
+        if end:
+            try:
+                supplied_end = _dt.fromisoformat(str(end).replace('Z','+00:00'))
+                if getattr(supplied_end, 'tzinfo', None): supplied_end = supplied_end.replace(tzinfo=None)
+            except ValueError:
+                return jsonify({"error":"Invalid campaign end time"}), 400
+            if supplied_end != canonical_end:
+                return jsonify({"error":"Campaign end must match the selected 7, 30, or 90-day window"}), 400
+        end = canonical_end.isoformat()
         org_state = db.session.execute(text("SELECT verification_status,is_active FROM organisation WHERE id=:oid"), {"oid": organisation_id}).mappings().first()
         if not org_state or org_state["verification_status"] != "verified" or not org_state["is_active"]:
             return jsonify({"error":"Organisation verification must be complete before paid sponsorships can be created"}), 403

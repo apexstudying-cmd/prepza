@@ -66,11 +66,13 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             return {"ok": False, "reason": "unsupported_currency"}
 
         existing = db.session.execute(text("""
-            SELECT id, amount_kes FROM discovery_event
+            SELECT id, amount_kes, metadata FROM discovery_event
             WHERE event_key=:key
         """), {"key": event_key}).mappings().first()
         if existing:
-            return {"ok": True, "duplicate": True, "amount_minor": int(existing["amount_kes"] or 0) * 100}
+            metadata = existing["metadata"] if isinstance(existing["metadata"], dict) else {}
+            amount_minor = int(metadata.get("amount_minor") or round(Decimal(str(existing["amount_kes"] or 0)) * 100))
+            return {"ok": True, "duplicate": True, "amount_minor": amount_minor}
 
         # Serialize events for the same student so a rolling frequency cap
         # cannot be bypassed by two simultaneous requests.
@@ -80,9 +82,10 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             count_type = "impression" if event_type == "impression" else "push_delivery"
             recent_count = db.session.execute(text("""
                 SELECT COUNT(*) FROM discovery_event
-                WHERE user_id=:uid AND event_type=:etype
+                WHERE user_id=:uid AND campaign_id=:cid AND event_type=:etype
                   AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
-            """), {"uid": user_id, "etype": count_type}).scalar_one()
+                  AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+            """), {"uid": user_id, "cid": campaign_id, "etype": count_type}).scalar_one()
             if int(recent_count) >= cap:
                 return {"ok": False, "reason": "student_frequency_cap"}
 
@@ -111,8 +114,8 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
         """), {
             "cid": campaign_id, "uid": user_id, "key": event_key,
             "etype": event_type, "placement": placement,
-            "amount": 0,
-            "meta": json.dumps({"billable": True, "amount_minor": price, "meter_version": "g3-v1"})
+            "amount": float(amount_kes),
+            "meta": json.dumps({"billable": True, "amount_minor": price, "meter_version": "g3-v2"})
         })
         db.session.execute(text("""
             INSERT INTO b2b_campaign_ledger
@@ -125,7 +128,7 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             "cid": campaign_id, "etype": f"delivery_{event_type}",
             "amount": -price, "idem": f"delivery:{event_key}",
             "key": event_key,
-            "meta": json.dumps({"user_id": user_id, "amount_minor": price, "meter_version": "g3-v1"})
+            "meta": json.dumps({"user_id": user_id, "amount_minor": price, "meter_version": "g3-v2"})
         })
         if event_type == "impression":
             counter = "delivered_impressions"

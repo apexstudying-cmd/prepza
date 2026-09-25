@@ -94,7 +94,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     content = types.SimpleNamespace(content_hash="hash-7", extracted_text="course notes", page_count=3)
     session = _FakeSession(content)
     fake_db = types.SimpleNamespace(session=session)
-    fake_app = types.SimpleNamespace(db=fake_db, DocumentContent=object, AiJob=_FakeAiJob)
+    fake_app = types.SimpleNamespace(db=fake_db, DocumentContent=object, AiJob=_FakeAiJob, Document=object)
 
     class FakeProviderError(Exception):
         pass
@@ -164,7 +164,7 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-8", extracted_text="notes", page_count=1)
     session = _FakeSession(content)
     fake_app = types.SimpleNamespace(
-        db=types.SimpleNamespace(session=session), DocumentContent=object, AiJob=_FakeAiJob
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
     )
 
     class FakeProviderError(Exception):
@@ -208,7 +208,7 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-flash", extracted_text="course notes", page_count=4)
     session = _FakeSession(content)
     fake_app = types.SimpleNamespace(
-        db=types.SimpleNamespace(session=session), DocumentContent=object, AiJob=_FakeAiJob
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
     )
 
     class FakeProviderError(Exception):
@@ -226,6 +226,7 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
     fake_usage = types.SimpleNamespace(
         FEATURES={"flashcards": ("flashcard_generations", "flashcard_max_cards")},
         check_and_consume_ai_quota=lambda *args, **kwargs: (True, {"period_start": "2026-09-01"}),
+        mark_generation_variant_ready=lambda *args, **kwargs: None,
         reserve_generation_variant=lambda *args, **kwargs: (
             seen_variants.append(variant_state["next"]) or
             variant_state.update(next=1 if variant_state["next"] == 4 else variant_state["next"] + 1) or
