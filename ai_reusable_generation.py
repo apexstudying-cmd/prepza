@@ -176,7 +176,7 @@ def _podcast_payload(parsed):
 
 def generate_document_material(*, material_type, document_content_id, triggering_user_id, plan_tier="free", parameters=None):
     import ai_service
-    from app import db, DocumentContent, AiJob
+    from app import db, DocumentContent, AiJob, Document
     if material_type not in PROMPT_VERSIONS:
         raise ValueError(f"Unsupported AI material type: {material_type}")
     params = normalize_parameters(material_type, parameters)
