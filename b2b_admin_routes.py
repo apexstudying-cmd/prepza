@@ -69,20 +69,17 @@ def register_b2b_admin_routes(app, db):
         key=str(data.get("placement_key") or "").strip().lower().replace(" ","_")[:80]
         label=str(data.get("label") or "").strip()[:160]
         modes=data.get("allowed_billing_modes") or ["cpm","cpc"]
-        try:
-            cpm=None if data.get("cpm_amount_minor") is None else int(data["cpm_amount_minor"])
-            cpc=None if data.get("cpc_amount_minor") is None else int(data["cpc_amount_minor"])
-        except (TypeError,ValueError):
-            return jsonify({"error":"Invalid placement pricing"}),400
+        if "cpm_amount_minor" in data or "cpc_amount_minor" in data:
+            return jsonify({"error":"Placement pricing is managed only through canonical B2B pricing"}),400
         if not key or not label or not isinstance(modes,list) or not set(modes).issubset({"cpm","cpc"}) or not modes:
             return jsonify({"error":"Valid placement key, label and billing modes are required"}),400
         try:
             row=db.session.execute(text("""
                 INSERT INTO b2b_placement_config
-                    (placement_key,label,allowed_billing_modes,cpm_amount_minor,cpc_amount_minor)
-                VALUES (:key,:label,CAST(:modes AS jsonb),:cpm,:cpc)
+                    (placement_key,label,allowed_billing_modes)
+                VALUES (:key,:label,CAST(:modes AS jsonb))
                 RETURNING id
-            """),{"key":key,"label":label,"modes":json.dumps(modes),"cpm":cpm,"cpc":cpc}).scalar_one()
+            """),{"key":key,"label":label,"modes":json.dumps(modes)}).scalar_one()
             db.session.commit()
         except Exception:
             db.session.rollback()
