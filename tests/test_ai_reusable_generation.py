@@ -293,3 +293,17 @@ def test_all_document_materials_use_the_shared_four_variant_pool():
     assert "reserve_generation_variant" in source
     assert "mark_generation_variant_ready" in source
     assert "release_generation_variant" in source
+
+@pytest.mark.parametrize(
+    ("material_type", "parameter", "maximum"),
+    [
+        ("summary", "max_pages", 10),
+        ("podcast", "duration_minutes", 50),
+        ("flashcards", "card_count", 50),
+        ("mind_map", "node_count", 50),
+    ],
+)
+def test_generation_request_ceilings_are_enforced(material_type, parameter, maximum):
+    assert normalize_parameters(material_type, {parameter: maximum})[parameter] == maximum
+    with pytest.raises(ValueError, match="cannot exceed"):
+        normalize_parameters(material_type, {parameter: maximum + 1})
