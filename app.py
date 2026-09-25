@@ -1121,7 +1121,7 @@ class StudyActivityLog(db.Model):
     )
 
 
-STUDY_TIME_FEATURES = {"reading", "podcast", "quiz", "flashcards", "tutor_chat", "mindmap"}
+STUDY_TIME_FEATURES = {"reading", "podcast", "quiz", "flashcards", "tutor_chat", "mindmap", "offline"}
 
 
 class StudyTimeLog(db.Model):
@@ -6156,6 +6156,16 @@ def _document_study_event_id(user_id, document_content_id):
 MAX_HEARTBEAT_INTERVAL_SECONDS = 30
 MAX_STUDY_TIME_SECONDS_PER_DAY = 8 * 60 * 60  # anti-gaming ceiling, 8h/day
 MIN_QUALIFYING_STUDY_SECONDS = 10 * 60  # 10 cumulative active minutes/day
+PREPZA_STUDY_TIMEZONE = os.environ.get("PREPZA_TIMEZONE", "Africa/Nairobi")
+try:
+    PREPZA_STUDY_TZ = ZoneInfo(PREPZA_STUDY_TIMEZONE)
+except Exception:
+    PREPZA_STUDY_TZ = ZoneInfo("Africa/Nairobi")
+
+
+def _study_local_date():
+    """Return the authoritative Prepza study calendar date in Nairobi time."""
+    return datetime.now(PREPZA_STUDY_TZ).date()
 
 
 def record_study_time_heartbeat(user_id, feature="reading"):
@@ -6528,6 +6538,123 @@ def study_time_heartbeat():
         "credited_this_heartbeat": credited_this_heartbeat,
         "qualifying_study_seconds": MIN_QUALIFYING_STUDY_SECONDS,
         "study_day_active": study_day_active,
+    })
+
+
+@app.route("/study-time/offline-baselines")
+@login_required
+def study_time_offline_baselines():
+    """Return server totals for exact Nairobi calendar dates before offline reconciliation."""
+    user_id = session.get("user_id")
+    raw_dates = (request.args.get("dates") or "").split(",")
+    dates = []
+    for raw in raw_dates:
+        value = raw.strip()
+        if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", value):
+            try:
+                parsed = datetime.strptime(value, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if parsed <= _study_local_date():
+                dates.append(parsed)
+    dates = sorted(set(dates))
+    totals = {}
+    if dates:
+        rows = db.session.query(
+            StudyTimeLog.activity_date,
+            db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0),
+        ).filter(
+            StudyTimeLog.user_id == user_id,
+            StudyTimeLog.activity_date.in_(dates),
+        ).group_by(StudyTimeLog.activity_date).all()
+        totals = {day.isoformat(): min(MAX_STUDY_TIME_SECONDS_PER_DAY, int(seconds or 0)) for day, seconds in rows}
+    return jsonify({
+        "server_total_seconds_by_date": {day.isoformat(): int(totals.get(day.isoformat(), 0)) for day in dates},
+        "timezone": PREPZA_STUDY_TIMEZONE,
+        "max_daily_seconds": MAX_STUDY_TIME_SECONDS_PER_DAY,
+    })
+
+
+@app.route("/study-time/offline-sync", methods=["POST"])
+@require_csrf
+def study_time_offline_sync():
+    """Merge local-first offline totals into the server using Nairobi dates and monotonic absolute targets."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+    data = request.get_json(silent=True) or {}
+    entries = data.get("entries")
+    if not isinstance(entries, list):
+        return jsonify({"error": "entries must be an array"}), 400
+
+    today = _study_local_date()
+    accepted = {}
+    server_totals = {}
+
+    for entry in entries[:90]:
+        if not isinstance(entry, dict):
+            continue
+        date_text = str(entry.get("date") or "").strip()
+        if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", date_text):
+            continue
+        try:
+            activity_date = datetime.strptime(date_text, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if activity_date > today:
+            return jsonify({"error": "Offline study dates cannot be in the future"}), 400
+
+        requested_total = max(0, min(
+            MAX_STUDY_TIME_SECONDS_PER_DAY,
+            int(entry.get("total_seconds") or 0),
+        ))
+        rows = db.session.query(
+            StudyTimeLog.feature,
+            StudyTimeLog.study_time_seconds,
+        ).filter(
+            StudyTimeLog.user_id == user_id,
+            StudyTimeLog.activity_date == activity_date,
+        ).all()
+        existing_total = min(
+            MAX_STUDY_TIME_SECONDS_PER_DAY,
+            sum(max(0, int(seconds or 0)) for _, seconds in rows),
+        )
+        offline_row = StudyTimeLog.query.filter_by(
+            user_id=user_id,
+            activity_date=activity_date,
+            feature="offline",
+        ).first()
+        non_offline_total = existing_total - (max(0, int(offline_row.study_time_seconds)) if offline_row else 0)
+        target_offline = max(0, requested_total - non_offline_total)
+        target_total = min(MAX_STUDY_TIME_SECONDS_PER_DAY, non_offline_total + target_offline)
+
+        if offline_row is None:
+            offline_row = StudyTimeLog(
+                user_id=user_id,
+                activity_date=activity_date,
+                feature="offline",
+                study_time_seconds=target_offline,
+                last_heartbeat_at=None,
+            )
+            db.session.add(offline_row)
+            applied = target_offline
+        else:
+            before = max(0, int(offline_row.study_time_seconds or 0))
+            if target_offline > before:
+                offline_row.study_time_seconds = target_offline
+                applied = target_offline - before
+            else:
+                applied = 0
+
+        accepted[date_text] = applied
+        server_totals[date_text] = target_total
+
+    db.session.commit()
+    return jsonify({
+        "server_total_seconds_by_date": server_totals,
+        "accepted_seconds_by_date": accepted,
+        "timezone": PREPZA_STUDY_TIMEZONE,
+        "max_daily_seconds": MAX_STUDY_TIME_SECONDS_PER_DAY,
     })
 
 
