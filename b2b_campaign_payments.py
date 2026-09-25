@@ -203,6 +203,12 @@ def register_b2b_campaign_payments(app, db):
             value, version = pricing(key)
             current_pricing[key] = {"value": value, "version": version}
 
+        pricing_versions = sorted({
+            str(item.get("version"))
+            for item in current_pricing.values()
+            if item.get("version")
+        })
+        snapshot_version = "|".join(pricing_versions)[:80] or "unversioned"
         db.session.execute(text("""
             UPDATE discovery_campaign
             SET pricing_version=:version,
@@ -211,7 +217,7 @@ def register_b2b_campaign_payments(app, db):
                 updated_at=CURRENT_TIMESTAMP
             WHERE id=:cid AND organisation_id=:oid
         """), {
-            "version": "launch-v1",
+            "version": snapshot_version,
             "snapshot": json.dumps(current_pricing),
             "cid": campaign_id, "oid": organisation_id,
         })
