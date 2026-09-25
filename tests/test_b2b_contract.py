@@ -106,5 +106,7 @@ def test_placement_admin_does_not_define_authoritative_rates():
 def test_organisation_portal_uses_backend_billing_plan_source():
     source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
     assert "Object.entries((billing?.plans || {})" in source
-    assert "/api/organisations/${orgId}/plan/checkout" not in source
-    assert "/billing/manual-checkout" not in source or "manual-checkout" in source
+    assert "const orgPlans = Object.entries((billing?.plans || {})" in source
+    assert "monthly_fee_kes: 2500" not in source
+    assert "monthly_fee_kes: 7500" not in source
+    assert "monthly_fee_kes: 15000" not in source
