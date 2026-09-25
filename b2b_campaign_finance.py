@@ -114,6 +114,72 @@ def register_b2b_campaign_finance(app, db):
         """)).mappings().all()
         return jsonify({"pricing":[dict(r) for r in rows]})
 
+
+    @app.patch("/api/admin/b2b/pricing/<string:config_key>")
+    def admin_update_b2b_pricing(config_key):
+        if not is_admin():
+            return jsonify({"error": "Admin access required"}), 403
+        token = session.get("csrf_token")
+        if not token or request.headers.get("X-CSRF-Token") != token:
+            return jsonify({"error": "Invalid CSRF token"}), 403
+        key = str(config_key or "").strip()
+        row = db.session.execute(text("""
+            SELECT config_key, value_json, currency, version
+            FROM b2b_pricing_config
+            WHERE config_key=:key AND is_active=TRUE
+            FOR UPDATE
+        """), {"key": key}).mappings().first()
+        if not row:
+            return jsonify({"error": "Pricing key not found"}), 404
+        data = request.get_json(silent=True) or {}
+        value = data.get("value")
+        if not isinstance(value, dict):
+            return jsonify({"error": "value must be an object"}), 400
+        if "amount_kes" in value:
+            try:
+                amount = int(value["amount_kes"])
+            except (TypeError, ValueError):
+                return jsonify({"error": "amount_kes must be an integer"}), 400
+            if amount < 0:
+                return jsonify({"error": "amount_kes cannot be negative"}), 400
+            value["amount_kes"] = amount
+        if "per" in value:
+            try:
+                value["per"] = int(value["per"])
+            except (TypeError, ValueError):
+                return jsonify({"error": "per must be an integer"}), 400
+            if value["per"] <= 0:
+                return jsonify({"error": "per must be positive"}), 400
+        if "max_impressions" in value:
+            value["max_impressions"] = max(0, int(value["max_impressions"]))
+        if "max_slots" in value:
+            value["max_slots"] = max(0, int(value["max_slots"]))
+        if "max_deliveries" in value:
+            value["max_deliveries"] = max(0, int(value["max_deliveries"]))
+        uid = int(session["user_id"])
+        version = db.session.execute(text("""
+            SELECT 'admin-' || CAST(EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) AS BIGINT)::text
+        """)).scalar_one()
+        db.session.execute(text("""
+            UPDATE b2b_pricing_config
+            SET value_json=CAST(:value AS jsonb), version=:version,
+                updated_by_user_id=:uid, updated_at=CURRENT_TIMESTAMP
+            WHERE config_key=:key AND is_active=TRUE
+        """), {"value": json.dumps(value), "version": str(version), "uid": uid, "key": key})
+        db.session.execute(text("""
+            INSERT INTO b2b_audit_log(action, actor_user_id, metadata)
+            VALUES ('pricing_config_updated', :uid, CAST(:metadata AS jsonb))
+        """), {"uid": uid, "metadata": json.dumps({
+            "config_key": key, "previous_value": row["value_json"],
+            "new_value": value, "previous_version": row["version"],
+            "new_version": str(version)
+        })})
+        db.session.commit()
+        return jsonify({
+            "ok": True, "config_key": key, "value": value,
+            "version": str(version), "currency": row["currency"]
+        }), 200
+
     @app.get("/api/admin/b2b/campaigns/<int:campaign_id>/ledger")
     def admin_b2b_campaign_ledger(campaign_id):
         if not is_admin(): return jsonify({"error":"Admin access required"}),403
