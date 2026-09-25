@@ -11428,7 +11428,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               </div>
             </AdminCard>
 
-            <AdminCard title="AI (Anthropic) Spend">
+            <AdminCard title="AI Provider Spend">
               <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div style={{ background: (mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#F9FAFB'), borderRadius: 10, padding: '12px 14px' }}>
