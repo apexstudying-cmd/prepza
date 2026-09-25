@@ -133,7 +133,7 @@ AI_TASKS = {
     "TUTORING": {
         "primary": _configured_model("tutoring", MODEL_OPENAI_GPT5_MINI),
         "fallback": MODEL_OPENAI_LUNA,
-        "max_tokens": 1024,
+        "max_tokens": 1600,
         "notes": "Ada uses OpenAI only: GPT-5 mini normally, GPT-5.6 Luna as same-provider fallback.",
     },
     "SUMMARIZATION": {
@@ -362,7 +362,7 @@ class MultiProvider:
         )
 
     @classmethod
-    def chat(cls, model, system_messages, messages, max_tokens, return_meta=False):
+    def chat(cls, model, system_messages, messages, max_tokens, return_meta=False, prompt_cache_key=None):
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
             raise AIProviderError("OPENAI_API_KEY is not configured")
@@ -384,7 +384,25 @@ class MultiProvider:
                 text_value = str(item)
             if text_value:
                 normalized.insert(0, {"role": "system", "content": text_value})
-        payload = {"model": model_id, "input": normalized, "max_output_tokens": max_tokens}
+        if prompt_cache_key:
+            input_items = []
+            for index, item in enumerate(system_messages or []):
+                text_value = item.get("text", "") if isinstance(item, dict) else str(item)
+                block = {"type": "input_text", "text": text_value}
+                if index == 0:
+                    block["prompt_cache_breakpoint"] = {"mode": "explicit"}
+                input_items.append({"role": "developer", "content": [block]})
+            input_items.extend(normalized)
+            payload = {
+                "model": model_id,
+                "input": input_items,
+                "max_output_tokens": max_tokens,
+                "prompt_cache_options": {"mode": "explicit", "ttl": "30m"},
+                "store": False,
+                "prompt_cache_key": str(prompt_cache_key)[:64],
+            }
+        else:
+            payload = {"model": model_id, "input": normalized, "max_output_tokens": max_tokens}
         for attempt in range(3):
             with cls._openai_cooldown_lock:
                 cooldown = max(0.0, cls._openai_cooldown_until - time.time())
@@ -414,9 +432,15 @@ class MultiProvider:
         if not text_value:
             raise AIProviderError("OpenAI returned no tutor text")
         usage = data.get("usage") or {}
+        details = usage.get("input_tokens_details") or usage.get("prompt_tokens_details") or {}
+        cached_tokens = int(details.get("cached_tokens", 0) or 0)
+        cache_write_tokens = int(details.get("cache_write_tokens", 0) or details.get("cache_creation_tokens", 0) or 0)
+        total_input = int(usage.get("input_tokens", 0) or 0)
         ai_usage = AIUsage(
-            input_tokens=int(usage.get("input_tokens", 0) or 0),
+            input_tokens=max(0, total_input - cached_tokens - cache_write_tokens),
             output_tokens=int(usage.get("output_tokens", 0) or 0),
+            cache_read_tokens=cached_tokens,
+            cache_creation_tokens=cache_write_tokens,
         )
         ai_usage.cost_usd = compute_cost_usd(model, ai_usage.input_tokens, ai_usage.output_tokens)
         if return_meta:
