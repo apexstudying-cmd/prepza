@@ -12,23 +12,46 @@ from flask import jsonify, request, session
 from sqlalchemy import text
 
 
-ORGANISATION_PLANS = {
-    "launch": {"monthly_fee_kes": 2500, "active_user_cap": 250},
-    "growth": {"monthly_fee_kes": 7500, "active_user_cap": 1000},
-    "scale": {"monthly_fee_kes": 15000, "active_user_cap": 3000},
-}
-
-
 def register_organisation_billing(app, db):
     with app.app_context():
         if db.engine.dialect.name == 'sqlite':
             return
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS organisation_plan_config (
+                plan_code VARCHAR(20) PRIMARY KEY,
+                monthly_fee_kes INTEGER NOT NULL,
+                active_user_cap INTEGER NOT NULL,
+                active_opportunities INTEGER NOT NULL DEFAULT 0,
+                sponsored_campaigns INTEGER NOT NULL DEFAULT 0,
+                candidate_search_window_days INTEGER NOT NULL DEFAULT 7,
+                analytics_retention_days INTEGER NOT NULL DEFAULT 30,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                version INTEGER NOT NULL DEFAULT 1,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        db.session.execute(text("""
+            INSERT INTO organisation_plan_config
+                (plan_code,monthly_fee_kes,active_user_cap,active_opportunities,sponsored_campaigns,
+                 candidate_search_window_days,analytics_retention_days)
+            VALUES
+                ('launch',2500,250,2,1,7,30),
+                ('growth',7500,1000,10,3,30,90),
+                ('scale',15000,3000,50,10,30,365)
+            ON CONFLICT (plan_code) DO NOTHING
+        """))
         db.session.execute(text("""
             ALTER TABLE organisation_billing
             ADD COLUMN IF NOT EXISTS transaction_reference VARCHAR(120),
             ADD COLUMN IF NOT EXISTS checkout_url TEXT
         """))
         db.session.commit()
+
+    def organisation_plan(plan_code):
+        return db.session.execute(text("""
+            SELECT * FROM organisation_plan_config
+            WHERE plan_code=:plan AND is_active=TRUE
+        """), {"plan": plan_code}).mappings().first()
 
     def member_role(org_id, user_id):
         return db.session.execute(text("""
@@ -60,7 +83,7 @@ def register_organisation_billing(app, db):
 
         data = request.get_json(silent=True) or {}
         plan_code = str(data.get("plan") or "").strip().lower()
-        plan = ORGANISATION_PLANS.get(plan_code)
+        plan = organisation_plan(plan_code)
         if not plan:
             return jsonify({"error": "Choose a valid paid organisation plan"}), 400
 
@@ -184,7 +207,7 @@ def register_organisation_billing(app, db):
             return jsonify({"ok": True})
 
         plan_code = str(metadata.get("plan_code") or "").lower()
-        plan = ORGANISATION_PLANS.get(plan_code)
+        plan = organisation_plan(plan_code)
         reference = str(data.get("reference") or "")
         if not plan or not reference:
             return jsonify({"ok": True})
