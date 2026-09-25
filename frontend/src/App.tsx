@@ -9,6 +9,7 @@ import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOffli
 import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
 import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'
+import B2BFinanceAdmin from './admin/B2BFinanceAdmin'
 import StudyShareSheet from './share/StudyShareSheet'
 import StudyActivityScreen from './StudyActivityScreen'
 import PdfStudyCanvas from './crypto/PdfStudyCanvas'
@@ -9549,6 +9550,7 @@ const adminNav = [
   { key: 'organisations', label: 'Organisations', icon: '🏢' },
   { key: 'ai-usage', label: 'AI & Usage', icon: '🤖' },
   { key: 'payments', label: 'Payments', icon: '💳' },
+  { key: 'b2b-finance', label: 'B2B Finance', icon: '▣' },
   { key: 'communications', label: 'Communications', icon: '📢' },
   { key: 'analytics', label: 'Analytics', icon: '📈' },
   { key: 'moderation', label: 'Moderation', icon: '🛡️' },
@@ -11653,6 +11655,10 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
 
   if (section === 'ambassadors') return <AdminAmbassadorsPanel />
 
+  if (section === 'b2b-finance') {
+    return <B2BFinanceAdmin tokens={T} />
+  }
+
   if (section === 'communications') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -12999,7 +13005,7 @@ function AdminCommunityPanel() {
 function AdminPlatform({ onExit }: { onExit: () => void }) {
   const { mode, tokens: T } = useTheme()
   const [section, setSection] = useState('dashboard')
-  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System', settings: 'Settings', groups: 'Groups' }
+  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', 'b2b-finance': 'B2B Finance', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System', settings: 'Settings', groups: 'Groups' }
 
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', background: T.pageBg, fontFamily: 'Plus Jakarta Sans', overflow: 'hidden' }}>
