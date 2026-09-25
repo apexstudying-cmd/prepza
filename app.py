@@ -14634,6 +14634,18 @@ register_infrastructure_monitoring(
 
 
 
+@app.route("/admin/ai/rate-limits", methods=["GET"])
+@require_admin
+def admin_ai_rate_limits():
+    from ai_service import MultiProvider
+    return jsonify({
+        "provider": "openai",
+        "scope": "this API process",
+        "telemetry": MultiProvider.rate_limit_snapshot(),
+        "note": "Account/project limits are authoritative; response headers are captured when OpenAI returns them."
+    })
+
+
 @app.route("/admin/infrastructure/capacity", methods=["GET"])
 @require_admin
 def admin_infrastructure_capacity():
