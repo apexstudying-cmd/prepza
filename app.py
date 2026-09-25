@@ -8713,7 +8713,9 @@ def subscription_upgrade():
     if plan not in ("plus", "pro"):
         return jsonify({"error": "plan must be 'plus' or 'pro'"}), 400
 
-    price = get_plan_prices()[plan]
+    from ai_economics import get_plan
+    plan_config = get_plan(db, plan)
+    price = int(plan_config["price_kes"]) if plan_config else 0
     if price <= 0:
         return jsonify({"error": "This plan is not currently available"}), 400
 
