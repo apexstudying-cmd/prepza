@@ -9612,7 +9612,7 @@ type AdminCapacityPlan = {
   cpu_cores_required: number
   cpu_cores_with_headroom: number
   ram_gb_required: number
-  render_fit: { plan: string; cpu: number; ram_gb: number; fits: boolean }[]
+  render_fit: string
   assumptions: string[]
   one_thousand_dau_baseline: any
 }
@@ -11329,8 +11329,8 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
       ) : capacityPlanError ? (
         <AdminCard title="Render application capacity"><div style={{ padding: '18px', color: '#DC2626', fontSize: 12 }}>{capacityPlanError}</div></AdminCard>
       ) : capacityPlan && (() => {
-        const required = capacityPlan.render_fit.find(p => p.fits)
-        const baseline = capacityPlan.one_thousand_dau_baseline?.render_fit?.find((p: any) => p.fits)
+        const required = capacityPlan.render_fit
+        const baseline = capacityPlan.one_thousand_dau_baseline?.recommended_start || capacityPlan.one_thousand_dau_baseline?.render_fit
         return (
           <AdminCard title="Render application capacity">
             <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -11353,15 +11353,11 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               <div style={{ fontSize: 11, color: T.textMuted }}>
                 Baseline: 1,000 DAU, 100 peak concurrent requests, 60 requests/user/day, 10× peak multiplier, 50ms CPU/request, 0.5MB incremental RAM/request, 50% RAM headroom.
               </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {capacityPlan.render_fit.map(p => (
-                  <span key={p.plan} style={{ border: p.fits ? '1px solid #16A34A' : '1px solid ' + T.border, color: p.fits ? '#16A34A' : T.textMuted, borderRadius: 8, padding: '6px 9px', fontSize: 10, fontWeight: 700 }}>
-                    {p.plan} · {p.cpu} CPU · {p.ram_gb}GB {p.fits ? 'fits' : 'too small'}
-                  </span>
-                ))}
+              <div style={{ fontSize: 11, color: T.textMuted }}>
+                Render shape selected by the calculator: <strong style={{ color: T.text }}>{required}</strong>. The calculator can be adjusted from the endpoint as observed traffic changes.
               </div>
               {baseline && <div style={{ fontSize: 11, color: T.text, background: 'rgba(201,168,76,.08)', borderRadius: 9, padding: '9px 11px' }}>
-                Current 1,000-DAU baseline maps to <strong>{baseline.plan}</strong>. Recalculate this card after real CPU/RAM/latency telemetry is connected before paying for a larger plan.
+                Current 1,000-DAU baseline maps to <strong>{baseline}</strong>. Recalculate this card after real CPU/RAM/latency telemetry is connected before paying for a larger plan.
               </div>}
             </div>
           </AdminCard>
