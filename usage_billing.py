@@ -298,182 +298,97 @@ def _usage_row(db, user_id, feature):
 
 
 def check_and_consume_ai_quota(db, user_id, feature, units):
-    """Atomically consume a generation allowance from the student's active entitlement."""
+    """Consume the canonical monthly generation allowance before an AI call."""
     if feature not in FEATURES:
         return True, {"feature": feature}
     try:
-        units = int(units)
-    except (TypeError, ValueError):
-        return False, {"error": "Invalid generation amount"}
-    if units <= 0:
-        return False, {"error": "Generation amount must be positive"}
+        units=int(units)
+    except (TypeError,ValueError):
+        return False, {"error":"Invalid generation amount"}
+    if units<=0:
+        return False, {"error":"Generation amount must be positive"}
+    from ai_economics import get_plan,get_active_entitlements,get_user_plan_code
+    allowance_keys={"summary":"summary_pages","podcast":"podcast_minutes",
+                    "flashcards":"flashcards","quiz":"questions","mind_map":"mind_map_nodes"}
+    allowance_key=allowance_keys[feature]
+    active=get_active_entitlements(db,user_id)
 
-    ent = _current_student_entitlement(db, user_id)
-    plan_code = ent["plan"]
-    plan = STUDENT_PLANS[plan_code]
-    request_limit_key, unit_limit_key, monthly_unit_key = FEATURES[feature]
-    max_units = int(plan[unit_limit_key])
-    total_unit_limit = int(plan[monthly_unit_key])
+    if not active:
+        plan=get_plan(db,"free") or {}
+        max_units=int(plan.get(allowance_key) or 0)
+        if units>max_units:
+            return False, {"error":"Requested generation exceeds the Free plan limit.",
+                            "code":"generation_size_limit","feature":feature,"plan":"free","max_units":max_units}
+        period=date.today().replace(day=1)
+        db.session.execute(text("""
+            INSERT INTO student_ai_usage (user_id,period_start,feature,units,requests,updated_at)
+            VALUES (:uid,:period,:feature,0,0,CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id,period_start,feature) DO NOTHING
+        """),{"uid":user_id,"period":period,"feature":feature})
+        row=db.session.execute(text("""
+            SELECT units,requests FROM student_ai_usage
+            WHERE user_id=:uid AND period_start=:period AND feature=:feature FOR UPDATE
+        """),{"uid":user_id,"period":period,"feature":feature}).mappings().first()
+        used=int(row["units"] or 0)
+        if used+units>max_units:
+            db.session.rollback()
+            return False, {"error":"You have used up this plan's generation allowance.",
+                            "code":"generation_quota_exhausted","feature":feature,"plan":"free",
+                            "used_units":used,"unit_limit":max_units,"remaining_units":max(0,max_units-used)}
+        db.session.execute(text("""
+            UPDATE student_ai_usage SET units=units+:units,requests=requests+1,updated_at=CURRENT_TIMESTAMP
+            WHERE user_id=:uid AND period_start=:period AND feature=:feature
+        """),{"uid":user_id,"period":period,"feature":feature,"units":units})
+        db.session.commit()
+        return True, {"feature":feature,"plan":"free","used_units":used+units,"unit_limit":max_units,
+                      "remaining_units":max(0,max_units-used-units),"max_units_per_generation":max_units,
+                      "period_start":period}
 
-    if units > max_units:
-        return False, {
-            "error": f"This plan supports at most {max_units} {('pages' if feature == 'summary' else 'minutes' if feature == 'podcast' else 'cards' if feature == 'flashcards' else 'questions' if feature == 'quiz' else 'nodes')} per generation.",
-            "code": "generation_size_limit", "feature": feature, "plan": plan_code,
-            "max_units": max_units,
-        }
+    # Serialize quota reservations for this student's active entitlement
+    # payments so two simultaneous generation requests cannot both spend the
+    # same remaining allowance.
+    for ent in active:
+        db.session.execute(text("SELECT id FROM payment WHERE id=:pid FOR UPDATE"),
+                           {"pid":int(ent["id"])}).first()
 
-    if ent["entitlement_id"] == 0:
-        # Free is calendar-month allowance; paid entitlements are purchase-scoped.
-        period = ent["period_start"]
-    else:
-        period = ent["period_start"]
-
-    db.session.execute(text("""
-        INSERT INTO student_ai_entitlement_usage
-            (user_id, entitlement_id, period_start, feature, units, requests, updated_at)
-        VALUES (:uid, :eid, :period, :feature, 0, 0, CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id, entitlement_id, feature) DO NOTHING
-    """), {"uid": user_id, "eid": ent["entitlement_id"], "period": period, "feature": feature})
-
-    row = db.session.execute(text("""
-        SELECT units, requests
-        FROM student_ai_entitlement_usage
-        WHERE user_id = :uid AND entitlement_id = :eid AND feature = :feature
-        FOR UPDATE
-    """), {"uid": user_id, "eid": ent["entitlement_id"], "feature": feature}).mappings().first()
-    used_units = int(row["units"] or 0)
-    used_requests = int(row["requests"] or 0)
-    if used_units + units > total_unit_limit:
+    plan_map={row["plan"]:get_plan(db,row["plan"]) for row in active}
+    limits={int(row["id"]):int((plan_map.get(row["plan"]) or {}).get(allowance_key) or 0) for row in active}
+    usage_rows=db.session.execute(text("""
+        SELECT payment_id,COALESCE(SUM(units),0) AS units
+        FROM student_entitlement_usage
+        WHERE user_id=:uid AND feature=:feature AND payment_id IS NOT NULL
+        GROUP BY payment_id
+    """),{"uid":user_id,"feature":feature}).mappings().all()
+    used_by_payment={int(row["payment_id"]):int(row["units"] or 0) for row in usage_rows}
+    total_limit=sum(limits.values())
+    total_used=sum(used_by_payment.get(pid,0) for pid in limits)
+    max_generation=max(limits.values(),default=0)
+    if units>max_generation:
+        return False, {"error":"Requested generation exceeds the largest active plan allowance.",
+                        "code":"generation_size_limit","feature":feature,
+                        "plan":get_user_plan_code(db,user_id),"max_units":max_generation}
+    if total_used+units>total_limit:
         db.session.rollback()
-        return False, {
-            "error": "You have used up this plan's generation allowance.",
-            "code": "generation_quota_exhausted", "feature": feature, "plan": plan_code,
-            "used_requests": used_requests, "used_units": used_units,
-            "unit_limit": total_unit_limit, "remaining_units": max(0, total_unit_limit - used_units),
-        }
-
-    db.session.execute(text("""
-        UPDATE student_ai_entitlement_usage
-        SET units = units + :units, requests = requests + 1, updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND entitlement_id = :eid AND feature = :feature
-    """), {"uid": user_id, "eid": ent["entitlement_id"], "feature": feature, "units": units})
-    db.session.commit()
-    return {
-        "ok": True
-    } if False else (True, {
-        "feature": feature, "plan": plan_code, "entitlement_id": ent["entitlement_id"],
-        "used_requests": used_requests + 1, "request_limit": None,
-        "used_units": used_units + units, "unit_limit": total_unit_limit,
-        "remaining_units": max(0, total_unit_limit - used_units - units),
-        "max_units_per_generation": max_units, "period_start": period,
-    })
-
-
-
-ADA_TOKEN_LIMITS = {
-    "free": {"daily": 20000, "monthly": 500000, "output": 800},
-    "plus": {"daily": 100000, "monthly": 2500000, "output": 1200},
-    "pro": {"daily": 250000, "monthly": 6000000, "output": 1600},
-}
-
-
-def get_ada_limits(db, user_id):
-    ent = _current_student_entitlement(db, user_id)
-    return ent, ADA_TOKEN_LIMITS[ent["plan"]]
-
-
-def reserve_ada_tokens(db, user_id, estimated_tokens, output_limit):
-    """Atomically reserve an Ada token budget before calling the provider."""
-    estimated_tokens = max(1, int(estimated_tokens))
-    ent, limits = get_ada_limits(db, user_id)
-    if int(output_limit) > limits["output"]:
-        return False, {"error": "Ada output limit exceeds this plan.", "code": "ada_output_limit"}
-    now = datetime.utcnow()
-    day_start = now.date()
-    month_start = date(now.year, now.month, 1)
-    db.session.execute(text("""
-        INSERT INTO student_ada_usage
-            (user_id, entitlement_id, day_start, month_start, reserved_tokens, actual_tokens, requests, updated_at)
-        VALUES (:uid, :eid, :day, :month, 0, 0, 0, CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id, entitlement_id)
-        DO UPDATE SET day_start = EXCLUDED.day_start, month_start = EXCLUDED.month_start
-    """), {"uid": user_id, "eid": ent["entitlement_id"], "day": day_start, "month": month_start})
-    row = db.session.execute(text("""
-        SELECT reserved_tokens, actual_tokens, requests
-        FROM student_ada_usage
-        WHERE user_id = :uid AND entitlement_id = :eid
-        FOR UPDATE
-    """), {"uid": user_id, "eid": ent["entitlement_id"]}).mappings().first()
-    reserved = int(row["reserved_tokens"] or 0)
-    # Reservations from a previous day/month are harmless only if they were
-    # released; reset counters at the boundary while preserving the entitlement.
-    db.session.execute(text("""
-        UPDATE student_ada_usage
-        SET reserved_tokens = CASE WHEN day_start = :day THEN reserved_tokens ELSE 0 END,
-            actual_tokens = CASE WHEN month_start = :month THEN actual_tokens ELSE 0 END,
-            day_start = :day, month_start = :month, updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND entitlement_id = :eid
-    """), {"uid": user_id, "eid": ent["entitlement_id"], "day": day_start, "month": month_start})
-    row = db.session.execute(text("""
-        SELECT reserved_tokens, actual_tokens
-        FROM student_ada_usage
-        WHERE user_id = :uid AND entitlement_id = :eid
-        FOR UPDATE
-    """), {"uid": user_id, "eid": ent["entitlement_id"]}).mappings().first()
-    reserved = int(row["reserved_tokens"] or 0)
-    actual = int(row["actual_tokens"] or 0)
-    if reserved + estimated_tokens > limits["daily"]:
+        return False, {"error":"You have used up this plan stack's generation allowance.",
+                        "code":"generation_quota_exhausted","feature":feature,
+                        "used_units":total_used,"unit_limit":total_limit,
+                        "remaining_units":max(0,total_limit-total_used)}
+    candidates=sorted([(limits[pid]-used_by_payment.get(pid,0),pid) for pid in limits],reverse=True)
+    remaining,payment_id=candidates[0] if candidates else (0,None)
+    if payment_id is None or remaining<units:
         db.session.rollback()
-        return False, {"error": "You've reached Ada's daily token limit.", "code": "ada_daily_limit", "daily_limit": limits["daily"]}
-    if actual + reserved + estimated_tokens > limits["monthly"]:
-        db.session.rollback()
-        return False, {"error": "You've reached Ada's monthly token limit.", "code": "ada_monthly_limit", "monthly_limit": limits["monthly"]}
+        return False, {"error":"This generation is larger than any single remaining entitlement wallet.",
+                        "code":"generation_request_too_large","remaining_units":max(0,total_limit-total_used)}
     db.session.execute(text("""
-        UPDATE student_ada_usage
-        SET reserved_tokens = reserved_tokens + :tokens,
-            requests = requests + 1,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND entitlement_id = :eid
-    """), {"uid": user_id, "eid": ent["entitlement_id"], "tokens": estimated_tokens})
+        INSERT INTO student_entitlement_usage (user_id,payment_id,feature,units,request_count,metadata)
+        VALUES (:uid,:pid,:feature,:units,1,CAST(:metadata AS jsonb))
+    """),{"uid":user_id,"pid":payment_id,"feature":feature,"units":units,
+           "metadata":json.dumps({"provisional":True,"active_entitlement_stack":[int(row["id"]) for row in active]})})
     db.session.commit()
-    return True, {"entitlement_id": ent["entitlement_id"], "reserved_tokens": estimated_tokens}
-
-
-def finalize_ada_tokens(db, user_id, entitlement_id, reserved_tokens, actual_tokens):
-    reserved_tokens = max(0, int(reserved_tokens))
-    actual_tokens = max(0, int(actual_tokens))
-    row = db.session.execute(text("""
-        SELECT reserved_tokens, actual_tokens
-        FROM student_ada_usage
-        WHERE user_id = :uid AND entitlement_id = :eid
-        FOR UPDATE
-    """), {"uid": user_id, "eid": int(entitlement_id)}).mappings().first()
-    if not row:
-        return
-    current_reserved = int(row["reserved_tokens"] or 0)
-    current_actual = int(row["actual_tokens"] or 0)
-    release = min(current_reserved, reserved_tokens)
-    db.session.execute(text("""
-        UPDATE student_ada_usage
-        SET reserved_tokens = GREATEST(0, reserved_tokens - :release),
-            actual_tokens = actual_tokens + :actual,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND entitlement_id = :eid
-    """), {"uid": user_id, "eid": int(entitlement_id), "release": release, "actual": actual_tokens})
-    db.session.commit()
-
-
-def refund_ada_reservation(db, user_id, entitlement_id, reserved_tokens):
-    reserved_tokens = max(0, int(reserved_tokens))
-    db.session.execute(text("""
-        UPDATE student_ada_usage
-        SET reserved_tokens = GREATEST(0, reserved_tokens - :tokens),
-            requests = GREATEST(0, requests - 1),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = :uid AND entitlement_id = :eid
-    """), {"uid": user_id, "eid": int(entitlement_id), "tokens": reserved_tokens})
-    db.session.commit()
-
+    return True, {"feature":feature,"plan":get_user_plan_code(db,user_id),"used_units":total_used+units,
+                  "unit_limit":total_limit,"remaining_units":max(0,total_limit-total_used-units),
+                  "max_units_per_generation":max_generation,"period_start":active[0]["subscription_starts_at"].date(),
+                  "entitlement_payment_id":payment_id,"entitlement_payment_ids":[int(row["id"]) for row in active]}
 
 def reserve_generation_variant(db, user_id, base_fingerprint, feature, base_parameters=None, pool_size=4):
     """Reserve the first shared variant this student has not seen.
