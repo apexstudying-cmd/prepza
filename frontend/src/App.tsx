@@ -8,6 +8,7 @@ import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, ge
 import { getCachedGeneratedAudioUrl, getLatestGeneratedMaterialForPath, setOfflineUserId } from './offline/generatedMaterials'
 import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
+import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'
 import StudyShareSheet from './share/StudyShareSheet'
 import StudyActivityScreen from './StudyActivityScreen'
 import PdfStudyCanvas from './crypto/PdfStudyCanvas'
@@ -13603,7 +13604,7 @@ function orgPill(text: string, color: string) {
 
 const ORG_OPPORTUNITY_TYPES = ['job', 'internship', 'scholarship', 'competition', 'volunteering', 'event', 'other']
 
-function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
+function OrganisationPortalScreen({ onExit, onOpenPremium }: { onExit: () => void; onOpenPremium?: () => void }) {
   const { tokens: T } = useTheme()
   const [csrfToken, setCsrfToken] = useState('')
   const [loading, setLoading] = useState(true)
@@ -13691,6 +13692,7 @@ function OrganisationPortalScreen({ onExit }: { onExit: () => void }) {
     return (
       <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: T.pageBg, overflow: 'hidden' }}>
         <Header title="Organisation Portal" />
+        {onOpenPremium && <button onClick={onOpenPremium} style={{ margin: '12px 18px 0', padding: '10px 14px', border: 'none', borderRadius: 12, background: ORG_COLORS.gold, color: ORG_COLORS.navy, fontWeight: 800, cursor: 'pointer' }}>Open Business workspace</button>}
         <div style={{ flex: 1, overflowY: 'auto', padding: 18 }}>
           <div style={{ background: `linear-gradient(135deg,${ORG_COLORS.navy},${ORG_COLORS.navy3})`, borderRadius: 20, padding: 22, marginBottom: 18, textAlign: 'center' }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>{Ic.person('w-8 h-8')}</div>
@@ -14548,6 +14550,7 @@ export default function App() {
 
   const [adminMode, setAdminMode] = useState(false)
   const [orgPortalMode, setOrgPortalMode] = useState(false)
+  const [premiumOrgPortalMode, setPremiumOrgPortalMode] = useState(false)
   useEffect(() => {
     // Product analytics: a signup/login is not an active user. The heartbeat
     // records foreground engagement and meaningful sessions for DAU/WAU/MAU
@@ -14760,7 +14763,8 @@ export default function App() {
   }, [])
 
   if (adminMode) return <AdminPlatform onExit={() => setAdminMode(false)} />
-  if (orgPortalMode) return <OrganisationPortalScreen onExit={() => setOrgPortalMode(false)} />
+  if (orgPortalMode) return <OrganisationPortalScreen onExit={() => setOrgPortalMode(false)} onOpenPremium={() => { setOrgPortalMode(false); setPremiumOrgPortalMode(true) }} />
+  if (premiumOrgPortalMode) return <PremiumOrganisationPortal onExit={() => setPremiumOrgPortalMode(false)} />
 
   // Bottom navigation belongs to the primary app surfaces. Detail/immersive flows must own the full viewport so the global nav does not compete with their back/close controls.
   const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','upload-share-choice','processing','doc-ready','document-study','document-reader','ai-tutor','flashcards','quiz','podcast-player','podcast-library','summary','opportunity-detail','share-sheet','settings','student-profile','notifications','library','mind-map','new-chat','chat-detail','chat-options','edit-profile','payment','payment-success','payment-failure','payment-history','publish-library','xp-progress','study-streak','study-activity','achievements','time-studied','followers','following','follow-requests','group-detail','group-create']
