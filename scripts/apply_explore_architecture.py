@@ -173,6 +173,7 @@ if __name__ == '__main__':
     text = APP.read_text(encoding='utf-8')
     transformed = replace_explore(text)
     if transformed == text:
-        raise SystemExit('Explore architecture patch made no changes')
+        print('Explore architecture already matches the current App architecture; skipping.')
+        raise SystemExit(0)
     APP.write_text(transformed, encoding='utf-8')
     print('Explore architecture applied: study-material discovery removed; opportunities, students, and groups retained.')
