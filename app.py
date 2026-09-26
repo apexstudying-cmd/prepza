@@ -3356,16 +3356,19 @@ def update_profile():
     if not data:
         return jsonify({"error": "Request body must be valid JSON"}), 400
 
-    year = data.get("year")
-    semester = data.get("semester")
+    # PATCH semantics: academic fields are optional. If one is supplied,
+    # the other must also be supplied so a profile cannot be left with a
+    # half-updated academic period. Other profile fields can be edited alone.
+    year = data.get("year", None)
+    semester = data.get("semester", None)
 
-    if year is None or semester is None:
-        return jsonify({"error": "year and semester are both required"}), 400
+    if (year is None) != (semester is None):
+        return jsonify({"error": "year and semester must be supplied together"}), 400
 
-    if not isinstance(year, int) or year < 1 or year > 4:
+    if year is not None and (not isinstance(year, int) or year < 1 or year > 4):
         return jsonify({"error": "Year must be a number between 1 and 4"}), 400
 
-    if not isinstance(semester, int) or semester not in (1, 2):
+    if semester is not None and (not isinstance(semester, int) or semester not in (1, 2)):
         return jsonify({"error": "Semester must be 1 or 2"}), 400
 
     display_name = data.get("display_name", None)
@@ -3418,8 +3421,10 @@ def update_profile():
             return jsonify({"error": "Selected course does not belong to the selected university"}), 400
 
     user = db.session.get(User, user_id)
-    user.year = year
-    user.semester = semester
+    if year is not None:
+        user.year = year
+    if semester is not None:
+        user.semester = semester
     if display_name is not None:
         user.display_name = display_name or None
     if bio is not None:
