@@ -7615,7 +7615,7 @@ function PublishLibraryScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
     setSubmitError('')
     setStep(4)
     try {
-      const result = await api<{ publication_id: number; status: string }>('/library/publish', {
+      const result = await api<{ publication_id?: number; status?: string; duplicate?: boolean; published?: boolean; message?: string }>('/library/publish', {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
         body: JSON.stringify({
@@ -7625,7 +7625,7 @@ function PublishLibraryScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
           material_type: matType,
         }),
       })
-      setSubmittedStatus(result.status)
+      setSubmittedStatus(result.duplicate ? 'already_in_library' : (result.status || 'pending'))
       setStep(5)
     } catch (e) {
       setSubmitError(e instanceof ApiError ? e.message : 'Something went wrong submitting your material. Please try again.')
@@ -7767,9 +7767,13 @@ function PublishLibraryScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
       {step === 5 && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px' }} className="scrollbar-hide">
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <div style={{ width: 72, height: 72, background: 'rgba(76,201,123,0.1)', borderRadius: '50%', border: '3px solid #4CC97B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 28 }}>📥</div>
-            <div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 8 }}>Submitted for Review</div>
-            <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65 }}>Your material has been received and is {submittedStatus || 'pending'}. Our team reviews every submission to maintain quality standards — this usually takes 24-48h. You'll be notified of the outcome.</div>
+            <div style={{ width: 72, height: 72, background: submittedStatus === 'already_in_library' ? `${N.gold}18` : 'rgba(76,201,123,0.1)', borderRadius: '50%', border: `3px solid ${submittedStatus === 'already_in_library' ? N.gold : '#4CC97B'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 28 }}>{submittedStatus === 'already_in_library' ? '✓' : '📥'}</div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 8 }}>{submittedStatus === 'already_in_library' ? 'Already in Prepza Library' : 'Submitted for Review'}</div>
+            <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65 }}>
+              {submittedStatus === 'already_in_library'
+                ? 'This exact document is already represented in the Prepza Library. Your personal StudyHub copy remains yours, and no duplicate Library submission was created.'
+                : `Your material has been received and is ${submittedStatus || 'pending'}. Our team reviews every submission to maintain quality standards — this usually takes 24-48h. You'll be notified of the outcome.`}
+            </div>
           </div>
 
           <div style={{ background: T.card, borderRadius: 14, padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
