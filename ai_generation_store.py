@@ -238,6 +238,48 @@ def claim_or_get_generation(
     return GenerationLookup(int(existing["id"]), existing["status"], existing["payload"], False, None)
 
 
+
+def find_ready_generation_family(
+    *,
+    content_hash: str,
+    feature: str,
+    base_parameters: dict[str, Any] | None,
+    prompt_version: str,
+    schema_version: str,
+    scope: str,
+    owner_user_id: int | None,
+) -> GenerationLookup | None:
+    """Return an exact ready product before variant/queue work."""
+    _ensure_schema()
+    from sqlalchemy import text
+    from app import db
+    normalized_scope = str(scope).strip().lower()
+    row = db.session.execute(
+        text("""
+            SELECT id, status, payload
+            FROM ai_generation_artifact
+            WHERE content_hash = :content_hash
+              AND feature = :feature
+              AND prompt_version = :prompt_version
+              AND schema_version = :schema_version
+              AND scope = :scope
+              AND owner_user_id IS NOT DISTINCT FROM :owner_user_id
+              AND status = 'ready'
+              AND (parameters - 'variant') = CAST(:base_parameters AS jsonb)
+            ORDER BY completed_at ASC, id ASC
+            LIMIT 1
+        """),
+        {
+            "content_hash": content_hash, "feature": feature,
+            "prompt_version": prompt_version, "schema_version": schema_version,
+            "scope": normalized_scope, "owner_user_id": owner_user_id,
+            "base_parameters": json.dumps(base_parameters or {}, sort_keys=True, separators=(",", ":")),
+        },
+    ).mappings().first()
+    if not row:
+        return None
+    return GenerationLookup(int(row["id"]), "ready", row["payload"], False, None)
+
 def wait_for_generation(fingerprint: str, *, timeout_seconds: float = 30.0, poll_interval_seconds: float = 0.25) -> GenerationLookup:
     from sqlalchemy import text
     from app import db
