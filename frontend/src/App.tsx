@@ -6548,12 +6548,17 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
         setSavedItems(items => items.filter(it => it.id !== pub.id))
       } else {
         const result = await api<{ message: string; document_id?: number; in_studyhub?: boolean; already_in_studyhub?: boolean }>(`/library/${pub.id}/save`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
+        if (result.document_id) {
+          // A saved Library document is a Study Hub item too: prepare its
+          // complete offline package immediately, including ready materials.
+          await saveStudyHubDocumentOffline(Number(result.document_id))
+        }
         if (result.already_in_studyhub) {
-          setSaveNotice('This document is already in your Study Hub. No download was needed.')
+          setSaveNotice('This document is already in your Study Hub and is offline-ready.')
           setTimeout(() => setSaveNotice(''), 4500)
         } else {
-          setSaveNotice('Saved to your Study Hub.')
-          setTimeout(() => setSaveNotice(''), 3000)
+          setSaveNotice('Saved to your Study Hub and prepared for offline study.')
+          setTimeout(() => setSaveNotice(''), 3500)
         }
         loadSaved()
       }
