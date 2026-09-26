@@ -13,6 +13,7 @@ import B2BFinanceAdmin from './admin/B2BFinanceAdmin'
 import StudyShareSheet from './share/StudyShareSheet'
 import StudyActivityScreen from './StudyActivityScreen'
 import PdfStudyCanvas from './crypto/PdfStudyCanvas'
+import { cacheAvatar, getCachedAvatar, clearCachedAvatar } from './offline/avatarCache'
 
 // ─── API helper ─────────────────────────────────────────────────────────────
 // Launch verification: generated frontend architecture and theme contrast are validated in CI.
@@ -7413,7 +7414,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
 }
 
 // ─── EDIT PROFILE ─────────────────────────────────────────────────────────────
-type EditProfileMe = { display_name: string | null; bio: string | null; year: number | null; semester: number | null; university_id: number | null; program_id: number | null; avatar_url?: string | null; csrf_token: string }
+type EditProfileMe = { id?: number; display_name: string | null; bio: string | null; year: number | null; semester: number | null; university_id: number | null; program_id: number | null; avatar_url?: string | null; csrf_token: string }
 
 function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { tokens: T } = useTheme()
@@ -7440,6 +7441,7 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     api<EditProfileMe>('/me')
       .then(me => {
         setCsrfToken(me.csrf_token)
+        if (me.id) { setOfflineUserId(Number(me.id)); if (me.avatar_url) void cacheAvatar(Number(me.id), me.avatar_url) }
         setAvatarUrl(me.avatar_url || null)
         setForm({
           display_name: me.display_name || '',
@@ -7450,7 +7452,11 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           semester: me.semester,
         })
       })
-      .catch(() => setLoadError('Could not load your profile. Check your connection and try again.'))
+      .catch(async () => {
+        const id=Number(localStorage.getItem('prepza-offline-user-id')||0)
+        if (Number.isInteger(id) && id>0) { const cached=await getCachedAvatar(id); if (cached) setAvatarUrl(cached) }
+        setLoadError('Could not load your profile. Check your connection and try again.')
+      })
       .finally(() => setLoadingMe(false))
   }, [])
 
@@ -7485,13 +7491,15 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         method:'POST',headers:{'X-CSRF-Token':csrfToken},body:JSON.stringify({storage_path:prepared.storage_path})
       })
       setAvatarUrl(confirmed.avatar_url)
+      const id=Number(localStorage.getItem('prepza-offline-user-id')||0)
+      if (id>0) void cacheAvatar(id, confirmed.avatar_url)
     } catch(e) { setSaveError(e instanceof ApiError ? e.message : (e instanceof Error ? e.message : 'Could not update photo.')) }
     finally { setAvatarBusy(false) }
   }
 
   const removeAvatar = async () => {
     setAvatarBusy(true); setSaveError('')
-    try { await api('/profile/avatar',{method:'DELETE',headers:{'X-CSRF-Token':csrfToken}}); setAvatarUrl(null) }
+    try { await api('/profile/avatar',{method:'DELETE',headers:{'X-CSRF-Token':csrfToken}}); const id=Number(localStorage.getItem('prepza-offline-user-id')||0); if(id>0) void clearCachedAvatar(id); setAvatarUrl(null) }
     catch(e){setSaveError(e instanceof ApiError ? e.message : 'Could not remove photo.')}
     finally{setAvatarBusy(false)}
   }
