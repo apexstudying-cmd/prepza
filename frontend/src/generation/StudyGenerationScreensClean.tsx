@@ -62,7 +62,7 @@ function QuotaNotice({ usage, feature, unit }: { usage: PrepzaUsage | null; feat
 }
 
 function Header({ title, subtitle, onBack, T }: { title: string; subtitle?: string; onBack: () => void; T: Theme }) {
-  return <div style={{ background: T.navy, color: '#fff', padding: '0 18px 16px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><button onClick={onBack} aria-label="Back" style={{ width: 34, height: 34, border: 0, borderRadius: 10, background: 'rgba(255,255,255,.1)', color: '#fff', fontSize: 21 }}><</button><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 800 }}>{title}</div>{subtitle && <div style={{ fontSize: 11, marginTop: 2, color: 'rgba(255,255,255,.55)' }}>{subtitle}</div>}</div></div></div>
+  return <div style={{ background: T.navy, color: '#fff', padding: '0 18px 16px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><button onClick={onBack} aria-label="Back" style={{ width: 34, height: 34, border: 0, borderRadius: 10, background: 'rgba(255,255,255,.1)', color: '#fff', fontSize: 12 }}>Back</button><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 800 }}>{title}</div>{subtitle && <div style={{ fontSize: 11, marginTop: 2, color: 'rgba(255,255,255,.55)' }}>{subtitle}</div>}</div></div></div>
 }
 
 function Choice({ selected, title, description, onClick, T, disabled }: { selected: boolean; title: string; description: string; onClick: () => void; T: Theme; disabled?: boolean }) {
