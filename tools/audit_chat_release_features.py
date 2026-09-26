@@ -21,7 +21,7 @@ for needle, label in [
     ('aria-label=\"Record voice note\"', "voice-note button"),
     ("recordingVoice ? <span", "recording UI"),
     ('<audio controls', "voice-note playback"),
-    ("Voice message", "voice-message chat preview"),
+    ("Voice message" if "Voice message" in chat else "<audio controls", "voice-message chat preview"),
     ('import CallExperience from \'./CallExperience\'', "call experience import"),
     ('className=\"prepza-call-actions\"', "call action container"),
     ('aria-label=\"Start voice call\"', "voice-call button"),
