@@ -41,7 +41,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
   const load=async()=>{
     setLoading(true);setError('')
     try{
-      const [me,o,p,c,pm,r,k,i,pr]=await Promise.all([
+      const [me,o,p,c,pm,r,k,i,pr,op]=await Promise.all([
         req<{csrf_token:string}>('/me'),req<Overview>('/api/admin/b2b/overview'),
         req<{placements:Placement[]}>('/api/admin/b2b/placements'),
         req<{campaigns:Campaign[]}>('/api/admin/b2b/campaigns'),
