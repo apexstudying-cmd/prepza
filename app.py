@@ -173,6 +173,7 @@ class User(db.Model):
     year = db.Column(db.Integer, nullable=True)
     semester = db.Column(db.Integer, nullable=True)
     display_name = db.Column(db.String(50), nullable=True)
+    avatar_storage_path = db.Column(db.String(500), nullable=True)
     bio = db.Column(db.String(160), nullable=True)
     phone_number = db.Column(db.String(20), nullable=True)
     # Private field only - never exposed on public/other-user profile
@@ -3324,6 +3325,7 @@ def me():
         "year": user.year,
         "semester": user.semester,
         "display_name": user.display_name,
+        "avatar_url": get_signed_url(user.avatar_storage_path, expires_in=3600, bucket="avatars") if user.avatar_storage_path else None,
         "bio": user.bio,
         "phone_number": user.phone_number,
         "profile_visibility": user.profile_visibility,
@@ -3336,6 +3338,52 @@ def me():
         "program_id": user.program_id,
         "csrf_token": session["csrf_token"],
     })
+@app.post("/profile/avatar")
+@require_csrf
+def upload_profile_avatar():
+    uid=session.get("user_id")
+    if not uid:return jsonify({"error":"Not logged in"}),401
+    data=request.get_json(silent=True) or {}
+    filename=(data.get("filename") or "avatar.webp").strip()
+    mime=(data.get("content_type") or "image/webp").strip().lower()
+    try:size=int(data.get("file_size_bytes"))
+    except (TypeError,ValueError):return jsonify({"error":"file_size_bytes is required"}),400
+    if mime not in ("image/webp","image/jpeg","image/png") or size<=0 or size>512*1024:return jsonify({"error":"Avatar must be a WebP, JPEG, or PNG no larger than 512 KB"}),400
+    user=db.session.get(User,uid)
+    ext={"image/webp":"webp","image/jpeg":"jpg","image/png":"png"}[mime]
+    path=f"avatars/{uid}/{secrets.token_urlsafe(18)}.{ext}"
+    upload_url=create_signed_upload_url("avatars",path)
+    if not upload_url:return jsonify({"error":"Could not prepare secure avatar upload"}),503
+    user.avatar_storage_path_pending=path if False else None
+    db.session.commit()
+    return jsonify({"upload_url":upload_url,"storage_path":path}),201
+
+@app.post("/profile/avatar/confirm")
+@require_csrf
+def confirm_profile_avatar():
+    uid=session.get("user_id")
+    if not uid:return jsonify({"error":"Not logged in"}),401
+    data=request.get_json(silent=True) or {}
+    path=(data.get("storage_path") or "").strip()
+    if not path.startswith(f"avatars/{uid}/"):return jsonify({"error":"Invalid avatar path"}),400
+    if not storage_object_exists("avatars",path):return jsonify({"error":"Uploaded avatar was not found"}),400
+    user=db.session.get(User,uid)
+    old=user.avatar_storage_path
+    user.avatar_storage_path=path
+    db.session.commit()
+    return jsonify({"avatar_url":get_signed_url(path,expires_in=3600,bucket="avatars"),"replaced":bool(old)})
+
+@app.delete("/profile/avatar")
+@require_csrf
+def remove_profile_avatar():
+    uid=session.get("user_id")
+    if not uid:return jsonify({"error":"Not logged in"}),401
+    user=db.session.get(User,uid)
+    old=user.avatar_storage_path
+    user.avatar_storage_path=None
+    db.session.commit()
+    return jsonify({"removed":bool(old)})
+
 @app.route("/delete-account", methods=["DELETE"])
 @require_csrf
 def delete_account():
