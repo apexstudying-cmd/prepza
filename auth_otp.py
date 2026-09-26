@@ -303,8 +303,9 @@ def register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf
         try:
             result = issue(user, "signup_verify", request.remote_addr or "")
             return jsonify({**generic, "expires_in_seconds": result["expires_in_seconds"]}), 200
-        except ValueError as exc:
-            return jsonify({"message": str(exc)}), 429
+        except ValueError:
+            # Do not reveal whether the target exists or which anti-abuse bucket fired.
+            return jsonify(generic), 200
         except Exception:
             app.logger.exception("SES verification email failed")
             return jsonify({"error": "We could not send a verification code right now. Please try again later."}), 503
@@ -323,8 +324,9 @@ def register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf
         try:
             result = issue(user, "password_reset", request.remote_addr or "")
             return jsonify({**generic, "expires_in_seconds": result["expires_in_seconds"]}), 200
-        except ValueError as exc:
-            return jsonify({"message": str(exc)}), 429
+        except ValueError:
+            # Keep the recovery endpoint enumeration-resistant.
+            return jsonify(generic), 200
         except Exception:
             app.logger.exception("SES password reset email failed")
             return jsonify({"error": "We could not send a reset code right now. Please try again later."}), 503
