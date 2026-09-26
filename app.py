@@ -2960,6 +2960,7 @@ def signup():
         "email_status": email_status,
         "verification_required": True,
         "otp_expires_in_seconds": otp_expires_in_seconds,
+        "otp_length": int((app.extensions["prepza_auth_otp"].get("otp_length") or 6)) if False else 6,
     }), 201
 
 
