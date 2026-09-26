@@ -4805,7 +4805,10 @@ def get_podcast_audio(document_id):
     if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
-    if document.user_id == user_id:
+    requested_material_id = request.args.get("material_id")
+    if requested_material_id:
+        material = _requested_generated_material(user_id, document, requested_material_id, "podcast")
+    elif document.user_id == user_id:
         material = get_generated_material_for_user(
             document.document_content_id, "podcast", session.get("user_id")
         )
