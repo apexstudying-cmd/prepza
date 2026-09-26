@@ -9685,7 +9685,7 @@ const adminNavGroups = [
 ] as const
 
 function AdminNavIcon({name}:{name:string}) {
-  const common={viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const,ariaHidden:true}
+  const common={viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const,"aria-hidden":true}
   if(name==='dashboard') return <svg width="18" height="18" {...common}><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
   if(name==='users') return <svg width="18" height="18" {...common}><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 2.7-5 6-5s6 2 6 5"/><path d="M16 6.5a2.5 2.5 0 0 1 0 4.8M18 15c1.9.7 3 2.1 3 4"/></svg>
   if(name==='payments') return <svg width="18" height="18" {...common}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M7 14h4"/></svg>
