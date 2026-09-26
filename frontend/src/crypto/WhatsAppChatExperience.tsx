@@ -526,6 +526,59 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
       setError(friendlyError(value,'Could not save this document to Study Hub.'))
     } finally { setStudyHubSendingId(null) }
   }
+  const stopVoiceTimer = () => { if (voiceTimerRef.current != null) { window.clearInterval(voiceTimerRef.current); voiceTimerRef.current = null } }
+  const cancelVoiceRecording = () => {
+    voiceDiscardRef.current = true
+    stopVoiceTimer()
+    try { voiceRecorderRef.current?.stop() } catch {}
+    voiceRecorderRef.current = null
+    voiceChunksRef.current = []
+    setRecordingVoice(false)
+    setRecordingSeconds(0)
+  }
+  const startVoiceRecording = async () => {
+    if (selectedId == null || recordingVoice || uploading || sending) return
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') { setError('Voice recording is not supported on this device.'); return }
+    setError('')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const preferred = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(type => MediaRecorder.isTypeSupported(type))
+      const recorder = preferred ? new MediaRecorder(stream, { mimeType: preferred }) : new MediaRecorder(stream)
+      voiceDiscardRef.current = false
+      voiceChunksRef.current = []
+      voiceRecorderRef.current = recorder
+      setRecordingSeconds(0)
+      setRecordingVoice(true)
+      voiceTimerRef.current = window.setInterval(() => setRecordingSeconds(value => value + 1), 1000)
+      recorder.ondataavailable = event => { if (event.data.size > 0) voiceChunksRef.current.push(event.data) }
+      recorder.onerror = () => { stream.getTracks().forEach(track => track.stop()); setError('Could not record the voice note.'); cancelVoiceRecording() }
+      recorder.onstop = () => {
+        stream.getTracks().forEach(track => track.stop())
+        stopVoiceTimer()
+        const discarded = voiceDiscardRef.current
+        const chunks = voiceChunksRef.current
+        voiceRecorderRef.current = null
+        voiceChunksRef.current = []
+        setRecordingVoice(false)
+        setRecordingSeconds(0)
+        if (discarded || !chunks.length) return
+        const mime = recorder.mimeType || preferred || 'audio/webm'
+        const extension = mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'm4a' : 'webm'
+        const file = new File([new Blob(chunks, { type: mime })], `voice-note-${Date.now()}.${extension}`, { type: mime })
+        void sendAttachment(file)
+      }
+      recorder.start(250)
+    } catch (value) {
+      setError(friendlyError(value, 'Microphone access is required to record a voice note.'))
+      cancelVoiceRecording()
+    }
+  }
+  const stopVoiceRecording = () => {
+    voiceDiscardRef.current = false
+    const recorder = voiceRecorderRef.current
+    if (!recorder) return
+    try { recorder.stop() } catch { cancelVoiceRecording() }
+  }
   const sendAttachment = async (file: File) => {
     if (selectedId == null || uploading) return
     if (!/\.(pdf|doc|docx|ppt|pptx|jpg|jpeg|png|webm|ogg|mp3|m4a|wav|aac)$/i.test(file.name)) { setError('Unsupported file type.'); return }
