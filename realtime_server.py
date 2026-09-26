@@ -227,10 +227,9 @@ def broadcast_message_response(response):
                 return response
             payload = safe_message_payload(response.get_json(silent=True))
             if payload and payload.get("conversation_id") == conversation_id:
-                emit_kwargs = {"to": room_for(conversation_id)}
-        if getattr(request, "sid", None):
-            emit_kwargs["include_self"] = False
-        socketio.emit("chat:message", payload, **emit_kwargs)
+                # This hook runs in a normal HTTP request, not a Socket.IO event
+                # context. Do not ask Flask-SocketIO for request.sid here.
+                socketio.emit("chat:message", payload, to=room_for(conversation_id))
         except Exception:
             app.logger.exception("Realtime message broadcast failed")
     return response
