@@ -26,6 +26,7 @@ import podcast_audio
 from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
 from db_runtime import configure_sqlalchemy_runtime
+from auth_otp import register_email_otp
 
 load_dotenv()
 
@@ -2378,6 +2379,10 @@ def require_csrf(f):
         return f(*args, **kwargs)
     return decorated
 
+# Email OTP / SES authentication service.
+register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf, limiter)
+
+
 _student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
 
 from student_subscription_billing import register_student_subscription_billing
@@ -2869,7 +2874,7 @@ def list_programs(university_id):
 
 
 @app.route("/signup", methods=["POST"])
-@limiter.limit("5 per hour")
+@limiter.limit("30 per minute")
 def signup():
     data = request.get_json(silent=True)
     if not data:
@@ -2938,8 +2943,6 @@ def signup():
     if existing_user:
         return jsonify({"error": "An account with this email already exists"}), 409
 
-    token = secrets.token_urlsafe(32)
-
     new_user = User(
         email=email,
         password_hash=generate_password_hash(password),
@@ -2947,7 +2950,6 @@ def signup():
         semester=semester,
         display_name=display_name,
         email_verified=False,
-        verification_token=token,
         signup_source=signup_source,
         university_id=university_id,
         program_id=program_id,
@@ -2986,15 +2988,25 @@ def signup():
             print(f"WARNING: referral capture failed for new user {new_user.id}: {e}")
 
     try:
-        send_verification_email(email, token)
-        email_status = "Verification email sent"
-    except Exception as e:
-        email_status = f"Account created but verification email failed to send: {str(e)}"
+        otp_service = app.extensions["prepza_auth_otp"]
+        result = otp_service["issue"](new_user, "signup_verify", request.remote_addr or "")
+        email_status = "Verification code sent"
+        otp_expires_in_seconds = result["expires_in_seconds"]
+    except ValueError as e:
+        db.session.delete(new_user)
+        db.session.commit()
+        return jsonify({"error": str(e)}), 429
+    except Exception:
+        app.logger.exception("Initial SES verification email failed")
+        email_status = "Verification code could not be sent"
+        otp_expires_in_seconds = None
 
     return jsonify({
         "message": "Account created successfully",
         "user_id": new_user.id,
         "email_status": email_status,
+        "verification_required": True,
+        "otp_expires_in_seconds": otp_expires_in_seconds,
     }), 201
 
 
