@@ -9660,6 +9660,27 @@ try:
 except Exception as exc:
     app.logger.exception("Opportunity runtime registration failed: %s", exc)
 
+@app.get("/admin/system/storage")
+def admin_system_storage():
+    uid=session.get("user_id")
+    admin=db.session.get(User,uid) if uid else None
+    if not admin or not admin.is_admin:
+        return jsonify({"error":"Admin access required"}),403
+    result={"supabase":{"configured":bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_ROLE_KEY"))},
+            "r2":{"enabled":False,"objects":0,"bytes":0,"by_bucket":{}}}
+    try:
+        from object_storage import r2_enabled,r2_usage
+        if r2_enabled(): result["r2"]=r2_usage()
+    except Exception as exc:
+        result["r2"]["error"]=str(exc)
+    try:
+        row=db.session.execute(db.text("SELECT COALESCE(SUM(COALESCE((metadata->>'size')::bigint,0)),0) FROM storage.objects")).scalar()
+        result["supabase"]["object_bytes"]=int(row or 0)
+    except Exception as exc:
+        result["supabase"]["object_bytes"]=None
+        result["supabase"]["object_bytes_error"]=str(exc)
+    return jsonify(result)
+
 # Register the split chat modules only after the base models/helpers/routes
 # above exist. They add group membership management, E2EE key envelopes,
 # and read-receipt/message metadata hooks without circular imports.
