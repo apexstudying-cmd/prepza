@@ -19,7 +19,7 @@ for needle, label in [
     ("recordingVoice", "voice recording state"),
     ("startVoiceRecording", "voice recording handler"),
     ('aria-label=\"Record voice note\"', "voice-note button"),
-    ("recordingVoice ? <span", "recording UI") if "recordingVoice ? <span" in chat else ("recordingVoice ?<span", "recording UI"),
+    ("recordingVoice ? <span", "recording UI") if "recordingVoice ? <span" in chat or "recordingVoice ?<span" in chat or "recordingVoice &&" in chat else ("__missing_recording_ui__", "recording UI"),
     ('<audio controls', "voice-note playback"),
     ("Voice message" if "Voice message" in chat else "<audio controls", "voice-message chat preview"),
     ('import CallExperience from \'./CallExperience\'', "call experience import"),
