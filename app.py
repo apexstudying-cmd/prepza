@@ -3922,6 +3922,8 @@ def list_documents():
                 "type": material.material_type,
                 "status": material.status,
                 "parameters": material.generation_parameters or {},
+                "scope": material.scope,
+                "owner_user_id": material.owner_user_id,
             })
 
     result = []
@@ -4002,6 +4004,8 @@ def get_document(document_id):
                 "type": m.material_type,
                 "status": m.status,
                 "parameters": m.generation_parameters or {},
+                "scope": m.scope,
+                "owner_user_id": m.owner_user_id,
             }
             for m in material_query.order_by(GeneratedMaterial.updated_at.desc()).all()
         ]
