@@ -9654,6 +9654,12 @@ def confirm_chat_attachment(conversation_id,attachment_id):
     attachment.status="ready"; db.session.commit()
     return jsonify({"attachment_id":attachment.id,"status":"ready"}),200
 
+try:
+    from opportunity_runtime import register_opportunity_runtime
+    register_opportunity_runtime(app, db, Opportunity, Organisation, User)
+except Exception as exc:
+    app.logger.exception("Opportunity runtime registration failed: %s", exc)
+
 # Register the split chat modules only after the base models/helpers/routes
 # above exist. They add group membership management, E2EE key envelopes,
 # and read-receipt/message metadata hooks without circular imports.
