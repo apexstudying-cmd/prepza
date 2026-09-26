@@ -6014,6 +6014,7 @@ function SignupScreen({ setScreen, referralCode, referralChannel }: { setScreen:
           via: referralChannel || undefined,
         }),
       })
+      sessionStorage.setItem('prepza_verification_email', payload.email)
       setScreen('check-email')
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : 'Something went wrong. Please try again.'
@@ -6162,18 +6163,129 @@ function SignupScreen({ setScreen, referralCode, referralChannel }: { setScreen:
 // ─── CHECK EMAIL ────────────────────────────────────────────────────────────
 function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { tokens: T } = useTheme()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [error, setError] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [resendSeconds, setResendSeconds] = useState(0)
+  const [resending, setResending] = useState(false)
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem('prepza_verification_email') || ''
+    setEmail(stored)
+    window.setTimeout(() => inputRef.current?.focus(), 50)
+  }, [])
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return
+    const id = window.setInterval(() => setResendSeconds(s => Math.max(0, s - 1)), 1000)
+    return () => window.clearInterval(id)
+  }, [resendSeconds])
+
+  const verify = async (value: string) => {
+    const clean = value.replace(/\D/g, '').slice(0, 6)
+    if (clean.length !== 6 || verifying || !email) return
+    setCode(clean)
+    setError('')
+    setVerifying(true)
+    try {
+      await api('/verify-otp', {
+        method: 'POST',
+        body: JSON.stringify({ email, code: clean }),
+      })
+      sessionStorage.removeItem('prepza_verification_email')
+      setScreen('home')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'That code could not be verified. Please try again.')
+      setCode('')
+      window.setTimeout(() => inputRef.current?.focus(), 20)
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  const handleCodeChange = (value: string) => {
+    const clean = value.replace(/\D/g, '').slice(0, 6)
+    setCode(clean)
+    setError('')
+    if (clean.length === 6) void verify(clean)
+  }
+
+  const resend = async () => {
+    if (!email || resending || resendSeconds > 0) return
+    setResending(true)
+    setError('')
+    try {
+      const response = await api<{ message: string; expires_in_seconds?: number }>('/resend-verification', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      })
+      setResendSeconds(60)
+      if (response.message) setError('')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not send a new code right now.')
+    } finally {
+      setResending(false)
+      window.setTimeout(() => inputRef.current?.focus(), 20)
+    }
+  }
+
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 32px', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)`, textAlign: 'center' }}>
-      <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(201,168,76,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
-        <span style={{ fontSize: 32 }}>✉️</span>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 28px', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)`, textAlign: 'center' }}>
+      <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(201,168,76,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, color: N.gold }}>
+        <svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m4 7 8 6 8-6" />
+        </svg>
       </div>
-      <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', marginBottom: 10 }}>Check your email</div>
-      <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 1.6, marginBottom: 32 }}>
-        We've sent a verification link to your inbox. Click it to activate your account, then come back and sign in.
+      <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', marginBottom: 10 }}>Verify your email</div>
+      <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 1.6, marginBottom: 24, maxWidth: 340 }}>
+        Enter the 6-digit code we sent to <strong style={{ color: N.gold }}>{email || 'your email'}</strong>.
       </div>
-      <button onClick={() => setScreen('login')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 32px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-        Back to Sign In
-      </button>
+
+      <div style={{ width: '100%', maxWidth: 340 }}>
+        <input
+          ref={inputRef}
+          value={code}
+          onChange={e => handleCodeChange(e.target.value)}
+          onPaste={e => {
+            const pasted = e.clipboardData.getData('text')
+            if (/^\d{6}$/.test(pasted.trim())) {
+              e.preventDefault()
+              handleCodeChange(pasted.trim())
+            }
+          }}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]*"
+          maxLength={6}
+          aria-label="6-digit verification code"
+          placeholder="000000"
+          disabled={verifying}
+          style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: `1px solid ${error ? 'rgba(255,120,130,0.6)' : 'rgba(255,255,255,0.15)'}`, borderRadius: 16, padding: '16px', color: '#fff', fontSize: 26, letterSpacing: 10, textAlign: 'center', fontFamily: 'Plus Jakarta Sans', outline: 'none' }}
+        />
+
+        {verifying && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 10 }}>Verifying…</div>}
+        {error && <div style={{ color: '#ffb4bd', fontSize: 13, lineHeight: 1.5, marginTop: 12 }}>{error}</div>}
+
+        <button
+          type="button"
+          onClick={resend}
+          disabled={resending || resendSeconds > 0}
+          style={{ marginTop: 20, background: 'none', border: 'none', color: N.gold, fontWeight: 700, fontSize: 13, cursor: resendSeconds > 0 || resending ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: resendSeconds > 0 || resending ? 0.55 : 1 }}
+        >
+          {resending ? 'Sending…' : resendSeconds > 0 ? `Resend code in ${resendSeconds}s` : 'Resend code'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { sessionStorage.removeItem('prepza_verification_email'); setScreen('login') }}
+          style={{ width: '100%', marginTop: 18, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 16, padding: '13px 0', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}
+        >
+          Back to Sign In
+        </button>
+      </div>
     </div>
   )
 }
