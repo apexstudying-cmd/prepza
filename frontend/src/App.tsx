@@ -13946,6 +13946,24 @@ function OrgOpportunitiesTab({ orgId, isOwner, csrfToken, onCreate }: { orgId: n
   const [promoPrices, setPromoPrices] = useState<Record<string, number>>({})
   const [promoPricesLoading, setPromoPricesLoading] = useState(false)
 
+  const payPromotion = async (promotionId: number) => {
+    if (!isOwner || promoPayingId === promotionId || !promoTarget) return
+    setPromoPayingId(promotionId); setPromoError('')
+    try {
+      const res = await api<{ payment_required: boolean; redirect_url?: string }>(
+        `/organisations/${orgId}/opportunity-promotions/${promotionId}/pay`,
+        { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } },
+      )
+      if (res.payment_required && res.redirect_url) window.location.href = res.redirect_url
+      else {
+        const refreshed = await api<{ promotions: OrgPromotion[] }>(`/organisations/${orgId}/opportunities/${promoTarget.id}/promotions`)
+        setPromoHistory(refreshed.promotions)
+      }
+    } catch (e) {
+      setPromoError(e instanceof ApiError ? e.message : 'Could not start payment.')
+    } finally { setPromoPayingId(null) }
+  }
+
   useEffect(() => {
     setPromoPricesLoading(true)
     api<{ prices: Record<string, number> }>('/organisations/promotion-prices')
