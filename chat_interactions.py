@@ -243,5 +243,3 @@ def _chat_metadata_after_request(response):
 
     return response
 
-
-ensure_chat_metadata_schema()
