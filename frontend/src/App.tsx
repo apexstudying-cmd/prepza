@@ -273,6 +273,16 @@ function GenerationError({ error }: { error: string }) {
   )
 }
 
+function DelayedScreenSkeleton({ children }: { children: React.ReactNode }) {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisible(true), 220)
+    return () => window.clearTimeout(timer)
+  }, [])
+  if (!visible) return null
+  return <>{children}</>
+}
+
 function GenerationLoading({ label }: { label: string }) {
   const { tokens: T } = useTheme()
   const [percent, setPercent] = useState(5)
@@ -2908,7 +2918,7 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
     )
   }
 
-  if (loading) return <SkeletonAITutor />
+  if (loading) return <DelayedScreenSkeleton><SkeletonAITutor /></DelayedScreenSkeleton>
   if (error) return <GenerationError error={error} />
 
   return (
@@ -3900,7 +3910,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId }: {
     setRequestBusy(b => ({ ...b, [key]: false }))
   }
 
-  if (loading) return <SkeletonChats />
+  if (loading) return <DelayedScreenSkeleton><SkeletonChats /></DelayedScreenSkeleton>
   void draftVersion
   const displayed = chats.filter(c => {
     const matchSearch = c.name.toLowerCase().includes(search.toLowerCase())
@@ -4540,7 +4550,7 @@ function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, s
     if (value.trim()) typingTimer.current = window.setTimeout(() => sendTypingRealtime(conversationId, false), 1800)
   }
 
-  if (loading) return <SkeletonChatDetail />
+  if (loading) return <DelayedScreenSkeleton><SkeletonChatDetail /></DelayedScreenSkeleton>
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: T.pageBg, fontFamily: 'Plus Jakarta Sans' }}>
@@ -4869,7 +4879,7 @@ function OppDetailScreen({ setScreen, opportunityId }: { setScreen: (s: Screen) 
     )
   }
 
-  if (loading) return <SkeletonOppDetail />
+  if (loading) return <DelayedScreenSkeleton><SkeletonOppDetail /></DelayedScreenSkeleton>
 
   if (error || !opp) {
     return (
@@ -6585,7 +6595,7 @@ function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfile
     announcement: '\ud83d\udce3', group_like: '\u2764\ufe0f', group_vote: '\u2b06\ufe0f', group_promoted: '\u2b50', podcast_ready: '◉', podcast_failed: '!', moderation_warning: '\u26a0\ufe0f',
   } as Record<string,string>)[type] || '\ud83d\udd14'
 
-  if (loading) return <SkeletonNotifications />
+  if (loading) return <DelayedScreenSkeleton><SkeletonNotifications /></DelayedScreenSkeleton>
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
       <div style={{ background: N.navy, padding: '0 18px 16px' }}>
@@ -6935,7 +6945,7 @@ function PodcastLibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <SkeletonPodcastLibrary />
+  if (loading) return <DelayedScreenSkeleton><SkeletonPodcastLibrary /></DelayedScreenSkeleton>
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
