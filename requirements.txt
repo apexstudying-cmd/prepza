@@ -32,4 +32,4 @@ pywebpush
 qrcode==8.2
 simple-websocket==1.1.0
 
-redis==7.1.0
+redis==8.1.0
