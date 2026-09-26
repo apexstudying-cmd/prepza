@@ -1722,7 +1722,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
   )
 }
 
-function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
+function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   const { tokens: T } = useTheme()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All')
@@ -3747,6 +3747,10 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
       )}
     </div>
   )
+}
+
+function ExploreScreen(props: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
+  return <ExploreSurface {...props} />
 }
 
 // ─── CHATS ────────────────────────────────────────────────────────────────────
