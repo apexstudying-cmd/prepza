@@ -4245,7 +4245,7 @@ def _ai_generation_parameters_from_request():
 
 @app.route("/documents/<int:document_id>/summarize", methods=["POST"])
 @limiter.limit(
-    "200 per hour",
+    "20 per hour",
     key_func=lambda: f"summarize:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
@@ -4289,7 +4289,7 @@ def summarize_document(document_id):
 
 @app.route("/documents/<int:document_id>/quiz", methods=["POST"])
 @limiter.limit(
-    "200 per hour",
+    "20 per hour",
     key_func=lambda: f"quiz:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
@@ -4395,7 +4395,7 @@ def complete_quiz(document_id, material_id):
 
 @app.route("/documents/<int:document_id>/flashcards", methods=["POST"])
 @limiter.limit(
-    "200 per hour",
+    "20 per hour",
     key_func=lambda: f"flashcards:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
@@ -4580,7 +4580,7 @@ def generation_progress(document_id):
 
 @app.route("/documents/<int:document_id>/podcast-script", methods=["POST"])
 @limiter.limit(
-    "200 per hour",
+    "20 per hour",
     key_func=lambda: f"podcast-script:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
@@ -4818,7 +4818,7 @@ def list_podcasts():
 
 @app.route("/documents/<int:document_id>/mindmap", methods=["POST"])
 @limiter.limit(
-    "200 per hour",
+    "20 per hour",
     key_func=lambda: f"mindmap:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
