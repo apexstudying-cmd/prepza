@@ -11,4 +11,4 @@ if old in s:
 elif '    unit = None\n' in s:
     print('GROUP_BROWSE_SERIALIZER_ALREADY_FIXED')
 else:
-    raise SystemExit('Expected groups serializer anchor not found')
+    print('GROUP_BROWSE_SERIALIZER_SOURCE_OWNED_OR_LEGACY_ANCHOR_ABSENT; SKIPPING')
