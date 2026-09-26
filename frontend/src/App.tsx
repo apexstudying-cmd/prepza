@@ -6319,12 +6319,13 @@ function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           value={code}
           onChange={e => handleCodeChange(e.target.value)}
           onPaste={e => {
-            const pasted = e.clipboardData.getData('text')
-            if (new RegExp('^\\d{' + otpLength + '} {
+            const pasted = e.clipboardData.getData('text').trim().replace(/\D/g, '')
+            if (pasted.length === otpLength) {
               e.preventDefault()
-              handleCodeChange(pasted.trim())
+              handleCodeChange(pasted)
             }
           }}
+
           inputMode="numeric"
           autoComplete="one-time-code"
           pattern="[0-9]*"
