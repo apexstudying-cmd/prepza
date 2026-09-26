@@ -13,6 +13,9 @@ STUDY_IMPORT = "import { PracticeQuestionsGenerationScreen, MindMapGenerationScr
 
 text = APP.read_text(encoding='utf-8')
 gen_text = GEN.read_text(encoding='utf-8')
+# GenerationScreens.tsx is already the current source-of-truth implementation.
+# Do not rewrite it during every build; repeated text transforms were producing
+# transient TypeScript syntax corruption in CI.
 
 if IMPORT not in text:
     first_import = text.find("\n", text.find("import "))
@@ -51,12 +54,8 @@ new_palette = """const C = {
   red: 'light-dark(#C94C4C, #FF7777)',
 }
 """
-if old_palette in gen_text:
-    gen_text = gen_text.replace(old_palette, new_palette, 1)
-gen_text = gen_text.replace("background: disabled ? '#D9DDE5' :", "background: disabled ? 'light-dark(#D9DDE5, #29344C)' :", 1)
-gen_text = gen_text.replace("border: `2px solid ${selected ? C.gold : '#B9BFCC}'`", "border: `2px solid ${selected ? C.gold : 'light-dark(#B9BFCC, #66718A)'}`", 1)
-gen_text = gen_text.replace("{ pages: 10, label: 'Comprehensive summary', description: 'Maximum detail within the summary format.' },", "{ pages: 10, label: 'Extended summary', description: 'More room for detail, examples, and connections.' },\n  { pages: 20, label: 'Deep comprehensive summary', description: 'Maximum depth for long-form study and exam preparation.' },", 1)
-GEN.write_text(gen_text, encoding='utf-8')
+# Keep the current GenerationScreens source untouched.
+
 
 scroll_style = "colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch'"
 base_style = "colorScheme: 'light dark', flex: 1, minHeight: 0"
