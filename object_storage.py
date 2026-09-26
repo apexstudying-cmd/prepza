@@ -58,6 +58,14 @@ def r2_presigned_put(logical_bucket, path, expires_in=900):
     )
 
 
+def r2_delete(logical_bucket, path):
+    _r2_client().delete_object(
+        Bucket=os.environ["PREPZA_R2_BUCKET"].strip(),
+        Key=_r2_key(logical_bucket, path),
+    )
+    return True
+
+
 def r2_head(logical_bucket, path):
     return _r2_client().head_object(
         Bucket=os.environ["PREPZA_R2_BUCKET"].strip(),
