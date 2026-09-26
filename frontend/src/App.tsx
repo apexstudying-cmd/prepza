@@ -7409,7 +7409,7 @@ function ChatOptionsScreen({ setScreen, conversationId, setActiveProfileUserId, 
 }
 
 // ─── EDIT PROFILE ─────────────────────────────────────────────────────────────
-type EditProfileMe = { display_name: string | null; bio: string | null; year: number | null; semester: number | null; university_id: number | null; program_id: number | null; csrf_token: string }
+type EditProfileMe = { display_name: string | null; bio: string | null; year: number | null; semester: number | null; university_id: number | null; program_id: number | null; avatar_url?: string | null; csrf_token: string }
 
 function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { tokens: T } = useTheme()
@@ -7428,12 +7428,15 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarBusy, setAvatarBusy] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     api<EditProfileMe>('/me')
       .then(me => {
         setCsrfToken(me.csrf_token)
+        setAvatarUrl(me.avatar_url || null)
         setForm({
           display_name: me.display_name || '',
           bio: me.bio || '',
@@ -7455,6 +7458,39 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     if (form.university_id == null) { setPrograms([]); return }
     api<ProgramOption[]>(`/universities/${form.university_id}/programs`).then(setPrograms).catch(() => {})
   }, [form.university_id])
+
+  const handleAvatarFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) { setSaveError('Please choose an image.'); return }
+    setAvatarBusy(true); setSaveError('')
+    try {
+      const bitmap = await createImageBitmap(file)
+      const side = Math.min(bitmap.width, bitmap.height)
+      const sx = (bitmap.width - side) / 2, sy = (bitmap.height - side) / 2
+      const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512
+      const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('Image processing is unavailable.')
+      ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, 512, 512)
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', 0.82))
+      if (!blob || blob.size > 512 * 1024) throw new Error('The processed photo is too large. Please choose a smaller image.')
+      const prepared = await api<{upload_url:string;storage_path:string}>('/profile/avatar', {
+        method:'POST', headers:{'X-CSRF-Token':csrfToken},
+        body:JSON.stringify({filename:'avatar.webp',content_type:'image/webp',file_size_bytes:blob.size})
+      })
+      const upload = await fetch(prepared.upload_url,{method:'PUT',body:blob,headers:{'Content-Type':'image/webp'}})
+      if (!upload.ok) throw new Error('Could not upload the photo.')
+      const confirmed = await api<{avatar_url:string}>('/profile/avatar/confirm',{
+        method:'POST',headers:{'X-CSRF-Token':csrfToken},body:JSON.stringify({storage_path:prepared.storage_path})
+      })
+      setAvatarUrl(confirmed.avatar_url)
+    } catch(e) { setSaveError(e instanceof ApiError ? e.message : (e instanceof Error ? e.message : 'Could not update photo.')) }
+    finally { setAvatarBusy(false) }
+  }
+
+  const removeAvatar = async () => {
+    setAvatarBusy(true); setSaveError('')
+    try { await api('/profile/avatar',{method:'DELETE',headers:{'X-CSRF-Token':csrfToken}}); setAvatarUrl(null) }
+    catch(e){setSaveError(e instanceof ApiError ? e.message : 'Could not remove photo.')}
+    finally{setAvatarBusy(false)}
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -7503,13 +7539,18 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       </div>
       {loadError && <div style={{ margin: '14px 20px 0', color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{loadError}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 20px 12px' }}>
-        <div style={{ position: 'relative', marginBottom: 20 }}>
-          <div style={{ width: 80, height: 80, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy }}>{initials}</div>
-          <div style={{ position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, background: N.gold, borderRadius: '50%', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ color: T.text }}>{Ic.edit('w-3 h-3')}</div>
-          </div>
+        <div style={{ position: 'relative', marginBottom: 10 }}>
+          {avatarUrl ? <img src={avatarUrl} alt="" style={{ width:80,height:80,borderRadius:'50%',objectFit:'cover',display:'block' }} /> :
+            <div style={{ width:80,height:80,background:`linear-gradient(135deg,${N.gold},${N.goldL})`,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:28,color:N.navy }}>{initials}</div>}
+          <label style={{ position:'absolute',bottom:0,right:0,width:26,height:26,background:N.gold,borderRadius:'50%',border:'2px solid #fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',opacity:avatarBusy?.6:1 }}>
+            <input type="file" accept="image/*" disabled={avatarBusy} onChange={e=>{const f=e.target.files?.[0];if(f)void handleAvatarFile(f);e.currentTarget.value=''}} style={{display:'none'}} />
+            <div style={{color:T.text}}>{Ic.edit('w-3 h-3')}</div>
+          </label>
         </div>
-        <div style={{ fontSize: 12, color: T.textMuted }}>Change photo (coming soon)</div>
+        <div style={{display:'flex',gap:12,alignItems:'center'}}>
+          <div style={{fontSize:12,color:T.textMuted}}>{avatarBusy?'Updating photo…':'Photo is compressed on this device before upload.'}</div>
+          {avatarUrl&&<button type="button" onClick={()=>void removeAvatar()} disabled={avatarBusy} style={{border:'none',background:'transparent',color:'#C94C4C',fontWeight:700,fontSize:11}}>Remove</button>}
+        </div>
       </div>
       <div style={{ padding: '0 20px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div>
