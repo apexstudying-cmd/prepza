@@ -22,7 +22,7 @@ for needle, label in [
     ("recordingVoice ? <span", "recording UI") if "recordingVoice ? <span" in chat or "recordingVoice ?<span" in chat or "recordingVoice &&" in chat else ("__missing_recording_ui__", "recording UI"),
     ('<audio controls', "voice-note playback"),
     ("Voice message" if "Voice message" in chat else "<audio controls", "voice-message chat preview"),
-    ('import CallExperience from \'./CallExperience\'', "call experience import"),
+    ("CallExperience from './CallExperience'", "call experience import"),
     ('className=\"prepza-call-actions\"', "call action container"),
     ('aria-label=\"Start voice call\"', "voice-call button"),
     ('aria-label=\"Start video call\"', "video-call button"),
