@@ -1723,7 +1723,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
 }
 
 function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
-  type ExploreStudentLocalLocal = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean; is_pending?: boolean }
+  type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean; is_pending?: boolean }
   const { tokens: T } = useTheme()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All')
