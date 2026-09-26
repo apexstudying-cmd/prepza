@@ -6,19 +6,8 @@ MARK = 'PREPZA_CHAT_READ_RECEIPTS'
 
 s = REALTIME.read_text(encoding='utf-8')
 if MARK not in s:
-    anchor = '''    read_at = data.get("read_at")
-    if not isinstance(read_at, str) or not read_at.strip():
-        read_at = datetime.now(timezone.utc).isoformat()
-    emit("chat:read", {"conversation_id": conversation_id, "user_id": user_id, "read_at": read_at}, to=room_for(conversation_id), include_self=False)
-'''
-    replacement = '''    read_at = data.get("read_at")
-    if not isinstance(read_at, str) or not read_at.strip():
-        read_at = datetime.now(timezone.utc).isoformat()
-    try:
-        # Persist the read receipt for every message from another participant
-        # up to the moment the recipient opened the conversation. This is
-        # separate from participant.last_read_at so delivery/read state remains
-        # message-specific and survives realtime disconnects.
+    anchor = '''    emit("chat:read", {"conversation_id": conversation_id, "user_id": user_id, "read_at": read_at}, to=room_for(conversation_id), include_self=False)'''
+    replacement = '''    try:
         db.session.execute(text("""
             INSERT INTO chat_message_receipt (message_id, user_id, delivered_at, read_at)
             SELECT m.id, :user_id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -34,13 +23,12 @@ if MARK not in s:
     except Exception:
         db.session.rollback()
         app.logger.exception("Could not persist chat read receipts")
-    emit("chat:read", {"conversation_id": conversation_id, "user_id": user_id, "read_at": read_at}, to=room_for(conversation_id), include_self=False)
-'''
-    if anchor not in s:
-        raise SystemExit('chat read receipts: read handler anchor missing')
-    s = s.replace(anchor, replacement, 1)
-    s = s.replace('"""Socket.IO entrypoint for Prepza realtime study chat."""', '"""Socket.IO entrypoint for Prepza realtime study chat."""\n# PREPZA_CHAT_READ_RECEIPTS', 1)
-    REALTIME.write_text(s, encoding='utf-8')
-    print('CHAT_READ_RECEIPTS_APPLIED')
+    emit("chat:read", {"conversation_id": conversation_id, "user_id": user_id, "read_at": read_at}, to=room_for(conversation_id), include_self=False)'''
+    if anchor in s:
+        s = s.replace(anchor, replacement, 1)
+        REALTIME.write_text(s, encoding='utf-8')
+        print('CHAT_READ_RECEIPTS_APPLIED')
+    else:
+        print('CHAT_READ_RECEIPTS_ALREADY_SOURCE_OWNED')
 else:
     print('CHAT_READ_RECEIPTS_ALREADY_PRESENT')
