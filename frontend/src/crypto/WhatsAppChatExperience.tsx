@@ -16,6 +16,8 @@ const AttachmentIc = {
   file:(s='w-5 h-5')=><svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>,
 }
 
+const AttachmentAttachmentIc = AttachmentIc
+
 type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; last_message_sender_name?: string | null; last_message_filename?: string | null; unread_count: number; status?: string }
 type Attachment = { id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null; study_document?: boolean }
 type Message = { id: number; conversation_id: number; sender_id: number; body: string | null; nonce?: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null; attachment: Attachment | null; kind?: 'text' | 'reaction'; read_by_count?: number; read_by_all?: boolean }
