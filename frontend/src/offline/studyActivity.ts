@@ -66,7 +66,10 @@ export function startOfflineStudyTracking(documentId: number, feature = 'reading
   let active = visible
   let stopped = false
   let fractionalSeconds = 0
-  const INTERACTION_WINDOW_MS = 15000
+  // Study credit continues while the student is genuinely visible/active, but
+  // two continuous minutes without an interaction ends the credited session.
+  // A later interaction resumes credit immediately.
+  const INTERACTION_WINDOW_MS = 2 * 60 * 1000
   const markInteraction = () => {
     if (stopped) return
     interactedAt = performance.now()
