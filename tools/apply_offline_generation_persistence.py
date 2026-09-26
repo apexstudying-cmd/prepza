@@ -93,7 +93,7 @@ def patch_api(text, path):
     if success is None:
         raise SystemExit(f'Offline generation: API success anchor missing in {path.name}')
     if "// Offline generated-material persistence\n" not in text:
-        addition = success + "\n  // Offline generated-material persistence\n  if (typeof body === 'object' && body !== null && (requestMethod === 'GET' || requestMethod === 'POST')) {\\n    void saveGeneratedMaterialOffline(path, requestBody, body)\\n    if (requestMethod === 'GET' && path.endsWith('/podcast-audio') && body.audio_status === 'ready' && body.audio_url) void cacheGeneratedAudioOffline(String(body.audio_url))\\n  }\\n"
+        addition = success + "\n  // Offline generated-material persistence\n  if (typeof body === 'object' && body !== null && (requestMethod === 'GET' || requestMethod === 'POST')) {\n    void saveGeneratedMaterialOffline(path, requestBody, body)\n    if (requestMethod === 'GET' && path.endsWith('/podcast-audio') && body.audio_status === 'ready' && body.audio_url) void cacheGeneratedAudioOffline(String(body.audio_url))\\n  }\\n"
         text = text.replace(success, addition, 1)
     return text
 
