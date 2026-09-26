@@ -41,13 +41,7 @@ jobs:
 
       - name: Typecheck
         run: |
-          pnpm run prebuild
-          echo '--- APP 6208-6260 ---'
-          nl -ba src/App.tsx | sed -n '6208,6260p'
-          echo '--- APP 14940-15010 ---'
-          nl -ba src/App.tsx | sed -n '14940,15010p'
-          echo '--- CHAT 680-688 ---'
-          nl -ba src/crypto/WhatsAppChatExperience.tsx | sed -n '680,688p'
+          python3 ../tools/debug_prebuild_sequence.py
           pnpm exec tsc --noEmit
 
       - name: Validate service worker JavaScript
