@@ -3851,9 +3851,44 @@ def list_documents():
         .all()
     )
 
+    # Build the list response in bulk. The previous implementation performed
+    # one DocumentContent lookup per document, and the My Study frontend then
+    # made another HTTP request per document just to discover ready materials.
+    # Keep the same ownership/scope rules while reducing this to a small,
+    # bounded number of database queries.
+    content_ids = [d.document_content_id for d in documents if d.document_content_id]
+    content_by_id = {}
+    if content_ids:
+        content_by_id = {
+            int(content.id): content
+            for content in DocumentContent.query.filter(DocumentContent.id.in_(content_ids)).all()
+        }
+
+    material_by_content = {}
+    if content_ids:
+        material_query = GeneratedMaterial.query.filter(
+            GeneratedMaterial.document_content_id.in_(content_ids),
+            GeneratedMaterial.status == "ready",
+            GeneratedMaterial.generation_version == "v2",
+            db.or_(
+                GeneratedMaterial.scope == "shared",
+                db.and_(
+                    GeneratedMaterial.scope == "private",
+                    GeneratedMaterial.owner_user_id == user_id,
+                ),
+            ),
+        ).order_by(GeneratedMaterial.updated_at.desc())
+        for material in material_query.all():
+            material_by_content.setdefault(int(material.document_content_id), []).append({
+                "id": material.id,
+                "type": material.material_type,
+                "status": material.status,
+                "parameters": material.generation_parameters or {},
+            })
+
     result = []
     for d in documents:
-        content = db.session.get(DocumentContent, d.document_content_id) if d.document_content_id else None
+        content = content_by_id.get(d.document_content_id) if d.document_content_id else None
         # Once past "uploading", status tracks the shared DocumentContent
         # live - document_pipeline.py updates content.status in the
         # background, not this row, and several Document rows can share
@@ -3867,6 +3902,7 @@ def list_documents():
             "page_count": content.page_count if content else None,
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "last_opened_at": d.last_opened_at.isoformat() if d.last_opened_at else None,
+            "materials": material_by_content.get(int(d.document_content_id), []) if d.document_content_id else [],
         })
 
     return jsonify({"documents": result})
