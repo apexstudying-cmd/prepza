@@ -4,6 +4,7 @@ import re
 
 APP = Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx"
 s = APP.read_text(encoding="utf-8")
+s = s.replace('ExploreStudentLocal', 'ExploreStudent')
 
 pattern = re.compile(r"if\s*\(loading\)\s*return\s*(<Skeleton[A-Za-z0-9_]+\s*/>)")
 s, count = pattern.subn(r"if (loading) return <DelayedScreenSkeleton>\1</DelayedScreenSkeleton>", s)
