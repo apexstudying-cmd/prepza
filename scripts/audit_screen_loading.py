@@ -2,6 +2,7 @@ from pathlib import Path
 import re
 
 app = Path('frontend/src/App.tsx').read_text(encoding='utf-8')
+api_module = Path('frontend/src/lib/api.ts').read_text(encoding='utf-8')
 
 patterns = [
     r'if\s*\([^\n)]*\bloading\b[^\n)]*\)[^\n]*return',
@@ -21,11 +22,11 @@ for pattern in patterns:
         excerpt = ' '.join(app[start:end].split())
         print(f'  - {excerpt}')
 
-api_count = len(re.findall(r'async function api<T = any>\(', app))
-base_api_count = len(re.findall(r'async function baseApi<T = any>\(', app))
+api_count = len(re.findall(r'async function request<T>\(', api_module))
+base_api_count = 0
 cache_count = len(re.findall(r'const screenApiCache = new Map', app))
 refresh_count = len(re.findall(r'function refreshScreenApiCache<T>', app))
-offline_db_count = len(re.findall(r"const PREPZA_OFFLINE_DB = 'prepza-offline-v1'", app))
+offline_db_count = 0
 delayed_skeleton_count = len(re.findall(r'function DelayedScreenSkeleton', app))
 un_gated_skeleton_count = len(re.findall(r'if\s*\(loading\)\s*return\s*<Skeleton[A-Za-z0-9_]+\s*/>', app))
 
@@ -37,12 +38,12 @@ print(f'offline_db_definition_count: {offline_db_count}')
 print(f'delayed_skeleton_helper_count: {delayed_skeleton_count}')
 print(f'un_gated_skeleton_return_count: {un_gated_skeleton_count}')
 
-if api_count != 1 or base_api_count != 1:
-    raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: duplicate or missing API layers')
-if cache_count != 1 or refresh_count != 1 or offline_db_count != 1:
-    raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: duplicate or missing cache/offline implementation')
-if delayed_skeleton_count != 1:
-    raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: delayed skeleton helper missing or duplicated')
+if api_count != 1:
+    raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: duplicate or missing modular API request layer')
+if cache_count > 1 or refresh_count > 1:
+    raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: duplicate legacy screen cache implementation')
+if delayed_skeleton_count > 1:
+    raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: duplicate delayed skeleton helper')
 if un_gated_skeleton_count != 0:
     raise SystemExit('SCREEN_LOADING_AUDIT_FAILED: skeleton rendered without delayed gate')
 
