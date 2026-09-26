@@ -2827,7 +2827,9 @@ def list_programs(university_id):
 
 
 @app.route("/signup", methods=["POST"])
-@limiter.limit("30 per minute")
+# Campus-NAT-friendly burst guard: 30 signups / 10 minutes and 300 / 24h per source IP.
+# Email/OTP limits remain separate, so an IP is not the student identity.
+@limiter.limit("30 per 10 minutes; 300 per day")
 def signup():
     data = request.get_json(silent=True)
     if not data:
