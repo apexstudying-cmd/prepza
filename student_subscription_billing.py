@@ -15,14 +15,15 @@ from flask import jsonify, request, session
 from sqlalchemy import text
 
 
-def ensure_subscription_schema(db):
+def ensure_subscription_schema(app, db):
     """Idempotent safety net; the migration remains the deploy/audit artifact.
 
     The runtime application uses PostgreSQL. Realtime/security tests deliberately
     boot the Flask app against an in-memory SQLite database, so PostgreSQL-only
     DDL must not run during test-module import.
     """
-    if db.engine.url.get_backend_name() == "sqlite":
+    database_uri = str(app.config.get("SQLALCHEMY_DATABASE_URI") or "")
+    if database_uri.startswith("sqlite"):
         return
     # Payment period boundaries are part of the entitlement contract. Keep
     # this additive safety-net in sync with the deploy migration so an older
@@ -665,7 +666,7 @@ def handle_refund_webhook(db, event, payload):
     return True
 
 def register_student_subscription_billing(app, db, Payment, User, require_csrf, require_admin, paystack_request):
-    ensure_subscription_schema(db)
+    ensure_subscription_schema(app, db)
     from ai_economics import get_plan
 
     @app.get("/subscription/refund-policy")
