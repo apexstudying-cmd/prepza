@@ -7,6 +7,7 @@ import { ensureE2EEIdentityReady, fetchUserPublicKey, uploadGroupKeyEnvelopes } 
 import { provisionInitialGroupKey } from './groupProvisioning'
 import CallExperience from './CallExperience'
 import { saveStudyHubDocumentOffline } from '../offline/studyHubOffline'
+import { cacheChatAttachment, getCachedChatAttachmentUrl } from '../offline/chatAttachmentCache'
 
 const AttachmentIc = {
   camera:(s='w-5 h-5')=><svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.2"/><path d="M8 10h.01"/></svg>,
@@ -67,6 +68,16 @@ function replyId(message: Message) { const envelope = parseEnvelope(message.body
 function buildReactionState(messages: Message[]) { const state: ReactionState = {}; for (const message of messages) { if (message.kind !== 'reaction') continue; const event = parseEnvelope(message.body); if (!event || event.type !== 'reaction') continue; const byEmoji = state[event.target_id] || (state[event.target_id] = {}); const users = byEmoji[event.emoji] || (byEmoji[event.emoji] = new Set<number>()); if (event.action === 'add') users.add(message.sender_id); else users.delete(message.sender_id) } return state }
 function isImage(fileType: string) { return /^(jpg|jpeg|png|gif|webp)$/i.test(fileType) || fileType.startsWith('image/') }
 function isAudio(fileType: string) { return /^(webm|ogg|mp3|m4a|wav|aac|mp4)$/i.test(fileType) || fileType.startsWith('audio/') }
+async function hydrateAttachmentUrls(messages: Message[]): Promise<Message[]> {
+  return Promise.all(messages.map(async message => {
+    const attachment=message.attachment
+    if (!attachment) return message
+    const cached=await getCachedChatAttachmentUrl(attachment.id)
+    if (cached) return { ...message, attachment: { ...attachment, view_url: cached } }
+    if (attachment.view_url) void cacheChatAttachment(attachment.id, attachment.view_url, attachment.file_type, attachment.original_filename)
+    return message
+  }))
+}
 
 export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenOptions, onOpenDocument }: { onClose?: () => void; onOpenProfile?: (userId: number, displayName?: string, conversationId?: number) => void; onOpenOptions?: (conversationId: number) => void; onOpenDocument?: (documentId: number) => void }) {
   const [visible, setVisible] = useState(false)
@@ -221,7 +232,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
     void getCachedChatMessages(selectedId).then(cached => {
       if (cancelled || !cached) return
       cacheLoaded = true
-      setMessages(cached as Message[])
+      void hydrateAttachmentUrls(cached as Message[]).then(hydrated => { if (!cancelled) setMessages(hydrated) })
       setLoading(false)
     })
     Promise.all([
@@ -230,8 +241,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
     ]).then(([nextDetail, nextMessages]) => {
       if (cancelled) return
       setDetail(nextDetail)
-      setMessages(nextMessages.messages || [])
-      void cacheChatMessages(selectedId, nextMessages.messages || [])
+      void hydrateAttachmentUrls(nextMessages.messages || []).then(hydrated => { if (!cancelled) { setMessages(hydrated); void cacheChatMessages(selectedId, hydrated) } })
       setOnlineUsers(new Set())
       joinRealtimeChat(selectedId)
       if (readReceiptsEnabled === true) sendReadRealtime(selectedId)
@@ -248,7 +258,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
 
   useEffect(() => {
     if (!visible || view !== 'detail' || selectedId == null) return
-    const refresh = () => api<{ messages: Message[] }>(`/chats/${selectedId}/messages`).then(result => { setMessages(result.messages || []); void cacheChatMessages(selectedId, result.messages || []); void loadList() }).catch(() => {})
+    const refresh = () => api<{ messages: Message[] }>(`/chats/${selectedId}/messages`).then(result => hydrateAttachmentUrls(result.messages || [])).then(messages => { setMessages(messages); void cacheChatMessages(selectedId, messages); void loadList() }).catch(() => {})
     const onMessage = (event: Event) => { const message = (event as CustomEvent<Message>).detail; if (message?.conversation_id === selectedId) void refresh() }
     const onRead = (event: Event) => { const data = (event as CustomEvent<{ conversation_id?: number; user_id?: number }>).detail; if (data?.conversation_id === selectedId && data.user_id) setMessages(current => current.map(m => m.sender_id === meIdRef.current ? { ...m, read_by_count: Math.max(m.read_by_count || 0, 1) } : m)) }
     const onMessageUpdated = (event: Event) => { const data = (event as CustomEvent<{ conversation_id?: number }>).detail; if (data?.conversation_id === selectedId) void refresh() }
@@ -478,7 +488,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
     const current = reactionState[message.id]?.[emoji]?.has(meId || -1) || false
     setReactionPicker(null); setSending(true); setError('')
     const envelope: ChatEnvelope = { v: 1, type: 'reaction', target_id: message.id, emoji, action: current ? 'remove' : 'add' }
-    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'reaction' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not update reaction.')) } finally { setSending(false) }
+    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'reaction' }) }); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); const hydrated=await hydrateAttachmentUrls(result.messages || []); setMessages(hydrated); void cacheChatMessages(selectedId, hydrated); void loadList() } catch (value) { setError(friendlyError(value, 'Could not update reaction.')) } finally { setSending(false) }
   }
   const loadStudyHubDocuments = async () => {
     setStudyHubLoading(true); setStudyHubError('')
