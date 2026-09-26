@@ -141,7 +141,7 @@ def test_message_broadcast_is_limited_to_e2ee_persisted_payload():
     with app.test_request_context("/chats/12/messages", method="POST"):
         with patch("realtime_server.is_e2ee_conversation", return_value=True), patch("realtime_server.socketio.emit") as emit:
             assert broadcast_message_response(response) is response
-        emit.assert_called_once_with("chat:message", payload["message"], to="chat:12")
+        emit.assert_called_once_with("chat:message", payload["message"], to="chat:12", include_self=False)
 
 
 def test_non_e2ee_message_is_not_broadcast():
