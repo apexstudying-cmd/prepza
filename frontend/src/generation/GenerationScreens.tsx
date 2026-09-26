@@ -51,7 +51,7 @@ function QuotaNotice({ usage, feature, unit }: { usage: PrepzaUsage | null; feat
 function friendlyGenerationError(error: unknown): string {
   if (!(error instanceof GenerationApiError)) return error instanceof Error ? error.message : 'Generation could not be completed. Please try again.'
   if (error.code === 'generation_quota_exhausted' || /used up this plan.?s generation allowance|generation quota exhausted/i.test(error.message)) {
-    return 'You have used all of this feature's allowance for your current plan. Upgrade your plan to continue generating.'
+    return 'You have used all of this feature allowance for your current plan. Upgrade your plan to continue generating.'
   }
   if (error.code === 'generation_size_limit') {
     return error.message
