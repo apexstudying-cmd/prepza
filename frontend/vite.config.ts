@@ -185,4 +185,4 @@ function figmaSiteConfiguration(config: FigmaSiteConfiguration): Plugin {
       },
     },
   }
-})
+}
