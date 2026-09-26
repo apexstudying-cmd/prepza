@@ -15,6 +15,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from flask import jsonify, request, session
 from sqlalchemy import func
+from werkzeug.security import generate_password_hash
 
 
 DEFAULTS = {
@@ -277,12 +278,11 @@ def register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf
         if user.email_verified:
             return jsonify({"message": "Email already verified", "redirect": "/"}), 200
         user.email_verified = True
-        _sync_referral_progress = app.view_functions.get("_sync_referral_progress")
-        if _sync_referral_progress:
-            try:
-                _sync_referral_progress(user)
-            except Exception:
-                app.logger.exception("Referral sync failed during OTP verification")
+        try:
+            from app import _sync_referral_progress
+            _sync_referral_progress(user)
+        except Exception:
+            app.logger.exception("Referral sync failed during OTP verification")
         db.session.commit()
         session.permanent = True
         session["user_id"] = user.id
