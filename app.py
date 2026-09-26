@@ -1320,6 +1320,10 @@ class MessageAttachment(db.Model):
     conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id", ondelete="CASCADE"), nullable=False)
     message_id = db.Column(db.Integer, db.ForeignKey("message.id", ondelete="CASCADE"), nullable=True)
     uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    # Non-null only for a Study Hub source-document share. Generated AI
+    # artifacts never use this field and therefore cannot be shared through
+    # the Study Hub chat flow.
+    source_document_content_id = db.Column(db.Integer, db.ForeignKey("document_content.id"), nullable=True)
     storage_path = db.Column(db.String(500), nullable=False)
     file_type = db.Column(db.String(20), nullable=False)
     original_filename = db.Column(db.String(255), nullable=False)
@@ -9439,7 +9443,7 @@ def _serialize_chat_message(message):
             "original_filename": attachment.original_filename,
             "file_size_bytes": attachment.file_size_bytes,
             "view_url": get_cached_chat_attachment_url(attachment),
-            "study_document": bool(DocumentContent.query.filter_by(storage_path=attachment.storage_path, status="ready").first()),
+            "study_document": attachment.source_document_content_id is not None,
         }
     return {
         "id": message.id,
@@ -9640,6 +9644,7 @@ def share_study_document_to_chat(conversation_id):
     attachment=MessageAttachment(
         conversation_id=conversation_id,
         uploaded_by_user_id=user_id,
+        source_document_content_id=content.id,
         storage_path=content.storage_path,
         file_type=content.file_type or "application/octet-stream",
         original_filename=document.original_filename or document.title,
@@ -9665,8 +9670,8 @@ def import_chat_study_document(conversation_id, attachment_id):
     attachment=db.session.get(MessageAttachment,attachment_id)
     if not attachment or attachment.conversation_id!=conversation_id or attachment.status!="ready":
         return jsonify({"error":"Attachment not found"}),404
-    content=DocumentContent.query.filter_by(storage_path=attachment.storage_path, status="ready").first()
-    if not content:
+    content=db.session.get(DocumentContent, attachment.source_document_content_id) if attachment.source_document_content_id else None
+    if not content or content.status!="ready" or not content.storage_path:
         return jsonify({"error":"The shared source document is no longer available"}),410
     existing=Document.query.filter_by(user_id=user_id,document_content_id=content.id,is_removed=False).first()
     if existing:
