@@ -25,6 +25,7 @@ import document_pipeline
 import podcast_audio
 from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
+from db_runtime import configure_sqlalchemy_runtime
 
 load_dotenv()
 
@@ -41,7 +42,7 @@ if sentry_dsn:
     )
 
 app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
-limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"])
+limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"], storage_uri=os.environ.get("REDIS_URL", "memory://"), storage_options={"socket_connect_timeout": 2, "socket_timeout": 2} if os.environ.get("REDIS_URL") else {})
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
