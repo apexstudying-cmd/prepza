@@ -1723,6 +1723,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
 }
 
 function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
+  type ExploreStudentLocal = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean; is_pending?: boolean }
   const { tokens: T } = useTheme()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All')
@@ -1853,7 +1854,7 @@ function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setA
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}><div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>👥 Students</div><span style={{ fontSize: 11, color: T.textMuted }}>{filteredStudents.length} found</span></div>
             {filteredStudents.length === 0 ? <div style={{ fontSize: 12, color: T.textMuted }}>No students found.</div> : <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
               {filteredStudents.slice(0, 12).map(s => {
-                const initials = s.display_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
+                const initials = s.display_name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
                 return <div key={s.user_id} style={{ flexShrink: 0, width: 148, background: T.card, borderRadius: 16, padding: '15px 14px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                   <div onClick={() => openStudentProfile(s)} style={{ cursor: 'pointer' }}><div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><Avi name={initials} size={48} /></div><div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{s.display_name}</div><div style={{ fontSize: 10, color: T.textMuted }} className="line-clamp-1">{s.program_name || 'Student'}{s.year ? ` · Y${s.year}` : ''}</div></div>
                   <button onClick={() => toggleFollow(s)} disabled={followBusy[s.user_id] || s.is_pending} style={{ marginTop: 10, background: (s.is_following || s.is_pending) ? 'rgba(201,168,76,0.15)' : N.navy, color: N.gold, border: (s.is_following || s.is_pending) ? `1px solid ${N.gold}44` : 'none', borderRadius: 10, padding: '6px 16px', fontSize: 11, fontWeight: 700, cursor: s.is_pending ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy[s.user_id] ? 0.6 : 1 }}>{followBusy[s.user_id] ? '…' : s.is_pending ? 'Requested' : s.is_following ? 'Following ✓' : 'Follow'}</button>
