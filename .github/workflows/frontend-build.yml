@@ -40,7 +40,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: python3 ../tools/debug_prebuild_sequence.py
+        run: pnpm run prebuild && pnpm exec tsc --noEmit
 
       - name: Validate service worker JavaScript
         run: |
