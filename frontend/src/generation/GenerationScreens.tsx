@@ -116,7 +116,7 @@ function GenerationHeader({ title, subtitle, onBack }: { title: string; subtitle
   return (
     <div style={headerStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button onClick={onBack} style={{ width: 34, height: 34, border: 'none', borderRadius: 10, background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 20, cursor: 'pointer' }}><</button>
+        <button onClick={onBack} style={{ width: 34, height: 34, border: 'none', borderRadius: 10, background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 20, cursor: 'pointer' }}>Back</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 16 }}>{title}</div>
           {subtitle && <div style={{ marginTop: 2, fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{subtitle}</div>}
