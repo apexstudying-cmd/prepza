@@ -186,3 +186,15 @@ function figmaSiteConfiguration(config: FigmaSiteConfiguration): Plugin {
     },
   }
 }
+
+function figmaErrorOverlayReplay(): Plugin {
+  return { name: 'figma-error-overlay-replay' }
+}
+
+function figmaReactRefreshBoundaryFallback(): Plugin {
+  return { name: 'figma-react-refresh-boundary-fallback' }
+}
+
+function figmaMakeKitPlugin(_options: { storiesGlob?: string } = {}): Plugin {
+  return { name: 'figma-make-kit' }
+}
