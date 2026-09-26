@@ -133,7 +133,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
           {([['monthly_fee_kes','Monthly KES'],['active_user_cap','Active-user cap'],['active_opportunities','Opportunities'],['sponsored_campaigns','Sponsored campaigns'],['candidate_search_window_days','Search days'],['analytics_retention_days','Analytics days']] as const).map(([key,label])=><label key={key} style={{fontSize:10,color:T.textMuted}}>{label}<input type="number" min="0" value={Number(p[key])} onChange={e=>setOrganisationPlans(v=>v.map(x=>x.plan_code===p.plan_code?{...x,[key]:Number(e.target.value)}:x))} style={{display:'block',width:'100%',boxSizing:'border-box',padding:7}}/></label>)}
         </div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}><label style={{fontSize:11}}><input type="checkbox" checked={p.is_active} onChange={e=>setOrganisationPlans(v=>v.map(x=>x.plan_code===p.plan_code?{...x,is_active:e.target.checked}:x))}/> Active</label><button disabled={savingOrganisationPlan===p.plan_code} onClick={()=>saveOrganisationPlan(p)} style={{background:'#C9A84C',color:'#0B1437',border:0,borderRadius:8,padding:'8px 12px',fontWeight:800}}>{savingOrganisationPlan===p.plan_code?'Saving…':'Save plan'}</button></div>
-      </div>}
+      </div>)}
     </div>}
 
     {tab==='pricing'&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
