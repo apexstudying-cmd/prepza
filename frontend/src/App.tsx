@@ -9665,26 +9665,26 @@ function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void })
 
 // ─── ADMIN PLATFORM ───────────────────────────────────────────────────────────
 
-const adminNav = [
-  { key: 'dashboard', label: 'Dashboard', icon: '📊' },
-  { key: 'users', label: 'Users', icon: '👥' },
-  { key: 'content', label: 'Content', icon: '📄' },
-  { key: 'universities', label: 'Universities', icon: '🏛️' },
-  { key: 'community', label: 'Community', icon: '💬' },
-  { key: 'opportunities', label: 'Opportunities', icon: '🚀' },
-  { key: 'promotions', label: 'Promotions', icon: '✦' },
-  { key: 'organisations', label: 'Organisations', icon: '🏢' },
-  { key: 'ai-usage', label: 'AI & Usage', icon: '🤖' },
-  { key: 'payments', label: 'Payments', icon: '💳' },
-  { key: 'b2b-finance', label: 'B2B Finance', icon: '▣' },
-  { key: 'communications', label: 'Communications', icon: '📢' },
-  { key: 'analytics', label: 'Analytics', icon: '📈' },
-  { key: 'moderation', label: 'Moderation', icon: '🛡️' },
-  { key: 'system', label: 'System', icon: '⚙️' },
-  { key: 'settings', label: 'Settings', icon: '🔧' },
-  { key: 'groups', label: 'Groups', icon: '👨‍👩‍👧' },
-  { key: 'ambassadors', label: 'Ambassadors', icon: '🤝' },
-]
+const adminNavGroups = [
+  { key:'dashboard', label:'Dashboard', icon:'dashboard', items:[{key:'dashboard',label:'Overview'}] },
+  { key:'users', label:'Users', icon:'users', items:[{key:'users',label:'Students'},{key:'groups',label:'Groups'},{key:'moderation',label:'Moderation'}] },
+  { key:'payments', label:'Payments', icon:'payments', items:[{key:'payments',label:'Student payments'},{key:'b2b-finance',label:'B2B finance'},{key:'ambassadors',label:'Ambassadors'}] },
+  { key:'organisations', label:'Organizations', icon:'org', items:[{key:'organisations',label:'Organizations'},{key:'opportunities',label:'Opportunities'},{key:'promotions',label:'Promotions'}] },
+  { key:'content', label:'Content', icon:'content', items:[{key:'content',label:'Library & review'},{key:'universities',label:'Universities'}] },
+  { key:'communications', label:'Communications', icon:'communications', items:[{key:'communications',label:'Announcements'}] },
+  { key:'system', label:'System', icon:'system', items:[{key:'system',label:'Infrastructure'},{key:'ai-usage',label:'AI & usage'},{key:'analytics',label:'Analytics'},{key:'settings',label:'Settings'}] },
+] as const
+
+function AdminNavIcon({name}:{name:string}) {
+  const common={viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const,ariaHidden:true}
+  if(name==='dashboard') return <svg width="18" height="18" {...common}><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+  if(name==='users') return <svg width="18" height="18" {...common}><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 2.7-5 6-5s6 2 6 5"/><path d="M16 6.5a2.5 2.5 0 0 1 0 4.8M18 15c1.9.7 3 2.1 3 4"/></svg>
+  if(name==='payments') return <svg width="18" height="18" {...common}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M7 14h4"/></svg>
+  if(name==='org') return <svg width="18" height="18" {...common}><path d="M4 21V5l8-3 8 3v16M8 9h2M14 9h2M8 13h2M14 13h2M8 17h2M14 17h2"/></svg>
+  if(name==='content') return <svg width="18" height="18" {...common}><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v5h5M8 12h8M8 16h6"/></svg>
+  if(name==='communications') return <svg width="18" height="18" {...common}><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg>
+  return <svg width="18" height="18" {...common}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20h-2.6v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.6-1H6v-2.6h.4A1.7 1.7 0 0 0 8 10a1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5H15v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v2.6H21a1.7 1.7 0 0 0-1.6 1z"/></svg>
+}
 
 type AdminLibraryQueueItem = {
   id: number
@@ -10013,6 +10013,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   const [confirmAction, setConfirmAction] = useState<{ type: string; target: string; userId?: number; nextSuspended?: boolean } | null>(null)
   const [contentTab, setContentTab] = useState('Pending Review')
   const [commTab, setCommTab] = useState('Announcements')
+  const [adminExpanded, setAdminExpanded] = useState<Record<string, boolean>>({ dashboard:true, users:true, payments:false, organisations:false, content:false, communications:false, system:false })
   const [csrfToken, setCsrfToken] = useState('')
   useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
 
@@ -13074,16 +13075,17 @@ function AdminPlatform({ onExit }: { onExit: () => void }) {
         </div>
         <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '0 14px 10px' }} />
         <div style={{ flex: 1, padding: '0 8px' }}>
-          {adminNav.map(n => {
-            const active = section === n.key
-            const hasBadge: Record<string, string> = { moderation: '7', content: '23', payments: '14' }
-            return (
-              <button key={n.key} onClick={() => setSection(n.key)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, background: active ? 'rgba(201,168,76,0.15)' : 'transparent', border: `1px solid ${active ? 'rgba(201,168,76,0.25)' : 'transparent'}`, cursor: 'pointer', marginBottom: 2, transition: 'all 0.15s' }}>
-                <span style={{ fontSize: 15 }}>{n.icon}</span>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? N.gold : 'rgba(255,255,255,0.65)', textAlign: 'left' }}>{n.label}</span>
-                {hasBadge[n.key] && <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99 }}>{hasBadge[n.key]}</span>}
+          {adminNavGroups.map(group => {
+            const open = Boolean(adminExpanded[group.key])
+            const activeGroup = group.items.some(item => item.key === section)
+            return <div key={group.key} style={{marginBottom:3}}>
+              <button type="button" onClick={()=>setAdminExpanded(v=>({...v,[group.key]:!open}))} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,background:activeGroup?'rgba(201,168,76,0.10)':'transparent',border:'1px solid transparent',cursor:'pointer',color:activeGroup?N.gold:'rgba(255,255,255,.78)'}}>
+                <AdminNavIcon name={group.icon}/><span style={{flex:1,fontSize:13,fontWeight:activeGroup?750:600,textAlign:'left'}}>{group.label}</span><span style={{fontSize:12,opacity:.55}}>{open?'−':'+'}</span>
               </button>
-            )
+              {open && <div style={{padding:'2px 0 5px 28px'}}>
+                {group.items.map(item=><button type="button" key={item.key} onClick={()=>setSection(item.key)} style={{width:'100%',display:'flex',alignItems:'center',padding:'7px 10px',border:0,borderLeft:`2px solid ${section===item.key?N.gold:'rgba(255,255,255,.08)'}`,background:'transparent',color:section===item.key?N.gold:'rgba(255,255,255,.52)',fontSize:11,cursor:'pointer',textAlign:'left'}}>{item.label}</button>)}
+              </div>}
+            </div>
           })}
         </div>
         <div style={{ padding: '10px 8px 20px' }}>
