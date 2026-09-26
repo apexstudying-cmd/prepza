@@ -116,5 +116,5 @@ replacement = r'''export function MindMapGenerationScreen({ setScreen, activeDoc
 }
 '''
 
-GEN.write_text(text[:start] + replacement + '\n', encoding='utf-8')
+GEN.write_text(text[:start] + replacement.replace('’', "'").replace('‘', "'").replace('“', '"').replace('”', '"').replace('…', '...').replace('‹', 'Back').replace('→', '->').replace('·', ' - ').replace('✓', 'OK').replace('−', '-').replace('Ⅱ', 'II').replace('▶', '>') + '\n', encoding='utf-8')
 print('Study generation screen polish applied.')
