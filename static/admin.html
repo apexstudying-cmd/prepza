@@ -389,6 +389,7 @@
     <div class="tab" data-panel="units">Units</div>
     <div class="tab" data-panel="content">Content</div>
     <div class="tab" data-panel="payments">Payments</div>
+    <div class="tab" data-panel="infrastructure">Infrastructure</div>
     <div class="tab" data-panel="settings">Settings</div>
   </div>
 
@@ -515,9 +516,40 @@
             <div><label for="setting-price-qna">Q&amp;A</label><input type="number" id="setting-price-qna" min="0" placeholder="0"></div>
           </div>
           <button class="btn-primary" onclick="saveSettings()">Save settings</button>
+          <div class="card" style="margin-top:18px;">
+            <h2>Email OTP authentication</h2>
+            <p class="hint">These values are the backend authentication contract. The student UI reads the OTP length returned by signup/recovery, while the backend enforces these values on every request.</p>
+            <div class="form-row" style="grid-template-columns:repeat(4,1fr);">
+              <div><label>Enabled</label><label class="toggle-switch"><input type="checkbox" id="otp-enabled"><span class="toggle-slider"></span></label></div>
+              <div><label>Code length</label><input type="number" id="otp-length" min="6" max="8"></div>
+              <div><label>Expiry (min)</label><input type="number" id="otp-expiry" min="2" max="30"></div>
+              <div><label>Max attempts</label><input type="number" id="otp-attempts" min="3" max="10"></div>
+            </div>
+            <div class="form-row" style="grid-template-columns:repeat(3,1fr);">
+              <div><label>Resend cooldown (sec)</label><input type="number" id="otp-cooldown" min="30" max="600"></div>
+              <div><label>Target sends / hour</label><input type="number" id="otp-target-hour" min="1" max="20"></div>
+              <div><label>IP sends / hour</label><input type="number" id="otp-ip-hour" min="5" max="100"></div>
+            </div>
+            <div id="otp-ses-status" class="hint"></div>
+            <button class="btn-primary" onclick="saveOtpSettings()">Save OTP settings</button>
+          </div>
+
         </div>
       </div>
     </section>
+    <!-- INFRASTRUCTURE PANEL -->
+    <section class="panel" id="panel-infrastructure">
+      <div class="card">
+        <h2>Infrastructure & dependencies</h2>
+        <p class="hint">Measured provider state and explicit upgrade triggers. Prepza never upgrades a provider automatically.</p>
+        <div id="infra-summary"></div>
+      </div>
+      <div class="card">
+        <h2>Dependency register</h2>
+        <div id="dependency-table"></div>
+      </div>
+    </section>
+
     <!-- PAYMENTS PANEL -->
     <section class="panel" id="panel-payments">
       <div class="card">
@@ -610,6 +642,8 @@ function initApp() {
   loadContent();
   loadPayments();
   loadSettings();
+  loadInfrastructure();
+  loadOtpSettings();
 }
 
 // ---------- Tabs ----------
@@ -1033,6 +1067,52 @@ async function saveSettings() {
   } catch (e) {
     toast(e.message, "error");
   }
+}
+
+async function loadInfrastructure() {
+  try {
+    const data = await api("/admin/infrastructure");
+    const ses = data.ses || {};
+    document.getElementById("infra-summary").innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-box"><div class="stat-label">SES status</div><div class="stat-value" style="font-size:18px;">${escapeHtml(ses.status || "unknown")}</div></div>
+        <div class="stat-box"><div class="stat-label">SES 24h quota</div><div class="stat-value" style="font-size:18px;">${ses.max_24_hour_send ?? "—"}</div></div>
+        <div class="stat-box"><div class="stat-label">SES used / 24h</div><div class="stat-value" style="font-size:18px;">${ses.sent_last_24_hours ?? "—"}</div></div>
+        <div class="stat-box"><div class="stat-label">SES send rate</div><div class="stat-value" style="font-size:18px;">${ses.max_send_rate ?? "—"}/s</div></div>
+      </div>`;
+    const rows=(data.dependencies||[]).map(d=>`<tr><td><strong>${escapeHtml(d.provider)}</strong><br><span class="hint">${escapeHtml(d.resource)}</span></td><td>${escapeHtml(d.status)}</td><td>${escapeHtml(d.upgrade_trigger)}</td><td>${escapeHtml(d.action)}</td></tr>`).join("");
+    document.getElementById("dependency-table").innerHTML = rows ? `<table><thead><tr><th>Dependency</th><th>Status</th><th>Upgrade trigger</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="hint">No dependency data.</p>';
+  } catch(e) { document.getElementById("infra-summary").innerHTML='<p class="hint">Could not load infrastructure telemetry.</p>'; toast(e.message,"error"); }
+}
+
+async function loadOtpSettings() {
+  try {
+    const data=await api("/admin/auth/otp");
+    const s=data.settings||{};
+    document.getElementById("otp-enabled").checked=String(s.otp_enabled).toLowerCase()==="true";
+    document.getElementById("otp-length").value=s.otp_length||6;
+    document.getElementById("otp-expiry").value=s.otp_expiry_minutes||10;
+    document.getElementById("otp-attempts").value=s.otp_max_attempts||5;
+    document.getElementById("otp-cooldown").value=s.otp_resend_cooldown_seconds||60;
+    document.getElementById("otp-target-hour").value=s.otp_max_sends_per_target_hour||5;
+    document.getElementById("otp-ip-hour").value=s.otp_max_sends_per_ip_hour||20;
+    const ses=data.ses||{};
+    document.getElementById("otp-ses-status").textContent=`SES: ${ses.status||"unknown"} · region: ${ses.region||"not configured"} · 24h quota: ${ses.max_24_hour_send??"—"} · used: ${ses.sent_last_24_hours??"—"}`;
+  } catch(e) { toast("Could not load OTP settings: "+e.message,"error"); }
+}
+
+async function saveOtpSettings() {
+  const body={
+    otp_enabled:document.getElementById("otp-enabled").checked,
+    otp_length:parseInt(document.getElementById("otp-length").value,10),
+    otp_expiry_minutes:parseInt(document.getElementById("otp-expiry").value,10),
+    otp_max_attempts:parseInt(document.getElementById("otp-attempts").value,10),
+    otp_resend_cooldown_seconds:parseInt(document.getElementById("otp-cooldown").value,10),
+    otp_max_sends_per_target_hour:parseInt(document.getElementById("otp-target-hour").value,10),
+    otp_max_sends_per_ip_hour:parseInt(document.getElementById("otp-ip-hour").value,10)
+  };
+  try { await api("/admin/auth/otp",{method:"PATCH",body:JSON.stringify(body)}); toast("OTP settings saved","success"); loadOtpSettings(); }
+  catch(e) { toast(e.message,"error"); }
 }
 
 async function refundPayment(paymentId) {
