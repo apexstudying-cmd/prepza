@@ -6,7 +6,7 @@ const META_STORE = 'savedStudyHub'
 const ASSET_DB = 'prepza-offline-study-v1'
 const ASSET_STORE = 'documents'
 const MAX_SINGLE_ASSET_BYTES = 75 * 1024 * 1024
-const MAX_TOTAL_ASSET_BYTES = 250 * 1024 * 1024
+const MAX_TOTAL_ASSET_BYTES = 1024 * 1024 * 1024
 
 type SavedStudyHubMeta = {
   key: string
@@ -299,8 +299,16 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     // Generated materials are already-entitled, ready artifacts. Never call
     // generation POST endpoints while preparing an offline package: those
     // endpoints can create jobs. Read only the exact ready material rows.
+    // Offline Study Hub only receives materials this student actually
+    // owns/generated. A shared Library artifact must never become an
+    // offline entitlement merely because the source document is public.
     const readyMaterials = Array.isArray(detail.materials)
-      ? detail.materials.filter((m: any) => m?.status === 'ready' && Number(m?.id) > 0)
+      ? detail.materials.filter((m: any) =>
+          m?.status === 'ready' &&
+          Number(m?.id) > 0 &&
+          m?.scope === 'private' &&
+          Number(m?.owner_user_id) === userId
+        )
       : []
     await Promise.all(readyMaterials.map(async (material: any) => {
       try {
@@ -320,14 +328,17 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     // Podcast audio is separately generated/cached; its GET endpoint only
     // resolves an existing ready audio object and never creates TTS work.
     try {
-      const audioResponse = await fetch(
-        `/documents/${documentId}/podcast-audio`,
-        { credentials: 'include', cache: 'no-store' },
-      )
-      if (audioResponse.ok) {
-        const audioPayload = await audioResponse.json()
-        if (audioPayload?.audio_status === 'ready' && audioPayload?.audio_url) {
-          await cacheGeneratedAudioOffline(String(audioPayload.audio_url))
+      const privatePodcast = readyMaterials.find((m: any) => m?.type === 'podcast')
+      if (privatePodcast) {
+        const audioResponse = await fetch(
+          `/documents/${documentId}/podcast-audio?material_id=${Number(privatePodcast.id)}`,
+          { credentials: 'include', cache: 'no-store' },
+        )
+        if (audioResponse.ok) {
+          const audioPayload = await audioResponse.json()
+          if (audioPayload?.audio_status === 'ready' && audioPayload?.audio_url) {
+            await cacheGeneratedAudioOffline(String(audioPayload.audio_url))
+          }
         }
       }
     } catch (_) {}
