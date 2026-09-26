@@ -263,6 +263,22 @@
 
     <p class="footer-link"><button type="button" class="btn-link" id="back-to-login">Back to log in</button></p>
   </div>
+  <!-- Forgot password OTP form -->
+  <div id="forgot-otp-view" class="hidden">
+    <p class="card-title">Reset your password</p>
+    <p class="card-sub">Enter the code sent to <strong id="forgot-otp-email"></strong>.</p>
+    <div id="forgot-otp-message" class="message"></div>
+    <form id="forgot-otp-form">
+      <div class="field"><label for="forgot-otp-code">Verification code</label>
+        <input type="text" id="forgot-otp-code" required inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000" style="font-family:'IBM Plex Mono',monospace;letter-spacing:.35em;text-align:center;font-size:20px;">
+      </div>
+      <div class="field"><label for="forgot-new-password">New password</label><input type="password" id="forgot-new-password" required autocomplete="new-password" minlength="8"></div>
+      <div class="field"><label for="forgot-confirm-password">Confirm password</label><input type="password" id="forgot-confirm-password" required autocomplete="new-password" minlength="8"></div>
+      <button type="submit" class="btn-primary" id="forgot-otp-submit">Reset password</button>
+    </form>
+    <button type="button" id="forgot-otp-resend" class="btn-link" style="margin-top:16px;">Resend code</button>
+  </div>
+
 
 </div>
 
@@ -360,13 +376,13 @@ document.getElementById('resend-verification-btn').addEventListener('click', asy
       body: JSON.stringify({ email })
     });
     const data = await res.json();
-    showMessage('login-message', data.message || 'If an unverified account with that email exists, a new verification link has been sent.', 'success');
+    showMessage('login-message', data.message || 'If the account is eligible, a new verification code has been sent.', 'success');
   } catch (err) {
     showMessage('login-message', 'Could not reach Prepza. Check your connection.', 'error');
   }
   this.style.display = 'none';
   this.disabled = false;
-  this.textContent = 'Resend verification email';
+  this.textContent = 'Resend verification code';
 });
 
 document.getElementById('forgot-form').addEventListener('submit', async (e) => {
@@ -390,7 +406,13 @@ document.getElementById('forgot-form').addEventListener('submit', async (e) => {
     if (!res.ok) {
       showMessage('forgot-message', data.error || 'Something went wrong. Try again.', 'error');
     } else {
-      showMessage('forgot-message', data.message || 'If an account exists, a reset link has been sent.', 'success');
+      sessionStorage.setItem('prepza_reset_email', email);
+      sessionStorage.setItem('prepza_reset_otp_length', String(data.otp_length || 6));
+      document.getElementById('forgot-view').classList.add('hidden');
+      document.getElementById('forgot-otp-view').classList.remove('hidden');
+      document.getElementById('forgot-otp-email').textContent = email;
+      document.getElementById('forgot-otp-code').maxLength = Number(data.otp_length || 6);
+      document.getElementById('forgot-otp-code').focus();
     }
   } catch (err) {
     showMessage('forgot-message', 'Could not reach Prepza. Check your connection.', 'error');
@@ -398,6 +420,44 @@ document.getElementById('forgot-form').addEventListener('submit', async (e) => {
 
   submitBtn.disabled = false;
   submitBtn.textContent = 'Send reset link';
+});
+
+document.getElementById('forgot-otp-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = sessionStorage.getItem('prepza_reset_email') || '';
+  const code = document.getElementById('forgot-otp-code').value.replace(/\D/g,'');
+  const password = document.getElementById('forgot-new-password').value;
+  const confirm = document.getElementById('forgot-confirm-password').value;
+  const msg = document.getElementById('forgot-otp-message');
+  if (password !== confirm) { msg.textContent='Passwords do not match.'; msg.className='message error'; msg.style.display='block'; return; }
+  const btn=document.getElementById('forgot-otp-submit'); btn.disabled=true;
+  try {
+    const res=await fetch('/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code,new_password:password})});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error || 'Could not reset your password.');
+    document.getElementById('forgot-otp-view').classList.add('hidden');
+    loginView.classList.remove('hidden');
+    showMessage('login-message','Password reset successfully. You can now log in.','success');
+    sessionStorage.removeItem('prepza_reset_email'); sessionStorage.removeItem('prepza_reset_otp_length');
+  } catch(err) { msg.textContent=err.message; msg.className='message error'; msg.style.display='block'; }
+  finally { btn.disabled=false; }
+});
+document.getElementById('forgot-otp-code').addEventListener('input',(e)=>{
+  const n=Number(sessionStorage.getItem('prepza_reset_otp_length')||6);
+  e.target.value=e.target.value.replace(/\D/g,'').slice(0,n);
+  if(e.target.value.length===n) document.getElementById('forgot-new-password').focus();
+});
+document.getElementById('forgot-otp-resend').addEventListener('click',async()=>{
+  const email=sessionStorage.getItem('prepza_reset_email')||'';
+  const btn=document.getElementById('forgot-otp-resend'); btn.disabled=true; btn.textContent='Sending...';
+  try {
+    const res=await fetch('/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||'Could not send a new code.');
+    if(data.otp_length) sessionStorage.setItem('prepza_reset_otp_length',String(data.otp_length));
+    const msg=document.getElementById('forgot-otp-message'); msg.textContent=data.message||'If the account is eligible, a new code has been sent.'; msg.className='message success'; msg.style.display='block';
+  } catch(err) { const msg=document.getElementById('forgot-otp-message'); msg.textContent=err.message; msg.className='message error'; msg.style.display='block'; }
+  finally { setTimeout(()=>{btn.disabled=false;btn.textContent='Resend code';},60000); }
 });
 </script>
 
