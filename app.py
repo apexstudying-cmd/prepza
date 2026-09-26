@@ -7556,6 +7556,7 @@ def _serialize_group_member(membership):
     return {
         "user_id": membership.user_id,
         "display_name": _display_name(user) if user else "Deleted user",
+        "avatar_url": (get_signed_url(user.avatar_storage_path, expires_in=3600, bucket="avatars") if user and user.avatar_storage_path else None),
         "role": membership.role,
         "joined_at": membership.joined_at.isoformat() if membership.joined_at else None,
     }
@@ -8209,6 +8210,7 @@ def get_public_profile(target_user_id):
     return jsonify({
         "user_id": target.id,
         "display_name": _display_name(target),
+        "avatar_url": get_signed_url(target.avatar_storage_path, expires_in=3600, bucket="avatars") if target.avatar_storage_path else None,
         "bio": target.bio,
         "year": target.year,
         "university_name": university.name if university else None,
@@ -9377,6 +9379,7 @@ def _serialize_conversation_detail(conversation, viewer_id):
             {
                 "user_id": p.user_id,
                 "display_name": _display_name(users[p.user_id]) if p.user_id in users else "Student",
+                "avatar_url": (get_signed_url(users[p.user_id].avatar_storage_path, expires_in=3600, bucket="avatars") if p.user_id in users and users[p.user_id].avatar_storage_path else None),
                 "role": p.role,
             }
             for p in participants
