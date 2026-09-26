@@ -6,6 +6,10 @@ APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 
 text = APP.read_text(encoding='utf-8')
 
+if 'async function baseApi<T = any>' not in text and 'async function api<T = any>' not in text:
+    print('Loading policy: current App uses modular frontend/src/lib/api.ts; skipping legacy loading transform.')
+    raise SystemExit(0)
+
 # Loading architecture sits above the existing API/offline/queue stack.
 # Never replace that stack: those transforms intentionally share one API layer.
 if 'async function baseApi<T = any>' not in text:
