@@ -299,16 +299,28 @@ def generate_document_material(*, material_type, document_content_id, triggering
         if not exact_row:
             raise RuntimeError("Ready AI artifact disappeared before it could be served")
         exact_parameters = exact_row["parameters"] or {}
-        material = _material_from_payload(
-            document_content_id=document_content_id,
-            material_type=material_type,
-            fingerprint=exact_row["fingerprint"],
-            payload=exact_ready.payload,
-            scope=scope,
-            owner_user_id=owner_user_id,
-            parameters=exact_parameters,
-            document_title=document_title,
-        )
+        try:
+            material = _material_from_payload(
+                document_content_id=document_content_id,
+                material_type=material_type,
+                fingerprint=exact_row["fingerprint"],
+                payload=exact_ready.payload,
+                scope=scope,
+                owner_user_id=owner_user_id,
+                parameters=exact_parameters,
+                document_title=document_title,
+            )
+        except Exception:
+            if quota_reserved:
+                try:
+                    refund_ai_quota(
+                        db, triggering_user_id, quota_feature, quota_units,
+                        period_start=quota_period,
+                        entitlement_payment_id=quota_payment_id,
+                    )
+                except Exception:
+                    db.session.rollback()
+            raise
         return {
             "payload": json.loads(material.payload),
             "material_id": material.id,
