@@ -1723,12 +1723,12 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
 }
 
 function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
-  type ExploreStudentLocal = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean; is_pending?: boolean }
+  type ExploreStudentLocalLocal = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean; is_pending?: boolean }
   const { tokens: T } = useTheme()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All')
   const [groups, setGroups] = useState<GroupSummary[]>([])
-  const [students, setStudents] = useState<ExploreStudent[]>([])
+  const [students, setStudents] = useState<ExploreStudentLocal[]>([])
   const [opportunities, setOpportunities] = useState<OpportunityPublic[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1740,7 +1740,7 @@ function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setA
     api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
     Promise.all([
       api<{ groups: GroupSummary[] }>('/groups').then(r => r.groups).catch(() => []),
-      api<{ students: ExploreStudent[] }>('/students').then(r => r.students).catch(() => []),
+      api<{ students: ExploreStudentLocal[] }>('/students').then(r => r.students).catch(() => []),
       api<{ opportunities: OpportunityPublic[] }>('/opportunities').then(r => r.opportunities).catch(() => []),
     ]).then(([g, s, o]) => {
       setGroups(g)
@@ -1756,7 +1756,7 @@ function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setA
   const filteredOpportunities = opportunities.filter(o => matches(o.title) || matches(o.organisation?.name) || matches(o.opportunity_type) || matches(o.location))
   const trendingOpportunities = opportunities.slice(0, 6)
 
-  const toggleFollow = async (s: ExploreStudent) => {
+  const toggleFollow = async (s: ExploreStudentLocal) => {
     if (followBusy[s.user_id]) return
     setFollowBusy(b => ({ ...b, [s.user_id]: true }))
     try {
@@ -1772,7 +1772,7 @@ function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setA
     setFollowBusy(b => ({ ...b, [s.user_id]: false }))
   }
 
-  const openStudentProfile = (s: ExploreStudent) => {
+  const openStudentProfile = (s: ExploreStudentLocal) => {
     setActiveProfileUserId?.(s.user_id)
     setActiveProfileName?.(s.display_name)
     setScreen('student-profile')
