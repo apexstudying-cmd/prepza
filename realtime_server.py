@@ -193,10 +193,14 @@ def handle_read(data):
     read_at = data.get("read_at")
     if not isinstance(read_at, str) or not read_at.strip():
         read_at = datetime.now(timezone.utc).isoformat()
-    setting = db.session.execute(
-        text('SELECT read_receipts_enabled FROM "user" WHERE id = :user_id'),
-        {"user_id": user_id},
-    ).scalar()
+    try:
+        setting = db.session.execute(
+            text('SELECT read_receipts_enabled FROM "user" WHERE id = :user_id'),
+            {"user_id": user_id},
+        ).scalar()
+    except Exception:
+        db.session.rollback()
+        setting = True
     if setting is False:
         return
     emit("chat:read", {"conversation_id": conversation_id, "user_id": user_id, "read_at": read_at}, to=room_for(conversation_id), include_self=False)
