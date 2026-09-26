@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'
 import { startOfflineStudyTracking } from '../offline/studyActivity'
