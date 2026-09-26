@@ -8,6 +8,13 @@ import { provisionInitialGroupKey } from './groupProvisioning'
 import CallExperience from './CallExperience'
 import { saveStudyHubDocumentOffline } from '../offline/studyHubOffline'
 
+const AttachmentIc = {
+  camera:(s='w-5 h-5')=><svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.2"/><path d="M8 10h.01"/></svg>,
+  gallery:(s='w-5 h-5')=><svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9" r="1.3"/><path d="m5 17 4.2-4.2 3 3 2.2-2.2L19 18"/></svg>,
+  studyHub:(s='w-5 h-5')=><svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H20v15H6.5A2.5 2.5 0 0 0 4 21z"/><path d="M4 6.5V18a3 3 0 0 0 3 3M8 8h8M8 12h8"/></svg>,
+  file:(s='w-5 h-5')=><svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>,
+}
+
 type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; last_message_sender_name?: string | null; last_message_filename?: string | null; unread_count: number; status?: string }
 type Attachment = { id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null; study_document?: boolean }
 type Message = { id: number; conversation_id: number; sender_id: number; body: string | null; nonce?: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null; attachment: Attachment | null; kind?: 'text' | 'reaction'; read_by_count?: number; read_by_all?: boolean }
