@@ -30,7 +30,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Generate production source
-        run: npm run build
+        run: npx vite build
 
       - name: Audit loading gates
         working-directory: .
