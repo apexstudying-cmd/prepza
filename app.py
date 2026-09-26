@@ -2381,6 +2381,11 @@ def require_csrf(f):
 
 # Email OTP / SES authentication service.
 register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf, limiter)
+from infrastructure_monitoring import register_infrastructure_monitoring
+register_infrastructure_monitoring(
+    app, db, require_admin, SystemSetting, User, DocumentContent,
+    AiUsageLog, Payment, StudyActivityLog, StudyTimeLog
+)
 
 
 _student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
