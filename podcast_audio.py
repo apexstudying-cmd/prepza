@@ -5,7 +5,7 @@ Takes an already-generated podcast SCRIPT (GeneratedMaterial.material_type
 == 'podcast', payload.script.turns - see ai_service.generate_document_
 podcast_script) and synthesizes one audio file: one TTS call per script
 turn against a self-hosted Kokoro server, stitched together with short
-pauses between speakers, uploaded to Supabase Storage, with the result
+pauses between speakers, uploaded to the active private object store (R2 when configured), with the result
 written back onto the SAME GeneratedMaterial row (audio_status/
 audio_storage_path/duration_seconds) rather than a new row.
 
@@ -299,6 +299,14 @@ def _upload_podcast_audio(storage_path, audio_bytes, bucket=PODCAST_AUDIO_BUCKET
     bytes instead of GETting them or requesting a client upload URL,
     since this is server-generated content, not a client upload.
     """
+    try:
+        from object_storage import r2_enabled, r2_put_bytes
+        if r2_enabled():
+            return bool(r2_put_bytes(bucket, storage_path, audio_bytes, "audio/mpeg"))
+    except Exception as e:
+        print(f"ERROR uploading podcast audio to R2 {bucket}/{storage_path}: {e}")
+        return False
+
     supabase_url = os.environ.get("SUPABASE_URL", "").strip()
     service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
