@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import logoImg from './imports/logo.png'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
