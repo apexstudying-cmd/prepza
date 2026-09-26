@@ -111,7 +111,7 @@ void ensureE2EEIdentityReady().catch((error) => console.warn('[Prepza] E2EE iden
 // the same import surface used by in-app uploads.
 try {
   const launchQueueApi = (window as any).launchQueue
-  launchQueueApi?.setConsumer(async ({ files }) => {
+  launchQueueApi?.setConsumer(async ({ files }: { files: any[] }) => {
     for (const handle of files || []) {
       try {
         const file = await handle.getFile()
