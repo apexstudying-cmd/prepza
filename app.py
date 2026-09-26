@@ -352,6 +352,7 @@ class Document(db.Model):
     report_reason = db.Column(db.String(50), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_opened_at = db.Column(db.DateTime, nullable=True)
 
 
 class DocumentReadingProgress(db.Model):
@@ -3841,7 +3842,7 @@ def list_documents():
 
     documents = (
         Document.query.filter_by(user_id=user_id, is_removed=False)
-        .order_by(Document.created_at.desc())
+        .order_by(db.func.coalesce(Document.last_opened_at, Document.created_at).desc(), Document.id.desc())
         .all()
     )
 
@@ -3860,6 +3861,7 @@ def list_documents():
             "file_type": content.file_type if content else None,
             "page_count": content.page_count if content else None,
             "created_at": d.created_at.isoformat() if d.created_at else None,
+            "last_opened_at": d.last_opened_at.isoformat() if d.last_opened_at else None,
         })
 
     return jsonify({"documents": result})
@@ -3875,6 +3877,8 @@ def get_document(document_id):
     if not _can_study_document(user_id, document):
         return jsonify({"error": "Document not found"}), 404
 
+    document.last_opened_at = datetime.utcnow()
+    db.session.commit()
     content = db.session.get(DocumentContent, document.document_content_id) if document.document_content_id else None
 
     # Once past "uploading", status tracks the shared DocumentContent live -
@@ -3936,6 +3940,7 @@ def get_document(document_id):
         "view_url": view_url,
         "materials": materials,
         "created_at": document.created_at.isoformat() if document.created_at else None,
+        "last_opened_at": document.last_opened_at.isoformat() if document.last_opened_at else None,
     })
 
 
