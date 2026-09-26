@@ -242,7 +242,7 @@ async function sha256Hex(file: File): Promise<string> {
 
 type DocumentDetail = {
   id: number; title: string; original_filename: string; status: string
-  content_hash?: string | null
+  content_hash?: string | null; last_opened_at?: string | null
   file_type: string | null; file_size_bytes: number | null; page_count: number | null
   error_message: string | null; view_url: string | null
   materials: { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]; created_at: string | null
@@ -1459,7 +1459,7 @@ function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) =>
 }
 
 // ─── HOME ─────────────────────────────────────────────────────────────────────
-type HomeDocument = { id: number; title: string; status: string; file_type: string | null; page_count: number | null; created_at: string | null }
+type HomeDocument = { id: number; title: string; status: string; file_type: string | null; page_count: number | null; created_at: string | null; last_opened_at?: string | null }
 type GamificationSummary = { xp_total: number; level: number; level_title: string; current_streak: number; longest_streak: number; documents_count: number; followers_count: number }
 
 // ─── Social (Chunk 12) ─────────────────────────────────────────────────────────
@@ -2620,6 +2620,10 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
         setPage(progress.page_num || 0)
         setSavedPage(progress.page_num || 0)
         setCsrfToken(me.csrf_token)
+        // The native reader is itself a Study Hub entry point. Persist the
+        // complete source locally so a student can return offline even if
+        // they entered the reader directly rather than through My Study.
+        void saveStudyHubDocumentOffline(activeDocumentId).catch(() => {})
       } catch (e) {
         try {
           const localDoc = await loadLocal()
