@@ -6339,6 +6339,9 @@ function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         {verifying && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 10 }}>Verifying…</div>}
         {error && <div style={{ color: '#ffb4bd', fontSize: 13, lineHeight: 1.5, marginTop: 12 }}>{error}</div>}
 
+
+        {verifying && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 10 }}>Verifying…</div>}
+        {error && <div style={{ color: '#ffb4bd', fontSize: 13, lineHeight: 1.5, marginTop: 12 }}>{error}</div>}
         <button
           type="button"
           onClick={resend}
