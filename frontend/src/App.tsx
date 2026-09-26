@@ -9850,7 +9850,8 @@ type AdminInfrastructure = {
   supabase_limits: { egress_gb: number; realtime_messages: number; realtime_peak_connections: number }
   ai: { requests_mtd: number; input_tokens_mtd: number; output_tokens_mtd: number; spend_mtd_usd: number; projected_month_end_usd: number; budget_usd: number | null; budget_percent: number | null; status: string; by_feature: { feature: string; requests: number; cost_usd: number }[] }
   payments: { revenue_mtd_kes: number; estimated_paystack_fees_mtd_kes: number; estimated_net_after_paystack_kes: number; note: string }
-  known_limits: { render_hobby_build_minutes: number; render_hobby_bandwidth_gb: number; render_runtime_metrics: string; brevo_free_daily_emails: number; supabase_free_egress_gb: number; supabase_free_cached_egress_gb: number; supabase_free_realtime_messages: number; supabase_free_realtime_peak_connections: number }
+  ses: { configured: boolean; region: string | null; status: string; max_24_hour_send: number | null; max_send_rate: number | null; sent_last_24_hours: number | null; sending_enabled: boolean | null; enforcement_status: string | null; application_sends_last_24_hours: number; verification_sends_last_24_hours: number; password_reset_sends_last_24_hours: number; error?: string }
+  known_limits: { render_hobby_build_minutes: number; render_hobby_bandwidth_gb: number; render_runtime_metrics: string; ses_free_tier: string; ses_sandbox_daily_send: number; ses_sandbox_send_rate: number; supabase_free_egress_gb: number; supabase_free_cached_egress_gb: number; supabase_free_realtime_messages: number; supabase_free_realtime_peak_connections: number }
   upgrade_policy: { automatic_billing: boolean; message: string }
 }
 
@@ -10571,6 +10572,14 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   const [infrastructure, setInfrastructure] = useState<AdminInfrastructure | null>(null)
   const [infrastructureLoading, setInfrastructureLoading] = useState(true)
   const [infrastructureError, setInfrastructureError] = useState('')
+  const [otpAdmin, setOtpAdmin] = useState<{
+    settings: Record<string, string>
+    ses: { configured: boolean; region: string | null; status: string; max_24_hour_send?: number | null; max_send_rate?: number | null; sent_last_24_hours?: number | null; sending_enabled?: boolean | null; enforcement_status?: string | null; error?: string }
+  } | null>(null)
+  const [otpAdminLoading, setOtpAdminLoading] = useState(true)
+  const [otpAdminSaving, setOtpAdminSaving] = useState(false)
+  const [otpAdminError, setOtpAdminError] = useState('')
+
 
   const [systemCapacity, setSystemCapacity] = useState<AdminSystemCapacity | null>(null)
   const [storageCapacity, setStorageCapacity] = useState<AdminStorageCapacity | null>(null)
@@ -10612,6 +10621,34 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     if (section !== 'system') return
     loadAuditLogs(1)
   }, [section, auditDays, auditActionFilter, auditTargetTypeFilter])
+
+  useEffect(() => {
+    if (section !== 'system') return
+    setOtpAdminLoading(true)
+    setOtpAdminError('')
+    api<typeof otpAdmin>('/admin/auth/otp')
+      .then(setOtpAdmin)
+      .catch(e => setOtpAdminError(e instanceof ApiError ? e.message : 'Could not load email authentication settings.'))
+      .finally(() => setOtpAdminLoading(false))
+  }, [section])
+
+  const saveOtpAdmin = async (patch: Record<string, unknown>) => {
+    if (otpAdminSaving) return
+    setOtpAdminSaving(true)
+    setOtpAdminError('')
+    try {
+      const next = await api<typeof otpAdmin>('/admin/auth/otp', {
+        method: 'PATCH',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify(patch),
+      })
+      setOtpAdmin(next)
+    } catch (e) {
+      setOtpAdminError(e instanceof ApiError ? e.message : 'Could not save email authentication settings.')
+    } finally {
+      setOtpAdminSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (section !== 'system') return
@@ -11540,8 +11577,55 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 10, color: T.textMuted }}>AI spend this month</div><div style={{ fontSize: 21, fontWeight: 800, color: T.text, marginTop: 4 }}>${infrastructure.ai.spend_mtd_usd.toFixed(2)}</div><div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>Projected ${infrastructure.ai.projected_month_end_usd.toFixed(2)} · {infrastructure.ai.requests_mtd} requests</div></div>
               <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 10, color: T.textMuted }}>Revenue this month</div><div style={{ fontSize: 21, fontWeight: 800, color: N.gold, marginTop: 4 }}>KES {infrastructure.payments.revenue_mtd_kes.toLocaleString()}</div><div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>Est. Paystack fees KES {infrastructure.payments.estimated_paystack_fees_mtd_kes.toLocaleString()}</div></div>
             </div>
-            <div style={{ background: 'rgba(201,168,76,.08)', border: '1px solid rgba(201,168,76,.2)', borderRadius: 11, padding: '10px 12px', fontSize: 11, color: T.text, lineHeight: 1.55 }}><strong>Upgrade rule:</strong> Prepza does not upgrade anything automatically. Use this screen to decide when a measured limit is getting close. Render build minutes/bandwidth and Brevo sends are known ceilings but require their provider dashboards for live usage.</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 10, color: T.textMuted }}><div>Render Hobby: {infrastructure.known_limits.render_hobby_build_minutes} build min · {infrastructure.known_limits.render_hobby_bandwidth_gb} GB bandwidth</div><div>Supabase Free: {infrastructure.known_limits.supabase_free_egress_gb} GB egress · 2M realtime</div><div>Brevo Free: {infrastructure.known_limits.brevo_free_daily_emails} emails/day</div><div>Podcast TTS: generated once per artifact; no per-play generation cost</div></div>
+            <div style={{ background: 'rgba(201,168,76,.08)', border: '1px solid rgba(201,168,76,.2)', borderRadius: 11, padding: '10px 12px', fontSize: 11, color: T.text, lineHeight: 1.55 }}><strong>Upgrade rule:</strong> Prepza does not upgrade provider plans automatically. SES below is live account telemetry, not a hardcoded free-tier estimate.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 10, color: T.textMuted }}><div>Render Hobby: {infrastructure.known_limits.render_hobby_build_minutes} build min · {infrastructure.known_limits.render_hobby_bandwidth_gb} GB bandwidth</div><div>Supabase Free: {infrastructure.known_limits.supabase_free_egress_gb} GB egress · 2M realtime</div><div>SES: {infrastructure.ses.status} · {infrastructure.ses.sent_last_24_hours == null ? 'quota unavailable' : infrastructure.ses.sent_last_24_hours + ' sent / ' + (infrastructure.ses.max_24_hour_send ?? '—') + ' 24h'}</div><div>Podcast TTS: generated once per artifact; no per-play generation cost</div></div>
+            <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}>
+              <div style={{ fontSize: 10, color: T.textMuted }}>Transactional email — last 24h</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: T.text, marginTop: 4 }}>{infrastructure.ses.application_sends_last_24_hours.toLocaleString()}</div>
+              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>Verification {infrastructure.ses.verification_sends_last_24_hours.toLocaleString()} · password reset {infrastructure.ses.password_reset_sends_last_24_hours.toLocaleString()}</div>
+            </div>
+          </div>
+        </AdminCard>
+      )}
+      {otpAdminLoading ? (
+        <AdminCard title="Email authentication">
+          <div style={{ padding: 18, color: T.textMuted, fontSize: 12 }}>Loading OTP settings…</div>
+        </AdminCard>
+      ) : otpAdminError ? (
+        <AdminCard title="Email authentication">
+          <div style={{ padding: 18, color: '#DC2626', fontSize: 12 }}>{otpAdminError}</div>
+        </AdminCard>
+      ) : otpAdmin && (
+        <AdminCard title="Email authentication — SES OTP">
+          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {[
+                ['Provider', otpAdmin.ses.status],
+                ['Region', otpAdmin.ses.region || 'Not configured'],
+                ['24h quota', otpAdmin.ses.max_24_hour_send == null ? '—' : otpAdmin.ses.max_24_hour_send.toLocaleString()],
+                ['Send rate', otpAdmin.ses.max_send_rate == null ? '—' : otpAdmin.ses.max_send_rate + '/sec'],
+              ].map(([label, value]) => <div key={label} style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 11 }}><div style={{ fontSize: 10, color: T.textMuted }}>{label}</div><div style={{ fontSize: 14, fontWeight: 800, color: T.text, marginTop: 4 }}>{value}</div></div>)}
+            </div>
+            <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.5 }}>
+              Configure the safe operational policy here. Provider credentials remain Render environment variables and are never shown.
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 12, color: T.text }}>
+              <span>OTP verification enabled</span>
+              <button type="button" disabled={otpAdminSaving} onClick={() => saveOtpAdmin({ otp_enabled: otpAdmin.settings.otp_enabled !== 'true' })} style={{ border: 'none', borderRadius: 999, padding: '7px 12px', background: otpAdmin.settings.otp_enabled === 'true' ? '#DCFCE7' : '#F3F4F6', color: otpAdmin.settings.otp_enabled === 'true' ? '#16A34A' : '#6B7280', fontWeight: 800, cursor: 'pointer' }}>{otpAdmin.settings.otp_enabled === 'true' ? 'Enabled' : 'Disabled'}</button>
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 8 }}>
+              {[
+                ['Expiry (min)', 'otp_expiry_minutes'],
+                ['Max attempts', 'otp_max_attempts'],
+                ['Resend cooldown (sec)', 'otp_resend_cooldown_seconds'],
+                ['Target sends/hour', 'otp_max_sends_per_target_hour'],
+                ['IP sends/hour', 'otp_max_sends_per_ip_hour'],
+              ].map(([label, key]) => (
+                <label key={key} style={{ fontSize: 10, color: T.textMuted }}>{label}
+                  <input value={otpAdmin.settings[key] || ''} onChange={e => setOtpAdmin(v => v ? ({ ...v, settings: { ...v.settings, [key]: e.target.value } }) : v)} onBlur={e => saveOtpAdmin({ [key]: Number(e.target.value) })} inputMode="numeric" style={{ width: '100%', boxSizing: 'border-box', marginTop: 5, padding: '8px 9px', borderRadius: 9, border: '1px solid rgba(128,128,128,.2)', background: T.card, color: T.text }} />
+                </label>
+              ))}
+            </div>
           </div>
         </AdminCard>
       )}
