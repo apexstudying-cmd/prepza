@@ -5716,7 +5716,7 @@ function ForgotPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void })
 
   const resetPassword = async () => {
     setError('')
-    if (!new RegExp('^\\d{' + otpLength + '}
+    if (!new RegExp('^\\d{' + otpLength + '}$').test(code)) { setError('Enter the ' + otpLength + '-digit code from your email.'); return }
     if (!passwordValid) { setError('Choose a password with at least 8 characters, including upper/lowercase letters, a number and a symbol.'); return }
     if (newPassword !== confirmPassword) { setError('The passwords do not match.'); return }
     setSubmitting(true)
@@ -6230,6 +6230,7 @@ function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { tokens: T } = useTheme()
   const inputRef = useRef<HTMLInputElement>(null)
   const [email, setEmail] = useState('')
+  const [otpLength, setOtpLength] = useState(6)
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [verifying, setVerifying] = useState(false)
@@ -6276,7 +6277,7 @@ function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     const clean = value.replace(/\D/g, '').slice(0, otpLength)
     setCode(clean)
     setError('')
-    if (clean.length === 6) void verify(clean)
+    if (clean.length === otpLength) void verify(clean)
   }
 
   const resend = async () => {
@@ -6319,7 +6320,45 @@ function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           onChange={e => handleCodeChange(e.target.value)}
           onPaste={e => {
             const pasted = e.clipboardData.getData('text')
-            if (/^\d{6}$/.test(pasted.trim())) {
+            if (new RegExp('^\\d{' + otpLength + '} {
+              e.preventDefault()
+              handleCodeChange(pasted.trim())
+            }
+          }}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]*"
+          maxLength={otpLength}
+          aria-label={otpLength + '-digit verification code'}
+          placeholder={"0".repeat(otpLength)}
+          disabled={verifying}
+          style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: `1px solid ${error ? 'rgba(255,120,130,0.6)' : 'rgba(255,255,255,0.15)'}`, borderRadius: 16, padding: '16px', color: '#fff', fontSize: 26, letterSpacing: 10, textAlign: 'center', fontFamily: 'Plus Jakarta Sans', outline: 'none' }}
+        />
+
+        {verifying && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 10 }}>Verifying…</div>}
+        {error && <div style={{ color: '#ffb4bd', fontSize: 13, lineHeight: 1.5, marginTop: 12 }}>{error}</div>}
+
+        <button
+          type="button"
+          onClick={resend}
+          disabled={resending || resendSeconds > 0}
+          style={{ marginTop: 20, background: 'none', border: 'none', color: N.gold, fontWeight: 700, fontSize: 13, cursor: resendSeconds > 0 || resending ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: resendSeconds > 0 || resending ? 0.55 : 1 }}
+        >
+          {resending ? 'Sending…' : resendSeconds > 0 ? `Resend code in ${resendSeconds}s` : 'Resend code'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { sessionStorage.removeItem('prepza_verification_email'); setScreen('login') }}
+          style={{ width: '100%', marginTop: 18, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 16, padding: '13px 0', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}
+        >
+          Back to Sign In
+        </button>
+      </div>
+    </div>
+  )
+}
+).test(pasted.trim())) {
               e.preventDefault()
               handleCodeChange(pasted.trim())
             }
