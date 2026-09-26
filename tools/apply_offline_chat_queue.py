@@ -23,12 +23,13 @@ def main() -> None:
         'imports',
     )
 
-    text = replace_once(
-        text,
-        "installConversationObserver()\n",
-        "installConversationObserver()\ninstallOfflineChatQueue()\n",
-        'queue startup',
-    )
+    if 'installOfflineChatQueue()' not in text:
+        text = replace_once(
+            text,
+            "installConversationObserver()\n",
+            "installConversationObserver()\ninstallOfflineChatQueue()\n",
+            'queue startup',
+        )
 
     old_send = """    try { const token = await getCsrfToken(); await api(`/chats/${selectedId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) }); setInput(''); setReplyingTo(null); const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages`); setMessages(result.messages || []); void loadList() } catch (value) { setError(friendlyError(value, 'Could not send this message.')) } finally { setSending(false) }"""
     new_send = """    try {
@@ -47,7 +48,12 @@ def main() -> None:
         setMessages(result.messages || []); void loadList()
       }
     } catch (value) { setError(friendlyError(value, 'Could not send this message.')) } finally { setSending(false) }"""
-    text = replace_once(text, old_send, new_send, 'text send')
+    if old_send in text:
+        text = replace_once(text, old_send, new_send, 'text send')
+    elif 'enqueueOfflineChatMessage' not in text or 'Message saved. It will send when your connection returns.' not in text:
+        raise SystemExit('Offline chat queue patch anchor missing: text send')
+    else:
+        print('Offline chat text send already contains queue delivery; skipping send rewrite.')
 
     # Reconcile queued messages as soon as the account reconnects while the chat is open.
     reconnect_effect = """  useEffect(() => {
