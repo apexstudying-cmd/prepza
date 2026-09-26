@@ -33,7 +33,7 @@ export default function PdfStudyCanvas({ src, title, storageKey, initialPage = 1
   // offline annotations and bookmarks survive a new object URL.
   const stableStudyKey = storageKey || src
   const annotationKey = `${STORE}:${stableStudyKey}`, bookmarkKey = `${BOOKMARKS}:${stableStudyKey}`
-  useEffect(() => { if (documentId == null) return startOfflineStudyTracking(documentId, 'reading') }, [documentId])
+  useEffect(() => { const trackingDocumentId = documentId; if (trackingDocumentId == null) return; void startOfflineStudyTracking(trackingDocumentId, 'reading') }, [documentId])
   useEffect(() => { setAnnotations(loadAnnotations(annotationKey)); undoRef.current = []; setBookmarks(loadBookmarks(bookmarkKey)) }, [annotationKey, bookmarkKey])
   const commitAnnotations = (next: Annotation[]) => {
     const bounded = next.length > MAX_ANNOTATIONS ? next.slice(-MAX_ANNOTATIONS) : next
