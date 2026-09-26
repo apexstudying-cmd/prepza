@@ -40,7 +40,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm run prebuild && pnpm exec tsc --noEmit
+        run: |
+          pnpm run prebuild
+          echo '--- APP 6208-6260 ---'
+          nl -ba src/App.tsx | sed -n '6208,6260p'
+          echo '--- APP 14940-15010 ---'
+          nl -ba src/App.tsx | sed -n '14940,15010p'
+          echo '--- CHAT 680-688 ---'
+          nl -ba src/crypto/WhatsAppChatExperience.tsx | sed -n '680,688p'
+          pnpm exec tsc --noEmit
 
       - name: Validate service worker JavaScript
         run: |
