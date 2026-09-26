@@ -323,7 +323,7 @@ def register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf
             return jsonify(generic), 200
         try:
             result = issue(user, "password_reset", request.remote_addr or "")
-            return jsonify({**generic, "expires_in_seconds": result["expires_in_seconds"]}), 200
+            return jsonify({**generic, "expires_in_seconds": result["expires_in_seconds"], "otp_length": result["otp_length"]}), 200
         except ValueError:
             # Keep the recovery endpoint enumeration-resistant.
             return jsonify(generic), 200
