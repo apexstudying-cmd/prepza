@@ -6359,20 +6359,6 @@ function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     </div>
   )
 }
-).test(pasted.trim())) {
-              e.preventDefault()
-              handleCodeChange(pasted.trim())
-            }
-          }}
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          pattern="[0-9]*"
-          maxLength={otpLength}
-          aria-label={otpLength + '-digit verification code'}
-          placeholder="000000"
-          disabled={verifying}
-          style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: `1px solid ${error ? 'rgba(255,120,130,0.6)' : 'rgba(255,255,255,0.15)'}`, borderRadius: 16, padding: '16px', color: '#fff', fontSize: 26, letterSpacing: 10, textAlign: 'center', fontFamily: 'Plus Jakarta Sans', outline: 'none' }}
-        />
 
         {verifying && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 10 }}>Verifying…</div>}
         {error && <div style={{ color: '#ffb4bd', fontSize: 13, lineHeight: 1.5, marginTop: 12 }}>{error}</div>}
