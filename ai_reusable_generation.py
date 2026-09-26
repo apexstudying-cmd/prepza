@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from sqlalchemy import text
 
 from ai_artifact_fingerprint import GENERATION_VERSION, build_generation_fingerprint
 from ai_generation_store import claim_or_get_generation, find_ready_generation_family, mark_generation_failed, mark_generation_ready, wait_for_generation
