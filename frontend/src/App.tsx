@@ -686,11 +686,19 @@ function DocumentStudyHubScreen({
           api<{ page_num: number }>(`/documents/${activeDocumentId}/reading`),
         ])
         if (cancelled) return
+        // Study Hub is local-first: do not present the item as ready until its
+        // complete source has been persisted locally. This also repairs older
+        // Study Hub items created before the automatic-ingestion contract.
+        setSaveOfflineBusy(true)
+        try {
+          await saveStudyHubDocumentOffline(activeDocumentId)
+          if (cancelled) return
+          setSavedToLib(true)
+        } finally {
+          if (!cancelled) setSaveOfflineBusy(false)
+        }
         setDocument(data)
         setReadingPage(Math.max(0, progress.page_num || 0))
-        // Study Hub is the student's offline study space: opening a document
-        // here automatically persists the complete source file locally.
-        void saveStudyHubDocumentOffline(activeDocumentId).catch(() => {})
       } catch (err) {
         try {
           const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
@@ -1965,20 +1973,17 @@ function UploadScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scree
         }
       }
 
-      // Keep the file the student just selected locally. This uses the
-      // original File object rather than downloading the canonical server copy.
-      // If the same content is already stored locally, saveUploadedFileOffline
-      // aliases it by content hash instead of storing another Blob.
-      try {
-        await saveUploadedFileOffline(created.document_id, file, {
-          userId: me.id,
-          title,
-          fileType: ext,
-          contentHash,
-        })
-      } catch {
-        // Upload success must not be blocked by local-storage limits.
-      }
+      // Study Hub ingestion is local-first. The original File is already the
+      // canonical bytes, so persist it before declaring the new Study Hub item
+      // ready. This avoids an extra download and guarantees the item is usable
+      // offline immediately after ingestion.
+      setUploadStage('Preparing offline copy...')
+      await saveUploadedFileOffline(created.document_id, file, {
+        userId: me.id,
+        title,
+        fileType: ext,
+        contentHash,
+      })
 
       setActiveDocumentId(created.document_id)
       setScreen('upload-share-choice')
@@ -2476,7 +2481,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
               { icon: Ic.book('w-5 h-5'), title: 'Summary', sub: '2-page condensed notes', action: () => setScreen('summary'), color: '#4CC97B' },
               { icon: Ic.podcast('w-5 h-5'), title: 'Study Podcast', sub: '9 min AI-generated episode', action: () => setScreen('podcast-player'), color: '#C94C4C' },
               { icon: Ic.explore('w-5 h-5'), title: 'Mind Map', sub: 'Visual concept overview', action: () => setScreen('mind-map'), color: '#9B59B6' },
-              { icon: 'download', title: 'Save for offline study', sub: 'Keep this document in your Study Hub', action: () => void saveForOfflineStudy(), color: T.textMuted },
+              { icon: Ic.download('w-5 h-5'), title: 'Offline ready', sub: 'Complete study copy is stored on this device', action: () => {}, color: T.textMuted },
             ].map((t, i) => (
               <button key={i} onClick={t.action} style={{ display: 'flex', alignItems: 'center', gap: 12, background: T.card, border: '1px solid rgba(0,0,0,0.04)', borderRadius: 14, padding: '13px 15px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', fontFamily: 'Plus Jakarta Sans' }}>
                 <div style={{ width: 44, height: 44, background: t.color + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{t.icon === 'download' ? <div style={{ color: t.color }}>{Ic.download('w-5 h-5')}</div> : t.icon}</div>
