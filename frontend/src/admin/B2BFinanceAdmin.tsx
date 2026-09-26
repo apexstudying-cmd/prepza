@@ -94,7 +94,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
   }
 
   if(loading)return <div style={{padding:30,color:T.textMuted}}>Loading B2B finance…</div>
-  const card={background:T.card,borderRadius:14,padding:16,border:'1px solid '+T.border}
+  const card={background:T.card,borderRadius:14,padding:16,border:'1px solid '+T.border,boxSizing:'border-box' as const,minWidth:0}
   const tabs=['overview','organisation-plans','pricing','placements','campaigns','payments','reconciliation','verification','invoices'] as const
 
   return <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -104,7 +104,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
     </div>
 
     {tab==='overview'&&overview&&<>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
         {[
           ['Campaigns',overview.campaigns.toLocaleString(),''],
           ['Active',overview.active_campaigns.toLocaleString(),''],
@@ -112,7 +112,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
           ['Spent / ledger net',`KES ${overview.ledger_net_balance_kes.toLocaleString()}`,'']
         ].map(x=><div key={x[0]} style={card}><div style={{fontSize:11,color:T.textMuted}}>{x[0]}</div><div style={{fontSize:22,fontWeight:800,color:T.text,marginTop:5}}>{x[1]}</div></div>)}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:12}}>
         <div style={card}><b>Revenue & customer charges</b><div style={{marginTop:12,fontSize:13,lineHeight:1.9}}>
           <div>Paid campaign value: <strong>KES {overview.paid_campaign_value_kes.toLocaleString()}</strong></div>
           <div>Refunded campaign value: <strong>KES {overview.refunded_campaign_value_kes.toLocaleString()}</strong></div>
@@ -128,7 +128,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
     {tab==='organisation-plans'&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div style={card}><b>Organisation subscription plans</b><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Canonical monthly plan catalog. Changes affect future purchases and plan enforcement; historical payment records remain unchanged.</div></div>
       {organisationPlans.map(p=><div key={p.plan_code} style={card}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(150px,1fr))',gap:10}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10}}>
           <div><b>{p.plan_code}</b><div style={{fontSize:10,color:T.textMuted}}>v{p.version} · {p.updated_at||'—'}</div></div>
           {([['monthly_fee_kes','Monthly KES'],['active_user_cap','Active-user cap'],['active_opportunities','Opportunities'],['sponsored_campaigns','Sponsored campaigns'],['candidate_search_window_days','Search days'],['analytics_retention_days','Analytics days']] as const).map(([key,label])=><label key={key} style={{fontSize:10,color:T.textMuted}}>{label}<input type="number" min="0" value={Number(p[key])} onChange={e=>setOrganisationPlans(v=>v.map(x=>x.plan_code===p.plan_code?{...x,[key]:Number(e.target.value)}:x))} style={{display:'block',width:'100%',boxSizing:'border-box',padding:7}}/></label>)}
         </div>
