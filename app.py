@@ -3354,8 +3354,6 @@ def upload_profile_avatar():
     path=f"avatars/{uid}/{secrets.token_urlsafe(18)}.{ext}"
     upload_url=create_signed_upload_url("avatars",path)
     if not upload_url:return jsonify({"error":"Could not prepare secure avatar upload"}),503
-    user.avatar_storage_path_pending=path if False else None
-    db.session.commit()
     return jsonify({"upload_url":upload_url,"storage_path":path}),201
 
 @app.post("/profile/avatar/confirm")
