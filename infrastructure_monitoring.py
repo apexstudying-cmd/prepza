@@ -183,6 +183,63 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
         database_pct = _pct(db_bytes, SUPABASE["database"]["limit"])
         storage_pct = _pct(storage_bytes, SUPABASE["storage"]["limit"])
 
+        dependency_catalog = [
+            {
+                "id": "render",
+                "provider": "Render",
+                "resource": "Web service / build / runtime",
+                "status": "configured" if os.environ.get("RENDER_API_KEY") else "needs_provider_api_key",
+                "upgrade_trigger": "When runtime, bandwidth, build minutes, or service availability becomes a measured bottleneck.",
+                "action": "Add RENDER_API_KEY and service identifiers so Admin can read live provider telemetry; upgrade only when the measured limit requires it.",
+                "cost_risk": "Paid Render service tiers may incur recurring charges."
+            },
+            {
+                "id": "supabase",
+                "provider": "Supabase",
+                "resource": "Postgres / Storage / Realtime",
+                "status": "measured",
+                "upgrade_trigger": "When measured database, storage, egress, or realtime usage approaches the current plan ceiling.",
+                "action": "Review the measured Admin values before changing plan.",
+                "cost_risk": "Higher plans or usage can create recurring/usage charges."
+            },
+            {
+                "id": "ses",
+                "provider": "Amazon SES",
+                "resource": "Transactional email",
+                "status": ses.get("status", "unknown"),
+                "upgrade_trigger": "When the live 24-hour quota or send rate approaches the account limit, or sandbox status blocks legitimate recipients.",
+                "action": "Request SES production access or a quota increase; do not automatically upgrade.",
+                "cost_risk": "SES billing/free-tier eligibility is separate from the account sending quota."
+            },
+            {
+                "id": "r2",
+                "provider": "Cloudflare",
+                "resource": "R2 object storage",
+                "status": "configured" if os.environ.get("R2_ACCESS_KEY_ID") and os.environ.get("R2_SECRET_ACCESS_KEY") else "not_configured",
+                "upgrade_trigger": "When audio/material storage or egress requirements exceed the current storage arrangement.",
+                "action": "Configure R2 credentials and measured usage before migrating/expanding storage.",
+                "cost_risk": "R2 usage can incur storage/operation/egress-related charges depending on the service configuration."
+            },
+            {
+                "id": "redis",
+                "provider": "Render Key Value / Redis-compatible",
+                "resource": "Cache / rate limiting / queues",
+                "status": "configured" if os.environ.get("REDIS_URL") or os.environ.get("REDIS_PRIVATE_URL") else "not_configured",
+                "upgrade_trigger": "When multi-instance rate limiting, queues, or cache consistency requires shared Redis-compatible state.",
+                "action": "Provision only when application telemetry shows in-process state is becoming a bottleneck.",
+                "cost_risk": "Managed Key Value/Redis capacity is a paid infrastructure dependency once provisioned."
+            },
+            {
+                "id": "aws_tts",
+                "provider": "AWS / external TTS fallback",
+                "resource": "Text-to-speech fallback",
+                "status": "configured" if os.environ.get("AWS_ACCESS_KEY_ID") and (os.environ.get("AWS_TTS_REGION") or os.environ.get("AWS_REGION")) else "not_configured",
+                "upgrade_trigger": "When the primary Kokoro capacity or reliability becomes insufficient.",
+                "action": "Monitor TTS usage and cost before increasing paid fallback capacity.",
+                "cost_risk": "TTS API usage can create usage-based charges."
+            }
+        ]
+
         return jsonify({
             "generated_at": now.isoformat() + "Z",
             "active_users": {"today": active_1d, "last_7d": active_7d, "last_30d": active_30d},
@@ -226,6 +283,7 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
                 "estimated_net_after_paystack_kes": round(revenue - estimated_fees, 2),
                 "note": "Estimated only; reconcile against Paystack settlement records.",
             },
+            "dependencies": dependency_catalog,
             "known_limits": {
                 "render_hobby_build_minutes": 500,
                 "render_hobby_bandwidth_gb": 5,
