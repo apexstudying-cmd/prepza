@@ -296,18 +296,41 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
     assetUrls.push(url)
     if (cache) { try { await cacheResponse(cache, url, new Response(blob, { headers: { 'Content-Type': blob.type || 'application/pdf' } })) } catch (_) {} }
 
-    const generatedPaths = ['summarize', 'quiz', 'flashcards', 'podcast-script', 'podcast-audio', 'mindmap']
-    await Promise.all(generatedPaths.map(async feature => {
+    // Generated materials are already-entitled, ready artifacts. Never call
+    // generation POST endpoints while preparing an offline package: those
+    // endpoints can create jobs. Read only the exact ready material rows.
+    const readyMaterials = Array.isArray(detail.materials)
+      ? detail.materials.filter((m: any) => m?.status === 'ready' && Number(m?.id) > 0)
+      : []
+    await Promise.all(readyMaterials.map(async (material: any) => {
       try {
-        const materialResponse = await fetch(`/documents/${documentId}/${feature}`, { credentials: 'include', cache: 'no-store' })
+        const materialResponse = await fetch(
+          `/documents/${documentId}/materials/${Number(material.id)}`,
+          { credentials: 'include', cache: 'no-store' },
+        )
         if (!materialResponse.ok) return
         const payload = await materialResponse.json()
-        await saveGeneratedMaterialOffline(`/documents/${documentId}/${feature}`, null, payload)
-        if (feature === 'podcast-audio' && payload?.audio_status === 'ready' && payload?.audio_url) {
-          await cacheGeneratedAudioOffline(String(payload.audio_url))
-        }
+        await saveGeneratedMaterialOffline(
+          `/documents/${documentId}/materials/${Number(material.id)}`,
+          null,
+          payload,
+        )
       } catch (_) {}
     }))
+    // Podcast audio is separately generated/cached; its GET endpoint only
+    // resolves an existing ready audio object and never creates TTS work.
+    try {
+      const audioResponse = await fetch(
+        `/documents/${documentId}/podcast-audio`,
+        { credentials: 'include', cache: 'no-store' },
+      )
+      if (audioResponse.ok) {
+        const audioPayload = await audioResponse.json()
+        if (audioPayload?.audio_status === 'ready' && audioPayload?.audio_url) {
+          await cacheGeneratedAudioOffline(String(audioPayload.audio_url))
+        }
+      }
+    } catch (_) {}
 
     const meta: SavedStudyHubMeta = { key: assetKey, userId, documentId, title: detail.title, fileType: detail.file_type, pageCount: Number(detail.page_count || 0) || undefined, contentHash, savedAt: Date.now(), assetUrls }
     await putMeta(meta)
