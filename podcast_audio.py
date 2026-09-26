@@ -49,14 +49,15 @@ AudioSegment.converter = imageio_ffmpeg.get_ffmpeg_exe()
 KOKORO_TTS_BASE_URL = os.environ.get("KOKORO_TTS_BASE_URL", "").rstrip("/")
 KOKORO_SHARED_SECRET = os.environ.get("KOKORO_SHARED_SECRET")
 
-# Placeholder - swap for real picks after listening to Kokoro's voice
-# gallery (af_*/am_*/bf_*/bm_* naming: a=American, b=British, f=female,
-# m=male). Nothing else in this file depends on which IDs go here.
+# Default production voice mapping. The script generator emits only lec,
+# morio, and kichwa; every turn is mapped before synthesis.
 PODCAST_VOICE_MAP = {
-    "lec": "bm_george",
-    "morio": "am_adam",
-    "kichwa": "af_sarah",
+    "lec": os.environ.get("PREPZA_PODCAST_VOICE_LEC", "bm_george").strip(),
+    "morio": os.environ.get("PREPZA_PODCAST_VOICE_MORIO", "am_adam").strip(),
+    "kichwa": os.environ.get("PREPZA_PODCAST_VOICE_KICHWA", "af_sarah").strip(),
 }
+if any(not voice for voice in PODCAST_VOICE_MAP.values()):
+    raise RuntimeError("Every podcast speaker must have a configured TTS voice")
 
 TURN_GAP_MS = 400  # silence stitched between speaker turns
 PODCAST_AUDIO_BUCKET = "podcast-audio"
