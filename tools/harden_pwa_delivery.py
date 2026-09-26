@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app.py"
 PUBLIC = ROOT / "frontend" / "public"
 DIST = ROOT / "frontend" / "dist"
-SOURCE_ICONS = ROOT / "static" / "images"
+SOURCE_ICONS = PUBLIC
 
 
 def patch_app_headers() -> None:
