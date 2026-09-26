@@ -145,7 +145,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
           <button disabled={savingPricing===item.config_key||!('amount_kes' in item.value_json)} onClick={()=>savePricing(item,Number(item.value_json.amount_kes||0))} style={{background:'#C9A84C',color:'#0B1437',border:0,borderRadius:8,padding:'8px 12px',fontWeight:800}}>{savingPricing===item.config_key?'Saving…':'Save'}</button>
         </div>
       </div>)}
-    </div>
+    </div>}
 
     {tab==='placements'&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div style={{...card,fontSize:12,color:T.textMuted}}>Placement inventory and commercial rates are admin-controlled. Campaigns should use the frozen pricing snapshot created at purchase; changing these settings affects future campaigns, not already-funded campaigns.</div>
