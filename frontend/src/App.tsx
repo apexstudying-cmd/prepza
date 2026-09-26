@@ -9684,6 +9684,11 @@ type AdminInfrastructure = {
   upgrade_policy: { automatic_billing: boolean; message: string }
 }
 
+type AdminStorageCapacity = {
+  supabase: { configured:boolean; object_bytes:number|null; object_bytes_error?:string }
+  r2: { enabled:boolean; objects:number; bytes:number; by_bucket:Record<string,number>; error?:string }
+}
+
 type AdminSystemCapacity = {
   tier: string
   available_tiers: string[]
@@ -10397,6 +10402,10 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   const [infrastructureError, setInfrastructureError] = useState('')
 
   const [systemCapacity, setSystemCapacity] = useState<AdminSystemCapacity | null>(null)
+  const [storageCapacity, setStorageCapacity] = useState<AdminStorageCapacity | null>(null)
+  const [storageCapacityLoading, setStorageCapacityLoading] = useState(true)
+  const [storageCapacityError, setStorageCapacityError] = useState('')
+
   const [systemCapacityLoading, setSystemCapacityLoading] = useState(true)
   const [systemCapacityError, setSystemCapacityError] = useState('')
   const [tierSwitching, setTierSwitching] = useState(false)
@@ -10444,6 +10453,14 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   }, [section])
 
 
+  const loadStorageCapacity = () => {
+    setStorageCapacityLoading(true); setStorageCapacityError('')
+    api<AdminStorageCapacity>('/admin/system/storage')
+      .then(setStorageCapacity)
+      .catch(e => setStorageCapacityError(e instanceof ApiError ? e.message : 'Could not load storage capacity.'))
+      .finally(() => setStorageCapacityLoading(false))
+  }
+
   const loadSystemCapacity = () => {
     setSystemCapacityLoading(true)
     setSystemCapacityError('')
@@ -10478,6 +10495,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
   useEffect(() => {
     if (section !== 'system') return
     loadSystemCapacity()
+    loadStorageCapacity()
     loadAdminAccounts()
   }, [section])
 
@@ -11353,6 +11371,26 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
             </div>
             <div style={{ background: 'rgba(201,168,76,.08)', border: '1px solid rgba(201,168,76,.2)', borderRadius: 11, padding: '10px 12px', fontSize: 11, color: T.text, lineHeight: 1.55 }}><strong>Upgrade rule:</strong> Prepza does not upgrade anything automatically. Use this screen to decide when a measured limit is getting close. Render build minutes/bandwidth and Brevo sends are known ceilings but require their provider dashboards for live usage.</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 10, color: T.textMuted }}><div>Render Hobby: {infrastructure.known_limits.render_hobby_build_minutes} build min · {infrastructure.known_limits.render_hobby_bandwidth_gb} GB bandwidth</div><div>Supabase Free: {infrastructure.known_limits.supabase_free_egress_gb} GB egress · 2M realtime</div><div>Brevo Free: {infrastructure.known_limits.brevo_free_daily_emails} emails/day</div><div>Podcast TTS: generated once per artifact; no per-play generation cost</div></div>
+          </div>
+        </AdminCard>
+      )}
+      {storageCapacityLoading ? (
+        <div style={{padding:'24px 0',textAlign:'center',color:T.textMuted,fontSize:13}}>Loading storage capacity…</div>
+      ) : storageCapacityError ? (
+        <div style={{padding:'24px 0',textAlign:'center',color:'#DC2626',fontSize:13}}>{storageCapacityError}</div>
+      ) : storageCapacity && (
+        <AdminCard title="Object storage — Supabase vs Cloudflare R2">
+          <div style={{padding:'16px 18px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:12}}>
+            <div style={{border:'1px solid #E5E7EB',borderRadius:12,padding:14}}>
+              <div style={{fontWeight:800,color:T.text}}>Supabase Storage</div>
+              <div style={{fontSize:22,fontWeight:800,marginTop:6}}>{storageCapacity.supabase.object_bytes == null ? '—' : (storageCapacity.supabase.object_bytes/1024/1024/1024).toFixed(2)+' GB'}</div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{storageCapacity.supabase.configured ? 'Configured' : 'Not configured'} · database-backed telemetry</div>
+            </div>
+            <div style={{border:'1px solid #E5E7EB',borderRadius:12,padding:14}}>
+              <div style={{fontWeight:800,color:T.text}}>Cloudflare R2</div>
+              <div style={{fontSize:22,fontWeight:800,marginTop:6}}>{storageCapacity.r2.enabled ? (storageCapacity.r2.bytes/1024/1024/1024).toFixed(2)+' GB' : 'Not enabled'}</div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{storageCapacity.r2.enabled ? `${storageCapacity.r2.objects.toLocaleString()} objects · cached 5 min` : 'Configure R2 credentials on Render'}</div>
+            </div>
           </div>
         </AdminCard>
       )}
