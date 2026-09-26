@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 
 from ai_artifact_fingerprint import GENERATION_VERSION, build_generation_fingerprint
-from ai_generation_store import claim_or_get_generation, mark_generation_failed, mark_generation_ready, wait_for_generation
+from ai_generation_store import claim_or_get_generation, find_ready_generation_family, mark_generation_failed, mark_generation_ready, wait_for_generation
 
 # Per-request product ceilings are intentionally separate from monthly plan allowances.
 # A Pro student can spend 100 summary pages/month, for example, but one request
@@ -274,6 +274,46 @@ def generate_document_material(*, material_type, document_content_id, triggering
         prompt_version=prompt_version, schema_version=schema_version,
         scope=scope, owner_user_id=owner_user_id,
     )
+
+    # Fast path: an exact source-hash + product-configuration artifact that is
+    # already ready must be served immediately. Do not reserve a new variant,
+    # create an AiJob, or wait behind another generation. Quota was deliberately
+    # consumed above, so reuse saves Prepza provider cost without expanding the
+    # student's entitlement.
+    exact_ready = find_ready_generation_family(
+        content_hash=content.content_hash,
+        feature=material_type,
+        base_parameters=base_parameters,
+        prompt_version=prompt_version,
+        schema_version=schema_version,
+        scope=scope,
+        owner_user_id=owner_user_id,
+    )
+    if exact_ready and exact_ready.payload:
+        exact_row = db.session.execute(text("""
+            SELECT fingerprint, parameters
+            FROM ai_generation_artifact
+            WHERE id = :artifact_id
+        """), {"artifact_id": exact_ready.artifact_id}).mappings().first()
+        if not exact_row:
+            raise RuntimeError("Ready AI artifact disappeared before it could be served")
+        exact_parameters = exact_row["parameters"] or {}
+        material = _material_from_payload(
+            document_content_id=document_content_id,
+            material_type=material_type,
+            fingerprint=exact_row["fingerprint"],
+            payload=exact_ready.payload,
+            scope=scope,
+            owner_user_id=owner_user_id,
+            parameters=exact_parameters,
+            document_title=document_title,
+        )
+        return {
+            "payload": json.loads(material.payload),
+            "material_id": material.id,
+            "reused": True,
+            "model_used": None,
+        }
 
     if variant_pool_feature:
         variant = reserve_generation_variant(
