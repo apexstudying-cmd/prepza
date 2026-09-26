@@ -6359,30 +6359,6 @@ function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     </div>
   )
 }
-, fontSize: 12, marginTop: 10 }}>Verifying…</div>}
-        {error && <div style={{ color: '#ffb4bd', fontSize: 13, lineHeight: 1.5, marginTop: 12 }}>{error}</div>}
-
-        <button
-          type="button"
-          onClick={resend}
-          disabled={resending || resendSeconds > 0}
-          style={{ marginTop: 20, background: 'none', border: 'none', color: N.gold, fontWeight: 700, fontSize: 13, cursor: resendSeconds > 0 || resending ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: resendSeconds > 0 || resending ? 0.55 : 1 }}
-        >
-          {resending ? 'Sending…' : resendSeconds > 0 ? `Resend code in ${resendSeconds}s` : 'Resend code'}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => { sessionStorage.removeItem('prepza_verification_email'); setScreen('login') }}
-          style={{ width: '100%', marginTop: 18, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 16, padding: '13px 0', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}
-        >
-          Back to Sign In
-        </button>
-      </div>
-    </div>
-  )
-}
-
 // ─── COMPLETE PROFILE (lands here after a first-time Google Sign-In) ──────────
 function CompleteProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { tokens: T } = useTheme()
@@ -15161,64 +15137,6 @@ function friendlyGenerationError(error: unknown): string {
     return 'Prepza has temporarily paused fresh AI generation. Your existing study materials are still available. Please try again later.'
   }
   return message || 'We could not generate this study material. Please try again.'
-}
-
-}).test(code)) { setError('Enter the ' + otpLength + '-digit code from your email.'); return }
-    if (!passwordValid) { setError('Choose a password with at least 8 characters, including upper/lowercase letters, a number and a symbol.'); return }
-    if (newPassword !== confirmPassword) { setError('The passwords do not match.'); return }
-    setSubmitting(true)
-    try {
-      await api('/reset-password', {
-        method: 'POST',
-        body: JSON.stringify({ email, code, new_password: newPassword }),
-      })
-      setDone(true)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'That code could not be verified. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)` }} className="scrollbar-hide">
-      <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <button onClick={() => setScreen('login')} style={{ alignSelf: 'flex-start', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, padding: '8px 12px', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 32, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12 }}>{Ic.back('w-4 h-4')} Back</button>
-        <img src={logoImg} alt="Prepza" style={{ width: 64, height: 64, borderRadius: 18, marginBottom: 20 }} />
-        {!sent ? (
-          <>
-            <div style={{ fontWeight: 800, fontSize: 24, color: '#fff', textAlign: 'center' }}>Reset Password</div>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 6, marginBottom: 32, textAlign: 'center' }}>Enter your email and we'll send a verification code.</div>
-            <div style={{ width: '100%' }}>
-              <input value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" placeholder="your@email.com" style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 16 }} />
-              {error && <div style={{ background: 'rgba(140,29,43,0.25)', border: '1px solid rgba(140,29,43,0.5)', borderRadius: 12, padding: '10px 14px', color: '#ffb4bd', fontSize: 13, marginBottom: 16 }}>{error}</div>}
-              <button disabled={submitting} onClick={requestCode} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: submitting ? 0.6 : 1 }}>{submitting ? 'Sending…' : 'Send Reset Code'}</button>
-            </div>
-          </>
-        ) : done ? (
-          <>
-            <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(76,201,123,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, color: '#4CC97B' }}>
-              <svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-            </div>
-            <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', textAlign: 'center', marginBottom: 10 }}>Password reset</div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, textAlign: 'center', lineHeight: 1.7, marginBottom: 32 }}>Your password has been changed. Sign in with the new password.</div>
-            <button onClick={() => setScreen('login')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Back to Login</button>
-          </>
-        ) : (
-          <>
-            <div style={{ fontWeight: 800, fontSize: 24, color: '#fff', textAlign: 'center' }}>Enter your reset code</div>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 6, marginBottom: 20, textAlign: 'center' }}>We sent a 6-digit code to <strong style={{ color: N.gold }}>{email}</strong>.</div>
-            {error && <div style={{ width: '100%', background: 'rgba(140,29,43,0.25)', border: '1px solid rgba(140,29,43,0.5)', borderRadius: 12, padding: '10px 14px', color: '#ffb4bd', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}>{error}</div>}
-            <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: '15px', color: '#fff', fontSize: 25, letterSpacing: 9, textAlign: 'center', fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 14 }} />
-            <input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="New password" style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 10 }} />
-            <input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Confirm new password" style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 14 }} />
-            <button disabled={submitting} onClick={resetPassword} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: submitting ? 0.6 : 1 }}>{submitting ? 'Saving…' : 'Reset Password'}</button>
-            <button type="button" onClick={resend} disabled={resendSeconds > 0 || submitting} style={{ marginTop: 16, background: 'none', border: 'none', color: N.gold, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: resendSeconds > 0 ? 0.55 : 1 }}>{resendSeconds > 0 ? `Resend code in ${resendSeconds}s` : 'Resend code'}</button>
-          </>
-        )}
-      </div>
-    </div>
-  )
 }
 
 // ─── RESET PASSWORD (reached via the emailed /reset-password?token= link) ────
