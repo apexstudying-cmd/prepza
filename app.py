@@ -2481,6 +2481,14 @@ def get_signed_url(bucket_path, expires_in=60, bucket="content"):
     if not bucket_path:
         return None
 
+    try:
+        from object_storage import r2_enabled, r2_presigned_get
+        if r2_enabled():
+            return r2_presigned_get(bucket, bucket_path, expires_in=expires_in)
+    except Exception as e:
+        print(f"ERROR generating R2 signed URL for {bucket}/{bucket_path}: {e}")
+        return None
+
     supabase_url = os.environ.get("SUPABASE_URL", "").strip()
     service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
@@ -2562,6 +2570,14 @@ def fetch_private_file_bytes(bucket_path, bucket="content"):
     Returns None if anything fails.
     """
     if not bucket_path:
+        return None
+
+    try:
+        from object_storage import r2_enabled, r2_get_bytes
+        if r2_enabled():
+            return r2_get_bytes(bucket, bucket_path)
+    except Exception as e:
+        print(f"ERROR fetching R2 private file {bucket}/{bucket_path}: {e}")
         return None
 
     supabase_url = os.environ.get("SUPABASE_URL", "").strip()
@@ -3637,10 +3653,18 @@ def get_document_extension(filename):
 
 def create_signed_upload_url(bucket, path):
     """
-    Requests a short-lived signed upload URL from Supabase Storage so the
-    client can PUT the file bytes directly to Supabase - the file itself
-    never passes through this Flask server. Returns None on failure.
+    Returns a short-lived direct-upload URL. R2 is preferred when its
+    credentials are configured; Supabase remains the compatibility fallback
+    until the production R2 environment is enabled.
     """
+    try:
+        from object_storage import r2_enabled, r2_presigned_put
+        if r2_enabled():
+            return r2_presigned_put(bucket, path)
+    except Exception as e:
+        print(f"ERROR generating R2 signed upload URL for {bucket}/{path}: {e}")
+        return None
+
     supabase_url = os.environ.get("SUPABASE_URL", "").strip()
     service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
@@ -3669,9 +3693,23 @@ def create_signed_upload_url(bucket, path):
 
 def storage_object_exists(bucket, path):
     """
-    Confirms an object actually landed in Supabase Storage. Used to verify
-    a client's "upload finished" claim before trusting it server-side.
+    Confirms an object landed in the active private object store before the
+    server trusts a client upload-complete claim.
     """
+    try:
+        from object_storage import r2_enabled, r2_head
+        if r2_enabled():
+            r2_head(bucket, path)
+            return True
+    except Exception as e:
+        try:
+            from object_storage import r2_enabled
+            if r2_enabled():
+                print(f"ERROR checking R2 object {bucket}/{path}: {e}")
+                return False
+        except Exception:
+            return False
+
     supabase_url = os.environ.get("SUPABASE_URL", "").strip()
     service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
