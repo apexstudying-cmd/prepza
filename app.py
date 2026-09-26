@@ -2940,11 +2940,13 @@ def signup():
             db.session.rollback()
             print(f"WARNING: referral capture failed for new user {new_user.id}: {e}")
 
+    otp_length = 6
     try:
         otp_service = app.extensions["prepza_auth_otp"]
         result = otp_service["issue"](new_user, "signup_verify", request.remote_addr or "")
         email_status = "Verification code sent"
         otp_expires_in_seconds = result["expires_in_seconds"]
+        otp_length = result.get("otp_length", 6)
     except ValueError as e:
         db.session.delete(new_user)
         db.session.commit()
@@ -2960,7 +2962,7 @@ def signup():
         "email_status": email_status,
         "verification_required": True,
         "otp_expires_in_seconds": otp_expires_in_seconds,
-        "otp_length": int((app.extensions["prepza_auth_otp"].get("otp_length") or 6)) if False else 6,
+        "otp_length": otp_length,
     }), 201
 
 
