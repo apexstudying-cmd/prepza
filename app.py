@@ -3369,6 +3369,11 @@ def confirm_profile_avatar():
     old=user.avatar_storage_path
     user.avatar_storage_path=path
     db.session.commit()
+    # Delete the previous object only after the new avatar is authoritative.
+    # If cleanup fails, the profile remains correct and the orphan is safe to
+    # collect later; never delete the old object before confirmation succeeds.
+    if old and old != path:
+        delete_storage_object("avatars", old)
     return jsonify({"avatar_url":get_signed_url(path,expires_in=3600,bucket="avatars"),"replaced":bool(old)})
 
 @app.delete("/profile/avatar")
@@ -3380,6 +3385,8 @@ def remove_profile_avatar():
     old=user.avatar_storage_path
     user.avatar_storage_path=None
     db.session.commit()
+    if old:
+        delete_storage_object("avatars", old)
     return jsonify({"removed":bool(old)})
 
 @app.route("/delete-account", methods=["DELETE"])
@@ -3735,6 +3742,39 @@ def create_signed_upload_url(bucket, path):
     except Exception as e:
         print(f"ERROR generating signed upload URL for {bucket}/{path}: {e}")
         return None
+
+
+def delete_storage_object(bucket, path):
+    """Delete one private object from the active storage provider."""
+    if not path:
+        return False
+    try:
+        from object_storage import r2_enabled, r2_delete
+        if r2_enabled():
+            r2_delete(bucket, path)
+            return True
+    except Exception as exc:
+        try:
+            from object_storage import r2_enabled
+            if r2_enabled():
+                app.logger.warning("R2 delete failed for %s/%s: %s", bucket, path, exc)
+                return False
+        except Exception:
+            return False
+    supabase_url=os.environ.get("SUPABASE_URL", "").strip()
+    service_key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    if not supabase_url or not service_key:
+        return False
+    try:
+        response=requests.delete(
+            f"{supabase_url}/storage/v1/object/{bucket}/{path}",
+            headers={"Authorization":f"Bearer {service_key}","apikey":service_key},
+            timeout=15,
+        )
+        return response.status_code in (200,204)
+    except Exception as exc:
+        app.logger.warning("Supabase object delete failed for %s/%s: %s", bucket, path, exc)
+        return False
 
 
 def storage_object_exists(bucket, path):
@@ -9399,6 +9439,7 @@ def _serialize_chat_message(message):
             "original_filename": attachment.original_filename,
             "file_size_bytes": attachment.file_size_bytes,
             "view_url": get_cached_chat_attachment_url(attachment),
+            "study_document": bool(DocumentContent.query.filter_by(storage_path=attachment.storage_path, status="ready").first()),
         }
     return {
         "id": message.id,
@@ -9571,6 +9612,47 @@ def send_chat_message(conversation_id):
     if attachment:
         attachment.message_id=message.id
     conversation.updated_at=datetime.utcnow()
+    db.session.commit()
+    return jsonify(_serialize_chat_message(message)),201
+
+@app.post("/chats/<int:conversation_id>/study-documents")
+@require_csrf
+def share_study_document_to_chat(conversation_id):
+    """Share an existing source document from the sender's Study Hub.
+
+    This does not create an AI artifact, does not publish to Library, and
+    does not copy the file into chat storage. The chat attachment references
+    the already-existing DocumentContent object so the recipient can import
+    that source into their own Study Hub without creating a second object.
+    """
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    if not _get_chat_or_404(conversation_id,user_id): return jsonify({"error":"Conversation not found"}),404
+    data=request.get_json(silent=True) or {}
+    try: document_id=int(data.get("document_id"))
+    except (TypeError,ValueError): return jsonify({"error":"document_id is required"}),400
+    document=db.session.get(Document,document_id)
+    if not document or document.user_id!=user_id or document.is_removed or not document.document_content_id:
+        return jsonify({"error":"Study Hub document not found"}),404
+    content=db.session.get(DocumentContent,document.document_content_id)
+    if not content or content.status!="ready" or not content.storage_path:
+        return jsonify({"error":"This document is not ready to share"}),409
+    attachment=MessageAttachment(
+        conversation_id=conversation_id,
+        uploaded_by_user_id=user_id,
+        storage_path=content.storage_path,
+        file_type=content.file_type or "application/octet-stream",
+        original_filename=document.original_filename or document.title,
+        file_size_bytes=int(content.file_size_bytes or 0),
+        status="ready",
+    )
+    db.session.add(attachment); db.session.flush()
+    message=Message(conversation_id=conversation_id,sender_id=user_id,body=None,nonce=None,
+                    e2ee_key_epoch=int(db.session.get(Conversation,conversation_id).key_epoch or 0)
+                    if db.session.get(Conversation,conversation_id).e2ee_mode=="group_v1" else 0)
+    db.session.add(message); db.session.flush()
+    attachment.message_id=message.id
+    db.session.get(Conversation,conversation_id).updated_at=datetime.utcnow()
     db.session.commit()
     return jsonify(_serialize_chat_message(message)),201
 
