@@ -5,7 +5,7 @@ from sqlalchemy import or_
 OPPORTUNITY_TYPES=("job","internship","scholarship","competition","volunteering","event","other")
 PAGE_SIZE=20
 
-def register_opportunity_runtime(app,db,Opportunity,Organisation,User):
+def register_opportunity_runtime(app,db,Opportunity,Organisation,User,OrganisationMember,require_csrf):
     class SavedOpportunity(db.Model):
         __tablename__="saved_opportunity"
         id=db.Column(db.Integer,primary_key=True)
@@ -123,6 +123,7 @@ def register_opportunity_runtime(app,db,Opportunity,Organisation,User):
         return jsonify(public(opp,uid))
 
     @app.post("/opportunities/<int:opportunity_id>/save")
+    @require_csrf
     def save_opportunity(opportunity_id):
         uid=session.get("user_id")
         if not uid:return jsonify({"error":"Not logged in"}),401
@@ -132,6 +133,7 @@ def register_opportunity_runtime(app,db,Opportunity,Organisation,User):
         return jsonify({"message":"Saved"})
 
     @app.delete("/opportunities/<int:opportunity_id>/save")
+    @require_csrf
     def unsave_opportunity(opportunity_id):
         uid=session.get("user_id")
         if not uid:return jsonify({"error":"Not logged in"}),401
@@ -149,6 +151,7 @@ def register_opportunity_runtime(app,db,Opportunity,Organisation,User):
         return jsonify({"saved":[public(visible[r.opportunity_id],uid) for r in rows if r.opportunity_id in visible]})
 
     @app.patch("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>/targeting")
+    @require_csrf
     def update_opportunity_targeting(organisation_id,opportunity_id):
         uid=session.get("user_id");opp=db.session.get(Opportunity,opportunity_id)
         if not uid or not opp or opp.organisation_id!=organisation_id:return jsonify({"error":"Opportunity not found"}),404
