@@ -312,6 +312,8 @@ const Ic = {
   back:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>,
   close:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>,
   search:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>,
+  camera:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.2"/></svg>,
+  gallery:  (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9" r="1.3"/><path d="m5 17 4.2-4.2 3 3 2.2-2.2L19 18"/></svg>,
   send:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>,
   mic:      (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>,
   upload:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>,
@@ -3598,6 +3600,8 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
 function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   const { tokens: T } = useTheme()
   const [saved, setSaved] = useState(false)
+  const avatarCameraRef = useRef<HTMLInputElement>(null)
+  const avatarGalleryRef = useRef<HTMLInputElement>(null)
   const [summary, setSummary] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -7543,9 +7547,14 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           {avatarUrl ? <img src={avatarUrl} alt="" style={{ width:80,height:80,borderRadius:'50%',objectFit:'cover',display:'block' }} /> :
             <div style={{ width:80,height:80,background:`linear-gradient(135deg,${N.gold},${N.goldL})`,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:28,color:N.navy }}>{initials}</div>}
           <label style={{ position:'absolute',bottom:0,right:0,width:26,height:26,background:N.gold,borderRadius:'50%',border:'2px solid #fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',opacity:avatarBusy?.6:1 }}>
-            <input type="file" accept="image/*" disabled={avatarBusy} onChange={e=>{const f=e.target.files?.[0];if(f)void handleAvatarFile(f);e.currentTarget.value=''}} style={{display:'none'}} />
+            <input ref={avatarGalleryRef} type="file" accept="image/*" disabled={avatarBusy} onChange={e=>{const f=e.target.files?.[0];if(f)void handleAvatarFile(f);e.currentTarget.value=''}} style={{display:'none'}} />
             <div style={{color:T.text}}>{Ic.edit('w-3 h-3')}</div>
           </label>
+        </div>
+        <input ref={avatarCameraRef} type="file" accept="image/*" capture="environment" disabled={avatarBusy} onChange={e=>{const f=e.target.files?.[0];if(f)void handleAvatarFile(f);e.currentTarget.value=''}} style={{display:'none'}} />
+        <div style={{display:'flex',gap:8,alignItems:'center',justifyContent:'center',marginBottom:8}}>
+          <button type="button" disabled={avatarBusy} onClick={()=>avatarCameraRef.current?.click()} style={{display:'flex',alignItems:'center',gap:6,border:`1px solid ${T.border}`,background:T.card,color:T.text,padding:'7px 10px',borderRadius:10,cursor:'pointer',fontSize:10,fontWeight:750}}>{Ic.camera('w-4 h-4')} Camera</button>
+          <button type="button" disabled={avatarBusy} onClick={()=>avatarGalleryRef.current?.click()} style={{display:'flex',alignItems:'center',gap:6,border:`1px solid ${T.border}`,background:T.card,color:T.text,padding:'7px 10px',borderRadius:10,cursor:'pointer',fontSize:10,fontWeight:750}}>{Ic.gallery('w-4 h-4')} Gallery</button>
         </div>
         <div style={{display:'flex',gap:12,alignItems:'center'}}>
           <div style={{fontSize:12,color:T.textMuted}}>{avatarBusy?'Updating photo…':'Photo is compressed on this device before upload.'}</div>
