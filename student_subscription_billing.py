@@ -16,7 +16,14 @@ from sqlalchemy import text
 
 
 def ensure_subscription_schema(db):
-    """Idempotent safety net; the migration remains the deploy/audit artifact."""
+    """Idempotent safety net; the migration remains the deploy/audit artifact.
+
+    The runtime application uses PostgreSQL. Realtime/security tests deliberately
+    boot the Flask app against an in-memory SQLite database, so PostgreSQL-only
+    DDL must not run during test-module import.
+    """
+    if db.engine.url.get_backend_name() == "sqlite":
+        return
     # Payment period boundaries are part of the entitlement contract. Keep
     # this additive safety-net in sync with the deploy migration so an older
     # database cannot boot into code that references a missing column.
