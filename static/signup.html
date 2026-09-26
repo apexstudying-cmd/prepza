@@ -304,10 +304,27 @@
     <p class="footer-link">Already have an account? <a href="/static/login.html">Log in</a></p>
   </div>
 
+  <div id="otp-view" class="hidden">
+    <p class="card-title">Verify your email</p>
+    <p class="card-sub">Enter the code we sent to <strong id="otp-email"></strong>. The code expires soon.</p>
+    <div id="otp-message" class="message"></div>
+    <form id="otp-form">
+      <div class="field">
+        <label for="signup-otp">Verification code</label>
+        <input type="text" id="signup-otp" required inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="8" placeholder="000000" style="font-family:'IBM Plex Mono',monospace; letter-spacing:.35em; text-align:center; font-size:20px;">
+      </div>
+      <button type="submit" class="btn-primary" id="otp-submit">Verify email</button>
+    </form>
+    <button type="button" id="otp-resend" class="btn-primary" style="background:transparent;color:var(--navy);border:1px solid var(--border);margin-top:10px;">Resend code</button>
+    <p class="footer-link"><a href="/static/login.html">Go to log in</a></p>
+  </div>
+
   <div id="success-view" class="hidden">
     <div class="success-box">
-      <div class="icon">&#9993;</div>
-      <p><strong>Check your email</strong><br>We've sent a verification link to your inbox. Verify your email, then log in to get started.</p>
+      <div class="icon" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <p><strong>Email verified</strong><br>Your Prepza account is ready. You can now log in.</p>
     </div>
     <p class="footer-link"><a href="/static/login.html">Go to log in</a></p>
   </div>
@@ -378,8 +395,14 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       return;
     }
 
+    sessionStorage.setItem('prepza_verification_email', email);
+    sessionStorage.setItem('prepza_verification_otp_length', String(data.otp_length || 6));
     document.getElementById('signup-view').classList.add('hidden');
-    document.getElementById('success-view').classList.remove('hidden');
+    document.getElementById('otp-view').classList.remove('hidden');
+    document.getElementById('otp-email').textContent = email;
+    const otpInput = document.getElementById('signup-otp');
+    otpInput.maxLength = Number(data.otp_length || 6);
+    otpInput.focus();
 
   } catch (err) {
     msgEl.textContent = 'Could not reach Prepza. Check your connection.';
@@ -388,6 +411,58 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     submitBtn.disabled = false;
     submitBtn.textContent = 'Create account';
   }
+});
+
+document.getElementById('otp-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = sessionStorage.getItem('prepza_verification_email') || '';
+  const code = document.getElementById('signup-otp').value.replace(/\D/g, '');
+  const btn = document.getElementById('otp-submit');
+  const msg = document.getElementById('otp-message');
+  msg.style.display = 'none';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/verify-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email, code}) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Invalid verification code.');
+    document.getElementById('otp-view').classList.add('hidden');
+    document.getElementById('success-view').classList.remove('hidden');
+    sessionStorage.removeItem('prepza_verification_email');
+    sessionStorage.removeItem('prepza_verification_otp_length');
+  } catch (err) {
+    msg.textContent = err.message || 'Could not verify the code.';
+    msg.className = 'message error';
+    msg.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+});
+document.getElementById('signup-otp').addEventListener('input', (e) => {
+  const n = Number(sessionStorage.getItem('prepza_verification_otp_length') || 6);
+  e.target.value = e.target.value.replace(/\D/g,'').slice(0,n);
+  if (e.target.value.length === n) document.getElementById('otp-form').requestSubmit();
+});
+document.getElementById('signup-otp').addEventListener('paste', (e) => {
+  const n = Number(sessionStorage.getItem('prepza_verification_otp_length') || 6);
+  const code = e.clipboardData.getData('text').replace(/\D/g,'').slice(0,n);
+  if (code.length === n) { e.preventDefault(); e.target.value = code; document.getElementById('otp-form').requestSubmit(); }
+});
+document.getElementById('otp-resend').addEventListener('click', async () => {
+  const email = sessionStorage.getItem('prepza_verification_email') || '';
+  const btn = document.getElementById('otp-resend');
+  btn.disabled = true; btn.textContent = 'Sending...';
+  try {
+    const res = await fetch('/resend-verification',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not send a new code.');
+    document.getElementById('otp-message').textContent = data.message || 'If the account is eligible, a new code has been sent.';
+    document.getElementById('otp-message').className = 'message success';
+    document.getElementById('otp-message').style.display = 'block';
+  } catch (err) {
+    document.getElementById('otp-message').textContent = err.message;
+    document.getElementById('otp-message').className = 'message error';
+    document.getElementById('otp-message').style.display = 'block';
+  } finally { setTimeout(() => { btn.disabled=false; btn.textContent='Resend code'; }, 60000); }
 });
 </script>
 
