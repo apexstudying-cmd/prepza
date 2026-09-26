@@ -9656,7 +9656,7 @@ def confirm_chat_attachment(conversation_id,attachment_id):
 
 try:
     from opportunity_runtime import register_opportunity_runtime
-    register_opportunity_runtime(app, db, Opportunity, Organisation, User)
+    register_opportunity_runtime(app, db, Opportunity, Organisation, User, OrganisationMember, require_csrf)
 except Exception as exc:
     app.logger.exception("Opportunity runtime registration failed: %s", exc)
 
