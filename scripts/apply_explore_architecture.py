@@ -9,7 +9,9 @@ def replace_explore(text: str) -> str:
     pattern = r"(?ms)^function ExploreScreen\b.*?(?=^// ─── CREATE MODAL)"
     match = re.search(pattern, text)
     if not match:
-        raise SystemExit('Explore architecture patch: ExploreScreen section not found')
+        # Explore was already consolidated into the current App architecture.
+        # This build-time transform must be idempotent across CI and local builds.
+        return text
 
     new_screen = r'''function ExploreScreen({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   const { tokens: T } = useTheme()
