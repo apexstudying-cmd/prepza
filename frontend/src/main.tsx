@@ -15,6 +15,7 @@ import { installChatDraftPersistence } from './crypto/chatDraftPersistence'
 import { installNavigationTransitions } from './crypto/navigationTransitions'
 import { installGlobalPullRefresh } from './crypto/globalPullRefresh'
 import { installOfflineBootstrap } from './offline/bootstrap'
+import OfflineStatusBanner from './offline/OfflineStatusBanner'
 import { installActivityHeartbeat } from './activityHeartbeat'
 import App from './App'
 import ExternalDocumentImport from './ExternalDocumentImport'
@@ -78,6 +79,7 @@ root.render(
   <React.StrictMode>
     <StartupErrorBoundary>
       <App />
+      <OfflineStatusBanner />
       <ExternalDocumentImport />
       <InChatAdaEnhancer />
       <DirectInChatAdaEnhancer />
