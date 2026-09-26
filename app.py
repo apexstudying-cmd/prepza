@@ -9656,6 +9656,31 @@ def share_study_document_to_chat(conversation_id):
     db.session.commit()
     return jsonify(_serialize_chat_message(message)),201
 
+@app.post("/chats/<int:conversation_id>/attachments/<int:attachment_id>/study-hub")
+@require_csrf
+def import_chat_study_document(conversation_id, attachment_id):
+    user_id=session.get("user_id")
+    if not user_id: return jsonify({"error":"Not logged in"}),401
+    if not _get_chat_or_404(conversation_id,user_id): return jsonify({"error":"Conversation not found"}),404
+    attachment=db.session.get(MessageAttachment,attachment_id)
+    if not attachment or attachment.conversation_id!=conversation_id or attachment.status!="ready":
+        return jsonify({"error":"Attachment not found"}),404
+    content=DocumentContent.query.filter_by(storage_path=attachment.storage_path, status="ready").first()
+    if not content:
+        return jsonify({"error":"The shared source document is no longer available"}),410
+    existing=Document.query.filter_by(user_id=user_id,document_content_id=content.id,is_removed=False).first()
+    if existing:
+        return jsonify({"document_id":existing.id,"already_exists":True}),200
+    document=Document(
+        user_id=user_id,
+        document_content_id=content.id,
+        title=attachment.original_filename or "Shared document",
+        original_filename=attachment.original_filename or "shared-document",
+        status="ready",
+    )
+    db.session.add(document); db.session.commit()
+    return jsonify({"document_id":document.id,"already_exists":False}),201
+
 @app.post("/chats/<int:conversation_id>/read")
 @require_csrf
 def mark_chat_read(conversation_id):
