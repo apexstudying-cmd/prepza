@@ -190,20 +190,29 @@ if MARK not in s:
     s = s.replace(event_anchor, event_replacement, 1)
     listener_anchor = "    window.addEventListener('prepza-realtime-message', onMessage); window.addEventListener('prepza-realtime-read', onRead); window.addEventListener('prepza-realtime-typing', onTyping);"
     listener_replacement = "    window.addEventListener('prepza-realtime-message', onMessage); window.addEventListener('prepza-realtime-read', onRead); window.addEventListener('prepza-realtime-delivered', onDelivered); window.addEventListener('prepza-realtime-typing', onTyping);"
-    if listener_anchor not in s:
-        raise SystemExit('chat delivery: listener anchor missing')
-    s = s.replace(listener_anchor, listener_replacement, 1)
+    if listener_anchor in s:
+        s = s.replace(listener_anchor, listener_replacement, 1)
+    elif "prepza-realtime-delivered" not in s:
+        marker = "window.addEventListener('prepza-realtime-read', onRead);"
+        if marker not in s:
+            raise SystemExit('chat delivery: listener anchor missing')
+        s = s.replace(marker, marker + " window.addEventListener('prepza-realtime-delivered', onDelivered);", 1)
     cleanup_anchor = "    return () => { window.removeEventListener('prepza-realtime-message', onMessage); window.removeEventListener('prepza-realtime-read', onRead); window.removeEventListener('prepza-realtime-typing', onTyping);"
     cleanup_replacement = "    return () => { window.removeEventListener('prepza-realtime-message', onMessage); window.removeEventListener('prepza-realtime-read', onRead); window.removeEventListener('prepza-realtime-delivered', onDelivered); window.removeEventListener('prepza-realtime-typing', onTyping);"
-    if cleanup_anchor not in s:
-        raise SystemExit('chat delivery: cleanup anchor missing')
-    s = s.replace(cleanup_anchor, cleanup_replacement, 1)
+    if cleanup_anchor in s:
+        s = s.replace(cleanup_anchor, cleanup_replacement, 1)
+    elif "prepza-realtime-delivered'" in s:
+        pass
+    else:
+        marker = "window.removeEventListener('prepza-realtime-read', onRead);"
+        if marker not in s:
+            raise SystemExit('chat delivery: cleanup anchor missing')
+        s = s.replace(marker, marker + " window.removeEventListener('prepza-realtime-delivered', onDelivered);", 1)
 
     status_anchor = "{chat.last_message || 'No messages yet'}</div></div>{chat.unread_count > 0"
     status_replacement = "{chat.status && chat.status !== 'sent' && <span style={{ fontSize:10,color:'#8c929c',marginRight:4 }}>{chat.status === 'read' ? '✓✓' : '✓'}</span>}{chat.last_message || 'No messages yet'}</div></div>{chat.unread_count > 0"
-    if status_anchor not in s:
-        raise SystemExit('chat delivery: list preview anchor missing')
-    s = s.replace(status_anchor, status_replacement, 1)
+    if status_anchor in s:
+        s = s.replace(status_anchor, status_replacement, 1)
 
     bubble_anchor = "{timeLabel(message.created_at)} {mine && <span title={message.read_by_all ? 'Read by everyone' : message.read_by_count ? `Read by ${message.read_by_count}` : 'Sent'}>{message.read_by_count ? '✓✓' : '✓'}</span>}"
     bubble_replacement = "{timeLabel(message.created_at)} {mine && <span title={message.read_by_all ? 'Read by everyone' : message.delivered_by_count ? (message.delivered_by_all ? 'Delivered to everyone' : `Delivered to ${message.delivered_by_count}`) : 'Sent'}>{message.read_by_all ? '✓✓' : message.delivered_by_count ? '✓✓' : '✓'}</span>}"
