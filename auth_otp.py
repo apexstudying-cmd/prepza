@@ -224,7 +224,7 @@ def register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf
         try:
             message_id = send_email(target, subject, text_body, html_body, purpose)
             db.session.commit()
-            return {"expires_in_seconds": otp_expiry_minutes() * 60, "message_id": message_id}
+            return {"expires_in_seconds": otp_expiry_minutes() * 60, "otp_length": otp_length(), "message_id": message_id}
         except Exception:
             db.session.rollback()
             raise
@@ -302,7 +302,7 @@ def register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf
             return jsonify(generic), 200
         try:
             result = issue(user, "signup_verify", request.remote_addr or "")
-            return jsonify({**generic, "expires_in_seconds": result["expires_in_seconds"]}), 200
+            return jsonify({**generic, "expires_in_seconds": result["expires_in_seconds"], "otp_length": result["otp_length"]}), 200
         except ValueError:
             # Do not reveal whether the target exists or which anti-abuse bucket fired.
             return jsonify(generic), 200
