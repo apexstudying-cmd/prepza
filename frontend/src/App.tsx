@@ -6359,11 +6359,6 @@ function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     </div>
   )
 }
-).test(pasted.trim())) {
-              e.preventDefault()
-              handleCodeChange(pasted.trim())
-            }
-          }}
           inputMode="numeric"
           autoComplete="one-time-code"
           pattern="[0-9]*"
