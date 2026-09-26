@@ -7,6 +7,9 @@ ceilings, estimated spend, and explicit upgrade signals before a bill arrives.
 from datetime import datetime, timedelta
 from flask import jsonify, session
 from sqlalchemy import func
+import os
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 
 def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
@@ -91,6 +94,63 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
 
         # Paystack fees are variable, so these are estimates from the
         # recorded provider/channel metadata, never an accounting figure.
+        # Actual Amazon SES account telemetry. SES quotas are regional and
+        # separate from the AWS Free Tier allowance, so the dashboard reports
+        # the live account quota rather than a hardcoded "free emails/day".
+        ses_region = os.environ.get("AWS_SES_REGION") or os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+        ses = {
+            "configured": bool(
+                ses_region
+                and (os.environ.get("SES_FROM_EMAIL") or os.environ.get("AWS_SES_FROM_EMAIL"))
+                and os.environ.get("AWS_ACCESS_KEY_ID")
+                and os.environ.get("AWS_SECRET_ACCESS_KEY")
+            ),
+            "region": ses_region,
+            "status": "not_configured",
+            "max_24_hour_send": None,
+            "max_send_rate": None,
+            "sent_last_24_hours": None,
+            "sending_enabled": None,
+            "enforcement_status": None,
+            "application_sends_last_24_hours": 0,
+            "verification_sends_last_24_hours": 0,
+            "password_reset_sends_last_24_hours": 0,
+        }
+        if ses["configured"]:
+            try:
+                account = boto3.client("sesv2", region_name=ses_region).get_account()
+                quota = account.get("SendQuota") or {}
+                ses.update({
+                    "status": "ok" if account.get("SendingEnabled", True) else "sending_disabled",
+                    "sending_enabled": bool(account.get("SendingEnabled", True)),
+                    "enforcement_status": account.get("EnforcementStatus"),
+                    "max_24_hour_send": quota.get("Max24HourSend"),
+                    "max_send_rate": quota.get("MaxSendRate"),
+                    "sent_last_24_hours": quota.get("SentLast24Hours"),
+                })
+            except (ClientError, BotoCoreError, Exception) as exc:
+                ses.update({"status": "error", "error": str(exc)[:240]})
+
+        otp_ext = app.extensions.get("prepza_auth_otp") or {}
+        otp_model = otp_ext.get("AuthOtp")
+        if otp_model is not None:
+            otp_since = now - timedelta(days=1)
+            ses["application_sends_last_24_hours"] = int(
+                db.session.query(func.count(otp_model.id)).filter(otp_model.created_at >= otp_since).scalar() or 0
+            )
+            ses["verification_sends_last_24_hours"] = int(
+                db.session.query(func.count(otp_model.id)).filter(
+                    otp_model.created_at >= otp_since,
+                    otp_model.purpose == "signup_verify",
+                ).scalar() or 0
+            )
+            ses["password_reset_sends_last_24_hours"] = int(
+                db.session.query(func.count(otp_model.id)).filter(
+                    otp_model.created_at >= otp_since,
+                    otp_model.purpose == "password_reset",
+                ).scalar() or 0
+            )
+
         success_payments = Payment.query.filter(
             Payment.status == "success", Payment.created_at >= month_start
         ).all()
@@ -159,6 +219,7 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
                 "status": _status(ai_budget_pct) if ai_budget else "monitor",
                 "by_feature": by_feature,
             },
+            "ses": ses,
             "payments": {
                 "revenue_mtd_kes": revenue,
                 "estimated_paystack_fees_mtd_kes": round(estimated_fees, 2),
@@ -169,7 +230,9 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
                 "render_hobby_build_minutes": 500,
                 "render_hobby_bandwidth_gb": 5,
                 "render_runtime_metrics": "Use Render Billing/Service Metrics; not exposed to the app without a Render API key.",
-                "brevo_free_daily_emails": 300,
+                "ses_free_tier": "New AWS customers may receive up to 3,000 SES message charges/month for the first 12 months; this is separate from SES account sending quotas.",
+                "ses_sandbox_daily_send": 200,
+                "ses_sandbox_send_rate": 1,
                 "supabase_free_egress_gb": 5,
                 "supabase_free_cached_egress_gb": 5,
                 "supabase_free_realtime_messages": 2_000_000,

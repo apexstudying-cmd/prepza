@@ -26,6 +26,7 @@ import podcast_audio
 from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
 from db_runtime import configure_sqlalchemy_runtime
+from auth_otp import register_email_otp
 
 load_dotenv()
 
@@ -2287,58 +2288,6 @@ def sync_paystack_payment_status(reference):
     return payment
 
 
-def send_verification_email(to_email, token):
-    api_key = os.environ.get("BREVO_API_KEY")
-    verify_link = f"{BASE_URL}/verify-email?token={token}"
-
-    url = "https://api.brevo.com/v3/smtp/email"
-    headers = {
-        "accept": "application/json",
-        "api-key": api_key,
-        "content-type": "application/json",
-    }
-    payload = {
-        "sender": {"name": "Prepza", "email": "prepza2026@gmail.com"},
-        "to": [{"email": to_email}],
-        "subject": "Verify your Prepza account",
-        "htmlContent": f"""
-            <p>Welcome to Prepza!</p>
-            <p>Please verify your email by clicking the link below:</p>
-            <p><a href="{verify_link}">{verify_link}</a></p>
-            <p>If you didn't sign up for Prepza, you can ignore this email.</p>
-        """,
-    }
-
-    response = requests.post(url, json=payload, headers=headers)
-    response.raise_for_status()
-
-
-def send_reset_email(to_email, token):
-    api_key = os.environ.get("BREVO_API_KEY")
-    reset_link = f"{BASE_URL}/reset-password?token={token}"
-
-    url = "https://api.brevo.com/v3/smtp/email"
-    headers = {
-        "accept": "application/json",
-        "api-key": api_key,
-        "content-type": "application/json",
-    }
-    payload = {
-        "sender": {"name": "Prepza", "email": "prepza2026@gmail.com"},
-        "to": [{"email": to_email}],
-        "subject": "Reset your Prepza password",
-        "htmlContent": f"""
-            <p>We received a request to reset your Prepza password.</p>
-            <p>Click the link below to choose a new password. This link expires in 1 hour.</p>
-            <p><a href="{reset_link}">{reset_link}</a></p>
-            <p>If you did not request this, you can safely ignore this email.</p>
-        """,
-    }
-
-    response = requests.post(url, json=payload, headers=headers)
-    response.raise_for_status()
-
-
 def require_admin(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -2377,6 +2326,15 @@ def require_csrf(f):
             return jsonify({"error": "Missing or invalid CSRF token"}), 403
         return f(*args, **kwargs)
     return decorated
+
+# Email OTP / SES authentication service.
+register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf, limiter)
+from infrastructure_monitoring import register_infrastructure_monitoring
+register_infrastructure_monitoring(
+    app, db, require_admin, SystemSetting, User, DocumentContent,
+    AiUsageLog, Payment, StudyActivityLog, StudyTimeLog
+)
+
 
 _student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
 
@@ -2869,7 +2827,7 @@ def list_programs(university_id):
 
 
 @app.route("/signup", methods=["POST"])
-@limiter.limit("5 per hour")
+@limiter.limit("30 per minute")
 def signup():
     data = request.get_json(silent=True)
     if not data:
@@ -2938,8 +2896,6 @@ def signup():
     if existing_user:
         return jsonify({"error": "An account with this email already exists"}), 409
 
-    token = secrets.token_urlsafe(32)
-
     new_user = User(
         email=email,
         password_hash=generate_password_hash(password),
@@ -2947,7 +2903,6 @@ def signup():
         semester=semester,
         display_name=display_name,
         email_verified=False,
-        verification_token=token,
         signup_source=signup_source,
         university_id=university_id,
         program_id=program_id,
@@ -2985,16 +2940,29 @@ def signup():
             db.session.rollback()
             print(f"WARNING: referral capture failed for new user {new_user.id}: {e}")
 
+    otp_length = 6
     try:
-        send_verification_email(email, token)
-        email_status = "Verification email sent"
-    except Exception as e:
-        email_status = f"Account created but verification email failed to send: {str(e)}"
+        otp_service = app.extensions["prepza_auth_otp"]
+        result = otp_service["issue"](new_user, "signup_verify", request.remote_addr or "")
+        email_status = "Verification code sent"
+        otp_expires_in_seconds = result["expires_in_seconds"]
+        otp_length = result.get("otp_length", 6)
+    except ValueError as e:
+        db.session.delete(new_user)
+        db.session.commit()
+        return jsonify({"error": str(e)}), 429
+    except Exception:
+        app.logger.exception("Initial SES verification email failed")
+        email_status = "Verification code could not be sent"
+        otp_expires_in_seconds = None
 
     return jsonify({
         "message": "Account created successfully",
         "user_id": new_user.id,
         "email_status": email_status,
+        "verification_required": True,
+        "otp_expires_in_seconds": otp_expires_in_seconds,
+        "otp_length": otp_length,
     }), 201
 
 
@@ -3063,97 +3031,6 @@ def verify_email_confirm():
         "message": "Email verified successfully",
         "redirect": "/",
     })
-@app.route("/resend-verification", methods=["POST"])
-@limiter.limit("5 per hour")
-def resend_verification():
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-    email = (data.get("email") or "").strip().lower()
-    if not email:
-        return jsonify({"error": "Email is required"}), 400
-    user = User.query.filter_by(email=email).first()
-    # Always return the same generic message whether or not the account
-    # exists or is already verified - same privacy pattern as /forgot-password,
-    # so this endpoint can't be used to check which emails are registered.
-    generic_response = jsonify({
-        "message": "If an unverified account with that email exists, a new verification link has been sent."
-    })
-    if not user or user.email_verified:
-        return generic_response
-    token = secrets.token_urlsafe(32)
-    user.verification_token = token
-    db.session.commit()
-    try:
-        send_verification_email(email, token)
-    except Exception:
-        pass
-    return generic_response
-@app.route("/forgot-password", methods=["POST"])
-@limiter.limit("5 per hour")
-def forgot_password():
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    email = (data.get("email") or "").strip().lower()
-    if not email:
-        return jsonify({"error": "Email is required"}), 400
-
-    user = User.query.filter_by(email=email).first()
-
-    # Always return the same message whether or not the account exists -
-    # this stops people from using this endpoint to check which emails are registered.
-    generic_response = jsonify({
-        "message": "If an account with that email exists, a reset link has been sent."
-    })
-
-    if not user:
-        return generic_response
-
-    token = secrets.token_urlsafe(32)
-    user.reset_token = token
-    user.reset_token_expiry = datetime.utcnow() + timedelta(hours=1)
-    db.session.commit()
-
-    try:
-        send_reset_email(email, token)
-    except Exception:
-        pass  # Don't reveal email-sending failures - keep the response generic either way
-
-    return generic_response
-
-
-@app.route("/reset-password", methods=["POST"])
-def reset_password():
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    token = data.get("token") or ""
-    new_password = data.get("new_password") or ""
-
-    if not token:
-        return jsonify({"error": "Missing reset token"}), 400
-    if len(new_password) < 8:
-        return jsonify({"error": "Password must be at least 8 characters long"}), 400
-    strength_error = password_strength_error(new_password)
-    if strength_error:
-        return jsonify({"error": strength_error}), 400
-
-    user = User.query.filter_by(reset_token=token).first()
-    if not user or not user.reset_token_expiry or user.reset_token_expiry < datetime.utcnow():
-        return jsonify({"error": "Invalid or expired reset link"}), 400
-
-    user.password_hash = generate_password_hash(new_password)
-    user.reset_token = None
-    user.reset_token_expiry = None
-    user.session_version = (user.session_version or 0) + 1
-    db.session.commit()
-
-    return jsonify({"message": "Password reset successfully. You can now log in."})
-
-
 @app.route("/login", methods=["POST"])
 @limiter.limit("10 per minute")
 def login():
