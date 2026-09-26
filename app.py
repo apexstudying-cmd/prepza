@@ -9674,7 +9674,7 @@ def admin_system_storage():
     except Exception as exc:
         result["r2"]["error"]=str(exc)
     try:
-        row=db.session.execute(db.text("SELECT COALESCE(SUM(COALESCE((metadata->>'size')::bigint,0)),0) FROM storage.objects")).scalar()
+        row=db.session.execute(text("SELECT COALESCE(SUM(COALESCE((metadata->>'size')::bigint,0)),0) FROM storage.objects")).scalar()
         result["supabase"]["object_bytes"]=int(row or 0)
     except Exception as exc:
         result["supabase"]["object_bytes"]=None
