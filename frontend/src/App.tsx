@@ -593,10 +593,18 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       if (cancelled) return
       const ready = res.documents.filter(d => d.status === 'ready')
       setDocuments(ready)
-      const rows = await Promise.all(ready.map(async d => {
-        try { const detail = await api<DocumentDetail>(`/documents/${d.id}`); return (detail.materials || []).filter(m => m.status === 'ready').map(m => ({ documentId: d.id, documentTitle: d.title, materialId: m.id, type: m.type, parameters: m.parameters })) } catch { return [] }
-      }))
-      if (!cancelled) setMaterials(rows.flat())
+      // /documents now includes the student's ready-material summaries, so
+      // My Study no longer needs one HTTP request per document on load.
+      const rows = ready.flatMap(d => (d.materials || [])
+        .filter(m => m.status === 'ready')
+        .map(m => ({
+          documentId: d.id,
+          documentTitle: d.title,
+          materialId: m.id,
+          type: m.type,
+          parameters: m.parameters,
+        })))
+      if (!cancelled) setMaterials(rows)
     }).catch(e => {
       if (!cancelled) {
         setError(e instanceof ApiError ? e.message : 'Could not load your study library.')
@@ -1467,7 +1475,16 @@ function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) =>
 }
 
 // ─── HOME ─────────────────────────────────────────────────────────────────────
-type HomeDocument = { id: number; title: string; status: string; file_type: string | null; page_count: number | null; created_at: string | null; last_opened_at?: string | null }
+type HomeDocument = {
+  id: number
+  title: string
+  status: string
+  file_type: string | null
+  page_count: number | null
+  created_at: string | null
+  last_opened_at?: string | null
+  materials?: { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]
+}
 type GamificationSummary = { xp_total: number; level: number; level_title: string; current_streak: number; longest_streak: number; documents_count: number; followers_count: number }
 
 // ─── Social (Chunk 12) ─────────────────────────────────────────────────────────
