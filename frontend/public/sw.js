@@ -16,7 +16,7 @@ const CORE_SHELL = ['/offline.html', '/manifest.json', '/icon-192.png', '/icon-5
 function sameOrigin(url) { return url.origin === self.location.origin; }
 function isPdfJsAsset(url) { return url.hostname === PDFJS_HOST && url.pathname.startsWith(PDFJS_PATH_PREFIX); }
 function isNativeStudyPage(url) {
-  return sameOrigin(url) && /^\\/documents\\/\\d+\\/reading\\/page\\/\\d+$/.test(url.pathname);
+  return sameOrigin(url) && /^\/documents\/\\d+\/reading\/page\/\\d+$/.test(url.pathname);
 }
 
 function isCacheableAsset(request) {
@@ -24,11 +24,11 @@ function isCacheableAsset(request) {
   const url = new URL(request.url);
   if (url.pathname === '/sw.js' || url.pathname === '/sw-register.js') return false;
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return false;
-  if (isPdfJsAsset(url)) return /\\.(?:js|mjs|map)$/i.test(url.pathname);
+  if (isPdfJsAsset(url)) return /\.(?:js|mjs|map)$/i.test(url.pathname);
   if (isNativeStudyPage(url)) return true;
   if (!sameOrigin(url)) return false;
   return url.pathname.startsWith('/assets/') ||
-    /\\.(?:css|js|mjs|png|jpg|jpeg|webp|gif|svg|ico|woff2?|ttf|otf)$/i.test(url.pathname);
+    /\.(?:css|js|mjs|png|jpg|jpeg|webp|gif|svg|ico|woff2?|ttf|otf)$/i.test(url.pathname);
 }
 
 async function cacheResponse(cacheName, request, response) {
