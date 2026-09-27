@@ -26,42 +26,32 @@ jobs:
       - name: Compile backend and MCP adapter
         run: python3 -m py_compile app.py prepza_control.py control-mcp/server.py
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm install --no-audit --no-fund
-
-      - name: Persist generated frontend lockfile for diagnosis
-        run: |
-          if git diff --quiet -- frontend/package-lock.json; then
-            echo 'No lockfile changes.'
-          else
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add frontend/package-lock.json
-            git commit -m 'ci: persist generated frontend lockfile for verification'
-          fi
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend
         working-directory: frontend
-        run: npm run build
-
-      - name: Persist generated frontend sources for diagnosis
-        if: always()
-        working-directory: frontend
-        run: |
-          cd ..
-          git add frontend/src/generation/GenerationScreens.tsx frontend/src/generation/StudyGenerationScreensClean.tsx chat_interactions.py realtime_server.py || true
-          if git diff --cached --quiet; then echo 'No generated source mutations.'; else git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'; git commit -m 'ci: persist generated source diagnostics'; fi
+        run: pnpm run build
 
       - name: Diagnose generated build mutations
         if: always()
         run: |
-          echo '--- chat_interactions diff ---'
-          git diff -- chat_interactions.py || true
-          echo '--- package-lock diff ---'
-          git diff -- frontend/package-lock.json || true
-          echo '--- chat_interactions numbered excerpt ---'
-          nl -ba chat_interactions.py | sed -n '50,70p'
+          git diff -- frontend/src/generation/GenerationScreens.tsx frontend/src/generation/StudyGenerationScreensClean.tsx chat_interactions.py || true
+          grep -n "light-dark\|fontWeight.*850\|Choose map depth" frontend/src/generation/GenerationScreens.tsx frontend/src/generation/StudyGenerationScreensClean.tsx | head -20 || true
 
       - name: Verify patch is deterministic
         run: |
