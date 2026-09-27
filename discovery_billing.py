@@ -420,7 +420,7 @@ def register_discovery(app, db):
             target = normalize_target(raw_target)
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid targeting criteria"}), 400
-        if not name or placement not in ("feed", "home_carousel", "explore", "trending", "opportunities_feed", "feed_push", "push"):
+        if not name or placement not in ("feed", "home_carousel", "explore", "trending", "opportunities_feed", "feed_push", "podcast", "push"):
             return jsonify({"error": "Campaign name and valid placement are required"}), 400
         opportunity_id = data.get("opportunity_id")
         if opportunity_id is not None:
@@ -859,19 +859,20 @@ def register_discovery(app, db):
             WHERE status='active'
               AND funding_status IN ('funded','credited')
               AND (
-                (:requested_placement='home_carousel' AND placement='home_carousel')
-                OR (:requested_placement='explore' AND placement='explore')
-                OR (:requested_placement='trending' AND placement='trending')
-                OR (:requested_placement='opportunities' AND placement IN ('feed','home_carousel','explore','trending','opportunities_feed','feed_push'))
+                (:requested_placement='home_carousel' AND c.placement='home_carousel')
+                OR (:requested_placement='explore' AND c.placement='explore')
+                OR (:requested_placement='trending' AND c.placement='trending')
+                OR (:requested_placement='podcast' AND c.placement='podcast')
+                OR (:requested_placement='opportunities' AND c.placement IN ('feed','home_carousel','explore','trending','opportunities_feed','feed_push','podcast'))
               )
               AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
               AND EXISTS (
                 SELECT 1 FROM opportunity o
                 JOIN organisation org ON org.id=o.organisation_id
-                WHERE o.id=discovery_campaign.opportunity_id
+                WHERE o.id=c.opportunity_id
                   AND o.status='published'
                   AND o.expiry_date>CURRENT_TIMESTAMP
-                  AND org.id=discovery_campaign.organisation_id
+                  AND org.id=c.organisation_id
                   AND org.verification_status='verified'
                   AND org.is_active=TRUE
               )
@@ -884,7 +885,7 @@ def register_discovery(app, db):
                   AND e.event_type='impression'
                   AND e.created_at >= CURRENT_TIMESTAMP - (
                     GREATEST(1, COALESCE(
-                      (pricing_snapshot->'home_frequency_cap'->'value'->>'window_days')::INTEGER,
+                      (c.pricing_snapshot->'home_frequency_cap'->'value'->>'window_days')::INTEGER,
                       7
                     )) || ' days'
                   )::interval
