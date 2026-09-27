@@ -299,3 +299,4 @@ def normalize_chat_timestamps(response):
 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5000)
+# CI verification marker: current main gate suite only.
