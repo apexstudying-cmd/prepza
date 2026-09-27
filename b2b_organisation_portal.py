@@ -1,7 +1,6 @@
 """B2B organisation portal: dashboard, opportunity analytics, free distribution caps and billing documents."""
 from __future__ import annotations
 import io, os, uuid, secrets, hashlib
-import requests
 from datetime import datetime
 from flask import jsonify, request, session, send_file
 from sqlalchemy import text
