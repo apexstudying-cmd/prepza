@@ -10,6 +10,7 @@ from ai_generation_store import (
     claim_or_get_generation,
     claim_or_subscribe_generation_family,
     find_ready_generation_family,
+    find_generating_generation_family,
     mark_generation_failed,
     mark_generation_ready,
     wait_for_generation,
