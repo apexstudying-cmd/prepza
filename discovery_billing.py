@@ -857,6 +857,16 @@ def register_discovery(app, db):
               AND funding_status IN ('funded','credited')
               AND placement IN ('feed','feed_push')
               AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
+              AND EXISTS (
+                SELECT 1 FROM opportunity o
+                JOIN organisation org ON org.id=o.organisation_id
+                WHERE o.id=discovery_campaign.opportunity_id
+                  AND o.status='published'
+                  AND o.expiry_date>CURRENT_TIMESTAMP
+                  AND org.id=discovery_campaign.organisation_id
+                  AND org.verification_status='verified'
+                  AND org.is_active=TRUE
+              )
               AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
               AND delivered_impressions < GREATEST(1, budget_kes * 1000 / GREATEST(1,bid_kes))
             ORDER BY updated_at DESC LIMIT 50
