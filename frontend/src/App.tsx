@@ -1999,7 +1999,7 @@ function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setA
             <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>Featured in Explore</div>
             <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }} className="scrollbar-hide">
               {sponsoredExplore.slice(0, 4).map(c => (
-                <SponsoredOpportunityCard key={c.campaign_id} campaign={c} compact setScreen={setScreen} setActiveOpportunityId={() => {}} />
+                <SponsoredOpportunityCard key={c.campaign_id} campaign={c} compact setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
               ))}
             </div>
           </section>
