@@ -116,6 +116,45 @@ def start_podcast_audio_processing(material_id, flask_app, notification_id=None)
     target_duration_seconds = float(parameters.get("duration_minutes", 0) or 0) * 60
     audio_fingerprint = build_audio_fingerprint(envelope, target_duration_seconds)
 
+    # Exact ready-artifact fast path across podcast material variants.
+    # This runs before any new GPU job is created.
+    for candidate in (
+        GeneratedMaterial.query
+        .filter(
+            GeneratedMaterial.document_content_id == material.document_content_id,
+            GeneratedMaterial.material_type == "podcast",
+            GeneratedMaterial.status == "ready",
+            GeneratedMaterial.id != material.id,
+        )
+        .order_by(GeneratedMaterial.updated_at.desc())
+        .limit(50)
+    ):
+        try:
+            candidate_envelope = json.loads(candidate.payload or "{}")
+        except (TypeError, ValueError):
+            continue
+        if (
+            candidate_envelope.get("audio_status") == "ready"
+            and candidate_envelope.get("audio_storage_path")
+            and candidate_envelope.get("audio_fingerprint") == audio_fingerprint
+        ):
+            envelope["audio_status"] = "ready"
+            envelope["audio_storage_path"] = candidate_envelope["audio_storage_path"]
+            envelope["duration_seconds"] = candidate_envelope.get("duration_seconds")
+            envelope["requested_duration_seconds"] = candidate_envelope.get("requested_duration_seconds")
+            envelope["duration_verified"] = candidate_envelope.get("duration_verified", False)
+            envelope["duration_correction_ratio"] = candidate_envelope.get("duration_correction_ratio", 1.0)
+            envelope["audio_fingerprint"] = audio_fingerprint
+            material.payload = json.dumps(envelope)
+            db.session.commit()
+            _complete_generation_notification(
+                notification_id,
+                material.id,
+                success=True,
+                duration_seconds=material.payload and envelope.get("duration_seconds"),
+            )
+            return {"job_id": None, "status": "ready", "reused": True}
+
     existing_job = (
         AiJob.query
         .filter(
