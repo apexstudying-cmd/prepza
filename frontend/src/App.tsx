@@ -10030,6 +10030,7 @@ type AdminInfrastructure = {
     scaling_mode: string; dry_run: boolean; provider_configured: boolean;
     workers: { instance_id: number; worker_id?: string | null; gpu_name: string; gpu_vram_gb: number | null; status: string; worker_capacity: number; price_usd_per_hour: number | null; vram_used_gb: number | null; vram_total_gb: number | null; last_heartbeat_at: string | null; last_error: string | null }[];
     latest_decision: { action: string; reason_code: string; reason_text: string; dry_run: boolean; created_at: string | null } | null;
+    recent_decisions: { action: string; reason_code: string; reason_text: string; dry_run: boolean; created_at: string | null }[];
     policy: string;
   }
   generated_at: string
@@ -11792,6 +11793,16 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
               <div style={{ fontSize: 10, color: T.textMuted, marginTop: 5 }}>
                 {infrastructure.gpu_scaling.dry_run ? 'DRY RUN: no automatic GPU rental/destruction.' : infrastructure.gpu_scaling.scaling_mode === 'automatic' ? 'Automatic scaling enabled.' : 'Automatic scaling disabled.'}
               </div>
+              {infrastructure.gpu_scaling.recent_decisions.length > 0 && (
+                <div style={{ marginTop: 8, borderTop: `1px solid ${T.border}`, paddingTop: 7 }}>
+                  <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 5 }}>Recent decisions</div>
+                  {infrastructure.gpu_scaling.recent_decisions.slice(0, 5).map((d, i) => (
+                    <div key={i} style={{ fontSize: 10, color: T.textMuted, lineHeight: 1.4, marginTop: i ? 4 : 0 }}>
+                      <strong style={{ color: T.text }}>{d.action}</strong>{' · '}{d.reason_text}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 10, color: T.textMuted }}>AI spend this month</div><div style={{ fontSize: 21, fontWeight: 800, color: T.text, marginTop: 4 }}>${infrastructure.ai.spend_mtd_usd.toFixed(2)}</div><div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>Projected ${infrastructure.ai.projected_month_end_usd.toFixed(2)} · {infrastructure.ai.requests_mtd} requests</div></div>
               <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 10, color: T.textMuted }}>Revenue this month</div><div style={{ fontSize: 21, fontWeight: 800, color: N.gold, marginTop: 4 }}>KES {infrastructure.payments.revenue_mtd_kes.toLocaleString()}</div><div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>Est. Paystack fees KES {infrastructure.payments.estimated_paystack_fees_mtd_kes.toLocaleString()}</div></div>
