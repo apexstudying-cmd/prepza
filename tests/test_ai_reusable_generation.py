@@ -128,6 +128,16 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
 
     monkeypatch.setitem(sys.modules, "app", fake_app)
     monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
+    fake_usage = types.SimpleNamespace(
+        FEATURES={"summary": ("summary_generations", "summary_max_pages")},
+        check_and_consume_ai_quota=lambda *args, **kwargs: (True, {"period_start": "2026-09-01"}),
+        reserve_generation_variant=lambda *args, **kwargs: 1,
+        mark_generation_variant_ready=lambda *args, **kwargs: None,
+        release_generation_variant=lambda *args, **kwargs: None,
+        refund_ai_quota=lambda *args, **kwargs: None,
+    )
+    monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
+    monkeypatch.setattr(reusable, "find_ready_generation_family", lambda **kwargs: None)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
     monkeypatch.setattr(
         reusable,
@@ -184,6 +194,16 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "app", fake_app)
     monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
+    fake_usage = types.SimpleNamespace(
+        FEATURES={"summary": ("summary_generations", "summary_max_pages")},
+        check_and_consume_ai_quota=lambda *args, **kwargs: (True, {"period_start": "2026-09-01"}),
+        reserve_generation_variant=lambda *args, **kwargs: 1,
+        mark_generation_variant_ready=lambda *args, **kwargs: None,
+        release_generation_variant=lambda *args, **kwargs: None,
+        refund_ai_quota=lambda *args, **kwargs: None,
+    )
+    monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
+    monkeypatch.setattr(reusable, "find_ready_generation_family", lambda **kwargs: None)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
     monkeypatch.setattr(
         reusable,
