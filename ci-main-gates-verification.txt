@@ -1,1 +1,2 @@
 Temporary CI verification marker. This file is not intended for main.
+Re-run after main contract repairs.
