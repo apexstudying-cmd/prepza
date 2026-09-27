@@ -270,11 +270,13 @@ def handle_disconnect():
 
 @app.after_request
 def broadcast_message_response(response):
-    """Queue the persisted message representation for realtime fan-out."""
+    """Broadcast only the persisted encrypted representation for E2EE chats."""
     match = MESSAGE_PATH_RE.match(request.path)
     if match and request.method == "POST" and 200 <= response.status_code < 300:
         try:
             conversation_id = int(match.group(1))
+            if not is_e2ee_conversation(conversation_id):
+                return response
             payload = safe_message_payload(response.get_json(silent=True))
             if payload and payload.get("conversation_id") == conversation_id:
                 # PostgreSQL has already committed the message. With Redis,
