@@ -71,6 +71,26 @@ def campaign_target_matches_student(db, campaign_id, user_id):
         ("semesters", "semester"),
     )
     aliases = {"universities":"university_ids", "programs":"program_ids"}
+    # Sponsored discovery is opt-in and requires recent meaningful activity.
+    # This is part of eligibility, not merely a UI filter, because billing
+    # must never occur for a student outside the campaign audience.
+    if not bool(db.session.execute(text("""
+        SELECT COALESCE(discoverable,FALSE)
+        FROM student_opportunity_discovery WHERE user_id=:uid
+    """), {"uid": user_id}).scalar_one_or_none()):
+        return False, "student_not_discoverable"
+    try:
+        active_days = max(1, min(90, int(target.get("active_days", 30) or 30)))
+    except (TypeError, ValueError):
+        return False, "invalid_target_configuration"
+    since_date = datetime.utcnow().date() - __import__("datetime").timedelta(days=active_days - 1)
+    if not db.session.execute(text("""
+        SELECT 1 FROM product_activity_day
+        WHERE user_id=:uid AND activity_date>=:since_date
+          AND (engaged_seconds>=30 OR core_actions>0)
+        LIMIT 1
+    """), {"uid": user_id, "since_date": since_date}).first():
+        return False, "student_activity_not_eligible"
     for key, field in dimensions:
         values = target.get(key)
         if values is None:
@@ -129,14 +149,19 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
         # cannot be bypassed by two simultaneous requests.
         if event_type in ("impression", "push_delivery"):
             db.session.execute(text('SELECT id FROM "user" WHERE id=:uid FOR UPDATE'), {"uid": user_id})
-            cap = 3
+            cap_config = ((campaign["pricing_snapshot"] or {}).get("home_frequency_cap") or {}).get("value") if isinstance(campaign["pricing_snapshot"], dict) else None
+            if event_type == "push_delivery":
+                cap_config = ((campaign["pricing_snapshot"] or {}).get("push_frequency_cap") or {}).get("value") if isinstance(campaign["pricing_snapshot"], dict) else None
+            cap = int((cap_config or {}).get("max_impressions" if event_type == "impression" else "max_deliveries") or 3)
+            window_days = int((cap_config or {}).get("window_days") or 7)
+            window_days = max(1, min(30, window_days))
             count_type = "impression" if event_type == "impression" else "push_delivery"
             recent_count = db.session.execute(text("""
                 SELECT COUNT(*) FROM discovery_event
                 WHERE user_id=:uid AND campaign_id=:cid AND event_type=:etype
-                  AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+                  AND created_at >= CURRENT_TIMESTAMP - (:days || ' days')::interval
                   AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
-            """), {"uid": user_id, "cid": campaign_id, "etype": count_type}).scalar_one()
+            """), {"uid": user_id, "cid": campaign_id, "etype": count_type, "days": window_days}).scalar_one()
             if int(recent_count) >= cap:
                 return {"ok": False, "reason": "student_frequency_cap"}
 
