@@ -132,6 +132,17 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
         if campaign["ends_at"] and campaign["ends_at"] < datetime.utcnow():
             return {"ok": False, "reason": "campaign_ended"}
 
+        if event_type == "click":
+            prior_impression = db.session.execute(text("""
+                SELECT 1 FROM discovery_event
+                WHERE campaign_id=:cid AND user_id=:uid AND event_type='impression'
+                  AND placement=:placement
+                  AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+                LIMIT 1
+            """), {"cid": campaign_id, "uid": user_id, "placement": placement}).first()
+            if not prior_impression:
+                return {"ok": False, "reason": "click_without_impression"}
+
         price = _unit_price_minor(campaign, event_type)
         if price <= 0:
             return {"ok": False, "reason": "event_not_billable"}
@@ -208,16 +219,6 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             "key": event_key,
             "meta": json.dumps({"user_id": user_id, "amount_minor": price, "meter_version": "g3-v2"})
         })
-        if event_type == "click":
-            prior_impression = db.session.execute(text("""
-                SELECT 1 FROM discovery_event
-                WHERE campaign_id=:cid AND user_id=:uid AND event_type='impression'
-                  AND placement=:placement
-                  AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
-                LIMIT 1
-            """), {"cid": campaign_id, "uid": user_id, "placement": placement}).first()
-            if not prior_impression:
-                return {"ok": False, "reason": "click_without_impression"}
             counter = "delivered_clicks"
         elif event_type == "impression":
             counter = "delivered_impressions"
