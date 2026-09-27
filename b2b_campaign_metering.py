@@ -152,7 +152,7 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             cap_config = ((campaign["pricing_snapshot"] or {}).get("home_frequency_cap") or {}).get("value") if isinstance(campaign["pricing_snapshot"], dict) else None
             if event_type == "push_delivery":
                 cap_config = ((campaign["pricing_snapshot"] or {}).get("push_frequency_cap") or {}).get("value") if isinstance(campaign["pricing_snapshot"], dict) else None
-            cap = int((cap_config or {}).get("max_impressions" if event_type == "impression" else "max_deliveries") or 3)
+            cap = int((cap_config or {}).get("max_impressions" if event_type == "impression" else "max_deliveries") or 5)
             window_days = int((cap_config or {}).get("window_days") or 7)
             window_days = max(1, min(30, window_days))
             count_type = "impression" if event_type == "impression" else "push_delivery"

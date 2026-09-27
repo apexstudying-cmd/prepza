@@ -6,9 +6,11 @@ type Overview = { campaigns:number; active_campaigns:number; exhausted_campaigns
 type Campaign = { id:number; organisation_id:number; name:string; placement:string; status:string; budget_kes:number; bid_type:string; bid_kes:number; funding_status:string; funded_amount_minor:number; delivered_impressions:number; delivered_clicks:number; push_delivered:number; created_at:string|null }
 type Payment = { id:number; organisation_id:number; campaign_id:number|null; provider_reference:string; customer_amount_minor:number; campaign_amount_minor:number; processing_fee_minor:number; status:string; funding_status:string|null; created_at:string }
 type Recon = { payment_id:number; provider_reference:string; campaign_id:number; status:string; campaign_amount_minor:number; funding_amount_minor:number; ledger_funding_minor:number; reconciliation_status:string }
-type KycDoc = { id:number; organisation_id:number; document_type:string; file_name:string|null; status:string; admin_notes:string|null; created_at:string }
+type KycDoc = { id:number; organisation_id:number; organisation_name?:string|null; document_type:string; file_name:string|null; status:string; admin_notes:string|null; size_bytes?:number|null; sha256?:string|null; mime_type?:string|null; storage_provider?:string|null; created_at:string }
 type Invoice = { id:number; organisation_id:number; campaign_id:number|null; invoice_number:string; subtotal_minor:number; processing_fee_minor:number; total_minor:number; status:string; payment_method:string; due_at:string|null; paid_at:string|null; created_at:string }
 type Pricing = { config_key:string; value_json:Record<string,number>; currency:string; version:string; updated_by_user_id:number|null; updated_at:string|null }
+type OrgFinancial = { organisation_id:number; name:string; verification_status:string; plan_code:string; monthly_fee_kes:number; campaigns:number; active_campaigns:number; funded_minor:number; delivery_spend_minor:number; paid_campaign_value_minor:number; impressions:number; clicks:number; applications:number; push_deliveries:number }
+type DeliveryRow = { campaign_id:number; organisation_id:number; organisation_name:string; name:string; placement:string; status:string; funding_status:string; delivered_impressions:number; delivered_clicks:number; delivered_applications:number; push_delivered:number; spend_minor:number; billable_impressions:number; billable_clicks:number }
 type OrganisationPlan = { plan_code:string; monthly_fee_kes:number; active_user_cap:number; active_opportunities:number; sponsored_campaigns:number; candidate_search_window_days:number; analytics_retention_days:number; is_active:boolean; version:number; updated_at:string|null }
 
 async function req<T>(path:string, options:RequestInit={}):Promise<T>{
@@ -30,18 +32,20 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
   const [invoices,setInvoices]=useState<Invoice[]>([])
   const [pricing,setPricing]=useState<Pricing[]>([])
   const [organisationPlans,setOrganisationPlans]=useState<OrganisationPlan[]>([])
+  const [orgFinancials,setOrgFinancials]=useState<OrgFinancial[]>([])
+  const [deliveryRows,setDeliveryRows]=useState<DeliveryRow[]>([])
   const [savingOrganisationPlan,setSavingOrganisationPlan]=useState<string|null>(null)
   const [settling,setSettling]=useState<number|null>(null)
   const [savingPricing,setSavingPricing]=useState<string|null>(null)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [saving,setSaving]=useState<number|null>(null)
-  const [tab,setTab]=useState<'overview'|'organisation-plans'|'pricing'|'placements'|'campaigns'|'payments'|'reconciliation'|'verification'|'invoices'>('overview')
+  const [tab,setTab]=useState<'overview'|'organisation-plans'|'pricing'|'placements'|'campaigns'|'payments'|'reconciliation'|'delivery-monitoring'|'organisation-financials'|'verification'|'invoices'>('overview')
 
   const load=async()=>{
     setLoading(true);setError('')
     try{
-      const [me,o,p,c,pm,r,k,i,pr,op]=await Promise.all([
+      const [me,o,p,c,pm,r,k,i,pr,op,of,dm]=await Promise.all([
         req<{csrf_token:string}>('/me'),req<Overview>('/api/admin/b2b/overview'),
         req<{placements:Placement[]}>('/api/admin/b2b/placements'),
         req<{campaigns:Campaign[]}>('/api/admin/b2b/campaigns'),
@@ -50,9 +54,11 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
         req<{documents:KycDoc[]}>('/api/admin/b2b/kyc'),
         req<{invoices:Invoice[]}>('/api/admin/b2b/invoices'),
         req<{pricing:Pricing[]}>('/api/admin/b2b/pricing'),
-        req<{plans:OrganisationPlan[]}>('/api/admin/b2b/organisation-plans')
+        req<{plans:OrganisationPlan[]}>('/api/admin/b2b/organisation-plans'),
+        req<{organisations:OrgFinancial[]}>('/api/admin/b2b/organisation-financials'),
+        req<{campaigns:DeliveryRow[]}>('/api/admin/b2b/delivery-monitoring')
       ])
-      setCsrf(me.csrf_token);setOverview(o);setPlacements(p.placements);setCampaigns(c.campaigns);setPayments(pm.payments);setRecon(r.reconciliation);setKyc(k.documents);setInvoices(i.invoices);setPricing(pr.pricing);setOrganisationPlans(op.plans)
+      setCsrf(me.csrf_token);setOverview(o);setPlacements(p.placements);setCampaigns(c.campaigns);setPayments(pm.payments);setRecon(r.reconciliation);setKyc(k.documents);setInvoices(i.invoices);setPricing(pr.pricing);setOrganisationPlans(op.plans);setOrgFinancials(of.organisations);setDeliveryRows(dm.campaigns)
     }catch(e){setError(e instanceof Error?e.message:'Could not load B2B finance.')}
     finally{setLoading(false)}
   }
@@ -95,7 +101,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
 
   if(loading)return <div style={{padding:30,color:T.textMuted}}>Loading B2B finance…</div>
   const card={background:T.card,borderRadius:14,padding:16,border:'1px solid '+T.border,boxSizing:'border-box' as const,minWidth:0}
-  const tabs=['overview','organisation-plans','pricing','placements','campaigns','payments','reconciliation','verification','invoices'] as const
+  const tabs=['overview','organisation-plans','pricing','placements','campaigns','payments','reconciliation','delivery-monitoring','organisation-financials','verification','invoices'] as const
 
   return <div style={{display:'flex',flexDirection:'column',gap:14}}>
     {error&&<div style={{background:'#FEE2E2',color:'#991B1B',borderRadius:10,padding:10,fontSize:12}}>{error}</div>}
@@ -164,10 +170,13 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
 
     {tab==='payments'&&<div style={card}><div style={{fontWeight:800,marginBottom:10}}>B2B payments</div><div style={{overflowX:'auto'}}><table style={{width:'100%',fontSize:11,borderCollapse:'collapse'}}><thead><tr>{['Reference','Campaign','Customer paid','Campaign value','Processing fee','Status','Funding'].map(x=><th key={x} style={{textAlign:'left',padding:7,borderBottom:'1px solid '+T.border}}>{x}</th>)}</tr></thead><tbody>{payments.map(p=><tr key={p.id}>{[p.provider_reference,p.campaign_id??'—',kes(p.customer_amount_minor),kes(p.campaign_amount_minor),kes(p.processing_fee_minor),p.status,p.funding_status??'—'].map((x,i)=><td key={i} style={{padding:7,borderBottom:'1px solid '+T.border,color:T.text}}>{x}</td>)}</tr>)}</tbody></table></div></div>}
 
+    {tab==='delivery-monitoring'&&<div style={card}><div style={{fontWeight:800,marginBottom:10}}>Delivery monitoring</div><div style={{fontSize:11,color:T.textMuted,marginBottom:10}}>Billable delivery is shown separately from eligibility. Frequency-capped opportunities should disappear from a student's featured candidate pool rather than generate rejected impressions.</div><div style={{overflowX:'auto'}}><table style={{width:'100%',fontSize:11,borderCollapse:'collapse'}}><thead><tr>{['Organisation','Campaign','Placement','Status','Impressions','Clicks','Applications','Spend'].map(x=><th key={x} style={{textAlign:'left',padding:7,borderBottom:'1px solid '+T.border}}>{x}</th>)}</tr></thead><tbody>{deliveryRows.map(r=><tr key={r.campaign_id}><td style={{padding:7}}>{r.organisation_name}</td><td style={{padding:7}}>{r.name}</td><td style={{padding:7}}>{r.placement}</td><td style={{padding:7}}>{r.status}</td><td style={{padding:7}}>{r.delivered_impressions}</td><td style={{padding:7}}>{r.delivered_clicks}</td><td style={{padding:7}}>{r.delivered_applications}</td><td style={{padding:7}}>{kes(r.spend_minor)}</td></tr>)}</tbody></table></div></div>}
+    {tab==='organisation-financials'&&<div style={card}><div style={{fontWeight:800,marginBottom:10}}>Organisation economics</div><div style={{fontSize:11,color:T.textMuted,marginBottom:10}}>Platform subscription revenue and sponsored campaign funding are shown together for operator visibility; campaign funding is prepaid customer value, not automatically recognized revenue.</div><div style={{overflowX:'auto'}}><table style={{width:'100%',fontSize:11,borderCollapse:'collapse'}}><thead><tr>{['Organisation','Verification','Plan','Monthly fee','Campaign funding','Delivery spend','Paid campaign value','Campaigns','Impressions','Clicks','Applications'].map(x=><th key={x} style={{textAlign:'left',padding:7,borderBottom:'1px solid '+T.border}}>{x}</th>)}</tr></thead><tbody>{orgFinancials.map(r=><tr key={r.organisation_id}><td style={{padding:7}}>{r.name}</td><td style={{padding:7}}>{r.verification_status}</td><td style={{padding:7}}>{r.plan_code}</td><td style={{padding:7}}>KES {Number(r.monthly_fee_kes).toLocaleString()}</td><td style={{padding:7}}>{kes(r.funded_minor)}</td><td style={{padding:7}}>{kes(r.delivery_spend_minor)}</td><td style={{padding:7}}>{kes(r.paid_campaign_value_minor)}</td><td style={{padding:7}}>{r.campaigns}</td><td style={{padding:7}}>{r.impressions}</td><td style={{padding:7}}>{r.clicks}</td><td style={{padding:7}}>{r.applications}</td></tr>)}</tbody></table></div></div>}
+
     {tab==='verification'&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
-      <div style={card}><b>Organisation verification</b><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Review submitted documents here. Approving a document marks the organisation verified and unlocks paid sponsorship creation.</div></div>
+      <div style={card}><b>Organisation verification</b><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Review submitted documents here. An organisation is verified only after the required document set is approved and the reviewer independently cross-checks the registry and representative identity.</div></div>
       {kyc.map(d=><div key={d.id} style={card}><div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-        <div style={{flex:1,minWidth:220}}><b>{d.file_name||'KYC document'}</b><div style={{fontSize:10,color:T.textMuted}}>Organisation #{d.organisation_id} · {d.document_type}</div></div>
+        <div style={{flex:1,minWidth:220}}><b>{d.file_name||'KYC document'}</b><div style={{fontSize:10,color:T.textMuted}}>{d.organisation_name||('Organisation #'+d.organisation_id)} · {d.document_type} · {d.storage_provider||'—'} · {d.size_bytes?Math.round(Number(d.size_bytes)/1024):0} KB</div><div style={{fontSize:10,color:T.textMuted}}>SHA-256: {d.sha256||'—'}</div></div>
         <a href={'/api/admin/b2b/kyc/'+d.id+'/download'} target="_blank" rel="noreferrer" style={{fontSize:11,fontWeight:800,color:'#5570B7'}}>Open document</a>
         <select value={d.status} onChange={e=>setKyc(v=>v.map(x=>x.id===d.id?{...x,status:e.target.value}:x))} style={{padding:7,border:'1px solid '+T.border,borderRadius:8,background:T.card,color:T.text}}>
           <option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option>

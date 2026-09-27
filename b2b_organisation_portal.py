@@ -1,7 +1,6 @@
 """B2B organisation portal: dashboard, opportunity analytics, free distribution caps and billing documents."""
 from __future__ import annotations
 import io, os, uuid, secrets, hashlib
-import requests
 from datetime import datetime
 from flask import jsonify, request, session, send_file
 from sqlalchemy import text
@@ -350,7 +349,7 @@ def register_b2b_organisation_portal(app, db):
     @app.get("/api/admin/b2b/kyc")
     def admin_kyc():
         if not admin_user(): return jsonify({"error":"Admin access required"}),403
-        rows=db.session.execute(text("SELECT id,organisation_id,document_type,file_name,status,admin_notes,size_bytes,sha256,mime_type,storage_provider,created_at,reviewed_at,reviewed_by FROM organisation_kyc_document ORDER BY created_at DESC LIMIT 500")).mappings().all()
+        rows=db.session.execute(text("SELECT d.id,d.organisation_id,o.name AS organisation_name,d.document_type,d.file_name,d.status,d.admin_notes,d.size_bytes,d.sha256,d.mime_type,d.storage_provider,d.created_at,d.reviewed_at,d.reviewed_by FROM organisation_kyc_document d LEFT JOIN organisation o ON o.id=d.organisation_id ORDER BY d.created_at DESC LIMIT 500")).mappings().all()
         return jsonify({"documents":[dict(x) for x in rows]})
 
     @app.get("/api/admin/b2b/kyc/<int:doc_id>/download")
@@ -358,20 +357,14 @@ def register_b2b_organisation_portal(app, db):
         if not admin_user(): return jsonify({"error":"Admin access required"}),403
         doc=db.session.execute(text("SELECT file_name,storage_path,mime_type,storage_provider FROM organisation_kyc_document WHERE id=:i"),{"i":doc_id}).mappings().first()
         if not doc:return jsonify({"error":"KYC document not found"}),404
-        if doc["storage_provider"]=="r2":
-            try:
-                from object_storage import r2_get_bytes
-                data=r2_get_bytes("organisation-kyc",str(doc["storage_path"]))
-            except Exception:
-                return jsonify({"error":"KYC document could not be retrieved from private R2 storage"}),502
-            return send_file(io.BytesIO(data),mimetype=doc["mime_type"] or "application/octet-stream",as_attachment=True,download_name=str(doc["file_name"] or "kyc-document"))
-        # Legacy documents remain readable by admins while new uploads are R2-only.
-        base=os.environ.get("SUPABASE_URL","").strip(); key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY","").strip()
-        if not base or not key:return jsonify({"error":"Legacy private document storage is not configured"}),503
-        bucket="organisation-kyc"
-        res=requests.get(base+"/storage/v1/object/"+bucket+"/"+str(doc["storage_path"]),headers={"Authorization":"Bearer "+key,"apikey":key},timeout=30)
-        if not res.ok:return jsonify({"error":"Legacy KYC document could not be retrieved"}),502
-        return send_file(io.BytesIO(res.content),mimetype=res.headers.get("Content-Type",doc["mime_type"] or "application/octet-stream"),as_attachment=True,download_name=str(doc["file_name"] or "kyc-document"))
+        if doc["storage_provider"] != "r2":
+            return jsonify({"error":"KYC document is not stored in the current private R2 store"}),410
+        try:
+            from object_storage import r2_get_bytes
+            data=r2_get_bytes("organisation-kyc",str(doc["storage_path"]))
+        except Exception:
+            return jsonify({"error":"KYC document could not be retrieved from private R2 storage"}),502
+        return send_file(io.BytesIO(data),mimetype=doc["mime_type"] or "application/octet-stream",as_attachment=True,download_name=str(doc["file_name"] or "kyc-document"))
 
     @app.patch("/api/admin/b2b/kyc/<int:doc_id>")
     def admin_update_kyc(doc_id):
