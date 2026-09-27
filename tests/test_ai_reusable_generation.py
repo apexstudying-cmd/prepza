@@ -171,6 +171,82 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     assert len(material_calls) == 2
 
 
+def test_inflight_identical_request_attaches_without_provider_duplicate(monkeypatch):
+    content = types.SimpleNamespace(content_hash="hash-inflight", extracted_text="course notes", page_count=2)
+
+    class FakeResult:
+        def scalar_one(self):
+            return "fingerprint-inflight"
+
+    class Session(_FakeSession):
+        def execute(self, *args, **kwargs):
+            return FakeResult()
+
+    session = Session(content)
+    fake_app = types.SimpleNamespace(
+        db=types.SimpleNamespace(session=session), DocumentContent=object, Document=object, AiJob=_FakeAiJob
+    )
+
+    class FakeProviderError(Exception):
+        pass
+
+    class FakeRateError(Exception):
+        pass
+
+    route_calls = []
+    fake_ai = types.SimpleNamespace(
+        AIRequest=lambda **kwargs: kwargs,
+        AI_TASKS={"SUMMARIZATION": {"max_tokens": 1536}},
+        AIBudgetExceededError=Exception,
+        AIRateLimitExceededError=FakeRateError,
+        AIProviderError=FakeProviderError,
+        is_spend_cap_reached=lambda: False,
+        route_and_generate=lambda request: route_calls.append(request),
+        log_usage=lambda *args, **kwargs: None,
+    )
+    monkeypatch.setitem(sys.modules, "app", fake_app)
+    monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
+    fake_usage = types.SimpleNamespace(
+        FEATURES={"summary": ("summary_generations", "summary_max_pages")},
+        check_and_consume_ai_quota=lambda *args, **kwargs: (True, {"period_start": "2026-09-01"}),
+        reserve_generation_variant=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("variant reserved before inflight attachment")),
+        mark_generation_variant_ready=lambda *args, **kwargs: None,
+        release_generation_variant=lambda *args, **kwargs: None,
+        refund_ai_quota=lambda *args, **kwargs: None,
+    )
+    monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
+    monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
+    monkeypatch.setattr(reusable, "find_ready_generation_family", lambda **kwargs: None)
+    monkeypatch.setattr(
+        reusable,
+        "find_generating_generation_family",
+        lambda **kwargs: GenerationLookup(33, "generating", None, False),
+    )
+    monkeypatch.setattr(
+        reusable,
+        "wait_for_generation",
+        lambda *args, **kwargs: GenerationLookup(33, "ready", {"title": "Shared"}, False),
+    )
+    material_calls = []
+    monkeypatch.setattr(
+        reusable,
+        "_material_from_payload",
+        lambda **kwargs: material_calls.append(kwargs) or types.SimpleNamespace(id=303, payload='{"title":"Shared"}'),
+    )
+
+    result = reusable.generate_document_material(
+        material_type="summary",
+        document_content_id=7,
+        triggering_user_id=404,
+        parameters={"max_pages": 5},
+    )
+
+    assert result["reused"] is True
+    assert result["material_id"] == 303
+    assert route_calls == []
+    assert len(material_calls) == 1
+
+
 def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-8", extracted_text="notes", page_count=1)
     session = _FakeSession(content)
