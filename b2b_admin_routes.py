@@ -133,6 +133,8 @@ def register_b2b_admin_routes(app, db):
                    COUNT(DISTINCT c.id) AS campaigns,
                    COUNT(DISTINCT c.id) FILTER (WHERE c.status='active') AS active_campaigns,
                    COALESCE(SUM(c.funded_amount_minor),0) AS funded_minor,
+                   COALESCE((SELECT SUM(-l.signed_amount_minor) FROM b2b_campaign_ledger l JOIN discovery_campaign lc ON lc.id=l.campaign_id WHERE lc.organisation_id=o.id AND l.entry_type LIKE 'delivery_%'),0) AS delivery_spend_minor,
+                   COALESCE((SELECT SUM(p.campaign_amount_minor) FROM b2b_payment p WHERE p.organisation_id=o.id AND p.status IN ('paid','credited')),0) AS paid_campaign_value_minor,
                    COALESCE(SUM(c.delivered_impressions),0) AS impressions,
                    COALESCE(SUM(c.delivered_clicks),0) AS clicks,
                    COALESCE(SUM(c.delivered_applications),0) AS applications,
