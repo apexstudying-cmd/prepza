@@ -47,6 +47,16 @@ jobs:
         working-directory: frontend
         run: pnpm run build
 
+      - name: Diagnose generated TypeScript source
+        if: always()
+        run: |
+          echo '--- GenerationScreens line 57 ---'
+          sed -n '57p' frontend/src/generation/GenerationScreens.tsx | cat -v
+          echo '--- StudyGenerationScreensClean line 41 ---'
+          sed -n '41p' frontend/src/generation/StudyGenerationScreensClean.tsx | cat -v
+          echo '--- non-ASCII generated source ---'
+          LC_ALL=C grep -nP '[^\x00-\x7F]' frontend/src/generation/GenerationScreens.tsx frontend/src/generation/StudyGenerationScreensClean.tsx || true
+
       - name: Verify patch is deterministic
         run: |
           cp app.py /tmp/app.after
