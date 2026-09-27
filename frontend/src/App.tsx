@@ -1869,7 +1869,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
   )
 }
 
-function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
+function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveOpportunityId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveOpportunityId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean; is_pending?: boolean }
   const { tokens: T } = useTheme()
   const [query, setQuery] = useState('')
@@ -1975,7 +1975,7 @@ function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setA
             {sponsoredTrending.length > 0 && (
               <div style={{ display: 'flex', gap: 10, overflowX: 'auto', marginBottom: 10 }} className="scrollbar-hide">
                 {sponsoredTrending.slice(0, 3).map(c => (
-                  <SponsoredOpportunityCard key={c.campaign_id} campaign={c} compact setScreen={setScreen} setActiveOpportunityId={() => {}} />
+                  <SponsoredOpportunityCard key={c.campaign_id} campaign={c} compact setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
                 ))}
               </div>
             )}
@@ -3902,7 +3902,7 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
   )
 }
 
-function ExploreScreen(props: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
+function ExploreScreen(props: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveOpportunityId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   return <ExploreSurface {...props} />
 }
 
@@ -15323,7 +15323,7 @@ export default function App() {
       case 'reset-password':    return <ResetPasswordScreen setScreen={setScreen} />
       case 'verify-confirm':    return <VerifyConfirmScreen setScreen={setScreen} />
       case 'home':              return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} />
-      case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} setActiveDocumentId={setActiveDocumentId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
+      case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'create-modal':      return <CreateModal setScreen={setScreen} />
       case 'share-opp-form':    return <ShareOppForm setScreen={setScreen} />
       case 'edu-upload-form':   return <EduUploadForm setScreen={setScreen} />
