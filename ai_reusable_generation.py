@@ -503,7 +503,9 @@ def generate_document_material(*, material_type, document_content_id, triggering
         quota_payment_id = quota_meta.get("entitlement_payment_id")
 
     job = None
-    lookup = None
+    # Keep the claimed artifact lookup alive through provider execution. The
+    # lease token and artifact id are required to publish the result and to
+    # fence a stale producer; resetting lookup here loses both values.
     artifact_ready = False
     try:
         if ai_service.is_spend_cap_reached():
