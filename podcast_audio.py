@@ -63,20 +63,106 @@ TURN_GAP_MS = 400  # silence stitched between speaker turns
 PODCAST_AUDIO_BUCKET = "podcast-audio"
 
 
+def build_audio_fingerprint(envelope, target_duration_seconds):
+    canonical = {
+        "version": "kokoro-a2000-v1",
+        "target_duration_seconds": round(float(target_duration_seconds or 0), 3),
+        "voices": PODCAST_VOICE_MAP,
+        "turns": [
+            {
+                "speaker": str(turn.get("speaker") or ""),
+                "text": str(turn.get("text") or ""),
+            }
+            for turn in (envelope.get("script", {}).get("turns") or [])
+        ],
+    }
+    encoded = json.dumps(
+        canonical,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def start_podcast_audio_processing(material_id, flask_app, notification_id=None):
     """
-    Fire-and-forget: spawns a background thread that synthesizes audio
-    for one GeneratedMaterial(material_type='podcast') row. `flask_app`
-    is passed explicitly (not imported) - same reasoning as
-    document_pipeline.start_processing, a new thread doesn't inherit
-    the request's Flask context.
+    Queue exactly one podcast-audio job for the standalone GPU worker.
+
+    This deliberately does not start a Flask daemon thread and never calls
+    a Render TTS service.
     """
-    thread = threading.Thread(
-        target=_process_in_background,
-        args=(material_id, flask_app, notification_id),
-        daemon=True,
+    from app import db, GeneratedMaterial, AiJob
+
+    material = (
+        GeneratedMaterial.query
+        .filter_by(id=material_id)
+        .with_for_update()
+        .first()
     )
-    thread.start()
+    if not material or material.material_type != "podcast":
+        raise RuntimeError(f"Podcast material {material_id} is not valid")
+
+    envelope = json.loads(material.payload or "{}")
+    if envelope.get("audio_status") == "ready":
+        db.session.commit()
+        return {"job_id": None, "status": "ready", "reused": True}
+
+    turns = envelope.get("script", {}).get("turns") or []
+    if not turns:
+        raise RuntimeError("Podcast script has no speaker turns")
+
+    parameters = material.generation_parameters or {}
+    target_duration_seconds = float(parameters.get("duration_minutes", 0) or 0) * 60
+    audio_fingerprint = build_audio_fingerprint(envelope, target_duration_seconds)
+
+    existing_job = (
+        AiJob.query
+        .filter(
+            AiJob.document_content_id == material.document_content_id,
+            AiJob.feature == "podcast_audio",
+            AiJob.status.in_(("pending", "processing")),
+            AiJob.generation_parameters["material_id"].as_integer() == material.id,
+        )
+        .order_by(AiJob.id.desc())
+        .first()
+    )
+    if existing_job:
+        db.session.commit()
+        return {"job_id": existing_job.id, "status": existing_job.status, "reused": False}
+
+    storage_path = f"{material.document_content_id}-{material.id}.mp3"
+    generation_parameters = {
+        "material_id": material.id,
+        "turns": [
+            {
+                "text": str(turn.get("text") or ""),
+                "voice": PODCAST_VOICE_MAP.get(str(turn.get("speaker") or "")),
+            }
+            for turn in turns
+        ],
+        "target_duration_seconds": target_duration_seconds,
+        "storage_path": storage_path,
+        "audio_fingerprint": audio_fingerprint,
+        "audio_algorithm_version": "kokoro-a2000-v1",
+    }
+    if any(not item["voice"] for item in generation_parameters["turns"]):
+        raise RuntimeError("Podcast script contains a speaker without a configured Kokoro voice")
+
+    job = AiJob(
+        document_content_id=material.document_content_id,
+        user_id=material.owner_user_id,
+        feature="podcast_audio",
+        status="pending",
+        notification_id=notification_id,
+        progress_percent=0,
+        progress_stage="queued for Kokoro GPU",
+        material_id=material.id,
+        generation_parameters=generation_parameters,
+    )
+    db.session.add(job)
+    db.session.commit()
+    return {"job_id": job.id, "status": "pending", "reused": False}
 
 
 def _process_in_background(material_id, flask_app, notification_id=None):
