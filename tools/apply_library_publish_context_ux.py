@@ -27,6 +27,9 @@ def replace_once(old, new, label):
     global function
     count = function.count(old)
     if count != 1:
+        if count == 0 and label == "publish profile update suggestion" and "contextChangedFromProfile" in function:
+            print("Library publish context UX: profile update suggestion is already present; skipping duplicate patch.")
+            return
         raise SystemExit(f"FAIL CLOSED: {label}: expected 1 match, found {count}")
     function = function.replace(old, new, 1)
 
