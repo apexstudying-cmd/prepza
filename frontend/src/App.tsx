@@ -338,6 +338,7 @@ const Ic = {
   check:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>,
   flash:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>,
   podcast:  (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h1v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v8h1c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z"/></svg>,
+  lock:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>,
   book:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 14H8v-2h8v2zm0-4H8v-2h8v2zm0-4H8V6h8v2z"/></svg>,
   trophy:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></svg>,
   play:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>,
@@ -5356,7 +5357,7 @@ function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId,
 }
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
-function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+function SettingsScreen({ setScreen, resetToAuth }: { setScreen: (s: Screen) => void; resetToAuth: () => void }) {
   const [notifs, setNotifs] = useState({ push: true, messages: true, opportunities: false, community: true, reminders: true })
   const [priv, setPriv] = useState({ profilePublic: true, whoMessages: false, whoFollows: true, readReceipts: true })
   const [privacyBusy, setPrivacyBusy] = useState(false)
@@ -5371,6 +5372,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [logoutError, setLogoutError] = useState('')
 
   const [emailPassword, setEmailPassword] = useState('')
   const [newEmail, setNewEmail] = useState('')
@@ -5466,10 +5468,20 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     setDeleteError('')
     try {
       await api('/delete-account', { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
-      setScreen('login')
+      resetToAuth()
     } catch (e) {
       setDeleteError(e instanceof ApiError ? e.message : 'Could not delete your account. Please try again.')
       setDeleting(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    setLogoutError('')
+    try {
+      await api('/logout', { method: 'POST' })
+      resetToAuth()
+    } catch (e) {
+      setLogoutError(e instanceof ApiError ? e.message : 'Could not log you out. Please check your connection and try again.')
     }
   }
 
@@ -5695,7 +5707,7 @@ function SettingsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>👋</div>
             <div style={{ fontWeight: 800, fontSize: 17, color: N.navy, textAlign: 'center', marginBottom: 8 }}>Log out of Prepza?</div>
             <div style={{ fontSize: 13, color: T.textMuted, textAlign: 'center', marginBottom: 24 }}>You'll need to sign in again to access your study materials.</div>
-            <button onClick={() => { api('/logout', { method: 'POST' }).catch(() => {}).finally(() => setScreen('login')) }} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
+            <button onClick={() => { handleLogout() }} style={{ width: '100%', background: '#C94C4C', border: 'none', borderRadius: 14, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 14, color: '#fff', marginBottom: 10 }}>Log Out</button>
             <button onClick={() => setShowLogout(false)} style={{ width: '100%', background: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F3F4F6', border: 'none', borderRadius: 14, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: 14, color: T.text }}>Cancel</button>
           </div>
         </div>
@@ -6684,9 +6696,9 @@ function NotificationsScreen({ setScreen, setActiveForumPostId, setActiveProfile
 
 // ─── LIBRARY ──────────────────────────────────────────────────────────────────
 type LibraryPublicationSummary = {
-  id: number; document_id: number; title: string; description: string | null; material_type: string
+  id: number; document_id: number | null; title: string; description: string | null; material_type: string
   unit_id: number | null; unit_code: string | null; author: string
-  view_count: number; save_count: number; created_at: string | null
+  view_count: number; save_count: number; created_at: string | null; locked?: boolean
 }
 type SavedLibraryItem = LibraryPublicationSummary & { saved_at: string | null }
 type MySubmission = {
@@ -6799,14 +6811,26 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
       .finally(() => setSubmissionsLoading(false))
   }
 
+  const [academicRefreshKey, setAcademicRefreshKey] = useState(0)
+  useEffect(() => {
+    const onAcademicChange = () => setAcademicRefreshKey(v => v + 1)
+    window.addEventListener('prepza:academic-context-changed', onAcademicChange)
+    return () => window.removeEventListener('prepza:academic-context-changed', onAcademicChange)
+  }, [])
+
   useEffect(() => {
     const t = setTimeout(() => { loadBrowse() }, search.trim() ? 350 : 0)
     return () => clearTimeout(t)
-  }, [materialTypeFilter, universityFilter, search])
+  }, [materialTypeFilter, universityFilter, search, academicRefreshKey]
   useEffect(() => { loadSaved() }, [])
   useEffect(() => { loadSubmissions() }, [])
 
   const toggleSave = async (pub: LibraryPublicationSummary) => {
+    if (pub.locked || !pub.document_id) {
+      setSaveNotice('This Library item is locked on your current plan. Upgrade to open it.')
+      window.setTimeout(() => setSaveNotice(''), 3500)
+      return
+    }
     if (!csrfToken) return
     const isSaved = savedIds.has(pub.id)
     setSaveNotice('')
