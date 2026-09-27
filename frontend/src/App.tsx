@@ -15209,3 +15209,5 @@ function friendlyGenerationError(error: unknown): string {
   }
   return message || 'We could not generate this study material. Please try again.'
 }
+
+// CI verification marker: current main gate suite only.
