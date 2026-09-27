@@ -6977,7 +6977,7 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
         {activeTab === 'Published' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: T.textMuted }}>Materials you've submitted to the Prepza Library</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>Materials you've published to the Prepza Library</div>
               <button onClick={() => setScreen('publish-library')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 11, border: 'none', borderRadius: 10, padding: '6px 12px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>+ Publish</button>
             </div>
             {submissionsLoading ? (
@@ -6985,7 +6985,7 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
             ) : submissionsError ? (
               <ErrorState onRetry={loadSubmissions} />
             ) : submissions.length === 0 ? (
-              <EmptyState icon="📖" title="Nothing published yet" sub="Share your notes and materials with students across Kenya. Earn XP for approved contributions." action="Publish Material" onAction={() => setScreen('publish-library')} />
+              <EmptyState icon="📖" title="Nothing published yet" sub="Share your notes and materials with students across Kenya." action="Publish Material" onAction={() => setScreen('publish-library')} />
             ) : submissions.map(p => (
               <div key={p.id} onClick={p.status === 'approved' && p.document_id ? () => { setActiveDocumentId(p.document_id); setScreen('document-study') } : undefined} style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1.5px solid ${p.status === 'approved' ? 'rgba(76,201,123,0.2)' : 'rgba(0,0,0,0.06)'}`, cursor: p.status === 'approved' && p.document_id ? 'pointer' : 'default' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
@@ -7003,7 +7003,7 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
                   </div>
                 )}
                 {p.status === 'pending' && (
-                  <div style={{ fontSize: 11, color: '#D97706', marginTop: 6, fontWeight: 600 }}>Submitted {p.created_at ? new Date(p.created_at).toLocaleDateString() : ''} · Review takes 24-48h</div>
+                  <div style={{ fontSize: 11, color: '#D97706', marginTop: 6, fontWeight: 600 }}>Submitted {p.created_at ? new Date(p.created_at).toLocaleDateString() : ''} · Published immediately</div>
                 )}
                 {p.status === 'rejected' && p.rejection_reason && (
                   <div style={{ fontSize: 11, color: '#C94C4C', marginTop: 6, fontWeight: 600 }}>Rejected: {p.rejection_reason}</div>
@@ -8007,8 +8007,8 @@ function PublishLibraryScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
       {step === 1 && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
           <div style={{ background: `${N.gold}10`, border: `1px solid ${N.gold}30`, borderRadius: 14, padding: '12px 16px', marginBottom: 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: N.gold, marginBottom: 4 }}>Free to publish · Earn XP on approval</div>
-            <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.6 }}>Share educational materials with students across Kenya. Approved contributions earn XP and build your contributor reputation.</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: N.gold, marginBottom: 4 }}>Free to publish · Shared immediately</div>
+            <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.6 }}>Share educational materials with students across Kenya. Once published, students can save them to Study Hub. Reported material can be taken down by admins.</div>
           </div>
           <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 10 }}>Select a document</div>
           {docsLoading ? (
@@ -8090,7 +8090,7 @@ function PublishLibraryScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
             <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6 }}>I confirm that I have the right or permission to share this material, and I agree to Prepza's <span style={{ color: N.gold, fontWeight: 700 }}>Terms of Service</span>, <span style={{ color: N.gold, fontWeight: 700 }}>Content Policy</span>, and <span style={{ color: N.gold, fontWeight: 700 }}>Copyright Policy</span>.</div>
           </div>
           <button onClick={() => canProceed3 && !submitting && submit()} style={{ width: '100%', background: canProceed3 ? `linear-gradient(135deg,${N.gold},${N.goldL})` : '#E5E7EB', color: canProceed3 ? N.navy : T.textMuted, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: canProceed3 ? 'pointer' : 'not-allowed', fontFamily: 'Plus Jakarta Sans', boxShadow: canProceed3 ? `0 6px 24px ${N.gold}40` : 'none' }}>
-            Submit for Review
+            Publish to Library
           </button>
           <button onClick={() => setScreen('home')} style={{ width: '100%', background: 'transparent', color: T.textMuted, fontSize: 12, fontWeight: 600, border: 'none', padding: '12px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Cancel — don't publish</button>
         </div>
@@ -8109,22 +8109,22 @@ function PublishLibraryScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
         </div>
       )}
 
-      {/* Step 5: Submitted for review */}
+      {/* Step 5: Published */}
       {step === 5 && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px' }} className="scrollbar-hide">
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
             <div style={{ width: 72, height: 72, background: submittedStatus === 'already_in_library' ? `${N.gold}18` : 'rgba(76,201,123,0.1)', borderRadius: '50%', border: `3px solid ${submittedStatus === 'already_in_library' ? N.gold : '#4CC97B'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 28 }}>{submittedStatus === 'already_in_library' ? '✓' : '📥'}</div>
-            <div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 8 }}>{submittedStatus === 'already_in_library' ? 'Already in Prepza Library' : 'Submitted for Review'}</div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 8 }}>{submittedStatus === 'already_in_library' ? 'Already in Prepza Library' : 'Published to Prepza Library'}</div>
             <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.65 }}>
               {submittedStatus === 'already_in_library'
                 ? 'This exact document is already represented in the Prepza Library. Your personal StudyHub copy remains yours, and no duplicate Library submission was created.'
-                : `Your material has been received and is ${submittedStatus || 'pending'}. Our team reviews every submission to maintain quality standards — this usually takes 24-48h. You'll be notified of the outcome.`}
+                : 'Your material is now in the Prepza Library. Other students can see it and save it to Study Hub. If it is later reported and found unsuitable, an admin can take it down.'}
             </div>
           </div>
 
           <div style={{ background: T.card, borderRadius: 14, padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>What happens if rejected?</div>
-            <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.65 }}>You'll receive a notification with the reason. You can revise and resubmit, or contact support if you believe it's a mistake.</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>Library moderation</div>
+            <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.65 }}>Students can report a published document when it is inaccurate, inappropriate, plagiarised, or not appropriate for their academic context. Admins review reports and can remove the item.</div>
           </div>
 
           <button onClick={() => setScreen('library')} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 15, border: 'none', borderRadius: 16, padding: '14px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: `0 6px 24px ${N.gold}40` }}>
