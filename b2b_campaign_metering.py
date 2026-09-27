@@ -35,7 +35,7 @@ def _unit_price_minor(campaign, event_type):
             return 0
         return int((Decimal(bid_kes) * Decimal(100) / Decimal(1000)).to_integral_value())
     if event_type == "impression":
-        if "cpm" not in billing_modes or placement not in ("feed", "feed_push"):
+        if "cpm" not in billing_modes or placement not in ("feed", "feed_push", "home_carousel", "explore", "trending", "opportunities_feed", "podcast"):
             return 0
         return int((Decimal(bid_kes) * Decimal(100) / Decimal(1000)).to_integral_value())
     return 0
@@ -123,6 +123,8 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             return {"ok": False, "reason": "campaign_missing"}
         if campaign["status"] != "active":
             return {"ok": False, "reason": "campaign_inactive"}
+        if str(campaign["placement"] or "") != str(placement or ""):
+            return {"ok": False, "reason": "placement_mismatch"}
         if str(campaign["funding_status"] or "") not in ("funded", "credited"):
             return {"ok": False, "reason": "campaign_not_funded"}
         if campaign["starts_at"] and campaign["starts_at"] > datetime.utcnow():
@@ -206,10 +208,19 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             "key": event_key,
             "meta": json.dumps({"user_id": user_id, "amount_minor": price, "meter_version": "g3-v2"})
         })
-        if event_type == "impression":
-            counter = "delivered_impressions"
-        elif event_type == "click":
+        if event_type == "click":
+            prior_impression = db.session.execute(text("""
+                SELECT 1 FROM discovery_event
+                WHERE campaign_id=:cid AND user_id=:uid AND event_type='impression'
+                  AND placement=:placement
+                  AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+                LIMIT 1
+            """), {"cid": campaign_id, "uid": user_id, "placement": placement}).first()
+            if not prior_impression:
+                return {"ok": False, "reason": "click_without_impression"}
             counter = "delivered_clicks"
+        elif event_type == "impression":
+            counter = "delivered_impressions"
         else:
             counter = "push_delivered"
         db.session.execute(text(f"""
