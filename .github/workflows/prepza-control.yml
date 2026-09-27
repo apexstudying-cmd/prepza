@@ -30,6 +30,17 @@ jobs:
         working-directory: frontend
         run: npm install --no-audit --no-fund
 
+      - name: Persist generated frontend lockfile for diagnosis
+        run: |
+          if git diff --quiet -- frontend/package-lock.json; then
+            echo 'No lockfile changes.'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add frontend/package-lock.json
+            git commit -m 'ci: persist generated frontend lockfile for verification'
+          fi
+
       - name: Build frontend
         working-directory: frontend
         run: npm run build
