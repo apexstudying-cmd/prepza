@@ -7,13 +7,18 @@ on:
         description: "Deployable staging base URL"
         required: true
         type: string
+      profile:
+        description: "Capacity profile: smoke, ramp, capacity, or custom"
+        required: false
+        default: "smoke"
+        type: string
       http_vus:
-        description: "HTTP virtual users"
+        description: "HTTP virtual users (custom profile)"
         required: false
         default: "25"
         type: string
       ws_vus:
-        description: "Realtime virtual users"
+        description: "Realtime virtual users (custom profile)"
         required: false
         default: "25"
         type: string
@@ -26,9 +31,10 @@ on:
 jobs:
   load-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       BASE_URL: ${{ inputs.base_url }}
+      PROFILE: ${{ inputs.profile }}
       HTTP_VUS: ${{ inputs.http_vus }}
       WS_VUS: ${{ inputs.ws_vus }}
       HTTP_DURATION: ${{ inputs.duration }}
@@ -45,6 +51,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/work" \
             -w /work \
             -e BASE_URL \
+            -e PROFILE \
             -e HTTP_VUS \
             -e WS_VUS \
             -e HTTP_DURATION \
