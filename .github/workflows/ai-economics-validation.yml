@@ -1,6 +1,8 @@
 name: AI economics validation
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
@@ -35,4 +37,4 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          pytest -q tests/test_ai_economics.py tests/test_ai_reusable_generation.py
+          pytest -q tests/test_ai_economics.py tests/test_ai_reusable_generation.py tests/test_b2b_billing_regression.py
