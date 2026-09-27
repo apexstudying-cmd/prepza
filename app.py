@@ -4790,9 +4790,19 @@ def trigger_podcast_audio(document_id):
     material.payload = json.dumps(envelope)
     db.session.commit()
 
-    podcast_audio.start_podcast_audio_processing(material.id, app, notification.id)
+    queue_result = podcast_audio.start_podcast_audio_processing(material.id, app, notification.id)
+    if queue_result.get("status") == "ready":
+        return jsonify({
+            "audio_status": "ready",
+            "material_id": material.id,
+            "reused": True,
+        }), 200
 
-    return jsonify({"audio_status": "processing", "material_id": material.id}), 202
+    return jsonify({
+        "audio_status": "processing",
+        "material_id": material.id,
+        "job_id": queue_result.get("job_id"),
+    }), 202
 
 
 @app.route("/documents/<int:document_id>/podcast-audio")
