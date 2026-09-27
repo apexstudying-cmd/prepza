@@ -219,6 +219,7 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             "key": event_key,
             "meta": json.dumps({"user_id": user_id, "amount_minor": price, "meter_version": "g3-v2"})
         })
+        if event_type == "click":
             counter = "delivered_clicks"
         elif event_type == "impression":
             counter = "delivered_impressions"
