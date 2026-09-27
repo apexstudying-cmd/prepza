@@ -4748,6 +4748,13 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
   const [csrfToken, setCsrfToken] = useState('')
   const [togglingId, setTogglingId] = useState<number | null>(null)
   const [sponsored, setSponsored] = useState<{campaign_id:number;organisation_id:number;opportunity_id:number|null;name:string;objective:string;placement:string}[]>([])
+  const [academicRefreshKey, setAcademicRefreshKey] = useState(0)
+
+  useEffect(() => {
+    const onAcademicChange = () => setAcademicRefreshKey(v => v + 1)
+    window.addEventListener('prepza:academic-context-changed', onAcademicChange)
+    return () => window.removeEventListener('prepza:academic-context-changed', onAcademicChange)
+  }, [])
 
   useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
 
@@ -4785,7 +4792,7 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
     }
     const t = setTimeout(load, 300)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [filter, query])
+  }, [filter, query, academicRefreshKey])
 
   const toggleSave = async (o: OpportunityPublic) => {
     if (togglingId != null) return
