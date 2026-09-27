@@ -9735,6 +9735,192 @@ try:
 except Exception as exc:
     app.logger.exception("Chat runtime registration failed: %s", exc)
 
+
+# ---------- Audit Logging ----------
+# "Admin changes must be recorded in audit logs." / "Moderation actions
+# must be auditable." per the MVP spec's Admin Platform and Moderation
+# phases, and "Audit logs work" is a listed acceptance criterion.
+
+class AuditLog(db.Model):
+    """
+    Records administrative and moderation actions for accountability.
+    Append-only by convention - no UPDATE/DELETE route is exposed for
+    this table anywhere; a log that can be edited after the fact isn't
+    an audit trail.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    # nullable to leave room for a future system-initiated entry (e.g.
+    # an automated sweep) without forcing a fake actor.
+    action = db.Column(db.String(60), nullable=False)
+    # short verb-based code, e.g. "user_updated", "content_report_dismissed"
+    target_type = db.Column(db.String(40), nullable=True)
+    target_id = db.Column(db.Integer, nullable=True)
+    details = db.Column(db.Text, nullable=True)
+    # optional JSON-serialized context (best-effort; falls back to str()
+    # for anything that isn't directly JSON-serializable)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PushSubscription(db.Model):
+    """
+    A single browser/device Web Push subscription for a user. One user can
+    have multiple rows (multiple devices/browsers) - no uniqueness on
+    user_id alone, only on endpoint (a device re-subscribing gets a fresh
+    endpoint from the browser, so upsert is keyed on endpoint, not user_id).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    endpoint = db.Column(db.String(500), unique=True, nullable=False)
+    p256dh_key = db.Column(db.String(255), nullable=False)
+    auth_key = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class UserKey(db.Model):
+    """
+    End-to-end encryption key material for a user's Chats identity
+    (Chats/Conversation/Message only - Study Groups and Forum are not
+    encrypted and never touch this table). public_key is shared with
+    other participants so they can wrap a per-conversation symmetric
+    key to this user (see ConversationKey, added in a later E2EE
+    chunk). encrypted_private_key + kdf_salt are reserved for the
+    passphrase-wrapped multi-device backup blob (Chunk 2) - both stay
+    NULL until that chunk lands; this chunk only registers the public
+    key. The server never has access to the passphrase or the raw
+    private key, only this ciphertext blob once Chunk 2 adds it.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), unique=True, nullable=False)
+    public_key = db.Column(db.Text, nullable=False)
+    encrypted_private_key = db.Column(db.Text, nullable=True)
+    kdf_salt = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+def send_push_notification(user_id, title, body):
+    """
+    Sends a Web Push notification to every subscribed device for a user.
+    Best-effort: never raises - a push failure must not break the calling
+    route (e.g. an admin announcement send). Auto-prunes subscriptions the
+    push service reports as gone (404/410 - expired or unsubscribed).
+    """
+    vapid_private_key = os.environ.get("VAPID_PRIVATE_KEY")
+    vapid_claims_email = os.environ.get("VAPID_CLAIMS_EMAIL")
+    if not vapid_private_key or not vapid_claims_email:
+        print("WARNING: VAPID keys not configured - skipping push send")
+        return
+
+    subscriptions = PushSubscription.query.filter_by(user_id=user_id).all()
+    for sub in subscriptions:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh_key, "auth": sub.auth_key},
+                },
+                data=json.dumps({"title": title, "body": body}),
+                vapid_private_key=vapid_private_key,
+                vapid_claims={"sub": vapid_claims_email},
+            )
+        except WebPushException as e:
+            status_code = e.response.status_code if e.response is not None else None
+            if status_code in (404, 410):
+                db.session.delete(sub)
+                db.session.commit()
+            else:
+                print(f"WARNING: push send failed for user {user_id}: {e}")
+        except Exception as e:
+            print(f"WARNING: push send failed for user {user_id}: {e}")
+
+def log_admin_action(actor_id, action, target_type=None, target_id=None, details=None):
+    """
+    Stages one audit log row on the current session. Deliberately does
+    NOT call db.session.commit() itself - callers invoke this right
+    before their own existing commit, so the audit row lands atomically
+    together with the change it's describing, same transaction. If
+    details isn't JSON-serializable, falls back to str() rather than
+    raising - an audit-logging quirk must never break the admin action
+    it's describing.
+    """
+    payload = None
+    if details is not None:
+        try:
+            payload = json.dumps(details)
+        except (TypeError, ValueError):
+            payload = str(details)
+    db.session.add(AuditLog(
+        actor_id=actor_id, action=action, target_type=target_type,
+        target_id=target_id, details=payload,
+    ))
+
+
+@app.route("/admin/audit-logs")
+@require_admin
+def admin_list_audit_logs():
+    """
+    Lists audit log entries, newest first. Optional filters:
+    actor_id (exact match), action (substring match), target_type
+    (exact match), days (window, default 30, same convention as
+    /admin/ai-usage), page (1-indexed, 50 per page).
+    """
+    try:
+        days = int(request.args.get("days", 30))
+    except ValueError:
+        days = 30
+    days = max(1, min(days, 365))
+    window_start = datetime.utcnow() - timedelta(days=days)
+
+    query = AuditLog.query.filter(AuditLog.created_at >= window_start)
+
+    actor_id = request.args.get("actor_id", type=int)
+    if actor_id:
+        query = query.filter(AuditLog.actor_id == actor_id)
+
+    action_filter = (request.args.get("action") or "").strip()
+    if action_filter:
+        query = query.filter(AuditLog.action.ilike(f"%{action_filter}%"))
+
+    target_type = (request.args.get("target_type") or "").strip()
+    if target_type:
+        query = query.filter(AuditLog.target_type == target_type)
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    per_page = 50
+
+    entries = (
+        query.order_by(AuditLog.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    result = []
+    for e in entries:
+        actor = db.session.get(User, e.actor_id) if e.actor_id else None
+        parsed_details = None
+        if e.details:
+            try:
+                parsed_details = json.loads(e.details)
+            except (TypeError, ValueError):
+                parsed_details = e.details
+        result.append({
+            "id": e.id,
+            "actor_id": e.actor_id,
+            "actor_email": actor.email if actor else None,
+            "action": e.action,
+            "target_type": e.target_type,
+            "target_id": e.target_id,
+            "details": parsed_details,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        })
+
+    return jsonify({"page": page, "logs": result})
+
 # Register the protected developer control API only after all base models/routes exist.
 from prepza_control import register_control_routes
 
