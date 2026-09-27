@@ -14,6 +14,7 @@ import uvicorn
 
 PREPZA_INTERNAL_BASE_URL = os.environ["PREPZA_INTERNAL_BASE_URL"].rstrip("/")
 PREPZA_INTERNAL_TOKEN = os.environ.get("KOKORO_WORKER_TOKEN") or os.environ["PREPZA_INTERNAL_TOKEN"]
+WORKER_ID = os.environ.get("KOKORO_WORKER_ID", "").strip()
 R2_ENDPOINT_URL = os.environ["R2_ENDPOINT_URL"]
 R2_ACCESS_KEY_ID = os.environ["R2_ACCESS_KEY_ID"]
 R2_SECRET_ACCESS_KEY = os.environ["R2_SECRET_ACCESS_KEY"]
@@ -41,6 +42,40 @@ def _headers() -> dict[str, str]:
         "Content-Type": "application/json",
     }
 
+
+
+def _heartbeat() -> None:
+    if not WORKER_ID:
+        return
+    used = total = None
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts = [x.strip() for x in result.stdout.strip().split(",")]
+            if len(parts) >= 2:
+                used = round(float(parts[0]) / 1024, 3)
+                total = round(float(parts[1]) / 1024, 3)
+    except Exception:
+        pass
+    try:
+        response = requests.post(
+            f"{PREPZA_INTERNAL_BASE_URL}/internal/kokoro/worker/heartbeat",
+            headers=_headers(),
+            json={"worker_id": WORKER_ID, "vram_used_gb": used, "vram_total_gb": total, "status": "running"},
+            timeout=15,
+        )
+        response.raise_for_status()
+    except Exception:
+        pass
+
+
+def _heartbeat_loop() -> None:
+    while True:
+        _heartbeat()
+        time.sleep(30)
 
 def _claim_job() -> dict[str, Any] | None:
     response = requests.post(
@@ -240,4 +275,5 @@ def healthz() -> dict[str, str]:
 
 if __name__ == "__main__":
     threading.Thread(target=_poll_loop, name="prepza-kokoro-poller", daemon=True).start()
+    threading.Thread(target=_heartbeat_loop, name="prepza-kokoro-heartbeat", daemon=True).start()
     uvicorn.run(app, host="0.0.0.0", port=HEALTH_PORT)
