@@ -10020,17 +10020,6 @@ type AdminLibraryReportItem = {
 }
 
 type AdminInfrastructure = {
-  gpu: { provider: string; gpu: string; status: string; instance_id: number | null; offer_id: number | null; price_usd_per_hour: number | null; idle_timeout_seconds: number; last_job_at: string | null; last_idle_at: string | null; last_error: string | null; configured: boolean; provider_reachable: boolean; provider_instance: any | null }
-  gpu_scaling: {
-    pending_jobs: number; processing_jobs: number; queue_depth: number; oldest_pending_age_seconds: number | null; queued_audio_seconds: number;
-    current_workers: number; max_workers: number; max_pending_jobs_per_worker: number; max_pending_age_seconds: number;
-    vram_safety_fraction: number; worker_vram_estimate_gb: number; max_gpu_price_usd_per_hour: number; max_gpu_hourly_spend_usd: number;
-    scaling_mode: string; dry_run: boolean; provider_configured: boolean;
-    workers: { instance_id: number; worker_id?: string | null; gpu_name: string; gpu_vram_gb: number | null; status: string; worker_capacity: number; price_usd_per_hour: number | null; vram_used_gb: number | null; vram_total_gb: number | null; last_heartbeat_at: string | null; last_error: string | null }[];
-    latest_decision: { action: string; reason_code: string; reason_text: string; dry_run: boolean; created_at: string | null } | null;
-    recent_decisions: { action: string; reason_code: string; reason_text: string; dry_run: boolean; created_at: string | null }[];
-    policy: string;
-  }
   generated_at: string
   active_users: { today: number; last_7d: number; last_30d: number }
   study: { students_today: number; study_seconds_today: number; study_minutes_today: number }
@@ -11762,23 +11751,23 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
                 <div key={item.label}><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}><span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{item.label}</span><span style={{ fontSize: 11, color: item.pct >= 90 ? '#DC2626' : T.textMuted }}>{fmtBytesSys(item.used)} / {fmtBytesSys(item.limit)}</span></div><div style={{ height: 7, borderRadius: 99, background: mode === 'dark' ? 'rgba(255,255,255,.08)' : '#F0F1F4' }}><div style={{ height: 7, width: Math.min(item.pct, 100) + '%', borderRadius: 99, background: barColor(item.pct) }} /></div><div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{Math.round(item.pct)}% used · {item.pct >= 90 ? 'action soon' : item.pct >= 75 ? 'watch' : 'comfortable'}</div></div>
               ))}
             </div>
+            <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}>
+              <div style={{ fontSize: 10, color: T.textMuted }}>Podcast GPU & autoscaler</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: T.text, marginTop: 4 }}>{(infrastructure as any).gpu?.gpu || 'RTX A2000'}</div>
+              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>
+                {(infrastructure as any).gpu_scaling?.current_workers ?? 0} / {(infrastructure as any).gpu_scaling?.max_workers ?? 1} workers · {(infrastructure as any).gpu_scaling?.pending_jobs ?? 0} pending · {(infrastructure as any).gpu_scaling?.processing_jobs ?? 0} processing
+              </div>
+              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>
+                Oldest pending: {(infrastructure as any).gpu_scaling?.oldest_pending_age_seconds == null ? 'none' : (infrastructure as any).gpu_scaling.oldest_pending_age_seconds + 's'} · limit {(infrastructure as any).gpu_scaling?.max_pending_jobs_per_worker ?? 3} jobs/worker
+              </div>
+              <div style={{ fontSize: 10, color: T.text, marginTop: 5, lineHeight: 1.4 }}>
+                <strong>{(infrastructure as any).gpu_scaling?.latest_decision?.action || 'hold'}</strong>{' — '}{(infrastructure as any).gpu_scaling?.latest_decision?.reason_text || 'No scaling decision recorded yet.'}
+              </div>
+              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>
+                {(infrastructure as any).gpu_scaling?.dry_run ? 'DRY RUN: GPU rental/destruction is blocked.' : 'Automatic scaling policy active.'}
+              </div>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}>
-                <div style={{ fontSize: 10, color: T.textMuted }}>Podcast GPU</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: T.text, marginTop: 4 }}>{infrastructure.gpu.gpu}</div>
-                <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{infrastructure.gpu.status} · {infrastructure.gpu.configured ? (infrastructure.gpu.price_usd_per_hour == null ? 'offer pending' : ('$' + infrastructure.gpu.price_usd_per_hour.toFixed(4) + '/hr')) : 'Vast not configured'}</div>
-              </div>
-              <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}>
-                <div style={{ fontSize: 10, color: T.textMuted }}>Autoscaler</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: T.text, marginTop: 4 }}>{infrastructure.gpu_scaling.current_workers} / {infrastructure.gpu_scaling.max_workers} workers</div>
-                <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{infrastructure.gpu_scaling.pending_jobs} pending · {infrastructure.gpu_scaling.processing_jobs} processing · {infrastructure.gpu_scaling.oldest_pending_age_seconds == null ? 'no pending wait' : infrastructure.gpu_scaling.oldest_pending_age_seconds + 's oldest wait'}</div>
-                <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{infrastructure.gpu_scaling.max_pending_jobs_per_worker} jobs/worker · {infrastructure.gpu_scaling.max_pending_age_seconds}s max wait · ${infrastructure.gpu_scaling.max_gpu_hourly_spend_usd.toFixed(2)}/hr ceiling</div>
-                <div style={{ fontSize: 10, color: T.text, marginTop: 5, lineHeight: 1.4 }}><strong>{infrastructure.gpu_scaling.latest_decision?.action || 'hold'}</strong>{' — '}{infrastructure.gpu_scaling.latest_decision?.reason_text || 'No scaling decision recorded yet.'}</div>
-                <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{infrastructure.gpu_scaling.dry_run ? 'DRY RUN: no GPU changes.' : infrastructure.gpu_scaling.scaling_mode === 'automatic' ? 'Automatic scaling enabled.' : 'Automatic scaling disabled.'}</div>
-                {infrastructure.gpu_scaling.recent_decisions.length > 0 && <div style={{ marginTop: 6, fontSize: 10, color: T.textMuted }}>Recent: {infrastructure.gpu_scaling.recent_decisions.slice(0, 3).map((d, i) => <span key={i}>{i ? ' · ' : ''}{d.action}: {d.reason_code}</span>)}</div>}
-              </div>
-            </div>            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 10, color: T.textMuted }}>AI spend this month</div><div style={{ fontSize: 21, fontWeight: 800, color: T.text, marginTop: 4 }}>${infrastructure.ai.spend_mtd_usd.toFixed(2)}</div><div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>Projected ${infrastructure.ai.projected_month_end_usd.toFixed(2)} · {infrastructure.ai.requests_mtd} requests</div></div>
               <div style={{ background: mode === 'dark' ? 'rgba(255,255,255,.04)' : '#F9FAFB', borderRadius: 10, padding: 12 }}><div style={{ fontSize: 10, color: T.textMuted }}>Revenue this month</div><div style={{ fontSize: 21, fontWeight: 800, color: N.gold, marginTop: 4 }}>KES {infrastructure.payments.revenue_mtd_kes.toLocaleString()}</div><div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>Est. Paystack fees KES {infrastructure.payments.estimated_paystack_fees_mtd_kes.toLocaleString()}</div></div>
             </div>
