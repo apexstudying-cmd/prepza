@@ -2416,6 +2416,7 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
     { label: 'Plagiarised material', value: 'plagiarised_material' },
     { label: 'Inappropriate content', value: 'inappropriate_content' },
     { label: 'Copyright violation', value: 'copyright_violation' },
+    { label: 'Wrong academic category or year', value: 'wrong_academic_category_year' },
     { label: 'Other', value: 'other' },
   ]
 
