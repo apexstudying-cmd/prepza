@@ -162,6 +162,16 @@ def start_podcast_audio_processing(material_id, flask_app, notification_id=None)
     )
     db.session.add(job)
     db.session.commit()
+
+    # Provision the A2000 only after the durable queue row exists. If the
+    # provider is temporarily unavailable, the job remains pending and can
+    # be retried rather than being lost.
+    try:
+        import gpu_lifecycle
+        gpu_lifecycle.ensure_worker_capacity()
+    except Exception as exc:
+        flask_app.logger.warning("Kokoro GPU provisioning deferred: %s", exc)
+
     return {"job_id": job.id, "status": "pending", "reused": False}
 
 
