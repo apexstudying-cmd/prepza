@@ -26,13 +26,26 @@ jobs:
       - name: Compile backend and MCP adapter
         run: python3 -m py_compile app.py prepza_control.py control-mcp/server.py
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend
         working-directory: frontend
-        run: npm run build
+        run: pnpm run build
 
       - name: Verify patch is deterministic
         run: |
