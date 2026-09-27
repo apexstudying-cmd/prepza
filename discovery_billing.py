@@ -420,7 +420,7 @@ def register_discovery(app, db):
             target = normalize_target(raw_target)
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid targeting criteria"}), 400
-        if not name or placement not in ("feed", "home_carousel", "explore", "trending", "opportunities_feed", "feed_push", "push"):
+        if not name or placement not in ("feed", "home_carousel", "explore", "trending", "opportunities_feed", "feed_push", "podcast", "push"):
             return jsonify({"error": "Campaign name and valid placement are required"}), 400
         opportunity_id = data.get("opportunity_id")
         if opportunity_id is not None:
@@ -850,59 +850,92 @@ def register_discovery(app, db):
         if not uid:
             return jsonify({"error": "Not logged in"}), 401
         requested_placement = str(request.args.get("placement") or "opportunities").strip().lower()
-        if requested_placement not in ("home_carousel","explore","trending","opportunities"):
+        if requested_placement not in ("home_carousel", "explore", "trending", "podcast", "opportunities"):
             requested_placement = "opportunities"
         rows = db.session.execute(text("""
-            SELECT id, organisation_id, opportunity_id, name, objective, placement,
-                   bid_type, bid_kes, target_json
-            FROM discovery_campaign
-            WHERE status='active'
-              AND funding_status IN ('funded','credited')
+            SELECT c.id, c.organisation_id, c.opportunity_id, c.name, c.objective, c.placement,
+                   c.bid_type, c.bid_kes, c.target_json, c.pricing_snapshot,
+                   o.title AS opportunity_title, o.description AS opportunity_description,
+                   o.opportunity_type, o.location, o.is_remote, o.application_url,
+                   o.application_instructions, o.application_deadline, o.expiry_date,
+                   o.published_at, o.view_count,
+                   org.name AS organisation_name, org.logo_url AS organisation_logo_url,
+                   org.website AS organisation_website
+            FROM discovery_campaign c
+            JOIN opportunity o ON o.id=c.opportunity_id
+            JOIN organisation org ON org.id=c.organisation_id
+            WHERE c.status='active'
+              AND c.funding_status IN ('funded','credited')
               AND (
-                (:requested_placement='home_carousel' AND placement='home_carousel')
-                OR (:requested_placement='explore' AND placement='explore')
-                OR (:requested_placement='trending' AND placement='trending')
-                OR (:requested_placement='opportunities' AND placement IN ('feed','home_carousel','explore','trending','opportunities_feed','feed_push'))
+                (:requested_placement='home_carousel' AND c.placement='home_carousel')
+                OR (:requested_placement='explore' AND c.placement='explore')
+                OR (:requested_placement='trending' AND c.placement='trending')
+                OR (:requested_placement='podcast' AND c.placement='podcast')
+                OR (:requested_placement='opportunities'
+                    AND c.placement IN ('feed','home_carousel','explore','trending','opportunities_feed','feed_push','podcast'))
               )
-              AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
-              AND EXISTS (
-                SELECT 1 FROM opportunity o
-                JOIN organisation org ON org.id=o.organisation_id
-                WHERE o.id=discovery_campaign.opportunity_id
-                  AND o.status='published'
-                  AND o.expiry_date>CURRENT_TIMESTAMP
-                  AND org.id=discovery_campaign.organisation_id
-                  AND org.verification_status='verified'
-                  AND org.is_active=TRUE
-              )
-              AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
-              AND delivered_impressions < GREATEST(1, budget_kes * 1000 / GREATEST(1,bid_kes))
+              AND (c.starts_at IS NULL OR c.starts_at <= CURRENT_TIMESTAMP)
+              AND (c.ends_at IS NULL OR c.ends_at >= CURRENT_TIMESTAMP)
+              AND c.delivered_impressions < GREATEST(1, c.budget_kes * 1000 / GREATEST(1,c.bid_kes))
+              AND o.status='published'
+              AND o.expiry_date>CURRENT_TIMESTAMP
+              AND org.verification_status='verified'
+              AND org.is_active=TRUE
               AND (
-                SELECT COUNT(*) FROM discovery_event e
-                WHERE e.campaign_id=discovery_campaign.id
-                  AND e.user_id=:uid
-                  AND e.event_type='impression'
-                  AND e.created_at >= CURRENT_TIMESTAMP - (
-                    GREATEST(1, COALESCE(
-                      (pricing_snapshot->'home_frequency_cap'->'value'->>'window_days')::INTEGER,
-                      7
-                    )) || ' days'
-                  )::interval
-                  AND COALESCE((e.metadata->>'reversed')::boolean,FALSE)=FALSE
-              ) < GREATEST(1, COALESCE(
-                    (pricing_snapshot->'home_frequency_cap'->'value'->>'max_impressions')::INTEGER,
+                :requested_placement='opportunities'
+                OR (
+                  SELECT COUNT(*) FROM discovery_event e
+                  WHERE e.campaign_id=c.id
+                    AND e.user_id=:uid
+                    AND e.event_type='impression'
+                    AND e.created_at >= CURRENT_TIMESTAMP - (
+                      GREATEST(1, COALESCE(
+                        (c.pricing_snapshot->'home_frequency_cap'->'value'->>'window_days')::INTEGER,
+                        7
+                      )) || ' days'
+                    )::interval
+                    AND COALESCE((e.metadata->>'reversed')::boolean,FALSE)=FALSE
+                ) < GREATEST(1, COALESCE(
+                    (c.pricing_snapshot->'home_frequency_cap'->'value'->>'max_impressions')::INTEGER,
                     5
-              ))
-            ORDER BY updated_at DESC LIMIT 50
+                ))
+              )
+            ORDER BY c.updated_at DESC LIMIT 50
         """), {"uid": uid, "requested_placement": requested_placement}).mappings().all()
         feed=[]
         for r in rows:
             if not target_matches(uid, r["target_json"] or {}):
                 continue
             feed.append({
-                "campaign_id": int(r["id"]), "organisation_id": int(r["organisation_id"]),
+                "campaign_id": int(r["id"]),
+                "organisation_id": int(r["organisation_id"]),
                 "opportunity_id": int(r["opportunity_id"]) if r["opportunity_id"] else None,
-                "name": r["name"], "objective": r["objective"], "placement": r["placement"], "featured": requested_placement == "home_carousel",
+                "name": r["name"],
+                "objective": r["objective"],
+                "placement": r["placement"],
+                "featured": requested_placement in ("home_carousel", "explore", "trending", "podcast"),
+                "opportunity": {
+                    "id": int(r["opportunity_id"]),
+                    "title": r["opportunity_title"],
+                    "description": r["opportunity_description"],
+                    "opportunity_type": r["opportunity_type"],
+                    "location": r["location"],
+                    "is_remote": bool(r["is_remote"]),
+                    "application_url": r["application_url"],
+                    "application_instructions": r["application_instructions"],
+                    "application_deadline": r["application_deadline"].isoformat() if r["application_deadline"] else None,
+                    "expiry_date": r["expiry_date"].isoformat() if r["expiry_date"] else None,
+                    "published_at": r["published_at"].isoformat() if r["published_at"] else None,
+                    "view_count": int(r["view_count"] or 0),
+                    "organisation": {
+                        "id": int(r["organisation_id"]),
+                        "name": r["organisation_name"],
+                        "logo_url": r["organisation_logo_url"],
+                        "website": r["organisation_website"],
+                    },
+                    "promotion_type": "sponsored",
+                    "saved": False,
+                },
             })
             if len(feed) >= 10:
                 break

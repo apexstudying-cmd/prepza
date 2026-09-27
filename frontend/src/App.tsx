@@ -399,6 +399,17 @@ type OpportunityPublic = {
   saved: boolean
 }
 
+type SponsoredCampaign = {
+  campaign_id: number
+  organisation_id: number
+  opportunity_id: number | null
+  name: string
+  objective: string
+  placement: string
+  featured: boolean
+  opportunity: OpportunityPublic
+}
+
 const OPP_TYPE_META: Record<string, { icon: string; color: string; label: string }> = {
   job: { icon: '📋', color: '#9B59B6', label: 'Job' },
   internship: { icon: '💼', color: '#4CC97B', label: 'Internship' },
@@ -412,6 +423,121 @@ function oppTypeMeta(t: string) { return OPP_TYPE_META[t] || OPP_TYPE_META.other
 function fmtDeadline(iso: string | null) {
   if (!iso) return null
   return new Date(iso).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function SponsoredOpportunityCard({
+  campaign,
+  setScreen,
+  setActiveOpportunityId,
+  compact = false,
+}: {
+  campaign: SponsoredCampaign
+  setScreen: (s: Screen) => void
+  setActiveOpportunityId: (id: number | null) => void
+  compact?: boolean
+}) {
+  const { tokens: T } = useTheme()
+  const cardRef = useRef<HTMLButtonElement | null>(null)
+  const impressionSent = useRef(false)
+  const eventId = useRef<string | null>(null)
+  const timerRef = useRef<number | null>(null)
+  const opp = campaign.opportunity
+  const meta = oppTypeMeta(opp.opportunity_type)
+
+  const recordImpression = async () => {
+    if (impressionSent.current) return true
+    impressionSent.current = true
+    eventId.current = (crypto as any).randomUUID?.() || String(Date.now()) + '-' + Math.random().toString(36).slice(2)
+    try {
+      const result = await api<{ eligible?: boolean; recorded?: boolean }>(
+        '/api/discovery/campaigns/' + campaign.campaign_id + '/impression',
+        {
+          method: 'POST',
+          body: JSON.stringify({ event_id: eventId.current }),
+        },
+      )
+      if (result.eligible === false) {
+        impressionSent.current = false
+        return false
+      }
+      return true
+    } catch {
+      impressionSent.current = false
+      return false
+    }
+  }
+
+  useEffect(() => {
+    const node = cardRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(entries => {
+      const entry = entries[0]
+      if (entry?.isIntersecting && entry.intersectionRatio >= 0.5) {
+        if (timerRef.current == null) {
+          timerRef.current = window.setTimeout(() => {
+            timerRef.current = null
+            void recordImpression()
+          }, 1000)
+        }
+      } else if (timerRef.current != null) {
+        window.clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }, { threshold: [0, 0.5, 1] })
+    observer.observe(node)
+    return () => {
+      observer.disconnect()
+      if (timerRef.current != null) window.clearTimeout(timerRef.current)
+    }
+  }, [campaign.campaign_id])
+
+  const open = async () => {
+    await recordImpression()
+    try {
+      await api('/api/discovery/campaigns/' + campaign.campaign_id + '/click', { method: 'POST' })
+    } catch {}
+    if (opp.id) {
+      setActiveOpportunityId(opp.id)
+      setScreen('opportunity-detail')
+    }
+  }
+
+  return (
+    <button
+      ref={cardRef}
+      onClick={() => { void open() }}
+      aria-label={'View sponsored opportunity: ' + opp.title}
+      style={{
+        flex: compact ? '0 0 280px' : undefined,
+        width: compact ? 280 : '100%',
+        textAlign: 'left',
+        border: '1px solid ' + N.gold + '35',
+        background: T.card,
+        borderRadius: 16,
+        padding: 13,
+        cursor: 'pointer',
+        boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
+        fontFamily: 'Plus Jakarta Sans',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+        <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: 0.8, color: N.gold }}>SPONSORED</span>
+        <span style={{ marginLeft: 'auto', fontSize: 9, color: T.textMuted }}>{meta.label}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ width: 40, height: 40, borderRadius: 11, background: N.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+          {opp.organisation?.logo_url
+            ? <img src={opp.organisation.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <span style={{ color: N.gold, fontWeight: 900 }}>{(opp.organisation?.name || 'P').slice(0, 1).toUpperCase()}</span>}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: T.text, fontWeight: 800, fontSize: compact ? 12 : 13 }} className="line-clamp-2">{opp.title}</div>
+          <div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }} className="line-clamp-1">{opp.organisation?.name || 'Organisation'}</div>
+        </div>
+      </div>
+      {opp.application_deadline && <div style={{ color: T.textMuted, fontSize: 10, marginTop: 8 }}>Deadline · {fmtDeadline(opp.application_deadline)}</div>}
+    </button>
+  )
 }
 
 const OPP_FILTERS = ['All','Internships','Scholarships','Competitions','Jobs','Events','Saved']
@@ -1538,12 +1664,16 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
   const [summary, setSummary] = useState<GamificationSummary | null>(null)
 
   const [previewOpps, setPreviewOpps] = useState<OpportunityPublic[]>([])
+  const [sponsoredHome, setSponsoredHome] = useState<SponsoredCampaign[]>([])
   const [homePodcasts, setHomePodcasts] = useState<PodcastItem[]>([])
 
   useEffect(() => {
     api<{ opportunities: OpportunityPublic[] }>('/opportunities')
       .then(res => setPreviewOpps(res.opportunities.slice(0, 2)))
       .catch(() => {})
+    api<{ campaigns: SponsoredCampaign[] }>('/api/discovery/feed?placement=home_carousel')
+      .then(res => setSponsoredHome(res.campaigns || []))
+      .catch(() => setSponsoredHome([]))
     api<{ podcasts: PodcastItem[] }>('/podcasts')
       .then(res => setHomePodcasts(res.podcasts.slice(0, 4)))
       .catch(() => {})
@@ -1698,6 +1828,21 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
           </section>
         )}
 
+        {/* Sponsored opportunities */}
+        {sponsoredHome.length > 0 && (
+          <section style={{ padding: '0 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontWeight: 800, fontSize: 15, color: T.text }}>Sponsored opportunities</span>
+              <button onClick={() => setScreen('opportunities')} style={{ background: 'none', border: 'none', padding: 0, color: N.gold, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>See all</button>
+            </div>
+            <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }} className="scrollbar-hide">
+              {sponsoredHome.slice(0, 3).map(c => (
+                <SponsoredOpportunityCard key={c.campaign_id} campaign={c} compact setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Opportunities */}
         {previewOpps.length > 0 && (
           <section style={{ padding:'0 18px' }}>
@@ -1724,7 +1869,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
   )
 }
 
-function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
+function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setActiveOpportunityId, setActiveProfileUserId, setActiveProfileName }: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveOpportunityId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   type ExploreStudent = { user_id: number; display_name: string; program_name: string | null; year: number | null; xp_total: number | null; is_following: boolean; is_private?: boolean; is_pending?: boolean }
   const { tokens: T } = useTheme()
   const [query, setQuery] = useState('')
@@ -1732,6 +1877,8 @@ function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setA
   const [groups, setGroups] = useState<GroupSummary[]>([])
   const [students, setStudents] = useState<ExploreStudentLocal[]>([])
   const [opportunities, setOpportunities] = useState<OpportunityPublic[]>([])
+  const [sponsoredExplore, setSponsoredExplore] = useState<SponsoredCampaign[]>([])
+  const [sponsoredTrending, setSponsoredTrending] = useState<SponsoredCampaign[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
@@ -1744,10 +1891,14 @@ function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setA
       api<{ groups: GroupSummary[] }>('/groups').then(r => r.groups).catch(() => []),
       api<{ students: ExploreStudentLocal[] }>('/students').then(r => r.students).catch(() => []),
       api<{ opportunities: OpportunityPublic[] }>('/opportunities').then(r => r.opportunities).catch(() => []),
-    ]).then(([g, s, o]) => {
+      api<{ campaigns: SponsoredCampaign[] }>('/api/discovery/feed?placement=explore').then(r => r.campaigns || []).catch(() => []),
+      api<{ campaigns: SponsoredCampaign[] }>('/api/discovery/feed?placement=trending').then(r => r.campaigns || []).catch(() => []),
+    ]).then(([g, s, o, se, st]) => {
       setGroups(g)
       setStudents(s)
       setOpportunities(o)
+      setSponsoredExplore(se)
+      setSponsoredTrending(st)
       setLoading(false)
     })
   }, [])
@@ -1821,6 +1972,13 @@ function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setA
               <div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>🔥 Trending Opportunities</div>
               <button onClick={() => setScreen('opportunities')} style={{ fontSize: 12, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>See all →</button>
             </div>
+            {sponsoredTrending.length > 0 && (
+              <div style={{ display: 'flex', gap: 10, overflowX: 'auto', marginBottom: 10 }} className="scrollbar-hide">
+                {sponsoredTrending.slice(0, 3).map(c => (
+                  <SponsoredOpportunityCard key={c.campaign_id} campaign={c} compact setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
+                ))}
+              </div>
+            )}
             {trendingOpportunities.length === 0 ? <div style={{ fontSize: 12, color: T.textMuted }}>No opportunities available yet.</div> : (
               <div style={{ display: 'flex', gap: 10, overflowX: 'auto' }} className="scrollbar-hide">
                 {trendingOpportunities.map(o => {
@@ -1833,6 +1991,17 @@ function ExploreSurface({ setScreen, setActiveGroupId, setActiveDocumentId, setA
                 })}
               </div>
             )}
+          </section>
+        )}
+
+        {showOpps && sponsoredExplore.length > 0 && (
+          <section>
+            <div style={{ fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 12 }}>Featured in Explore</div>
+            <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }} className="scrollbar-hide">
+              {sponsoredExplore.slice(0, 4).map(c => (
+                <SponsoredOpportunityCard key={c.campaign_id} campaign={c} compact setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
+              ))}
+            </div>
           </section>
         )}
 
@@ -3361,16 +3530,16 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
   const [generationPercent, setGenerationPercent] = useState(0)
   const [generationStage, setGenerationStage] = useState('Preparing your podcast…')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
-  const [playerOpportunities, setPlayerOpportunities] = useState<OpportunityPublic[]>([])
+  const [playerOpportunities, setPlayerOpportunities] = useState<SponsoredCampaign[]>([])
   const [playerOppIndex, setPlayerOppIndex] = useState(0)
 
   useEffect(() => {
     if (stage !== 'ready') return
     let cancelled = false
-    api<{ opportunities: OpportunityPublic[] }>('/podcast-opportunities')
+    api<{ campaigns: SponsoredCampaign[] }>('/api/discovery/feed?placement=podcast')
       .then(res => {
         if (!cancelled) {
-          setPlayerOpportunities(res.opportunities || [])
+          setPlayerOpportunities(res.campaigns || [])
           setPlayerOppIndex(0)
         }
       })
@@ -3607,36 +3776,16 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 28px', gap: 24 }}>
           {audioUrl && <audio ref={audioRef} src={audioUrl} preload="metadata" />}
-          {playerOpportunities.length > 0 && (() => {
-            const opp = playerOpportunities[playerOppIndex % playerOpportunities.length]
-            const meta = oppTypeMeta(opp.opportunity_type)
-            return (
-              <button
-                onClick={() => { setActiveOpportunityId(opp.id); setScreen('opportunity-detail') }}
-                aria-label={'View opportunity: ' + opp.title}
-                style={{
-                  width: '100%', maxWidth: 520, textAlign: 'left', border: '1px solid ' + T.border,
-                  background: T.card, borderRadius: 16, padding: 12, cursor: 'pointer',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.06)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: 0.8, color: N.gold }}>OPPORTUNITY</span>
-                  {opp.promotion_type && <span style={{ fontSize: 9, color: T.textMuted }}>{opp.promotion_type}</span>}
-                  <span style={{ marginLeft: 'auto', fontSize: 10, color: T.textMuted }}>{meta.label}</span>
-                </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <div style={{ width: 38, height: 38, borderRadius: 10, background: N.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-                    {opp.organisation?.logo_url ? <img src={opp.organisation.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: N.gold, fontWeight: 900, fontSize: 13 }}>{(opp.organisation?.name || 'P').slice(0,1).toUpperCase()}</span>}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ color: T.text, fontWeight: 850, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.title}</div>
-                    <div style={{ color: T.textMuted, fontSize: 10, marginTop: 3 }}>{opp.organisation?.name || 'Organisation'} · Tap to view</div>
-                  </div>
-                </div>
-              </button>
-            )
-          })()}
+          {playerOpportunities.length > 0 && (
+            <section style={{ width: '100%', maxWidth: 520 }}>
+              <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: 0.8, color: T.textMuted, marginBottom: 8 }}>OPPORTUNITIES</div>
+              <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 3 }} className="scrollbar-hide">
+                {playerOpportunities.slice(0, 2).map(c => (
+                  <SponsoredOpportunityCard key={c.campaign_id} campaign={c} compact setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
+                ))}
+              </div>
+            </section>
+          )}
           <div style={{ width: 200, height: 200, borderRadius: 28, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 16px 48px rgba(201,168,76,0.35)`, fontSize: 28, fontWeight: 900, color: N.navy, fontFamily: 'Plus Jakarta Sans' }}>PREPZA</div>
           <div style={{ textAlign: 'center' }}><div style={{ fontWeight: 800, fontSize: 20, color: T.text, marginBottom: 4 }}>{title}</div><Pill text="AI Generated" color={N.gold} /></div>
           <div style={{ width: '100%' }}>
@@ -3753,7 +3902,7 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
   )
 }
 
-function ExploreScreen(props: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
+function ExploreScreen(props: { setScreen: (s: Screen) => void; setActiveGroupId: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveOpportunityId: (id: number | null) => void; setActiveProfileUserId?: (id: number) => void; setActiveProfileName?: (name: string) => void }) {
   return <ExploreSurface {...props} />
 }
 
@@ -4748,7 +4897,7 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
   const [togglingId, setTogglingId] = useState<number | null>(null)
-  const [sponsored, setSponsored] = useState<{campaign_id:number;organisation_id:number;opportunity_id:number|null;name:string;objective:string;placement:string}[]>([])
+  const [sponsored, setSponsored] = useState<SponsoredCampaign[]>([])
   const [academicRefreshKey, setAcademicRefreshKey] = useState(0)
 
   useEffect(() => {
@@ -4760,14 +4909,10 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
   useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
 
   useEffect(() => {
-    api<{ campaigns: {campaign_id:number;organisation_id:number;opportunity_id:number|null;name:string;objective:string;placement:string}[] }>('/api/discovery/feed')
+    api<{ campaigns: SponsoredCampaign[] }>('/api/discovery/feed?placement=opportunities')
       .then(res => setSponsored(res.campaigns || []))
       .catch(() => setSponsored([]))
   }, [])
-
-  useEffect(() => {
-    sponsored.forEach(c => { void api('/api/discovery/campaigns/' + c.campaign_id + '/impression', { method:'POST' }).catch(() => {}) })
-  }, [sponsored])
 
   useEffect(() => {
     let cancelled = false
@@ -4841,12 +4986,8 @@ function OpportunitiesScreen({ setScreen, setActiveOpportunityId }: { setScreen:
         {sponsored.length > 0 && filter !== 'Saved' && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: .5 }}>For you</div>
-            {sponsored.slice(0,2).map(c => (
-              <div key={c.campaign_id} onClick={async () => { try { await api('/api/discovery/campaigns/' + c.campaign_id + '/click', {method:'POST'}) } catch {} ; if (c.opportunity_id) openDetail(c.opportunity_id) }} style={{ background:T.card, border:`1px solid ${N.gold}35`, borderRadius:16, padding:14, marginBottom:10, cursor:c.opportunity_id?'pointer':'default', boxShadow:'0 3px 12px rgba(0,0,0,.05)' }}>
-                <div style={{display:'flex',justifyContent:'space-between',gap:10,marginBottom:5}}><div style={{fontSize:10,fontWeight:800,color:N.gold}}>SPONSORED</div><span style={{fontSize:10,color:T.textMuted}}>Recommended</span></div>
-                <div style={{fontWeight:800,fontSize:14,color:T.text}}>{c.name}</div>
-                <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Relevant to your Prepza profile and discovery preferences.</div>
-              </div>
+            {sponsored.slice(0, 2).map(c => (
+              <SponsoredOpportunityCard key={c.campaign_id} campaign={c} setScreen={setScreen} setActiveOpportunityId={setActiveOpportunityId} />
             ))}
           </div>
         )}
@@ -15182,7 +15323,7 @@ export default function App() {
       case 'reset-password':    return <ResetPasswordScreen setScreen={setScreen} />
       case 'verify-confirm':    return <VerifyConfirmScreen setScreen={setScreen} />
       case 'home':              return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} />
-      case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} setActiveDocumentId={setActiveDocumentId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
+      case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />
       case 'create-modal':      return <CreateModal setScreen={setScreen} />
       case 'share-opp-form':    return <ShareOppForm setScreen={setScreen} />
       case 'edu-upload-form':   return <EduUploadForm setScreen={setScreen} />
