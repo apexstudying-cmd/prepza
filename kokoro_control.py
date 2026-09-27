@@ -43,6 +43,9 @@ def claim_job():
     """
     from app import AiJob, db
 
+    worker_id = str((request.get_json(silent=True) or {}).get("worker_id") or "").strip()
+    if not worker_id:
+        return jsonify({"error": "worker_id is required"}), 400
     try:
         job = (
             AiJob.query
@@ -56,6 +59,7 @@ def claim_job():
 
         params = dict(job.generation_parameters or {})
         job.status = "processing"
+        job.claimed_worker_id = worker_id
         job.started_at = datetime.utcnow()
         job.progress_percent = 1
         job.progress_stage = "claimed by Kokoro GPU worker"
@@ -111,6 +115,10 @@ def complete_job(job_id):
     job = db.session.get(AiJob, job_id)
     if not job or job.feature != "podcast_audio":
         return jsonify({"error": "Job not found"}), 404
+
+    worker_id = str(data.get("worker_id") or "").strip()
+    if worker_id and job.claimed_worker_id and worker_id != job.claimed_worker_id:
+        return jsonify({"error": "Job claim belongs to another worker"}), 409
 
     # Completion is intentionally idempotent. A retry from a worker after
     # a lost HTTP response must not create a second material or corrupt the
