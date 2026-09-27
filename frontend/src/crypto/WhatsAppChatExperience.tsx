@@ -651,3 +651,4 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
     <CallExperience userId={meId} />
   </div>
 }
+// CI verification marker: current main gate suite only.
