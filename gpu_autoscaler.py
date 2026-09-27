@@ -282,18 +282,21 @@ def recover_stale_workers():
 def snapshot(extra_reason=None):
     m=queue_metrics(); ws=workers()
     latest=None
+    recent=[]
     if table_ready():
-        r=db().session.execute(text("""
+        rows=db().session.execute(text("""
             SELECT action,reason_code,reason_text,dry_run,created_at
-            FROM kokoro_gpu_scaling_decisions ORDER BY created_at DESC LIMIT 1
-        """)).mappings().first()
-        latest=dict(r) if r else None
+            FROM kokoro_gpu_scaling_decisions
+            ORDER BY created_at DESC LIMIT 20
+        """)).mappings().all()
+        recent=[dict(r) for r in rows]
+        latest=recent[0] if recent else None
     return {**m,"workers":ws,"current_workers":len(ws),"max_workers":MAX_WORKERS,
             "max_pending_jobs_per_worker":MAX_PENDING_PER_WORKER,
             "max_pending_age_seconds":MAX_PENDING_AGE,"vram_safety_fraction":VRAM_SAFETY,
             "worker_vram_estimate_gb":WORKER_VRAM_GB,"max_gpu_price_usd_per_hour":MAX_DPH,
             "max_gpu_hourly_spend_usd":MAX_SPEND,"scaling_mode":MODE,"dry_run":DRY_RUN,
-            "provider_configured":bool(KEY),"latest_decision":latest,"extra_reason":extra_reason,
+            "provider_configured":bool(KEY),"latest_decision":latest,"recent_decisions":recent,"extra_reason":extra_reason,
             "policy":"Queue depth + oldest pending age trigger capacity changes; measured VRAM limits workers per GPU; hard worker/price/hourly-spend ceilings always win over available Vast credit."}
 
 def admin_snapshot():
