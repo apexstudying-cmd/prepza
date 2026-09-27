@@ -283,7 +283,7 @@ def reconcile():
         if desired<current and metrics["queue_depth"]==0:
             candidates=sorted(active,key=lambda x:str(x.get("last_job_at") or ""))
             if candidates:
-                victim=candidates[-1]
+                victim=candidates[0]
                 last=victim.get("last_job_at")
                 idle=int((now()-last).total_seconds()) if last else IDLE_SECONDS
                 if idle>=IDLE_SECONDS:
@@ -330,28 +330,53 @@ def mark_job_activity():
         db().session.commit()
 
 def recover_stale_workers():
-    if not KEY or not table_ready(): return {"recovered":0}
+    if not table_ready():
+        return {"recovered":0,"requeued_jobs":0}
     cutoff=now().timestamp()-STALE_HEARTBEAT
     stale=db().session.execute(text("""
-        SELECT instance_id FROM kokoro_gpu_workers
+        SELECT instance_id,worker_id FROM kokoro_gpu_workers
         WHERE status IN ('starting','running') AND last_heartbeat_at IS NOT NULL
         AND EXTRACT(EPOCH FROM last_heartbeat_at)<:cutoff
     """),{"cutoff":cutoff}).mappings().all()
     recovered=0
+    requeued=0
     for x in stale:
+        worker_id=x.get("worker_id")
         try:
-            s=instance_status(x["instance_id"])
-            actual=str(s.get("actual_status") or s.get("status") or "").lower()
+            actual="unknown"
+            if KEY:
+                s=instance_status(x["instance_id"])
+                actual=str(s.get("actual_status") or s.get("status") or "").lower()
             if actual not in {"running","loading","created","starting"}:
                 db().session.execute(text("UPDATE kokoro_gpu_workers SET status='error',last_error=:e WHERE instance_id=:id"),
                                      {"e":"Provider reports unavailable: "+actual,"id":int(x["instance_id"])})
-                recovered+=1
+                if worker_id:
+                    rows=db().session.execute(text("""
+                        UPDATE ai_job
+                        SET status='pending',started_at=NULL,progress_percent=0,
+                            progress_stage='requeued after worker recovery',
+                            claimed_worker_id=NULL,retry_count=retry_count+1,error_message=NULL
+                        WHERE feature='podcast_audio' AND status='processing'
+                          AND claimed_worker_id=:worker_id RETURNING id
+                    """),{"worker_id":worker_id}).all()
+                    requeued += len(rows)
+                recovered += 1
         except Exception as exc:
             db().session.execute(text("UPDATE kokoro_gpu_workers SET status='error',last_error=:e WHERE instance_id=:id"),
                                  {"e":str(exc)[:1000],"id":int(x["instance_id"])})
-            recovered+=1
+            if worker_id:
+                rows=db().session.execute(text("""
+                    UPDATE ai_job
+                    SET status='pending',started_at=NULL,progress_percent=0,
+                        progress_stage='requeued after worker recovery',
+                        claimed_worker_id=NULL,retry_count=retry_count+1,error_message=NULL
+                    WHERE feature='podcast_audio' AND status='processing'
+                      AND claimed_worker_id=:worker_id RETURNING id
+                """),{"worker_id":worker_id}).all()
+                requeued += len(rows)
+            recovered += 1
     db().session.commit()
-    return {"recovered":recovered}
+    return {"recovered":recovered,"requeued_jobs":requeued}
 
 def snapshot(extra_reason=None):
     m=queue_metrics(); ws=workers()
