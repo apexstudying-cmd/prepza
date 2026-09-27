@@ -209,33 +209,70 @@ def admin_snapshot():
     }
 
 def scaling_snapshot():
-    """Read-only queue pressure and capacity recommendation.
+    """Read-only queue pressure and measured worker-throughput telemetry.
 
     This does not rent, resize, or destroy anything. It gives the admin
     surface enough measured information to choose the next worker count.
     """
     from app import AiJob
-    from sqlalchemy import func
 
-    pending = int(
-        AiJob.query.filter_by(feature="podcast_audio", status="pending").count()
+    pending_jobs = (
+        AiJob.query
+        .filter_by(feature="podcast_audio", status="pending")
+        .order_by(AiJob.created_at.asc())
+        .all()
     )
     processing = int(
         AiJob.query.filter_by(feature="podcast_audio", status="processing").count()
     )
+    pending = len(pending_jobs)
 
-    # One Kokoro worker intentionally runs one inference at a time. Keep the
-    # initial recommendation conservative: one worker per active processing
-    # slot, bounded by an operator-configured maximum.
+    now = datetime.utcnow()
+    oldest_pending_age = None
+    if pending_jobs and pending_jobs[0].created_at:
+        oldest_pending_age = max(0, int((now - pending_jobs[0].created_at).total_seconds()))
+
+    completed = (
+        AiJob.query
+        .filter(
+            AiJob.feature == "podcast_audio",
+            AiJob.status == "completed",
+            AiJob.started_at.isnot(None),
+            AiJob.completed_at.isnot(None),
+        )
+        .order_by(AiJob.completed_at.desc())
+        .limit(100)
+        .all()
+    )
+    durations = sorted(
+        max(0.0, (job.completed_at - job.started_at).total_seconds())
+        for job in completed
+    )
+    median_duration = None
+    if durations:
+        middle = len(durations) // 2
+        median_duration = (
+            durations[middle]
+            if len(durations) % 2
+            else (durations[middle - 1] + durations[middle]) / 2
+        )
+
     max_workers = max(1, int(os.environ.get("KOKORO_MAX_GPU_WORKERS", "1")))
-    desired_workers = min(max_workers, max(1, pending + processing)) if (pending + processing) else 0
+    queue_depth = pending + processing
+    desired_workers = min(max_workers, queue_depth) if queue_depth else 0
 
     return {
         "pending_jobs": pending,
         "processing_jobs": processing,
-        "queue_depth": pending + processing,
+        "queue_depth": queue_depth,
+        "oldest_pending_age_seconds": oldest_pending_age,
+        "completed_samples": len(durations),
+        "median_completed_job_seconds": round(median_duration, 2) if median_duration is not None else None,
         "current_worker_limit": max_workers,
         "desired_workers": desired_workers,
         "scaling_mode": os.environ.get("KOKORO_SCALING_MODE", "manual"),
-        "policy": "one active inference slot per GPU worker; increase worker count before increasing VRAM unless measured per-job VRAM exceeds the current GPU capacity",
+        "policy": (
+            "one active inference slot per GPU worker; scale worker count for queue pressure "
+            "before increasing VRAM unless measured per-job VRAM exceeds the current GPU capacity"
+        ),
     }
