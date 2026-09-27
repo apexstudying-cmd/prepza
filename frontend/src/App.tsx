@@ -6832,7 +6832,7 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
   useEffect(() => {
     const t = setTimeout(() => { loadBrowse() }, search.trim() ? 350 : 0)
     return () => clearTimeout(t)
-  }, [materialTypeFilter, universityFilter, search, academicRefreshKey]
+  }, [materialTypeFilter, universityFilter, search, academicRefreshKey])
   useEffect(() => { loadSaved() }, [])
   useEffect(() => { loadSubmissions() }, [])
 
