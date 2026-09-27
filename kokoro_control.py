@@ -215,13 +215,13 @@ def worker_status():
 @bp.post("/worker/heartbeat")
 def worker_heartbeat():
     data = request.get_json(silent=True) or {}
-    instance_id = data.get("instance_id")
-    if not instance_id:
-        return jsonify({"error": "instance_id is required"}), 400
+    worker_id = str(data.get("worker_id") or "").strip()
+    if not worker_id:
+        return jsonify({"error": "worker_id is required"}), 400
     try:
         import gpu_autoscaler
         return jsonify(gpu_autoscaler.heartbeat(
-            instance_id,
+            worker_id,
             data.get("vram_used_gb"),
             data.get("vram_total_gb"),
             str(data.get("status") or "running")[:32],
