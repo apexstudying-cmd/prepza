@@ -13,7 +13,7 @@ from pydub import AudioSegment
 import uvicorn
 
 PREPZA_INTERNAL_BASE_URL = os.environ["PREPZA_INTERNAL_BASE_URL"].rstrip("/")
-PREPZA_INTERNAL_TOKEN = os.environ["PREPZA_INTERNAL_TOKEN"]
+PREPZA_INTERNAL_TOKEN = os.environ.get("KOKORO_WORKER_TOKEN") or os.environ["PREPZA_INTERNAL_TOKEN"]
 R2_ENDPOINT_URL = os.environ["R2_ENDPOINT_URL"]
 R2_ACCESS_KEY_ID = os.environ["R2_ACCESS_KEY_ID"]
 R2_SECRET_ACCESS_KEY = os.environ["R2_SECRET_ACCESS_KEY"]
