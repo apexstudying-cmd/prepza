@@ -10,6 +10,7 @@ on:
       - ".github/workflows/student-frontend-contract.yml"
   push:
     branches:
+      - main
       - "g7-g10-b2b-hardening"
 
 jobs:
