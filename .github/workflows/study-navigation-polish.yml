@@ -32,9 +32,11 @@ jobs:
       - name: Verify required navigation anchors
         run: |
           grep -F "function MindMapScreen" frontend/src/App.tsx
-          grep -F "background: page" frontend/src/App.tsx
+          grep -F "const [document, setDocument] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)" frontend/src/App.tsx
           grep -F "const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)" frontend/src/App.tsx
           grep -F "window.history.back()" frontend/src/App.tsx
+          grep -F "const resumeOffline = () =>" frontend/src/App.tsx
+          grep -F "prepza: study-navigation-polish-v2" frontend/src/App.tsx
           if grep -F 'Opening your document' frontend/src/App.tsx; then
             echo 'Unexpected legacy document opening loader remains'
             exit 1
