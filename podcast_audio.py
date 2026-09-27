@@ -75,7 +75,6 @@ def start_podcast_audio_processing(material_id, flask_app, notification_id=None)
     Queue exactly one podcast-audio job for the standalone GPU worker.
 
     This deliberately does not start a Flask daemon thread and never calls
-    a Render TTS service.
     """
     from app import db, GeneratedMaterial, AiJob
 
