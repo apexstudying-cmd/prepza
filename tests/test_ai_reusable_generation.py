@@ -138,6 +138,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     )
     monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
     monkeypatch.setattr(reusable, "find_ready_generation_family", lambda **kwargs: None)
+    monkeypatch.setattr(reusable, "find_generating_generation_family", lambda **kwargs: None)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
     monkeypatch.setattr(
         reusable,
@@ -204,6 +205,7 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
     )
     monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
     monkeypatch.setattr(reusable, "find_ready_generation_family", lambda **kwargs: None)
+    monkeypatch.setattr(reusable, "find_generating_generation_family", lambda **kwargs: None)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
     monkeypatch.setattr(
         reusable,
@@ -277,6 +279,7 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
     monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
     monkeypatch.setattr(reusable, "find_ready_generation_family", lambda **kwargs: None)
+    monkeypatch.setattr(reusable, "find_generating_generation_family", lambda **kwargs: None)
     monkeypatch.setattr(reusable, "_generator", lambda *args, **kwargs: ("system", lambda raw: {"cards": [{"q": "Q", "a": "A"}]}, "FLASHCARDS"))
     monkeypatch.setattr(
         reusable,
