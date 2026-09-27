@@ -40,7 +40,7 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [saving,setSaving]=useState<number|null>(null)
-  const [tab,setTab]=useState<'overview'|'organisation-plans'|'pricing'|'placements'|'campaigns'|'payments'|'reconciliation'|'verification'|'invoices'>('overview')
+  const [tab,setTab]=useState<'overview'|'organisation-plans'|'pricing'|'placements'|'campaigns'|'payments'|'reconciliation'|'delivery-monitoring'|'organisation-financials'|'verification'|'invoices'>('overview')
 
   const load=async()=>{
     setLoading(true);setError('')
