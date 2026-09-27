@@ -6934,13 +6934,14 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
           ) : browseItems.length === 0 ? (
             <EmptyState icon="📚" title="Nothing published yet" sub="Be the first to share notes or past papers with other students." action="Publish Material" onAction={() => setScreen('publish-library')} />
           ) : browseItems.map(pub => (
-            <div key={pub.id} style={{ background: T.card, borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center' }}>
-              <div style={{ width: 44, height: 44, background: '#F3F4F6', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📕</div>
+            <div key={pub.id} style={{ background: T.card, borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', opacity: pub.locked ? 0.62 : 1 }}>
+              <div style={{ width: 44, height: 44, background: '#F3F4F6', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{pub.locked ? Ic.lock('w-5 h-5') : Ic.book('w-5 h-5')}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 2 }} className="line-clamp-1">{pub.title}</div>
-                <div style={{ fontSize: 11, color: T.textMuted }}>{pub.author}{pub.unit_code ? ` · ${pub.unit_code}` : ''} · {pub.view_count} views · {pub.save_count} saves</div>
+                <div style={{ fontSize: 11, color: T.textMuted }}>{pub.author}{pub.unit_code ? ` · ${pub.unit_code}` : ''} · {pub.view_count} views</div>
+                {pub.locked && <div style={{ fontSize: 10, color: N.gold, fontWeight: 800, marginTop: 4 }}>Premium Library · Upgrade to open</div>}
               </div>
-              <button onClick={() => toggleSave(pub)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: savedIds.has(pub.id) ? N.gold : '#9CA3AF', flexShrink: 0 }}>{Ic.bookmark('w-5 h-5')}</button>
+              {!pub.locked && <button onClick={() => toggleSave(pub)} aria-label={savedIds.has(pub.id) ? 'Remove from Study Hub' : 'Save to Study Hub'} style={{ background: 'none', border: 'none', cursor: 'pointer', color: savedIds.has(pub.id) ? N.gold : '#9CA3AF', flexShrink: 0 }}>{Ic.bookmark('w-5 h-5')}</button>}
               <button onClick={() => setReportItem(pub)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, flexShrink: 0 }}>{Ic.dots('w-4 h-4')}</button>
             </div>
           ))
@@ -14868,13 +14869,28 @@ export default function App() {
     window.history.pushState({ prepzaNav: true }, '')
   }
 
+  const resetNavigation = (target: Screen) => {
+    setScreenStack([target])
+    window.history.replaceState({ prepzaNav: true }, window.location.pathname)
+  }
+
   useEffect(() => {
-    window.history.replaceState({ prepzaNav: true }, '')
+    window.history.replaceState({ prepzaNav: true }, window.location.pathname)
     const onPopState = () => {
       setScreenStack(stack => (stack.length > 1 ? stack.slice(0, -1) : stack))
     }
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return
+      api('/me').catch((e) => {
+        if (e instanceof ApiError && e.status === 401) resetNavigation('login')
+      })
+    }
     window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
+    window.addEventListener('pageshow', onPageShow)
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      window.removeEventListener('pageshow', onPageShow)
+    }
   }, [])
 
   useEffect(() => {
@@ -15143,7 +15159,7 @@ export default function App() {
       case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
       case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} activeConversationId={activeConversationId} backScreen={activeProfileBackScreen} />
       case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} onOpenOrgPortal={() => setOrgPortalMode(true)} />
-      case 'settings':          return <SettingsScreen setScreen={setScreen} />
+      case 'settings':          return <SettingsScreen setScreen={setScreen} resetToAuth={() => resetNavigation('login')} />
       case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} setActiveDocumentId={setActiveDocumentId} />
       case 'library':           return <LibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'study-materials':   return <StudyMaterialsScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
