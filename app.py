@@ -3539,22 +3539,28 @@ def change_email():
         return jsonify({"error": "An account with this email already exists"}), 409
 
     token = secrets.token_urlsafe(32)
+    # Do not strand the account on a new unverified address if SES is
+    # unavailable. The new address is committed only after SES accepts the
+    # verification message.
+    try:
+        send_verification_email(new_email, token)
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Change-email verification email failed")
+        return jsonify({"error": "We could not send the verification email. Your current email was not changed."}), 503
+
     user.email = new_email
     user.email_verified = False
     user.verification_token = token
+    user.session_version = (user.session_version or 0) + 1
     db.session.commit()
-
-    try:
-        send_verification_email(new_email, token)
-        email_status = "Verification email sent"
-    except Exception as e:
-        email_status = f"Email updated but verification email failed to send: {str(e)}"
+    session["_session_version"] = user.session_version
 
     return jsonify({
         "message": "Email updated - please verify your new address before your next login.",
         "email": user.email,
         "email_verified": user.email_verified,
-        "email_status": email_status,
+        "email_status": "Verification email sent",
     })
 
 
