@@ -1,0 +1,48 @@
+name: staging-load-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Deployable staging base URL"
+        required: true
+        type: string
+      http_vus:
+        description: "HTTP virtual users"
+        required: false
+        default: "25"
+        type: string
+      ws_vus:
+        description: "Realtime virtual users"
+        required: false
+        default: "25"
+        type: string
+      duration:
+        description: "HTTP/WS test duration"
+        required: false
+        default: "30s"
+        type: string
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE_URL: ${{ inputs.base_url }}
+      HTTP_VUS: ${{ inputs.http_vus }}
+      WS_VUS: ${{ inputs.ws_vus }}
+      HTTP_DURATION: ${{ inputs.duration }}
+      WS_DURATION: ${{ inputs.duration }}
+      AUTH_COOKIE: ${{ secrets.STAGING_AUTH_COOKIE }}
+      CONVERSATION_ID: ${{ secrets.STAGING_CONVERSATION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg             --keyserver hkp://keyserver.ubuntu.com:80             --recv-keys C5F9F9A1D9A4A4A4
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main"             | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+      - name: Run staging load test
+        run: k6 run load_tests/prepza_staging.js
