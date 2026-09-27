@@ -204,6 +204,7 @@ def _process(job: dict[str, Any]) -> None:
 
 
 def _poll_loop() -> None:
+    last_idle_probe = 0.0
     while True:
         try:
             job = _claim_job()
@@ -213,6 +214,18 @@ def _poll_loop() -> None:
                 except Exception as exc:
                     _fail(int(job["job_id"]), str(exc))
             else:
+                now = time.time()
+                if now - last_idle_probe >= 30:
+                    try:
+                        response = requests.post(
+                            f"{PREPZA_INTERNAL_BASE_URL}/internal/kokoro/worker/idle",
+                            headers=_headers(),
+                            timeout=20,
+                        )
+                        response.raise_for_status()
+                    except Exception:
+                        pass
+                    last_idle_probe = now
                 time.sleep(POLL_SECONDS)
         except Exception:
             # Prepza can be restarting or briefly unavailable. Never crash the GPU
