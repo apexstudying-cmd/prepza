@@ -12009,6 +12009,7 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
         )}
       </AdminCard>
     </div>
+    </div>
     )
   }
 
