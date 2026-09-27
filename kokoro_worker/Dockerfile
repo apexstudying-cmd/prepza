@@ -19,6 +19,8 @@ ENV WEB_CONCURRENCY=1 \
 COPY kokoro_worker/start.sh /opt/prepza/start.sh
 RUN chmod +x /opt/prepza/start.sh
 
+USER appuser
+
 EXPOSE 8080
 
 CMD ["/opt/prepza/start.sh"]
