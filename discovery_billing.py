@@ -849,13 +849,21 @@ def register_discovery(app, db):
         uid = session.get("user_id")
         if not uid:
             return jsonify({"error": "Not logged in"}), 401
+        requested_placement = str(request.args.get("placement") or "opportunities").strip().lower()
+        if requested_placement not in ("home_carousel","explore","trending","opportunities"):
+            requested_placement = "opportunities"
         rows = db.session.execute(text("""
             SELECT id, organisation_id, opportunity_id, name, objective, placement,
                    bid_type, bid_kes, target_json
             FROM discovery_campaign
             WHERE status='active'
               AND funding_status IN ('funded','credited')
-              AND placement IN ('feed','home_carousel','explore','trending','opportunities_feed','feed_push')
+              AND (
+                (:requested_placement='home_carousel' AND placement='home_carousel')
+                OR (:requested_placement='explore' AND placement='explore')
+                OR (:requested_placement='trending' AND placement='trending')
+                OR (:requested_placement='opportunities' AND placement IN ('feed','home_carousel','explore','trending','opportunities_feed','feed_push'))
+              )
               AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
               AND EXISTS (
                 SELECT 1 FROM opportunity o
@@ -886,7 +894,7 @@ def register_discovery(app, db):
                     5
               ))
             ORDER BY updated_at DESC LIMIT 50
-        """), {"uid": uid}).mappings().all()
+        """), {"uid": uid, "requested_placement": requested_placement}).mappings().all()
         feed=[]
         for r in rows:
             if not target_matches(uid, r["target_json"] or {}):
@@ -894,7 +902,7 @@ def register_discovery(app, db):
             feed.append({
                 "campaign_id": int(r["id"]), "organisation_id": int(r["organisation_id"]),
                 "opportunity_id": int(r["opportunity_id"]) if r["opportunity_id"] else None,
-                "name": r["name"], "objective": r["objective"], "placement": r["placement"],
+                "name": r["name"], "objective": r["objective"], "placement": r["placement"], "featured": requested_placement == "home_carousel",
             })
             if len(feed) >= 10:
                 break
