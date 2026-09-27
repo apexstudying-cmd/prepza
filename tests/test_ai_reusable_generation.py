@@ -91,6 +91,17 @@ class _FakeAiJob:
         self.__dict__.update(kwargs)
 
 
+@pytest.fixture(autouse=True)
+def _mock_generation_family_boundaries(monkeypatch):
+    monkeypatch.setattr(
+        reusable,
+        "claim_or_subscribe_generation_family",
+        lambda **kwargs: types.SimpleNamespace(is_producer=True, lease_token="family-lease", artifact_id=None),
+    )
+    monkeypatch.setattr(reusable, "bind_inflight_artifact", lambda **kwargs: None)
+    monkeypatch.setattr(reusable, "finish_inflight_generation", lambda **kwargs: None)
+
+
 def test_first_generation_calls_provider_and_second_identical_request_reuses(monkeypatch):
     content = types.SimpleNamespace(content_hash="hash-7", extracted_text="course notes", page_count=3)
     session = _FakeSession(content)
