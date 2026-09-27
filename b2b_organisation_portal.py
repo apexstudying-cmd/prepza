@@ -401,7 +401,21 @@ def register_b2b_organisation_portal(app, db):
             and "representative_id" in approved_types
             and ("official_search" in approved_types or "authority_letter" in approved_types)
         )
-        if verification_complete:
+        if status == "rejected":
+            db.session.execute(text("""
+                UPDATE organisation
+                SET verification_status='rejected',
+                    verification_notes=:n
+                WHERE id=:o
+            """), {"n":notes or "Verification document rejected by Prepza.","o":doc["organisation_id"]})
+        elif status == "pending":
+            db.session.execute(text("""
+                UPDATE organisation
+                SET verification_status='pending',
+                    verification_notes=:n
+                WHERE id=:o
+            """), {"n":notes or "Verification review remains pending.","o":doc["organisation_id"]})
+        elif verification_complete:
             db.session.execute(text("""
                 UPDATE organisation
                 SET verification_status='verified',
