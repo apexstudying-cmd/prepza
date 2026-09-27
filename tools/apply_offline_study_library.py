@@ -33,7 +33,8 @@ def patch_app():
         raise SystemExit('Offline library: App import anchor not found')
     insert = anchor
     for line in imports:
-        if line not in s:
+        symbol = line.split('{', 1)[1].split('}', 1)[0].split(',')[0].strip()
+        if symbol not in s:
             insert += line
     if insert != anchor:
         s = s.replace(anchor, insert, 1)
