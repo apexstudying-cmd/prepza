@@ -180,6 +180,7 @@ def reconcile():
     locked=db().session.execute(text("SELECT pg_try_advisory_lock(hashtext('prepza:kokoro:autoscaler'))")).scalar()
     if not locked: return snapshot("Another autoscaler reconciliation is already running.")
     try:
+        recovery = recover_stale_workers()
         active=workers(); current=len(active)
         per_gpu=max([int(x.get("worker_capacity") or 1) for x in active] or [1])
         desired=target_for(metrics,current,per_gpu)
