@@ -16,7 +16,7 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 def main() -> None:
     text = TARGET.read_text(encoding='utf-8')
-    if 'installOfflineChatQueue' not in text:
+    if "import { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'" not in text:
         if "import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'" in text:
             text = text.replace(
                 "import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'\\n",
