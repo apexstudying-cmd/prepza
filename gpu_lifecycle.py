@@ -207,3 +207,35 @@ def admin_snapshot():
         "configured": bool(VAST_API_KEY), "provider_reachable": provider["reachable"],
         "provider_instance": provider["instance"],
     }
+
+def scaling_snapshot():
+    """Read-only queue pressure and capacity recommendation.
+
+    This does not rent, resize, or destroy anything. It gives the admin
+    surface enough measured information to choose the next worker count.
+    """
+    from app import AiJob
+    from sqlalchemy import func
+
+    pending = int(
+        AiJob.query.filter_by(feature="podcast_audio", status="pending").count()
+    )
+    processing = int(
+        AiJob.query.filter_by(feature="podcast_audio", status="processing").count()
+    )
+
+    # One Kokoro worker intentionally runs one inference at a time. Keep the
+    # initial recommendation conservative: one worker per active processing
+    # slot, bounded by an operator-configured maximum.
+    max_workers = max(1, int(os.environ.get("KOKORO_MAX_GPU_WORKERS", "1")))
+    desired_workers = min(max_workers, max(1, pending + processing)) if (pending + processing) else 0
+
+    return {
+        "pending_jobs": pending,
+        "processing_jobs": processing,
+        "queue_depth": pending + processing,
+        "current_worker_limit": max_workers,
+        "desired_workers": desired_workers,
+        "scaling_mode": os.environ.get("KOKORO_SCALING_MODE", "manual"),
+        "policy": "one active inference slot per GPU worker; increase worker count before increasing VRAM unless measured per-job VRAM exceeds the current GPU capacity",
+    }
