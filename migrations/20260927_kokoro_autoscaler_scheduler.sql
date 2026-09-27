@@ -62,7 +62,7 @@ BEGIN
   PERFORM cron.schedule(
     'prepza-kokoro-autoscaler',
     '* * * * *',
-    $$SELECT public.prepza_kokoro_autoscaler_tick();$$
+    $job$SELECT public.prepza_kokoro_autoscaler_tick();$job$
   );
 END;
 $$;
