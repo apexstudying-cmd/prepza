@@ -75,22 +75,22 @@ def queue_metrics():
 def workers():
     if not table_ready(): return []
     return [dict(x) for x in db().session.execute(text("""
-        SELECT id,instance_id,offer_id,gpu_name,gpu_vram_gb,status,worker_index,
+        SELECT id,instance_id,worker_id,offer_id,gpu_name,gpu_vram_gb,status,worker_index,
                worker_capacity,price_usd_per_hour,created_at,last_job_at,
                last_idle_at,last_heartbeat_at,vram_used_gb,vram_total_gb,last_error,metadata
         FROM kokoro_gpu_workers WHERE status <> 'destroyed' ORDER BY worker_index,id
     """)).mappings().all()]
 
-def upsert_worker(instance_id, offer_id, gpu_name, vram, price, status="starting", index=1, metadata=None):
-    params={"instance_id":int(instance_id),"offer_id":int(offer_id) if offer_id else None,
+def upsert_worker(instance_id, offer_id, gpu_name, vram, price, status="starting", index=1, metadata=None, worker_id=None):
+    params={"instance_id":int(instance_id),"worker_id":worker_id,"offer_id":int(offer_id) if offer_id else None,
             "gpu_name":gpu_name,"vram":vram,"status":status,"index":index,
             "capacity":capacity(vram),"price":price,"metadata":json.dumps(metadata or {})}
     db().session.execute(text("""
         INSERT INTO kokoro_gpu_workers
-        (instance_id,offer_id,gpu_name,gpu_vram_gb,status,worker_index,worker_capacity,price_usd_per_hour,metadata)
-        VALUES (:instance_id,:offer_id,:gpu_name,:vram,:status,:index,:capacity,:price,:metadata::jsonb)
+        (instance_id,worker_id,offer_id,gpu_name,gpu_vram_gb,status,worker_index,worker_capacity,price_usd_per_hour,metadata)
+        VALUES (:instance_id,:worker_id,:offer_id,:gpu_name,:vram,:status,:index,:capacity,:price,:metadata::jsonb)
         ON CONFLICT (instance_id) DO UPDATE SET
-        offer_id=EXCLUDED.offer_id,gpu_name=EXCLUDED.gpu_name,gpu_vram_gb=EXCLUDED.gpu_vram_gb,
+        worker_id=COALESCE(EXCLUDED.worker_id,kokoro_gpu_workers.worker_id),offer_id=EXCLUDED.offer_id,gpu_name=EXCLUDED.gpu_name,gpu_vram_gb=EXCLUDED.gpu_vram_gb,
         status=EXCLUDED.status,worker_index=EXCLUDED.worker_index,worker_capacity=EXCLUDED.worker_capacity,
         price_usd_per_hour=EXCLUDED.price_usd_per_hour,metadata=EXCLUDED.metadata
     """), params)
@@ -129,7 +129,7 @@ def instance_status(instance_id):
     if isinstance(inner,dict): return inner
     return data
 
-def create_instance(o):
+def create_instance(o, worker_id):
     required=["PREPZA_INTERNAL_BASE_URL","KOKORO_WORKER_TOKEN","R2_ENDPOINT_URL",
               "R2_ACCESS_KEY_ID","R2_SECRET_ACCESS_KEY","R2_BUCKET"]
     missing=[x for x in required if not os.environ.get(x)]
@@ -138,7 +138,7 @@ def create_instance(o):
     result=req("PUT","/asks/" + str(int(o["id"])) + "/",json={
         "client_id":"me","image":IMAGE,"disk":DISK_GB,
         "label":os.environ.get("VAST_INSTANCE_LABEL","prepza-kokoro-a2000"),
-        "runtype":"args","args":[],"env":env,"force":False})
+        "runtype":"args","args":[],"env":{**env,"KOKORO_WORKER_ID":worker_id},"force":False})
     if not result.get("success") or not result.get("new_contract"):
         raise RuntimeError("Vast instance creation failed: " + str(result))
     return int(result["new_contract"]),result
@@ -201,8 +201,9 @@ def reconcile():
             if DRY_RUN or MODE!="automatic":
                 decision(metrics,current,desired,current+1,"scale_up_planned","queue_pressure",reason,price,gpu,vram)
                 return snapshot()
-            iid,result=create_instance(o)
-            upsert_worker(iid,o.get("id"),gpu,vram,price,"starting",current+1,{"create_result":result})
+            worker_id=secrets.token_hex(16)
+            iid,result=create_instance(o,worker_id)
+            upsert_worker(iid,o.get("id"),gpu,vram,price,"starting",current+1,{"create_result":result},worker_id=worker_id)
             decision(metrics,current,desired,current+1,"scale_up","queue_pressure",reason,price,gpu,vram)
             return snapshot()
         if desired<current and metrics["queue_depth"]==0:
@@ -238,14 +239,14 @@ def reconcile():
         except Exception:
             db().session.rollback()
 
-def heartbeat(instance_id,vram_used_gb=None,vram_total_gb=None,status="running"):
+def heartbeat(worker_id,vram_used_gb=None,vram_total_gb=None,status="running"):
     if not table_ready(): return {"ok":False,"reason":"migration_not_applied"}
     db().session.execute(text("""
         UPDATE kokoro_gpu_workers SET status=:status,last_heartbeat_at=:now,
         vram_used_gb=:used,vram_total_gb=:total,worker_capacity=:capacity
-        WHERE instance_id=:id
+        WHERE worker_id=:id
     """),{"status":status,"now":now(),"used":vram_used_gb,"total":vram_total_gb,
-          "capacity":capacity(vram_total_gb),"id":int(instance_id)})
+          "capacity":capacity(vram_total_gb),"id":worker_id})
     db().session.commit()
     return {"ok":True}
 
