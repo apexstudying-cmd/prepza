@@ -4,7 +4,7 @@ type Props = { screen:string; setScreen:(screen:any)=>void }
 
 const STEPS = [
   { title:'Welcome to Prepza', body:'This is your study home. Your main study tools and recent activity start here.', screen:'home' },
-  { title:'Study Hub', body:'Study Hub is where you keep your course documents and offline study copies. Start here when you want your materials available without internet.', screen:'study-hub' },
+  { title:'Study Hub', body:'Study Hub is where you keep your course documents and offline study copies. Start here when you want your materials available without internet.', screen:'home' },
   { title:'Library', body:'Library is where you discover course materials for your university, programme, year and semester.', screen:'library' },
   { title:'Podcasts and study materials', body:'From your study documents you can create summaries, flashcards, mind maps, quizzes and podcasts. Existing generated materials are reused when they match exactly.', screen:'home' },
   { title:'Ada', body:'Ada is your study tutor. Ask questions about what you are learning and use it to work through difficult concepts.', screen:'ai-tutor' },
