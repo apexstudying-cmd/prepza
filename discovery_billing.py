@@ -420,7 +420,7 @@ def register_discovery(app, db):
             target = normalize_target(raw_target)
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid targeting criteria"}), 400
-        if not name or placement not in ("feed", "push", "feed_push"):
+        if not name or placement not in ("feed", "home_carousel", "explore", "trending", "opportunities_feed", "feed_push", "push"):
             return jsonify({"error": "Campaign name and valid placement are required"}), 400
         opportunity_id = data.get("opportunity_id")
         if opportunity_id is not None:
