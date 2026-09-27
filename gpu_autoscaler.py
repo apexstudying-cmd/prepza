@@ -1,4 +1,5 @@
 """Safe, measured Kokoro GPU autoscaling control plane."""
+# CI verification marker: policy gates are intentionally validated on a disposable branch.
 import json, math, os, secrets
 from datetime import datetime
 import requests
