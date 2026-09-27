@@ -9734,3 +9734,18 @@ try:
     import chat_interactions  # noqa: F401 - before/after hook registration
 except Exception as exc:
     app.logger.exception("Chat runtime registration failed: %s", exc)
+
+# Register the protected developer control API only after all base models/routes exist.
+from prepza_control import register_control_routes
+
+register_control_routes(
+    app,
+    db,
+    SystemSetting,
+    User,
+    Document,
+    DocumentContent,
+    GeneratedMaterial,
+    log_admin_action,
+    limiter,
+)
