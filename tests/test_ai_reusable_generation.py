@@ -1,3 +1,4 @@
+from ai_generation_store import find_generating_generation_family
 import sys
 import types
 from dataclasses import dataclass, field
@@ -408,3 +409,7 @@ def test_generation_request_ceilings_are_enforced(material_type, parameter, maxi
     assert normalize_parameters(material_type, {parameter: maximum})[parameter] == maximum
     with pytest.raises(ValueError, match="cannot exceed"):
         normalize_parameters(material_type, {parameter: maximum + 1})
+
+
+def test_generation_store_exposes_inflight_family_lookup():
+    assert callable(find_generating_generation_family)
