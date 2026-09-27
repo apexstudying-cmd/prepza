@@ -1,6 +1,6 @@
 """B2B organisation portal: dashboard, opportunity analytics, free distribution caps and billing documents."""
 from __future__ import annotations
-import io, os, uuid, secrets
+import io, os, uuid, secrets, hashlib
 import requests
 from datetime import datetime
 from flask import jsonify, request, session, send_file
@@ -373,26 +373,33 @@ def register_b2b_organisation_portal(app, db):
         file=request.files.get("file")
         dtype=str(request.form.get("document_type") or "").strip()[:60]
         if not file or not file.filename or not dtype: return jsonify({"error":"Document type and file are required"}),400
+        allowed_types={"certificate_of_registration","official_search","representative_id","authority_letter"}
+        if dtype not in allowed_types:
+            return jsonify({"error":"Choose one of the supported verification documents: certificate of registration, official search, representative ID, or authority letter."}),400
         allowed={"pdf","png","jpg","jpeg"}
         ext=file.filename.rsplit(".",1)[-1].lower() if "." in file.filename else ""
         if ext not in allowed:return jsonify({"error":"KYC documents must be PDF, PNG or JPEG"}),400
         data=file.read()
-        if len(data)>10*1024*1024:return jsonify({"error":"KYC document must be 10 MB or smaller"}),400
-        signatures={"pdf":b"%PDF-","png":b"\\x89PNG\\r\\n\\x1a\\n","jpg":b"\\xff\\xd8\\xff","jpeg":b"\\xff\\xd8\\xff"}
+        if len(data)>25*1024*1024:return jsonify({"error":"KYC document must be 25 MB or smaller"}),400
+        signatures={"pdf":b"%PDF-","png":b"\x89PNG\r\n\x1a\n","jpg":b"\xff\xd8\xff","jpeg":b"\xff\xd8\xff"}
         if not data.startswith(signatures[ext]):
             return jsonify({"error":"The uploaded file does not match its declared document type."}),400
-        base=os.environ.get("SUPABASE_URL","").strip()
-        key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY","").strip()
-        if not base or not key:return jsonify({"error":"Private document storage is not configured yet"}),503
-        bucket="organisation-kyc"
-        headers={"Authorization":"Bearer "+key,"apikey":key,"Content-Type":file.mimetype or "application/octet-stream"}
-        try:
-            requests.post(base+"/storage/v1/bucket",json={"id":bucket,"name":bucket,"public":False},headers={"Authorization":"Bearer "+key,"apikey":key},timeout=10)
-        except Exception: pass
+        from object_storage import r2_enabled, r2_put_bytes
+        if not r2_enabled():
+            return jsonify({"error":"R2 private storage is not configured for organisation verification yet."}),503
         path=f"{oid}/{uuid.uuid4().hex}.{ext}"
-        res=requests.post(base+"/storage/v1/object/"+bucket+"/"+path,data=data,headers=headers,timeout=30)
-        if not res.ok:return jsonify({"error":"Could not securely store the KYC document"}),502
-        db.session.execute(text("INSERT INTO organisation_kyc_document(organisation_id,document_type,file_name,storage_path) VALUES(:o,:t,:f,:p)"),{"o":oid,"t":dtype,"f":file.filename[:255],"p":path})
+        mime=file.mimetype or {"pdf":"application/pdf","png":"image/png","jpg":"image/jpeg","jpeg":"image/jpeg"}[ext]
+        digest=hashlib.sha256(data).hexdigest()
+        try:
+            r2_put_bytes("organisation-kyc",path,data,mime)
+        except Exception:
+            db.session.rollback()
+            return jsonify({"error":"Could not securely store the KYC document in private R2 storage"}),502
+        db.session.execute(text("""
+            INSERT INTO organisation_kyc_document
+              (organisation_id,document_type,file_name,storage_path,size_bytes,sha256,mime_type,storage_provider)
+            VALUES(:o,:t,:f,:p,:s,:h,:m,'r2')
+        """),{"o":oid,"t":dtype,"f":file.filename[:255],"p":path,"s":len(data),"h":digest,"m":mime})
         db.session.commit()
         return jsonify({"ok":True,"status":"pending","file_name":file.filename[:255]}),201
 
@@ -412,14 +419,15 @@ def register_b2b_organisation_portal(app, db):
     @app.get("/api/admin/b2b/kyc/<int:doc_id>/download")
     def admin_kyc_download(doc_id):
         if not admin_user(): return jsonify({"error":"Admin access required"}),403
-        doc=db.session.execute(text("SELECT file_name,storage_path FROM organisation_kyc_document WHERE id=:i"),{"i":doc_id}).mappings().first()
+        doc=db.session.execute(text("SELECT file_name,storage_path,mime_type,storage_provider FROM organisation_kyc_document WHERE id=:i"),{"i":doc_id}).mappings().first()
         if not doc:return jsonify({"error":"KYC document not found"}),404
-        base=os.environ.get("SUPABASE_URL","").strip(); key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY","").strip()
-        if not base or not key:return jsonify({"error":"Private document storage is not configured"}),503
-        bucket="organisation-kyc"
-        res=requests.get(base+"/storage/v1/object/"+bucket+"/"+str(doc["storage_path"]),headers={"Authorization":"Bearer "+key,"apikey":key},timeout=30)
-        if not res.ok:return jsonify({"error":"KYC document could not be retrieved"}),502
-        return send_file(io.BytesIO(res.content),mimetype=res.headers.get("Content-Type","application/octet-stream"),as_attachment=True,download_name=str(doc["file_name"] or "kyc-document"))
+        if doc["storage_provider"]!="r2": return jsonify({"error":"Legacy KYC storage is not supported by this download route"}),410
+        try:
+            from object_storage import r2_get_bytes
+            data=r2_get_bytes("organisation-kyc",str(doc["storage_path"]))
+        except Exception:
+            return jsonify({"error":"KYC document could not be retrieved from private R2 storage"}),502
+        return send_file(io.BytesIO(data),mimetype=doc["mime_type"] or "application/octet-stream",as_attachment=True,download_name=str(doc["file_name"] or "kyc-document"))
 
     @app.patch("/api/admin/b2b/kyc/<int:doc_id>")
     def admin_update_kyc(doc_id):
