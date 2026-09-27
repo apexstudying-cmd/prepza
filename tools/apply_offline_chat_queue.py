@@ -16,12 +16,20 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 def main() -> None:
     text = TARGET.read_text(encoding='utf-8')
-    text = replace_once(
-        text,
-        "import { provisionInitialGroupKey } from './groupProvisioning'\n",
-        "import { provisionInitialGroupKey } from './groupProvisioning'\nimport { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'\n",
-        'imports',
-    )
+    if 'installOfflineChatQueue' not in text:
+        if "import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'" in text:
+            text = text.replace(
+                "import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'\\n",
+                "import { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'\\n",
+                1,
+            )
+        else:
+            text = replace_once(
+                text,
+                "import { provisionInitialGroupKey } from './groupProvisioning'\\n",
+                "import { provisionInitialGroupKey } from './groupProvisioning'\\nimport { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'\\n",
+                'imports',
+            )
 
     if 'installOfflineChatQueue()' not in text:
         text = replace_once(
