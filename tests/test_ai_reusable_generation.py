@@ -142,11 +142,11 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     monkeypatch.setattr(
         reusable,
         "_generator",
-        lambda material_type: ("system", lambda raw: {"title": "Reusable"}, "SUMMARIZATION"),
+        lambda *args, **kwargs: ("system", lambda raw: {"title": "Reusable"}, "SUMMARIZATION"),
     )
     monkeypatch.setattr(reusable, "claim_or_get_generation", lambda **kwargs: claim_results.pop(0))
     monkeypatch.setattr(reusable, "mark_generation_ready", lambda *args: None)
-    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: material_calls.append(kwargs) or types.SimpleNamespace(id=99))
+    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: material_calls.append(kwargs) or types.SimpleNamespace(id=99, payload='{"title":"Reusable"}'))
 
     first = reusable.generate_document_material(
         material_type="summary",
@@ -210,13 +210,13 @@ def test_reused_ready_artifact_does_not_check_entitlement(monkeypatch):
         "claim_or_get_generation",
         lambda **kwargs: GenerationLookup(22, "ready", {"title": "Existing"}, False),
     )
-    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: types.SimpleNamespace(id=100))
+    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: types.SimpleNamespace(id=100, payload='{"title":"Existing"}'))
 
     result = reusable.generate_document_material(
         material_type="summary",
         document_content_id=8,
         triggering_user_id=202,
-        parameters={},
+        parameters={"max_pages": 5},
     )
 
     assert result["reused"] is True
@@ -290,7 +290,7 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
         return GenerationLookup(40 + claim_count["value"], "generating", None, True, f"lease-{claim_count['value']}")
     monkeypatch.setattr(reusable, "claim_or_get_generation", fake_claim)
     monkeypatch.setattr(reusable, "mark_generation_ready", lambda *args: None)
-    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: types.SimpleNamespace(id=kwargs.get("material_id", 1)))
+    monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: types.SimpleNamespace(id=kwargs.get("material_id", 1), payload='{"cards":[{"q":"Q","a":"A"}]}'))
 
     for _ in range(5):
         reusable.generate_document_material(
