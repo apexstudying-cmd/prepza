@@ -8,7 +8,13 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from ai_generation_store import claim_or_get_generation, mark_generation_failed, mark_generation_ready
+from ai_generation_store import (
+    claim_or_get_generation,
+    claim_or_subscribe_generation_family,
+    finish_inflight_generation,
+    mark_generation_failed,
+    mark_generation_ready,
+)
 
 
 @pytest.fixture(scope="module")
@@ -16,6 +22,8 @@ def postgres_db():
     url = "postgresql+psycopg2://prepza:prepza@127.0.0.1:5432/prepza_test"
     engine = create_engine(url, future=True)
     with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS ai_generation_subscriber"))
+        conn.execute(text("DROP TABLE IF EXISTS ai_generation_inflight"))
         conn.execute(text("DROP TABLE IF EXISTS ai_generation_artifact"))
         conn.execute(text("""
             CREATE TABLE ai_generation_artifact (
@@ -168,4 +176,46 @@ def test_shared_scope_rejects_owner(postgres_db):
     _engine, proxy = postgres_db
     with pytest.raises(ValueError):
         _claim("e" * 64, scope="shared", owner_user_id=101)
+    proxy.close()
+
+
+def test_concurrent_same_generation_family_has_one_producer_and_one_subscriber(postgres_db):
+    _engine, proxy = postgres_db
+    barrier = threading.Barrier(2)
+    results, errors = [], []
+
+    def worker(user_id):
+        try:
+            barrier.wait(timeout=5)
+            results.append(claim_or_subscribe_generation_family(
+                base_fingerprint="family-" + "h" * 58,
+                user_id=user_id,
+            ))
+        except Exception as exc:
+            errors.append(exc)
+        finally:
+            proxy.close()
+
+    threads = [
+        threading.Thread(target=worker, args=(301,)),
+        threading.Thread(target=worker, args=(302,)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert not errors
+    assert len(results) == 2
+    assert sum(result.is_producer for result in results) == 1
+    assert sum(not result.is_producer for result in results) == 1
+    assert len({result.base_fingerprint for result in results}) == 1
+
+    producer = next(result for result in results if result.is_producer)
+    finish_inflight_generation(
+        base_fingerprint=producer.base_fingerprint,
+        artifact_id=None,
+        lease_token=producer.lease_token,
+        success=False,
+    )
     proxy.close()
