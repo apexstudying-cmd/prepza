@@ -9,6 +9,7 @@ from sqlalchemy import text
 import redis
 from app import app, db, Conversation, ConversationParticipant
 import chat_interactions  # noqa: F401 - registers additive chat metadata hooks
+from chat_event_queue import enqueue_chat_event
 from offline_activity_routes import register_offline_activity_routes
 import chat_group_routes  # noqa: F401 - registers multi-user chat-group membership routes
 from e2ee_production_hardening import register_e2ee_production_hardening
@@ -278,9 +279,17 @@ def broadcast_message_response(response):
                 return response
             payload = safe_message_payload(response.get_json(silent=True))
             if payload and payload.get("conversation_id") == conversation_id:
-                # This hook runs in a normal HTTP request, not a Socket.IO event
-                # context. Do not ask Flask-SocketIO for request.sid here.
-                socketio.emit("chat:message", payload, to=room_for(conversation_id))
+                # PostgreSQL has already committed the message. With Redis,
+                # hand fan-out to the durable stream; without Redis retain the
+                # single-instance direct transport fallback.
+                if REDIS_URL:
+                    enqueue_chat_event(
+                        event="chat:message",
+                        conversation_id=conversation_id,
+                        payload=payload,
+                    )
+                else:
+                    socketio.emit("chat:message", payload, to=room_for(conversation_id))
         except Exception:
             app.logger.exception("Realtime message broadcast failed")
     return response
@@ -296,12 +305,24 @@ def broadcast_message_update_response(response):
             message_id = int(match.group(2))
             payload = safe_message_payload(response.get_json(silent=True))
             if payload and payload.get("id") == message_id and payload.get("conversation_id") == conversation_id:
-                socketio.emit(
-                    "chat:message-updated",
-                    {"conversation_id": conversation_id, "message_id": message_id, "deleted": request.method == "DELETE"},
-                    to=room_for(conversation_id),
-                    include_self=False,
-                )
+                update_payload = {
+                    "conversation_id": conversation_id,
+                    "message_id": message_id,
+                    "deleted": request.method == "DELETE",
+                }
+                if REDIS_URL:
+                    enqueue_chat_event(
+                        event="chat:message-updated",
+                        conversation_id=conversation_id,
+                        payload=update_payload,
+                    )
+                else:
+                    socketio.emit(
+                        "chat:message-updated",
+                        update_payload,
+                        to=room_for(conversation_id),
+                        include_self=False,
+                    )
         except Exception:
             app.logger.exception("Realtime message update broadcast failed")
     return response
