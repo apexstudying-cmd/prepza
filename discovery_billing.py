@@ -869,8 +869,24 @@ def register_discovery(app, db):
               )
               AND (ends_at IS NULL OR ends_at >= CURRENT_TIMESTAMP)
               AND delivered_impressions < GREATEST(1, budget_kes * 1000 / GREATEST(1,bid_kes))
+              AND (
+                SELECT COUNT(*) FROM discovery_event e
+                WHERE e.campaign_id=discovery_campaign.id
+                  AND e.user_id=:uid
+                  AND e.event_type='impression'
+                  AND e.created_at >= CURRENT_TIMESTAMP - (
+                    GREATEST(1, COALESCE(
+                      (pricing_snapshot->'home_frequency_cap'->'value'->>'window_days')::INTEGER,
+                      7
+                    )) || ' days'
+                  )::interval
+                  AND COALESCE((e.metadata->>'reversed')::boolean,FALSE)=FALSE
+              ) < GREATEST(1, COALESCE(
+                    (pricing_snapshot->'home_frequency_cap'->'value'->>'max_impressions')::INTEGER,
+                    5
+              ))
             ORDER BY updated_at DESC LIMIT 50
-        """)).mappings().all()
+        """), {"uid": uid}).mappings().all()
         feed=[]
         for r in rows:
             if not target_matches(uid, r["target_json"] or {}):
