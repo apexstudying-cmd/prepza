@@ -159,7 +159,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
         "_generator",
         lambda *args, **kwargs: ("system", lambda raw: {"title": "Reusable"}, "SUMMARIZATION"),
     )
-    monkeypatch.setattr(reusable, "claim_or_get_generation", lambda **kwargs: claim_results.pop(0))
+    monkeypatch.setattr(reusable, "claim_or_get_generation", lambda **kwargs: claim_results.pop(0) if claim_results else GenerationLookup(99, "generating", None, True, "lease-fallback"))
     monkeypatch.setattr(reusable, "mark_generation_ready", lambda *args: None)
     monkeypatch.setattr(reusable, "_material_from_payload", lambda **kwargs: material_calls.append(kwargs) or types.SimpleNamespace(id=99, payload='{"title":"Reusable"}'))
 
