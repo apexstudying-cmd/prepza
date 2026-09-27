@@ -152,13 +152,13 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
         material_type="summary",
         document_content_id=7,
         triggering_user_id=101,
-        parameters={"language": " English "},
+        parameters={"language": " English ", "max_pages": 5},
     )
     second = reusable.generate_document_material(
         material_type="summary",
         document_content_id=7,
         triggering_user_id=101,
-        parameters={"language": "English"},
+        parameters={"language": "English", "max_pages": 5},
     )
 
     assert first["reused"] is False
@@ -276,6 +276,7 @@ def test_flashcard_variant_pool_rotates_four_versions_before_reuse(monkeypatch):
     monkeypatch.setitem(sys.modules, "ai_service", fake_ai)
     monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
+    monkeypatch.setattr(reusable, "find_ready_generation_family", lambda **kwargs: None)
     monkeypatch.setattr(reusable, "_generator", lambda *args, **kwargs: ("system", lambda raw: {"cards": [{"q": "Q", "a": "A"}]}, "FLASHCARDS"))
     monkeypatch.setattr(
         reusable,
