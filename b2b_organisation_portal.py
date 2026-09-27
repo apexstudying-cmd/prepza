@@ -383,13 +383,58 @@ def register_b2b_organisation_portal(app, db):
         doc=db.session.execute(text("SELECT organisation_id FROM organisation_kyc_document WHERE id=:i"),{"i":doc_id}).mappings().first()
         if not doc:return jsonify({"error":"KYC document not found"}),404
         db.session.execute(text("UPDATE organisation_kyc_document SET status=:s,admin_notes=:n,reviewed_at=CASE WHEN :s='pending' THEN NULL ELSE CURRENT_TIMESTAMP END,reviewed_by=CASE WHEN :s='pending' THEN NULL ELSE :u END WHERE id=:i"),{"s":status,"n":notes or None,"u":uid,"i":doc_id})
-        if status=="approved":
-            db.session.execute(text("UPDATE organisation SET verification_status='verified',verification_notes=:n WHERE id=:o"),{"n":notes or "Verification approved by Prepza.","o":doc["organisation_id"]})
-        elif status=="rejected":
-            db.session.execute(text("UPDATE organisation SET verification_status='rejected',verification_notes=:n WHERE id=:o"),{"n":notes or "Verification document rejected by Prepza.","o":doc["organisation_id"]})
+        # An individual document approval is not sufficient to verify an organisation.
+        # Minimum verification set: approved registration certificate, approved
+        # representative ID, and either an approved official registry search or
+        # an approved authority letter when representative authority is not evident.
+        required = db.session.execute(text("""
+            SELECT document_type, COUNT(*) AS approved_count
+            FROM organisation_kyc_document
+            WHERE organisation_id=:o AND status='approved'
+              AND document_type IN ('certificate_of_registration','representative_id',
+                                   'official_search','authority_letter')
+            GROUP BY document_type
+        """), {"o":doc["organisation_id"]}).mappings().all()
+        approved_types = {str(r["document_type"]) for r in required if int(r["approved_count"] or 0) > 0}
+        verification_complete = (
+            "certificate_of_registration" in approved_types
+            and "representative_id" in approved_types
+            and ("official_search" in approved_types or "authority_letter" in approved_types)
+        )
+        if status == "rejected":
+            db.session.execute(text("""
+                UPDATE organisation
+                SET verification_status='rejected',
+                    verification_notes=:n
+                WHERE id=:o
+            """), {"n":notes or "Verification document rejected by Prepza.","o":doc["organisation_id"]})
+        elif status == "pending":
+            db.session.execute(text("""
+                UPDATE organisation
+                SET verification_status='pending',
+                    verification_notes=:n
+                WHERE id=:o
+            """), {"n":notes or "Verification review remains pending.","o":doc["organisation_id"]})
+        elif verification_complete:
+            db.session.execute(text("""
+                UPDATE organisation
+                SET verification_status='verified',
+                    verification_notes=:n
+                WHERE id=:o
+            """), {"n":notes or "Organisation verification requirements approved by Prepza.","o":doc["organisation_id"]})
         else:
-            db.session.execute(text("UPDATE organisation SET verification_status='pending' WHERE id=:o AND verification_status <> 'verified'"),{"o":doc["organisation_id"]})
-        db.session.commit(); return jsonify({"ok":True,"status":status})
+            missing = []
+            if "certificate_of_registration" not in approved_types: missing.append("registration certificate")
+            if "representative_id" not in approved_types: missing.append("representative ID")
+            if "official_search" not in approved_types and "authority_letter" not in approved_types:
+                missing.append("official registry search or authority letter")
+            db.session.execute(text("""
+                UPDATE organisation
+                SET verification_status='pending',
+                    verification_notes=:n
+                WHERE id=:o
+            """), {"n":"Verification still requires: " + ", ".join(missing) + ".", "o":doc["organisation_id"]})
+        db.session.commit(); return jsonify({"ok":True,"status":status,"verification_complete":verification_complete})
 
     @app.patch("/api/admin/b2b/invoices/<int:invoice_id>/etims")
     def admin_update_etims(invoice_id):

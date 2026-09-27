@@ -172,6 +172,12 @@ export default function B2BFinanceAdmin({tokens:T}:Props){
         <select value={d.status} onChange={e=>setKyc(v=>v.map(x=>x.id===d.id?{...x,status:e.target.value}:x))} style={{padding:7,border:'1px solid '+T.border,borderRadius:8,background:T.card,color:T.text}}>
           <option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option>
         </select>
+        <input
+          value={d.admin_notes||''}
+          onChange={e=>setKyc(v=>v.map(x=>x.id===d.id?{...x,admin_notes:e.target.value}:x))}
+          placeholder="Review note"
+          style={{minWidth:220,padding:7,border:'1px solid '+T.border,borderRadius:8,background:T.card,color:T.text}}
+        />
         <button onClick={async()=>{try{await req('/api/admin/b2b/kyc/'+d.id,{method:'PATCH',headers:{'X-CSRF-Token':csrf},body:JSON.stringify({status:d.status,admin_notes:d.admin_notes||''})});await load()}catch(e){setError(e instanceof Error?e.message:'Could not update verification.')}}} style={{background:'#C9A84C',color:'#0B1437',border:0,borderRadius:8,padding:'8px 12px',fontWeight:800}}>Save</button>
       </div></div>)}
       {!kyc.length&&<div style={card}>No verification documents are awaiting review.</div>}
