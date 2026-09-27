@@ -4,8 +4,7 @@ ai_service.py — Prepza's AI pipeline (Chunk 3).
 This module is the ONLY place in the codebase that should ever call an
 AI provider's SDK directly. Every feature (forum "Ask Prepza AI", and
 later the AI Tutor / Summaries / Quizzes / Flashcards / Podcasts / Mind
-maps) is expected to call the functions in this module rather than
-touching `legacy_provider` (or any future provider SDK) itself. That is what
+maps) is expected to call the functions in this module rather than touching provider SDKs directly. That is what
 makes it possible to add/swap providers later without rewriting every
 feature that uses AI - see PREPZA AI COST OPTIMIZATION & MULTI-MODEL
 ROUTING doc.
@@ -38,8 +37,7 @@ import requests
 # 1. PROVIDER-AGNOSTIC REQUEST / RESPONSE / USAGE SHAPES
 # ============================================================
 # Per the cost-optimization doc: features build an AIRequest and get
-# back an AIResponse. Nothing here is legacy provider-specific by name, even
-# though legacy providerProvider is currently the only implementation.
+# back an AIResponse. The request/response shapes remain provider-agnostic.
 
 @dataclass
 class AIRequest:
@@ -207,10 +205,8 @@ def _pricing_for(model, at=None):
     return applicable[-1] if applicable else schedule[0]
 
 
-# Message Batches API pricing (flat 50% off standard rates, per
-# OpenAI's Batch API pricing). Not date-scheduled like _PRICING_SCHEDULE above,
-# since both models' batch rates have only ever been this one price -
-# re-verify against platform.openai.com/docs if that changes.
+# OpenAI Batch API pricing. Batch pricing is modeled separately from
+# synchronous pricing so cost accounting cannot accidentally mix the two.
 _BATCH_PRICING = {
     # OpenAI Batch API: 50% of standard GPT-5 Mini input/output rates.
     MODEL_OPENAI_GPT5_MINI: (Decimal("0.125"), Decimal("1.00")),
@@ -849,7 +845,7 @@ def answer_forum_question(question_text, unit, triggering_user_id, plan_tier="fr
 # ============================================================
 # 10. CONTINUATION-RETRY CALL (summarization only)
 # ============================================================
-# route_and_generate()/legacy providerProvider.call() intentionally discard
+# route_and_generate()/MultiProvider.call() intentionally discard
 # stop_reason - fine for forum answers, which rarely truncate. Summaries
 # are longer and JSON-structured, so a max_tokens cutoff mid-JSON is a
 # real failure mode. This function is a separate, low-level path used
@@ -868,12 +864,9 @@ CONTINUATION_MAX_ATTEMPTS = 2
 
 def _call_with_continuation(task, system_prompt, user_message, max_tokens=None, cacheable_system=True):
     """
-    Like route_and_generate(), but detects max_tokens truncation and
-    retries with a prefilled continuation instead of returning a
-    truncated response. Uses the task's primary model only - no
-    primary/fallback escalation here (truncation isn't a provider
-    failure, so escalating models wouldn't help). Returns an AIResponse
-    whose usage/cost reflects the SUM of all attempts made.
+    Generate structured output through the current OpenAI Responses adapter.
+    A second attempt is made only when the first response consumes the full
+    output-token budget, using the first response as an assistant turn.
     """
     task_config = AI_TASKS.get(task)
     if not task_config:
@@ -883,52 +876,41 @@ def _call_with_continuation(task, system_prompt, user_message, max_tokens=None, 
     model = task_config["primary"]
     resolved_max_tokens = max_tokens or task_config["max_tokens"]
 
+    system = [{"type": "text", "text": system_prompt}] if cacheable_system else [
+        {"type": "text", "text": system_prompt}
+    ]
     accumulated_text = ""
     total_usage = AIUsage()
     start = time.monotonic()
 
-    if cacheable_system:
-        system = [{
-            "type": "text",
-            "text": system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        }]
-    else:
-        system = system_prompt
     for attempt in range(CONTINUATION_MAX_ATTEMPTS):
+        messages = [{"role": "user", "content": user_message}]
         if accumulated_text:
-            messages = [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": accumulated_text},
-            ]
-        else:
-            messages = [{"role": "user", "content": user_message}]
+            messages.append({"role": "assistant", "content": accumulated_text})
 
-        response = provider._client.messages.create(
+        chunk_text, usage = provider._openai_responses_messages(
             model=model,
-            max_tokens=resolved_max_tokens,
-            system=system,
+            system_blocks=system,
             messages=messages,
+            max_tokens=resolved_max_tokens,
         )
-
-        chunk_text = "".join(block.text for block in response.content if block.type == "text")
         accumulated_text += chunk_text
-
-        usage = response.usage
         total_usage.input_tokens += usage.input_tokens
         total_usage.output_tokens += usage.output_tokens
-        total_usage.cache_read_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
-        total_usage.cache_creation_tokens += getattr(usage, "cache_creation_input_tokens", 0) or 0
+        total_usage.cache_read_tokens += usage.cache_read_tokens
+        total_usage.cache_creation_tokens += usage.cache_creation_tokens
 
-        if response.stop_reason != "max_tokens":
+        if usage.output_tokens < resolved_max_tokens:
             break
 
     latency_ms = int((time.monotonic() - start) * 1000)
     total_usage.cost_usd = compute_cost_usd(
-        model, total_usage.input_tokens, total_usage.output_tokens,
-        total_usage.cache_read_tokens, total_usage.cache_creation_tokens,
+        model,
+        total_usage.input_tokens,
+        total_usage.output_tokens,
+        total_usage.cache_read_tokens,
+        total_usage.cache_creation_tokens,
     )
-
     return AIResponse(
         text=accumulated_text,
         model_used=model,
@@ -1695,7 +1677,7 @@ def _legacy_generate_document_podcast_script(document_content_id, triggering_use
 # later Ada phases, deliberately out of scope here.
 #
 # Unlike every other generate_document_*() function above, this talks
-# to provider._client.messages.create() directly instead of going
+# to the current OpenAI Responses adapter directly instead of going
 # through legacy providerProvider.call() - .call() only supports a single
 # user message, not a growing multi-turn history. Mirrors how
 # _call_with_continuation() already bypasses .call() for its own
@@ -1709,7 +1691,7 @@ def _legacy_generate_document_podcast_script(document_content_id, triggering_use
 # stable. The growing conversation history goes in the `messages` list
 # instead, uncached, capped at the last TUTOR_HISTORY_MESSAGE_LIMIT
 # messages so an unbounded conversation doesn't get expensive purely
-# from history length (the legacy provider API is stateless - full history
+# from history length (the the OpenAI Responses API is stateless - full history
 # is resent every turn).
 #
 # Deliberately NOT using continuation-retry (_call_with_continuation)
