@@ -34,6 +34,16 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Diagnose generated build mutations
+        if: always()
+        run: |
+          echo '--- chat_interactions diff ---'
+          git diff -- chat_interactions.py || true
+          echo '--- package-lock diff ---'
+          git diff -- frontend/package-lock.json || true
+          echo '--- chat_interactions numbered excerpt ---'
+          nl -ba chat_interactions.py | sed -n '50,70p'
+
       - name: Verify patch is deterministic
         run: |
           cp app.py /tmp/app.after
