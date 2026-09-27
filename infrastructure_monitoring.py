@@ -242,6 +242,7 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
         ]
 
         gpu = gpu_lifecycle.admin_snapshot()
+        gpu_scaling = gpu_lifecycle.scaling_snapshot()
 
         return jsonify({
             "generated_at": now.isoformat() + "Z",
@@ -269,6 +270,7 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
                 "realtime_peak_connections": SUPABASE["realtime_connections"]["limit"],
             },
             "gpu": gpu,
+            "gpu_scaling": gpu_scaling,
             "ai": {
                 "requests_mtd": int(ai_requests or 0),
                 "input_tokens_mtd": int(input_tokens or 0),
