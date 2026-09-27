@@ -11,6 +11,8 @@ import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
 import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'
 import B2BFinanceAdmin from './admin/B2BFinanceAdmin'
+import AdminOperationsDashboard from './admin/AdminOperationsDashboard'
+import StudentOnboarding from './StudentOnboarding'
 import StudyShareSheet from './share/StudyShareSheet'
 import StudyActivityScreen from './StudyActivityScreen'
 import PdfStudyCanvas from './crypto/PdfStudyCanvas'
@@ -10120,7 +10122,7 @@ const adminNavGroups = [
   { key:'organisations', label:'Organizations', icon:'org', items:[{key:'organisations',label:'Organizations'},{key:'opportunities',label:'Opportunities'},{key:'promotions',label:'Promotions'}] },
   { key:'content', label:'Content', icon:'content', items:[{key:'content',label:'Library & review'},{key:'universities',label:'Universities'}] },
   { key:'communications', label:'Communications', icon:'communications', items:[{key:'communications',label:'Announcements'}] },
-  { key:'system', label:'System', icon:'system', items:[{key:'system',label:'Infrastructure'},{key:'ai-usage',label:'AI & usage'},{key:'analytics',label:'Analytics'},{key:'settings',label:'Settings'}] },
+  { key:'system', label:'System', icon:'system', items:[{key:'operations',label:'Operations'},{key:'system',label:'Infrastructure'},{key:'ai-usage',label:'AI & usage'},{key:'analytics',label:'Analytics'},{key:'settings',label:'Settings'}] },
 ] as const
 
 function AdminNavIcon({name}:{name:string}) {
@@ -11860,6 +11862,8 @@ function AdminSection({ section, setSection }: { section: string; setSection: (s
     </div>
     )
   }
+
+  if (section === 'operations') return <AdminOperationsDashboard />
 
   if (section === 'system') {
     const fmtBytesSys = (n: number) => {
@@ -13605,7 +13609,7 @@ function AdminPlatform({ onExit }: { onExit: () => void }) {
   const { mode, tokens: T } = useTheme()
   const [section, setSection] = useState('dashboard')
   const [adminExpanded, setAdminExpanded] = useState<Record<string, boolean>>({})
-  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', 'b2b-finance': 'B2B Finance', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System', settings: 'Settings', groups: 'Groups' }
+  const sectionLabels: Record<string, string> = { dashboard: 'Dashboard', users: 'Users', content: 'Content', universities: 'Universities', community: 'Community', opportunities: 'Opportunities', promotions: 'Promotions', organisations: 'Organisations', 'ai-usage': 'AI & Usage', payments: 'Payments', 'b2b-finance': 'B2B Finance', communications: 'Communications', analytics: 'Analytics', moderation: 'Moderation', system: 'System', operations: 'Operations', settings: 'Settings', groups: 'Groups' }
 
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', background: T.pageBg, fontFamily: 'Plus Jakarta Sans', overflow: 'hidden' }}>
@@ -15399,6 +15403,7 @@ export default function App() {
       {/* Content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {renderScreen()}
+      <StudentOnboarding screen={screen} setScreen={setScreen} />
       </div>
       {/* Bottom nav */}
       {!noNav.includes(screen) && <BottomNav active={screen} setScreen={setScreen} unreadChats={unreadChats} exploreAttention={exploreAttention} setExploreAttention={setExploreAttention} />}
