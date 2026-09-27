@@ -85,69 +85,6 @@ def register_b2b_organisation_portal(app, db):
         """),{"u":uid}).mappings().all()
         return jsonify({"organisations":[dict(x) for x in rows]})
 
-    @app.get("/api/discovery/feed")
-    def student_discovery_feed():
-        uid=session.get("user_id")
-        if not uid:return jsonify({"error":"Not logged in"}),401
-        rows=db.session.execute(text("""
-          SELECT c.id campaign_id,c.organisation_id,c.opportunity_id,c.name,c.objective,c.placement,
-                 o.title opportunity_title,o.description opportunity_description,o.location,o.is_remote,
-                 org.name organisation_name,org.logo_url organisation_logo
-          FROM discovery_campaign c
-          JOIN opportunity o ON o.id=c.opportunity_id
-          JOIN organisation org ON org.id=c.organisation_id
-          JOIN "user" u ON u.id=:uid
-          WHERE c.status='active' AND c.funding_status IN ('funded','credited')
-            AND (c.starts_at IS NULL OR c.starts_at<=CURRENT_TIMESTAMP)
-            AND (c.ends_at IS NULL OR c.ends_at>=CURRENT_TIMESTAMP)
-            AND o.status='published' AND o.expiry_date>CURRENT_TIMESTAMP
-            AND org.verification_status='verified' AND org.is_active=TRUE
-            AND (c.placement IN ('feed','feed_push','push'))
-          ORDER BY c.updated_at DESC,c.id DESC LIMIT 20
-        """),{"uid":uid}).mappings().all()
-        from b2b_campaign_metering import campaign_target_matches_student
-        campaigns=[]
-        for row in rows:
-            matched,reason=campaign_target_matches_student(db,int(row["campaign_id"]),int(uid))
-            if not matched: continue
-            campaigns.append({
-              "campaign_id":int(row["campaign_id"]),"organisation_id":int(row["organisation_id"]),
-              "opportunity_id":int(row["opportunity_id"]) if row["opportunity_id"] else None,
-              "name":row["name"],"objective":row["objective"],"placement":row["placement"],
-              "opportunity_title":row["opportunity_title"],"organisation_name":row["organisation_name"],
-              "organisation_logo":row["organisation_logo"],"location":row["location"],"is_remote":row["is_remote"]
-            })
-        return jsonify({"campaigns":campaigns})
-
-    @app.post("/api/discovery/campaigns/<int:cid>/impression")
-    def student_discovery_impression(cid):
-        uid=session.get("user_id")
-        if not uid:return jsonify({"error":"Not logged in"}),401
-        campaign=db.session.execute(text("SELECT id,placement FROM discovery_campaign WHERE id=:i"),{"i":cid}).mappings().first()
-        if not campaign:return jsonify({"error":"Campaign not found"}),404
-        if campaign["placement"] not in ("feed","feed_push","push"):
-            return jsonify({"error":"Campaign is not a feed placement"}),409
-        from b2b_campaign_metering import record_billable_event
-        result=record_billable_event(db,int(cid),int(uid),"impression",str(campaign["placement"]),f"impression:{int(cid)}:{int(uid)}")
-        if not result.get("ok"):
-            code=429 if result.get("reason")=="student_frequency_cap" else 410
-            return jsonify({"error":"Sponsored impression was not eligible.","reason":result.get("reason")}),code
-        db.session.commit()
-        return jsonify({"ok":True,"amount_minor":result.get("amount_minor"),"duplicate":result.get("duplicate",False)})
-
-    @app.post("/api/discovery/campaigns/<int:cid>/click")
-    def student_discovery_click(cid):
-        uid=session.get("user_id")
-        if not uid:return jsonify({"error":"Not logged in"}),401
-        campaign=db.session.execute(text("SELECT id,placement FROM discovery_campaign WHERE id=:i"),{"i":cid}).mappings().first()
-        if not campaign:return jsonify({"error":"Campaign not found"}),404
-        from b2b_campaign_metering import record_billable_event
-        result=record_billable_event(db,int(cid),int(uid),"click",str(campaign["placement"]),f"click:{int(cid)}:{int(uid)}:{uuid.uuid4().hex}")
-        if not result.get("ok"):
-            return jsonify({"error":"Sponsored click was not eligible.","reason":result.get("reason")}),410
-        db.session.commit()
-        return jsonify({"ok":True,"amount_minor":result.get("amount_minor")})
-
     @app.get("/api/organisations/<int:oid>/portal/dashboard")
     def portal_dashboard(oid):
         uid=session.get("user_id")
