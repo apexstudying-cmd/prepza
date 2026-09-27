@@ -8,8 +8,8 @@ from flask import Blueprint, jsonify, request
 bp = Blueprint("kokoro_control", __name__, url_prefix="/internal/kokoro")
 
 
-def _authorized() -> bool:
-    expected = (os.environ.get("KOKORO_WORKER_TOKEN") or "").strip()
+def _authorized(token_name="KOKORO_WORKER_TOKEN") -> bool:
+    expected = (os.environ.get(token_name) or "").strip()
     supplied = request.headers.get("Authorization", "")
     if not expected or not supplied.startswith("Bearer "):
         return False
@@ -23,7 +23,12 @@ def register(app):
 
 @bp.before_request
 def require_worker_auth():
-    if not _authorized():
+    # Worker endpoints and autoscaler endpoints use separate secrets.
+    # A compromised worker token must not grant permission to provision GPUs.
+    if request.path.endswith("/reconcile") or request.path.endswith("/recover"):
+        if not _authorized("KOKORO_CONTROL_TOKEN"):
+            return jsonify({"error": "Unauthorized"}), 401
+    elif not _authorized("KOKORO_WORKER_TOKEN"):
         return jsonify({"error": "Unauthorized"}), 401
 
 
@@ -203,5 +208,50 @@ def worker_status():
     try:
         import gpu_lifecycle
         return jsonify(gpu_lifecycle.admin_snapshot()), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)[:500]}), 500
+
+
+@bp.post("/worker/heartbeat")
+def worker_heartbeat():
+    data = request.get_json(silent=True) or {}
+    instance_id = data.get("instance_id")
+    if not instance_id:
+        return jsonify({"error": "instance_id is required"}), 400
+    try:
+        import gpu_autoscaler
+        return jsonify(gpu_autoscaler.heartbeat(
+            instance_id,
+            data.get("vram_used_gb"),
+            data.get("vram_total_gb"),
+            str(data.get("status") or "running")[:32],
+        )), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)[:500]}), 500
+
+
+@bp.post("/reconcile")
+def reconcile():
+    try:
+        import gpu_autoscaler
+        return jsonify(gpu_autoscaler.reconcile()), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)[:500]}), 500
+
+
+@bp.post("/recover")
+def recover():
+    try:
+        import gpu_autoscaler
+        return jsonify(gpu_autoscaler.recover_stale_workers()), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)[:500]}), 500
+
+
+@bp.get("/scaling")
+def scaling():
+    try:
+        import gpu_autoscaler
+        return jsonify(gpu_autoscaler.snapshot()), 200
     except Exception as exc:
         return jsonify({"error": str(exc)[:500]}), 500
