@@ -60,7 +60,7 @@ jobs:
           grep -q 'PREPZA_CONTROL_TOKEN' prepza_control.py
           grep -q 'prepza_control_enabled' prepza_control.py
           grep -q 'hmac.compare_digest' prepza_control.py
-          grep -q 'control_api_disabled' prepza_control.py
+          grep -q 'control_api_enabled' prepza_control.py
           grep -q 'Disable Control Access' frontend/src/App.tsx
           grep -q 'Enable Control Access' frontend/src/App.tsx
           grep -q 'MCP_ACCESS_TOKEN' control-mcp/server.py
