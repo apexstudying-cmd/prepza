@@ -166,7 +166,7 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     assert first["payload"] == second["payload"]
     assert len(route_calls) == 1
     assert len(usage_calls) == 1
-    assert len(limit_calls) == 1
+    assert len(limit_calls) == 0
     assert len(material_calls) == 2
 
 
