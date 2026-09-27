@@ -348,7 +348,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 text("SELECT fingerprint FROM ai_generation_artifact WHERE id = :artifact_id"),
                 {"artifact_id": inflight.artifact_id},
             ).scalar_one(),
-            timeout_seconds=GENERATION_LEASE_SECONDS if False else 900.0,
+            timeout_seconds=900.0,
             poll_interval_seconds=0.5,
         )
         if waited.status == "ready" and waited.payload:
