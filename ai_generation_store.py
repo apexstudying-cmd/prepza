@@ -55,6 +55,35 @@ def _ensure_schema():
             ON ai_generation_artifact (status, updated_at)
         """))
         db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS ai_generation_inflight (
+                base_fingerprint VARCHAR(128) PRIMARY KEY,
+                artifact_id BIGINT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'generating',
+                lease_token VARCHAR(128) NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_ai_generation_inflight_artifact
+            ON ai_generation_inflight (artifact_id)
+        """))
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS ai_generation_subscriber (
+                id BIGSERIAL PRIMARY KEY,
+                base_fingerprint VARCHAR(128) NOT NULL,
+                user_id INTEGER NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'waiting',
+                artifact_id BIGINT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP NULL
+            )
+        """))
+        db.session.execute(text("""
+            CREATE INDEX IF NOT EXISTS ix_ai_generation_subscriber_family
+            ON ai_generation_subscriber (base_fingerprint, status, created_at)
+        """))
+        db.session.execute(text("""
             CREATE TABLE IF NOT EXISTS ai_generation_variant_family (
                 base_fingerprint VARCHAR(64) PRIMARY KEY,
                 feature VARCHAR(40) NOT NULL,
@@ -329,6 +358,134 @@ def find_generating_generation_family(
     if not row:
         return None
     return GenerationLookup(int(row["id"]), "generating", row["payload"], False, None)
+
+
+
+@dataclass(frozen=True)
+class InflightGeneration:
+    base_fingerprint: str
+    artifact_id: int | None
+    is_producer: bool
+    lease_token: str | None
+
+
+def claim_or_subscribe_generation_family(*, base_fingerprint: str, user_id: int) -> InflightGeneration:
+    """Atomically elect one producer for an exact generation family."""
+    _ensure_schema()
+    from sqlalchemy import text
+    from app import db
+    token = _new_lease_token()
+    inserted = db.session.execute(text("""
+        INSERT INTO ai_generation_inflight
+            (base_fingerprint, status, lease_token)
+        VALUES (:base_fingerprint, 'generating', :lease_token)
+        ON CONFLICT (base_fingerprint) DO NOTHING
+        RETURNING base_fingerprint, artifact_id, status, lease_token
+    """), {"base_fingerprint": base_fingerprint, "lease_token": token}).mappings().first()
+    if inserted is not None:
+        db.session.commit()
+        return InflightGeneration(base_fingerprint, None, True, inserted["lease_token"])
+
+    row = db.session.execute(text("""
+        SELECT artifact_id, status
+        FROM ai_generation_inflight
+        WHERE base_fingerprint = :base_fingerprint
+    """), {"base_fingerprint": base_fingerprint}).mappings().first()
+    if row is None:
+        db.session.rollback()
+        return claim_or_subscribe_generation_family(base_fingerprint=base_fingerprint, user_id=user_id)
+
+    if row["status"] in {"failed", "completed"}:
+        replacement = db.session.execute(text("""
+            UPDATE ai_generation_inflight
+            SET status = 'generating', artifact_id = NULL,
+                lease_token = :lease_token, updated_at = CURRENT_TIMESTAMP
+            WHERE base_fingerprint = :base_fingerprint
+              AND status IN ('failed', 'completed')
+            RETURNING base_fingerprint, lease_token
+        """), {"base_fingerprint": base_fingerprint, "lease_token": token}).mappings().first()
+        if replacement is not None:
+            db.session.commit()
+            return InflightGeneration(base_fingerprint, None, True, replacement["lease_token"])
+        db.session.rollback()
+        return claim_or_subscribe_generation_family(base_fingerprint=base_fingerprint, user_id=user_id)
+
+    db.session.execute(text("""
+        INSERT INTO ai_generation_subscriber (base_fingerprint, user_id, status)
+        VALUES (:base_fingerprint, :user_id, 'waiting')
+    """), {"base_fingerprint": base_fingerprint, "user_id": user_id})
+    db.session.commit()
+    return InflightGeneration(
+        base_fingerprint,
+        int(row["artifact_id"]) if row["artifact_id"] is not None else None,
+        False,
+        None,
+    )
+
+
+def bind_inflight_artifact(*, base_fingerprint: str, artifact_id: int, lease_token: str) -> None:
+    _ensure_schema()
+    from sqlalchemy import text
+    from app import db
+    result = db.session.execute(text("""
+        UPDATE ai_generation_inflight
+        SET artifact_id = :artifact_id, updated_at = CURRENT_TIMESTAMP
+        WHERE base_fingerprint = :base_fingerprint
+          AND status = 'generating'
+          AND lease_token = :lease_token
+    """), {"base_fingerprint": base_fingerprint, "artifact_id": artifact_id, "lease_token": lease_token})
+    if result.rowcount != 1:
+        db.session.rollback()
+        raise RuntimeError("AI in-flight family lease was lost before binding the artifact")
+    db.session.commit()
+
+
+def finish_inflight_generation(*, base_fingerprint: str, artifact_id: int | None, lease_token: str, success: bool) -> None:
+    _ensure_schema()
+    from sqlalchemy import text
+    from app import db
+    status = "completed" if success else "failed"
+    result = db.session.execute(text("""
+        UPDATE ai_generation_inflight
+        SET status = :status, artifact_id = :artifact_id, lease_token = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE base_fingerprint = :base_fingerprint
+          AND status = 'generating'
+          AND lease_token = :lease_token
+    """), {"base_fingerprint": base_fingerprint, "artifact_id": artifact_id, "status": status, "lease_token": lease_token})
+    if result.rowcount != 1:
+        db.session.rollback()
+        raise RuntimeError("AI in-flight family lease was lost before completion")
+    db.session.execute(text("""
+        UPDATE ai_generation_subscriber
+        SET status = :status, artifact_id = :artifact_id, completed_at = CURRENT_TIMESTAMP
+        WHERE base_fingerprint = :base_fingerprint AND status = 'waiting'
+    """), {"base_fingerprint": base_fingerprint, "artifact_id": artifact_id, "status": status})
+    db.session.commit()
+
+
+def wait_for_inflight_family(base_fingerprint: str, *, timeout_seconds: float = 900.0, poll_interval_seconds: float = 0.5) -> GenerationLookup:
+    _ensure_schema()
+    from sqlalchemy import text
+    from app import db
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        row = db.session.execute(text("""
+            SELECT i.status, i.artifact_id, a.status AS artifact_status, a.payload
+            FROM ai_generation_inflight i
+            LEFT JOIN ai_generation_artifact a ON a.id = i.artifact_id
+            WHERE i.base_fingerprint = :base_fingerprint
+        """), {"base_fingerprint": base_fingerprint}).mappings().first()
+        if row is None:
+            raise RuntimeError("AI in-flight family disappeared while waiting")
+        if row["status"] == "completed" and row["artifact_id"] is not None and row["artifact_status"] == "ready":
+            return GenerationLookup(int(row["artifact_id"]), "ready", row["payload"], False, None)
+        if row["status"] == "failed":
+            return GenerationLookup(int(row["artifact_id"] or 0), "failed", None, False, None)
+        if time.monotonic() >= deadline:
+            return GenerationLookup(int(row["artifact_id"] or 0), "generating", None, False, None)
+        db.session.expire_all()
+        time.sleep(poll_interval_seconds)
 
 def wait_for_generation(fingerprint: str, *, timeout_seconds: float = 30.0, poll_interval_seconds: float = 0.25) -> GenerationLookup:
     from sqlalchemy import text
