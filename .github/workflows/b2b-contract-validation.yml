@@ -1,6 +1,8 @@
 name: B2B contract validation
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
@@ -34,4 +36,4 @@ jobs:
       - name: Run B2B contract tests
         env:
           PYTHONPATH: .
-        run: pytest -q tests/test_b2b_contract.py
+        run: pytest -q tests/test_b2b_contract.py tests/test_b2b_billing_regression.py
