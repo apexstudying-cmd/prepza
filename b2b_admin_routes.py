@@ -29,6 +29,7 @@ def _register_b2b_admin_schema(db):
         ("home_carousel","Home carousel",None,None),
         ("explore_university","Explore / university discovery",None,None),
         ("opportunities_feed","Opportunities feed",None,None),
+        ("trending_opportunities","Trending opportunities",None,None),
         ("podcast_banner","Podcast-player banner",None,None),
     ]
     for key,label,cpm,cpc in placement_defaults:
@@ -37,8 +38,12 @@ def _register_b2b_admin_schema(db):
                 (placement_key,label,cpm_amount_minor,cpc_amount_minor)
             VALUES (:key,:label,:cpm,:cpc) ON CONFLICT (placement_key) DO NOTHING
         """),{"key":key,"label":label,"cpm":cpm,"cpc":cpc})
+    db.session.execute(text("""
+        UPDATE b2b_placement_config
+        SET frequency_cap_json='{"max_impressions":5,"window_days":7}'::jsonb
+        WHERE frequency_cap_json='{}'::jsonb
+    """))
     db.session.commit()
-
 
 def register_b2b_admin_routes(app, db):
     with app.app_context():
@@ -116,6 +121,50 @@ def register_b2b_admin_routes(app, db):
         """),{"uid":uid,"meta":json.dumps({"placement_id":placement_id,"placement_key":row["placement_key"]})})
         db.session.commit()
         return jsonify({"ok":True})
+
+
+    @app.get("/api/admin/b2b/organisation-financials")
+    def admin_b2b_organisation_financials():
+        if not is_admin(): return jsonify({"error":"Admin access required"}),403
+        rows=db.session.execute(text("""
+            SELECT o.id AS organisation_id,o.name,o.verification_status,
+                   COALESCE(ob.plan_code,'launch') AS plan_code,
+                   COALESCE(ob.monthly_fee_kes,0) AS monthly_fee_kes,
+                   COUNT(DISTINCT c.id) AS campaigns,
+                   COUNT(DISTINCT c.id) FILTER (WHERE c.status='active') AS active_campaigns,
+                   COALESCE(SUM(c.funded_amount_minor),0) AS funded_minor,
+                   COALESCE(SUM(c.delivered_impressions),0) AS impressions,
+                   COALESCE(SUM(c.delivered_clicks),0) AS clicks,
+                   COALESCE(SUM(c.delivered_applications),0) AS applications,
+                   COALESCE(SUM(c.push_delivered),0) AS push_deliveries
+            FROM organisation o
+            LEFT JOIN organisation_billing ob ON ob.organisation_id=o.id
+            LEFT JOIN discovery_campaign c ON c.organisation_id=o.id
+            GROUP BY o.id,o.name,o.verification_status,ob.plan_code,ob.monthly_fee_kes
+            ORDER BY funded_minor DESC,o.name
+        """)).mappings().all()
+        return jsonify({"organisations":[dict(r) for r in rows]})
+
+    @app.get("/api/admin/b2b/delivery-monitoring")
+    def admin_b2b_delivery_monitoring():
+        if not is_admin(): return jsonify({"error":"Admin access required"}),403
+        rows=db.session.execute(text("""
+            SELECT c.id AS campaign_id,c.organisation_id,o.name AS organisation_name,
+                   c.name,c.placement,c.status,c.funding_status,
+                   c.delivered_impressions,c.delivered_clicks,c.delivered_applications,c.push_delivered,
+                   COALESCE((SELECT SUM(-l.signed_amount_minor) FROM b2b_campaign_ledger l
+                             WHERE l.campaign_id=c.id AND l.entry_type LIKE 'delivery_%'),0) AS spend_minor,
+                   COALESCE((SELECT COUNT(*) FROM discovery_event e
+                             WHERE e.campaign_id=c.id AND e.event_type='impression'
+                               AND COALESCE((e.metadata->>'reversed')::boolean,FALSE)=FALSE),0) AS billable_impressions,
+                   COALESCE((SELECT COUNT(*) FROM discovery_event e
+                             WHERE e.campaign_id=c.id AND e.event_type='click'
+                               AND COALESCE((e.metadata->>'reversed')::boolean,FALSE)=FALSE),0) AS billable_clicks
+            FROM discovery_campaign c
+            JOIN organisation o ON o.id=c.organisation_id
+            ORDER BY c.created_at DESC LIMIT 500
+        """)).mappings().all()
+        return jsonify({"campaigns":[dict(r) for r in rows]})
 
     @app.get("/api/admin/b2b/campaigns")
     def admin_b2b_campaigns():
