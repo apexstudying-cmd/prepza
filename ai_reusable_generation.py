@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import text
 
 from ai_artifact_fingerprint import GENERATION_VERSION, build_generation_fingerprint
-from ai_generation_store import claim_or_get_generation, find_ready_generation_family, mark_generation_failed, mark_generation_ready, wait_for_generation
+from ai_generation_store import claim_or_get_generation, find_ready_generation_family, find_generating_generation_family, mark_generation_failed, mark_generation_ready, wait_for_generation
 
 # Per-request product ceilings are intentionally separate from monthly plan allowances.
 # A Pro student can spend 100 summary pages/month, for example, but one request
@@ -327,6 +327,62 @@ def generate_document_material(*, material_type, document_content_id, triggering
             "reused": True,
             "model_used": None,
         }
+
+    # In-flight collapse: after the ready fast path, attach this request to an
+    # already-generating exact product configuration before reserving a new
+    # variant or creating another provider call. The requester has already
+    # consumed their own quota above, so reuse still costs them entitlement
+    # units while saving Prepza a duplicate provider generation.
+    inflight = find_generating_generation_family(
+        content_hash=content.content_hash,
+        feature=material_type,
+        base_parameters=base_parameters,
+        prompt_version=prompt_version,
+        schema_version=schema_version,
+        scope=scope,
+        owner_user_id=owner_user_id,
+    )
+    if inflight:
+        waited = wait_for_generation(
+            fingerprint=db.session.execute(
+                text("SELECT fingerprint FROM ai_generation_artifact WHERE id = :artifact_id"),
+                {"artifact_id": inflight.artifact_id},
+            ).scalar_one(),
+            timeout_seconds=GENERATION_LEASE_SECONDS if False else 900.0,
+            poll_interval_seconds=0.5,
+        )
+        if waited.status == "ready" and waited.payload:
+            row = db.session.execute(
+                text("SELECT fingerprint, parameters FROM ai_generation_artifact WHERE id = :artifact_id"),
+                {"artifact_id": waited.artifact_id},
+            ).mappings().first()
+            if not row:
+                raise RuntimeError("In-flight AI artifact disappeared before it could be served")
+            material = _material_from_payload(
+                document_content_id=document_content_id,
+                material_type=material_type,
+                fingerprint=row["fingerprint"],
+                payload=waited.payload,
+                scope=scope,
+                owner_user_id=owner_user_id,
+                parameters=row["parameters"] or {},
+                document_title=document_title,
+            )
+            return {
+                "payload": json.loads(material.payload),
+                "material_id": material.id,
+                "reused": True,
+                "model_used": None,
+            }
+        if waited.status == "failed":
+            # The failed producer released its lease; this request may now
+            # become the next legitimate producer below.
+            pass
+        else:
+            raise ai_service.AIProviderError(
+                "AI generation is still running. Please keep the generation screen open and try again shortly."
+            )
+
 
     if variant_pool_feature:
         variant = reserve_generation_variant(
