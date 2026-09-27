@@ -15209,3 +15209,4 @@ function friendlyGenerationError(error: unknown): string {
   }
   return message || 'We could not generate this study material. Please try again.'
 }
+// Temporary CI verification marker.
