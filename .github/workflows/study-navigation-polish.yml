@@ -67,6 +67,7 @@ jobs:
         run: python3 -m py_compile scripts/apply_study_navigation_polish.py
 
       - name: Commit generated changes
+        if: github.event_name == 'push' && github.ref == 'refs/heads/fix/study-navigation-polish'
         run: |
           if git diff --quiet; then
             echo 'No generated changes.'
