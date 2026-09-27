@@ -55,6 +55,11 @@ def claim_job():
         job.progress_percent = 1
         job.progress_stage = "claimed by Kokoro GPU worker"
         db.session.commit()
+        try:
+            import gpu_lifecycle
+            gpu_lifecycle.mark_job_activity()
+        except Exception:
+            pass
 
         return jsonify({
             "job_id": job.id,
@@ -182,3 +187,21 @@ def complete_job(job_id):
         app.logger.warning("Kokoro failure notification failed: %s", exc)
 
     return jsonify({"ok": True}), 200
+
+
+@bp.post("/worker/idle")
+def worker_idle():
+    """Worker asks the control plane to destroy itself after the queue is idle."""
+    try:
+        import gpu_lifecycle
+        return jsonify(gpu_lifecycle.destroy_if_idle()), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)[:500]}), 500
+
+@bp.get("/worker/status")
+def worker_status():
+    try:
+        import gpu_lifecycle
+        return jsonify(gpu_lifecycle.admin_snapshot()), 200
+    except Exception as exc:
+        return jsonify({"error": str(exc)[:500]}), 500
