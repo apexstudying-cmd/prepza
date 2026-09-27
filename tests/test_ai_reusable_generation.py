@@ -140,6 +140,8 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     monkeypatch.setitem(sys.modules, "usage_billing", fake_usage)
     monkeypatch.setattr(reusable, "find_ready_generation_family", lambda **kwargs: None)
     monkeypatch.setattr(reusable, "find_generating_generation_family", lambda **kwargs: None)
+    monkeypatch.setattr(reusable, "claim_or_subscribe_generation_family", lambda **kwargs: types.SimpleNamespace(is_producer=True, lease_token="family-lease", artifact_id=None))
+    monkeypatch.setattr(reusable, "bind_inflight_artifact", lambda **kwargs: None)
     monkeypatch.setattr(reusable, "_content_scope", lambda *_: ("shared", None))
     monkeypatch.setattr(
         reusable,
@@ -222,6 +224,16 @@ def test_inflight_identical_request_attaches_without_provider_duplicate(monkeypa
         reusable,
         "find_generating_generation_family",
         lambda **kwargs: GenerationLookup(33, "generating", None, False),
+    )
+    monkeypatch.setattr(
+        reusable,
+        "claim_or_subscribe_generation_family",
+        lambda **kwargs: types.SimpleNamespace(is_producer=False, lease_token=None, artifact_id=33),
+    )
+    monkeypatch.setattr(
+        reusable,
+        "wait_for_inflight_family",
+        lambda *args, **kwargs: GenerationLookup(33, "ready", {"title": "Shared"}, False),
     )
     monkeypatch.setattr(
         reusable,
