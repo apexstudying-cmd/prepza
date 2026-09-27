@@ -5618,7 +5618,8 @@ def list_saved_library_items():
 
 LIBRARY_REPORT_REASONS = {
     "inaccurate_content", "plagiarised_material",
-    "inappropriate_content", "copyright_violation", "other",
+    "inappropriate_content", "copyright_violation",
+    "wrong_academic_category_year", "other",
 }
 LIBRARY_REPORT_DETAILS_MAX = 500
 
