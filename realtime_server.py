@@ -1,10 +1,12 @@
 """Socket.IO entrypoint for Prepza realtime study chat."""
+import os
 import re
 from datetime import datetime, timezone
 from threading import Lock
 from flask import request, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from sqlalchemy import text
+import redis
 from app import app, db, Conversation, ConversationParticipant
 import chat_interactions  # noqa: F401 - registers additive chat metadata hooks
 from offline_activity_routes import register_offline_activity_routes
@@ -12,7 +14,20 @@ import chat_group_routes  # noqa: F401 - registers multi-user chat-group members
 from e2ee_production_hardening import register_e2ee_production_hardening
 
 # Socket.IO is the realtime transport; HTTP/database remains the source of truth.
-socketio = SocketIO(app, async_mode="threading", cors_allowed_origins=[], logger=False, engineio_logger=False)
+REDIS_URL = os.environ.get("REDIS_URL")
+_realtime_redis = redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=1, socket_timeout=1) if REDIS_URL else None
+
+# Flask-SocketIO uses this queue to fan realtime events across multiple
+# Render instances. PostgreSQL remains the message source of truth.
+socketio = SocketIO(
+    app,
+    async_mode="threading",
+    cors_allowed_origins=[],
+    logger=False,
+    engineio_logger=False,
+    message_queue=REDIS_URL or None,
+    channel="prepza-realtime",
+)
 register_offline_activity_routes(app, db)
 register_e2ee_production_hardening(app, db, Conversation, ConversationParticipant)
 MESSAGE_PATH_RE = re.compile(r"^/chats/(\d+)/messages$")
@@ -24,6 +39,39 @@ _socket_state_lock = Lock()
 
 def room_for(conversation_id):
     return f"chat:{conversation_id}"
+
+
+def _presence_key(conversation_id):
+    return f"prepza:chat:presence:{conversation_id}"
+
+
+def _redis_presence_join(user_id, conversation_id):
+    if _realtime_redis is None:
+        return None
+    try:
+        count = _realtime_redis.hincrby(_presence_key(conversation_id), str(user_id), 1)
+        _realtime_redis.expire(_presence_key(conversation_id), 300)
+        return count == 1
+    except Exception:
+        app.logger.exception("Redis presence join failed")
+        return None
+
+
+def _redis_presence_leave(user_id, conversation_id):
+    if _realtime_redis is None:
+        return None
+    try:
+        key = _presence_key(conversation_id)
+        count = _realtime_redis.hincrby(key, str(user_id), -1)
+        if count <= 0:
+            _realtime_redis.hdel(key, str(user_id))
+            count = 0
+        if _realtime_redis.exists(key):
+            _realtime_redis.expire(key, 300)
+        return count == 0
+    except Exception:
+        app.logger.exception("Redis presence leave failed")
+        return None
 
 
 def authenticated_user_id():
@@ -122,7 +170,8 @@ def handle_join_chat(data):
     had_other_socket = user_has_other_socket_in_room(user_id, conversation_id)
     join_room(room)
     track_socket_room(conversation_id)
-    if not already_tracked and not had_other_socket:
+    redis_first = None if already_tracked else _redis_presence_join(user_id, conversation_id)
+    if not already_tracked and (redis_first is True or (redis_first is None and not had_other_socket)):
         emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": True}, to=room)
     return {"ok": True, "conversation_id": conversation_id}
 
@@ -142,7 +191,8 @@ def handle_leave_chat(data):
     had_other_socket = user_has_other_socket_in_room(user_id, conversation_id)
     leave_room(room)
     untrack_socket_room(conversation_id)
-    if not had_other_socket:
+    redis_last = _redis_presence_leave(user_id, conversation_id)
+    if redis_last is True or (redis_last is None and not had_other_socket):
         emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room)
     return {"ok": True, "conversation_id": conversation_id}
 
@@ -212,7 +262,8 @@ def handle_disconnect():
     if user_id is None:
         return
     for conversation_id in rooms:
-        if not user_has_other_socket_in_room(user_id, conversation_id):
+        redis_last = _redis_presence_leave(user_id, conversation_id)
+        if redis_last is True or (redis_last is None and not user_has_other_socket_in_room(user_id, conversation_id)):
             emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room_for(conversation_id))
 
 
