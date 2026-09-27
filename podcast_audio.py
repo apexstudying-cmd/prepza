@@ -17,18 +17,6 @@ a last-resort safety net since a background thread has no caller to
 raise to. Job bookkeeping (_create_job/_complete_job) also mirrors
 document_pipeline.py's AiJob helpers, using feature="podcast_audio".
 
-TTS backend: whichever Kokoro-compatible server KOKORO_TTS_BASE_URL
-points at - a Hugging Face Space (free CPU Basic tier) running the
-community kokoro-fastapi Docker image, exposing an OpenAI-compatible
-/v1/audio/speech endpoint. KOKORO_SHARED_SECRET, if set, is sent as a
-bearer token - the Space is on a public URL with no auth of its own,
-so this is a lightweight abuse guard (stop random strangers from
-burning the free quota), not real security.
-
-Requires `pydub` and a bundled ffmpeg (e.g. `imageio-ffmpeg`) in
-requirements.txt for audio stitching - see project notes.
-
-PODCAST_VOICE_MAP below uses placeholder Kokoro voice IDs. Swap them
 for real choices once you've actually listened to the voice gallery -
 nothing else in this file needs to change when you do.
 """
@@ -45,9 +33,6 @@ import requests
 from pydub import AudioSegment
 import imageio_ffmpeg
 AudioSegment.converter = imageio_ffmpeg.get_ffmpeg_exe()
-
-KOKORO_TTS_BASE_URL = os.environ.get("KOKORO_TTS_BASE_URL", "").rstrip("/")
-KOKORO_SHARED_SECRET = os.environ.get("KOKORO_SHARED_SECRET")
 
 # Default production voice mapping. The script generator emits only lec,
 # morio, and kichwa; every turn is mapped before synthesis.
