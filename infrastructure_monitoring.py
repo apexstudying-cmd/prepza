@@ -10,6 +10,7 @@ from sqlalchemy import func
 import os
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+import gpu_lifecycle
 
 
 def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
@@ -240,6 +241,8 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
             }
         ]
 
+        gpu = gpu_lifecycle.admin_snapshot()
+
         return jsonify({
             "generated_at": now.isoformat() + "Z",
             "active_users": {"today": active_1d, "last_7d": active_7d, "last_30d": active_30d},
@@ -265,6 +268,7 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
                 "realtime_messages": SUPABASE["realtime_messages"]["limit"],
                 "realtime_peak_connections": SUPABASE["realtime_connections"]["limit"],
             },
+            "gpu": gpu,
             "ai": {
                 "requests_mtd": int(ai_requests or 0),
                 "input_tokens_mtd": int(input_tokens or 0),
