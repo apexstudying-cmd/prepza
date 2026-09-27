@@ -12,8 +12,6 @@ import hashlib
 import json
 import os
 
-from datetime import datetime
-
 PODCAST_VOICE_MAP = {
     "lec": os.environ.get("PREPZA_PODCAST_VOICE_LEC", "bm_george").strip(),
     "morio": os.environ.get("PREPZA_PODCAST_VOICE_MORIO", "am_adam").strip(),
@@ -21,8 +19,6 @@ PODCAST_VOICE_MAP = {
 }
 if any(not voice for voice in PODCAST_VOICE_MAP.values()):
     raise RuntimeError("Every podcast speaker must have a configured TTS voice")
-
-PODCAST_AUDIO_BUCKET = "podcast-audio"
 
 
 def build_audio_fingerprint(envelope, target_duration_seconds):
@@ -214,75 +210,3 @@ def _complete_generation_notification(notification_id, material_id, *, success, 
         )
     except Exception as exc:
         print(f"WARNING: could not finalize podcast notification {notification_id}: {exc}")
-
-def _upload_podcast_audio(storage_path, audio_bytes, bucket=PODCAST_AUDIO_BUCKET):
-    """
-    Uploads generated audio bytes directly to the private podcast-audio
-    Supabase Storage bucket, using the service role key - same
-    authenticated-REST pattern as app.py's existing Storage helpers
-    (fetch_private_file_bytes / create_signed_upload_url), just POSTing
-    bytes instead of GETting them or requesting a client upload URL,
-    since this is server-generated content, not a client upload.
-    """
-    try:
-        from object_storage import r2_enabled, r2_put_bytes
-        if r2_enabled():
-            return bool(r2_put_bytes(bucket, storage_path, audio_bytes, "audio/mpeg"))
-    except Exception as e:
-        print(f"ERROR uploading podcast audio to R2 {bucket}/{storage_path}: {e}")
-        return False
-
-    supabase_url = os.environ.get("SUPABASE_URL", "").strip()
-    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-
-    if not supabase_url or not service_key:
-        print("WARNING: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set")
-        return False
-
-    upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{storage_path}"
-    headers = {
-        "Authorization": f"Bearer {service_key}",
-        "apikey": service_key,
-        "Content-Type": "audio/mpeg",
-        "x-upsert": "true",
-    }
-
-    try:
-        response = requests.post(upload_url, headers=headers, data=audio_bytes)
-        response.raise_for_status()
-        return True
-    except Exception as e:
-        print(f"ERROR uploading podcast audio to {bucket}/{storage_path}: {e}")
-        return False
-
-
-def _update_job_progress(job, percent, stage):
-    from app import db
-    job.progress_percent = max(0, min(100, int(percent)))
-    job.progress_stage = stage
-    db.session.commit()
-
-
-def _create_job(document_content_id, feature, notification_id=None):
-    from app import db, AiJob
-    job = AiJob(
-        document_content_id=document_content_id,
-        feature=feature,
-        status="processing",
-        notification_id=notification_id,
-        started_at=datetime.utcnow(),
-        progress_percent=0,
-        progress_stage="queued",
-    )
-    db.session.add(job)
-    db.session.commit()
-    return job
-
-
-def _complete_job(job, success, error_message=None):
-    from app import db
-    job.status = "completed" if success else "failed"
-    job.completed_at = datetime.utcnow()
-    if error_message:
-        job.error_message = error_message[:500]
-    db.session.commit()
