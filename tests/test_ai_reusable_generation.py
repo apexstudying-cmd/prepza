@@ -180,6 +180,10 @@ def test_inflight_identical_request_attaches_without_provider_duplicate(monkeypa
     class FakeResult:
         def scalar_one(self):
             return "fingerprint-inflight"
+        def mappings(self):
+            return self
+        def first(self):
+            return {"fingerprint": "fingerprint-inflight", "parameters": {"max_pages": 5}}
 
     class Session(_FakeSession):
         def execute(self, *args, **kwargs):
