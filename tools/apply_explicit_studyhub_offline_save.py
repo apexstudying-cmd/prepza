@@ -15,7 +15,9 @@ if IMPORT_ANCHOR not in s:
     raise SystemExit('Offline wiring: import anchor not found')
 anchor = IMPORT_ANCHOR
 for line in IMPORTS:
-    if line not in s:
+    symbol_group = line.split('{', 1)[1].split('}', 1)[0]
+    symbols = [part.strip() for part in symbol_group.split(',')]
+    if not all(symbol in s for symbol in symbols):
         s = s.replace(anchor, anchor + line, 1)
     anchor = line
 
