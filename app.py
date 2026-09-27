@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 import ai_service
 import document_pipeline
 import podcast_audio
+import kokoro_control
 from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
 from db_runtime import configure_sqlalchemy_runtime
@@ -65,6 +66,7 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 db = SQLAlchemy(app)
+kokoro_control.register(app)
 from usage_billing import register_usage_billing
 register_usage_billing(app, db)
 from ai_economics import register_ai_economics
