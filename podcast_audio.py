@@ -1,41 +1,19 @@
-"""
-podcast_audio.py - Phase 2 of the Podcast feature: audio synthesis.
+"""Prepza podcast audio orchestration.
 
-Takes an already-generated podcast SCRIPT (GeneratedMaterial.material_type
-== 'podcast', payload.script.turns - see ai_service.generate_document_
-podcast_script) and synthesizes one audio file: one TTS call per script
-turn against a self-hosted Kokoro server, stitched together with short
-pauses between speakers, uploaded to the active private object store (R2 when configured), with the result
-written back onto the SAME GeneratedMaterial row (audio_status/
-audio_storage_path/duration_seconds) rather than a new row.
+The Flask app is the control plane. It resolves exact ready artifacts,
+creates one durable AiJob for missing audio, and exposes an authenticated
+internal queue API. The standalone Kokoro GPU worker claims the job,
+generates audio on the GPU, stores it in R2, and reports completion.
 
-Mirrors document_pipeline.py's background-thread pattern exactly:
-start_processing spawns a daemon thread, which pushes its own Flask
-app context (a new thread has no access to the request's context) and
-calls the synchronous process function, with a top-level try/except as
-a last-resort safety net since a background thread has no caller to
-raise to. Job bookkeeping (_create_job/_complete_job) also mirrors
-document_pipeline.py's AiJob helpers, using feature="podcast_audio".
-
-for real choices once you've actually listened to the voice gallery -
-nothing else in this file needs to change when you do.
+There is deliberately no Render TTS fallback.
 """
 
-import io
-import os
+import hashlib
 import json
-import threading
-import subprocess
-import tempfile
+import os
+
 from datetime import datetime
 
-import requests
-from pydub import AudioSegment
-import imageio_ffmpeg
-AudioSegment.converter = imageio_ffmpeg.get_ffmpeg_exe()
-
-# Default production voice mapping. The script generator emits only lec,
-# morio, and kichwa; every turn is mapped before synthesis.
 PODCAST_VOICE_MAP = {
     "lec": os.environ.get("PREPZA_PODCAST_VOICE_LEC", "bm_george").strip(),
     "morio": os.environ.get("PREPZA_PODCAST_VOICE_MORIO", "am_adam").strip(),
@@ -44,7 +22,6 @@ PODCAST_VOICE_MAP = {
 if any(not voice for voice in PODCAST_VOICE_MAP.values()):
     raise RuntimeError("Every podcast speaker must have a configured TTS voice")
 
-TURN_GAP_MS = 400  # silence stitched between speaker turns
 PODCAST_AUDIO_BUCKET = "podcast-audio"
 
 
