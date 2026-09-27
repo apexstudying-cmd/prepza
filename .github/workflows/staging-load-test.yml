@@ -40,4 +40,15 @@ jobs:
       - name: Validate load-test script with k6
         run: docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work grafana/k6:latest inspect load_tests/prepza_staging.js
       - name: Run staging load test
-        run: k6 run load_tests/prepza_staging.js
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work \
+            -e BASE_URL \
+            -e HTTP_VUS \
+            -e WS_VUS \
+            -e HTTP_DURATION \
+            -e WS_DURATION \
+            -e AUTH_COOKIE \
+            -e CONVERSATION_ID \
+            grafana/k6:latest run load_tests/prepza_staging.js
