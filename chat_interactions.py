@@ -32,36 +32,34 @@ def ensure_chat_metadata_schema():
             return
         try:
             with app.app_context():
-                db.session.execute(text("""
-                    CREATE TABLE IF NOT EXISTS chat_message_meta (
-                        message_id INTEGER PRIMARY KEY,
-                        conversation_id INTEGER NOT NULL,
-                        kind VARCHAR(20) NOT NULL DEFAULT 'text',
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                """))
-                db.session.execute(text("""
-                    CREATE INDEX IF NOT EXISTS ix_chat_message_meta_conversation_kind
-                    ON chat_message_meta (conversation_id, kind)
-                """))
-                if db.engine.url.get_backend_name() != 'sqlite':
-                    db.session.execute(text("""
-                        ALTER TABLE "user"
-                        ADD COLUMN IF NOT EXISTS read_receipts_enabled BOOLEAN NOT NULL DEFAULT TRUE
+                with db.engine.begin() as conn:
+                    conn.execute(text("""
+                        CREATE TABLE IF NOT EXISTS chat_message_meta (
+                            message_id INTEGER PRIMARY KEY,
+                            conversation_id INTEGER NOT NULL,
+                            kind VARCHAR(20) NOT NULL DEFAULT 'text',
+                            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        )
                     """))
-                    db.session.execute(text("""
-                        ALTER TABLE message
-                        ADD COLUMN IF NOT EXISTS e2ee_key_epoch INTEGER NOT NULL DEFAULT 0
+                    conn.execute(text("""
+                        CREATE INDEX IF NOT EXISTS ix_chat_message_meta_conversation_kind
+                        ON chat_message_meta (conversation_id, kind)
                     """))
-                    db.session.execute(text("""
-                        CREATE INDEX IF NOT EXISTS ix_message_conversation_e2ee_epoch
-                        ON message (conversation_id, e2ee_key_epoch, created_at)
-                    """))
-                db.session.commit()
+                    if db.engine.url.get_backend_name() != 'sqlite':
+                        conn.execute(text("""
+                            ALTER TABLE "user"
+                            ADD COLUMN IF NOT EXISTS read_receipts_enabled BOOLEAN NOT NULL DEFAULT TRUE
+                        """))
+                        conn.execute(text("""
+                            ALTER TABLE message
+                            ADD COLUMN IF NOT EXISTS e2ee_key_epoch INTEGER NOT NULL DEFAULT 0
+                        """))
+                        conn.execute(text("""
+                            CREATE INDEX IF NOT EXISTS ix_message_conversation_e2ee_epoch
+                            ON message (conversation_id, e2ee_key_epoch, created_at)
+                        """))
             _SCHEMA_READY = True
         except Exception:
-            with app.app_context():
-                db.session.rollback()
             app.logger.exception("Could not initialize chat metadata schema")
 
 
