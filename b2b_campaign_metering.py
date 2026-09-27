@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 from sqlalchemy import text
-from datetime import datetime
+from datetime import datetime, timedelta
 
 EVENT_TYPES = {"impression", "click", "push_delivery"}
 
@@ -83,7 +83,7 @@ def campaign_target_matches_student(db, campaign_id, user_id):
         active_days = max(1, min(90, int(target.get("active_days", 30) or 30)))
     except (TypeError, ValueError):
         return False, "invalid_target_configuration"
-    since_date = datetime.utcnow().date() - __import__("datetime").timedelta(days=active_days - 1)
+    since_date = datetime.utcnow().date() - timedelta(days=active_days - 1)
     if not db.session.execute(text("""
         SELECT 1 FROM product_activity_day
         WHERE user_id=:uid AND activity_date>=:since_date
