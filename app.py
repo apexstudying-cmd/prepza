@@ -55,6 +55,9 @@ def add_security_headers(response):
     # those query strings from becoming Referer data on subsequent requests.
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    if session.get("user_id") is not None and not request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, private, max-age=0"
+        response.headers["Pragma"] = "no-cache"
     return response
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 app.config["SESSION_COOKIE_SECURE"] = True
@@ -120,6 +123,25 @@ def _ensure_chat_idempotency_schema():
 EMAIL_REGEX = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 PHONE_NUMBER_REGEX = re.compile(r"^\+?\d{9,15}$")
 BASE_URL = (os.environ.get("BASE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "https://prepza-sf60.onrender.com").rstrip("/")
+
+def send_verification_email(to_email, token):
+    """Send the existing verification-link email through the launch SES provider."""
+    region = os.environ.get("AWS_SES_REGION") or os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+    sender = (os.environ.get("SES_FROM_EMAIL") or os.environ.get("AWS_SES_FROM_EMAIL") or os.environ.get("AWS_FROM_EMAIL") or "").strip()
+    if not region or not sender:
+        raise RuntimeError("AWS SES verification email is not configured")
+    link = f"{BASE_URL}/verify-email?{urlencode({'token': token})}"
+    boto3.client("sesv2", region_name=region).send_email(
+        FromEmailAddress=sender,
+        Destination={"ToAddresses": [to_email]},
+        Content={"Simple": {
+            "Subject": {"Data": "Verify your new Prepza email", "Charset": "UTF-8"},
+            "Body": {
+                "Text": {"Data": f"Verify your new Prepza email by opening: {link}", "Charset": "UTF-8"},
+                "Html": {"Data": f"<p>Verify your new Prepza email.</p><p><a href=\"{link}\">Verify email</a></p>", "Charset": "UTF-8"},
+            },
+        }},
+    )
 
 COMMON_WEAK_PASSWORDS = {
     "password", "password1", "password12", "password123",
@@ -2865,11 +2887,11 @@ def signup():
     if strength_error:
         return jsonify({"error": strength_error}), 400
 
-    if year is None or not isinstance(year, int) or year < 1 or year > 4:
-        return jsonify({"error": "Year is required and must be a number between 1 and 4"}), 400
+    if year is None or not isinstance(year, int) or year < 1 or year > 5:
+        return jsonify({"error": "Year is required and must be a number between 1 and 5"}), 400
 
-    if semester is None or not isinstance(semester, int) or semester not in (1, 2):
-        return jsonify({"error": "Semester is required and must be 1 or 2"}), 400
+    if semester is None or not isinstance(semester, int) or semester not in (1, 2, 3):
+        return jsonify({"error": "Semester is required and must be 1, 2, or 3"}), 400
 
     if not university_id or not isinstance(university_id, int):
         return jsonify({"error": "University is required"}), 400
@@ -3184,8 +3206,11 @@ def google_auth_callback():
 
 @app.route("/logout", methods=["POST"])
 def logout():
-    session.pop("user_id", None)
-    return jsonify({"message": "Logged out successfully"})
+    session.clear()
+    response = jsonify({"message": "Logged out successfully"})
+    response.headers["Cache-Control"] = "no-store, private, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.route("/me")
@@ -3281,7 +3306,7 @@ def delete_account():
         return jsonify({"error": "Not logged in"}), 401
     user = db.session.get(User, user_id)
     if not user:
-        session.pop("user_id", None)
+        session.clear()
         return jsonify({"error": "Account not found"}), 404
     # Preserve payment/financial records for accounting and any M-Pesa
     # dispute purposes - just disassociate them from the deleted user
@@ -3289,8 +3314,11 @@ def delete_account():
     Payment.query.filter_by(user_id=user.id).update({"user_id": None})
     db.session.delete(user)
     db.session.commit()
-    session.pop("user_id", None)
-    return jsonify({"message": "Account deleted successfully"})
+    session.clear()
+    response = jsonify({"message": "Account deleted successfully"})
+    response.headers["Cache-Control"] = "no-store, private, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.route("/profile", methods=["PATCH"])
@@ -3318,11 +3346,11 @@ def update_profile():
     if (year is None) != (semester is None):
         return jsonify({"error": "year and semester must be supplied together"}), 400
 
-    if year is not None and (not isinstance(year, int) or year < 1 or year > 4):
-        return jsonify({"error": "Year must be a number between 1 and 4"}), 400
+    if year is not None and (not isinstance(year, int) or year < 1 or year > 5):
+        return jsonify({"error": "Year must be a number between 1 and 5"}), 400
 
-    if semester is not None and (not isinstance(semester, int) or semester not in (1, 2)):
-        return jsonify({"error": "Semester must be 1 or 2"}), 400
+    if semester is not None and (not isinstance(semester, int) or semester not in (1, 2, 3)):
+        return jsonify({"error": "Semester must be 1, 2, or 3"}), 400
 
     display_name = data.get("display_name", None)
     bio = data.get("bio", None)
@@ -5217,7 +5245,9 @@ def publish_document():
         title=title,
         description=description,
         material_type=material_type,
-        status="pending",
+        status="approved",
+        reviewed_by=None,
+        reviewed_at=datetime.utcnow(),
     )
     db.session.add(publication)
     db.session.commit()
@@ -5225,6 +5255,8 @@ def publish_document():
     return jsonify({
         "publication_id": publication.id,
         "status": publication.status,
+        "published": True,
+        "message": "Published to the Library. Other students can now save it to Study Hub.",
     }), 201
 
 
@@ -5287,9 +5319,8 @@ def browse_library():
         return jsonify({"error": "Not logged in"}), 401
 
     query = LibraryPublication.query.filter_by(status="approved")
-    if not _student_has_premium_library(user_id):
-        free_ids=_free_library_publication_ids(user_id)
-        query=query.filter(LibraryPublication.id.in_(free_ids)) if free_ids else query.filter(text("1=0"))
+    free_ids = _free_library_publication_ids(user_id)
+    has_premium = _student_has_premium_library(user_id)
     flagged_document_ids = _flagged_document_ids()
     if flagged_document_ids:
         query = query.filter(~LibraryPublication.document_id.in_(flagged_document_ids))
@@ -5336,9 +5367,9 @@ def browse_library():
         author = db.session.get(User, pub.user_id)
         result.append({
             "id": pub.id,
-            "document_id": pub.document_id,
+            "document_id": pub.document_id if (has_premium or pub.id in free_ids) else None,
             "title": pub.title,
-            "description": pub.description,
+            "description": pub.description if (has_premium or pub.id in free_ids) else None,
             "material_type": pub.material_type,
             "unit_id": pub.unit_id,
             "unit_code": unit.code if unit else None,
@@ -5346,6 +5377,7 @@ def browse_library():
             "view_count": pub.view_count,
             "save_count": pub.save_count,
             "created_at": pub.created_at.isoformat() if pub.created_at else None,
+            "locked": not (has_premium or pub.id in free_ids),
         })
 
     return jsonify({"page": page, "publications": result})
@@ -9799,7 +9831,7 @@ class UserKey(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-def send_push_notification(user_id, title, body):
+def send_push_notification(user_id, title, body, data=None):
     """
     Sends a Web Push notification to every subscribed device for a user.
     Best-effort: never raises - a push failure must not break the calling
@@ -9820,7 +9852,7 @@ def send_push_notification(user_id, title, body):
                     "endpoint": sub.endpoint,
                     "keys": {"p256dh": sub.p256dh_key, "auth": sub.auth_key},
                 },
-                data=json.dumps({"title": title, "body": body}),
+                data=json.dumps({"title": title, "body": body, "data": data if isinstance(data, dict) else {}}),
                 vapid_private_key=vapid_private_key,
                 vapid_claims={"sub": vapid_claims_email},
             )
