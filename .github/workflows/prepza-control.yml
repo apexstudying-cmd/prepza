@@ -45,6 +45,14 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Persist generated frontend sources for diagnosis
+        if: always()
+        working-directory: frontend
+        run: |
+          cd ..
+          git add frontend/src/generation/GenerationScreens.tsx frontend/src/generation/StudyGenerationScreensClean.tsx chat_interactions.py realtime_server.py || true
+          if git diff --cached --quiet; then echo 'No generated source mutations.'; else git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'; git commit -m 'ci: persist generated source diagnostics'; fi
+
       - name: Diagnose generated build mutations
         if: always()
         run: |
