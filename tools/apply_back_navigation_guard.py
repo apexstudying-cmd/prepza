@@ -9,6 +9,9 @@ def replace_once(old: str, new: str) -> None:
     if new in text:
         return
     if old not in text:
+        if "prepzaNav" in text:
+            print("Back-navigation guard is already source-owned; skipping legacy transform.")
+            return
         raise SystemExit("Back-navigation patch anchor missing")
     APP.write_text(text.replace(old, new, 1), encoding="utf-8")
 
