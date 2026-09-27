@@ -3,12 +3,18 @@ name: Kokoro GPU worker validation
 on:
   push:
     branches:
-      - a2000-kokoro-worker
+      - main
   pull_request:
+    branches:
+      - main
     paths:
+      - "app.py"
       - "podcast_audio.py"
+      - "gpu_autoscaler.py"
+      - "gpu_lifecycle.py"
       - "kokoro_control.py"
       - "kokoro_worker/**"
+      - "migrations/20260927_kokoro_*.sql"
       - ".github/workflows/kokoro-worker-validation.yml"
 
 jobs:
@@ -18,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compile Python modules
         run: |
-          python -m py_compile app.py podcast_audio.py kokoro_control.py kokoro_worker/worker.py
+          python -m py_compile app.py podcast_audio.py gpu_autoscaler.py gpu_lifecycle.py kokoro_control.py kokoro_worker/worker.py
       - name: Assert Render TTS path is absent
         run: |
           ! grep -Eiq 'KOKORO_TTS_BASE_URL|prepza-tts' podcast_audio.py
