@@ -206,31 +206,8 @@ def register_control_routes(
             } for material in materials],
         })
 
-    # The control API is imported by app.py only after all application
-    # models/routes have been defined. Reuse that safe bootstrap point to
-    # register the E2EE chat routes without modifying the large app.py file.
-    from e2ee_chat_models import create_e2ee_models
-    from e2ee_chat_routes import register_e2ee_chat_routes
-    from e2ee_ada_routes import register_e2ee_ada_route
-    from app import Conversation, ConversationParticipant, Message
-
-    ConversationKeyEnvelope = create_e2ee_models(db)
-    register_e2ee_chat_routes(
-        app,
-        db,
-        Conversation,
-        ConversationParticipant,
-        User,
-        ConversationKeyEnvelope,
-    )
-    register_e2ee_ada_route(
-        app,
-        db,
-        Conversation,
-        ConversationParticipant,
-        Document,
-        User,
-    )
+    # E2EE/chat routes are registered once by app.py's existing runtime bootstrap.
+    # The control adapter must not register the same endpoints a second time.
 
     def _rotate_once_for_transaction(connection, conversation_id):
         """Return True once per conversation in the current DB transaction."""
