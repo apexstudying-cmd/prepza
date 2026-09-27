@@ -1,4 +1,5 @@
 // @ts-nocheck
+// CI verification marker: restored production Admin frontend is build-tested.
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import logoImg from './imports/logo.png'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
