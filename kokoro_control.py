@@ -92,6 +92,9 @@ def update_progress(job_id):
     job = db.session.get(AiJob, job_id)
     if not job or job.feature != "podcast_audio":
         return jsonify({"error": "Job not found"}), 404
+    worker_id = str(data.get("worker_id") or "").strip()
+    if not worker_id or not job.claimed_worker_id or worker_id != job.claimed_worker_id:
+        return jsonify({"error": "Job claim identity is required and must match the claiming worker"}), 409
     if job.status != "processing":
         return jsonify({"error": "Job is not processing"}), 409
 
@@ -117,8 +120,8 @@ def complete_job(job_id):
         return jsonify({"error": "Job not found"}), 404
 
     worker_id = str(data.get("worker_id") or "").strip()
-    if worker_id and job.claimed_worker_id and worker_id != job.claimed_worker_id:
-        return jsonify({"error": "Job claim belongs to another worker"}), 409
+    if not worker_id or not job.claimed_worker_id or worker_id != job.claimed_worker_id:
+        return jsonify({"error": "Job claim identity is required and must match the claiming worker"}), 409
 
     # Completion is intentionally idempotent. A retry from a worker after
     # a lost HTTP response must not create a second material or corrupt the
