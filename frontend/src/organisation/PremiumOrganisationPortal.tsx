@@ -40,8 +40,10 @@ function Verification({org,docs,busy,upload}:any){
   <Card><h3>Organisation verification</h3><span style={pill(String(org?.verification_status||'pending').toUpperCase())}>{org?.verification_status||'pending'}</span>
    <p>{org?.verification_notes||'Your organisation must be verified before it can publish opportunities or activate paid distribution.'}</p>
    <div style={{background:'#F8F5EC',borderRadius:12,padding:12,fontSize:11,lineHeight:1.6,color:'#5F4A12'}}>
-    <b>What Prepza checks</b><br/>
-    The legal name and registration number must match the organisation profile. We check the document type, visible registry details, dates, names and consistency across documents. For Kenyan entities, admins should independently cross-check registry information rather than treating an uploaded PDF or image as proof by itself.
+    <b>Verification requirements</b><br/>
+    Upload an official registration certificate, an official registry search, and the submitting representative's government ID. An authority letter is required when the representative's authority is not already evident from the registry record or organisation documents. Approval requires the registration certificate + representative ID + either the official search or authority letter.
+    <br/><br/>
+    Prepza independently checks the legal name, registration details, dates, representative identity and consistency across documents. An uploaded file is evidence for review, not proof by itself.
    </div>
    <select value={type} onChange={e=>setType(e.target.value)} style={input}>
     {requirements.map(([v,label])=><option key={v} value={v}>{label}</option>)}
