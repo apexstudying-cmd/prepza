@@ -2357,6 +2357,8 @@ def require_csrf(f):
 
 # Email OTP / SES authentication service.
 register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf, limiter)
+from admin_operations import register_admin_operations
+register_admin_operations(app, db, require_admin)
 from infrastructure_monitoring import register_infrastructure_monitoring
 register_infrastructure_monitoring(
     app, db, require_admin, SystemSetting, User, DocumentContent,
