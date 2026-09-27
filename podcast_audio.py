@@ -1,56 +1,19 @@
-"""
-podcast_audio.py - Phase 2 of the Podcast feature: audio synthesis.
+"""Prepza podcast audio orchestration.
 
-Takes an already-generated podcast SCRIPT (GeneratedMaterial.material_type
-== 'podcast', payload.script.turns - see ai_service.generate_document_
-podcast_script) and synthesizes one audio file: one TTS call per script
-turn against a self-hosted Kokoro server, stitched together with short
-pauses between speakers, uploaded to the active private object store (R2 when configured), with the result
-written back onto the SAME GeneratedMaterial row (audio_status/
-audio_storage_path/duration_seconds) rather than a new row.
+The Flask app is the control plane. It resolves exact ready artifacts,
+creates one durable AiJob for missing audio, and exposes an authenticated
+internal queue API. The standalone Kokoro GPU worker claims the job,
+generates audio on the GPU, stores it in R2, and reports completion.
 
-Mirrors document_pipeline.py's background-thread pattern exactly:
-start_processing spawns a daemon thread, which pushes its own Flask
-app context (a new thread has no access to the request's context) and
-calls the synchronous process function, with a top-level try/except as
-a last-resort safety net since a background thread has no caller to
-raise to. Job bookkeeping (_create_job/_complete_job) also mirrors
-document_pipeline.py's AiJob helpers, using feature="podcast_audio".
-
-TTS backend: whichever Kokoro-compatible server KOKORO_TTS_BASE_URL
-points at - a Hugging Face Space (free CPU Basic tier) running the
-community kokoro-fastapi Docker image, exposing an OpenAI-compatible
-/v1/audio/speech endpoint. KOKORO_SHARED_SECRET, if set, is sent as a
-bearer token - the Space is on a public URL with no auth of its own,
-so this is a lightweight abuse guard (stop random strangers from
-burning the free quota), not real security.
-
-Requires `pydub` and a bundled ffmpeg (e.g. `imageio-ffmpeg`) in
-requirements.txt for audio stitching - see project notes.
-
-PODCAST_VOICE_MAP below uses placeholder Kokoro voice IDs. Swap them
-for real choices once you've actually listened to the voice gallery -
-nothing else in this file needs to change when you do.
+There is deliberately no Render TTS fallback.
 """
 
-import io
-import os
+import hashlib
 import json
-import threading
-import subprocess
-import tempfile
+import os
+
 from datetime import datetime
 
-import requests
-from pydub import AudioSegment
-import imageio_ffmpeg
-AudioSegment.converter = imageio_ffmpeg.get_ffmpeg_exe()
-
-KOKORO_TTS_BASE_URL = os.environ.get("KOKORO_TTS_BASE_URL", "").rstrip("/")
-KOKORO_SHARED_SECRET = os.environ.get("KOKORO_SHARED_SECRET")
-
-# Default production voice mapping. The script generator emits only lec,
-# morio, and kichwa; every turn is mapped before synthesis.
 PODCAST_VOICE_MAP = {
     "lec": os.environ.get("PREPZA_PODCAST_VOICE_LEC", "bm_george").strip(),
     "morio": os.environ.get("PREPZA_PODCAST_VOICE_MORIO", "am_adam").strip(),
@@ -59,195 +22,147 @@ PODCAST_VOICE_MAP = {
 if any(not voice for voice in PODCAST_VOICE_MAP.values()):
     raise RuntimeError("Every podcast speaker must have a configured TTS voice")
 
-TURN_GAP_MS = 400  # silence stitched between speaker turns
 PODCAST_AUDIO_BUCKET = "podcast-audio"
+
+
+def build_audio_fingerprint(envelope, target_duration_seconds):
+    canonical = {
+        "version": "kokoro-a2000-v1",
+        "target_duration_seconds": round(float(target_duration_seconds or 0), 3),
+        "voices": PODCAST_VOICE_MAP,
+        "turns": [
+            {
+                "speaker": str(turn.get("speaker") or ""),
+                "text": str(turn.get("text") or ""),
+            }
+            for turn in (envelope.get("script", {}).get("turns") or [])
+        ],
+    }
+    encoded = json.dumps(
+        canonical,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def start_podcast_audio_processing(material_id, flask_app, notification_id=None):
     """
-    Fire-and-forget: spawns a background thread that synthesizes audio
-    for one GeneratedMaterial(material_type='podcast') row. `flask_app`
-    is passed explicitly (not imported) - same reasoning as
-    document_pipeline.start_processing, a new thread doesn't inherit
-    the request's Flask context.
+    Queue exactly one podcast-audio job for the standalone GPU worker.
+
+    This deliberately does not start a Flask daemon thread and never calls
     """
-    thread = threading.Thread(
-        target=_process_in_background,
-        args=(material_id, flask_app, notification_id),
-        daemon=True,
+    from app import db, GeneratedMaterial, AiJob
+
+    material = (
+        GeneratedMaterial.query
+        .filter_by(id=material_id)
+        .with_for_update()
+        .first()
     )
-    thread.start()
-
-
-def _process_in_background(material_id, flask_app, notification_id=None):
-    with flask_app.app_context():
-        try:
-            process_podcast_audio(material_id, notification_id=notification_id)
-        except Exception as e:  # noqa: BLE001 - last-resort safety net, thread has no caller to raise to
-            print(f"ERROR: podcast audio synthesis crashed for material {material_id}: {e}")
-
-
-def _fit_audio_to_duration(combined, target_seconds):
-    """Correct duration with pitch-preserving FFmpeg; never regenerate AI/TTS."""
-    if not target_seconds or target_seconds <= 0:
-        return combined, None
-    target_ms = int(round(target_seconds * 1000))
-    source_ms = len(combined)
-    if source_ms <= 0:
-        raise RuntimeError("Synthesized podcast audio is empty")
-    ratio = source_ms / target_ms
-    if ratio < 0.70 or ratio > 1.40:
-        raise RuntimeError(
-            f"Podcast TTS duration {source_ms / 1000:.1f}s is too far from "
-            f"requested {target_seconds:.1f}s for safe audio correction"
-        )
-    if abs(source_ms - target_ms) <= 100:
-        return (combined[:target_ms] if source_ms > target_ms else combined + AudioSegment.silent(target_ms - source_ms)), ratio
-    with tempfile.TemporaryDirectory(prefix="prepza-podcast-") as tmp:
-        source_path = os.path.join(tmp, "source.wav")
-        fitted_path = os.path.join(tmp, "fitted.wav")
-        combined.export(source_path, format="wav")
-        command = [
-            AudioSegment.converter, "-y", "-hide_banner", "-loglevel", "error",
-            "-i", source_path, "-filter:a", f"atempo={ratio:.8f}",
-            "-ar", "44100", "-ac", "2", fitted_path,
-        ]
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"FFmpeg duration correction failed: {result.stderr[-500:]}")
-        fitted = AudioSegment.from_file(fitted_path, format="wav")
-        if len(fitted) > target_ms:
-            fitted = fitted[:target_ms]
-        elif len(fitted) < target_ms:
-            fitted += AudioSegment.silent(duration=target_ms - len(fitted))
-        return fitted, ratio
-
-
-def process_podcast_audio(material_id, notification_id=None):
-    """
-    Synchronous audio-synthesis pipeline for one GeneratedMaterial row.
-    Safe to call directly (e.g. from an admin retry endpoint) without
-    going through start_podcast_audio_processing's background thread.
-
-    A single failed TTS turn fails the whole episode rather than
-    producing a podcast with a missing line - partial audio isn't a
-    usable product, better to retry the whole thing.
-    """
-    from app import db, GeneratedMaterial
-
-    material = db.session.get(GeneratedMaterial, material_id)
     if not material or material.material_type != "podcast":
-        print(f"ERROR: podcast audio requested for invalid material {material_id}")
-        return
+        raise RuntimeError(f"Podcast material {material_id} is not valid")
 
-    envelope = json.loads(material.payload)
+    envelope = json.loads(material.payload or "{}")
     if envelope.get("audio_status") == "ready":
-        return  # already done - avoid redoing work if triggered twice
-
-    job = _create_job(material.document_content_id, feature="podcast_audio", notification_id=notification_id)
-
-    envelope["audio_status"] = "processing"
-    material.payload = json.dumps(envelope)
-    db.session.commit()
-
-    try:
-        _update_job_progress(job, 5, "preparing")
-        if not KOKORO_TTS_BASE_URL:
-            raise RuntimeError("KOKORO_TTS_BASE_URL is not configured")
-
-        turns = envelope["script"]["turns"]
-        parameters = material.generation_parameters or {}
-        target_duration_seconds = float(parameters.get("duration_minutes", 0) or 0) * 60
-        combined = AudioSegment.empty()
-        gap = AudioSegment.silent(duration=TURN_GAP_MS)
-
-        total_turns = max(1, len(turns))
-        for i, turn in enumerate(turns):
-            speaker = turn["speaker"]
-            voice_id = PODCAST_VOICE_MAP.get(speaker)
-            if not voice_id:
-                raise RuntimeError(f"No voice configured for speaker '{speaker}'")
-
-            clip_bytes = _synthesize_turn(turn["text"], voice_id)
-            clip = AudioSegment.from_file(io.BytesIO(clip_bytes), format="wav")
-            combined += clip
-            if i < len(turns) - 1:
-                combined += gap
-            _update_job_progress(job, 10 + int(((i + 1) / total_turns) * 70), f"synthesizing speaker turns ({i + 1}/{total_turns})")
-
-        _update_job_progress(job, 82, "fitting audio to requested duration")
-        combined, correction_ratio = _fit_audio_to_duration(combined, target_duration_seconds)
-        _update_job_progress(job, 90, "exporting final audio")
-
-        buffer = io.BytesIO()
-        combined.export(buffer, format="mp3", bitrate="128k")
-        audio_bytes = buffer.getvalue()
-        duration_seconds = len(combined) / 1000.0
-        if target_duration_seconds and abs(duration_seconds - target_duration_seconds) > 0.05:
-            raise RuntimeError(
-                f"Podcast duration verification failed: requested {target_duration_seconds:.1f}s, "
-                f"got {duration_seconds:.1f}s"
-            )
-
-        storage_path = f"{material.document_content_id}-{material.id}.mp3"
-        if not _upload_podcast_audio(storage_path, audio_bytes):
-            raise RuntimeError("Failed to upload synthesized audio to storage")
-
-        _update_job_progress(job, 98, "verifying final duration")
-        envelope["audio_status"] = "ready"
-        envelope["audio_storage_path"] = storage_path
-        envelope["duration_seconds"] = round(duration_seconds, 3)
-        envelope["requested_duration_seconds"] = round(target_duration_seconds, 3) if target_duration_seconds else None
-        envelope["duration_verified"] = bool(target_duration_seconds and abs(duration_seconds - target_duration_seconds) <= 0.05)
-        envelope["duration_correction_ratio"] = round(correction_ratio, 6) if correction_ratio else 1.0
-        material.payload = json.dumps(envelope)
         db.session.commit()
+        return {"job_id": None, "status": "ready", "reused": True}
 
-        _complete_job(job, success=True)
-        job.progress_percent = 100
-        job.progress_stage = "ready"
-        db.session.commit()
-        _complete_generation_notification(notification_id, material.id, success=True, duration_seconds=duration_seconds)
+    turns = envelope.get("script", {}).get("turns") or []
+    if not turns:
+        raise RuntimeError("Podcast script has no speaker turns")
 
-    except Exception as e:
-        envelope["audio_status"] = "failed"
-        material.payload = json.dumps(envelope)
-        db.session.commit()
-        _complete_job(job, success=False, error_message=str(e))
+    parameters = material.generation_parameters or {}
+    target_duration_seconds = float(parameters.get("duration_minutes", 0) or 0) * 60
+    audio_fingerprint = build_audio_fingerprint(envelope, target_duration_seconds)
+
+    # Exact ready-artifact fast path across podcast material variants.
+    # This runs before any new GPU job is created.
+    for candidate in (
+        GeneratedMaterial.query
+        .filter(
+            GeneratedMaterial.document_content_id == material.document_content_id,
+            GeneratedMaterial.material_type == "podcast",
+            GeneratedMaterial.status == "ready",
+            GeneratedMaterial.id != material.id,
+        )
+        .order_by(GeneratedMaterial.updated_at.desc())
+        .limit(50)
+    ):
         try:
-            job.progress_stage = "failed"
+            candidate_envelope = json.loads(candidate.payload or "{}")
+        except (TypeError, ValueError):
+            continue
+        if (
+            candidate_envelope.get("audio_status") == "ready"
+            and candidate_envelope.get("audio_storage_path")
+            and candidate_envelope.get("audio_fingerprint") == audio_fingerprint
+        ):
+            envelope["audio_status"] = "ready"
+            envelope["audio_storage_path"] = candidate_envelope["audio_storage_path"]
+            envelope["duration_seconds"] = candidate_envelope.get("duration_seconds")
+            envelope["requested_duration_seconds"] = candidate_envelope.get("requested_duration_seconds")
+            envelope["duration_verified"] = candidate_envelope.get("duration_verified", False)
+            envelope["duration_correction_ratio"] = candidate_envelope.get("duration_correction_ratio", 1.0)
+            envelope["audio_fingerprint"] = audio_fingerprint
+            material.payload = json.dumps(envelope)
             db.session.commit()
-        except Exception:
-            db.session.rollback()
-        _complete_generation_notification(notification_id, material.id, success=False, error_message=str(e))
-        raise
+            _complete_generation_notification(
+                notification_id,
+                material.id,
+                success=True,
+                duration_seconds=material.payload and envelope.get("duration_seconds"),
+            )
+            return {"job_id": None, "status": "ready", "reused": True}
 
-
-def _synthesize_turn(text, voice_id):
-    """
-    Calls our own prepza-tts server's /synthesize endpoint for one turn
-    of dialogue. NOT OpenAI-compatible - this is a custom minimal
-    ONNX-based Kokoro server (separate "prepza-tts" repo/Render
-    service), not the abandoned kokoro-fastapi Docker image, so the
-    endpoint path and request body are both different from what an
-    OpenAI-compatible TTS API would expect. Returns raw WAV bytes.
-    Raises on any non-200 response or network failure.
-    """
-    headers = {"Content-Type": "application/json"}
-    if KOKORO_SHARED_SECRET:
-        headers["Authorization"] = f"Bearer {KOKORO_SHARED_SECRET}"
-
-    response = requests.post(
-        f"{KOKORO_TTS_BASE_URL}/synthesize",
-        headers=headers,
-        json={
-            "text": text,
-            "voice": voice_id,
-        },
-        timeout=60,
+    existing_job = (
+        AiJob.query
+        .filter(
+            AiJob.document_content_id == material.document_content_id,
+            AiJob.feature == "podcast_audio",
+            AiJob.status.in_(("pending", "processing")),
+            AiJob.generation_parameters["material_id"].as_integer() == material.id,
+        )
+        .order_by(AiJob.id.desc())
+        .first()
     )
-    response.raise_for_status()
-    return response.content
+    if existing_job:
+        db.session.commit()
+        return {"job_id": existing_job.id, "status": existing_job.status, "reused": False}
+
+    storage_path = f"{material.document_content_id}-{material.id}.mp3"
+    generation_parameters = {
+        "material_id": material.id,
+        "turns": [
+            {
+                "text": str(turn.get("text") or ""),
+                "voice": PODCAST_VOICE_MAP.get(str(turn.get("speaker") or "")),
+            }
+            for turn in turns
+        ],
+        "target_duration_seconds": target_duration_seconds,
+        "storage_path": storage_path,
+        "audio_fingerprint": audio_fingerprint,
+        "audio_algorithm_version": "kokoro-a2000-v1",
+    }
+    if any(not item["voice"] for item in generation_parameters["turns"]):
+        raise RuntimeError("Podcast script contains a speaker without a configured Kokoro voice")
+
+    job = AiJob(
+        document_content_id=material.document_content_id,
+        user_id=material.owner_user_id,
+        feature="podcast_audio",
+        status="pending",
+        notification_id=notification_id,
+        progress_percent=0,
+        progress_stage="queued for Kokoro GPU",
+        material_id=material.id,
+        generation_parameters=generation_parameters,
+    )
+    db.session.add(job)
+    db.session.commit()
+    return {"job_id": job.id, "status": "pending", "reused": False}
 
 
 

@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 import ai_service
 import document_pipeline
 import podcast_audio
+import kokoro_control
 from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
 from db_runtime import configure_sqlalchemy_runtime
@@ -65,6 +66,7 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 db = SQLAlchemy(app)
+kokoro_control.register(app)
 from usage_billing import register_usage_billing
 register_usage_billing(app, db)
 from ai_economics import register_ai_economics
@@ -4788,9 +4790,19 @@ def trigger_podcast_audio(document_id):
     material.payload = json.dumps(envelope)
     db.session.commit()
 
-    podcast_audio.start_podcast_audio_processing(material.id, app, notification.id)
+    queue_result = podcast_audio.start_podcast_audio_processing(material.id, app, notification.id)
+    if queue_result.get("status") == "ready":
+        return jsonify({
+            "audio_status": "ready",
+            "material_id": material.id,
+            "reused": True,
+        }), 200
 
-    return jsonify({"audio_status": "processing", "material_id": material.id}), 202
+    return jsonify({
+        "audio_status": "processing",
+        "material_id": material.id,
+        "job_id": queue_result.get("job_id"),
+    }), 202
 
 
 @app.route("/documents/<int:document_id>/podcast-audio")

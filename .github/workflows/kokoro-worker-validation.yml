@@ -1,0 +1,28 @@
+name: Kokoro GPU worker validation
+
+on:
+  push:
+    branches:
+      - a2000-kokoro-worker
+  pull_request:
+    paths:
+      - "podcast_audio.py"
+      - "kokoro_control.py"
+      - "kokoro_worker/**"
+      - ".github/workflows/kokoro-worker-validation.yml"
+
+jobs:
+  python-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Python modules
+        run: |
+          python -m py_compile app.py podcast_audio.py kokoro_control.py kokoro_worker/worker.py
+      - name: Assert Render TTS path is absent
+        run: |
+          ! grep -Eiq 'KOKORO_TTS_BASE_URL|prepza-tts' podcast_audio.py
+      - name: Assert GPU worker is single-process
+        run: |
+          grep -q 'WEB_CONCURRENCY=1' kokoro_worker/Dockerfile
+          grep -q 'uvicorn api.src.main:app --host 127.0.0.1 --port 8880' kokoro_worker/start.sh
