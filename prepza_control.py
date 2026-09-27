@@ -208,6 +208,8 @@ def register_control_routes(
 
     # E2EE/chat routes are registered once by app.py's existing runtime bootstrap.
     # The control adapter must not register the same endpoints a second time.
+    # Reuse the already-mapped chat models for lifecycle listeners; do not re-register routes.
+    from app import Conversation, ConversationParticipant, Message
 
     def _rotate_once_for_transaction(connection, conversation_id):
         """Return True once per conversation in the current DB transaction."""
