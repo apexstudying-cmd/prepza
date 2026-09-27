@@ -6261,7 +6261,7 @@ function SignupScreen({ setScreen, referralCode, referralChannel }: { setScreen:
 
         {step === 5 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1, 2, 3, 4].map(y => (
+            {[1, 2, 3, 4, 5].map(y => (
               <button key={y} onClick={() => { setData(d => ({ ...d, year: y })); advance() }} style={optionStyle(data.year === y)}>Year {y}</button>
             ))}
           </div>
@@ -6269,7 +6269,7 @@ function SignupScreen({ setScreen, referralCode, referralChannel }: { setScreen:
 
         {step === 6 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1, 2].map(s => (
+            {[1, 2, 3].map(s => (
               <button key={s} disabled={submitting} onClick={() => { setData(d => ({ ...d, semester: s })); handleSubmit({ semester: s }) }} style={optionStyle(data.semester === s)}>Semester {s}</button>
             ))}
             {submitting && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8 }}>Creating your account...</div>}
@@ -6513,6 +6513,9 @@ function CompleteProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }
           semester: payload.semester,
         }),
       })
+      window.dispatchEvent(new CustomEvent('prepza:academic-context-changed', { detail: {
+        university_id: payload.university_id, program_id: payload.program_id, year: payload.year, semester: payload.semester
+      }}))
       setScreen('home')
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
@@ -6590,7 +6593,7 @@ function CompleteProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }
 
         {step === 2 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1, 2, 3, 4].map(y => (
+            {[1, 2, 3, 4, 5].map(y => (
               <button key={y} onClick={() => { setData(d => ({ ...d, year: y })); advance() }} style={optionStyle(data.year === y)}>Year {y}</button>
             ))}
           </div>
@@ -6598,7 +6601,7 @@ function CompleteProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }
 
         {step === 3 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1, 2].map(s => (
+            {[1, 2, 3].map(s => (
               <button key={s} disabled={submitting} onClick={() => { setData(d => ({ ...d, semester: s })); handleFinish({ semester: s }) }} style={optionStyle(data.semester === s)}>Semester {s}</button>
             ))}
             {submitting && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8 }}>Saving...</div>}
@@ -7795,6 +7798,9 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           semester: form.semester,
         }),
       })
+      window.dispatchEvent(new CustomEvent('prepza:academic-context-changed', { detail: {
+        university_id: form.university_id, program_id: form.program_id, year: form.year, semester: form.semester
+      }}))
       setSaved(true)
       setTimeout(() => setScreen('profile'), 1000)
     } catch (e) {
@@ -7872,14 +7878,14 @@ function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Year</div>
             <select value={form.year ?? ''} onChange={e => setForm(f => ({ ...f, year: e.target.value ? Number(e.target.value) : null }))} style={inputStyle}>
               <option value="">—</option>
-              {[1, 2, 3, 4].map(y => <option key={y} value={y}>Year {y}</option>)}
+              {[1, 2, 3, 4, 5].map(y => <option key={y} value={y}>Year {y}</option>)}
             </select>
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Semester</div>
             <select value={form.semester ?? ''} onChange={e => setForm(f => ({ ...f, semester: e.target.value ? Number(e.target.value) : null }))} style={inputStyle}>
               <option value="">—</option>
-              {[1, 2].map(s => <option key={s} value={s}>Semester {s}</option>)}
+              {[1, 2, 3].map(s => <option key={s} value={s}>Semester {s}</option>)}
             </select>
           </div>
         </div>
