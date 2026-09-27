@@ -81,6 +81,7 @@ def _claim_job() -> dict[str, Any] | None:
     response = requests.post(
         f"{PREPZA_INTERNAL_BASE_URL}/internal/kokoro/jobs/claim",
         headers=_headers(),
+        json={"worker_id": WORKER_ID},
         timeout=20,
     )
     if response.status_code == 204:
@@ -111,7 +112,7 @@ def _complete(job_id: int, **payload: Any) -> None:
 
 def _fail(job_id: int, error_message: str) -> None:
     try:
-        _complete(job_id, success=False, error_message=error_message[:500])
+        _complete(job_id, worker_id=WORKER_ID, success=False, error_message=error_message[:500])
     except Exception:
         # The worker must keep polling even if Prepza is temporarily unreachable.
         pass
@@ -227,6 +228,7 @@ def _process(job: dict[str, Any]) -> None:
     _report(job_id, progress_percent=98, progress_stage="verifying final duration")
     _complete(
         job_id,
+        worker_id=WORKER_ID,
         success=True,
         storage_path=storage_path,
         duration_seconds=round(duration_seconds, 3),
