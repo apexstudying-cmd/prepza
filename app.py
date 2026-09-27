@@ -623,6 +623,10 @@ class AiJob(db.Model):
     generation_parameters = db.Column(db.JSON, nullable=False, default=dict)
     # Notification row to finalize when a background generation completes.
     notification_id = db.Column(db.Integer, db.ForeignKey("notification.id"), nullable=True)
+    # Worker identity that owns an active podcast-audio claim. This is
+    # fenced during stale-worker recovery so a replacement worker cannot
+    # accidentally complete an old claim.
+    claimed_worker_id = db.Column(db.String(64), nullable=True, index=True)
     # legacy provider Message Batch id, when this job's AI call(s) went through
     # the Batch API instead of a synchronous call - lets an admin look up
     # the batch directly in the legacy provider Console if a job seems stuck.
