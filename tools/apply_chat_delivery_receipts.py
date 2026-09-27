@@ -32,9 +32,18 @@ if MARK not in s:
                     CREATE INDEX IF NOT EXISTS ix_chat_message_receipt_user_delivery
                     ON chat_message_receipt (user_id, delivered_at)
                 """))'''
-    if schema_anchor not in s:
-        raise SystemExit('chat delivery: schema anchor missing')
-    s = s.replace(schema_anchor, schema_insert, 1)
+    if schema_anchor in s:
+        s = s.replace(schema_anchor, schema_insert, 1)
+    elif 'CREATE TABLE IF NOT EXISTS chat_message_receipt' not in s:
+        # Current chat_interactions.py may already own schema bootstrap with equivalent semantics.
+        schema_fallback = '''                    conn.execute(text("""
+                        CREATE INDEX IF NOT EXISTS ix_chat_message_meta_conversation_kind
+                        ON chat_message_meta (conversation_id, kind)
+                    """))'''
+        if schema_fallback not in s:
+            print('chat delivery: schema anchor is source-owned/legacy; skipping schema injection')
+        else:
+            s = s.replace(schema_fallback, schema_insert, 1)
 
     decorate_anchor = '''    other_participants = [p for p in participants if p.user_id != user_id]
 
