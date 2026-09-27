@@ -413,7 +413,7 @@ def register_b2b_organisation_portal(app, db):
     @app.get("/api/admin/b2b/kyc")
     def admin_kyc():
         if not admin_user(): return jsonify({"error":"Admin access required"}),403
-        rows=db.session.execute(text("SELECT id,organisation_id,document_type,file_name,status,admin_notes,created_at,reviewed_at,reviewed_by FROM organisation_kyc_document ORDER BY created_at DESC LIMIT 500")).mappings().all()
+        rows=db.session.execute(text("SELECT id,organisation_id,document_type,file_name,status,admin_notes,size_bytes,sha256,mime_type,storage_provider,created_at,reviewed_at,reviewed_by FROM organisation_kyc_document ORDER BY created_at DESC LIMIT 500")).mappings().all()
         return jsonify({"documents":[dict(x) for x in rows]})
 
     @app.get("/api/admin/b2b/kyc/<int:doc_id>/download")
@@ -510,15 +510,11 @@ def register_b2b_organisation_portal(app, db):
     def kyc_list(oid):
         uid=session.get("user_id")
         if not uid or not access(oid,uid):return jsonify({"error":"Organisation membership required"}),403
-        rows=db.session.execute(text("SELECT id,document_type,file_name,status,admin_notes,created_at,reviewed_at FROM organisation_kyc_document WHERE organisation_id=:o ORDER BY created_at DESC"),{"o":oid}).mappings().all()
+        rows=db.session.execute(text("SELECT id,document_type,file_name,status,admin_notes,size_bytes,sha256,mime_type,storage_provider,created_at,reviewed_at FROM organisation_kyc_document WHERE organisation_id=:o ORDER BY created_at DESC"),{"o":oid}).mappings().all()
         return jsonify({"documents":[dict(x) for x in rows]})
 
     @app.post("/api/organisations/<int:oid>/kyc")
-    def kyc_submit(oid):
-        uid=session.get("user_id")
-        if not uid or not access(oid,uid,owner=True) or not csrf():return jsonify({"error":"Organisation owner and valid CSRF token required"}),403
-        data=request.get_json(silent=True) or {}
-        dtype=str(data.get("document_type") or "").strip()[:60];fname=str(data.get("file_name") or "").strip()[:255];path=str(data.get("storage_path") or "").strip()[:500]
-        if not dtype or not fname or not path:return jsonify({"error":"document_type, file_name and storage_path are required"}),400
-        db.session.execute(text("INSERT INTO organisation_kyc_document(organisation_id,document_type,file_name,storage_path) VALUES(:o,:t,:f,:p)"),{"o":oid,"t":dtype,"f":fname,"p":path});db.session.commit()
-        return jsonify({"ok":True,"status":"pending"}),201
+    def kyc_submit_legacy(oid):
+        # Do not accept caller-supplied storage paths. All KYC files must pass
+        # the authenticated multipart upload path, which stores them in R2.
+        return jsonify({"error":"Use the multipart KYC upload endpoint."}),410
