@@ -19,15 +19,15 @@ def main() -> None:
     if "import { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'" not in text:
         if "import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'" in text:
             text = text.replace(
-                "import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'\\n",
-                "import { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'\\n",
+                "import { enqueueOfflineChatMessage } from '../offline/chatOfflineQueue'\n",
+                "import { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'\n",
                 1,
             )
         else:
             text = replace_once(
                 text,
-                "import { provisionInitialGroupKey } from './groupProvisioning'\\n",
-                "import { provisionInitialGroupKey } from './groupProvisioning'\\nimport { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'\\n",
+                "import { provisionInitialGroupKey } from './groupProvisioning'\n",
+                "import { provisionInitialGroupKey } from './groupProvisioning'\\nimport { enqueueOfflineChatMessage, installOfflineChatQueue } from '../offline/chatOfflineQueue'\n",
                 'imports',
             )
 
