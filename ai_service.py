@@ -219,9 +219,8 @@ def compute_cost_usd(model, input_tokens, output_tokens,
     """
     Computes cost in USD from real token counts (never estimates).
     `input_tokens` here should be the NON-cached portion only - callers
-    pass the API response's input_tokens field, which legacy provider already
-    reports net of cache reads/writes. Pass batch=True for requests that
-    went through route_and_generate_batch (Message Batches API pricing).
+    pass the API response's input_tokens field. Pass batch=True when a
+    caller uses the OpenAI Batch API pricing path.
     """
     if batch:
         pricing = _BATCH_PRICING.get(model)
@@ -249,7 +248,7 @@ def compute_cost_usd(model, input_tokens, output_tokens,
 # ============================================================
 
 class MultiProvider:
-    """Provider adapter for legacy provider, Gemini REST, and OpenAI REST.
+    """Provider adapter for Gemini REST and OpenAI REST.
 
     Keys are read only from the server environment. They must never be
     committed to the repository or sent through chat.
