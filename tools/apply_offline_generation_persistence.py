@@ -182,6 +182,25 @@ def patch_summary(text, path):
     return text[:pos] + restore + text[pos:]
 
 
+def normalize_offline_imports(text: str) -> str:
+    """Merge named imports from the shared offline modules after all build transformers run."""
+    modules = [
+        "../offline/generatedMaterials",
+        "../offline/studyHubOffline",
+    ]
+    for module in modules:
+        pattern = re.compile(r"^import \\{([^}]*)\\} from '" + re.escape(module) + r"'\\n", re.MULTILINE)
+        names = []
+        for match in pattern.finditer(text):
+            names.extend(name.strip() for name in match.group(1).split(",") if name.strip())
+        if not names:
+            continue
+        merged = "import { " + ", ".join(dict.fromkeys(names)) + " } from '" + module + "'\\n"
+        text = pattern.sub("", text)
+        text = merged + text
+    return text
+
+
 def patch(path):
     text = path.read_text(encoding='utf-8')
     text = add_imports(text, path)
@@ -189,6 +208,7 @@ def patch(path):
     text = patch_podcast(text, path)
     text = patch_flashcards(text, path)
     text = patch_summary(text, path)
+    text = normalize_offline_imports(text)
     path.write_text(text, encoding='utf-8')
 
 
