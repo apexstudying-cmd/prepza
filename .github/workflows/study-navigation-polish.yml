@@ -48,7 +48,7 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend
-        run: npm run build
+        run: pnpm run build
 
       - name: Compile patch script
         run: python3 -m py_compile scripts/apply_study_navigation_polish.py
