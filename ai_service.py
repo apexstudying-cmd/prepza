@@ -177,7 +177,7 @@ AI_TASKS = {
 
 
 # ============================================================
-# 3. PRICING (per MTok, USD) - keyed by effective date since legacy provider
+# 3. PRICING (per MTok, USD) - keyed by effective date
 #    has an announced GPT-5 Mini 5 price change on 2026-08-31.
 #    Re-verify against platform.openai.com/docs if this drifts far
 #    from today's date. Cache multipliers apply to the INPUT price only.
@@ -187,13 +187,9 @@ _PRICING_SCHEDULE = {
     MODEL_GEMINI_FLASH_LITE: [(datetime(2000, 1, 1), Decimal("0.10"), Decimal("0.40"))],
     MODEL_GEMINI_FLASH: [(datetime(2000, 1, 1), Decimal("0.30"), Decimal("2.50"))],
     MODEL_OPENAI_LUNA: [(datetime(2000, 1, 1), Decimal("0.20"), Decimal("1.20"))],
+    # OpenAI GPT-5 Mini: $0.25/M input, $2.00/M output.
     MODEL_OPENAI_GPT5_MINI: [
-        # legacy provider's current official price is $2/$10 per MTok. The
-        # previously announced Sep-2026 increase to $3/$15 was cancelled.
-        (datetime(2000, 1, 1), Decimal("2.00"), Decimal("10.00")),
-    ],
-    MODEL_OPENAI_GPT5_MINI: [
-        (datetime(2000, 1, 1), Decimal("1.00"), Decimal("5.00")),
+        (datetime(2000, 1, 1), Decimal("0.25"), Decimal("2.00")),
     ],
 }
 
@@ -212,12 +208,12 @@ def _pricing_for(model, at=None):
 
 
 # Message Batches API pricing (flat 50% off standard rates, per
-# legacy provider's docs). Not date-scheduled like _PRICING_SCHEDULE above,
+# OpenAI's Batch API pricing). Not date-scheduled like _PRICING_SCHEDULE above,
 # since both models' batch rates have only ever been this one price -
 # re-verify against platform.openai.com/docs if that changes.
 _BATCH_PRICING = {
-    MODEL_OPENAI_GPT5_MINI: (Decimal("1.00"), Decimal("5.00")),
-    MODEL_OPENAI_GPT5_MINI: (Decimal("0.50"), Decimal("2.50")),
+    # OpenAI Batch API: 50% of standard GPT-5 Mini input/output rates.
+    MODEL_OPENAI_GPT5_MINI: (Decimal("0.125"), Decimal("1.00")),
 }
 
 
