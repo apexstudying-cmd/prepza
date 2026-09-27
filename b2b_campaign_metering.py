@@ -40,6 +40,57 @@ def _unit_price_minor(campaign, event_type):
         return int((Decimal(bid_kes) * Decimal(100) / Decimal(1000)).to_integral_value())
     return 0
 
+def campaign_target_matches_student(db, campaign_id, user_id):
+    """Return whether the authenticated student matches the campaign audience.
+
+    Target dimensions are ANDed across dimensions and ORed within a dimension.
+    An omitted dimension means "all" for that dimension. This is deliberately
+    checked at billing time as well as feed-selection time so a client cannot
+    manufacture a billable delivery for an ineligible student.
+    """
+    row = db.session.execute(text("""
+        SELECT c.target_json, u.university_id, u.program_id, u.year, u.semester,
+               o.status AS opportunity_status, org.verification_status, org.is_active
+        FROM discovery_campaign c
+        LEFT JOIN opportunity o ON o.id=c.opportunity_id
+        LEFT JOIN organisation org ON org.id=c.organisation_id
+        JOIN "user" u ON u.id=:uid
+        WHERE c.id=:cid
+    """), {"cid": campaign_id, "uid": user_id}).mappings().first()
+    if not row:
+        return False, "campaign_or_student_missing"
+    if row["opportunity_status"] not in ("published",):
+        return False, "opportunity_not_published"
+    if row["verification_status"] != "verified" or not row["is_active"]:
+        return False, "organisation_not_verified"
+    target = row["target_json"] if isinstance(row["target_json"], dict) else {}
+    dimensions = (
+        ("university_ids", "university_id"),
+        ("program_ids", "program_id"),
+        ("years", "year"),
+        ("semesters", "semester"),
+    )
+    aliases = {"universities":"university_ids", "programs":"program_ids"}
+    for key, field in dimensions:
+        values = target.get(key)
+        if values is None:
+            for alias, canonical in aliases.items():
+                if canonical == key and target.get(alias) is not None:
+                    values = target.get(alias)
+                    break
+        if values in (None, [], ""):
+            continue
+        if not isinstance(values, (list, tuple, set)):
+            return False, "invalid_target_configuration"
+        try:
+            allowed = {int(v) for v in values}
+            student_value = row[field]
+            if student_value is None or int(student_value) not in allowed:
+                return False, "student_not_targeted"
+        except (TypeError, ValueError):
+            return False, "invalid_target_configuration"
+    return True, "target_match"
+
 def record_billable_event(db, campaign_id, user_id, event_type, placement, event_key):
     """Atomically check balance, insert event+ledger, and update counters."""
     if event_type not in EVENT_TYPES:
