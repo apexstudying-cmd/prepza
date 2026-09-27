@@ -855,7 +855,7 @@ def register_discovery(app, db):
             FROM discovery_campaign
             WHERE status='active'
               AND funding_status IN ('funded','credited')
-              AND placement IN ('feed','feed_push')
+              AND placement IN ('feed','home_carousel','explore','trending','opportunities_feed','feed_push')
               AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP)
               AND EXISTS (
                 SELECT 1 FROM opportunity o
