@@ -65,8 +65,8 @@ def main() -> None:
     engine = read('frontend/src/crypto/pdfStudyReaderEngine.ts')
     pdf_vendor = read('tools/ensure_local_pdfjs.py')
 
-    require(generated, ['getLatestGeneratedMaterialForPath', 'listGeneratedMaterialsOffline', 'deleteGeneratedMaterialOffline', 'prepza-offline-user-id', 'generatedAudio', 'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl'], 'generated-material persistence')
-    require(study, ['prepza-study-assets-v1', 'openAssetDb', 'putStudyAsset', 'getOfflineStudyDocumentBlob', 'getOfflineStudyDocumentUrl', 'getOfflineStudyStorageUsage', 'summarize', 'flashcards', 'quiz', 'mind-map', 'podcast-script', 'podcast-audio'], 'offline Study Hub package')
+    require(generated, ['getLatestGeneratedMaterialForPath', 'listGeneratedMaterialsOffline', 'deleteGeneratedMaterialOffline', 'prepza-offline-user-id', 'generatedAudio', 'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl', 'summarize', 'flashcards', 'quiz', 'mind-map', 'podcast-script', 'podcast-audio'], 'generated-material persistence')
+    require(study, ['prepza-study-assets-v1', 'openAssetDb', 'putStudyAsset', 'getOfflineStudyDocumentBlob', 'getOfflineStudyDocumentUrl', 'getOfflineStudyStorageUsage', 'podcast-audio'], 'offline Study Hub package')
     require(activity, ['recordOfflineStudySeconds', 'syncedSeconds', 'syncOfflineStudyActivity', '/study-time/offline-sync', 'total_seconds', 'server_total_seconds_by_date'], 'offline study activity')
     require(backend_activity, ['total_seconds', 'server_total_seconds_by_date', 'new_total = max(existing_total, target)'], 'server study reconciliation')
     require(bootstrap, ['setOfflineUserId', 'syncOfflineStudyActivity'], 'offline bootstrap')
