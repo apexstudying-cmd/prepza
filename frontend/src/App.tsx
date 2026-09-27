@@ -6787,6 +6787,7 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
     { value: 'plagiarised_material', label: 'Plagiarised material' },
     { value: 'inappropriate_content', label: 'Inappropriate content' },
     { value: 'copyright_violation', label: 'Copyright violation' },
+    { value: 'wrong_academic_category_year', label: 'Wrong academic category or year' },
     { value: 'other', label: 'Other' },
   ]
 
