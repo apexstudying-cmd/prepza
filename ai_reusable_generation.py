@@ -6,7 +6,17 @@ from datetime import datetime
 from sqlalchemy import text
 
 from ai_artifact_fingerprint import GENERATION_VERSION, build_generation_fingerprint
-from ai_generation_store import claim_or_get_generation, find_ready_generation_family, find_generating_generation_family, mark_generation_failed, mark_generation_ready, wait_for_generation
+from ai_generation_store import (
+    claim_or_get_generation,
+    claim_or_subscribe_generation_family,
+    find_ready_generation_family,
+    mark_generation_failed,
+    mark_generation_ready,
+    wait_for_generation,
+    wait_for_inflight_family,
+    bind_inflight_artifact,
+    finish_inflight_generation,
+)
 
 # Per-request product ceilings are intentionally separate from monthly plan allowances.
 # A Pro student can spend 100 summary pages/month, for example, but one request
@@ -328,26 +338,19 @@ def generate_document_material(*, material_type, document_content_id, triggering
             "model_used": None,
         }
 
-    # In-flight collapse: after the ready fast path, attach this request to an
-    # already-generating exact product configuration before reserving a new
-    # variant or creating another provider call. The requester has already
-    # consumed their own quota above, so reuse still costs them entitlement
-    # units while saving Prepza a duplicate provider generation.
-    inflight = find_generating_generation_family(
-        content_hash=content.content_hash,
-        feature=material_type,
-        base_parameters=base_parameters,
-        prompt_version=prompt_version,
-        schema_version=schema_version,
-        scope=scope,
-        owner_user_id=owner_user_id,
+    # In-flight family collapse: elect exactly one provider producer for this
+    # source-hash + product configuration. Every concurrent requester keeps
+    # its own quota charge but subscribes to the same provider artifact.
+    family = claim_or_subscribe_generation_family(
+        base_fingerprint=base_fingerprint,
+        user_id=triggering_user_id,
     )
-    if inflight:
-        waited = wait_for_generation(
-            fingerprint=db.session.execute(
-                text("SELECT fingerprint FROM ai_generation_artifact WHERE id = :artifact_id"),
-                {"artifact_id": inflight.artifact_id},
-            ).scalar_one(),
+    family_producer = family.is_producer
+    family_lease = family.lease_token
+
+    if not family_producer:
+        waited = wait_for_inflight_family(
+            base_fingerprint,
             timeout_seconds=900.0,
             poll_interval_seconds=0.5,
         )
@@ -375,13 +378,10 @@ def generate_document_material(*, material_type, document_content_id, triggering
                 "model_used": None,
             }
         if waited.status == "failed":
-            # The failed producer released its lease; this request may now
-            # become the next legitimate producer below.
-            pass
-        else:
-            raise ai_service.AIProviderError(
-                "AI generation is still running. Please keep the generation screen open and try again shortly."
-            )
+            raise ai_service.AIProviderError("AI generation failed - please try again.")
+        raise ai_service.AIProviderError(
+            "AI generation is still running. Please keep the generation screen open and try again shortly."
+        )
 
 
     if variant_pool_feature:
@@ -407,6 +407,13 @@ def generate_document_material(*, material_type, document_content_id, triggering
             parameters=params, prompt_version=prompt_version, schema_version=schema_version,
             scope=scope, owner_user_id=owner_user_id,
         )
+        if lookup.owner and family_producer:
+            bind_inflight_artifact(
+                base_fingerprint=base_fingerprint,
+                artifact_id=lookup.artifact_id,
+                lease_token=family_lease,
+            )
+
     except Exception:
         if variant_pool_feature and variant is not None:
             try:
@@ -495,6 +502,7 @@ def generate_document_material(*, material_type, document_content_id, triggering
         quota_payment_id = quota_meta.get("entitlement_payment_id")
 
     job = None
+    lookup = None
     artifact_ready = False
     try:
         if ai_service.is_spend_cap_reached():
@@ -547,6 +555,13 @@ def generate_document_material(*, material_type, document_content_id, triggering
         parsed = parser(ai_response.text)
         payload = _podcast_payload(parsed) if material_type == "podcast" else parsed
         mark_generation_ready(lookup.artifact_id, payload, lookup.lease_token)
+        if family_producer:
+            finish_inflight_generation(
+                base_fingerprint=base_fingerprint,
+                artifact_id=lookup.artifact_id,
+                lease_token=family_lease,
+                success=True,
+            )
         if variant_pool_feature:
             mark_generation_variant_ready(
                 db, triggering_user_id, base_fingerprint, variant, lookup.artifact_id
@@ -584,6 +599,16 @@ def generate_document_material(*, material_type, document_content_id, triggering
         if not artifact_ready:
             try:
                 mark_generation_failed(lookup.artifact_id, str(exc), lookup.lease_token)
+            except Exception:
+                db.session.rollback()
+        if family_producer and family_lease:
+            try:
+                finish_inflight_generation(
+                    base_fingerprint=base_fingerprint,
+                    artifact_id=(lookup.artifact_id if lookup is not None else None),
+                    lease_token=family_lease,
+                    success=False,
+                )
             except Exception:
                 db.session.rollback()
         if job is not None:
