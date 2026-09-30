@@ -70,7 +70,7 @@ REQUIRED = {
     "/admin/auth/otp",
 }
 
-ROUTE_RE = re.compile(r"@app\.(?:route|get|post|put|patch|delete|options|head)\(\s*["']([^"']+)["']")
+ROUTE_RE = re.compile(r"@app\.(?:route|get|post|put|patch|delete|options|head)\(\s*[\"']([^\"']+)[\"']")
 
 def main():
     routes = set()
