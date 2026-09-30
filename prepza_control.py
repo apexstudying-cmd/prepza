@@ -345,3 +345,21 @@ import admin_reconciled_core_a
 import admin_reconciled_core_b
 import admin_reconciled_organisation
 import admin_reconciled_opportunities
+
+
+# Defense-in-depth for the reconciled admin runtime. Individual legacy routes
+# also use require_admin/require_csrf; this guard prevents a missed decorator
+# from turning an admin endpoint into an unauthenticated mutation.
+@app.before_request
+def _reconciled_admin_guard():
+    if not (request.path == "/admin" or request.path.startswith("/admin/")):
+        return None
+    uid = session.get("user_id")
+    admin = db.session.get(User, uid) if uid else None
+    if not admin or not admin.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    if request.method in {"POST", "PATCH", "PUT", "DELETE"}:
+        token = request.headers.get("X-CSRF-Token")
+        if not token or not session.get("csrf_token") or token != session.get("csrf_token"):
+            return jsonify({"error": "Invalid CSRF token"}), 403
+    return None
