@@ -38,5 +38,7 @@ jobs:
         run: pnpm exec tsc --noEmit
       - name: Chat UI contract
         run: python3 scripts/test_chat_ui_contract.py
+      - name: StudyHub offline storage contract
+        run: python3 tools/verify_studyhub_offline_limits.py
       - name: Student screen end-to-end contract
         run: python3 tools/audit_student_screen_contract.py
