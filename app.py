@@ -9619,6 +9619,7 @@ def create_chat():
     except (TypeError,ValueError):
         return jsonify({"error":"participant_ids must contain integers"}),400
     participant_ids=[x for x in participant_ids if x != user_id]
+    conversation_status = "accepted"
     if is_group:
         name=(data.get("name") or "").strip()
         if not name or len(name)>100: return jsonify({"error":"Group name is required and must be 100 characters or fewer"}),400
@@ -9628,7 +9629,6 @@ def create_chat():
         if len(participant_ids)!=1: return jsonify({"error":"A direct chat requires exactly one other participant"}),400
         target= db.session.get(User,participant_ids[0])
         if not target or target.is_suspended: return jsonify({"error":"Student not found"}),404
-        conversation_status = "accepted"
         if target.who_can_message=="followers":
             follows=Follow.query.filter_by(follower_id=user_id,followed_id=target.id).first()
             if not follows:
