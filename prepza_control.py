@@ -337,3 +337,11 @@ def register_control_routes(
                 return response
 
         app._prepza_e2ee_message_epoch_response_hook = True
+
+
+# Day 3 admin runtime reconciliation is loaded by app.py's final control import.
+import admin_reconciled_ambassadors
+import admin_reconciled_core_a
+import admin_reconciled_core_b
+import admin_reconciled_organisation
+import admin_reconciled_opportunities
