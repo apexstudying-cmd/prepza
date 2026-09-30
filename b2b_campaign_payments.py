@@ -19,17 +19,7 @@ from flask import jsonify, request, session
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-
-def _available_prepaid_campaign_balance(funded_amount_minor, ledger_net_minor):
-    """Return unused campaign value without double-counting the funding credit.
-
-    The campaign ledger contains the original funding credit as well as every
-    delivery/refund entry, so its net balance is already the remaining prepaid
-    value. The funded amount is retained as a safety ceiling.
-    """
-    funded = max(0, int(funded_amount_minor or 0))
-    ledger_net = max(0, int(ledger_net_minor or 0))
-    return min(funded, ledger_net)
+from b2b_campaign_accounting import available_prepaid_campaign_balance as _available_prepaid_campaign_balance
 
 
 def register_b2b_campaign_payments(app, db):
