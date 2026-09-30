@@ -16,12 +16,14 @@ export default function StudentOnboarding({screen,setScreen}:Props) {
   const [open,setOpen]=useState(false)
   const [step,setStep]=useState(0)
   const [ready,setReady]=useState(false)
+  const [userKey,setUserKey]=useState<string|null>(null)
   useEffect(()=>{
     if (screen !== 'home') return
     let cancelled=false
     fetch('/me',{credentials:'include'}).then(r=>r.ok?r.json():null).then(me=>{
       if (cancelled || !me?.user_id || me?.is_admin) return
       const key = `prepza_onboarding_v1_done:${me.user_id}`
+      setUserKey(key)
       if (localStorage.getItem(key) !== '1') setOpen(true)
     }).catch(()=>{}).finally(()=>{if(!cancelled)setReady(true)})
     return ()=>{cancelled=true}
@@ -29,9 +31,8 @@ export default function StudentOnboarding({screen,setScreen}:Props) {
   const finish=()=>{
     // Completion is account-specific so a second student using the same
     // device still receives their own first-run guide.
-    fetch('/me',{credentials:'include'}).then(r=>r.ok?r.json():null).then(me=>{
-      if (me?.user_id) localStorage.setItem(`prepza_onboarding_v1_done:${me.user_id}`,'1')
-    }).catch(()=>{}).finally(()=>setOpen(false))
+    if (userKey) localStorage.setItem(userKey,'1')
+    setOpen(false)
   }
   if (!ready || !open) return null
   const current=STEPS[step]
