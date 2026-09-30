@@ -331,6 +331,15 @@ def _upsert_subscription(db, *, user_id, plan, plan_code=None, subscription_code
              next_payment_at,initial_payment_id,latest_payment_id)
         VALUES (:uid,:plan,:plan_code,:subscription_code,:email_token,:customer_code,
                 COALESCE(:status,'active'),:next_payment_at,:initial_payment_id,:latest_payment_id)
+        ON CONFLICT (user_id,paystack_plan_code) DO UPDATE
+        SET paystack_subscription_code=COALESCE(EXCLUDED.paystack_subscription_code,student_subscription.paystack_subscription_code),
+            paystack_email_token=COALESCE(EXCLUDED.paystack_email_token,student_subscription.paystack_email_token),
+            paystack_customer_code=COALESCE(EXCLUDED.paystack_customer_code,student_subscription.paystack_customer_code),
+            status=COALESCE(EXCLUDED.status,student_subscription.status),
+            next_payment_at=COALESCE(EXCLUDED.next_payment_at,student_subscription.next_payment_at),
+            initial_payment_id=COALESCE(student_subscription.initial_payment_id,EXCLUDED.initial_payment_id),
+            latest_payment_id=COALESCE(EXCLUDED.latest_payment_id,student_subscription.latest_payment_id),
+            updated_at=CURRENT_TIMESTAMP
         RETURNING id
     """), {
         "uid": user_id, "plan": plan, "plan_code": plan_code,
