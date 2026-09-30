@@ -73,3 +73,10 @@ def test_refund_webhook_uses_paystack_transaction_reference():
 def test_refund_webhook_accepts_nested_transaction_reference_fallback():
     payload = {"transaction": {"reference": "nested-ref"}}
     assert billing._refund_transaction_reference(payload) == "nested-ref"
+
+
+def test_subscription_upsert_uses_database_conflict_resolution_for_webhook_races():
+    from pathlib import Path
+    source = Path("student_subscription_billing.py").read_text(encoding="utf-8")
+    assert "ON CONFLICT (user_id,paystack_plan_code) DO UPDATE" in source
+    assert "EXCLUDED.paystack_subscription_code" in source
