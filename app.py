@@ -254,27 +254,10 @@ class Program(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-class Unit(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(20), nullable=False)
-    name = db.Column(db.String(200), nullable=False)
-    year = db.Column(db.Integer, nullable=False)
-    semester = db.Column(db.Integer, nullable=False)
-    university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=True)
-
-
-class UnitProgram(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
-    program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=False)
-    __table_args__ = (
-        db.UniqueConstraint("unit_id", "program_id", name="uq_unit_program"),
-    )
-
 
 class ContentItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
+
     content_type = db.Column(db.String(20), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     file_url = db.Column(db.String(500), nullable=True)
@@ -704,7 +687,7 @@ class LearningConcept(db.Model):
     """
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), unique=True, nullable=False)
-    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -1051,7 +1034,7 @@ class LibraryPublication(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     document_id = db.Column(db.Integer, db.ForeignKey("document.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
+
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.String(1000), nullable=True)
     material_type = db.Column(db.String(30), nullable=False)
@@ -1379,7 +1362,7 @@ class Group(db.Model):
     # public | private | course_only
     university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=True)
     program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=True)
-    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
+
     year = db.Column(db.Integer, nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     member_count = db.Column(db.Integer, nullable=False, default=0)
@@ -5207,8 +5190,7 @@ def publish_document():
     title = (data.get("title") or "").strip()
     description = data.get("description")
     material_type = (data.get("material_type") or "").strip()
-    unit_id = data.get("unit_id")
-
+    unit_id = None
     if not document_id:
         return jsonify({"error": "document_id is required"}), 400
 
@@ -5232,7 +5214,7 @@ def publish_document():
         return jsonify({"error": "material_type must be one of: " + ", ".join(sorted(LIBRARY_MATERIAL_TYPES))}), 400
 
     if unit_id is not None:
-        if not db.session.get(Unit, unit_id):
+        if not None:
             return jsonify({"error": "Unit not found"}), 404
 
     if _document_content_has_flagged_material(document.document_content_id):
@@ -5266,7 +5248,7 @@ def publish_document():
     publication = LibraryPublication(
         document_id=document_id,
         user_id=user_id,
-        unit_id=unit_id,
+
         title=title,
         description=description,
         material_type=material_type,
@@ -5304,15 +5286,15 @@ def my_library_submissions():
 
     result = []
     for pub in publications:
-        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+        unit = None if pub.unit_id else None
         result.append({
             "id": pub.id,
             "document_id": pub.document_id,
             "title": pub.title,
             "description": pub.description,
             "material_type": pub.material_type,
-            "unit_id": pub.unit_id,
-            "unit_code": unit.code if unit else None,
+            "unit_id": None,
+            "unit_code": None,
             "status": pub.status,
             "rejection_reason": pub.rejection_reason,
             "view_count": pub.view_count,
@@ -5353,16 +5335,13 @@ def browse_library():
     q = (request.args.get("q") or "").strip()
     if q:
         query = query.filter(LibraryPublication.title.ilike(f"%{q}%"))
-
-    unit_id = request.args.get("unit_id", type=int)
+    unit_id = None
     if unit_id:
-        query = query.filter(LibraryPublication.unit_id == unit_id)
+        query = query.filter(False)
 
     university_id = request.args.get("university_id", type=int)
     if university_id:
-        query = query.join(Unit, LibraryPublication.unit_id == Unit.id).filter(
-            Unit.university_id == university_id
-        )
+        query = query.filter(LibraryPublication.university_id == university_id)
 
     material_type = request.args.get("material_type")
     if material_type:
@@ -5388,7 +5367,7 @@ def browse_library():
 
     result = []
     for pub in publications:
-        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+        unit = None if pub.unit_id else None
         author = db.session.get(User, pub.user_id)
         result.append({
             "id": pub.id,
@@ -5396,8 +5375,8 @@ def browse_library():
             "title": pub.title,
             "description": pub.description if (has_premium or pub.id in free_ids) else None,
             "material_type": pub.material_type,
-            "unit_id": pub.unit_id,
-            "unit_code": unit.code if unit else None,
+            "unit_id": None,
+            "unit_code": None,
             "author": _display_name(author) if author else "Deleted user",
             "view_count": pub.view_count,
             "save_count": pub.save_count,
@@ -5617,15 +5596,15 @@ def list_saved_library_items():
             # Underlying material was flagged after this was saved - hide
             # it the same way browse_library does, rather than error.
             continue
-        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+        unit = None if pub.unit_id else None
         author = db.session.get(User, pub.user_id)
         result.append({
             "id": pub.id,
             "title": pub.title,
             "description": pub.description,
             "material_type": pub.material_type,
-            "unit_id": pub.unit_id,
-            "unit_code": unit.code if unit else None,
+            "unit_id": None,
+            "unit_code": None,
             "author": _display_name(author) if author else "Deleted user",
             "view_count": pub.view_count,
             "save_count": pub.save_count,
@@ -5701,7 +5680,7 @@ def admin_library_queue():
 
     result = []
     for pub in publications:
-        unit = db.session.get(Unit, pub.unit_id) if pub.unit_id else None
+        unit = None if pub.unit_id else None
         author = db.session.get(User, pub.user_id)
         document = db.session.get(Document, pub.document_id)
         result.append({
@@ -5710,8 +5689,8 @@ def admin_library_queue():
             "title": pub.title,
             "description": pub.description,
             "material_type": pub.material_type,
-            "unit_id": pub.unit_id,
-            "unit_code": unit.code if unit else None,
+            "unit_id": None,
+            "unit_code": None,
             "author_email": author.email if author else None,
             "original_filename": document.original_filename if document else None,
             "created_at": pub.created_at.isoformat() if pub.created_at else None,
@@ -6862,7 +6841,7 @@ GROUP_PRIVACY_VALUES = {"public", "private", "course_only"}
 
 
 def _serialize_group(group, membership=None):
-    unit = db.session.get(Unit, group.unit_id) if group.unit_id else None
+    unit = None if group.unit_id else None
     return {
         "id": group.id,
         "name": group.name,
@@ -6870,8 +6849,8 @@ def _serialize_group(group, membership=None):
         "privacy": group.privacy,
         "university_id": group.university_id,
         "program_id": group.program_id,
-        "unit_id": group.unit_id,
-        "unit_code": unit.code if unit else None,
+        "unit_id": None,
+        "unit_code": None,
         "year": group.year,
         "member_count": group.member_count,
         "created_by": group.created_by,
@@ -6918,10 +6897,9 @@ def create_group():
     if program_id is not None:
         if not isinstance(program_id, int) or not db.session.get(Program, program_id):
             return jsonify({"error": "Invalid program_id"}), 400
-
-    unit_id = data.get("unit_id")
+    unit_id = None
     if unit_id is not None:
-        if not isinstance(unit_id, int) or not db.session.get(Unit, unit_id):
+        if not isinstance(unit_id, int) or not None:
             return jsonify({"error": "Invalid unit_id"}), 400
 
     year = data.get("year")
@@ -6945,7 +6923,7 @@ def create_group():
         privacy=privacy,
         university_id=university_id,
         program_id=program_id,
-        unit_id=unit_id,
+
         year=year,
         created_by=user_id,
         member_count=1,
@@ -6989,10 +6967,9 @@ def browse_groups():
     q = (request.args.get("q") or "").strip()
     if q:
         query = query.filter(Group.name.ilike(f"%{q}%"))
-
-    unit_id = request.args.get("unit_id", type=int)
+    unit_id = None
     if unit_id:
-        query = query.filter(Group.unit_id == unit_id)
+        query = query.filter(False)
 
     university_id = request.args.get("university_id", type=int)
     if university_id:
@@ -8643,14 +8620,14 @@ def my_library():
     for item in items:
         if not has_access(user_id, item):
             continue
-        unit = db.session.get(Unit, item.unit_id)
+        unit = None
         item_unlocked_at = unlocked_at.get(item.id)
         grouped[item.content_type].append({
             "id": item.id,
             "title": item.title,
             "paper_year": item.paper_year,
-            "unit_id": item.unit_id,
-            "unit_code": unit.code if unit else None,
+            "unit_id": None,
+            "unit_code": None,
             "file_url": (
                 get_signed_url(get_fulfilled_content_file_path(user_id, item.id))
                 if item.is_downloadable else None

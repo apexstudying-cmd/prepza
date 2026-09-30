@@ -41,3 +41,14 @@ CI must pass before this Day 5 pass is considered complete.
 The first Day 5 CI run reached `pnpm run build` successfully, including the full existing `prebuild` transformation chain, but the additional clean-tree assertion failed because those transformation scripts intentionally rewrite frontend source during the build. This was a false-positive gate, not a TypeScript/Vite/build failure. The clean-tree assertion was removed; the real `pnpm run build` remains the authoritative frontend build step.
 
 This also confirms that the current build architecture should be treated as a transformation pipeline during later deployment-hardening work rather than assuming the build is source-immutable.
+
+
+## Live database reconciliation finding
+
+A read-only inspection of the connected Supabase/PostgreSQL database was performed on 2026-09-30.
+
+The current `main` ORM still mapped the retired `Unit`/`UnitProgram` tables and several `unit_id` columns, while the live database has no `unit` or `unit_program` tables and no `unit_id` columns on `content_item`, `group`, `library_publication`, or `learning_concept`. Day 5 reconciles those ORM mappings and legacy compatibility responses without changing the live database.
+
+The live database also lacks active columns currently mapped/used by `main`: `ai_job.user_id`, `ai_job.generation_parameters`, `document_content.material_id`, `message_attachment.source_document_content_id`, `payment.organisation_id`, `user.avatar_storage_path`, and `user.read_receipts_enabled`. No production schema change was made; these remain migration blockers before production verification.
+
+The connected Supabase project also reports 73 public tables with RLS disabled. Representative privilege checks did not show SELECT granted to `anon` or `authenticated`, but disabled RLS remains a defense-in-depth gap. The project also has 31 tables with RLS enabled but no policies, so RLS must not be enabled blindly without policy design.
