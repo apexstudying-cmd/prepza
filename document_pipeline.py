@@ -167,9 +167,16 @@ def _extract_pdf_text(file_bytes, job):
 
         ocr_results = {}
         if ocr_page_nums:
-            if len(ocr_page_nums) >= _get_ocr_batch_threshold():
+            use_batch = (
+                len(ocr_page_nums) >= _get_ocr_batch_threshold()
+                and callable(getattr(ai_service, "route_and_generate_batch", None))
+            )
+            if use_batch:
                 ocr_results = _transcribe_pages_via_batch(doc, ocr_page_nums, job)
             else:
+                # The OpenAI synchronous OCR adapter is the guaranteed runtime
+                # path. Batch remains an optional optimization until the
+                # ai_service batch adapter is actually implemented.
                 for page_num in ocr_page_nums:
                     ocr_results[page_num] = _transcribe_page_image(_render_page_png(doc[page_num]))
 
@@ -213,7 +220,7 @@ def _transcribe_page_image(image_bytes):
 
 def _transcribe_pages_via_batch(doc, page_nums, job):
     """
-    Submits all given pages as one Anthropic Message Batch. Any page
+    Submits all given pages as one OpenAI Batch API. Any page
     whose batch item comes back errored/expired falls back to a normal
     synchronous call for just that page, so one bad page never fails
     extraction for the whole document. If batch submission itself
