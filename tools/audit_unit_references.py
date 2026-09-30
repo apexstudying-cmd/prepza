@@ -7,9 +7,13 @@ text = APP.read_text(encoding="utf-8")
 # The current production schema still uses Unit/UnitProgram for curriculum
 # metadata. Do not let a stale frontend prebuild migration delete live ORM
 # models or rewrite the backend during a static frontend build.
-if "class Unit(db.Model)" in text:
-    print("Skipped Unit-reference retirement audit: current backend still owns the Unit curriculum model.")
-    raise SystemExit(0)
+if "class Unit(db.Model)" not in text:
+    # The legacy Unit schema has now been retired on main. Treat the already
+    # reconciled source as a valid terminal state rather than trying to remove
+    # a mapper that no longer exists.
+    if 'ForeignKey("unit.id")' not in text and "LibraryPublication.unit_id" not in text and "Group.unit_id" not in text:
+        print("Unit-reference retirement audit passed: Unit schema is already reconciled.")
+        raise SystemExit(0)
 
 # The Unit tables are already removed from production. This final prebuild
 # cleanup makes the application source match that schema before the process
