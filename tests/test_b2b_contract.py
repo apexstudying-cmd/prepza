@@ -113,7 +113,18 @@ def test_organisation_portal_uses_backend_billing_plan_source():
 
 
 def test_b2b_refund_balance_does_not_double_count_funding():
+    import sys
+    import types
+
+    # This focused CI gate intentionally installs only pytest/sqlalchemy.
+    # Stub the optional HTTP client so we can exercise the pure accounting
+    # helper without pulling provider/network dependencies into the test gate.
+    requests_stub = types.ModuleType("requests")
+    requests_stub.request = lambda *args, **kwargs: None
+    sys.modules.setdefault("requests", requests_stub)
+
     from b2b_campaign_payments import _available_prepaid_campaign_balance
+
     # Ledger net already includes the original funding credit.
     assert _available_prepaid_campaign_balance(500_000, 350_000) == 350_000
     assert _available_prepaid_campaign_balance(500_000, 650_000) == 500_000
