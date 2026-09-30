@@ -37,11 +37,11 @@ REQUIRED_FRONTEND_PATHS = [
     "/chats/${conversationId}/${action}-request",
 ]
 
-REQUIRED_BACKEND_ROUTE_PATTERNS = [
-    r'@[w.]+.get("/students")',
-    r'@[w.]+.get("/message-requests")',
-    r'@[w.]+.post("/chats/<int:conversation_id>/accept-request")',
-    r'@[w.]+.post("/chats/<int:conversation_id>/decline-request")',
+REQUIRED_BACKEND_ROUTE_ANCHORS = [
+    '@app.get("/students")',
+    '@app.get("/message-requests")',
+    '@app.post("/chats/<int:conversation_id>/accept-request")',
+    '@app.post("/chats/<int:conversation_id>/decline-request")',
 ]
 
 if not APP.exists():
@@ -53,8 +53,7 @@ backend_sources = [
     for p in ROOT.rglob("*.py")
     if ".git" not in p.parts and "__pycache__" not in p.parts
 ]
-backend = "
-".join(backend_sources)
+backend = "\n".join(backend_sources)
 
 case_screens = set(re.findall(r"case ['\"]([^'\"]+)['\"]\s*:", frontend))
 missing_screens = sorted(REQUIRED_SCREENS - case_screens)
@@ -72,8 +71,8 @@ if missing_frontend:
     )
 
 missing_backend = [
-    pattern for pattern in REQUIRED_BACKEND_ROUTE_PATTERNS
-    if not re.search(pattern, backend)
+    anchor for anchor in REQUIRED_BACKEND_ROUTE_ANCHORS
+    if anchor not in backend
 ]
 if missing_backend:
     raise SystemExit(
