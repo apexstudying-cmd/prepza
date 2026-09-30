@@ -487,3 +487,100 @@ def admin_update_group(group_id):
 
     return jsonify(_serialize_group(group))
 
+
+
+@app.route("/admin/settings", methods=["GET"])
+@require_admin
+def admin_get_settings():
+    rows = {row.key: row.value for row in SystemSetting.query.all()}
+
+    def integer(key, default=0):
+        try:
+            return int(rows.get(key, str(default)) or default)
+        except (TypeError, ValueError):
+            return default
+
+    def optional_integer(key, default=None):
+        raw = rows.get(key)
+        if raw is None or str(raw).strip().lower() == "unlimited":
+            return default
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return default
+
+    try:
+        budget = float(rows.get("ai_monthly_budget_usd", "20.00") or "20.00")
+    except (TypeError, ValueError):
+        budget = 20.0
+
+    return jsonify({
+        "maintenance_mode": rows.get("maintenance_mode", "false") == "true",
+        "maintenance_message": rows.get("maintenance_message", ""),
+        "prepza_control_enabled": rows.get("prepza_control_enabled", "false") == "true",
+        "price_notes": integer("price_notes"),
+        "price_past_paper": integer("price_past_paper"),
+        "price_qna": integer("price_qna"),
+        "price_promotion_standard": integer("price_promotion_standard"),
+        "price_promotion_featured": integer("price_promotion_featured"),
+        "price_promotion_sponsored": integer("price_promotion_sponsored"),
+        "ai_daily_limit_free": optional_integer("ai_daily_limit_free", 5),
+        "ai_daily_limit_plus": optional_integer("ai_daily_limit_plus", 15),
+        "ai_daily_limit_premium": optional_integer("ai_daily_limit_premium", None),
+        "ai_daily_tutor_limit_free": optional_integer("ai_daily_tutor_limit_free", 10),
+        "ai_daily_tutor_limit_plus": optional_integer("ai_daily_tutor_limit_plus", 30),
+        "ai_daily_tutor_limit_premium": optional_integer("ai_daily_tutor_limit_premium", None),
+        "ai_monthly_budget_usd": budget,
+    })
+
+
+@app.route("/admin/settings", methods=["PATCH"])
+@require_csrf
+@require_admin
+def admin_update_settings():
+    data = request.get_json(silent=True) or {}
+    allowed = {
+        "maintenance_mode", "maintenance_message", "prepza_control_enabled",
+        "price_notes", "price_past_paper", "price_qna",
+        "price_promotion_standard", "price_promotion_featured", "price_promotion_sponsored",
+        "ai_daily_limit_free", "ai_daily_limit_plus", "ai_daily_limit_premium",
+        "ai_daily_tutor_limit_free", "ai_daily_tutor_limit_plus", "ai_daily_tutor_limit_premium",
+        "ai_monthly_budget_usd",
+    }
+    unknown = sorted(set(data) - allowed)
+    if unknown:
+        return jsonify({"error": f"Unsupported settings: {', '.join(unknown)}"}), 400
+
+    for key, value in data.items():
+        if key in {"maintenance_mode", "prepza_control_enabled"}:
+            if not isinstance(value, bool):
+                return jsonify({"error": f"{key} must be true or false"}), 400
+            value = "true" if value else "false"
+        elif key == "maintenance_message":
+            if not isinstance(value, str) or len(value) > 500:
+                return jsonify({"error": "maintenance_message must be a string of 500 characters or fewer"}), 400
+        elif key == "ai_monthly_budget_usd":
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+                return jsonify({"error": "ai_monthly_budget_usd must be a positive number"}), 400
+            value = str(value)
+        elif key.startswith("ai_daily_"):
+            if value is None:
+                value = "unlimited"
+            elif not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                return jsonify({"error": f"{key} must be a non-negative integer or null"}), 400
+            else:
+                value = str(value)
+        else:
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                return jsonify({"error": f"{key} must be a non-negative integer"}), 400
+            value = str(value)
+
+        row = SystemSetting.query.filter_by(key=key).first()
+        if not row:
+            row = SystemSetting(key=key, value=str(value))
+            db.session.add(row)
+        else:
+            row.value = str(value)
+
+    db.session.commit()
+    return admin_get_settings()
