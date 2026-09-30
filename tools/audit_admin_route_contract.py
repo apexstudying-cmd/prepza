@@ -18,6 +18,7 @@ BACKEND_FILES = [
     ROOT / "admin_reconciled_organisation.py",
     ROOT / "admin_reconciled_ambassadors.py",
     ROOT / "opportunity_expiry_runtime.py",
+    ROOT / "auth_otp.py",
 ]
 
 REQUIRED = {
