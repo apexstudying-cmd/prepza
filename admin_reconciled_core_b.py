@@ -487,6 +487,3 @@ def admin_update_group(group_id):
 
     return jsonify(_serialize_group(group))
 
-@app.route("/admin/settings", methods=["GET"])
-
-@app.route("/admin/settings", methods=["PATCH"])
