@@ -19,7 +19,7 @@ BACKEND_FILES += [ROOT / p for p in (
 frontend = FRONTEND.read_text(encoding="utf-8")
 frontend_paths = set(
     p.replace("?", "")
-    for p in re.findall(r"""[`'"]((?:/admin|/api/admin)[^\`'"]*)[`'"]""", frontend)
+    for p in re.findall(r"""[`'"]((?:/admin|/api/admin)[^`'"]*)[`'"]""", frontend)
     if "${" not in p
 )
 
