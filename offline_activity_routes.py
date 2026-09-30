@@ -2,7 +2,7 @@
 
 The client sends an absolute local daily study total rather than a one-shot
 increment. The server reconciles by moving its authoritative total forward to
-that target (capped at Prepza's existing 8-hour daily ceiling). Replaying the
+that target (capped at Prepza's existing 12-hour daily ceiling). Replaying the
 same request after an ambiguous network failure therefore cannot double-count
 the same offline study time.
 """
@@ -47,7 +47,7 @@ def register_offline_activity_routes(app, db):
             StudyTimeLog.activity_date.in_(dates),
         ).group_by(StudyTimeLog.activity_date).all()
 
-        totals = {date.isoformat(): min(8 * 60 * 60, max(0, int(seconds or 0))) for date, seconds in rows}
+        totals = {date.isoformat(): min(12 * 60 * 60, max(0, int(seconds or 0))) for date, seconds in rows}
         return jsonify({'server_total_seconds_by_date': totals})
 
     @app.route('/study-time/offline-sync', methods=['POST'])
@@ -63,7 +63,7 @@ def register_offline_activity_routes(app, db):
             return jsonify({'error': 'entries must be a list of at most 31 daily totals'}), 400
 
         today = datetime.utcnow().date()
-        max_day_seconds = 8 * 60 * 60
+        max_day_seconds = 12 * 60 * 60
         accepted = {}
         server_totals = {}
 
