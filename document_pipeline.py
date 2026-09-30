@@ -140,9 +140,9 @@ def _fetch_file_bytes(storage_path):
 def _extract_pdf_text(file_bytes, job):
     """
     Extracts text page-by-page with PyMuPDF. Pages with near-empty
-    native text (scanned/image-only) are transcribed via a Claude
-    vision call rather than adding a Tesseract/OCR system dependency -
-    reuses the same provider abstraction as everything else and gets
+    native text (scanned/image-only) are transcribed through the OpenAI
+    OCR adapter rather than adding a Tesseract/OCR system dependency.
+    This reuses the same provider abstraction as everything else and gets
     logged like any other AI call.
 
     If a document has at least _get_ocr_batch_threshold() pages needing
