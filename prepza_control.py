@@ -15,6 +15,10 @@ from datetime import datetime
 from flask import jsonify, request
 from sqlalchemy import event, inspect, text
 
+import app as _app
+# Reconciled admin guard needs the fully initialized application globals.
+globals().update({k: getattr(_app, k) for k in dir(_app) if not k.startswith("__")})
+
 
 CONTROL_SETTING_KEY = "prepza_control_enabled"
 CONTROL_TOKEN_ENV = "PREPZA_CONTROL_TOKEN"
