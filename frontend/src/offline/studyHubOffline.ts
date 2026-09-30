@@ -6,7 +6,7 @@ const META_STORE = 'savedStudyHub'
 const ASSET_DB = 'prepza-offline-study-v1'
 const ASSET_STORE = 'documents'
 const MAX_SINGLE_ASSET_BYTES = 75 * 1024 * 1024
-const MAX_TOTAL_ASSET_BYTES = 1024 * 1024 * 1024
+const MAX_TOTAL_ASSET_BYTES = 250 * 1024 * 1024
 
 type SavedStudyHubMeta = {
   key: string
