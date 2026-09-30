@@ -110,3 +110,11 @@ def test_organisation_portal_uses_backend_billing_plan_source():
     assert "monthly_fee_kes: 2500" not in source
     assert "monthly_fee_kes: 7500" not in source
     assert "monthly_fee_kes: 15000" not in source
+
+
+def test_b2b_refund_balance_does_not_double_count_funding():
+    from b2b_campaign_payments import _available_prepaid_campaign_balance
+    # Ledger net already includes the original funding credit.
+    assert _available_prepaid_campaign_balance(500_000, 350_000) == 350_000
+    assert _available_prepaid_campaign_balance(500_000, 650_000) == 500_000
+    assert _available_prepaid_campaign_balance(500_000, -1) == 0
