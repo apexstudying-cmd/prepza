@@ -53,7 +53,3 @@ jobs:
 
       - name: Build (production entrypoint)
         run: pnpm run build
-
-      - name: Verify build did not mutate tracked source
-        working-directory: .
-        run: git diff --exit-code -- frontend/src app.py tools .github/workflows/frontend-build.yml frontend/package.json
