@@ -2,7 +2,7 @@
 
 Date: 2026-09-30
 Branch: `main`
-Baseline commit audited: `1e3201476f22eb57c9d1fa17dc111c36b09c5b19`
+Baseline commit audited: `8e89af698061d1e6028c32a69b2ac6677863a233` (Day 1)
 
 ## Day 1 objective
 
@@ -65,7 +65,7 @@ Freeze the launch scope and identify every remaining launch blocker before infra
 
 ### Engineering
 
-**Status: GREEN for existing CI contracts, YELLOW for production proof.**
+**Status: YELLOW for full launch readiness.** Existing student/AI/realtime/E2EE/B2B CI contracts are green, but Day 2 found admin frontend/backend route drift that must be reconciled before the operational dashboard can be considered launch-ready.
 
 The current automated suite is broad and the latest observed main runs passed. That proves the tested contracts, not the complete production environment.
 
@@ -113,17 +113,17 @@ The Paystack contract is implemented and tested. Live/test keys, plans, webhook 
 
 The load-test workflow exists, but no real VPS capacity result has been produced yet. The 4 vCPU / 8 GB target remains a starting hypothesis, not a proven capacity number.
 
-## Remaining launch sequence
+## Revised launch sequence — Render-first
 
-1. **Day 1:** scope freeze + launch audit — this document.
-2. **Day 2:** VPS provisioning/security + Docker build/run.
-3. **Day 3:** PostgreSQL restore/migration procedure + Redis + backups.
-4. **Day 4:** R2 + SES + production-like secrets + operational monitoring.
-5. **Day 5:** full functional smoke testing.
-6. **Days 6–7:** progressive load testing and fixes.
-7. **Days 8–9:** security/payment/email/storage final verification.
-8. **Days 10–11:** final CI + release candidate + backup/rollback rehearsal.
-9. **Days 12–14:** controlled launch to a small student cohort, then expand based on measured results.
+1. **Day 1:** scope freeze + launch audit — completed.
+2. **Day 2:** functionality readiness audit — completed; VPS migration paused.
+3. **Day 3:** reconcile admin frontend/backend route contract and add route-drift regression coverage.
+4. **Day 4:** complete student-screen source audit and fix only launch-relevant defects.
+5. **When Render capacity resets:** deploy the exact tested `main` commit and verify PostgreSQL/Redis/realtime/PWA on the real service.
+6. **After deployment:** verify SES, Paystack, R2, AI providers and Kokoro with controlled test usage.
+7. **Then:** progressive functional/load testing on Render, using measured limits rather than hypothetical VPS capacity.
+8. **Only if measured Render limits justify it:** revisit VPS migration.
+9. **Controlled launch:** 10–20 students → 50–100 → 250–500 → broader release, with measured reliability and economics at each stage.
 
 ## Definition of launch-ready
 
@@ -133,3 +133,7 @@ Launch-ready means:
 
 **code passes + database is recoverable + storage is recoverable + payments are verified + email works + realtime works + AI cost controls work + monitoring works + load test evidence exists + rollback works.**
 
+
+## Day 2 functionality audit
+
+See `docs/FUNCTIONAL_READINESS_DAY2.md`. The audit fixed account-specific onboarding persistence and identified admin frontend/backend route drift. Historical admin patch files were not blindly applied because they do not cleanly match the current `main` source.
