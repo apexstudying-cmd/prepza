@@ -9992,3 +9992,19 @@ register_control_routes(
     log_admin_action,
     limiter,
 )
+
+# Register the reconciled admin runtime after all base models/helpers exist.
+# These modules were deliberately kept separate from app.py during the admin
+# recovery work so the current student/AI/realtime runtime is not overwritten.
+from admin_reconciled_core_a import register_reconciled_admin_core_a
+from admin_reconciled_core_b import register_reconciled_admin_core_b
+from admin_reconciled_opportunities import register_reconciled_admin_opportunities
+from admin_reconciled_organisation import register_reconciled_admin_organisation
+from admin_reconciled_ambassadors import register_reconciled_admin_ambassadors
+
+register_reconciled_admin_core_a()
+register_reconciled_admin_core_b()
+register_reconciled_admin_opportunities()
+register_reconciled_admin_organisation()
+register_reconciled_admin_ambassadors()
+
