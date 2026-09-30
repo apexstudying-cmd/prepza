@@ -35,3 +35,11 @@ def test_scanned_pdf_uses_sync_ocr_when_batch_adapter_is_missing():
     assert page_count == 3
     assert text == "one\n\ntwo\n\nthree"
     assert transcribe.call_count == 3
+
+
+def test_document_pipeline_has_no_anthropic_provider_reference():
+    from pathlib import Path
+    source = Path("document_pipeline.py").read_text(encoding="utf-8")
+    assert "Claude" not in source
+    assert "Anthropic" not in source
+    assert "OpenAI" in source
