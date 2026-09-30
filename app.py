@@ -10001,4 +10001,5 @@ import admin_reconciled_core_b  # noqa: F401 - decorator registration
 import admin_reconciled_opportunities  # noqa: F401 - decorator registration
 import admin_reconciled_organisation  # noqa: F401 - decorator registration
 import admin_reconciled_ambassadors  # noqa: F401 - decorator registration
+import opportunity_expiry_runtime  # noqa: F401 - decorator registration
 
