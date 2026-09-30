@@ -20,6 +20,18 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 
+def _available_prepaid_campaign_balance(funded_amount_minor, ledger_net_minor):
+    """Return unused campaign value without double-counting the funding credit.
+
+    The campaign ledger contains the original funding credit as well as every
+    delivery/refund entry, so its net balance is already the remaining prepaid
+    value. The funded amount is retained as a safety ceiling.
+    """
+    funded = max(0, int(funded_amount_minor or 0))
+    ledger_net = max(0, int(ledger_net_minor or 0))
+    return min(funded, ledger_net)
+
+
 def register_b2b_campaign_payments(app, db):
     def csrf_ok():
         token = session.get("csrf_token")
@@ -370,7 +382,7 @@ def register_b2b_campaign_payments(app, db):
         net = db.session.execute(text("""
             SELECT COALESCE(SUM(signed_amount_minor),0) FROM b2b_campaign_ledger WHERE campaign_id=:cid
         """), {"cid": campaign_id}).scalar_one()
-        return max(0, int(funded or 0) + int(net or 0))
+        return _available_prepaid_campaign_balance(funded, net)
 
     def initiate_refund(payment_id, amount_minor, actor_id, reason):
         payment = db.session.execute(text("""
