@@ -39,6 +39,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Day 5 functional wiring audit
+        working-directory: .
+        run: python3 tools/audit_functional_readiness_day5.py
+
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 
@@ -47,5 +51,9 @@ jobs:
           node --check public/sw.js
           node --check public/sw-register.js
 
-      - name: Build
-        run: pnpm exec vite build
+      - name: Build (production entrypoint)
+        run: pnpm run build
+
+      - name: Verify build did not mutate tracked source
+        working-directory: .
+        run: git diff --exit-code -- frontend/src app.py tools .github/workflows/frontend-build.yml frontend/package.json

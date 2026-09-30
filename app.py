@@ -7,6 +7,7 @@ import hashlib
 import json
 import requests
 import sentry_sdk
+import boto3
 import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -9696,6 +9697,30 @@ def send_chat_message(conversation_id):
     body=data.get("body")
     nonce=data.get("nonce")
     attachment_id=data.get("attachment_id")
+    client_message_id=data.get("client_message_id")
+    if client_message_id is not None:
+        if not isinstance(client_message_id,str):
+            return jsonify({"error":"client_message_id must be a string"}),400
+        client_message_id=client_message_id.strip()
+        if not client_message_id or len(client_message_id)>128:
+            return jsonify({"error":"client_message_id is invalid"}),400
+        if not _ensure_chat_idempotency_schema():
+            return jsonify({"error":"Chat retry protection is temporarily unavailable"}),503
+        existing_message_id=db.session.execute(text("""
+            SELECT message_id
+            FROM chat_message_idempotency
+            WHERE conversation_id=:conversation_id
+              AND sender_id=:sender_id
+              AND client_message_id=:client_message_id
+        """), {
+            "conversation_id":conversation_id,
+            "sender_id":user_id,
+            "client_message_id":client_message_id,
+        }).scalar_one_or_none()
+        if existing_message_id:
+            existing_message=db.session.get(Message,int(existing_message_id))
+            if existing_message:
+                return jsonify(_serialize_chat_message(existing_message)),200
     if body is not None and not isinstance(body,str): return jsonify({"error":"body must be a string"}),400
     body=(body or "").strip() if body else None
     if body and len(body)>CHAT_MESSAGE_CIPHERTEXT_MAX: return jsonify({"error":"Message is too large"}),400
@@ -9713,6 +9738,39 @@ def send_chat_message(conversation_id):
     db.session.add(message); db.session.flush()
     if attachment:
         attachment.message_id=message.id
+
+    if client_message_id:
+        inserted_message_id=db.session.execute(text("""
+            INSERT INTO chat_message_idempotency
+                (conversation_id,sender_id,client_message_id,message_id)
+            VALUES (:conversation_id,:sender_id,:client_message_id,:message_id)
+            ON CONFLICT (conversation_id,sender_id,client_message_id) DO NOTHING
+            RETURNING message_id
+        """), {
+            "conversation_id":conversation_id,
+            "sender_id":user_id,
+            "client_message_id":client_message_id,
+            "message_id":message.id,
+        }).scalar_one_or_none()
+        if inserted_message_id is None:
+            existing_message_id=db.session.execute(text("""
+                SELECT message_id
+                FROM chat_message_idempotency
+                WHERE conversation_id=:conversation_id
+                  AND sender_id=:sender_id
+                  AND client_message_id=:client_message_id
+            """), {
+                "conversation_id":conversation_id,
+                "sender_id":user_id,
+                "client_message_id":client_message_id,
+            }).scalar_one_or_none()
+            db.session.rollback()
+            if existing_message_id:
+                existing_message=db.session.get(Message,int(existing_message_id))
+                if existing_message:
+                    return jsonify(_serialize_chat_message(existing_message)),200
+            return jsonify({"error":"Could not reconcile the chat retry safely"}),503
+
     conversation.updated_at=datetime.utcnow()
     db.session.commit()
     return jsonify(_serialize_chat_message(message)),201
