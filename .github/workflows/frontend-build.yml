@@ -43,6 +43,10 @@ jobs:
         working-directory: .
         run: python3 tools/audit_functional_readiness_day5.py
 
+      - name: Day 5 ORM/schema drift audit
+        working-directory: .
+        run: python3 tools/audit_orm_schema_drift_day5.py
+
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 
