@@ -2,7 +2,7 @@
 
 Date: 2026-09-30
 Branch: `main`
-Baseline commit audited: `ef60539bb0cf8dd4d81b2343f77aec81e6e9099c`
+Baseline commit audited: `1e3201476f22eb57c9d1fa17dc111c36b09c5b19`
 
 ## Day 1 objective
 
@@ -23,7 +23,8 @@ Freeze the launch scope and identify every remaining launch blocker before infra
 - The repository has many SQL migrations but no single Alembic/automated production migration workflow. A safe ordered migration/backup/restore procedure remains a launch blocker for the VPS cutover.
 - Progressive load-test workflow exists and requires a real staging URL plus test credentials/secrets before it can produce capacity evidence.
 - Admin operations already expose database, active-user, AI, B2B and provider telemetry; launch work still needs the organic/referral/retention and unit-economics views needed to measure real demand and margin.
-- The unused Anthropic Python dependency was removed from `requirements.txt` in the Day 1 hardening commit. Prepza's active AI routing remains OpenAI-first; podcast speech remains Kokoro.
+- The unused Anthropic Python dependency was removed from `requirements.txt` during Day 1 hardening. Prepza's active AI routing remains OpenAI-first; podcast speech remains Kokoro.
+- Day 1 CI rerun after the hardening/documentation commits: all observed main launch-contract workflows passed, including E2EE Security Regression.
 
 ## Launch blockers
 
