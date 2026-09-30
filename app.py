@@ -9425,7 +9425,63 @@ def _get_chat_or_404(conversation_id, user_id):
     conversation = db.session.get(Conversation, conversation_id)
     if not conversation or not _active_participant(conversation_id, user_id):
         return None
+    # A pending direct-message request is visible only to its requester
+    # until the recipient explicitly accepts it.
+    if (
+        conversation.status == "pending"
+        and not conversation.is_group
+        and conversation.created_by != user_id
+    ):
+        return None
     return conversation
+
+@app.get("/students")
+def list_students_for_explore():
+    """Return a small public student directory for Explore."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    following_ids = {
+        row.followed_id
+        for row in Follow.query.filter_by(follower_id=user_id).all()
+    }
+    pending_follow_ids = {
+        row.target_id
+        for row in FollowRequest.query.filter_by(
+            requester_id=user_id, status="pending"
+        ).all()
+    }
+
+    users = (
+        User.query
+        .filter(
+            User.id != user_id,
+            User.is_suspended.is_(False),
+            User.profile_visibility == "public",
+            User.display_name.isnot(None),
+        )
+        .order_by(User.last_active_at.desc(), User.id.desc())
+        .limit(50)
+        .all()
+    )
+
+    students = []
+    for student in users:
+        program = db.session.get(Program, student.program_id) if student.program_id else None
+        students.append({
+            "user_id": student.id,
+            "display_name": _display_name(student),
+            "program_name": program.name if program else None,
+            "year": student.year,
+            "xp_total": 0,
+            "is_following": student.id in following_ids,
+            "is_private": False,
+            "is_pending": student.id in pending_follow_ids,
+        })
+
+    return jsonify({"students": students})
+
 
 @app.get("/users/search")
 def search_chat_users():
@@ -9444,6 +9500,99 @@ def search_chat_users():
     ).order_by(User.display_name.asc()).limit(20).all()
     return jsonify({"users":[{"id":u.id,"display_name":_display_name(u),
         "year":u.year,"semester":u.semester} for u in users]})
+
+@app.get("/message-requests")
+def list_message_requests():
+    """List pending 1:1 message requests addressed to the current user."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    conversations = (
+        Conversation.query
+        .join(
+            ConversationParticipant,
+            ConversationParticipant.conversation_id == Conversation.id,
+        )
+        .filter(
+            ConversationParticipant.user_id == user_id,
+            ConversationParticipant.left_at.is_(None),
+            Conversation.is_group.is_(False),
+            Conversation.status == "pending",
+            Conversation.created_by != user_id,
+        )
+        .order_by(Conversation.created_at.desc(), Conversation.id.desc())
+        .all()
+    )
+
+    requests = []
+    for conversation in conversations:
+        requester = db.session.get(User, conversation.created_by)
+        if not requester or requester.is_suspended:
+            continue
+        requests.append({
+            "conversation_id": conversation.id,
+            "requester_id": requester.id,
+            "requester_display_name": _display_name(requester),
+            "has_message": Message.query.filter_by(
+                conversation_id=conversation.id
+            ).first() is not None,
+            "created_at": conversation.created_at.isoformat()
+            if conversation.created_at else None,
+        })
+    return jsonify({"requests": requests})
+
+
+@app.post("/chats/<int:conversation_id>/accept-request")
+@require_csrf
+def accept_message_request(conversation_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    conversation = db.session.get(Conversation, conversation_id)
+    if (
+        not conversation
+        or conversation.is_group
+        or conversation.status != "pending"
+        or conversation.created_by == user_id
+        or not _active_participant(conversation_id, user_id)
+    ):
+        return jsonify({"error": "Message request not found"}), 404
+
+    conversation.status = "accepted"
+    conversation.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"id": conversation.id, "status": "accepted"})
+
+
+@app.post("/chats/<int:conversation_id>/decline-request")
+@require_csrf
+def decline_message_request(conversation_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    conversation = db.session.get(Conversation, conversation_id)
+    if (
+        not conversation
+        or conversation.is_group
+        or conversation.status != "pending"
+        or conversation.created_by == user_id
+        or not _active_participant(conversation_id, user_id)
+    ):
+        return jsonify({"error": "Message request not found"}), 404
+
+    ConversationParticipant.query.filter_by(
+        conversation_id=conversation.id
+    ).delete(synchronize_session=False)
+    Message.query.filter_by(conversation_id=conversation.id).delete(
+        synchronize_session=False
+    )
+    db.session.delete(conversation)
+    db.session.commit()
+    return jsonify({"status": "declined"})
+
 
 @app.get("/chats")
 def list_chats():
@@ -9479,29 +9628,41 @@ def create_chat():
         if len(participant_ids)!=1: return jsonify({"error":"A direct chat requires exactly one other participant"}),400
         target= db.session.get(User,participant_ids[0])
         if not target or target.is_suspended: return jsonify({"error":"Student not found"}),404
+        conversation_status = "accepted"
         if target.who_can_message=="followers":
             follows=Follow.query.filter_by(follower_id=user_id,followed_id=target.id).first()
-            if not follows: return jsonify({"error":"This student only accepts messages from followers"}),403
+            if not follows:
+                conversation_status = "pending"
         existing_rows=ConversationParticipant.query.filter_by(user_id=user_id,left_at=None).all()
         for row in existing_rows:
             conv=db.session.get(Conversation,row.conversation_id)
             if conv and not conv.is_group:
                 other=_active_participant(conv.id,target.id)
                 if other:
-                    return jsonify({"id":conv.id,"reused":True}),200
+                    if conv.status == "pending" and conv.created_by != user_id:
+                        continue
+                    return jsonify({
+                        "id":conv.id,
+                        "reused":True,
+                        "status":conv.status,
+                    }),200
     if participant_ids:
         users=User.query.filter(User.id.in_(participant_ids),User.is_suspended.is_(False)).all()
         if len(users)!=len(participant_ids): return jsonify({"error":"One or more students are unavailable"}),404
     conversation=Conversation(
         is_group=is_group,name=(data.get("name") or "").strip() if is_group else None,
-        created_by=user_id,status="accepted",e2ee_mode="legacy",key_epoch=0,
+        created_by=user_id,status=conversation_status,e2ee_mode="legacy",key_epoch=0,
     )
     db.session.add(conversation); db.session.flush()
     db.session.add(ConversationParticipant(conversation_id=conversation.id,user_id=user_id,role="admin" if is_group else "member"))
     for pid in participant_ids:
         db.session.add(ConversationParticipant(conversation_id=conversation.id,user_id=pid,role="member"))
     db.session.commit()
-    return jsonify({"id":conversation.id,"reused":False}),201
+    return jsonify({
+        "id": conversation.id,
+        "reused": False,
+        "status": conversation.status,
+    }),201
 
 @app.get("/chats/<int:conversation_id>")
 def get_chat(conversation_id):
