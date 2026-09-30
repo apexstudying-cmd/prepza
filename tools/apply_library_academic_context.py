@@ -3,6 +3,21 @@ from pathlib import Path
 APP = Path(__file__).resolve().parents[1] / "app.py"
 text = APP.read_text()
 
+# Current main may already contain the canonical academic-context schema.
+# The transformation is intentionally idempotent so the production build
+# cannot regress by expecting the retired Unit column after Day 5 reconciliation.
+library_model_start = text.find("class LibraryPublication")
+library_model_end = text.find("class SavedLibraryMaterial", library_model_start)
+library_model = text[library_model_start:library_model_end] if library_model_start >= 0 and library_model_end > library_model_start else ""
+if all(token in library_model for token in (
+    "university_id = db.Column",
+    "program_id = db.Column",
+    "year = db.Column",
+    "semester = db.Column",
+)):
+    print("Skipped Library academic-context schema patch: canonical fields are already present.")
+    raise SystemExit(0)
+
 
 def replace_once(old, new, label):
     global text
