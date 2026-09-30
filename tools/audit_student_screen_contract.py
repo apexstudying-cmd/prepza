@@ -34,8 +34,7 @@ REQUIRED_SCREENS = {
 REQUIRED_FRONTEND_PATHS = [
     "/students",
     "/message-requests",
-    "/chats/${conversationId}/accept-request",
-    "/chats/${conversationId}/decline-request",
+    "/chats/${conversationId}/${action}-request",
 ]
 
 REQUIRED_BACKEND_ROUTE_PATTERNS = [
