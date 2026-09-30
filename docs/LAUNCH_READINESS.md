@@ -137,3 +137,16 @@ Launch-ready means:
 ## Day 2 functionality audit
 
 See `docs/FUNCTIONAL_READINESS_DAY2.md`. The audit fixed account-specific onboarding persistence and identified admin frontend/backend route drift. Historical admin patch files were not blindly applied because they do not cleanly match the current `main` source.
+
+
+## Day 3 functionality/admin reconciliation
+
+Day 3 is complete. The existing reconciled admin runtime modules were found to already contain the intended recovery work; they were simply not registered by the current application bootstrap. They are now registered on `main` without replacing the current `app.py` runtime.
+
+The remaining missing contracts were restored for `/admin/settings` and `/admin/opportunities/sweep-expired`. Email OTP admin configuration was already present in `auth_otp.py`.
+
+A dedicated admin route contract audit now checks 46 required admin endpoints. The final Day 3 CI run passed all relevant launch-contract workflows, including the new Admin Route Contract.
+
+See `docs/FUNCTIONAL_READINESS_DAY3.md`.
+
+**Day 3 status:** GREEN for functionality/admin reconciliation; production deployment proof remains pending.
