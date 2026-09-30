@@ -34,7 +34,7 @@ def stress_queue_model() -> None:
 def idempotent_sync_model() -> None:
     server_total = 0
     target = 180
-    for _ in range(3): server_total = max(server_total, min(8 * 60 * 60, target))
+    for _ in range(3): server_total = max(server_total, min(12 * 60 * 60, target))
     assert server_total == 180, 'absolute study-total replay must be idempotent'
     local = [60, 120, 90]
     synced = [0, 0, 0]
@@ -46,6 +46,14 @@ def idempotent_sync_model() -> None:
         available -= credit
     assert synced == [60, 120, 0], f'local reconciliation distribution failed: {synced}'
     assert sum(synced) == authoritative
+
+
+def verify_daily_study_limit_contract() -> None:
+    activity = read('frontend/src/offline/studyActivity.ts')
+    backend = read('offline_activity_routes.py')
+    assert 'MAX_DAILY_SECONDS = 12 * 60 * 60' in activity
+    assert 'max_day_seconds = 12 * 60 * 60' in backend
+    assert "min(12 * 60 * 60, max(0, int(seconds or 0)))" in backend
 
 
 def main() -> None:
@@ -84,6 +92,7 @@ def main() -> None:
     assert 'https://cdn.jsdelivr.net' not in engine, 'PDF runtime must not use a CDN'
     stress_queue_model()
     idempotent_sync_model()
+    verify_daily_study_limit_contract()
     print('Offline architecture regression audit passed.')
 
 
