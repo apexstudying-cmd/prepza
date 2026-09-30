@@ -297,9 +297,6 @@ class Payment(db.Model):
     subscription_expires_at = db.Column(db.DateTime, nullable=True)  # subscription only
     # Immutable feature allowance snapshot for refund/accounting calculations.
     subscription_allowance_snapshot = db.Column(db.JSON, nullable=True)
-    # Organisation promotion billing. Nullable so existing student/content/subscription
-    # payments remain unchanged.
-    organisation_id = db.Column(db.Integer, db.ForeignKey("organisation.id"), nullable=True)
 
 
 class SystemSetting(db.Model):
@@ -1034,6 +1031,10 @@ class LibraryPublication(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     document_id = db.Column(db.Integer, db.ForeignKey("document.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=True)
+    program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=True)
+    year = db.Column(db.Integer, nullable=True)
+    semester = db.Column(db.Integer, nullable=True)
 
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.String(1000), nullable=True)
@@ -5190,7 +5191,18 @@ def publish_document():
     title = (data.get("title") or "").strip()
     description = data.get("description")
     material_type = (data.get("material_type") or "").strip()
-    unit_id = None
+    university_id = data.get("university_id")
+    program_id = data.get("program_id")
+    year = data.get("year")
+    semester = data.get("semester")
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "Account not found"}), 404
+    if university_id is None: university_id = user.university_id
+    if program_id is None: program_id = user.program_id
+    if year is None: year = user.year
+    if semester is None: semester = user.semester
+
     if not document_id:
         return jsonify({"error": "document_id is required"}), 400
 
@@ -5213,9 +5225,24 @@ def publish_document():
     if material_type not in LIBRARY_MATERIAL_TYPES:
         return jsonify({"error": "material_type must be one of: " + ", ".join(sorted(LIBRARY_MATERIAL_TYPES))}), 400
 
-    if unit_id is not None:
-        if not None:
-            return jsonify({"error": "Unit not found"}), 404
+    if data.get("unit_id") is not None:
+        return jsonify({"error": "unit_id is no longer supported for Library publications"}), 400
+    if any(value is None for value in (university_id, program_id, year, semester)):
+        return jsonify({"error": "university, course, year, and semester are required for Library publication"}), 400
+    if not isinstance(university_id, int) or isinstance(university_id, bool):
+        return jsonify({"error": "university_id must be an integer"}), 400
+    university = University.query.filter_by(id=university_id, is_active=True).first()
+    if not university:
+        return jsonify({"error": "Selected university was not found"}), 400
+    if not isinstance(program_id, int) or isinstance(program_id, bool):
+        return jsonify({"error": "program_id must be an integer"}), 400
+    program = Program.query.filter_by(id=program_id, university_id=university_id, is_active=True).first()
+    if not program:
+        return jsonify({"error": "Selected course does not belong to the selected university"}), 400
+    if not isinstance(year, int) or isinstance(year, bool) or not 1 <= year <= 5:
+        return jsonify({"error": "year must be an integer between 1 and 5"}), 400
+    if not isinstance(semester, int) or isinstance(semester, bool) or semester not in (1, 2, 3):
+        return jsonify({"error": "semester must be 1, 2, or 3"}), 400
 
     if _document_content_has_flagged_material(document.document_content_id):
         return jsonify({
@@ -5248,7 +5275,10 @@ def publish_document():
     publication = LibraryPublication(
         document_id=document_id,
         user_id=user_id,
-
+        university_id=university_id,
+        program_id=program_id,
+        year=year,
+        semester=semester,
         title=title,
         description=description,
         material_type=material_type,
@@ -5286,15 +5316,12 @@ def my_library_submissions():
 
     result = []
     for pub in publications:
-        unit = None if pub.unit_id else None
         result.append({
             "id": pub.id,
             "document_id": pub.document_id,
             "title": pub.title,
             "description": pub.description,
             "material_type": pub.material_type,
-            "unit_id": None,
-            "unit_code": None,
             "status": pub.status,
             "rejection_reason": pub.rejection_reason,
             "view_count": pub.view_count,
@@ -5336,12 +5363,23 @@ def browse_library():
     if q:
         query = query.filter(LibraryPublication.title.ilike(f"%{q}%"))
     unit_id = None
-    if unit_id:
-        query = query.filter(False)
+
+    if request.args.get("unit_id") is not None:
+        return jsonify({"error": "unit_id is no longer supported"}), 400
 
     university_id = request.args.get("university_id", type=int)
     if university_id:
         query = query.filter(LibraryPublication.university_id == university_id)
+
+    program_id = request.args.get("program_id", type=int)
+    if program_id:
+        query = query.filter(LibraryPublication.program_id == program_id)
+    year = request.args.get("year", type=int)
+    if year:
+        query = query.filter(LibraryPublication.year == year)
+    semester = request.args.get("semester", type=int)
+    if semester:
+        query = query.filter(LibraryPublication.semester == semester)
 
     material_type = request.args.get("material_type")
     if material_type:
@@ -5367,7 +5405,6 @@ def browse_library():
 
     result = []
     for pub in publications:
-        unit = None if pub.unit_id else None
         author = db.session.get(User, pub.user_id)
         result.append({
             "id": pub.id,
@@ -5375,8 +5412,10 @@ def browse_library():
             "title": pub.title,
             "description": pub.description if (has_premium or pub.id in free_ids) else None,
             "material_type": pub.material_type,
-            "unit_id": None,
-            "unit_code": None,
+            "university_id": pub.university_id,
+            "program_id": pub.program_id,
+            "year": pub.year,
+            "semester": pub.semester,
             "author": _display_name(author) if author else "Deleted user",
             "view_count": pub.view_count,
             "save_count": pub.save_count,
@@ -5596,15 +5635,16 @@ def list_saved_library_items():
             # Underlying material was flagged after this was saved - hide
             # it the same way browse_library does, rather than error.
             continue
-        unit = None if pub.unit_id else None
         author = db.session.get(User, pub.user_id)
         result.append({
             "id": pub.id,
             "title": pub.title,
             "description": pub.description,
             "material_type": pub.material_type,
-            "unit_id": None,
-            "unit_code": None,
+            "university_id": pub.university_id,
+            "program_id": pub.program_id,
+            "year": pub.year,
+            "semester": pub.semester,
             "author": _display_name(author) if author else "Deleted user",
             "view_count": pub.view_count,
             "save_count": pub.save_count,
@@ -5680,7 +5720,6 @@ def admin_library_queue():
 
     result = []
     for pub in publications:
-        unit = None if pub.unit_id else None
         author = db.session.get(User, pub.user_id)
         document = db.session.get(Document, pub.document_id)
         result.append({
@@ -5689,8 +5728,6 @@ def admin_library_queue():
             "title": pub.title,
             "description": pub.description,
             "material_type": pub.material_type,
-            "unit_id": None,
-            "unit_code": None,
             "author_email": author.email if author else None,
             "original_filename": document.original_filename if document else None,
             "created_at": pub.created_at.isoformat() if pub.created_at else None,
@@ -6841,7 +6878,6 @@ GROUP_PRIVACY_VALUES = {"public", "private", "course_only"}
 
 
 def _serialize_group(group, membership=None):
-    unit = None if group.unit_id else None
     return {
         "id": group.id,
         "name": group.name,
@@ -6849,8 +6885,6 @@ def _serialize_group(group, membership=None):
         "privacy": group.privacy,
         "university_id": group.university_id,
         "program_id": group.program_id,
-        "unit_id": None,
-        "unit_code": None,
         "year": group.year,
         "member_count": group.member_count,
         "created_by": group.created_by,
@@ -6897,10 +6931,8 @@ def create_group():
     if program_id is not None:
         if not isinstance(program_id, int) or not db.session.get(Program, program_id):
             return jsonify({"error": "Invalid program_id"}), 400
-    unit_id = None
-    if unit_id is not None:
-        if not isinstance(unit_id, int) or not None:
-            return jsonify({"error": "Invalid unit_id"}), 400
+    if data.get("unit_id") is not None:
+        return jsonify({"error": "unit_id is no longer supported"}), 400
 
     year = data.get("year")
     if year is not None:
@@ -6968,8 +7000,6 @@ def browse_groups():
     if q:
         query = query.filter(Group.name.ilike(f"%{q}%"))
     unit_id = None
-    if unit_id:
-        query = query.filter(False)
 
     university_id = request.args.get("university_id", type=int)
     if university_id:
@@ -8626,8 +8656,6 @@ def my_library():
             "id": item.id,
             "title": item.title,
             "paper_year": item.paper_year,
-            "unit_id": None,
-            "unit_code": None,
             "file_url": (
                 get_signed_url(get_fulfilled_content_file_path(user_id, item.id))
                 if item.is_downloadable else None
