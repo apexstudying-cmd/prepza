@@ -13,7 +13,10 @@ The repository contains a historical collection of hand-managed SQL migrations. 
 Do not run baseline against an unknown database. It records state without changing the schema.
 
 ## Backups
-scripts/backup_postgres.py creates a PostgreSQL custom-format dump and immediately runs pg_restore --list to verify that the archive is readable. It does not upload or schedule anything. A real production backup policy still needs an external destination, retention, encryption, and a tested restore drill.
+scripts/backup_postgres.py creates a PostgreSQL custom-format dump and immediately runs pg_restore --list to verify that the archive is readable. Its --check-only mode validates that pg_dump and pg_restore are available without connecting to a database. It does not upload or schedule anything. A real production backup policy still needs an external destination, retention, encryption, and a tested restore drill.
+
+## Day 8 verification
+The final Day 8 main commit passed all 11 configured CI workflows, including frontend build, realtime runtime, E2EE security, AI economics, B2B/student contracts, admin routes, screen loading, Chat UX, and Kokoro worker validation.
 
 ## No infrastructure changes
 Day 8 does not create Redis, R2, a VPS, a GPU, a Render cron service, or any paid resource.
