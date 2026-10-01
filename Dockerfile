@@ -22,4 +22,4 @@ COPY --from=frontend-build /build/frontend/dist ./frontend/dist
 RUN useradd --create-home --uid 10001 prepza && chown -R prepza:prepza /app
 USER prepza
 EXPOSE 5000
-CMD ["gunicorn", "app:app"]
+CMD ["gunicorn", "-k", "gthread", "-w", "1", "--threads", "100", "realtime_server:app"]
