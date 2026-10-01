@@ -4,7 +4,10 @@ from pathlib import Path
 SOURCE = Path("realtime_server.py").read_text(encoding="utf-8")
 
 REQUIRED = {
-    "authenticated socket gate": 'user_id = authenticated_user_id()\n    if user_id is None:',
+    "authenticated socket gate": 'user_id = authenticated_socket_user_id()\n    if user_id is None:',
+    "socket session version gate": 'stamped_version = session.get("_session_version")',
+    "socket suspension gate": 'if not user or user.is_suspended:',
+    "socket session mismatch gate": 'if stamped_version is None or stamped_version != user.session_version:',
     "join membership gate": 'if conversation_id <= 0 or not is_active_participant(user_id, conversation_id):\n        return {"ok": False, "error": "Conversation unavailable"}',
     "leave membership gate": 'if conversation_id <= 0 or not is_active_participant(user_id, conversation_id):\n        return {"ok": False}',
     "typing membership gate": 'if conversation_id <= 0 or not is_active_participant(user_id, conversation_id):\n        return',
