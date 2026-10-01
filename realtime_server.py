@@ -75,12 +75,26 @@ def _redis_presence_leave(user_id, conversation_id):
         return None
 
 
-def authenticated_user_id():
+def authenticated_socket_user_id():
+    """Authenticate the Socket.IO session against the same live session version as HTTP."""
     value = session.get("user_id")
     try:
-        return int(value) if value is not None else None
+        user_id = int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+    if user_id is None:
+        return None
+    stamped_version = session.get("_session_version")
+    from app import User
+    user = db.session.get(User, user_id)
+    if not user or user.is_suspended:
+        return None
+    if stamped_version is None or stamped_version != user.session_version:
+        return None
+    return user_id
+
+def authenticated_user_id():
+    return authenticated_socket_user_id()
 
 
 def is_active_participant(user_id, conversation_id):
@@ -144,7 +158,7 @@ def user_has_other_socket_in_room(user_id, conversation_id):
 
 @socketio.on("connect")
 def handle_connect(auth=None):
-    user_id = authenticated_user_id()
+    user_id = authenticated_socket_user_id()
     if user_id is None:
         return False
     with _socket_state_lock:
