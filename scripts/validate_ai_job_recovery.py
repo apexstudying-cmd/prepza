@@ -14,6 +14,7 @@ REQUIRED = [
     'worker stopped; retry required',
     'retry is safe.',
     '_recover_stale_ai_jobs()\n    user_id = session.get("user_id")',
+    '_recover_stale_ai_jobs()\n    if not isinstance(parameters, dict):',
 ]
 for marker in REQUIRED:
     if marker not in SOURCE:
