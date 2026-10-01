@@ -11,7 +11,11 @@ def main():
     load_dotenv(ROOT / ".env"); database_url=os.environ.get("DATABASE_URL")
     if not database_url: raise SystemExit("DATABASE_URL is required")
     parser=argparse.ArgumentParser(); parser.add_argument("--output-dir",default=str(ROOT/"backups")); parser.add_argument("--check-only",action="store_true"); args=parser.parse_args()
-    if args.check_only:\n        subprocess.run(["pg_dump","--version"],check=True)\n        subprocess.run(["pg_restore","--version"],check=True)\n        print("PostgreSQL backup tooling is available.")\n        return\n    out_dir=Path(args.output_dir); out_dir.mkdir(parents=True,exist_ok=True)
+    if args.check_only:
+        subprocess.run(["pg_dump","--version"], check=True)
+        subprocess.run(["pg_restore","--version"], check=True)
+        print("PostgreSQL backup tooling is available.")
+        return\n    out_dir=Path(args.output_dir); out_dir.mkdir(parents=True,exist_ok=True)
     stamp=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"); output=out_dir/f"prepza-postgres-{stamp}.dump"
     subprocess.run(["pg_dump","--format=custom","--no-owner","--no-acl","--file",str(output),database_url],check=True)
     subprocess.run(["pg_restore","--list",str(output)],check=True,stdout=subprocess.DEVNULL)
