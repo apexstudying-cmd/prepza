@@ -51,7 +51,7 @@ def test_call_signaling_requires_membership_in_active_call():
     attacker = _session_client(9)
     try:
         with patch('realtime_server.call_participants', return_value=[7, 8]), patch('realtime_server.db.session.get') as get_user:
-            get_user.return_value = type('UserStub', (), {'display_name': 'Caller'})()
+            get_user.return_value = type('UserStub', (), {'display_name': 'Caller', 'session_version': 1, 'is_suspended': False})()
             assert caller.emit('call:invite', {'call_id': 'test-call-5678', 'conversation_id': 12, 'to_user_id': 8, 'kind': 'video'}, callback=True) == {'ok': True}
         result = attacker.emit('call:offer', {'call_id': 'test-call-5678', 'conversation_id': 12, 'to_user_id': 8, 'payload': {'type': 'offer', 'sdp': 'fake'}}, callback=True)
         assert result == {'ok': False}
@@ -65,7 +65,7 @@ def test_call_end_clears_active_call():
     callee = _session_client(8)
     try:
         with patch('realtime_server.call_participants', return_value=[7, 8]), patch('realtime_server.db.session.get') as get_user:
-            get_user.return_value = type('UserStub', (), {'display_name': 'Caller'})()
+            get_user.return_value = type('UserStub', (), {'display_name': 'Caller', 'session_version': 1, 'is_suspended': False})()
             assert caller.emit('call:invite', {'call_id': 'test-call-9012', 'conversation_id': 12, 'to_user_id': 8, 'kind': 'video'}, callback=True) == {'ok': True}
         result = caller.emit('call:end', {'call_id': 'test-call-9012', 'conversation_id': 12, 'to_user_id': 8}, callback=True)
         assert result == {'ok': True}
