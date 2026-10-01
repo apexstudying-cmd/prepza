@@ -10,9 +10,9 @@ if '<OfflineStatusBanner />' in text:
     raise SystemExit(0)
 
 if IMPORT not in text:
-    anchor = "import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'\n"
-    if anchor not in text:
-        raise SystemExit('Offline status UI: import anchor missing')
+    anchor = next((line for line in text.splitlines(True) if line.startswith("import {") and "joinRealtimeChat" in line and "from './crypto/chatRealtime'" in line), "")
+    if not anchor:
+        raise SystemExit('Offline status UI: realtime chat import anchor missing')
     text = text.replace(anchor, anchor + IMPORT, 1)
 
 start = text.find('export default function App')
