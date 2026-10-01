@@ -32,7 +32,7 @@ def register_offline_activity_routes(app, db):
                 activity_date = datetime.strptime(value, '%Y-%m-%d').date()
             except (TypeError, ValueError):
                 continue
-            if activity_date > _today() or activity_date < datetime.utcnow().date() - timedelta(days=366):
+            if activity_date > _today() or activity_date < _today() - timedelta(days=366):
                 continue
             dates.append(activity_date)
         dates = sorted(set(dates))
@@ -62,7 +62,7 @@ def register_offline_activity_routes(app, db):
         if not isinstance(entries, list) or len(entries) > 31:
             return jsonify({'error': 'entries must be a list of at most 31 daily totals'}), 400
 
-        today = datetime.utcnow().date()
+        today = _today()
         max_day_seconds = 12 * 60 * 60
         accepted = {}
         server_totals = {}
