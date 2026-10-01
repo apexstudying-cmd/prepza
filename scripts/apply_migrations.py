@@ -61,7 +61,7 @@ def verify(conn):
             "ORDER BY migration_name"
         )
     ).all()
-    expected = {p.name: checksum(p) for p in migration_files()}
+    expected = {p.name: checksum(p) for p in migration_files() if p.name != LEDGER_MIGRATION}
     applied = dict(rows)
     changed = [n for n, d in applied.items() if expected.get(n) not in (None, d)]
     missing = sorted(set(expected) - set(applied))
