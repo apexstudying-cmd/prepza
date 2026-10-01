@@ -470,8 +470,48 @@ def _resolve_material_generation(feature, content, user_id, parameters):
     )
 
 
+AI_JOB_STALE_AFTER_SECONDS = max(300, int(os.environ.get("AI_JOB_STALE_AFTER_SECONDS", "3600")))
+
+
+def _recover_stale_ai_jobs():
+    """Fail abandoned in-process jobs instead of leaving students on 'processing' forever.
+
+    The current worker is intentionally process-local. If Gunicorn/Render kills the
+    process, the database row survives but the Python thread does not. This recovery
+    boundary makes that failure explicit and safe; the existing fingerprint/idempotency
+    layer makes a later retry collapse onto the same artifact instead of double-generating.
+    """
+    cutoff = datetime.utcnow() - timedelta(seconds=AI_JOB_STALE_AFTER_SECONDS)
+    stale_jobs = (
+        AiJob.query
+        .filter(
+            AiJob.status == "processing",
+            AiJob.started_at.isnot(None),
+            AiJob.started_at < cutoff,
+        )
+        .all()
+    )
+    if not stale_jobs:
+        return 0
+    recovered = 0
+    for stale_job in stale_jobs:
+        stale_job.status = "failed"
+        stale_job.retry_count = int(stale_job.retry_count or 0) + 1
+        stale_job.progress_stage = "worker stopped; retry required"
+        stale_job.error_message = (
+            f"Background worker stopped before completion. The job exceeded the "
+            f"{AI_JOB_STALE_AFTER_SECONDS}-second recovery window; retry is safe."
+        )[:500]
+        stale_job.completed_at = datetime.utcnow()
+        recovered += 1
+    db.session.commit()
+    app.logger.warning("Recovered %s stale AI generation job(s)", recovered)
+    return recovered
+
+
 def _start_async_material_generation(document_content_id, user_id, feature, parameters):
     """Create a user-visible job and run the exact requested generation off-request."""
+    _recover_stale_ai_jobs()
     if not isinstance(parameters, dict):
         raise ValueError("AI generation parameters must be an object")
     job = AiJob(
@@ -535,6 +575,9 @@ def _start_async_material_generation(document_content_id, user_id, feature, para
 
 @app.route("/ai-jobs/<int:job_id>")
 def get_ai_job_status(job_id):
+    # Reconcile abandoned process-local jobs before reporting status so a
+    # student never sees an indefinitely stuck "processing" job.
+    _recover_stale_ai_jobs()
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
