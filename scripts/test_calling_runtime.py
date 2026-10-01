@@ -9,6 +9,7 @@ def _session_client(user_id=None):
     if user_id is not None:
         with flask_client.session_transaction() as session:
             session['user_id'] = user_id
+            session['_session_version'] = 1
     client = socketio.test_client(app, flask_test_client=flask_client)
     if client.is_connected():
         client.get_received()
