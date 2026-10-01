@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import logoImg from './imports/logo.png'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
-import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'
+import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime, resetChatRealtime } from './crypto/chatRealtime'
 import CallExperience from './crypto/CallExperience'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline, saveUploadedFileOffline } from './offline/studyHubOffline'
@@ -15061,6 +15061,7 @@ export default function App() {
   }
 
   const resetNavigation = (target: Screen) => {
+    if (target === 'login') resetChatRealtime()
     setScreenStack([target])
     window.history.replaceState({ prepzaNav: true }, window.location.pathname)
   }
