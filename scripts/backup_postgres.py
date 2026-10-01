@@ -9,7 +9,6 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,6 +24,8 @@ def main():
         subprocess.run(["pg_restore", "--version"], check=True)
         print("PostgreSQL backup tooling is available.")
         return
+
+    from dotenv import load_dotenv
 
     load_dotenv(ROOT / ".env")
     database_url = os.environ.get("DATABASE_URL")
