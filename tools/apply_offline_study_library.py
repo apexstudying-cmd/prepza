@@ -24,9 +24,15 @@ def patch_generated_user_id():
 
 def patch_app():
     s = APP.read_text(encoding='utf-8')
-    actual_anchor = next((line for line in s.splitlines(True) if line.startswith("import {") and "joinRealtimeChat" in line and "from './crypto/chatRealtime'" in line), "")
+    # The realtime import has been rewritten by several earlier frontend transforms over time.
+    # Match the module import by its stable source path rather than requiring a particular
+    # symbol list or one-line formatting.
+    actual_anchor = next((
+        line for line in s.splitlines(True)
+        if "from './crypto/chatRealtime'" in line and line.lstrip().startswith("import")
+    ), "")
     if not actual_anchor:
-        raise SystemExit('Offline library: realtime chat import anchor not found')
+        raise SystemExit("Offline library: realtime chat import anchor not found")
     anchor = actual_anchor
     imports = [
         "import { getOfflineUserId } from './offline/generatedMaterials'\n",
