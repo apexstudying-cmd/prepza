@@ -90,6 +90,9 @@ def main() -> None:
     require(engine, ["const PDFJS_BASE = '/vendor/pdfjs'", '${PDFJS_BASE}/pdf.mjs', '${PDFJS_BASE}/pdf.worker.mjs'], 'zero-network PDF engine')
     require(pdf_vendor, ['pdf.mjs', 'pdf.worker.mjs', 'cdn.jsdelivr.net', 'OUT = ROOT / \'frontend\' / \'public\' / \'vendor\' / \'pdfjs\''], 'local PDF.js build asset')
     assert 'https://cdn.jsdelivr.net' not in engine, 'PDF runtime must not use a CDN'
+    require(bootstrap, ['prepza-offline-last-auth-user', "indexedDB.deleteDatabase('prepza-offline-chat-v1')", "caches.delete('prepza-generated-audio-v1')", 'isolateAccount'], 'offline account switch isolation')
+    assert "activity_date < _today() - timedelta(days=366)" in backend_activity, 'offline baseline date validation must use Nairobi time'
+    assert 'today = _today()' in backend_activity, 'offline sync date boundary must use Nairobi time'
     stress_queue_model()
     idempotent_sync_model()
     verify_daily_study_limit_contract()
