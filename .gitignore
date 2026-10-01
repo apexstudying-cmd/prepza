@@ -30,3 +30,7 @@ remove_*.py
 /mark_document_ready.py
 /diagnose_chat_patch_anchors.py
 *.patch
+
+# Local database backup archives (never commit DB dumps)
+/backups/
+*.dump
