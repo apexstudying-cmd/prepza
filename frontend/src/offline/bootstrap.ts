@@ -17,6 +17,22 @@ export function installOfflineBootstrap(): void {
   // This makes the persisted outgoing queue active after a cold restart.
   installOfflineChatQueue()
 
+  const isolateAccount = async (userId: number) => {
+    try {
+      const previous = Number(localStorage.getItem('prepza-offline-last-auth-user') || 0)
+      if (previous > 0 && previous !== userId) {
+        try { indexedDB.deleteDatabase('prepza-offline-v2') } catch (_) {}
+        try { indexedDB.deleteDatabase('prepza-offline-v1') } catch (_) {}
+        try { indexedDB.deleteDatabase('prepza-offline-study-v1') } catch (_) {}
+        try { indexedDB.deleteDatabase('prepza-offline-chat-v1') } catch (_) {}
+        try { await caches.delete('prepza-study-assets-v1') } catch (_) {}
+        try { await caches.delete('prepza-generated-audio-v1') } catch (_) {}
+        try { localStorage.removeItem('prepza-offline-user-id') } catch (_) {}
+      }
+      localStorage.setItem('prepza-offline-last-auth-user', String(userId))
+    } catch (_) {}
+  }
+
   const reconcile = async () => {
     if (!navigator.onLine) return
     try {
@@ -32,6 +48,7 @@ export function installOfflineBootstrap(): void {
       const me = await response.json()
       const userId = Number(me?.id)
       if (!Number.isInteger(userId) || userId <= 0) return
+      await isolateAccount(userId)
       setOfflineUserId(userId)
       setOfflineStudyUserId(userId)
       await syncOfflineStudyActivity(me?.csrf_token)
