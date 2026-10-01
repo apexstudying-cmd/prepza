@@ -34,4 +34,15 @@ export function sendTypingRealtime(conversationId: number, typing: boolean) { if
 export function sendReadRealtime(conversationId: number, readAt?: string) { if (connected) getSocket()?.emit('chat:read', { conversation_id: conversationId, read_at: readAt }) }
 export function isRealtimeConnected() { return connected }
 
+export function resetChatRealtime() {
+  joined.clear()
+  connected = false
+  if (socket) {
+    socket.removeAllListeners()
+    socket.disconnect()
+  }
+  socket = null
+  window.dispatchEvent(new CustomEvent('prepza-realtime-status', { detail: { connected: false } }))
+}
+
 export function sendChatMessageUpdated(conversationId: number, messageId: number, deleted: boolean) { if (connected) getSocket()?.emit('chat:message-updated', { conversation_id: conversationId, message_id: messageId, deleted }) }
