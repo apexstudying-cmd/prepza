@@ -61,7 +61,7 @@ permissions:
 # - actions/checkout tests the exact event commit, not a moving branch ref.
 # - A failed check requires a new code commit and a fresh run.
 env:
-  DATABASE_URL: 'sqlite:///:memory:'
+  DATABASE_URL: 'sqlite:////tmp/prepza-ci-runtime.sqlite'
   SECRET_KEY: realtime-test-secret
 
 jobs:

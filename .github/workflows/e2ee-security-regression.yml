@@ -29,7 +29,7 @@ permissions:
   contents: read
 
 env:
-  DATABASE_URL: 'sqlite:///:memory:'
+  DATABASE_URL: 'sqlite:////tmp/prepza-ci-runtime.sqlite'
   SECRET_KEY: realtime-test-secret
 
 jobs:
