@@ -96,13 +96,14 @@ class AIRateLimitExceededError(Exception):
 
 
 MODEL_OPENAI_GPT5_MINI = "openai:gpt-5-mini"
-MODEL_GEMINI_FLASH_LITE = "gemini:gemini-2.5-flash-lite"
-MODEL_GEMINI_FLASH = "gemini:gemini-2.5-flash"
 MODEL_OPENAI_LUNA = "openai:gpt-5.6-luna"
 
 def _configured_model(task_name, default):
-    """Allow provider/model swaps through environment without code changes."""
-    return os.environ.get(f"PREPZA_AI_MODEL_{task_name.upper()}", default)
+    """Allow only explicitly configured OpenAI models."""
+    model = os.environ.get(f"PREPZA_AI_MODEL_{task_name.upper()}", default).strip()
+    if not model.startswith("openai:"):
+        raise ValueError(f"Prepza AI model for {task_name} must use the OpenAI provider")
+    return model
 
 AI_TASKS = {
     # Wired and in use this chunk:
@@ -182,8 +183,6 @@ AI_TASKS = {
 # ============================================================
 
 _PRICING_SCHEDULE = {
-    MODEL_GEMINI_FLASH_LITE: [(datetime(2000, 1, 1), Decimal("0.10"), Decimal("0.40"))],
-    MODEL_GEMINI_FLASH: [(datetime(2000, 1, 1), Decimal("0.30"), Decimal("2.50"))],
     MODEL_OPENAI_LUNA: [(datetime(2000, 1, 1), Decimal("0.20"), Decimal("1.20"))],
     # OpenAI GPT-5 Mini: $0.25/M input, $2.00/M output.
     MODEL_OPENAI_GPT5_MINI: [
@@ -248,40 +247,12 @@ def compute_cost_usd(model, input_tokens, output_tokens,
 # ============================================================
 
 class MultiProvider:
-    """Provider adapter for Gemini REST and OpenAI REST.
+    """Provider adapter for OpenAI REST.
 
     Keys are read only from the server environment. They must never be
     committed to the repository or sent through chat.
     """
 
-
-    @staticmethod
-    def _gemini(model, system_prompt, user_message, max_tokens):
-        key = os.environ.get("GEMINI_API_KEY")
-        if not key:
-            raise AIProviderError("GEMINI_API_KEY is not configured")
-        model_id = model.split(":", 1)[1]
-        response = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent",
-            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-            json={
-                "system_instruction": {"parts": [{"text": system_prompt}]},
-                "contents": [{"parts": [{"text": user_message}]}],
-                "generationConfig": {"maxOutputTokens": max_tokens},
-            },
-            timeout=120,
-        )
-        response.raise_for_status()
-        data = response.json()
-        parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []
-        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
-        if not text:
-            raise AIProviderError("Gemini returned no text")
-        meta = data.get("usageMetadata") or {}
-        return text, AIUsage(
-            input_tokens=int(meta.get("promptTokenCount", 0) or 0),
-            output_tokens=int(meta.get("candidatesTokenCount", 0) or 0),
-        )
 
     @staticmethod
     def _openai(model, system_prompt, user_message, max_tokens):
@@ -375,10 +346,6 @@ class MultiProvider:
 
     def call(self, model, system_prompt, user_message, max_tokens, cacheable_system=False,
              image_b64=None, image_media_type=None):
-        if model.startswith("gemini:"):
-            if image_b64:
-                raise AIProviderError("Gemini adapter currently supports text-only generation")
-            return self._gemini(model, system_prompt, user_message, max_tokens)
         if model.startswith("openai:"):
             if image_b64:
                 raise AIProviderError("OpenAI adapter currently supports text-only generation")
@@ -387,8 +354,6 @@ class MultiProvider:
 
     @staticmethod
     def provider_name(model):
-        if model.startswith("gemini:"):
-            return "google"
         if model.startswith("openai:"):
             return "openai"
         raise AIProviderError(f"Unsupported AI model '{model}'")
