@@ -133,7 +133,9 @@ def send_verification_email(to_email, token):
     sender = (os.environ.get("SES_FROM_EMAIL") or os.environ.get("AWS_SES_FROM_EMAIL") or os.environ.get("AWS_FROM_EMAIL") or "").strip()
     if not region or not sender:
         raise RuntimeError("AWS SES verification email is not configured")
-    if not BASE_URL:\n        raise RuntimeError("BASE_URL is required for verification email links")\n    link = f"{BASE_URL}/verify-email?{urlencode({'token': token})}"
+    if not BASE_URL:
+        raise RuntimeError("BASE_URL is required for verification email links")
+    link = f"{BASE_URL}/verify-email?{urlencode({'token': token})}"
     boto3.client("sesv2", region_name=region).send_email(
         FromEmailAddress=sender,
         Destination={"ToAddresses": [to_email]},
