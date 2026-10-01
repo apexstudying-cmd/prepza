@@ -22,6 +22,8 @@ def connect():
 def ensure_ledger(conn): conn.execute(text((MIGRATIONS / LEDGER_MIGRATION).read_text(encoding="utf-8")))
 def baseline(conn):
     for path in migration_files():
+        if path.name == LEDGER_MIGRATION:
+            continue
         conn.execute(text("""INSERT INTO schema_migration (migration_name, checksum)
 VALUES (:name, :checksum) ON CONFLICT (migration_name) DO NOTHING"""), {"name":path.name,"checksum":checksum(path)})
     print(f"Baselined {len(migration_files())} migration file(s).")
@@ -38,7 +40,8 @@ def apply(conn):
         if path.name in applied:
             if applied[path.name] != checksum(path): raise SystemExit(f"Migration checksum changed after application: {path.name}")
             continue
-        if path.name == LEDGER_MIGRATION: continue
+        if path.name == LEDGER_MIGRATION:
+            continue
         print(f"Applying {path.name}...")
         conn.execute(text(path.read_text(encoding="utf-8")))
         conn.execute(text("INSERT INTO schema_migration (migration_name, checksum) VALUES (:name, :checksum)"), {"name":path.name,"checksum":checksum(path)})
