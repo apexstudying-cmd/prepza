@@ -1,4 +1,5 @@
 """Focused regression checks for Chunk 2 chat metadata hooks."""
+# Final Day 7 CI synchronization marker.
 import json
 from types import SimpleNamespace
 from unittest.mock import Mock
