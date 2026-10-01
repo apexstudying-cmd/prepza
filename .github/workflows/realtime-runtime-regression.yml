@@ -50,5 +50,8 @@ jobs:
         run: |
           python tools/apply_calling.py
           python tools/harden_calling.py
+      - name: Initialize CI SQLite schema
+        run: python scripts/init_ci_db.py
+
       - name: Run realtime, call, and chat interaction regressions
         run: python -m pytest scripts/test_realtime_runtime.py scripts/test_calling_runtime.py scripts/test_chat_interactions.py -q

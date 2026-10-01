@@ -24,13 +24,14 @@ def patch_generated_user_id():
 
 def patch_app():
     s = APP.read_text(encoding='utf-8')
-    anchor = "import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './crypto/chatRealtime'\n"
+    actual_anchor = next((line for line in s.splitlines(True) if line.startswith("import {") and "joinRealtimeChat" in line and "from './crypto/chatRealtime'" in line), "")
+    if not actual_anchor:
+        raise SystemExit('Offline library: realtime chat import anchor not found')
+    anchor = actual_anchor
     imports = [
         "import { getOfflineUserId } from './offline/generatedMaterials'\n",
         "import { getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'\n",
     ]
-    if anchor not in s:
-        raise SystemExit('Offline library: App import anchor not found')
     insert = anchor
     for line in imports:
         symbol = line.split('{', 1)[1].split('}', 1)[0].split(',')[0].strip()

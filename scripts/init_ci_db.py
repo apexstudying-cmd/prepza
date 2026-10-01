@@ -1,0 +1,1 @@
+"""Initialize the SQLite schema for CI runtime regression tests.\n\nThis is test-only setup: production migrations remain the source of truth.\n"""\n\nfrom app import app, db\n\n\nwith app.app_context():\n    db.create_all()\n    print("CI SQLite schema initialized.")\n
