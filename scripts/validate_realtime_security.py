@@ -2,6 +2,8 @@
 from pathlib import Path
 
 SOURCE = Path("realtime_server.py").read_text(encoding="utf-8")
+FRONTEND = Path("frontend/src/crypto/chatRealtime.ts").read_text(encoding="utf-8")
+APP_SOURCE = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
 
 REQUIRED = {
     "authenticated socket gate": 'user_id = authenticated_socket_user_id()\n    if user_id is None:',
@@ -26,5 +28,12 @@ if "socketio.emit(\"chat:message\"" not in broadcast_body:
     raise SystemExit("Realtime security regression: message broadcast path disappeared")
 if broadcast_body.index("is_e2ee_conversation") > broadcast_body.index("socketio.emit(\"chat:message\""):
     raise SystemExit("Realtime security regression: message broadcast is not E2EE-gated")
+for source, name, fragment in [
+    (FRONTEND, "realtime teardown", "export function resetChatRealtime()"),
+    (FRONTEND, "realtime socket disconnect", "socket.disconnect()"),
+    (APP_SOURCE, "logout realtime teardown", "if (target === 'login') resetChatRealtime()"),
+]:
+    if fragment not in source:
+        raise SystemExit(f"Realtime security regression: missing {name}")
 
 print("Realtime security invariants passed.")
