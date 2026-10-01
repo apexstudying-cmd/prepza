@@ -125,7 +125,7 @@ def _ensure_chat_idempotency_schema():
 
 EMAIL_REGEX = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 PHONE_NUMBER_REGEX = re.compile(r"^\+?\d{9,15}$")
-BASE_URL = (os.environ.get("BASE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "https://prepza-sf60.onrender.com").rstrip("/")
+BASE_URL = (os.environ.get("BASE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
 
 def send_verification_email(to_email, token):
     """Send the existing verification-link email through the launch SES provider."""
@@ -133,7 +133,7 @@ def send_verification_email(to_email, token):
     sender = (os.environ.get("SES_FROM_EMAIL") or os.environ.get("AWS_SES_FROM_EMAIL") or os.environ.get("AWS_FROM_EMAIL") or "").strip()
     if not region or not sender:
         raise RuntimeError("AWS SES verification email is not configured")
-    link = f"{BASE_URL}/verify-email?{urlencode({'token': token})}"
+    if not BASE_URL:\n        raise RuntimeError("BASE_URL is required for verification email links")\n    link = f"{BASE_URL}/verify-email?{urlencode({'token': token})}"
     boto3.client("sesv2", region_name=region).send_email(
         FromEmailAddress=sender,
         Destination={"ToAddresses": [to_email]},
