@@ -216,7 +216,7 @@ def register_infrastructure_monitoring(app, db, require_admin, SystemSetting,
                 "id": "r2",
                 "provider": "Cloudflare",
                 "resource": "R2 object storage",
-                "status": "configured" if os.environ.get("R2_ACCESS_KEY_ID") and os.environ.get("R2_SECRET_ACCESS_KEY") else "not_configured",
+                "status": "configured" if os.environ.get("PREPZA_R2_ACCESS_KEY_ID") and os.environ.get("PREPZA_R2_SECRET_ACCESS_KEY") else "not_configured",
                 "upgrade_trigger": "When audio/material storage or egress requirements exceed the current storage arrangement.",
                 "action": "Configure R2 credentials and measured usage before migrating/expanding storage.",
                 "cost_risk": "R2 usage can incur storage/operation/egress-related charges depending on the service configuration."
