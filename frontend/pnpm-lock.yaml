@@ -43,8 +43,8 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
       vite:
-        specifier: ^8.0.0
-        version: 8.0.3(@types/node@22.19.17)(jiti@2.6.1)
+        specifier: ^8.0.16
+        version: 8.0.16(@types/node@22.19.17)(jiti@2.6.1)
 
 packages:
 
