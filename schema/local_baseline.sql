@@ -103,7 +103,8 @@ CREATE SEQUENCE IF NOT EXISTS public.xp_event_id_seq;
 
 
 -- Tables and non-FK constraints
-CREATE TABLE public.ada_request_usage (\n    id bigint DEFAULT nextval('ada_request_usage_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.ada_request_usage (
+    id bigint DEFAULT nextval('ada_request_usage_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     plan_code character varying(20) NOT NULL,
     model character varying(100) NOT NULL,
@@ -116,23 +117,29 @@ CREATE TABLE public.ada_request_usage (\n    id bigint DEFAULT nextval('ada_requ
     cost_usd numeric(14,8) DEFAULT 0 NOT NULL,
     request_key character varying(120),
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT ada_request_usage_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT ada_request_usage_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.ada_usage_day (\n    user_id integer NOT NULL,
+CREATE TABLE public.ada_usage_day (
+    user_id integer NOT NULL,
     usage_date date NOT NULL,
     ada_units bigint DEFAULT 0 NOT NULL,
     requests integer DEFAULT 0 NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT ada_usage_day_pkey PRIMARY KEY (user_id, usage_date)\n);
+    CONSTRAINT ada_usage_day_pkey PRIMARY KEY (user_id, usage_date)
+);
 
-CREATE TABLE public.ada_usage_month (\n    user_id integer NOT NULL,
+CREATE TABLE public.ada_usage_month (
+    user_id integer NOT NULL,
     period_start date NOT NULL,
     ada_units bigint DEFAULT 0 NOT NULL,
     requests integer DEFAULT 0 NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT ada_usage_month_pkey PRIMARY KEY (user_id, period_start)\n);
+    CONSTRAINT ada_usage_month_pkey PRIMARY KEY (user_id, period_start)
+);
 
-CREATE TABLE public.ai_answer (\n    id integer DEFAULT nextval('ai_answer_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.ai_answer (
+    id integer DEFAULT nextval('ai_answer_id_seq'::regclass) NOT NULL,
     question_text text NOT NULL,
     answer_text text NOT NULL,
     search_vector tsvector GENERATED ALWAYS AS (to_tsvector('english'::regconfig, question_text)) STORED,
@@ -144,16 +151,20 @@ CREATE TABLE public.ai_answer (\n    id integer DEFAULT nextval('ai_answer_id_se
     cost_usd numeric(10,6) DEFAULT 0 NOT NULL,
     reuse_count integer DEFAULT 0 NOT NULL,
     created_at timestamp without time zone DEFAULT now() NOT NULL,
-    CONSTRAINT ai_answer_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT ai_answer_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.ai_economics_change_log (\n    id bigint DEFAULT nextval('ai_economics_change_log_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.ai_economics_change_log (
+    id bigint DEFAULT nextval('ai_economics_change_log_id_seq'::regclass) NOT NULL,
     admin_user_id integer NOT NULL,
     plan_code character varying(20) NOT NULL,
     changes jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT ai_economics_change_log_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT ai_economics_change_log_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.ai_generation_artifact (\n    id bigint DEFAULT nextval('ai_generation_artifact_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.ai_generation_artifact (
+    id bigint DEFAULT nextval('ai_generation_artifact_id_seq'::regclass) NOT NULL,
     fingerprint character varying(128) NOT NULL,
     content_hash character varying(128) NOT NULL,
     feature character varying(40) NOT NULL,
@@ -172,41 +183,51 @@ CREATE TABLE public.ai_generation_artifact (\n    id bigint DEFAULT nextval('ai_
     CONSTRAINT ai_generation_artifact_fingerprint_key UNIQUE (fingerprint),
     CONSTRAINT ai_generation_artifact_pkey PRIMARY KEY (id),
     CONSTRAINT ck_ai_generation_artifact_scope CHECK (((scope)::text = ANY ((ARRAY['shared'::character varying, 'private'::character varying])::text[]))),
-    CONSTRAINT ck_ai_generation_artifact_scope_owner CHECK (((((scope)::text = 'shared'::text) AND (owner_user_id IS NULL)) OR (((scope)::text = 'private'::text) AND (owner_user_id IS NOT NULL))))\n);
+    CONSTRAINT ck_ai_generation_artifact_scope_owner CHECK (((((scope)::text = 'shared'::text) AND (owner_user_id IS NULL)) OR (((scope)::text = 'private'::text) AND (owner_user_id IS NOT NULL))))
+);
 
-CREATE TABLE public.ai_generation_inflight (\n    base_fingerprint character varying(128) NOT NULL,
+CREATE TABLE public.ai_generation_inflight (
+    base_fingerprint character varying(128) NOT NULL,
     artifact_id bigint,
     status character varying(20) DEFAULT 'generating'::character varying NOT NULL,
     lease_token character varying(128),
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT ai_generation_inflight_pkey PRIMARY KEY (base_fingerprint)\n);
+    CONSTRAINT ai_generation_inflight_pkey PRIMARY KEY (base_fingerprint)
+);
 
-CREATE TABLE public.ai_generation_subscriber (\n    id bigint DEFAULT nextval('ai_generation_subscriber_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.ai_generation_subscriber (
+    id bigint DEFAULT nextval('ai_generation_subscriber_id_seq'::regclass) NOT NULL,
     base_fingerprint character varying(128) NOT NULL,
     user_id integer NOT NULL,
     status character varying(20) DEFAULT 'waiting'::character varying NOT NULL,
     artifact_id bigint,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     completed_at timestamp without time zone,
-    CONSTRAINT ai_generation_subscriber_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT ai_generation_subscriber_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.ai_generation_variant_access (\n    user_id integer NOT NULL,
+CREATE TABLE public.ai_generation_variant_access (
+    user_id integer NOT NULL,
     base_fingerprint character varying(64) NOT NULL,
     variant smallint NOT NULL,
     artifact_id bigint,
     status character varying(20) DEFAULT 'reserved'::character varying NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT ai_generation_variant_access_pkey PRIMARY KEY (user_id, base_fingerprint, variant)\n);
+    CONSTRAINT ai_generation_variant_access_pkey PRIMARY KEY (user_id, base_fingerprint, variant)
+);
 
-CREATE TABLE public.ai_generation_variant_family (\n    base_fingerprint character varying(64) NOT NULL,
+CREATE TABLE public.ai_generation_variant_family (
+    base_fingerprint character varying(64) NOT NULL,
     feature character varying(40) NOT NULL,
     base_parameters jsonb DEFAULT '{}'::jsonb NOT NULL,
     next_variant smallint DEFAULT 1 NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT ai_generation_variant_family_pkey PRIMARY KEY (base_fingerprint)\n);
+    CONSTRAINT ai_generation_variant_family_pkey PRIMARY KEY (base_fingerprint)
+);
 
-CREATE TABLE public.ai_job (\n    id integer DEFAULT nextval('ai_job_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.ai_job (
+    id integer DEFAULT nextval('ai_job_id_seq'::regclass) NOT NULL,
     document_content_id integer NOT NULL,
     feature character varying(30) NOT NULL,
     status character varying(20) DEFAULT 'pending'::character varying NOT NULL,
@@ -221,9 +242,11 @@ CREATE TABLE public.ai_job (\n    id integer DEFAULT nextval('ai_job_id_seq'::re
     progress_stage character varying(80),
     material_id integer,
     claimed_worker_id character varying(64),
-    CONSTRAINT ai_job_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT ai_job_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.ai_usage_log (\n    id integer DEFAULT nextval('ai_usage_log_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.ai_usage_log (
+    id integer DEFAULT nextval('ai_usage_log_id_seq'::regclass) NOT NULL,
     user_id integer,
     forum_reply_id integer,
     request_type character varying(20) NOT NULL,
@@ -235,9 +258,11 @@ CREATE TABLE public.ai_usage_log (\n    id integer DEFAULT nextval('ai_usage_log
     cost_usd numeric(10,6) DEFAULT 0 NOT NULL,
     created_at timestamp without time zone DEFAULT now() NOT NULL,
     provider character varying(20),
-    CONSTRAINT ai_usage_log_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT ai_usage_log_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.ambassador (\n    id integer DEFAULT nextval('ambassador_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.ambassador (
+    id integer DEFAULT nextval('ambassador_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     referral_code character varying(20) NOT NULL,
     status character varying(20) NOT NULL,
@@ -249,9 +274,11 @@ CREATE TABLE public.ambassador (\n    id integer DEFAULT nextval('ambassador_id_
     updated_at timestamp without time zone,
     CONSTRAINT ambassador_pkey PRIMARY KEY (id),
     CONSTRAINT ambassador_referral_code_key UNIQUE (referral_code),
-    CONSTRAINT ambassador_user_id_key UNIQUE (user_id)\n);
+    CONSTRAINT ambassador_user_id_key UNIQUE (user_id)
+);
 
-CREATE TABLE public.ambassador_payout (\n    id integer DEFAULT nextval('ambassador_payout_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.ambassador_payout (
+    id integer DEFAULT nextval('ambassador_payout_id_seq'::regclass) NOT NULL,
     ambassador_id integer NOT NULL,
     amount integer NOT NULL,
     status character varying(20) NOT NULL,
@@ -265,26 +292,32 @@ CREATE TABLE public.ambassador_payout (\n    id integer DEFAULT nextval('ambassa
     recipient_first_name character varying(100) NOT NULL,
     recipient_last_name character varying(100) NOT NULL,
     paystack_recipient_code character varying(100),
-    CONSTRAINT ambassador_payout_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT ambassador_payout_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.announcement (\n    id integer DEFAULT nextval('announcement_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.announcement (
+    id integer DEFAULT nextval('announcement_id_seq'::regclass) NOT NULL,
     title character varying(200) NOT NULL,
     body character varying(500) NOT NULL,
     sent_by integer NOT NULL,
     reach integer DEFAULT 0 NOT NULL,
     created_at timestamp without time zone DEFAULT now(),
-    CONSTRAINT announcement_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT announcement_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.audit_log (\n    id integer DEFAULT nextval('audit_log_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.audit_log (
+    id integer DEFAULT nextval('audit_log_id_seq'::regclass) NOT NULL,
     actor_id integer,
     action character varying(60) NOT NULL,
     target_type character varying(40),
     target_id integer,
     details text,
     created_at timestamp without time zone,
-    CONSTRAINT audit_log_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT audit_log_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.auth_otp (\n    id bigint DEFAULT nextval('auth_otp_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.auth_otp (
+    id bigint DEFAULT nextval('auth_otp_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     purpose character varying(30) NOT NULL,
     target character varying(320) NOT NULL,
@@ -294,9 +327,11 @@ CREATE TABLE public.auth_otp (\n    id bigint DEFAULT nextval('auth_otp_id_seq':
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     expires_at timestamp without time zone NOT NULL,
     consumed_at timestamp without time zone,
-    CONSTRAINT auth_otp_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT auth_otp_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.b2b_audit_log (\n    id bigint DEFAULT nextval('b2b_audit_log_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.b2b_audit_log (
+    id bigint DEFAULT nextval('b2b_audit_log_id_seq'::regclass) NOT NULL,
     organisation_id integer,
     campaign_id bigint,
     actor_user_id integer,
@@ -306,9 +341,11 @@ CREATE TABLE public.b2b_audit_log (\n    id bigint DEFAULT nextval('b2b_audit_lo
     reason text,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT b2b_audit_log_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT b2b_audit_log_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.b2b_campaign_funding (\n    id bigint DEFAULT nextval('b2b_campaign_funding_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.b2b_campaign_funding (
+    id bigint DEFAULT nextval('b2b_campaign_funding_id_seq'::regclass) NOT NULL,
     campaign_id bigint NOT NULL,
     payment_id bigint NOT NULL,
     amount_minor bigint NOT NULL,
@@ -318,9 +355,11 @@ CREATE TABLE public.b2b_campaign_funding (\n    id bigint DEFAULT nextval('b2b_c
     reversed_at timestamp without time zone,
     reversal_reason text,
     CONSTRAINT b2b_campaign_funding_payment_id_key UNIQUE (payment_id),
-    CONSTRAINT b2b_campaign_funding_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT b2b_campaign_funding_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.b2b_campaign_ledger (\n    id bigint DEFAULT nextval('b2b_campaign_ledger_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.b2b_campaign_ledger (
+    id bigint DEFAULT nextval('b2b_campaign_ledger_id_seq'::regclass) NOT NULL,
     campaign_id bigint NOT NULL,
     entry_type character varying(40) NOT NULL,
     signed_amount_minor bigint NOT NULL,
@@ -335,9 +374,11 @@ CREATE TABLE public.b2b_campaign_ledger (\n    id bigint DEFAULT nextval('b2b_ca
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT b2b_campaign_ledger_idempotency_key_key UNIQUE (idempotency_key),
-    CONSTRAINT b2b_campaign_ledger_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT b2b_campaign_ledger_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.b2b_invoice (\n    id bigint DEFAULT nextval('b2b_invoice_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.b2b_invoice (
+    id bigint DEFAULT nextval('b2b_invoice_id_seq'::regclass) NOT NULL,
     organisation_id integer NOT NULL,
     campaign_id bigint,
     invoice_number character varying(80) NOT NULL,
@@ -355,9 +396,11 @@ CREATE TABLE public.b2b_invoice (\n    id bigint DEFAULT nextval('b2b_invoice_id
     etims_control_code character varying(120),
     etims_issued_at timestamp without time zone,
     CONSTRAINT b2b_invoice_invoice_number_key UNIQUE (invoice_number),
-    CONSTRAINT b2b_invoice_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT b2b_invoice_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.b2b_payment (\n    id bigint DEFAULT nextval('b2b_payment_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.b2b_payment (
+    id bigint DEFAULT nextval('b2b_payment_id_seq'::regclass) NOT NULL,
     organisation_id integer NOT NULL,
     campaign_id bigint,
     provider character varying(30) DEFAULT 'paystack'::character varying NOT NULL,
@@ -378,9 +421,11 @@ CREATE TABLE public.b2b_payment (\n    id bigint DEFAULT nextval('b2b_payment_id
     refund_requested_at timestamp without time zone,
     refund_processed_at timestamp without time zone,
     CONSTRAINT b2b_payment_pkey PRIMARY KEY (id),
-    CONSTRAINT b2b_payment_provider_reference_key UNIQUE (provider_reference)\n);
+    CONSTRAINT b2b_payment_provider_reference_key UNIQUE (provider_reference)
+);
 
-CREATE TABLE public.b2b_placement_config (\n    id bigint DEFAULT nextval('b2b_placement_config_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.b2b_placement_config (
+    id bigint DEFAULT nextval('b2b_placement_config_id_seq'::regclass) NOT NULL,
     placement_key character varying(80) NOT NULL,
     label character varying(160) NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
@@ -394,9 +439,11 @@ CREATE TABLE public.b2b_placement_config (\n    id bigint DEFAULT nextval('b2b_p
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT b2b_placement_config_pkey PRIMARY KEY (id),
-    CONSTRAINT b2b_placement_config_placement_key_key UNIQUE (placement_key)\n);
+    CONSTRAINT b2b_placement_config_placement_key_key UNIQUE (placement_key)
+);
 
-CREATE TABLE public.b2b_pricing_config (\n    id bigint DEFAULT nextval('b2b_pricing_config_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.b2b_pricing_config (
+    id bigint DEFAULT nextval('b2b_pricing_config_id_seq'::regclass) NOT NULL,
     config_key character varying(80) NOT NULL,
     value_json jsonb NOT NULL,
     currency character varying(3) DEFAULT 'KES'::character varying NOT NULL,
@@ -406,44 +453,56 @@ CREATE TABLE public.b2b_pricing_config (\n    id bigint DEFAULT nextval('b2b_pri
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT b2b_pricing_config_config_key_key UNIQUE (config_key),
-    CONSTRAINT b2b_pricing_config_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT b2b_pricing_config_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.chat_message_idempotency (\n    conversation_id integer NOT NULL,
+CREATE TABLE public.chat_message_idempotency (
+    conversation_id integer NOT NULL,
     sender_id integer NOT NULL,
     client_message_id character varying(128) NOT NULL,
     message_id integer NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT chat_message_idempotency_pkey PRIMARY KEY (conversation_id, sender_id, client_message_id)\n);
+    CONSTRAINT chat_message_idempotency_pkey PRIMARY KEY (conversation_id, sender_id, client_message_id)
+);
 
-CREATE TABLE public.chat_message_meta (\n    message_id integer NOT NULL,
+CREATE TABLE public.chat_message_meta (
+    message_id integer NOT NULL,
     conversation_id integer NOT NULL,
     kind character varying(20) DEFAULT 'text'::character varying NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT chat_message_meta_pkey PRIMARY KEY (message_id)\n);
+    CONSTRAINT chat_message_meta_pkey PRIMARY KEY (message_id)
+);
 
-CREATE TABLE public.chat_message_receipt (\n    message_id integer NOT NULL,
+CREATE TABLE public.chat_message_receipt (
+    message_id integer NOT NULL,
     user_id integer NOT NULL,
     delivered_at timestamp without time zone,
     read_at timestamp without time zone,
-    CONSTRAINT chat_message_receipt_pkey PRIMARY KEY (message_id, user_id)\n);
+    CONSTRAINT chat_message_receipt_pkey PRIMARY KEY (message_id, user_id)
+);
 
-CREATE TABLE public.concept_prerequisite (\n    id integer DEFAULT nextval('concept_prerequisite_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.concept_prerequisite (
+    id integer DEFAULT nextval('concept_prerequisite_id_seq'::regclass) NOT NULL,
     concept_id integer NOT NULL,
     prerequisite_concept_id integer NOT NULL,
     created_at timestamp without time zone DEFAULT now() NOT NULL,
     CONSTRAINT concept_prerequisite_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_concept_prerequisite_pair UNIQUE (concept_id, prerequisite_concept_id)\n);
+    CONSTRAINT uq_concept_prerequisite_pair UNIQUE (concept_id, prerequisite_concept_id)
+);
 
-CREATE TABLE public.content_item (\n    id integer DEFAULT nextval('content_item_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.content_item (
+    id integer DEFAULT nextval('content_item_id_seq'::regclass) NOT NULL,
     content_type character varying(20) NOT NULL,
     title character varying(200) NOT NULL,
     file_url character varying(500),
     paper_year integer,
     is_downloadable boolean,
     price integer,
-    CONSTRAINT content_item_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT content_item_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.content_report (\n    id integer DEFAULT nextval('content_report_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.content_report (
+    id integer DEFAULT nextval('content_report_id_seq'::regclass) NOT NULL,
     target_type character varying(30) NOT NULL,
     target_id integer NOT NULL,
     reporter_user_id integer,
@@ -456,9 +515,11 @@ CREATE TABLE public.content_report (\n    id integer DEFAULT nextval('content_re
     reviewed_by integer,
     reviewed_at timestamp without time zone,
     created_at timestamp without time zone DEFAULT now(),
-    CONSTRAINT content_report_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT content_report_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.conversation (\n    id integer DEFAULT nextval('conversation_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.conversation (
+    id integer DEFAULT nextval('conversation_id_seq'::regclass) NOT NULL,
     is_group boolean NOT NULL,
     name character varying(100),
     created_by integer NOT NULL,
@@ -467,9 +528,11 @@ CREATE TABLE public.conversation (\n    id integer DEFAULT nextval('conversation
     status character varying(20) DEFAULT 'accepted'::character varying NOT NULL,
     e2ee_mode character varying(20) DEFAULT 'legacy'::character varying NOT NULL,
     key_epoch integer DEFAULT 0 NOT NULL,
-    CONSTRAINT conversation_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT conversation_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.conversation_key_envelope (\n    id integer DEFAULT nextval('conversation_key_envelope_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.conversation_key_envelope (
+    id integer DEFAULT nextval('conversation_key_envelope_id_seq'::regclass) NOT NULL,
     conversation_id integer NOT NULL,
     recipient_user_id integer NOT NULL,
     sender_user_id integer NOT NULL,
@@ -481,9 +544,11 @@ CREATE TABLE public.conversation_key_envelope (\n    id integer DEFAULT nextval(
     CONSTRAINT ck_conversation_key_envelope_epoch_nonnegative CHECK ((key_epoch >= 0)),
     CONSTRAINT ck_conversation_key_envelope_version_positive CHECK ((version > 0)),
     CONSTRAINT conversation_key_envelope_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_conversation_key_envelope_recipient_epoch UNIQUE (conversation_id, recipient_user_id, key_epoch)\n);
+    CONSTRAINT uq_conversation_key_envelope_recipient_epoch UNIQUE (conversation_id, recipient_user_id, key_epoch)
+);
 
-CREATE TABLE public.conversation_participant (\n    id integer DEFAULT nextval('conversation_participant_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.conversation_participant (
+    id integer DEFAULT nextval('conversation_participant_id_seq'::regclass) NOT NULL,
     conversation_id integer NOT NULL,
     user_id integer NOT NULL,
     role character varying(20) NOT NULL,
@@ -492,9 +557,11 @@ CREATE TABLE public.conversation_participant (\n    id integer DEFAULT nextval('
     left_at timestamp without time zone,
     muted boolean DEFAULT false NOT NULL,
     CONSTRAINT conversation_participant_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_participant_conversation_user UNIQUE (conversation_id, user_id)\n);
+    CONSTRAINT uq_participant_conversation_user UNIQUE (conversation_id, user_id)
+);
 
-CREATE TABLE public.discovery_campaign (\n    id bigint DEFAULT nextval('discovery_campaign_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.discovery_campaign (
+    id bigint DEFAULT nextval('discovery_campaign_id_seq'::regclass) NOT NULL,
     organisation_id integer NOT NULL,
     opportunity_id integer,
     name character varying(200) NOT NULL,
@@ -522,9 +589,11 @@ CREATE TABLE public.discovery_campaign (\n    id bigint DEFAULT nextval('discove
     activated_at timestamp without time zone,
     exhausted_at timestamp without time zone,
     refund_previous_status character varying(30),
-    CONSTRAINT discovery_campaign_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT discovery_campaign_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.discovery_event (\n    id bigint DEFAULT nextval('discovery_event_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.discovery_event (
+    id bigint DEFAULT nextval('discovery_event_id_seq'::regclass) NOT NULL,
     campaign_id bigint NOT NULL,
     user_id integer NOT NULL,
     event_key character varying(180) NOT NULL,
@@ -534,9 +603,11 @@ CREATE TABLE public.discovery_event (\n    id bigint DEFAULT nextval('discovery_
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT discovery_event_event_key_key UNIQUE (event_key),
-    CONSTRAINT discovery_event_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT discovery_event_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.discovery_push_delivery (\n    id bigint DEFAULT nextval('discovery_push_delivery_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.discovery_push_delivery (
+    id bigint DEFAULT nextval('discovery_push_delivery_id_seq'::regclass) NOT NULL,
     campaign_id bigint NOT NULL,
     user_id integer NOT NULL,
     subscription_endpoint text,
@@ -545,9 +616,11 @@ CREATE TABLE public.discovery_push_delivery (\n    id bigint DEFAULT nextval('di
     sent_at timestamp without time zone,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT discovery_push_delivery_campaign_id_user_id_key UNIQUE (campaign_id, user_id),
-    CONSTRAINT discovery_push_delivery_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT discovery_push_delivery_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.document (\n    id integer DEFAULT nextval('document_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.document (
+    id integer DEFAULT nextval('document_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     document_content_id integer,
     title character varying(200) NOT NULL,
@@ -559,9 +632,11 @@ CREATE TABLE public.document (\n    id integer DEFAULT nextval('document_id_seq'
     created_at timestamp without time zone,
     updated_at timestamp without time zone,
     last_opened_at timestamp without time zone,
-    CONSTRAINT document_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT document_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.document_content (\n    id integer DEFAULT nextval('document_content_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.document_content (
+    id integer DEFAULT nextval('document_content_id_seq'::regclass) NOT NULL,
     content_hash character varying(64) NOT NULL,
     storage_path character varying(500) NOT NULL,
     file_type character varying(20) NOT NULL,
@@ -573,50 +648,62 @@ CREATE TABLE public.document_content (\n    id integer DEFAULT nextval('document
     updated_at timestamp without time zone,
     extracted_text text,
     CONSTRAINT document_content_content_hash_key UNIQUE (content_hash),
-    CONSTRAINT document_content_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT document_content_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.document_reading_progress (\n    id integer GENERATED BY DEFAULT AS IDENTITY NOT NULL,
+CREATE TABLE public.document_reading_progress (
+    id integer GENERATED BY DEFAULT AS IDENTITY NOT NULL,
     user_id integer NOT NULL,
     document_id integer NOT NULL,
     page_num integer DEFAULT 0 NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT ck_document_reading_progress_page_nonnegative CHECK ((page_num >= 0)),
     CONSTRAINT document_reading_progress_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_document_reading_progress_user_document UNIQUE (user_id, document_id)\n);
+    CONSTRAINT uq_document_reading_progress_user_document UNIQUE (user_id, document_id)
+);
 
-CREATE TABLE public.flashcard_session (\n    id integer DEFAULT nextval('flashcard_session_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.flashcard_session (
+    id integer DEFAULT nextval('flashcard_session_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     generated_material_id integer NOT NULL,
     document_content_id integer NOT NULL,
     cards_reviewed integer,
     created_at timestamp without time zone,
-    CONSTRAINT flashcard_session_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT flashcard_session_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.follow (\n    id integer DEFAULT nextval('follow_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.follow (
+    id integer DEFAULT nextval('follow_id_seq'::regclass) NOT NULL,
     follower_id integer NOT NULL,
     followed_id integer NOT NULL,
     created_at timestamp without time zone,
     CONSTRAINT follow_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_follow_follower_followed UNIQUE (follower_id, followed_id)\n);
+    CONSTRAINT uq_follow_follower_followed UNIQUE (follower_id, followed_id)
+);
 
-CREATE TABLE public.follow_request (\n    id integer DEFAULT nextval('follow_request_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.follow_request (
+    id integer DEFAULT nextval('follow_request_id_seq'::regclass) NOT NULL,
     requester_id integer NOT NULL,
     target_id integer NOT NULL,
     status character varying(10) DEFAULT 'pending'::character varying NOT NULL,
     created_at timestamp without time zone DEFAULT now(),
     responded_at timestamp without time zone,
     CONSTRAINT follow_request_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_follow_request_requester_target UNIQUE (requester_id, target_id)\n);
+    CONSTRAINT uq_follow_request_requester_target UNIQUE (requester_id, target_id)
+);
 
-CREATE TABLE public.forum_post (\n    id integer DEFAULT nextval('forum_post_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.forum_post (
+    id integer DEFAULT nextval('forum_post_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     title character varying(200) NOT NULL,
     body text NOT NULL,
     created_at timestamp without time zone DEFAULT now() NOT NULL,
     is_removed boolean DEFAULT false NOT NULL,
-    CONSTRAINT forum_post_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT forum_post_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.forum_reply (\n    id integer DEFAULT nextval('forum_reply_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.forum_reply (
+    id integer DEFAULT nextval('forum_reply_id_seq'::regclass) NOT NULL,
     post_id integer NOT NULL,
     user_id integer,
     is_ai boolean DEFAULT false NOT NULL,
@@ -625,9 +712,11 @@ CREATE TABLE public.forum_reply (\n    id integer DEFAULT nextval('forum_reply_i
     body text NOT NULL,
     created_at timestamp without time zone DEFAULT now() NOT NULL,
     is_removed boolean DEFAULT false NOT NULL,
-    CONSTRAINT forum_reply_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT forum_reply_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.generated_material (\n    id integer DEFAULT nextval('generated_material_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.generated_material (
+    id integer DEFAULT nextval('generated_material_id_seq'::regclass) NOT NULL,
     document_content_id integer NOT NULL,
     material_type character varying(20) NOT NULL,
     status character varying(20) NOT NULL,
@@ -644,9 +733,11 @@ CREATE TABLE public.generated_material (\n    id integer DEFAULT nextval('genera
     generation_version character varying(50) DEFAULT 'v1'::character varying NOT NULL,
     scope character varying(20) DEFAULT 'shared'::character varying NOT NULL,
     owner_user_id integer,
-    CONSTRAINT generated_material_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT generated_material_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public."group" (\n    id integer DEFAULT nextval('group_id_seq'::regclass) NOT NULL,
+CREATE TABLE public."group" (
+    id integer DEFAULT nextval('group_id_seq'::regclass) NOT NULL,
     name character varying(150) NOT NULL,
     description character varying(1000),
     privacy character varying(20) NOT NULL,
@@ -657,57 +748,71 @@ CREATE TABLE public."group" (\n    id integer DEFAULT nextval('group_id_seq'::re
     member_count integer NOT NULL,
     created_at timestamp without time zone,
     is_active boolean DEFAULT true NOT NULL,
-    CONSTRAINT group_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT group_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.group_file (\n    id integer DEFAULT nextval('group_file_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.group_file (
+    id integer DEFAULT nextval('group_file_id_seq'::regclass) NOT NULL,
     group_id integer NOT NULL,
     document_id integer NOT NULL,
     shared_by_user_id integer NOT NULL,
     created_at timestamp without time zone,
     CONSTRAINT group_file_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_group_file_group_document UNIQUE (group_id, document_id)\n);
+    CONSTRAINT uq_group_file_group_document UNIQUE (group_id, document_id)
+);
 
-CREATE TABLE public.group_member (\n    id integer DEFAULT nextval('group_member_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.group_member (
+    id integer DEFAULT nextval('group_member_id_seq'::regclass) NOT NULL,
     group_id integer NOT NULL,
     user_id integer NOT NULL,
     role character varying(20) NOT NULL,
     joined_at timestamp without time zone,
     CONSTRAINT group_member_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_group_member_group_user UNIQUE (group_id, user_id)\n);
+    CONSTRAINT uq_group_member_group_user UNIQUE (group_id, user_id)
+);
 
-CREATE TABLE public.group_post (\n    id integer DEFAULT nextval('group_post_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.group_post (
+    id integer DEFAULT nextval('group_post_id_seq'::regclass) NOT NULL,
     group_id integer NOT NULL,
     user_id integer NOT NULL,
     post_type character varying(20) NOT NULL,
     body text NOT NULL,
     created_at timestamp without time zone,
     is_removed boolean DEFAULT false NOT NULL,
-    CONSTRAINT group_post_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT group_post_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.group_post_comment (\n    id integer DEFAULT nextval('group_post_comment_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.group_post_comment (
+    id integer DEFAULT nextval('group_post_comment_id_seq'::regclass) NOT NULL,
     group_post_id integer NOT NULL,
     user_id integer NOT NULL,
     body text NOT NULL,
     created_at timestamp without time zone,
     marked_helpful boolean DEFAULT false NOT NULL,
     is_removed boolean DEFAULT false NOT NULL,
-    CONSTRAINT group_post_comment_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT group_post_comment_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.group_post_like (\n    id integer DEFAULT nextval('group_post_like_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.group_post_like (
+    id integer DEFAULT nextval('group_post_like_id_seq'::regclass) NOT NULL,
     group_post_id integer NOT NULL,
     user_id integer NOT NULL,
     created_at timestamp without time zone,
     CONSTRAINT group_post_like_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_group_post_like_post_user UNIQUE (group_post_id, user_id)\n);
+    CONSTRAINT uq_group_post_like_post_user UNIQUE (group_post_id, user_id)
+);
 
-CREATE TABLE public.group_question_vote (\n    id integer DEFAULT nextval('group_question_vote_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.group_question_vote (
+    id integer DEFAULT nextval('group_question_vote_id_seq'::regclass) NOT NULL,
     group_post_id integer NOT NULL,
     user_id integer NOT NULL,
     created_at timestamp without time zone,
     CONSTRAINT group_question_vote_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_group_question_vote_post_user UNIQUE (group_post_id, user_id)\n);
+    CONSTRAINT uq_group_question_vote_post_user UNIQUE (group_post_id, user_id)
+);
 
-CREATE TABLE public.kokoro_gpu_scaling_decisions (\n    id bigint DEFAULT nextval('kokoro_gpu_scaling_decisions_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.kokoro_gpu_scaling_decisions (
+    id bigint DEFAULT nextval('kokoro_gpu_scaling_decisions_id_seq'::regclass) NOT NULL,
     action character varying(32) NOT NULL,
     reason_code character varying(80) NOT NULL,
     reason_text character varying(1000) NOT NULL,
@@ -738,9 +843,11 @@ CREATE TABLE public.kokoro_gpu_scaling_decisions (\n    id bigint DEFAULT nextva
     required_host_ram_gb numeric(8,2),
     projected_hourly_spend_usd numeric(12,6),
     decision_context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT kokoro_gpu_scaling_decisions_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT kokoro_gpu_scaling_decisions_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.kokoro_gpu_workers (\n    id bigint DEFAULT nextval('kokoro_gpu_workers_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.kokoro_gpu_workers (
+    id bigint DEFAULT nextval('kokoro_gpu_workers_id_seq'::regclass) NOT NULL,
     provider character varying(32) DEFAULT 'vast'::character varying NOT NULL,
     instance_id bigint NOT NULL,
     offer_id bigint,
@@ -763,15 +870,19 @@ CREATE TABLE public.kokoro_gpu_workers (\n    id bigint DEFAULT nextval('kokoro_
     required_vram_gb numeric(8,2),
     required_host_ram_gb numeric(8,2),
     CONSTRAINT kokoro_gpu_workers_instance_id_key UNIQUE (instance_id),
-    CONSTRAINT kokoro_gpu_workers_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT kokoro_gpu_workers_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.learning_concept (\n    id integer DEFAULT nextval('learning_concept_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.learning_concept (
+    id integer DEFAULT nextval('learning_concept_id_seq'::regclass) NOT NULL,
     name character varying(200) NOT NULL,
     created_at timestamp without time zone,
     CONSTRAINT learning_concept_name_key UNIQUE (name),
-    CONSTRAINT learning_concept_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT learning_concept_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.learning_event (\n    id integer DEFAULT nextval('learning_event_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.learning_event (
+    id integer DEFAULT nextval('learning_event_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     concept_id integer NOT NULL,
     tutor_message_id integer,
@@ -779,9 +890,11 @@ CREATE TABLE public.learning_event (\n    id integer DEFAULT nextval('learning_e
     evidence_snippet character varying(500),
     misconception character varying(300),
     created_at timestamp without time zone,
-    CONSTRAINT learning_event_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT learning_event_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.library_publication (\n    id integer DEFAULT nextval('library_publication_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.library_publication (
+    id integer DEFAULT nextval('library_publication_id_seq'::regclass) NOT NULL,
     document_id integer NOT NULL,
     user_id integer NOT NULL,
     title character varying(200) NOT NULL,
@@ -800,9 +913,11 @@ CREATE TABLE public.library_publication (\n    id integer DEFAULT nextval('libra
     program_id integer,
     year integer,
     semester integer,
-    CONSTRAINT library_publication_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT library_publication_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.library_report (\n    id integer DEFAULT nextval('library_report_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.library_report (
+    id integer DEFAULT nextval('library_report_id_seq'::regclass) NOT NULL,
     library_publication_id integer NOT NULL,
     reporter_user_id integer NOT NULL,
     reason character varying(50) NOT NULL,
@@ -812,9 +927,11 @@ CREATE TABLE public.library_report (\n    id integer DEFAULT nextval('library_re
     reviewed_at timestamp without time zone,
     admin_notes character varying(500),
     created_at timestamp without time zone,
-    CONSTRAINT library_report_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT library_report_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.message (\n    id integer DEFAULT nextval('message_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.message (
+    id integer DEFAULT nextval('message_id_seq'::regclass) NOT NULL,
     conversation_id integer NOT NULL,
     sender_id integer NOT NULL,
     body text,
@@ -824,9 +941,11 @@ CREATE TABLE public.message (\n    id integer DEFAULT nextval('message_id_seq'::
     nonce character varying(64),
     e2ee_key_epoch integer DEFAULT 0 NOT NULL,
     CONSTRAINT ck_message_e2ee_key_epoch_nonnegative CHECK ((e2ee_key_epoch >= 0)),
-    CONSTRAINT message_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT message_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.message_attachment (\n    id integer DEFAULT nextval('message_attachment_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.message_attachment (
+    id integer DEFAULT nextval('message_attachment_id_seq'::regclass) NOT NULL,
     conversation_id integer NOT NULL,
     message_id integer,
     uploaded_by_user_id integer NOT NULL,
@@ -838,9 +957,11 @@ CREATE TABLE public.message_attachment (\n    id integer DEFAULT nextval('messag
     created_at timestamp without time zone,
     cached_view_url character varying(1000),
     cached_view_url_expires_at timestamp without time zone,
-    CONSTRAINT message_attachment_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT message_attachment_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.notification (\n    id integer DEFAULT nextval('notification_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.notification (
+    id integer DEFAULT nextval('notification_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     type character varying(40) NOT NULL,
     title character varying(200) NOT NULL,
@@ -849,18 +970,22 @@ CREATE TABLE public.notification (\n    id integer DEFAULT nextval('notification
     related_id integer,
     is_read boolean NOT NULL,
     created_at timestamp without time zone,
-    CONSTRAINT notification_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT notification_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.notification_preference (\n    id integer DEFAULT nextval('notification_preference_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.notification_preference (
+    id integer DEFAULT nextval('notification_preference_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     community_enabled boolean DEFAULT true NOT NULL,
     messages_enabled boolean DEFAULT true NOT NULL,
     created_at timestamp without time zone DEFAULT now(),
     updated_at timestamp without time zone DEFAULT now(),
     CONSTRAINT notification_preference_pkey PRIMARY KEY (id),
-    CONSTRAINT notification_preference_user_id_key UNIQUE (user_id)\n);
+    CONSTRAINT notification_preference_user_id_key UNIQUE (user_id)
+);
 
-CREATE TABLE public.opportunity (\n    id integer DEFAULT nextval('opportunity_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.opportunity (
+    id integer DEFAULT nextval('opportunity_id_seq'::regclass) NOT NULL,
     organisation_id integer NOT NULL,
     created_by integer NOT NULL,
     title character varying(200) NOT NULL,
@@ -883,9 +1008,11 @@ CREATE TABLE public.opportunity (\n    id integer DEFAULT nextval('opportunity_i
     updated_at timestamp without time zone,
     organic_free_impression_cap integer DEFAULT 5000 NOT NULL,
     organic_free_cap_reached_at timestamp without time zone,
-    CONSTRAINT opportunity_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT opportunity_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.opportunity_promotion (\n    id integer DEFAULT nextval('opportunity_promotion_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.opportunity_promotion (
+    id integer DEFAULT nextval('opportunity_promotion_id_seq'::regclass) NOT NULL,
     opportunity_id integer NOT NULL,
     organisation_id integer NOT NULL,
     promotion_type character varying(20) NOT NULL,
@@ -898,16 +1025,20 @@ CREATE TABLE public.opportunity_promotion (\n    id integer DEFAULT nextval('opp
     reviewed_at timestamp without time zone,
     created_at timestamp without time zone,
     updated_at timestamp without time zone,
-    CONSTRAINT opportunity_promotion_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT opportunity_promotion_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.opportunity_view_event (\n    id bigint DEFAULT nextval('opportunity_view_event_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.opportunity_view_event (
+    id bigint DEFAULT nextval('opportunity_view_event_id_seq'::regclass) NOT NULL,
     opportunity_id integer NOT NULL,
     user_id integer NOT NULL,
     source character varying(20) DEFAULT 'organic'::character varying NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT opportunity_view_event_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT opportunity_view_event_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.organisation (\n    id integer DEFAULT nextval('organisation_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.organisation (
+    id integer DEFAULT nextval('organisation_id_seq'::regclass) NOT NULL,
     name character varying(150) NOT NULL,
     description character varying(1000),
     website character varying(500),
@@ -920,9 +1051,11 @@ CREATE TABLE public.organisation (\n    id integer DEFAULT nextval('organisation
     created_by integer NOT NULL,
     created_at timestamp without time zone,
     updated_at timestamp without time zone,
-    CONSTRAINT organisation_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT organisation_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.organisation_billing (\n    organisation_id integer NOT NULL,
+CREATE TABLE public.organisation_billing (
+    organisation_id integer NOT NULL,
     plan_code character varying(30) DEFAULT 'launch'::character varying NOT NULL,
     status character varying(20) DEFAULT 'trial'::character varying NOT NULL,
     monthly_fee_kes integer,
@@ -932,9 +1065,11 @@ CREATE TABLE public.organisation_billing (\n    organisation_id integer NOT NULL
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     transaction_reference character varying(120),
     checkout_url text,
-    CONSTRAINT organisation_billing_pkey PRIMARY KEY (organisation_id)\n);
+    CONSTRAINT organisation_billing_pkey PRIMARY KEY (organisation_id)
+);
 
-CREATE TABLE public.organisation_billing_event (\n    id bigint DEFAULT nextval('organisation_billing_event_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.organisation_billing_event (
+    id bigint DEFAULT nextval('organisation_billing_event_id_seq'::regclass) NOT NULL,
     organisation_id integer NOT NULL,
     event_key character varying(120) NOT NULL,
     event_type character varying(40) NOT NULL,
@@ -943,17 +1078,21 @@ CREATE TABLE public.organisation_billing_event (\n    id bigint DEFAULT nextval(
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT organisation_billing_event_event_key_key UNIQUE (event_key),
-    CONSTRAINT organisation_billing_event_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT organisation_billing_event_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.organisation_campaign_meter (\n    organisation_id integer NOT NULL,
+CREATE TABLE public.organisation_campaign_meter (
+    organisation_id integer NOT NULL,
     period_start date NOT NULL,
     impressions integer DEFAULT 0 NOT NULL,
     clicks integer DEFAULT 0 NOT NULL,
     applications integer DEFAULT 0 NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT organisation_campaign_meter_pkey PRIMARY KEY (organisation_id, period_start)\n);
+    CONSTRAINT organisation_campaign_meter_pkey PRIMARY KEY (organisation_id, period_start)
+);
 
-CREATE TABLE public.organisation_invoice (\n    id bigint DEFAULT nextval('organisation_invoice_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.organisation_invoice (
+    id bigint DEFAULT nextval('organisation_invoice_id_seq'::regclass) NOT NULL,
     organisation_id integer NOT NULL,
     period_start date NOT NULL,
     period_end date NOT NULL,
@@ -964,9 +1103,11 @@ CREATE TABLE public.organisation_invoice (\n    id bigint DEFAULT nextval('organ
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     paid_at timestamp without time zone,
     CONSTRAINT organisation_invoice_organisation_id_period_start_period_en_key UNIQUE (organisation_id, period_start, period_end),
-    CONSTRAINT organisation_invoice_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT organisation_invoice_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.organisation_kyc_document (\n    id bigint DEFAULT nextval('organisation_kyc_document_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.organisation_kyc_document (
+    id bigint DEFAULT nextval('organisation_kyc_document_id_seq'::regclass) NOT NULL,
     organisation_id integer NOT NULL,
     document_type character varying(60) NOT NULL,
     file_name character varying(255),
@@ -980,17 +1121,21 @@ CREATE TABLE public.organisation_kyc_document (\n    id bigint DEFAULT nextval('
     sha256 character varying(64),
     mime_type character varying(120),
     storage_provider character varying(20) DEFAULT 'supabase'::character varying NOT NULL,
-    CONSTRAINT organisation_kyc_document_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT organisation_kyc_document_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.organisation_member (\n    id integer DEFAULT nextval('organisation_member_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.organisation_member (
+    id integer DEFAULT nextval('organisation_member_id_seq'::regclass) NOT NULL,
     organisation_id integer NOT NULL,
     user_id integer NOT NULL,
     role character varying(20) NOT NULL,
     joined_at timestamp without time zone,
     CONSTRAINT organisation_member_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_org_member_org_user UNIQUE (organisation_id, user_id)\n);
+    CONSTRAINT uq_org_member_org_user UNIQUE (organisation_id, user_id)
+);
 
-CREATE TABLE public.organisation_plan_config (\n    plan_code character varying(20) NOT NULL,
+CREATE TABLE public.organisation_plan_config (
+    plan_code character varying(20) NOT NULL,
     monthly_fee_kes integer NOT NULL,
     active_user_cap integer NOT NULL,
     active_opportunities integer DEFAULT 0 NOT NULL,
@@ -1000,9 +1145,11 @@ CREATE TABLE public.organisation_plan_config (\n    plan_code character varying(
     is_active boolean DEFAULT true NOT NULL,
     version integer DEFAULT 1 NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT organisation_plan_config_pkey PRIMARY KEY (plan_code)\n);
+    CONSTRAINT organisation_plan_config_pkey PRIMARY KEY (plan_code)
+);
 
-CREATE TABLE public.organisation_usage_invoice (\n    id bigint DEFAULT nextval('organisation_usage_invoice_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.organisation_usage_invoice (
+    id bigint DEFAULT nextval('organisation_usage_invoice_id_seq'::regclass) NOT NULL,
     organisation_id integer NOT NULL,
     period_start date NOT NULL,
     period_end date NOT NULL,
@@ -1013,9 +1160,11 @@ CREATE TABLE public.organisation_usage_invoice (\n    id bigint DEFAULT nextval(
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     paid_at timestamp without time zone,
     CONSTRAINT organisation_usage_invoice_organisation_id_period_start_per_key UNIQUE (organisation_id, period_start, period_end, usage_type),
-    CONSTRAINT organisation_usage_invoice_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT organisation_usage_invoice_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.payment (\n    id integer DEFAULT nextval('payment_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.payment (
+    id integer DEFAULT nextval('payment_id_seq'::regclass) NOT NULL,
     phone_number character varying(20),
     amount integer NOT NULL,
     checkout_request_id character varying(100),
@@ -1034,43 +1183,53 @@ CREATE TABLE public.payment (\n    id integer DEFAULT nextval('payment_id_seq'::
     CONSTRAINT payment_checkout_request_id_key UNIQUE (checkout_request_id),
     CONSTRAINT payment_merchant_reference_key UNIQUE (reference),
     CONSTRAINT payment_order_tracking_id_key UNIQUE (provider_reference),
-    CONSTRAINT payment_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT payment_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.product_activity_day (\n    user_id integer NOT NULL,
+CREATE TABLE public.product_activity_day (
+    user_id integer NOT NULL,
     activity_date date NOT NULL,
     sessions integer DEFAULT 0 NOT NULL,
     engaged_seconds integer DEFAULT 0 NOT NULL,
     core_actions integer DEFAULT 0 NOT NULL,
     last_seen_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT product_activity_day_pkey PRIMARY KEY (user_id, activity_date)\n);
+    CONSTRAINT product_activity_day_pkey PRIMARY KEY (user_id, activity_date)
+);
 
-CREATE TABLE public.program (\n    id integer DEFAULT nextval('program_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.program (
+    id integer DEFAULT nextval('program_id_seq'::regclass) NOT NULL,
     university_id integer NOT NULL,
     name character varying(150) NOT NULL,
     degree_level character varying(50),
     discipline_category character varying(80),
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp without time zone DEFAULT now(),
-    CONSTRAINT program_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT program_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.push_subscription (\n    id integer DEFAULT nextval('push_subscription_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.push_subscription (
+    id integer DEFAULT nextval('push_subscription_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     endpoint character varying(500) NOT NULL,
     p256dh_key character varying(255) NOT NULL,
     auth_key character varying(255) NOT NULL,
     created_at timestamp without time zone DEFAULT now(),
     CONSTRAINT push_subscription_endpoint_key UNIQUE (endpoint),
-    CONSTRAINT push_subscription_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT push_subscription_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.quiz_attempt (\n    id integer DEFAULT nextval('quiz_attempt_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.quiz_attempt (
+    id integer DEFAULT nextval('quiz_attempt_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     generated_material_id integer NOT NULL,
     document_content_id integer NOT NULL,
     score_percent integer,
     created_at timestamp without time zone,
-    CONSTRAINT quiz_attempt_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT quiz_attempt_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.referral (\n    id integer DEFAULT nextval('referral_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.referral (
+    id integer DEFAULT nextval('referral_id_seq'::regclass) NOT NULL,
     ambassador_id integer NOT NULL,
     referred_user_id integer NOT NULL,
     referral_code_used character varying(20) NOT NULL,
@@ -1090,31 +1249,39 @@ CREATE TABLE public.referral (\n    id integer DEFAULT nextval('referral_id_seq'
     updated_at timestamp without time zone,
     CONSTRAINT referral_first_payment_id_key UNIQUE (first_payment_id),
     CONSTRAINT referral_pkey PRIMARY KEY (id),
-    CONSTRAINT referral_referred_user_id_key UNIQUE (referred_user_id)\n);
+    CONSTRAINT referral_referred_user_id_key UNIQUE (referred_user_id)
+);
 
-CREATE TABLE public.saved_library_material (\n    id integer DEFAULT nextval('saved_library_material_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.saved_library_material (
+    id integer DEFAULT nextval('saved_library_material_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     library_publication_id integer NOT NULL,
     created_at timestamp without time zone,
     CONSTRAINT saved_library_material_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_saved_material_user_pub UNIQUE (user_id, library_publication_id)\n);
+    CONSTRAINT uq_saved_material_user_pub UNIQUE (user_id, library_publication_id)
+);
 
-CREATE TABLE public.saved_opportunity (\n    id integer DEFAULT nextval('saved_opportunity_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.saved_opportunity (
+    id integer DEFAULT nextval('saved_opportunity_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     opportunity_id integer NOT NULL,
     created_at timestamp without time zone,
     CONSTRAINT saved_opportunity_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_saved_opportunity_user_opp UNIQUE (user_id, opportunity_id)\n);
+    CONSTRAINT uq_saved_opportunity_user_opp UNIQUE (user_id, opportunity_id)
+);
 
-CREATE TABLE public.student_ai_usage (\n    user_id integer NOT NULL,
+CREATE TABLE public.student_ai_usage (
+    user_id integer NOT NULL,
     period_start date NOT NULL,
     feature character varying(40) NOT NULL,
     units integer DEFAULT 0 NOT NULL,
     requests integer DEFAULT 0 NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT student_ai_usage_pkey PRIMARY KEY (user_id, period_start, feature)\n);
+    CONSTRAINT student_ai_usage_pkey PRIMARY KEY (user_id, period_start, feature)
+);
 
-CREATE TABLE public.student_concept_mastery (\n    id integer DEFAULT nextval('student_concept_mastery_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.student_concept_mastery (
+    id integer DEFAULT nextval('student_concept_mastery_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     concept_id integer NOT NULL,
     mastery_score integer DEFAULT 0 NOT NULL,
@@ -1125,9 +1292,11 @@ CREATE TABLE public.student_concept_mastery (\n    id integer DEFAULT nextval('s
     created_at timestamp without time zone DEFAULT now() NOT NULL,
     updated_at timestamp without time zone DEFAULT now() NOT NULL,
     CONSTRAINT student_concept_mastery_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_concept_mastery_user_concept UNIQUE (user_id, concept_id)\n);
+    CONSTRAINT uq_concept_mastery_user_concept UNIQUE (user_id, concept_id)
+);
 
-CREATE TABLE public.student_entitlement_usage (\n    id bigint DEFAULT nextval('student_entitlement_usage_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.student_entitlement_usage (
+    id bigint DEFAULT nextval('student_entitlement_usage_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     payment_id integer,
     feature character varying(40) NOT NULL,
@@ -1137,9 +1306,11 @@ CREATE TABLE public.student_entitlement_usage (\n    id bigint DEFAULT nextval('
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT student_entitlement_usage_pkey PRIMARY KEY (id),
     CONSTRAINT student_entitlement_usage_request_count_check CHECK ((request_count > 0)),
-    CONSTRAINT student_entitlement_usage_units_check CHECK ((units > 0))\n);
+    CONSTRAINT student_entitlement_usage_units_check CHECK ((units > 0))
+);
 
-CREATE TABLE public.student_learning_profile (\n    id integer DEFAULT nextval('student_learning_profile_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.student_learning_profile (
+    id integer DEFAULT nextval('student_learning_profile_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     preferred_explanation_style character varying(30),
     prefers_examples boolean,
@@ -1150,23 +1321,29 @@ CREATE TABLE public.student_learning_profile (\n    id integer DEFAULT nextval('
     created_at timestamp without time zone,
     updated_at timestamp without time zone,
     CONSTRAINT student_learning_profile_pkey PRIMARY KEY (id),
-    CONSTRAINT student_learning_profile_user_id_key UNIQUE (user_id)\n);
+    CONSTRAINT student_learning_profile_user_id_key UNIQUE (user_id)
+);
 
-CREATE TABLE public.student_opportunity_discovery (\n    user_id integer NOT NULL,
+CREATE TABLE public.student_opportunity_discovery (
+    user_id integer NOT NULL,
     discoverable boolean DEFAULT false NOT NULL,
     consent_version character varying(40) DEFAULT 'g5-v1'::character varying NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT student_opportunity_discovery_pkey PRIMARY KEY (user_id)\n);
+    CONSTRAINT student_opportunity_discovery_pkey PRIMARY KEY (user_id)
+);
 
-CREATE TABLE public.student_opportunity_discovery_audit (\n    id bigint DEFAULT nextval('student_opportunity_discovery_audit_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.student_opportunity_discovery_audit (
+    id bigint DEFAULT nextval('student_opportunity_discovery_audit_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     discoverable boolean NOT NULL,
     consent_version character varying(40) NOT NULL,
     source character varying(40) DEFAULT 'settings'::character varying NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT student_opportunity_discovery_audit_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT student_opportunity_discovery_audit_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.student_order (\n    id bigint DEFAULT nextval('student_order_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.student_order (
+    id bigint DEFAULT nextval('student_order_id_seq'::regclass) NOT NULL,
     order_number character varying(40) NOT NULL,
     user_id integer NOT NULL,
     payment_id integer NOT NULL,
@@ -1200,9 +1377,11 @@ CREATE TABLE public.student_order (\n    id bigint DEFAULT nextval('student_orde
     CONSTRAINT student_order_pkey PRIMARY KEY (id),
     CONSTRAINT student_order_quantity_check CHECK ((quantity > 0)),
     CONSTRAINT student_order_total_amount_check CHECK ((total_amount >= 0)),
-    CONSTRAINT student_order_unit_amount_check CHECK ((unit_amount >= 0))\n);
+    CONSTRAINT student_order_unit_amount_check CHECK ((unit_amount >= 0))
+);
 
-CREATE TABLE public.student_plan_config (\n    plan_code character varying(20) NOT NULL,
+CREATE TABLE public.student_plan_config (
+    plan_code character varying(20) NOT NULL,
     display_name character varying(40) NOT NULL,
     price_kes integer DEFAULT 0 NOT NULL,
     billing_period character varying(20) DEFAULT 'month'::character varying NOT NULL,
@@ -1221,9 +1400,11 @@ CREATE TABLE public.student_plan_config (\n    plan_code character varying(20) N
     is_active boolean DEFAULT true NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_by integer,
-    CONSTRAINT student_plan_config_pkey PRIMARY KEY (plan_code)\n);
+    CONSTRAINT student_plan_config_pkey PRIMARY KEY (plan_code)
+);
 
-CREATE TABLE public.student_refund_request (\n    id bigint DEFAULT nextval('student_refund_request_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.student_refund_request (
+    id bigint DEFAULT nextval('student_refund_request_id_seq'::regclass) NOT NULL,
     payment_id integer NOT NULL,
     user_id integer NOT NULL,
     requested_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -1244,9 +1425,11 @@ CREATE TABLE public.student_refund_request (\n    id bigint DEFAULT nextval('stu
     paystack_refund_reference character varying(120),
     provider_message character varying(500),
     CONSTRAINT student_refund_request_payment_id_key UNIQUE (payment_id),
-    CONSTRAINT student_refund_request_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT student_refund_request_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.student_subscription (\n    id bigint DEFAULT nextval('student_subscription_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.student_subscription (
+    id bigint DEFAULT nextval('student_subscription_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     plan character varying(20) NOT NULL,
     paystack_plan_code character varying(80) NOT NULL,
@@ -1265,17 +1448,21 @@ CREATE TABLE public.student_subscription (\n    id bigint DEFAULT nextval('stude
     CONSTRAINT student_subscription_paystack_subscription_code_key UNIQUE (paystack_subscription_code),
     CONSTRAINT student_subscription_pkey PRIMARY KEY (id),
     CONSTRAINT student_subscription_plan_check CHECK (((plan)::text = ANY ((ARRAY['plus'::character varying, 'pro'::character varying])::text[]))),
-    CONSTRAINT student_subscription_user_id_paystack_plan_code_key UNIQUE (user_id, paystack_plan_code)\n);
+    CONSTRAINT student_subscription_user_id_paystack_plan_code_key UNIQUE (user_id, paystack_plan_code)
+);
 
-CREATE TABLE public.study_activity_log (\n    id integer DEFAULT nextval('study_activity_log_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.study_activity_log (
+    id integer DEFAULT nextval('study_activity_log_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     document_content_id integer,
     activity_date date NOT NULL,
     created_at timestamp without time zone,
     CONSTRAINT study_activity_log_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_study_activity_user_doc_date UNIQUE (user_id, document_content_id, activity_date)\n);
+    CONSTRAINT uq_study_activity_user_doc_date UNIQUE (user_id, document_content_id, activity_date)
+);
 
-CREATE TABLE public.study_friend_streak (\n    id character varying(36) NOT NULL,
+CREATE TABLE public.study_friend_streak (
+    id character varying(36) NOT NULL,
     user_a_id integer NOT NULL,
     user_b_id integer NOT NULL,
     invited_by integer NOT NULL,
@@ -1287,66 +1474,82 @@ CREATE TABLE public.study_friend_streak (\n    id character varying(36) NOT NULL
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT study_friend_streak_pkey PRIMARY KEY (id),
-    CONSTRAINT study_friend_streak_user_a_id_user_b_id_key UNIQUE (user_a_id, user_b_id)\n);
+    CONSTRAINT study_friend_streak_user_a_id_user_b_id_key UNIQUE (user_a_id, user_b_id)
+);
 
-CREATE TABLE public.study_friend_streak_activity (\n    id character varying(36) NOT NULL,
+CREATE TABLE public.study_friend_streak_activity (
+    id character varying(36) NOT NULL,
     streak_id character varying(36) NOT NULL,
     user_a_id integer NOT NULL,
     user_b_id integer NOT NULL,
     activity_date date NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT study_friend_streak_activity_pkey PRIMARY KEY (id),
-    CONSTRAINT study_friend_streak_activity_streak_id_activity_date_key UNIQUE (streak_id, activity_date)\n);
+    CONSTRAINT study_friend_streak_activity_streak_id_activity_date_key UNIQUE (streak_id, activity_date)
+);
 
-CREATE TABLE public.study_streak (\n    id integer DEFAULT nextval('study_streak_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.study_streak (
+    id integer DEFAULT nextval('study_streak_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     current_streak integer DEFAULT 0 NOT NULL,
     longest_streak integer DEFAULT 0 NOT NULL,
     last_study_date date,
     updated_at timestamp without time zone,
     CONSTRAINT study_streak_pkey PRIMARY KEY (id),
-    CONSTRAINT study_streak_user_id_key UNIQUE (user_id)\n);
+    CONSTRAINT study_streak_user_id_key UNIQUE (user_id)
+);
 
-CREATE TABLE public.study_time_log (\n    id integer DEFAULT nextval('study_time_log_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.study_time_log (
+    id integer DEFAULT nextval('study_time_log_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     activity_date date NOT NULL,
     study_time_seconds integer DEFAULT 0 NOT NULL,
     last_heartbeat_at timestamp without time zone,
     feature character varying(20) DEFAULT 'reading'::character varying NOT NULL,
     CONSTRAINT study_time_log_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_study_time_user_date_feature UNIQUE (user_id, activity_date, feature)\n);
+    CONSTRAINT uq_study_time_user_date_feature UNIQUE (user_id, activity_date, feature)
+);
 
-CREATE TABLE public.system_setting (\n    id integer DEFAULT nextval('system_setting_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.system_setting (
+    id integer DEFAULT nextval('system_setting_id_seq'::regclass) NOT NULL,
     key character varying(50) NOT NULL,
     value text DEFAULT ''::text NOT NULL,
     CONSTRAINT system_setting_key_key UNIQUE (key),
-    CONSTRAINT system_setting_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT system_setting_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.tutor_conversation (\n    id integer DEFAULT nextval('tutor_conversation_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.tutor_conversation (
+    id integer DEFAULT nextval('tutor_conversation_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     document_content_id integer NOT NULL,
     created_at timestamp without time zone,
     updated_at timestamp without time zone,
     CONSTRAINT tutor_conversation_pkey PRIMARY KEY (id),
-    CONSTRAINT uq_tutor_conv_user_doc UNIQUE (user_id, document_content_id)\n);
+    CONSTRAINT uq_tutor_conv_user_doc UNIQUE (user_id, document_content_id)
+);
 
-CREATE TABLE public.tutor_message (\n    id integer DEFAULT nextval('tutor_message_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.tutor_message (
+    id integer DEFAULT nextval('tutor_message_id_seq'::regclass) NOT NULL,
     conversation_id integer NOT NULL,
     role character varying(10) NOT NULL,
     content text NOT NULL,
     created_at timestamp without time zone,
-    CONSTRAINT tutor_message_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT tutor_message_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.university (\n    id integer DEFAULT nextval('university_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.university (
+    id integer DEFAULT nextval('university_id_seq'::regclass) NOT NULL,
     name character varying(150) NOT NULL,
     short_code character varying(20) NOT NULL,
     country character varying(80),
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp without time zone DEFAULT now(),
     CONSTRAINT university_pkey PRIMARY KEY (id),
-    CONSTRAINT university_short_code_key UNIQUE (short_code)\n);
+    CONSTRAINT university_short_code_key UNIQUE (short_code)
+);
 
-CREATE TABLE public."user" (\n    id integer DEFAULT nextval('user_id_seq'::regclass) NOT NULL,
+CREATE TABLE public."user" (
+    id integer DEFAULT nextval('user_id_seq'::regclass) NOT NULL,
     email character varying(120) NOT NULL,
     password_hash character varying(255) NOT NULL,
     year integer,
@@ -1371,16 +1574,20 @@ CREATE TABLE public."user" (\n    id integer DEFAULT nextval('user_id_seq'::regc
     who_can_follow character varying(20) DEFAULT 'everyone'::character varying NOT NULL,
     session_version integer DEFAULT 0 NOT NULL,
     CONSTRAINT user_email_key UNIQUE (email),
-    CONSTRAINT user_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT user_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.user_achievement (\n    id integer DEFAULT nextval('user_achievement_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.user_achievement (
+    id integer DEFAULT nextval('user_achievement_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     achievement_code character varying(40) NOT NULL,
     unlocked_at timestamp without time zone,
     CONSTRAINT uq_user_achievement_user_code UNIQUE (user_id, achievement_code),
-    CONSTRAINT user_achievement_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT user_achievement_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.user_key (\n    id integer DEFAULT nextval('user_key_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.user_key (
+    id integer DEFAULT nextval('user_key_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     public_key text NOT NULL,
     encrypted_private_key text,
@@ -1388,9 +1595,11 @@ CREATE TABLE public.user_key (\n    id integer DEFAULT nextval('user_key_id_seq'
     created_at timestamp without time zone,
     updated_at timestamp without time zone,
     CONSTRAINT user_key_pkey PRIMARY KEY (id),
-    CONSTRAINT user_key_user_id_key UNIQUE (user_id)\n);
+    CONSTRAINT user_key_user_id_key UNIQUE (user_id)
+);
 
-CREATE TABLE public.user_warning (\n    id integer DEFAULT nextval('user_warning_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.user_warning (
+    id integer DEFAULT nextval('user_warning_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     issued_by integer NOT NULL,
     content_report_id integer,
@@ -1398,24 +1607,29 @@ CREATE TABLE public.user_warning (\n    id integer DEFAULT nextval('user_warning
     message character varying(500) NOT NULL,
     consequence character varying(500) NOT NULL,
     created_at timestamp without time zone DEFAULT now(),
-    CONSTRAINT user_warning_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT user_warning_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.view_progress (\n    id integer DEFAULT nextval('view_progress_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.view_progress (
+    id integer DEFAULT nextval('view_progress_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     content_item_id integer NOT NULL,
     page_num integer DEFAULT 0,
     updated_at timestamp without time zone DEFAULT now(),
     CONSTRAINT uq_view_progress_user_item UNIQUE (user_id, content_item_id),
-    CONSTRAINT view_progress_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT view_progress_pkey PRIMARY KEY (id)
+);
 
-CREATE TABLE public.xp_event (\n    id integer DEFAULT nextval('xp_event_id_seq'::regclass) NOT NULL,
+CREATE TABLE public.xp_event (
+    id integer DEFAULT nextval('xp_event_id_seq'::regclass) NOT NULL,
     user_id integer NOT NULL,
     event_type character varying(40) NOT NULL,
     xp_amount integer NOT NULL,
     related_id integer,
     created_at timestamp without time zone,
     CONSTRAINT uq_xp_event_user_type_related UNIQUE (user_id, event_type, related_id),
-    CONSTRAINT xp_event_pkey PRIMARY KEY (id)\n);
+    CONSTRAINT xp_event_pkey PRIMARY KEY (id)
+);
 
 -- Foreign keys
 ALTER TABLE public.ai_job ADD CONSTRAINT ai_job_document_content_id_fkey FOREIGN KEY (document_content_id) REFERENCES document_content(id);
