@@ -9,7 +9,7 @@ COPY . .
 WORKDIR /build/frontend
 RUN pnpm install --frozen-lockfile && pnpm run build
 
-FROM python:3.12-slim AS runtime
+FROM python:3.13-slim AS runtime
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PORT=5000
 RUN apt-get update \
