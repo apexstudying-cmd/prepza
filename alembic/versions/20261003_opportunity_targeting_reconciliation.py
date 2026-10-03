@@ -107,6 +107,7 @@ def upgrade() -> None:
             sa.ForeignKey("opportunity.id", ondelete="CASCADE"),
             nullable=False,
         ),
+        sa.Column("semester", sa.Integer(), nullable=False),
         sa.UniqueConstraint(
             "opportunity_id",
             "semester",
