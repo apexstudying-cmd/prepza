@@ -40,9 +40,9 @@ def _register_b2b_admin_schema(db):
         """),{"key":key,"label":label,"cpm":cpm,"cpc":cpc})
     db.session.execute(text("""
         UPDATE b2b_placement_config
-        SET frequency_cap_json='{"max_impressions":5,"window_days":7}'::jsonb
+        SET frequency_cap_json=CAST(:frequency_cap AS jsonb)
         WHERE frequency_cap_json='{}'::jsonb
-    """))
+    """), {"frequency_cap": json.dumps({"max_impressions": 5, "window_days": 7})})
     db.session.commit()
 
 def register_b2b_admin_routes(app, db):
