@@ -86,24 +86,25 @@ def qa_database():
         "opportunity_semester_target",
         "saved_opportunity",
     }
-    actual = set(inspect(db.engine).get_table_names(schema="public"))
-    missing = sorted(required_tables - actual)
-    if missing:
-        pytest.fail(f"QA database is missing required tables: {missing}")
+    with app.app_context():
+        actual = set(inspect(db.engine).get_table_names(schema="public"))
+        missing = sorted(required_tables - actual)
+        if missing:
+            pytest.fail(f"QA database is missing required tables: {missing}")
 
-    app.config.update(
-        TESTING=True,
-        SESSION_COOKIE_SECURE=False,
-        PROPAGATE_EXCEPTIONS=True,
-    )
+        app.config.update(
+            TESTING=True,
+            SESSION_COOKIE_SECURE=False,
+            PROPAGATE_EXCEPTIONS=True,
+        )
 
-    _reset_database()
-    try:
-        yield
-    finally:
-        db.session.remove()
         _reset_database()
-        db.engine.dispose()
+        try:
+            yield
+        finally:
+            db.session.remove()
+            _reset_database()
+            db.engine.dispose()
 
 
 @pytest.fixture(scope="module")
