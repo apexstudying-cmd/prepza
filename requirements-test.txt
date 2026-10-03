@@ -1,0 +1,3 @@
+# Local/CI test dependencies for the Prepza QA suite.
+-r requirements.txt
+pytest>=8,<9
