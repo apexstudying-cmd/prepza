@@ -7,6 +7,31 @@ OPPORTUNITY_TYPES=("job","internship","scholarship","competition","volunteering"
 PAGE_SIZE=20
 
 def register_opportunity_runtime(app,db,Opportunity,Organisation,User,OrganisationMember,require_csrf):
+    # This runtime is the authoritative student Opportunity surface. Older
+    # route modules may already have registered the same public paths before
+    # this reconciliation module is loaded. Flask keeps both rules, but
+    # dispatches the first matching rule, which can silently bypass the
+    # targeting/security logic below. Remove only those exact duplicate
+    # public Opportunity rules; unrelated routes are left untouched.
+    _authoritative_endpoints={"browse_opportunities","opportunity_detail",
+                              "save_opportunity","unsave_opportunity",
+                              "saved_opportunities"}
+    _public_opportunity_rules={"/opportunities",
+                               "/opportunities/<int:opportunity_id>",
+                               "/opportunities/saved",
+                               "/opportunities/<int:opportunity_id>/save"}
+    for _rule in list(app.url_map.iter_rules()):
+        if (_rule.rule in _public_opportunity_rules
+                and _rule.endpoint not in _authoritative_endpoints):
+            _rules_for_endpoint=app.url_map._rules_by_endpoint.get(_rule.endpoint, [])
+            if _rule in _rules_for_endpoint:
+                _rules_for_endpoint.remove(_rule)
+            if _rule in app.url_map._rules:
+                app.url_map._rules.remove(_rule)
+            if not _rules_for_endpoint:
+                app.url_map._rules_by_endpoint.pop(_rule.endpoint, None)
+                app.view_functions.pop(_rule.endpoint, None)
+
     class SavedOpportunity(db.Model):
         __tablename__="saved_opportunity"
         id=db.Column(db.Integer,primary_key=True)
