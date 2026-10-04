@@ -4374,23 +4374,6 @@ def _ai_generation_parameters_from_request():
         raise ValueError("AI generation parameters must be an object")
     return data
 
-
-def _validated_ai_generation_parameters(feature):
-    """Validate generation parameters at the HTTP boundary before queueing or calling a provider."""
-    from ai_reusable_generation import normalize_parameters
-    return normalize_parameters(feature, _ai_generation_parameters_from_request())
-
-
-def _generation_failure_response(exc):
-    import ai_service
-    if isinstance(exc, ai_service.AIRateLimitExceededError):
-        return jsonify({"error": str(exc), "code": "generation_quota_exhausted"}), 429
-    if isinstance(exc, ai_service.AIBudgetExceededError):
-        return jsonify({"error": str(exc), "code": "ai_budget_exceeded"}), 503
-    if isinstance(exc, ai_service.AIProviderError):
-        return jsonify({"error": str(exc), "code": "ai_provider_error"}), 502
-    return None
-
 @app.route("/documents/<int:document_id>/summarize", methods=["POST"])
 @limiter.limit(
     "20 per hour",
