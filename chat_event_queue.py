@@ -25,7 +25,7 @@ def _client():
     url = os.environ.get("REDIS_URL")
     if not url:
         raise RuntimeError("REDIS_URL is required for the dedicated chat event queue")
-    return redis.Redis.from_url(url, decode_responses=True, socket_connect_timeout=2, socket_timeout=5)
+    return redis.Redis.from_url(url, decode_responses=True, socket_connect_timeout=2, socket_timeout=10)
 
 
 def ensure_group(client=None):
@@ -107,12 +107,17 @@ def consume_forever(handler):
         if stale:
             _process_entries(client, handler, stale)
 
-        batches = client.xreadgroup(
-            GROUP_NAME,
-            CONSUMER_NAME,
-            {STREAM_KEY: ">"},
-            count=50,
-            block=5000,
-        )
+        try:
+            batches = client.xreadgroup(
+                GROUP_NAME,
+                CONSUMER_NAME,
+                {STREAM_KEY: ">"},
+                count=50,
+                block=5000,
+            )
+        except (redis.TimeoutError, redis.ConnectionError):
+            # A quiet stream or transient Redis disconnect must not kill the
+            # worker. The next loop reconnects and retries.
+            continue
         for _, entries in batches:
             _process_entries(client, handler, entries)
