@@ -879,9 +879,31 @@ def test_every_registered_route_dispatches_without_server_error():
     is not inherently a failure here because authentication, missing records,
     validation, redirects, and other legitimate boundaries can reject a
     probe.
+
+    Some routes intentionally return 503 when an optional production
+    integration is not configured in the disposable QA environment. Those
+    explicit configuration gates are allowed; unexpected 5xx responses still
+    fail the audit.
     """
     client = app.test_client()
     failures = []
+    expected_configuration_503 = {
+        "/auth/google",
+        "/push/vapid-public-key",
+        "/internal/control/v1/health",
+        "/internal/control/v1/status",
+        "/internal/control/v1/system/overview",
+        "/internal/control/v1/users/1/summary",
+        "/internal/control/v1/documents/1/summary",
+        "/internal/control/v1/documents/1/materials",
+    }
+
+    def _unexpected_server_error(response, path):
+        if response.status_code < 500:
+            return False
+        if response.status_code == 503 and path in expected_configuration_503:
+            return False
+        return True
 
     for rule in app.url_map.iter_rules():
         if rule.endpoint == "static":
@@ -891,21 +913,21 @@ def test_every_registered_route_dispatches_without_server_error():
 
         try:
             options = client.options(path)
-            if options.status_code >= 500:
+            if _unexpected_server_error(options, path):
                 failures.append(
                     f"OPTIONS {path} -> {options.status_code}"
                 )
 
             if "GET" in rule.methods:
                 response = client.get(path, follow_redirects=False)
-                if response.status_code >= 500:
+                if _unexpected_server_error(response, path):
                     failures.append(
                         f"GET {path} ({rule.endpoint}) -> {response.status_code}"
                     )
 
             if "HEAD" in rule.methods:
                 response = client.head(path, follow_redirects=False)
-                if response.status_code >= 500:
+                if _unexpected_server_error(response, path):
                     failures.append(
                         f"HEAD {path} ({rule.endpoint}) -> {response.status_code}"
                     )
@@ -915,6 +937,6 @@ def test_every_registered_route_dispatches_without_server_error():
             )
 
     assert not failures, (
-        "Registered route smoke probes reached a server error or raised: "
+        "Registered route smoke probes reached an unexpected server error or raised: "
         + "; ".join(failures)
     )
