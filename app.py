@@ -8518,8 +8518,8 @@ USER_KEY_PUBLIC_KEY_MAX_LEN = 2000
 # not a tight format check, since the server never inspects key contents.
 
 
-@app.route("/keys/register", methods=["POST"])
-@require_csrf
+# Legacy helper retained for compatibility with older internal callers. The authoritative
+# HTTP endpoint is registered by e2ee_chat_routes.register_e2ee_chat_routes.
 def register_user_key():
     """
     Upserts the logged-in user's Chats identity public key. Called
@@ -8556,7 +8556,8 @@ def register_user_key():
     return jsonify({"message": "Key registered"}), 200
 
 
-@app.route("/keys/<int:user_id>")
+# Legacy helper retained for compatibility with older internal callers. The authoritative
+# HTTP endpoint is registered by e2ee_chat_routes.register_e2ee_chat_routes.
 def get_user_public_key(user_id):
     """
     Returns another user's Chats identity public key, so the caller's
