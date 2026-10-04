@@ -111,7 +111,7 @@ Offline study and Study Hub uploads are enabled in the current default configura
 
 HTTP/database persistence remains the source of truth for chat. Socket.IO provides low-latency realtime transport.
 
-When Redis is configured, the realtime server uses Redis for Socket.IO message-queue fan-out, presence state, and the dedicated chat event stream. Without Redis, the code retains a single-instance direct Socket.IO fallback for message broadcasts.
+When Redis is configured, the realtime server uses Redis for Socket.IO message-queue fan-out and presence state, while persisted chat events enter the dedicated Redis Stream. The `chat_event_worker.py` consumer is required for that Redis Stream path and is included as `chat-worker` in the VPS Compose stack. Without Redis, the code retains a single-instance direct Socket.IO fallback for message broadcasts.
 
 Socket authentication checks the signed-in user, suspension state, and account session_version. Frontend logout/navigation teardown can reset the realtime singleton.
 
