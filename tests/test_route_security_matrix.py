@@ -44,19 +44,23 @@ def _admin_rules():
     ]
 
 
-def test_every_admin_route_rejects_anonymous_and_non_admin_users(world):
-    """Every /admin route must fail closed for anonymous and student sessions."""
-    anonymous = app.test_client()
-    student = __import__(
+def test_every_admin_get_route_rejects_anonymous_and_non_admin_users(world):
+    """Every GET /admin route must fail closed for anonymous and students."""
+    helpers = __import__(
         "test_local_qa_real_world",
         fromlist=["_client_for"],
-    )._client_for(world["student_a"].id)
+    )
+    anonymous = app.test_client()
+    student = helpers._client_for(world["student_a"].id)
 
     failures = []
     for rule in _admin_rules():
+        if "GET" not in rule.methods:
+            continue
+
         path = _probe_path(rule)
         for label, client in (("anonymous", anonymous), ("student", student)):
-            response = client.open(path, method="GET", follow_redirects=False)
+            response = client.get(path, follow_redirects=False)
             if response.status_code != 403:
                 failures.append(
                     f"{label} GET {path} ({rule.endpoint}) -> "
@@ -66,15 +70,25 @@ def test_every_admin_route_rejects_anonymous_and_non_admin_users(world):
     assert not failures, "\n".join(failures)
 
 
-def test_every_admin_mutation_requires_csrf_even_for_admin(world):
-    """The global admin guard must reject every mutation without CSRF."""
+def test_every_admin_mutation_fails_without_csrf_for_all_non_admins_and_admin(
+    world,
+):
+    """Every admin mutation must require both admin identity and CSRF."""
     helpers = __import__(
         "test_local_qa_real_world",
         fromlist=["_client_for"],
     )
+    anonymous = app.test_client()
+    student = helpers._client_for(world["student_a"].id)
     admin = helpers._client_for(world["admin"].id)
 
     failures = []
+    clients = (
+        ("anonymous", anonymous),
+        ("student", student),
+        ("admin", admin),
+    )
+
     for rule in _admin_rules():
         mutation_methods = sorted(
             rule.methods & {"POST", "PATCH", "PUT", "DELETE"}
@@ -83,12 +97,17 @@ def test_every_admin_mutation_requires_csrf_even_for_admin(world):
             continue
 
         path = _probe_path(rule)
-        for method in mutation_methods:
-            response = admin.open(path, method=method, follow_redirects=False)
-            if response.status_code != 403:
-                failures.append(
-                    f"admin {method} {path} ({rule.endpoint}) -> "
-                    f"{response.status_code}, expected 403 without CSRF"
+        for label, client in clients:
+            for method in mutation_methods:
+                response = client.open(
+                    path,
+                    method=method,
+                    follow_redirects=False,
                 )
+                if response.status_code != 403:
+                    failures.append(
+                        f"{label} {method} {path} ({rule.endpoint}) -> "
+                        f"{response.status_code}, expected 403 without CSRF"
+                    )
 
     assert not failures, "\n".join(failures)
