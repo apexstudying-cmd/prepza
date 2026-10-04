@@ -596,7 +596,7 @@ def _validate_opportunity_fields(data, partial=False):
 
     return fields, None
 
-def create_opportunity(organisation_id):
+@app.route("/organisations/<int:organisation_id>/opportunities", methods=["POST"])\n@require_csrf\ndef create_opportunity(organisation_id):
     """
     Creates a new Opportunity in status='draft'. Allowed even if the
     organisation isn't verified yet - verification is only required to
@@ -635,7 +635,7 @@ def create_opportunity(organisation_id):
 
     return jsonify(_serialize_opportunity(opp)), 201
 
-def list_org_opportunities(organisation_id):
+@app.route("/organisations/<int:organisation_id>/opportunities")\ndef list_org_opportunities(organisation_id):
     """Lists this org's own opportunities, any status. ?status= filters
     to one status (management view - not the public browse endpoint)."""
     user_id = session.get("user_id")
@@ -663,7 +663,7 @@ def list_org_opportunities(organisation_id):
     opportunities = query.order_by(Opportunity.created_at.desc()).all()
     return jsonify({"opportunities": [_serialize_opportunity(o) for o in opportunities]})
 
-def get_org_opportunity(organisation_id, opportunity_id):
+@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>")\ndef get_org_opportunity(organisation_id, opportunity_id):
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
@@ -678,7 +678,7 @@ def get_org_opportunity(organisation_id, opportunity_id):
 
     return jsonify(_serialize_opportunity(opp))
 
-def update_opportunity(organisation_id, opportunity_id):
+@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>", methods=["PATCH"])\n@require_csrf\ndef update_opportunity(organisation_id, opportunity_id):
     """
     Edits an opportunity. Only allowed while status is 'draft' or
     'rejected' - once it's in the review/published pipeline, the org
@@ -723,7 +723,7 @@ def update_opportunity(organisation_id, opportunity_id):
 
     return jsonify(_serialize_opportunity(opp))
 
-def submit_opportunity(organisation_id, opportunity_id):
+@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>/submit", methods=["POST"])\n@require_csrf\ndef submit_opportunity(organisation_id, opportunity_id):
     """
     Moves draft/rejected -> pending_review. Requires the organisation to
     be verified AND active (an unverified or deactivated org's postings
@@ -770,7 +770,7 @@ def submit_opportunity(organisation_id, opportunity_id):
 
     return jsonify(_serialize_opportunity(opp))
 
-def archive_opportunity(organisation_id, opportunity_id):
+@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>/archive", methods=["POST"])\n@require_csrf\ndef archive_opportunity(organisation_id, opportunity_id):
     """Org self-service archive - lets them retire a published or
     already-expired posting without waiting on an admin."""
     user_id = session.get("user_id")
@@ -795,7 +795,7 @@ def archive_opportunity(organisation_id, opportunity_id):
 
     return jsonify(_serialize_opportunity(opp))
 
-def withdraw_opportunity(organisation_id, opportunity_id):
+@app.route("/organisations/<int:organisation_id>/opportunities/<int:opportunity_id>", methods=["DELETE"])\n@require_csrf\ndef withdraw_opportunity(organisation_id, opportunity_id):
     """Org withdraws its own opportunity at any point in its lifecycle
     (except if already removed). Soft-delete via status='removed', same
     pattern as Document.is_removed elsewhere in this file."""
