@@ -97,6 +97,11 @@ def qa_database():
             TESTING=True,
             SESSION_COOKIE_SECURE=False,
             PROPAGATE_EXCEPTIONS=True,
+            # Route/semantic matrices may intentionally issue hundreds of
+            # requests. Disable the production limiter for those tests so
+            # rate limiting does not mask application behavior. A dedicated
+            # test below explicitly re-enables it for the real contract.
+            RATELIMIT_ENABLED=False,
         )
 
         _reset_database()
@@ -534,21 +539,25 @@ def _create_published_targeted_opportunity(world, *, title, university_ids=None,
 
 
 def test_organisation_can_create_multiple_opportunities_under_live_rate_limit(world):
-    """A legitimate organisation can create several postings without hitting the global limit."""
+    """A legitimate organisation can create several postings under the live default limit."""
     owner = _client_for(world["student_a"].id)
     org_id = world["organisation"].id
+    previous = app.config.get("RATELIMIT_ENABLED", True)
+    app.config["RATELIMIT_ENABLED"] = True
+    try:
+        created_ids = []
+        for index in range(5):
+            response = owner.post(
+                f"/organisations/{org_id}/opportunities",
+                json={**_future_payload(), "title": f"QA Rate Limit Opportunity {index}"},
+                headers=_csrf(world["student_a"].id),
+            )
+            assert response.status_code == 201, response.get_json()
+            created_ids.append(response.get_json()["id"])
 
-    created_ids = []
-    for index in range(5):
-        response = owner.post(
-            f"/organisations/{org_id}/opportunities",
-            json={**_future_payload(), "title": f"QA Rate Limit Opportunity {index}"},
-            headers=_csrf(world["student_a"].id),
-        )
-        assert response.status_code == 201, response.get_json()
-        created_ids.append(response.get_json()["id"])
-
-    assert len(set(created_ids)) == 5
+        assert len(set(created_ids)) == 5
+    finally:
+        app.config["RATELIMIT_ENABLED"] = previous
 
 
 def test_opportunity_targeting_matrix_and_current_profile_changes(world):
