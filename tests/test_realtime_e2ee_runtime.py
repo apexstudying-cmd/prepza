@@ -15,6 +15,9 @@ from pathlib import Path
 import pytest
 from flask_socketio import SocketIOTestClient
 
+pytest_plugins = ("test_local_qa_real_world",)
+
+
 from app import (
     Conversation,
     ConversationParticipant,
