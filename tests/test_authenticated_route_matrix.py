@@ -11,7 +11,7 @@ import re
 
 from test_local_qa_real_world import _client_for, qa_database, world
 
-from app import app
+from app import app, db
 
 
 EXPECTED_CONFIGURATION_503 = {
@@ -71,19 +71,40 @@ def test_every_get_route_dispatches_for_authenticated_student_and_admin(world):
 
         for role, client in clients:
             if "GET" in rule.methods:
-                response = client.get(path, follow_redirects=False)
-                if _unexpected_5xx(response, path):
+                try:
+                    response = client.get(path, follow_redirects=False)
+                    if _unexpected_5xx(response, path):
+                        failures.append(
+                            f"{role} GET {path} ({rule.endpoint}) -> "
+                            f"{response.status_code}"
+                        )
+                except Exception as exc:
+                    # Continue after a route exception so the matrix can
+                    # report every offending route. The module fixture keeps
+                    # one app context alive, so an exception can otherwise
+                    # leave SQLAlchemy's transaction aborted and hide the
+                    # original route failure behind InFailedSqlTransaction.
                     failures.append(
                         f"{role} GET {path} ({rule.endpoint}) -> "
-                        f"{response.status_code}"
+                        f"EXCEPTION {type(exc).__name__}: {exc}"
                     )
+                finally:
+                    db.session.rollback()
 
             if "HEAD" in rule.methods:
-                response = client.head(path, follow_redirects=False)
-                if _unexpected_5xx(response, path):
+                try:
+                    response = client.head(path, follow_redirects=False)
+                    if _unexpected_5xx(response, path):
+                        failures.append(
+                            f"{role} HEAD {path} ({rule.endpoint}) -> "
+                            f"{response.status_code}"
+                        )
+                except Exception as exc:
                     failures.append(
                         f"{role} HEAD {path} ({rule.endpoint}) -> "
-                        f"{response.status_code}"
+                        f"EXCEPTION {type(exc).__name__}: {exc}"
                     )
+                finally:
+                    db.session.rollback()
 
     assert not failures, "\n".join(failures)
