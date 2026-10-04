@@ -48,11 +48,18 @@ def _test_route_literals() -> dict[str, set[str]]:
         except (OSError, SyntaxError):
             continue
 
+        # Keep both ordinary string constants and f-string source literals.
+        # Real route calls commonly look like f"/groups/{group_id}".
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 value = node.value
                 if value.startswith("/") and not value.startswith("//"):
                     found[str(path.relative_to(ROOT))].add(value)
+
+        for match in re.finditer(r'''(?i)(?:f|r|fr|rf)?["'](/[^"']*)["']''', source):
+            value = match.group(1)
+            if value.startswith("/") and not value.startswith("//"):
+                found[str(path.relative_to(ROOT))].add(value)
     return found
 
 
@@ -73,7 +80,7 @@ def _best_route_matches(route: str, literals: set[str]) -> set[str]:
 
         # Test strings may contain f-string fragments such as
         # /groups/{group_id}; normalize those to the corresponding converter.
-        candidate = re.sub(r"\\{[^}]+\\}", "<int>", normalized)
+        candidate = re.sub(r"\{[^}]+\}", "<int>", normalized)
         route_shape = re.sub(r"<int:[^>]+>", "<int>", route)
         route_shape = re.sub(r"<string:[^>]+>", "<string>", route_shape)
         if candidate == route_shape:
