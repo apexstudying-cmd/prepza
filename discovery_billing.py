@@ -800,14 +800,12 @@ def register_discovery(app, db):
         })
 
 
-    @app.get("/api/opportunity-discovery")
     def legacy_discovery_preference_get():
         uid=session.get("user_id")
         if not uid: return jsonify({"error":"Not logged in"}),401
         value=db.session.execute(text("SELECT COALESCE(discoverable,FALSE) FROM student_opportunity_discovery WHERE user_id=:uid"),{"uid":uid}).scalar_one_or_none()
         return jsonify({"discoverable":bool(value)})
 
-    @app.post("/api/opportunity-discovery")
     def legacy_discovery_preference_set():
         uid=session.get("user_id")
         if not uid: return jsonify({"error":"Not logged in"}),401
