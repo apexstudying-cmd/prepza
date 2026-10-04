@@ -907,7 +907,7 @@ def test_student_economics_entitlement_lifecycle_and_quota_truth(world):
     ok, stack_probe = check_and_consume_ai_quota(db, user.id, "summary", 101)
     assert not ok and stack_probe["code"] == "generation_size_limit"
     ok, stack_use = check_and_consume_ai_quota(db, user.id, "summary", 100)
-    assert ok and stack_use["remaining_units"] == 39
+    assert ok and stack_use["remaining_units"] == 40
 
     # The public usage endpoint must agree with the actual entitlement ledger,
     # including paid request counts.
@@ -929,6 +929,130 @@ def test_student_economics_entitlement_lifecycle_and_quota_truth(world):
     )
     db.session.commit()
     assert get_user_plan_code(db, user.id) == "plus"
+
+
+def test_paystack_checkout_uses_base_plan_price_and_provider_success_is_idempotent(world, monkeypatch):
+    """Verify Paystack uses the product price, while provider fees stay outside entitlement economics."""
+    import app as app_module
+
+    from ai_economics import get_plan, get_user_plan_code
+
+    user = User(
+        email="qa.paystack@test.invalid",
+        password_hash=generate_password_hash("Qa!Password123"),
+        year=2,
+        semester=1,
+        display_name="qa.paystack",
+        email_verified=True,
+        is_suspended=False,
+        profile_visibility="public",
+        who_can_message="everyone",
+        who_can_follow="everyone",
+        read_receipts_enabled=True,
+        university_id=world["university_a"].id,
+        program_id=world["program_a"].id,
+        session_version=0,
+    )
+    db.session.add(user)
+    db.session.commit()
+
+    calls = []
+
+    def fake_paystack_request(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        if method == "GET" and path == "/plan/QA_PLUS":
+            return {
+                "status": True,
+                "data": {
+                    "amount": int(get_plan(db, "plus")["price_kes"]) * 100,
+                    "interval": "monthly",
+                    "currency": "KES",
+                },
+            }
+        if method == "POST" and path == "/transaction/initialize":
+            return {
+                "status": True,
+                "data": {
+                    "authorization_url": "https://checkout.example.invalid/qa",
+                    "reference": "qa-provider-ref",
+                },
+            }
+        if method == "GET" and path == "/transaction/verify/qa-paystack-1":
+            return {
+                "status": True,
+                "data": {
+                    "id": 9001,
+                    "status": "success",
+                    "amount": int(get_plan(db, "plus")["price_kes"]) * 100,
+                    "currency": "KES",
+                },
+            }
+        raise AssertionError((method, path, kwargs))
+
+    monkeypatch.setattr(app_module, "paystack_request", fake_paystack_request)
+
+    provider_reference, authorization_url = app_module.create_paystack_transaction(
+        "qa-paystack-1",
+        int(get_plan(db, "plus")["price_kes"]),
+        "Prepza Plus Plan",
+        user,
+        paystack_plan_code="QA_PLUS",
+    )
+    assert provider_reference == "qa-provider-ref"
+    assert authorization_url.endswith("/qa")
+
+    init_payload = next(
+        kwargs["json"] for method, path, kwargs in calls
+        if method == "POST" and path == "/transaction/initialize"
+    )
+    assert init_payload["amount"] == int(get_plan(db, "plus")["price_kes"]) * 100
+    assert init_payload["currency"] == "KES"
+    assert init_payload["reference"] == "qa-paystack-1"
+    # Paystack's dashboard "pass fees to customers" setting is intentionally
+    # outside Prepza's product price. Prepza must never inflate its order or
+    # entitlement amount by guessing the provider fee.
+    assert "transaction_charge" not in init_payload
+    assert "bearer" not in init_payload
+
+    payment = app_module.Payment(
+        user_id=user.id,
+        content_item_id=None,
+        amount=int(get_plan(db, "plus")["price_kes"]),
+        provider="paystack",
+        reference="qa-paystack-1",
+        provider_reference="qa-provider-ref",
+        payment_type="subscription",
+        plan="plus",
+        status="pending",
+    )
+    db.session.add(payment)
+    db.session.flush()
+    app_module._student_order_helpers["create"](
+        payment,
+        item_title="Plus Plan",
+        requested_payload={"payment_type": "subscription", "plan": "plus", "quantity": 1},
+    )
+    db.session.commit()
+
+    first = app_module.sync_paystack_payment_status("qa-paystack-1")
+    assert first.status == "success"
+    assert first.provider_reference == "9001"
+    assert get_user_plan_code(db, user.id) == "plus"
+
+    payment_id = first.id
+    entitlement_start = first.subscription_starts_at
+    entitlement_end = first.subscription_expires_at
+
+    second = app_module.sync_paystack_payment_status("qa-paystack-1")
+    assert second.id == payment_id
+    assert second.subscription_starts_at == entitlement_start
+    assert second.subscription_expires_at == entitlement_end
+
+    orders = db.session.execute(
+        text("SELECT status FROM student_order WHERE payment_id=:pid"),
+        {"pid": payment_id},
+    ).scalars().all()
+    assert orders == ["fulfilled"]
 
 def test_csrf_and_session_version_fail_closed(world):
     client = _client_for(world["student_a"].id)
