@@ -498,14 +498,16 @@ def test_duplicate_opportunity_save_is_race_safe(world):
     def save_once():
         from app import db as thread_db
 
-        client = _client_for(student_id)
-        response = client.post(
-            f"/opportunities/{opportunity_id}/save",
-            headers=_csrf(student_id),
-        )
-        status = response.status_code
-        thread_db.session.remove()
-        return status
+        with app.app_context():
+            try:
+                client = _client_for(student_id)
+                response = client.post(
+                    f"/opportunities/{opportunity_id}/save",
+                    headers=_csrf(student_id),
+                )
+                return response.status_code
+            finally:
+                thread_db.session.remove()
 
     statuses = []
     with ThreadPoolExecutor(max_workers=10) as executor:
@@ -530,11 +532,13 @@ def test_concurrent_organisation_reads(world):
     def read_once():
         from app import db as thread_db
 
-        client = _client_for(student_id)
-        response = client.get(url)
-        status = response.status_code
-        thread_db.session.remove()
-        return status
+        with app.app_context():
+            try:
+                client = _client_for(student_id)
+                response = client.get(url)
+                return response.status_code
+            finally:
+                thread_db.session.remove()
 
     statuses = []
     with ThreadPoolExecutor(max_workers=20) as executor:
