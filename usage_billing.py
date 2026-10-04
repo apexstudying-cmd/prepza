@@ -659,17 +659,21 @@ def register_usage_billing(app, db):
                     feature:int(cfg.get(key) or 0) for feature,key in feature_keys.items()
                 }
             rows=db.session.execute(text("""
-                SELECT payment_id,feature,COALESCE(SUM(units),0) AS units
+                SELECT payment_id,feature,
+                       COALESCE(SUM(units),0) AS units,
+                       COALESCE(SUM(request_count),0) AS requests
                 FROM student_entitlement_usage
                 WHERE user_id=:uid AND payment_id IS NOT NULL
                 GROUP BY payment_id,feature
             """),{"uid":user_id}).mappings().all()
             used={(int(row["payment_id"]),row["feature"]):int(row["units"] or 0) for row in rows}
+            requests={(int(row["payment_id"]),row["feature"]):int(row["requests"] or 0) for row in rows}
             for feature in feature_keys:
                 total=sum(v[feature] for v in limits_by_payment.values())
                 spent=sum(used.get((pid,feature),0) for pid in limits_by_payment)
+                request_count=sum(requests.get((pid,feature),0) for pid in limits_by_payment)
                 largest=max((v[feature] for v in limits_by_payment.values()),default=0)
-                usage[feature]={"requests":0,"units":spent,"remaining_units":max(0,total-spent),
+                usage[feature]={"requests":request_count,"units":spent,"remaining_units":max(0,total-spent),
                                 "unit_limit":total,"max_units_per_generation":largest}
         else:
             period=date.today().replace(day=1)
