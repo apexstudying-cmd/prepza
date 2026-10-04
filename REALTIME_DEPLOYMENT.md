@@ -2,6 +2,12 @@
 
 The realtime branch adds Socket.IO without changing the E2EE boundary. The Flask API still persists messages and the browser still encrypts/decrypts them.
 
+## Redis event worker
+
+When `REDIS_URL` is configured, the dedicated Redis Stream chat event worker is required. The HTTP message route persists the message in PostgreSQL and appends a realtime event to the Redis Stream; `chat_event_worker.py` consumes that stream and emits through the shared Socket.IO Redis message queue. The worker is part of the VPS Compose stack as `chat-worker`.
+
+Without Redis, the realtime server uses its single-process direct Socket.IO broadcast fallback. That fallback is for a single realtime process only and is not a substitute for the Redis worker when multiple processes/services are used.
+
 ## Render start command
 
 For the service that currently runs the Flask app, use:
