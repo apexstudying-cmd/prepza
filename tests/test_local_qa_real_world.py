@@ -1256,3 +1256,144 @@ def test_every_registered_route_dispatches_without_server_error():
         "Registered route smoke probes reached an unexpected server error or raised: "
         + "; ".join(failures)
     )
+
+
+def test_b2b_prepaid_metering_protects_advertiser_balance_and_locks_campaign_pricing(world):
+    """Verify billable views/clicks debit prepaid funds exactly and caps protect repeats."""
+    from b2b_campaign_metering import record_billable_event
+
+    now = datetime.utcnow()
+    campaign = db.session.execute(
+        text("""
+            INSERT INTO discovery_campaign
+                (organisation_id, opportunity_id, name, objective, placement, status,
+                 budget_kes, bid_type, bid_kes, target_json, starts_at, ends_at)
+            VALUES
+                (:oid, NULL, 'QA prepaid economics', 'reach', 'feed', 'active',
+                 5000, 'both', 350, CAST(:target AS jsonb), :starts, :ends)
+            RETURNING id
+        """),
+        {
+            "oid": world["organisation"].id,
+            "target": json.dumps({"billing_modes": ["cpm", "cpc"]}),
+            "starts": now - timedelta(minutes=1),
+            "ends": now + timedelta(days=1),
+        },
+    ).scalar_one()
+    db.session.execute(
+        text("""
+            UPDATE discovery_campaign
+            SET funding_status='funded',
+                funded_amount_minor=500000,
+                pricing_version='qa-v1',
+                pricing_snapshot=CAST(:snapshot AS jsonb)
+            WHERE id=:cid
+        """),
+        {
+            "cid": campaign,
+            "snapshot": json.dumps({
+                "home_impression_cpm": {"value": {"amount_kes": 350, "per": 1000}, "version": "qa-v1"},
+                "click_cpc": {"value": {"amount_kes": 20}, "version": "qa-v1"},
+                "home_frequency_cap": {"value": {"max_impressions": 1000, "window_days": 7}, "version": "qa-v1"},
+                "click_frequency_cap": {"value": {"max_clicks": 1, "window_days": 1}, "version": "qa-v1"},
+            }),
+        },
+    )
+    db.session.commit()
+
+    student_id = world["student_a"].id
+
+    # A qualifying sponsored view costs exactly KES 0.35 at KES 350 CPM.
+    first_view = record_billable_event(
+        db, campaign, student_id, "impression", "feed", "qa-impression-1"
+    )
+    assert first_view["ok"]
+    assert first_view["amount_minor"] == 35
+
+    # Re-sending the exact event key cannot charge twice.
+    duplicate_view = record_billable_event(
+        db, campaign, student_id, "impression", "feed", "qa-impression-1"
+    )
+    assert duplicate_view["ok"] and duplicate_view["duplicate"]
+    assert duplicate_view["amount_minor"] == 35
+
+    # The first qualifying click costs exactly KES 20.
+    first_click = record_billable_event(
+        db, campaign, student_id, "click", "feed", "qa-click-1"
+    )
+    assert first_click["ok"]
+    assert first_click["amount_minor"] == 2000
+
+    # Repeated clicks from the same student are capped at one billable click
+    # per rolling day, so an attacker cannot drain prepaid funds by hammering
+    # the same CTA.
+    second_click = record_billable_event(
+        db, campaign, student_id, "click", "feed", "qa-click-2"
+    )
+    assert not second_click["ok"]
+    assert second_click["reason"] == "student_frequency_cap"
+
+    # Changing the global admin CPC price does not rewrite the already-funded
+    # campaign's pricing snapshot.
+    db.session.execute(
+        text("""
+            UPDATE b2b_pricing_config
+            SET value_json=CAST(:value AS jsonb), version='qa-admin-v2'
+            WHERE config_key='click_cpc'
+        """),
+        {"value": json.dumps({"amount_kes": 99})},
+    )
+    db.session.commit()
+
+    campaign_price = db.session.execute(
+        text("""
+            SELECT (pricing_snapshot->'click_cpc'->'value'->>'amount_kes')::INTEGER
+            FROM discovery_campaign WHERE id=:cid
+        """),
+        {"cid": campaign},
+    ).scalar_one()
+    assert campaign_price == 20
+
+    # CPM arithmetic remains exact: 1,000 billable impressions at KES 350
+    # consume KES 350 total. Use a separate campaign with a high test cap.
+    cpm_campaign = db.session.execute(
+        text("""
+            INSERT INTO discovery_campaign
+                (organisation_id, name, objective, placement, status, budget_kes,
+                 bid_type, bid_kes, target_json, starts_at, ends_at,
+                 funding_status, funded_amount_minor, pricing_version, pricing_snapshot)
+            VALUES
+                (:oid, 'QA CPM 1000', 'reach', 'feed', 'active', 350,
+                 'cpm', 350, CAST(:target AS jsonb), :starts, :ends,
+                 'funded', 35000, 'qa-cpm-v1', CAST(:snapshot AS jsonb))
+            RETURNING id
+        """),
+        {
+            "oid": world["organisation"].id,
+            "target": json.dumps({"billing_modes": ["cpm"]}),
+            "starts": now - timedelta(minutes=1),
+            "ends": now + timedelta(days=1),
+            "snapshot": json.dumps({
+                "home_impression_cpm": {"value": {"amount_kes": 350, "per": 1000}, "version": "qa-cpm-v1"},
+                "home_frequency_cap": {"value": {"max_impressions": 1000, "window_days": 7}, "version": "qa-cpm-v1"},
+            }),
+        },
+    ).scalar_one()
+    db.session.commit()
+
+    for i in range(1000):
+        result = record_billable_event(
+            db, cpm_campaign, student_id, "impression", "feed", f"qa-cpm-{i}"
+        )
+        assert result["ok"]
+
+    ledger_balance = db.session.execute(
+        text("""
+            SELECT COALESCE(SUM(signed_amount_minor), 0)
+            FROM b2b_campaign_ledger WHERE campaign_id=:cid
+        """),
+        {"cid": cpm_campaign},
+    ).scalar_one()
+    assert int(ledger_balance) == 0
+
+    db.session.commit()
