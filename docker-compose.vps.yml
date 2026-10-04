@@ -64,6 +64,22 @@ services:
       - "127.0.0.1:5001:5000"
     command: ["gunicorn", "-k", "gthread", "-w", "1", "--threads", "100", "realtime_server:app"]
 
+  chat-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "chat_event_worker.py"]
+
 volumes:
   postgres_data:
   redis_data:
