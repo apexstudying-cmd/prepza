@@ -105,6 +105,17 @@ def qa_database():
         )
 
         _reset_database()
+
+        # The production app seeds the canonical Free/Plus/Pro AI economics
+        # rows during register_ai_economics(). This QA fixture truncates every
+        # table after application startup, so re-run that same initialization
+        # after the reset. Otherwise authenticated routes such as
+        # /api/usage/me would see a real empty-plan state that cannot occur on
+        # a freshly initialized production database.
+        from ai_economics import ensure_economics_schema
+
+        ensure_economics_schema(db)
+
         try:
             yield
         finally:
