@@ -59,10 +59,10 @@ async function generationRequest<T = any>(
     window.dispatchEvent(new CustomEvent('prepza:generation-progress', { detail: progress }))
   }
   let selectedMaterialId: number | null = null
-  const match = path.match(/^\/documents\/(\d+)\/(summarize|quiz|flashcards|mindmap|podcast-script)$/)
+  const match = path.match(/^\/documents\/(\d+)\/(summarize|quiz|flashcards|mind-map|podcast-script)$/)
   const documentId = match?.[1]
   const feature = match?.[2] === 'podcast-script' ? 'podcast'
-    : match?.[2] === 'mindmap' ? 'mind_map'
+    : match?.[2] === 'mind-map' ? 'mind_map'
     : match?.[2]
 
   if (!documentId || !feature) return api<T>(path, options)
@@ -73,7 +73,7 @@ async function generationRequest<T = any>(
       null,
     )
     if (cached?.payload && cached?.type) {
-      const payloadKey = feature === 'mind_map' ? 'mindmap' : feature
+      const payloadKey = feature === 'mind_map' ? 'mind_map' : feature
       return {
         material_id: cached.material_id,
         reused: true,
@@ -7233,14 +7233,14 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
     api<{ csrf_token: string }>('/me')
       .then(me => {
         setHeartbeatCsrf(me.csrf_token)
-        return generationRequest<{ material_id: number; reused: boolean; mindmap: any }>(`/documents/${activeDocumentId}/mindmap`, {
+        return generationRequest<{ material_id: number; reused: boolean; mind_map: any }>(`/documents/${activeDocumentId}/mind-map`, {
           method: 'POST',
           headers: { 'X-CSRF-Token': me.csrf_token },
         })
       })
-      .then(res => setRaw(res.mindmap))
+      .then(res => setRaw(res.mind_map))
       .catch(async e => {
-        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/mindmap`)
+        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/mind-map`)
         if (cached) { setRaw(cached); setError('') }
         else if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
