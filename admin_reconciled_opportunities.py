@@ -4,6 +4,32 @@ import app as _app
 # globals and modular runtimes have been initialized.
 globals().update({k:getattr(_app,k) for k in dir(_app) if not k.startswith("__")})
 
+def _serialize_opportunity(opp):
+    """Serialize an opportunity using the organisation-side API shape."""
+    return {
+        "id": opp.id,
+        "organisation_id": opp.organisation_id,
+        "created_by": opp.created_by,
+        "title": opp.title,
+        "description": opp.description,
+        "opportunity_type": opp.opportunity_type,
+        "location": opp.location,
+        "is_remote": opp.is_remote,
+        "application_url": opp.application_url,
+        "application_instructions": opp.application_instructions,
+        "application_deadline": opp.application_deadline.isoformat() if opp.application_deadline else None,
+        "expiry_date": opp.expiry_date.isoformat() if opp.expiry_date else None,
+        "status": opp.status,
+        "rejection_reason": opp.rejection_reason,
+        "submitted_at": opp.submitted_at.isoformat() if opp.submitted_at else None,
+        "reviewed_at": opp.reviewed_at.isoformat() if opp.reviewed_at else None,
+        "published_at": opp.published_at.isoformat() if opp.published_at else None,
+        "view_count": opp.view_count,
+        "created_at": opp.created_at.isoformat() if opp.created_at else None,
+        "updated_at": opp.updated_at.isoformat() if opp.updated_at else None,
+    }
+
+
 def _serialize_opportunity_admin(opp):
     """Same shape as _serialize_opportunity() plus the organisation's
     name/verification state, so the admin queue doesn't need a second
