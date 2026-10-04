@@ -626,7 +626,7 @@ def test_opportunity_targeting_matrix_and_current_profile_changes(world):
             "program_ids": [program_a.id, program_b.id],
             "years": [2, 3],
             "semesters": [1, 2],
-        }, {"A", "B", "C", "D"}),
+        }, {"A", "B", "C"}),
     ]
 
     for name, targeting, expected in cases:
