@@ -1,6 +1,6 @@
 from datetime import datetime
 from flask import jsonify, request, session
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 OPPORTUNITY_TYPES=("job","internship","scholarship","competition","volunteering","event","other")
@@ -78,19 +78,20 @@ def register_opportunity_runtime(app,db,Opportunity,Organisation,User,Organisati
               (OpportunityYearTarget,OpportunityYearTarget.year,user.year),
               (OpportunitySemesterTarget,OpportunitySemesterTarget.semester,user.semester))
         for M,col,val in dims:
-            any_target=(
-                db.session.query(M.id)
-                .filter(M.opportunity_id==Opportunity.id)
-                .correlate(Opportunity)
-                .exists()
+            # Use uncorrelated opportunity-id subqueries rather than relying on
+            # SQLAlchemy's implicit correlation rules. Each academic dimension
+            # is independent: an opportunity with no targets for that dimension
+            # is unrestricted; otherwise the student's current value must be
+            # one of that dimension's target values.
+            targeted_opportunity_ids = select(M.opportunity_id).distinct()
+            q=q.filter(
+                or_(
+                    ~Opportunity.id.in_(targeted_opportunity_ids),
+                    Opportunity.id.in_(
+                        select(M.opportunity_id).where(col == val)
+                    ) if val is not None else False,
+                )
             )
-            match=(
-                db.session.query(M.id)
-                .filter(M.opportunity_id==Opportunity.id,col==val)
-                .correlate(Opportunity)
-                .exists()
-            ) if val is not None else None
-            q=q.filter(or_(~any_target,match if match is not None else False))
         return q
 
     def public(opp,uid):
