@@ -665,7 +665,10 @@ def test_opportunity_targeting_matrix_and_current_profile_changes(world):
             **targeting,
         )
         for student_name, student_id in ids.items():
-            response = clients[student_name].get("/opportunities")
+            response = clients[student_name].get(
+                "/opportunities",
+                query_string={"q": f"QA Target Matrix {name}"},
+            )
             assert response.status_code == 200, (name, student_name, response.status_code)
             visible_ids = {
                 row["id"] for row in response.get_json()["opportunities"]
