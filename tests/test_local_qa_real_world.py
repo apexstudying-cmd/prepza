@@ -383,7 +383,7 @@ def test_organisation_opportunity_lifecycle_and_targeting(world):
     )
     assert forbidden_verify.status_code == 403
 
-    verified = admin.post(f"/admin/organisations/{org_id}/verify")
+    verified = admin.post(\n        f"/admin/organisations/{org_id}/verify",\n        headers=_csrf(world["admin"].id),\n    )
     assert verified.status_code == 200
     assert verified.get_json()["verification_status"] == "verified"
 
