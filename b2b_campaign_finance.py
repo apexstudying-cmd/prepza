@@ -75,6 +75,7 @@ def _register_b2b_campaign_finance_schema(db):
         ("click_cpc", {"amount_kes": 20}),
         ("push_delivery_cpm", {"amount_kes": 1500, "per": 1000}),
         ("home_frequency_cap", {"max_impressions": 3, "window_days": 7}),
+        ("click_frequency_cap", {"max_clicks": 1, "window_days": 1}),
         ("home_sponsored_inventory", {"max_slots": 7}),
         ("push_frequency_cap", {"max_deliveries": 3, "window_days": 7}),
     ]
