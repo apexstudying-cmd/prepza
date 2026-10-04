@@ -3462,7 +3462,12 @@ def update_profile():
     if read_receipts_enabled is not None:
         user.read_receipts_enabled = read_receipts_enabled
     if university_id is not None:
+        # A university change cannot leave the old university's program
+        # attached to the user. If the caller supplies a program, it has
+        # already been validated against the selected university above.
         user.university_id = university_id
+        if program_id is None:
+            user.program_id = None
     if program_id is not None:
         user.program_id = program_id
     _sync_referral_progress(user)
