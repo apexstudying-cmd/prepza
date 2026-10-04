@@ -32,6 +32,13 @@ def register_opportunity_runtime(app,db,Opportunity,Organisation,User,Organisati
                 app.url_map._rules_by_endpoint.pop(_rule.endpoint, None)
                 app.view_functions.pop(_rule.endpoint, None)
 
+    # Flask's Map caches its routing structures after the first bind. We have
+    # deliberately removed stale legacy public-Opportunity rules above, so
+    # invalidate that cache before the application serves requests. Without
+    # this, a removed endpoint can remain in the rule list and dispatch can
+    # fail with KeyError instead of reaching the authoritative handlers.
+    app.url_map._remap = True
+
     class SavedOpportunity(db.Model):
         __tablename__="saved_opportunity"
         id=db.Column(db.Integer,primary_key=True)
