@@ -77,9 +77,15 @@ def main() -> int:
         "tests/test_route_security_matrix.py",
         "tests/test_authenticated_route_matrix.py",
     ]
+    # Keep QA rate-limit counters separate from the running app's Redis DB.
+    # This preserves the real rate-limit rules while preventing earlier local
+    # QA runs from consuming the disposable suite's request budget.
+    qa_env = os.environ.copy()
+    qa_env["REDIS_URL"] = "memory://"
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", *test_files],
-        env=os.environ.copy(),
+        env=qa_env,
         check=False,
     )
 
