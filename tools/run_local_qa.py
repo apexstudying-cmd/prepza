@@ -1,4 +1,4 @@
-"""Bootstrap a disposable Prepza QA database and run the real-world test suite."""
+"""Bootstrap a disposable Prepza QA database and run the full QA suite."""
 
 from __future__ import annotations
 
@@ -71,9 +71,14 @@ def main() -> int:
     command.upgrade(alembic_cfg, "head")
     print("Alembic upgrade head: OK")
 
-    print("Running real-world QA suite...")
+    print("Running full real-world and route semantic QA suite...")
+    test_files = [
+        "tests/test_local_qa_real_world.py",
+        "tests/test_route_security_matrix.py",
+        "tests/test_authenticated_route_matrix.py",
+    ]
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "tests/test_local_qa_real_world.py"],
+        [sys.executable, "-m", "pytest", "-q", *test_files],
         env=os.environ.copy(),
         check=False,
     )
