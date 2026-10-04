@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "20261004_ai_job_schema_reconciliation"
+revision = "20261004_ai_job_reconcile"
 down_revision = "20261003_opportunity_targeting"
 branch_labels = None
 depends_on = None
