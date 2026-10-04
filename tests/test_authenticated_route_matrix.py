@@ -54,12 +54,8 @@ def _unexpected_5xx(response, path):
 
 def test_every_get_route_dispatches_for_authenticated_student_and_admin(world):
     """Authenticated GET/HEAD paths must not unexpectedly crash."""
-    helpers = __import__(
-        "test_local_qa_real_world",
-        fromlist=["_client_for"],
-    )
-    student = helpers._client_for(world["student_a"].id)
-    admin = helpers._client_for(world["admin"].id)
+    student = _client_for(world["student_a"].id)
+    admin = _client_for(world["admin"].id)
 
     failures = []
     clients = (
