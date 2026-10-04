@@ -1,6 +1,7 @@
 from datetime import datetime
 from flask import jsonify, request, session
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
 OPPORTUNITY_TYPES=("job","internship","scholarship","competition","volunteering","event","other")
 PAGE_SIZE=20
@@ -77,9 +78,19 @@ def register_opportunity_runtime(app,db,Opportunity,Organisation,User,Organisati
               (OpportunityYearTarget,OpportunityYearTarget.year,user.year),
               (OpportunitySemesterTarget,OpportunitySemesterTarget.semester,user.semester))
         for M,col,val in dims:
-            any_target=db.session.query(M.id).filter(M.opportunity_id==Opportunity.id)
-            match=db.session.query(M.id).filter(M.opportunity_id==Opportunity.id,col==val) if val is not None else None
-            q=q.filter(or_(~any_target.exists(),match.exists() if match is not None else False))
+            any_target=(
+                db.session.query(M.id)
+                .filter(M.opportunity_id==Opportunity.id)
+                .correlate(Opportunity)
+                .exists()
+            )
+            match=(
+                db.session.query(M.id)
+                .filter(M.opportunity_id==Opportunity.id,col==val)
+                .correlate(Opportunity)
+                .exists()
+            ) if val is not None else None
+            q=q.filter(or_(~any_target,match if match is not None else False))
         return q
 
     def public(opp,uid):
@@ -129,7 +140,14 @@ def register_opportunity_runtime(app,db,Opportunity,Organisation,User,Organisati
         if not uid:return jsonify({"error":"Not logged in"}),401
         if not visible_query(db.session.get(User,uid)).filter(Opportunity.id==opportunity_id).first():return jsonify({"error":"Opportunity not found"}),404
         if not SavedOpportunity.query.filter_by(user_id=uid,opportunity_id=opportunity_id).first():
-            db.session.add(SavedOpportunity(user_id=uid,opportunity_id=opportunity_id));db.session.commit()
+            try:
+                db.session.add(SavedOpportunity(user_id=uid,opportunity_id=opportunity_id))
+                db.session.commit()
+            except IntegrityError:
+                # Another concurrent request may have inserted the same save
+                # between our existence check and commit. The unique
+                # constraint makes that race safe; treat the winner as success.
+                db.session.rollback()
         return jsonify({"message":"Saved"})
 
     @app.delete("/opportunities/<int:opportunity_id>/save")
