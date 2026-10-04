@@ -442,6 +442,265 @@ def test_organisation_opportunity_lifecycle_and_targeting(world):
     assert hidden_detail.status_code == 404
 
 
+def _create_published_targeted_opportunity(world, *, title, university_ids=None, program_ids=None, years=None, semesters=None):
+    now = datetime.utcnow()
+    opportunity = Opportunity(
+        organisation_id=world["organisation"].id,
+        created_by=world["student_a"].id,
+        title=title,
+        description="Disposable targeting-matrix opportunity.",
+        opportunity_type="internship",
+        location="Nairobi",
+        is_remote=False,
+        application_url="https://example.invalid/matrix",
+        application_instructions="QA",
+        application_deadline=now + timedelta(days=5),
+        expiry_date=now + timedelta(days=20),
+        status="published",
+        published_at=now,
+        view_count=0,
+    )
+    db.session.add(opportunity)
+    db.session.flush()
+
+    (
+        OpportunityUniversityTarget,
+        OpportunityProgramTarget,
+        OpportunityYearTarget,
+        OpportunitySemesterTarget,
+        _SavedOpportunity,
+    ) = app.opportunity_targeting_models
+
+    for university_id in university_ids or []:
+        db.session.add(OpportunityUniversityTarget(
+            opportunity_id=opportunity.id,
+            university_id=university_id,
+        ))
+    for program_id in program_ids or []:
+        db.session.add(OpportunityProgramTarget(
+            opportunity_id=opportunity.id,
+            program_id=program_id,
+        ))
+    for year in years or []:
+        db.session.add(OpportunityYearTarget(
+            opportunity_id=opportunity.id,
+            year=year,
+        ))
+    for semester in semesters or []:
+        db.session.add(OpportunitySemesterTarget(
+            opportunity_id=opportunity.id,
+            semester=semester,
+        ))
+    db.session.commit()
+    return opportunity.id
+
+
+def test_opportunity_targeting_matrix_and_current_profile_changes(world):
+    # The matrix deliberately uses different values for each dimension so a
+    # failure cannot be hidden by two students coincidentally sharing a value.
+    university_a = world["university_a"]
+    university_b = world["university_b"]
+    program_a = world["program_a"]
+    program_b = world["program_b"]
+
+    program_c = Program(
+        university_id=university_a.id,
+        name="QA Information Technology",
+        degree_level="Bachelors",
+        discipline_category="Computing",
+        is_active=True,
+    )
+    db.session.add(program_c)
+    db.session.flush()
+
+    student_c = User(
+        email="qa.student.c@test.invalid",
+        password_hash=generate_password_hash("Qa!Password123"),
+        year=3,
+        semester=1,
+        display_name="qa.student.c",
+        email_verified=True,
+        is_suspended=False,
+        profile_visibility="public",
+        who_can_message="everyone",
+        who_can_follow="everyone",
+        read_receipts_enabled=True,
+        university_id=university_a.id,
+        program_id=program_a.id,
+        session_version=0,
+    )
+    student_d = User(
+        email="qa.student.d@test.invalid",
+        password_hash=generate_password_hash("Qa!Password123"),
+        year=2,
+        semester=2,
+        display_name="qa.student.d",
+        email_verified=True,
+        is_suspended=False,
+        profile_visibility="public",
+        who_can_message="everyone",
+        who_can_follow="everyone",
+        read_receipts_enabled=True,
+        university_id=university_a.id,
+        program_id=program_c.id,
+        session_version=0,
+    )
+    db.session.add_all([student_c, student_d])
+    db.session.commit()
+
+    clients = {
+        "A": _client_for(world["student_a"].id),
+        "B": _client_for(world["student_b"].id),
+        "C": _client_for(student_c.id),
+        "D": _client_for(student_d.id),
+    }
+    ids = {
+        "A": world["student_a"].id,
+        "B": world["student_b"].id,
+        "C": student_c.id,
+        "D": student_d.id,
+    }
+
+    # The organisation is verified by the lifecycle test immediately above.
+    # Keep this assertion explicit so the matrix never silently tests an
+    # unavailable organisation.
+    organisation = db.session.get(Organisation, world["organisation"].id)
+    assert organisation.verification_status == "verified"
+
+    cases = [
+        ("none", {}, {"A", "B", "C", "D"}),
+        ("university", {"university_ids": [university_a.id]}, {"A", "C", "D"}),
+        ("program", {"program_ids": [program_a.id]}, {"A", "C"}),
+        ("year", {"years": [2]}, {"A", "B", "D"}),
+        ("semester", {"semesters": [1]}, {"A", "B", "C"}),
+        ("university_program", {"university_ids": [university_a.id], "program_ids": [program_a.id]}, {"A", "C"}),
+        ("university_year", {"university_ids": [university_a.id], "years": [2]}, {"A", "D"}),
+        ("university_semester", {"university_ids": [university_a.id], "semesters": [1]}, {"A", "C"}),
+        ("program_year", {"program_ids": [program_a.id], "years": [2]}, {"A"}),
+        ("program_semester", {"program_ids": [program_a.id], "semesters": [1]}, {"A", "C"}),
+        ("year_semester", {"years": [2], "semesters": [1]}, {"A", "B"}),
+        ("all_four", {
+            "university_ids": [university_a.id],
+            "program_ids": [program_a.id],
+            "years": [2],
+            "semesters": [1],
+        }, {"A"}),
+        ("multiple_values", {
+            "university_ids": [university_a.id, university_b.id],
+            "program_ids": [program_a.id, program_b.id],
+            "years": [2, 3],
+            "semesters": [1, 2],
+        }, {"A", "B", "C", "D"}),
+    ]
+
+    for name, targeting, expected in cases:
+        opportunity_id = _create_published_targeted_opportunity(
+            world,
+            title=f"QA Target Matrix {name}",
+            **targeting,
+        )
+        for student_name, client in clients.items():
+            response = client.get("/opportunities")
+            assert response.status_code == 200
+            visible_ids = {
+                row["id"]
+                for row in response.get_json()["opportunities"]
+            }
+            assert (opportunity_id in visible_ids) == (student_name in expected), (
+                name,
+                student_name,
+                expected,
+                visible_ids,
+            )
+
+    # Current-profile changes must immediately change eligibility. The same
+    # student changes program repeatedly, not just once.
+    profile_client = clients["A"]
+    student_a_id = world["student_a"].id
+
+    program_target_id = _create_published_targeted_opportunity(
+        world,
+        title="QA Program Change Target",
+        program_ids=[program_a.id],
+    )
+
+    def visible_for_profile_target():
+        response = profile_client.get("/opportunities")
+        assert response.status_code == 200
+        return program_target_id in {
+            row["id"] for row in response.get_json()["opportunities"]
+        }
+
+    assert visible_for_profile_target()
+
+    changed = profile_client.patch(
+        "/profile",
+        json={"program_id": program_c.id},
+        headers=_csrf(student_a_id),
+    )
+    assert changed.status_code == 200
+    assert changed.get_json()["program_id"] == program_c.id
+    assert not visible_for_profile_target()
+
+    changed_back = profile_client.patch(
+        "/profile",
+        json={"program_id": program_a.id},
+        headers=_csrf(student_a_id),
+    )
+    assert changed_back.status_code == 200
+    assert changed_back.get_json()["program_id"] == program_a.id
+    assert visible_for_profile_target()
+
+    # Changing university without supplying a new program must clear the old
+    # program rather than leaving an impossible University B + Program A pair.
+    university_changed = profile_client.patch(
+        "/profile",
+        json={"university_id": university_b.id},
+        headers=_csrf(student_a_id),
+    )
+    assert university_changed.status_code == 200
+    assert university_changed.get_json()["university_id"] == university_b.id
+    assert university_changed.get_json()["program_id"] is None
+
+    stored = db.session.get(User, student_a_id)
+    assert stored.university_id == university_b.id
+    assert stored.program_id is None
+
+    # Repeatedly changing to a new university + program remains valid.
+    university_and_program_changed = profile_client.patch(
+        "/profile",
+        json={
+            "university_id": university_a.id,
+            "program_id": program_c.id,
+        },
+        headers=_csrf(student_a_id),
+    )
+    assert university_and_program_changed.status_code == 200
+    assert university_and_program_changed.get_json()["program_id"] == program_c.id
+
+    changed_again = profile_client.patch(
+        "/profile",
+        json={"program_id": program_a.id},
+        headers=_csrf(student_a_id),
+    )
+    assert changed_again.status_code == 200
+    assert changed_again.get_json()["program_id"] == program_a.id
+
+    invalid_cross_university_program = profile_client.patch(
+        "/profile",
+        json={
+            "university_id": university_a.id,
+            "program_id": program_b.id,
+        },
+        headers=_csrf(student_a_id),
+    )
+    assert invalid_cross_university_program.status_code == 400
+
+    final = db.session.get(User, student_a_id)
+    assert final.university_id == university_a.id
+    assert final.program_id == program_a.id
+
+
 def test_csrf_and_session_version_fail_closed(world):
     client = _client_for(world["student_a"].id)
 
