@@ -12,6 +12,7 @@ not contacted by this first layer. Controlled-provider tests come later.
 from __future__ import annotations
 
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
@@ -857,7 +858,7 @@ def _safe_probe_path(rule):
     """Build a non-mutating probe URL for a Flask rule."""
     path = rule.rule
     for name, converter in rule._converters.items():
-        token = f"<{name}>"
+        token = re.compile(r"<[^>]*:" + re.escape(name) + r">")
         if converter.__class__.__name__ == "IntegerConverter":
             replacement = "1"
         elif converter.__class__.__name__ == "UUIDConverter":
@@ -866,7 +867,7 @@ def _safe_probe_path(rule):
             replacement = "1.0"
         else:
             replacement = "qa"
-        path = path.replace(token, replacement)
+        path = token.sub(replacement, path)
     return path
 
 
