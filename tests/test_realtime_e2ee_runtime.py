@@ -281,7 +281,7 @@ def test_realtime_deployment_contains_dedicated_chat_worker():
     assert "chat_event_worker.py" in compose
     assert "REDIS_URL: redis://redis:6379/0" in compose
     assert "consume_forever(handle_event)" in worker
-    assert "channel="prepza-realtime"" in worker
+    assert 'channel="prepza-realtime"' in worker
 
 
 def test_redis_stream_queue_is_not_treated_as_postgres_source_of_truth():
