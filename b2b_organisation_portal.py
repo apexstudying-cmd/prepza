@@ -144,7 +144,6 @@ def register_b2b_organisation_portal(app, db):
         """),{"i":cid}).mappings().all()
         return jsonify({"campaign":dict(c),"daily":[dict(x) for x in daily]})
 
-    @app.get("/opportunities")
     def public_opportunity_feed_capped():
         uid=session.get("user_id")
         if not uid:return jsonify({"error":"Not logged in"}),401
@@ -167,7 +166,6 @@ def register_b2b_organisation_portal(app, db):
           {**params,"off":(page-1)*20}).mappings().all()
         return jsonify({"page":page,"opportunities":[{"id":r["id"],"title":r["title"],"description":r["description"],"opportunity_type":r["opportunity_type"],"location":r["location"],"is_remote":r["is_remote"],"application_url":r["application_url"],"application_instructions":r["application_instructions"],"application_deadline":r["application_deadline"].isoformat() if r["application_deadline"] else None,"expiry_date":r["expiry_date"].isoformat() if r["expiry_date"] else None,"published_at":r["published_at"].isoformat() if r["published_at"] else None,"view_count":r["view_count"],"organisation":{"id":r["organisation_id"],"name":r["organisation_name"],"logo_url":r["logo_url"],"website":r["website"]},"promotion_type":r["promotion_type"]} for r in rows]})
 
-    @app.get("/opportunities/<int:opportunity_id>")
     def public_opportunity_detail_capped(opportunity_id):
         return record_organic_view(opportunity_id)
 
