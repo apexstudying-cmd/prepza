@@ -44,12 +44,8 @@ def _admin_rules():
 
 def test_every_admin_get_route_rejects_anonymous_and_non_admin_users(world):
     """Every GET /admin route must fail closed for anonymous and students."""
-    helpers = __import__(
-        "test_local_qa_real_world",
-        fromlist=["_client_for"],
-    )
     anonymous = app.test_client()
-    student = helpers._client_for(world["student_a"].id)
+    student = _client_for(world["student_a"].id)
 
     failures = []
     for rule in _admin_rules():
