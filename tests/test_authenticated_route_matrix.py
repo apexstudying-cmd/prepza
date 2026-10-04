@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import re
 
-import pytest
-
-pytest_plugins = ("test_local_qa_real_world",)
+from test_local_qa_real_world import _client_for, qa_database, world
 
 from app import app
 
