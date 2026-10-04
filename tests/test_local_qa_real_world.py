@@ -851,3 +851,69 @@ def test_concurrent_organisation_reads(world):
             statuses.append(future.result())
 
     assert statuses == [200] * 20
+
+
+def _safe_probe_path(rule):
+    """Build a non-mutating probe URL for a Flask rule."""
+    path = rule.rule
+    for name, converter in rule._converters.items():
+        token = f"<{name}>"
+        if converter.__class__.__name__ == "IntegerConverter":
+            replacement = "1"
+        elif converter.__class__.__name__ == "UUIDConverter":
+            replacement = "00000000-0000-0000-0000-000000000001"
+        elif converter.__class__.__name__ == "FloatConverter":
+            replacement = "1.0"
+        else:
+            replacement = "qa"
+        path = path.replace(token, replacement)
+    return path
+
+
+def test_every_registered_route_dispatches_without_server_error():
+    """Smoke-test the full runtime route surface without mutating app state.
+
+    OPTIONS verifies Flask registration for every application route. GET/HEAD
+    probes are attempted only where the route declares them. A non-2xx status
+    is not inherently a failure here because authentication, missing records,
+    validation, redirects, and other legitimate boundaries can reject a
+    probe.
+    """
+    client = app.test_client()
+    failures = []
+
+    for rule in app.url_map.iter_rules():
+        if rule.endpoint == "static":
+            continue
+
+        path = _safe_probe_path(rule)
+
+        try:
+            options = client.options(path)
+            if options.status_code >= 500:
+                failures.append(
+                    f"OPTIONS {path} -> {options.status_code}"
+                )
+
+            if "GET" in rule.methods:
+                response = client.get(path, follow_redirects=False)
+                if response.status_code >= 500:
+                    failures.append(
+                        f"GET {path} ({rule.endpoint}) -> {response.status_code}"
+                    )
+
+            if "HEAD" in rule.methods:
+                response = client.head(path, follow_redirects=False)
+                if response.status_code >= 500:
+                    failures.append(
+                        f"HEAD {path} ({rule.endpoint}) -> {response.status_code}"
+                    )
+        except Exception as exc:
+            failures.append(
+                f"{rule.endpoint} {path}: {type(exc).__name__}: {exc}"
+            )
+
+    assert not failures, (
+        "Registered route smoke probes reached a server error or raised: "
+        + "; ".join(failures)
+    )
