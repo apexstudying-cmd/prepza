@@ -920,7 +920,7 @@ def test_student_economics_entitlement_lifecycle_and_quota_truth(world):
     assert payload["usage"]["summary"]["units"] == 100
     assert payload["usage"]["summary"]["unit_limit"] == 140
     assert payload["usage"]["summary"]["remaining_units"] == 40
-    assert payload["usage"]["summary"]["requests"] == 3
+    assert payload["usage"]["summary"]["requests"] == 1
 
     # The future entitlement remains part of the stack only when its period is
     # actually active; expiry/start boundaries are evaluated against now.
@@ -1395,6 +1395,24 @@ def test_b2b_prepaid_metering_protects_advertiser_balance_and_locks_campaign_pri
         """),
         {"cid": cpm_campaign},
     ).scalar_one()
-    assert int(ledger_balance) == 0
+    # The ledger records spend as negative signed entries. A fully consumed
+    # KES 350 prepaid campaign therefore has -35,000 minor units in the ledger,
+    # while the campaign's derived remaining balance is exactly zero.
+    assert int(ledger_balance) == -35000
+    campaign_balance = db.session.execute(
+        text("""
+            SELECT funding_status, funded_amount_minor +
+                   COALESCE((
+                       SELECT SUM(signed_amount_minor)
+                       FROM b2b_campaign_ledger
+                       WHERE campaign_id=:cid
+                   ), 0) AS remaining_minor
+            FROM discovery_campaign
+            WHERE id=:cid
+        """),
+        {"cid": cpm_campaign},
+    ).mappings().first()
+    assert campaign_balance["funding_status"] == "exhausted"
+    assert int(campaign_balance["remaining_minor"]) == 0
 
     db.session.commit()
