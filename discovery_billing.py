@@ -147,11 +147,11 @@ def _register_discovery_schema(db):
         return bool(session.get("csrf_token") and request.headers.get("X-CSRF-Token")
                     and session.get("csrf_token") == request.headers.get("X-CSRF-Token"))
 
-    def member_role(org_id, user_id):
-        return db.session.execute(text("""
-            SELECT role FROM organisation_member
-            WHERE organisation_id = :oid AND user_id = :uid LIMIT 1
-        """), {"oid": org_id, "uid": user_id}).scalar_one_or_none()
+def member_role(db, org_id, user_id):
+    return db.session.execute(text("""
+        SELECT role FROM organisation_member
+        WHERE organisation_id = :oid AND user_id = :uid LIMIT 1
+    """), {"oid": org_id, "uid": user_id}).scalar_one_or_none()
 
 
 def register_discovery(app, db):
@@ -159,7 +159,7 @@ def register_discovery(app, db):
         _register_discovery_schema(db)
 
     def org_access(org_id, user_id, owner_only=False):
-        role = member_role(org_id, user_id)
+        role = member_role(db, org_id, user_id)
         return role == "owner" if owner_only else role in ("owner", "manager")
 
     def org_plan(org_id):
