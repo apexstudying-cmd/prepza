@@ -305,6 +305,20 @@ def test_route_inventory_contains_critical_boundaries():
         assert len(matching) == 1, f"Duplicate student Opportunity route: {path} -> {matching}"
 
 
+def test_no_duplicate_registered_route_methods():
+    duplicates = {}
+    for rule in app.url_map.iter_rules():
+        for method in rule.methods - {"HEAD", "OPTIONS"}:
+            duplicates.setdefault((rule.rule, method), []).append(rule.endpoint)
+
+    duplicates = {
+        key: endpoints
+        for key, endpoints in duplicates.items()
+        if len(set(endpoints)) > 1
+    }
+    assert not duplicates, f"Duplicate route/method registrations: {duplicates}"
+
+
 def test_public_and_authenticated_session_boundaries(world):
     anonymous = app.test_client()
 
