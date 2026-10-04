@@ -68,13 +68,9 @@ def test_every_admin_mutation_fails_without_csrf_for_all_non_admins_and_admin(
     world,
 ):
     """Every admin mutation must require both admin identity and CSRF."""
-    helpers = __import__(
-        "test_local_qa_real_world",
-        fromlist=["_client_for"],
-    )
     anonymous = app.test_client()
-    student = helpers._client_for(world["student_a"].id)
-    admin = helpers._client_for(world["admin"].id)
+    student = _client_for(world["student_a"].id)
+    admin = _client_for(world["admin"].id)
 
     failures = []
     clients = (
