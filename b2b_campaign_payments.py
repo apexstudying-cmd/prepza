@@ -200,8 +200,8 @@ def register_b2b_campaign_payments(app, db):
         # cannot silently change the economics of this already-created campaign.
         current_pricing = {}
         for key in ("sponsored_campaign_minimum", "home_impression_cpm", "click_cpc",
-                    "push_delivery_cpm", "home_frequency_cap", "home_sponsored_inventory",
-                    "push_frequency_cap"):
+                    "push_delivery_cpm", "home_frequency_cap", "click_frequency_cap",
+                    "home_sponsored_inventory", "push_frequency_cap"):
             value, version = pricing(key)
             current_pricing[key] = {"value": value, "version": version}
 
