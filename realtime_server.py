@@ -16,7 +16,21 @@ from e2ee_production_hardening import register_e2ee_production_hardening
 
 # Socket.IO is the realtime transport; HTTP/database remains the source of truth.
 REDIS_URL = os.environ.get("REDIS_URL")
-_realtime_redis = redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=1, socket_timeout=1) if REDIS_URL else None
+# Flask-Limiter also uses REDIS_URL, but local QA deliberately sets it to
+# memory://. That is a valid limiter/Kombu test transport, not a redis-py
+# URL. Only real Redis URLs may enable realtime Redis presence/fan-out state.
+REALTIME_REDIS_ENABLED = REDIS_URL.startswith(("redis://", "rediss://")) if REDIS_URL else False
+REALTIME_REDIS_URL = REDIS_URL if REALTIME_REDIS_ENABLED else None
+_realtime_redis = (
+    redis.Redis.from_url(
+        REALTIME_REDIS_URL,
+        decode_responses=True,
+        socket_connect_timeout=1,
+        socket_timeout=1,
+    )
+    if REALTIME_REDIS_URL
+    else None
+)
 
 # Flask-SocketIO uses this queue to fan realtime events across multiple
 # Render instances. PostgreSQL remains the message source of truth.
@@ -26,7 +40,7 @@ socketio = SocketIO(
     cors_allowed_origins=[],
     logger=False,
     engineio_logger=False,
-    message_queue=REDIS_URL or None,
+    message_queue=REALTIME_REDIS_URL or None,
     channel="prepza-realtime",
 )
 register_offline_activity_routes(app, db)
