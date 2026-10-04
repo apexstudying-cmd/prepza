@@ -407,11 +407,17 @@ def test_organisation_opportunity_lifecycle_and_targeting(world):
         for row in queue.get_json()["opportunities"]
     )
 
-    approved = admin.post(\n        f"/admin/opportunities/{opportunity_id}/approve",\n        headers=_csrf(world["admin"].id),\n    )
+    approved = admin.post(
+        f"/admin/opportunities/{opportunity_id}/approve",
+        headers=_csrf(world["admin"].id),
+    )
     assert approved.status_code == 200
     assert approved.get_json()["status"] == "approved"
 
-    published = admin.post(f"/admin/opportunities/{opportunity_id}/publish")
+    published = admin.post(
+        f"/admin/opportunities/{opportunity_id}/publish",
+        headers=_csrf(world["admin"].id),
+    )
     assert published.status_code == 200
     assert published.get_json()["status"] == "published"
 
