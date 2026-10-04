@@ -565,28 +565,28 @@ def admin_retry_ai_job(job_id):
 @app.route("/admin/content", methods=["GET"])
 
 def admin_list_content():
-    unit_id = request.args.get("unit_id", type=int)
+    # The current ContentItem schema is no longer unit-backed. Older
+    # versions exposed unit_id/unit_code here, but the Unit model and
+    # ContentItem.unit_id column were removed by the current schema.
+    if request.args.get("unit_id") is not None:
+        return jsonify({"error": "unit_id is no longer supported"}), 400
 
-    query = ContentItem.query
-    if unit_id:
-        query = query.filter_by(unit_id=unit_id)
+    items = ContentItem.query.order_by(ContentItem.id.desc()).all()
 
-    items = query.order_by(ContentItem.id.desc()).all()
-
-    result = []
-    for item in items:
-        unit = db.session.get(Unit, item.unit_id)
-        result.append({
+    result = [
+        {
             "id": item.id,
-            "unit_id": item.unit_id,
-            "unit_code": unit.code if unit else None,
+            "unit_id": None,
+            "unit_code": None,
             "content_type": item.content_type,
             "title": item.title,
             "file_url": item.file_url,
             "paper_year": item.paper_year,
             "is_downloadable": item.is_downloadable,
             "price": get_price_for_type(item.content_type),
-        })
+        }
+        for item in items
+    ]
 
     return jsonify({"content": result})
 
@@ -597,26 +597,23 @@ def admin_add_content():
     if not data:
         return jsonify({"error": "Request body must be valid JSON"}), 400
 
-    unit_id = data.get("unit_id")
+    if data.get("unit_id") is not None:
+        return jsonify({"error": "unit_id is no longer supported"}), 400
+
     content_type = data.get("content_type")
     title = data.get("title")
     file_url = data.get("file_url")
     paper_year = data.get("paper_year")
 
-    if not unit_id or not content_type or not title:
-        return jsonify({"error": "unit_id, content_type, and title are required"}), 400
+    if not content_type or not title:
+        return jsonify({"error": "content_type and title are required"}), 400
 
     if content_type not in ("past_paper", "notes", "qna"):
         return jsonify({"error": "content_type must be past_paper, notes, or qna"}), 400
 
-    unit = db.session.get(Unit, unit_id)
-    if not unit:
-        return jsonify({"error": "Unit not found"}), 404
-
     is_downloadable = False if content_type == "qna" else True
 
     item = ContentItem(
-        unit_id=unit_id,
         content_type=content_type,
         title=title,
         file_url=file_url,
@@ -713,7 +710,10 @@ def admin_analytics():
         func.coalesce(func.sum(DocumentContent.file_size_bytes), 0)
     ).scalar()
 
-    total_units = db.session.query(func.count(Unit.id)).scalar()
+    # Unit is no longer part of the current content schema. Keep the
+    # response field for backward-compatible admin clients, but do not
+    # query a removed model/table.
+    total_units = 0
     total_content = db.session.query(func.count(ContentItem.id)).scalar()
 
     content_by_type = dict(
