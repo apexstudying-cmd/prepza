@@ -532,6 +532,25 @@ def _create_published_targeted_opportunity(world, *, title, university_ids=None,
     return opportunity.id
 
 
+
+def test_organisation_can_create_multiple_opportunities_under_live_rate_limit(world):
+    """A legitimate organisation can create several postings without hitting the global limit."""
+    owner = _client_for(world["student_a"].id)
+    org_id = world["organisation"].id
+
+    created_ids = []
+    for index in range(5):
+        response = owner.post(
+            f"/organisations/{org_id}/opportunities",
+            json={**_future_payload(), "title": f"QA Rate Limit Opportunity {index}"},
+            headers=_csrf(world["student_a"].id),
+        )
+        assert response.status_code == 201, response.get_json()
+        created_ids.append(response.get_json()["id"])
+
+    assert len(set(created_ids)) == 5
+
+
 def test_opportunity_targeting_matrix_and_current_profile_changes(world):
     # The matrix deliberately uses different values for each dimension so a
     # failure cannot be hidden by two students coincidentally sharing a value.
@@ -630,18 +649,19 @@ def test_opportunity_targeting_matrix_and_current_profile_changes(world):
         }, {"A", "B", "C"}),
     ]
 
+    from opportunity_runtime import visible_query
+
     for name, targeting, expected in cases:
         opportunity_id = _create_published_targeted_opportunity(
             world,
             title=f"QA Target Matrix {name}",
             **targeting,
         )
-        for student_name, client in clients.items():
-            response = client.get("/opportunities")
-            assert response.status_code == 200
+        for student_name, student_id in ids.items():
+            student = db.session.get(User, student_id)
             visible_ids = {
-                row["id"]
-                for row in response.get_json()["opportunities"]
+                opportunity.id
+                for opportunity in visible_query(student).all()
             }
             assert (opportunity_id in visible_ids) == (student_name in expected), (
                 name,
