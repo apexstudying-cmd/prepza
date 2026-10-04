@@ -13,10 +13,14 @@ They reuse the disposable QA world from test_local_qa_real_world.py.
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import text
-
 from app import db, Organisation, OrganisationMember, Opportunity, User, app
-from tests.test_local_qa_real_world import _client_for, _csrf, _future_payload
+from tests.test_local_qa_real_world import (
+    _client_for,
+    _csrf,
+    _future_payload,
+    qa_database,
+    world,
+)
 
 
 def _create_second_organisation(world):
