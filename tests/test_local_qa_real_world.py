@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
@@ -918,7 +919,7 @@ def test_student_economics_entitlement_lifecycle_and_quota_truth(world):
     assert payload["plan"] == "pro"
     assert payload["usage"]["summary"]["units"] == 100
     assert payload["usage"]["summary"]["unit_limit"] == 140
-    assert payload["usage"]["summary"]["remaining_units"] == 0
+    assert payload["usage"]["summary"]["remaining_units"] == 40
     assert payload["usage"]["summary"]["requests"] == 3
 
     # The future entitlement remains part of the stack only when its period is
