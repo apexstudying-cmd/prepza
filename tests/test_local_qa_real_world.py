@@ -779,6 +779,157 @@ def test_opportunity_targeting_matrix_and_current_profile_changes(world):
     assert final.program_id == program_a.id
 
 
+
+def test_student_economics_entitlement_lifecycle_and_quota_truth(world):
+    """Exercise the real paid/free entitlement boundary and quota ledger."""
+    from ai_economics import (
+        get_active_entitlements,
+        get_user_plan_code,
+    )
+    from usage_billing import check_and_consume_ai_quota
+
+    user = User(
+        email="qa.economics@test.invalid",
+        password_hash=generate_password_hash("Qa!Password123"),
+        year=2,
+        semester=1,
+        display_name="qa.economics",
+        email_verified=True,
+        is_suspended=False,
+        profile_visibility="public",
+        who_can_message="everyone",
+        who_can_follow="everyone",
+        read_receipts_enabled=True,
+        university_id=world["university_a"].id,
+        program_id=world["program_a"].id,
+        session_version=0,
+    )
+    db.session.add(user)
+    db.session.flush()
+
+    now = datetime.utcnow()
+    helpers = app.extensions["prepza_student_orders"]
+
+    def add_subscription(plan, amount, starts_at, expires_at, *, fulfill=True):
+        payment = __import__("app").Payment(
+            user_id=user.id,
+            content_item_id=None,
+            amount=amount,
+            provider="paystack",
+            reference=f"qa-econ-{plan}-{payment_counter[0]}",
+            provider_reference=f"qa-provider-{payment_counter[0]}",
+            payment_type="subscription",
+            plan=plan,
+            status="success",
+            subscription_starts_at=starts_at,
+            subscription_expires_at=expires_at,
+        )
+        payment_counter[0] += 1
+        db.session.add(payment)
+        db.session.flush()
+        helpers["create"](
+            payment,
+            item_title=("Plus Plan" if plan == "plus" else "Pro Plan"),
+            requested_payload={"payment_type": "subscription", "plan": plan, "quantity": 1},
+        )
+        if fulfill:
+            assert helpers["mark_paid_and_fulfilled"](payment)
+        db.session.commit()
+        return payment
+
+    payment_counter = [1]
+
+    # Money marked successful is not enough: without a fulfilled order there
+    # is deliberately no paid entitlement.
+    add_subscription(
+        "plus", 499, now - timedelta(hours=1), now + timedelta(days=29), fulfill=False
+    )
+    assert get_user_plan_code(db, user.id) == "free"
+    assert get_active_entitlements(db, user.id) == []
+
+    # Once the exact order is fulfilled, Plus becomes active.
+    payment = db.session.execute(
+        text("SELECT * FROM payment WHERE user_id=:uid ORDER BY id DESC LIMIT 1"),
+        {"uid": user.id},
+    ).mappings().first()
+    payment_obj = db.session.get(__import__("app").Payment, int(payment["id"]))
+    assert helpers["mark_paid_and_fulfilled"](payment_obj)
+    db.session.commit()
+
+    assert get_user_plan_code(db, user.id) == "plus"
+    assert len(get_active_entitlements(db, user.id)) == 1
+
+    # Plus summary allowance is exactly 40 pages: 39 + 1 succeeds, then the
+    # next page is rejected rather than allowing an over-consumption.
+    ok, first = check_and_consume_ai_quota(db, user.id, "summary", 39)
+    assert ok and first["remaining_units"] == 1
+    ok, second = check_and_consume_ai_quota(db, user.id, "summary", 2)
+    assert not ok and second["code"] == "generation_quota_exhausted"
+    ok, third = check_and_consume_ai_quota(db, user.id, "summary", 1)
+    assert ok and third["remaining_units"] == 0
+    ok, fourth = check_and_consume_ai_quota(db, user.id, "summary", 1)
+    assert not ok and fourth["code"] == "generation_quota_exhausted"
+
+    # A paid entitlement expiring now falls back to Free immediately.
+    db.session.execute(
+        text("UPDATE payment SET subscription_expires_at=:expires WHERE id=:pid"),
+        {"expires": now - timedelta(seconds=1), "pid": int(payment["id"])},
+    )
+    db.session.commit()
+    assert get_user_plan_code(db, user.id) == "free"
+
+    # A future-paid entitlement must not grant access before its start time.
+    future_payment = add_subscription(
+        "plus", 499, now + timedelta(days=2), now + timedelta(days=32)
+    )
+    assert get_user_plan_code(db, user.id) == "free"
+    assert not get_active_entitlements(db, user.id)
+
+    # Activate a Pro entitlement and prove its exact 100-page allowance.
+    db.session.execute(
+        text("UPDATE payment SET subscription_starts_at=:starts, subscription_expires_at=:expires WHERE id=:pid"),
+        {
+            "starts": now - timedelta(minutes=1),
+            "expires": now + timedelta(days=29),
+            "pid": future_payment.id,
+        },
+    )
+    db.session.commit()
+    assert get_user_plan_code(db, user.id) == "plus"
+
+    pro_payment = add_subscription(
+        "pro", 999, now - timedelta(seconds=30), now + timedelta(days=29)
+    )
+    assert get_user_plan_code(db, user.id) == "pro"
+
+    # With Plus + Pro simultaneously active, total allowance is additive but
+    # one generation can never exceed the largest single plan allowance.
+    ok, stack_probe = check_and_consume_ai_quota(db, user.id, "summary", 101)
+    assert not ok and stack_probe["code"] == "generation_size_limit"
+    ok, stack_use = check_and_consume_ai_quota(db, user.id, "summary", 100)
+    assert ok and stack_use["remaining_units"] == 39
+
+    # The public usage endpoint must agree with the actual entitlement ledger,
+    # including paid request counts.
+    client = _client_for(user.id)
+    usage_response = client.get("/api/usage/me")
+    assert usage_response.status_code == 200
+    payload = usage_response.get_json()
+    assert payload["plan"] == "pro"
+    assert payload["usage"]["summary"]["units"] == 140
+    assert payload["usage"]["summary"]["unit_limit"] == 140
+    assert payload["usage"]["summary"]["remaining_units"] == 0
+    assert payload["usage"]["summary"]["requests"] == 3
+
+    # The future entitlement remains part of the stack only when its period is
+    # actually active; expiry/start boundaries are evaluated against now.
+    db.session.execute(
+        text("UPDATE payment SET subscription_expires_at=:expires WHERE id=:pid"),
+        {"expires": now - timedelta(seconds=1), "pid": int(pro_payment.id)},
+    )
+    db.session.commit()
+    assert get_user_plan_code(db, user.id) == "plus"
+
 def test_csrf_and_session_version_fail_closed(world):
     client = _client_for(world["student_a"].id)
 
