@@ -76,6 +76,7 @@ def main() -> int:
         "tests/test_local_qa_real_world.py",
         "tests/test_route_security_matrix.py",
         "tests/test_authenticated_route_matrix.py",
+        "tests/test_local_qa_authz.py",
     ]
     # Keep QA rate-limit counters separate from the running app's Redis DB.
     # This preserves the real rate-limit rules while preventing earlier local
