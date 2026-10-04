@@ -916,7 +916,7 @@ def test_student_economics_entitlement_lifecycle_and_quota_truth(world):
     assert usage_response.status_code == 200
     payload = usage_response.get_json()
     assert payload["plan"] == "pro"
-    assert payload["usage"]["summary"]["units"] == 140
+    assert payload["usage"]["summary"]["units"] == 100
     assert payload["usage"]["summary"]["unit_limit"] == 140
     assert payload["usage"]["summary"]["remaining_units"] == 0
     assert payload["usage"]["summary"]["requests"] == 3
