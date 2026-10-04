@@ -658,8 +658,6 @@ def test_opportunity_targeting_matrix_and_current_profile_changes(world):
         }, {"A", "B", "C"}),
     ]
 
-    from opportunity_runtime import visible_query
-
     for name, targeting, expected in cases:
         opportunity_id = _create_published_targeted_opportunity(
             world,
@@ -667,10 +665,10 @@ def test_opportunity_targeting_matrix_and_current_profile_changes(world):
             **targeting,
         )
         for student_name, student_id in ids.items():
-            student = db.session.get(User, student_id)
+            response = clients[student_name].get("/opportunities")
+            assert response.status_code == 200, (name, student_name, response.status_code)
             visible_ids = {
-                opportunity.id
-                for opportunity in visible_query(student).all()
+                row["id"] for row in response.get_json()["opportunities"]
             }
             assert (opportunity_id in visible_ids) == (student_name in expected), (
                 name,
