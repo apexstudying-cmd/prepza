@@ -282,6 +282,28 @@ def test_route_inventory_contains_critical_boundaries():
     missing = sorted(expected - routes)
     assert not missing, f"Critical registered routes are missing: {missing}"
 
+    # A duplicate Flask rule for the same student-facing path is dangerous:
+    # dispatch uses the first matching rule, so an older implementation can
+    # silently bypass the reconciled targeting/security behavior.
+    for path in (
+        "/opportunities",
+        "/opportunities/<int:opportunity_id>",
+        "/opportunities/<int:opportunity_id>/save",
+        "/opportunities/saved",
+    ):
+        matching = [
+            rule.endpoint
+            for rule in app.url_map.iter_rules()
+            if rule.rule == path
+            and "GET" in rule.methods
+            if path != "/opportunities/<int:opportunity_id>/save"
+        ] if path != "/opportunities/<int:opportunity_id>/save" else [
+            rule.endpoint
+            for rule in app.url_map.iter_rules()
+            if rule.rule == path and "POST" in rule.methods
+        ]
+        assert len(matching) == 1, f"Duplicate student Opportunity route: {path} -> {matching}"
+
 
 def test_public_and_authenticated_session_boundaries(world):
     anonymous = app.test_client()
