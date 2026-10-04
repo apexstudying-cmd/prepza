@@ -158,17 +158,29 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             amount_minor = int(metadata.get("amount_minor") or round(Decimal(str(existing["amount_kes"] or 0)) * 100))
             return {"ok": True, "duplicate": True, "amount_minor": amount_minor}
 
-        # Serialize events for the same student so a rolling frequency cap
+        # Serialize events for the same student so rolling frequency caps
         # cannot be bypassed by two simultaneous requests.
-        if event_type in ("impression", "push_delivery"):
+        if event_type in ("impression", "click", "push_delivery"):
             db.session.execute(text('SELECT id FROM "user" WHERE id=:uid FOR UPDATE'), {"uid": user_id})
-            cap_config = ((campaign["pricing_snapshot"] or {}).get("home_frequency_cap") or {}).get("value") if isinstance(campaign["pricing_snapshot"], dict) else None
-            if event_type == "push_delivery":
-                cap_config = ((campaign["pricing_snapshot"] or {}).get("push_frequency_cap") or {}).get("value") if isinstance(campaign["pricing_snapshot"], dict) else None
-            cap = int((cap_config or {}).get("max_impressions" if event_type == "impression" else "max_deliveries") or 5)
+            snapshot = campaign["pricing_snapshot"] if isinstance(campaign["pricing_snapshot"], dict) else {}
+            if event_type == "impression":
+                cap_config = (snapshot.get("home_frequency_cap") or {}).get("value")
+                cap = int((cap_config or {}).get("max_impressions") or 3)
+                count_type = "impression"
+            elif event_type == "click":
+                # CPC is intentionally frequency-limited per student. A student
+                # can generate at most one billable click for a campaign in the
+                # configured rolling window, protecting prepaid advertiser funds
+                # from repeated taps while still allowing a later genuine click.
+                cap_config = (snapshot.get("click_frequency_cap") or {}).get("value")
+                cap = int((cap_config or {}).get("max_clicks") or 1)
+                count_type = "click"
+            else:
+                cap_config = (snapshot.get("push_frequency_cap") or {}).get("value")
+                cap = int((cap_config or {}).get("max_deliveries") or 3)
+                count_type = "push_delivery"
             window_days = int((cap_config or {}).get("window_days") or 7)
             window_days = max(1, min(30, window_days))
-            count_type = "impression" if event_type == "impression" else "push_delivery"
             recent_count = db.session.execute(text("""
                 SELECT COUNT(*) FROM discovery_event
                 WHERE user_id=:uid AND campaign_id=:cid AND event_type=:etype
