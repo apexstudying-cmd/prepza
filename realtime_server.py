@@ -9,7 +9,6 @@ from sqlalchemy import text
 import redis
 from app import app, db, Conversation, ConversationParticipant
 import chat_interactions  # noqa: F401 - registers additive chat metadata hooks
-from chat_event_queue import enqueue_chat_event
 import chat_group_routes  # noqa: F401 - registers multi-user chat-group membership routes
 
 # Socket.IO is the realtime transport; HTTP/database remains the source of truth.
@@ -292,105 +291,6 @@ def handle_disconnect():
             emit("chat:presence", {"conversation_id": conversation_id, "user_id": user_id, "online": False}, to=room_for(conversation_id))
 
 
-@app.after_request
-def broadcast_message_response(response):
-    """Broadcast only the persisted encrypted representation for E2EE chats."""
-    match = MESSAGE_PATH_RE.match(request.path)
-    if match and request.method == "POST" and 200 <= response.status_code < 300:
-        try:
-            conversation_id = int(match.group(1))
-            if not is_e2ee_conversation(conversation_id):
-                return response
-            payload = safe_message_payload(response.get_json(silent=True))
-            if payload and payload.get("conversation_id") == conversation_id:
-                # PostgreSQL has already committed the message. With Redis,
-                # hand fan-out to the durable stream; without Redis retain the
-                # single-instance direct transport fallback.
-                if REDIS_URL:
-                    enqueue_chat_event(
-                        event="chat:message",
-                        conversation_id=conversation_id,
-                        payload=payload,
-                    )
-                else:
-                    socketio.emit("chat:message", payload, to=room_for(conversation_id))
-        except Exception:
-            app.logger.exception("Realtime message broadcast failed")
-    return response
-
-
-@app.after_request
-def broadcast_message_update_response(response):
-    """Broadcast successful persisted message edits/deletes to other participants."""
-    match = MESSAGE_ITEM_PATH_RE.match(request.path)
-    if match and request.method in {"PATCH", "DELETE"} and 200 <= response.status_code < 300:
-        try:
-            conversation_id = int(match.group(1))
-            message_id = int(match.group(2))
-            payload = safe_message_payload(response.get_json(silent=True))
-            if payload and payload.get("id") == message_id and payload.get("conversation_id") == conversation_id:
-                update_payload = {
-                    "conversation_id": conversation_id,
-                    "message_id": message_id,
-                    "deleted": request.method == "DELETE",
-                }
-                if REDIS_URL:
-                    enqueue_chat_event(
-                        event="chat:message-updated",
-                        conversation_id=conversation_id,
-                        payload=update_payload,
-                    )
-                else:
-                    socketio.emit(
-                        "chat:message-updated",
-                        update_payload,
-                        to=room_for(conversation_id),
-                        include_self=False,
-                    )
-        except Exception:
-            app.logger.exception("Realtime message update broadcast failed")
-    return response
-
-
-@app.after_request
-def normalize_chat_timestamps(response):
-    """Expose database UTC timestamps with an explicit UTC offset.
-
-    ChatMessage.created_at is stored as a naive UTC datetime for compatibility
-    with the existing schema. Sending that value as a naive ISO string makes
-    browsers interpret it as local time, which shifts the displayed chat time.
-    Only chat-message payloads are normalized here; the stored value is not
-    changed and the existing database schema remains untouched.
-    """
-    if request.method != "GET" or not re.match(r"^/chats/\d+/messages(?:/search)?$", request.path):
-        return response
-    if not response.is_json:
-        return response
-    try:
-        payload = response.get_json(silent=True)
-        if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list):
-            return response
-        changed = False
-        for message in payload["messages"]:
-            if not isinstance(message, dict):
-                continue
-            for field in ("created_at", "edited_at"):
-                value = message.get(field)
-                if not isinstance(value, str) or not value:
-                    continue
-                try:
-                    parsed = datetime.fromisoformat(value)
-                except ValueError:
-                    continue
-                if parsed.tzinfo is None:
-                    message[field] = parsed.replace(tzinfo=timezone.utc).isoformat()
-                    changed = True
-        if changed:
-            response.set_data(__import__("json").dumps(payload, separators=(",", ":")))
-            response.headers["Content-Type"] = "application/json"
-    except Exception:
-        app.logger.exception("Chat timestamp normalization failed")
-    return response
 
 
 if __name__ == "__main__":
