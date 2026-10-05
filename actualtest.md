@@ -729,3 +729,65 @@ Cause: when Compose executes `python scripts/test_redis_realtime_client_runtime.
 This was a test-harness import-path defect, not a realtime/runtime failure. The script was corrected to add the repository root to `sys.path` before importing the application modules.
 
 The distributed realtime assertions have **not** been scored yet. Re-run the same gate after refreshing `main`.
+
+
+## 2026-10-05 — Cross-process realtime client delivery gate passed
+
+### Exact command
+
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_redis_realtime_client_runtime.py
+
+### Exact result
+
+    PASS: real Socket.IO client connected to the separate realtime process
+    PASS: authenticated client joined the real database-backed conversation
+    PASS: Redis Stream -> chat-worker -> Redis Socket.IO queue -> realtime process -> client delivered chat:message
+    PASS: Redis stream entry 1791205395549-0 was acknowledged
+
+### What this proves
+
+The final Redis-backed cross-process realtime delivery gate is now **GREEN**.
+
+This test exercised the actual distributed path:
+
+    real Redis Stream
+        ↓
+    real chat_event_worker.py
+        ↓
+    Redis Socket.IO message queue
+        ↓
+    separate realtime container
+        ↓
+    real authenticated Socket.IO client
+
+The client joined a real PostgreSQL-backed conversation, the controlled event traversed the worker and Redis Socket.IO queue, and the connected client received the expected `chat:message`. The Redis Stream entry was also acknowledged.
+
+This closes the previously unproven browser-facing distributed realtime hop for the tested single-message path.
+
+### Important boundary
+
+This is strong local Docker evidence, not proof of a public production deployment under internet load. It does prove the complete local multi-process Redis/realtime/client chain works in the production-style Compose architecture.
+
+It does not by itself prove browser behavior in every frontend state, high-load behavior, external network conditions, or production-provider configuration.
+
+### Current realtime evidence
+
+- Full local integration suite: **74 passed, 0 failed, 3375 warnings — GREEN**
+- Focused authenticated realtime runtime: **9 passed in 2.98s — GREEN**
+- Focused calling runtime: **4 passed in 3.31s — GREEN**
+- Redis-backed chat-worker gate: **GREEN**
+- Redis-backed cross-process realtime client delivery: **GREEN**
+
+### Important debugging lesson
+
+The first execution failed before reaching any realtime assertion because the container contained an older copy of the test script and raised:
+
+    ModuleNotFoundError: No module named 'app'
+
+The repository and local checkout already contained the fix, so we rebuilt the app image with:
+
+    docker compose -f docker-compose.vps.yml build --no-cache app
+
+After force-recreating the app, realtime, and chat-worker containers, the container contained the corrected import path and the actual distributed test passed.
+
+This is a useful source-of-truth lesson: when Git contains the expected code but a container executes different code, inspect the code inside the running image before diagnosing application behavior.
