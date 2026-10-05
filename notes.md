@@ -1269,3 +1269,12 @@ The **3375 warnings are not failed tests**. Most are deprecation warnings for `d
 ### Current status
 
 The full local QA gate is **GREEN**. The next unresolved release gate remains the real browser-to-browser WebRTC test; after that, continue with storage/data-integrity and controlled external-provider verification.
+
+
+## Browser WebRTC gate — first host run (2026-10-05)
+- The first real-host run reached three green setup checkpoints: fixture creation, independent browser authentication, and caller conversation navigation with callee remaining on Home.
+- It then failed while waiting for the caller's real `Start voice call` control (30s Playwright timeout).
+- This is currently classified as a **test/render synchronization failure**, not as proof that WebRTC signaling or media is broken. The call button is rendered conditionally after the conversation detail and peer identity are loaded, while the test previously used only a fixed 1.2s delay.
+- `scripts/test_browser_webrtc_runtime.py` was hardened on `main` to wait explicitly for that control for up to 15s and emit diagnostic caller UI text/buttons if it remains absent.
+- Commit: `aa67d88d326e4518606197d4569ffd0cf8ec427b`.
+- Next step is to rerun the browser gate; do not classify the WebRTC path green until the real call reaches Connected and both browsers expose live remote audio tracks.
