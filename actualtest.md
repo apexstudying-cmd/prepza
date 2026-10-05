@@ -635,3 +635,37 @@ This result uses `REDIS_URL=memory://` because the focused Flask-SocketIO test c
 The next test must target the **actual Redis-backed Compose path**, including the running Redis service and dedicated chat worker. We should not add duplicate application assertions. The purpose is to establish whether the cross-process delivery/worker path works with the real `redis://redis:6379/0` configuration.
 
 No paid infrastructure or production deployment is involved.
+
+
+## 2026-10-05 — Redis-backed chat-worker runtime gate prepared
+
+The next realtime gate is deliberately **not** another in-process Socket.IO test.
+
+Added:
+
+- scripts/test_redis_chat_worker_runtime.py
+
+This focused runtime check requires a real redis:// or rediss:// connection and starts the actual chat_event_worker.py process with isolated Redis Stream/group names.
+
+It verifies:
+
+1. the worker creates its real Redis consumer group;
+2. a chat event is placed on the Redis Stream;
+3. the real worker consumes the event;
+4. the worker acknowledges the Stream entry;
+5. the worker publishes the resulting chat:message event to the prepza-realtime Socket.IO Redis channel for the correct conversation room.
+
+This is stronger than the existing memory:// Socket.IO tests because it exercises the actual Redis Stream + worker process + Socket.IO Redis message-queue boundary.
+
+**Important limitation:** this still does not prove that a browser/client connected to a separate realtime process receives the event. That final client-facing multi-process hop remains a separate deployment-level check.
+
+**Execution status:** PREPARED / NOT YET EXECUTED.
+
+Exact intended command after refreshing local main:
+
+    docker compose -f docker-compose.vps.yml build app
+    docker compose -f docker-compose.vps.yml up -d --force-recreate app realtime chat-worker
+    docker compose -f docker-compose.vps.yml exec app python -m pip install -r requirements-test.txt
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_redis_chat_worker_runtime.py
+
+Do not classify the Redis-backed realtime gate as green until this command actually passes.
