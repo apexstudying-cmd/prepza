@@ -20,6 +20,12 @@ import time
 import uuid
 from contextlib import suppress
 
+# The script is executed as /app/scripts/<file> inside Compose, so Python's
+# default import path starts at /app/scripts rather than the repository root.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 import redis
 import socketio
 from werkzeug.security import generate_password_hash
