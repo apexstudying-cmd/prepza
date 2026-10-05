@@ -712,3 +712,65 @@ The question is now:
 **Can a realtime event/message traverse the actual Redis-backed multi-process architecture, with PostgreSQL remaining the durable source of truth and the dedicated chat worker consuming/recovering Redis Stream work correctly?**
 
 No paid infrastructure, VPS migration, GPU purchase, or production deployment is part of this gate.
+
+
+## 2026-10-05 — Prepared the real Redis chat-worker gate
+
+### What we changed
+
+We moved to the next realtime question: **does the actual Redis-backed background worker path work, rather than only the in-process Socket.IO test path?**
+
+I added:
+
+    scripts/test_redis_chat_worker_runtime.py
+
+The script starts the real chat_event_worker.py process with isolated Redis Stream/group names, puts a controlled chat event into the real Redis Stream, and waits for two pieces of evidence:
+
+- the worker acknowledges the Redis Stream entry;
+- the worker publishes the corresponding chat:message event onto the prepza-realtime Socket.IO Redis channel for the correct room.
+
+### Why this matters
+
+The previous focused realtime result was:
+
+**9 passed in 2.98s**
+
+but it deliberately used:
+
+    REDIS_URL=memory://
+
+That proved authenticated Socket.IO behavior and realtime authorization, but it did not prove the production-style Redis Stream/worker path.
+
+The new test targets that missing boundary.
+
+### What I learned
+
+A realtime architecture can have several separate hops:
+
+    PostgreSQL persistence
+        ↓
+    Redis Stream
+        ↓
+    chat-worker
+        ↓
+    Socket.IO Redis message queue
+        ↓
+    realtime server
+        ↓
+    connected browser
+
+A test must say exactly which hops it proves. We should not call the entire chain green just because one in-process Socket.IO test passes.
+
+### Current status
+
+**Redis-backed worker gate: PREPARED / NOT YET EXECUTED.**
+
+After refreshing local main, run the standard rebuild/install loop and then:
+
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_redis_chat_worker_runtime.py
+
+The final browser-facing multi-process delivery check will come after this worker/Redis gate.
+
+### Interview-ready explanation
+
+> I separated the realtime tests by boundary. The first suite verifies authenticated Socket.IO behavior in-process. The next runtime test starts the real Redis-backed chat worker, injects an event into a Redis Stream, verifies acknowledgement, and verifies publication onto the Socket.IO Redis channel. This lets me prove each distributed-system hop instead of claiming the whole architecture works from a single test.
