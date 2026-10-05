@@ -1199,3 +1199,46 @@ The first local rebuild after the global calling redesign exposed an important r
 This was not a Docker, pnpm, or dependency failure. `pnpm install --frozen-lockfile` completed successfully; the failure occurred inside the project's own prebuild transformation chain. The transformer has now been updated to recognize the redesigned incoming-call handler and to skip duplicate history insertion on subsequent runs. This is exactly the kind of source-of-truth reconciliation the local production-style build is intended to catch.
 
 Do not treat the containers started after the failed build as proof of the new frontend. Rebuild the app image after refreshing `main`, then run the frontend build and browser gate again.
+
+## 2026-10-05 — Lesson: the source-transformer build gate is now green
+
+### What happened
+
+After the previous calling redesign, the Docker build had failed inside the frontend prebuild chain with:
+
+    CALL_HISTORY_FAILED: accept handler missing
+
+We refreshed the checkout to origin/main and rebuilt the app image. The current commit is **c09c7eb** (fix global call realtime listener dependency). The complete Docker build finished successfully: **22/22 steps**, including the frontend command:
+
+    pnpm install --frozen-lockfile && pnpm run build
+
+The final image was exported as prepza-app:latest.
+
+### Why it mattered
+
+The failure was caused by drift between a source transformation script and the redesigned CallExperience.tsx. That meant the code could look valid while the actual production-style build could still fail. The successful rebuild proves that this source-transformer mismatch is no longer blocking the image build.
+
+### What I learned
+
+A build pipeline can contain more than the compiler/bundler. Prepza's frontend build also runs repository-specific transformation scripts. Those scripts are part of the real source-to-runtime contract and must remain compatible with source-code refactors.
+
+A simple mental model is:
+
+    source code -> prebuild transformations -> Vite build -> Docker runtime image
+
+If any stage breaks, the application is not deployable even when the TypeScript itself looks reasonable.
+
+### Evidence
+
+- git reset --hard origin/main reached c09c7eb.
+- Docker reported [+] build 1/1 and Image prepza-app Built.
+- The frontend build step completed rather than stopping at CALL_HISTORY_FAILED.
+- Runtime image creation and export completed successfully.
+
+### Interview-ready explanation
+
+> After redesigning the calling UI, the Docker build exposed a source-transformer compatibility problem. I traced the failure to the prebuild transformation layer rather than Docker or pnpm. After reconciling the transformer with the new source structure, I rebuilt from the exact main commit and verified the full 22-step image build succeeded. I still treat runtime and browser tests separately because a build proves packaging, not behavior.
+
+### Next step
+
+Recreate the app/realtime/chat-worker services from the newly built image, then run the full local QA and the real browser WebRTC gate. The browser calling gate remains **NOT YET PROVEN** until it actually establishes browser-to-browser media.
