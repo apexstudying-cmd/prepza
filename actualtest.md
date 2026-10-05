@@ -886,3 +886,34 @@ The browser gate now:
 
 The real browser WebRTC gate must be executed again after the corrected script is present locally and the Docker app stack is refreshed as needed.
 
+
+## 2026-10-05 — Browser WebRTC gate: corrected harness for session and cleanup
+
+The next browser run exposed two more **test-harness** issues before WebRTC media could be evaluated:
+
+1. The local browser test used the numeric `http://127.0.0.1:5000` origin while the Flask application sets its session cookie as `Secure`. The test could therefore authenticate at the HTTP response level without reliably sending the session cookie on the follow-up `/me` request.
+2. The cleanup SQL was inside a Python f-string, so the dictionary expression `{"user_ids": user_ids}` was interpreted as an f-string formatting expression.
+
+### Corrections made on main
+
+The browser gate now:
+
+- defaults to `http://localhost:5000`, which is the appropriate local origin for browser testing with Secure cookies;
+- verifies the authenticated session by calling `/me` immediately after login;
+- returns the real authenticated user ID from that verification instead of making a second unauthenticated assumption;
+- escapes the cleanup dictionary braces correctly;
+- adds Playwright to `requirements-test.txt` so the Python browser-test dependency is part of the repository's test environment.
+
+Chromium itself remains a separately installed browser binary via:
+
+    python -m playwright install chromium
+
+We are intentionally keeping Chromium out of the production/app Docker image because this is a host-side browser integration test.
+
+### Status
+
+**CORRECTED / NOT YET EXECUTED.**
+
+The browser WebRTC gate still must pass before calling the calling gate green.
+
+The earlier failures remain classified as harness defects; no application WebRTC failure has yet been demonstrated.
