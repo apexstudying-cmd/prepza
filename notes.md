@@ -774,3 +774,50 @@ The final browser-facing multi-process delivery check will come after this worke
 ### Interview-ready explanation
 
 > I separated the realtime tests by boundary. The first suite verifies authenticated Socket.IO behavior in-process. The next runtime test starts the real Redis-backed chat worker, injects an event into a Redis Stream, verifies acknowledgement, and verifies publication onto the Socket.IO Redis channel. This lets me prove each distributed-system hop instead of claiming the whole architecture works from a single test.
+
+
+## 2026-10-05 — Real Redis chat-worker runtime gate passed
+
+### Exact command
+
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_redis_chat_worker_runtime.py
+
+### Exact result
+
+    PASS: real Redis chat worker consumed and acknowledged the event
+    PASS: worker published chat:message onto prepza-realtime for the conversation room
+    PASS: Redis stream entry 1791203715146-0 was processed
+
+### What this proves
+
+The dedicated Redis-backed chat-worker path is now **GREEN**.
+
+We proved the actual Docker Redis service was reachable, the real `chat_event_worker.py` consumed a controlled Redis Stream event, acknowledged it, and published the corresponding `chat:message` event onto the `prepza-realtime` Socket.IO Redis channel for the correct conversation room.
+
+This is stronger than the earlier `REDIS_URL=memory://` focused Socket.IO tests because it exercises the real background worker and Redis infrastructure.
+
+### What remains
+
+We still need to prove the final client-facing distributed hop:
+
+    Redis publication
+        ↓
+    separate realtime container
+        ↓
+    connected Socket.IO client
+
+Do not call the complete multi-process realtime path green until that test passes.
+
+### Next test
+
+A dedicated script was added:
+
+    scripts/test_redis_realtime_client_runtime.py
+
+Run it with:
+
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_redis_realtime_client_runtime.py
+
+It creates disposable authenticated users and a real database-backed conversation, connects a real Socket.IO client to the separate `realtime` service, starts the real chat worker with an isolated Redis Stream/group, injects one controlled event, and verifies the client receives `chat:message`.
+
+This is deliberately a new boundary test, not a duplicate of the already-green 9-case authenticated Socket.IO suite.
