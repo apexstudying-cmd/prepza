@@ -1242,3 +1242,30 @@ If any stage breaks, the application is not deployable even when the TypeScript 
 ### Next step
 
 Recreate the app/realtime/chat-worker services from the newly built image, then run the full local QA and the real browser WebRTC gate. The browser calling gate remains **NOT YET PROVEN** until it actually establishes browser-to-browser media.
+
+
+## 2026-10-05 — Lesson: a green full QA suite means the rebuilt runtime still matches the application contracts
+
+### What happened
+
+After recreating the production-style Docker services from the newly successful app image, I ran the complete local QA runner. The disposable QA database was migrated with Alembic and the full suite finished with **74 passed, 0 failed in 54.89 seconds**.
+
+### Why it matters
+
+This is stronger evidence than simply seeing containers in a `Started` state. Container startup proves processes launched; the 74/74 suite proves the running application still satisfies a large set of real HTTP, database, authorization, economics, AI, E2EE, and realtime contracts after the rebuild.
+
+### Important economics lesson
+
+The suite includes `test_student_economics_entitlement_lifecycle_and_quota_truth`. That means the current green result is meaningful for the requirement that Prepza's Free/Plus/Pro entitlement lifecycle and remaining AI quota are enforced according to the tested contract, including expiry/future-start boundaries and per-request ceilings. It does **not** mean live Paystack fulfillment, live OpenAI billing, or every production provider integration has been proven.
+
+### Warning interpretation
+
+The **3375 warnings are not failed tests**. Most are deprecation warnings for `datetime.utcnow()`; there is also legacy SQLAlchemy `Query.get()` usage. These should become technical-debt cleanup work, but they are not a reason to mark this QA run red.
+
+### Interview-ready explanation
+
+> After rebuilding and recreating the production-style services, I ran the full local integration suite against a disposable PostgreSQL QA database. Alembic upgraded the database successfully and all 74 collected cases passed. That gives me evidence that the rebuilt runtime still satisfies the application's route, authorization, economics, AI, E2EE, and realtime contracts. I keep the browser WebRTC and external-provider gates separate because passing integration tests does not prove real browser media or live third-party services.
+
+### Current status
+
+The full local QA gate is **GREEN**. The next unresolved release gate remains the real browser-to-browser WebRTC test; after that, continue with storage/data-integrity and controlled external-provider verification.
