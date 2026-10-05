@@ -1190,3 +1190,12 @@ The first implementation pass moved CallExperience to the app shell, removed the
 The backend currently rejects call invites unless the conversation contains exactly two active participants. Therefore I am not pretending group calling is implemented yet. The next design phase should specify participant selection, add-person behavior, group call state, call history, and the server-side call state model before implementing group calls.
 
 Current status: redesign committed to main; local build/browser verification still pending.
+
+
+## 2026-10-05 — Build failure from source-transformer drift
+
+The first local rebuild after the global calling redesign exposed an important repository pattern: the frontend build runs many source transformation scripts before Vite. `apply_call_history.py` still searched for the old one-line `call:incoming` handler and therefore stopped the build with `CALL_HISTORY_FAILED: incoming handler missing`.
+
+This was not a Docker, pnpm, or dependency failure. `pnpm install --frozen-lockfile` completed successfully; the failure occurred inside the project's own prebuild transformation chain. The transformer has now been updated to recognize the redesigned incoming-call handler and to skip duplicate history insertion on subsequent runs. This is exactly the kind of source-of-truth reconciliation the local production-style build is intended to catch.
+
+Do not treat the containers started after the failed build as proof of the new frontend. Rebuild the app image after refreshing `main`, then run the frontend build and browser gate again.
