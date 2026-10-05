@@ -234,6 +234,15 @@ def main():
                 redis_client.xgroup_destroy(STREAM, GROUP)
 
             db.session.rollback()
+            if conversation_id is not None:
+                with suppress(Exception):
+                    ConversationParticipant.query.filter_by(
+                        conversation_id=conversation_id
+                    ).delete(synchronize_session=False)
+                with suppress(Exception):
+                    Conversation.query.filter_by(id=conversation_id).delete(
+                        synchronize_session=False
+                    )
             for user in users.values():
                 with suppress(Exception):
                     db.session.delete(user)
