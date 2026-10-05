@@ -218,3 +218,103 @@ A second interview point:
 - Reinstall the test requirements as part of the standard QA loop.
 - Run the full real-world QA suite again.
 - If the five realtime failures disappear, separately verify the Redis-backed production realtime path before marking the realtime gate green.
+
+
+## 2026-10-05 — Latest QA result and chat scaling lesson
+
+### Latest standard QA evidence
+
+The standard Docker QA loop was rerun from origin/main at commit 1297c66. The migration revision-ID problem is fixed: Alembic now reaches "Alembic upgrade head: OK". The full suite reached 70 passed, 4 failed, 3377 warnings in 41.92s.
+
+Realtime/E2EE is therefore NOT GREEN yet.
+
+The four failures currently reduce to three important areas:
+
+1. Duplicate Flask routes: GET /study-time/offline-baselines and POST /study-time/offline-sync are each registered by two endpoint functions. This teaches that the final Flask url_map must be checked, not just individual route definitions.
+2. Late Flask after_request setup: realtime_server.py still registers an after_request hook when imported after the app has already handled a request. Routes were moved into startup, but this hook is another form of late application setup. The correct lifecycle is: create/configure app -> register routes/hooks/extensions -> serve requests.
+3. Plaintext E2EE enforcement: the direct E2EE endpoint accepted {"body": "THIS IS PLAINTEXT"} with HTTP 201 when the contract expects HTTP 409 before persistence. We must trace authentication -> membership -> E2EE validation -> persistence and find the bypass.
+
+The two socket failures are symptoms of the same late after_request problem, so they should not be counted as two unrelated root causes.
+
+### Alembic revision-ID lesson
+
+The earlier migration failure happened because the revision ID was longer than the 32-character storage available to Alembic's version table. We shortened 20261005_chat_attachment_source_document to 20261005_chat_attach_source_doc. The new run reaching Alembic upgrade head: OK proves that specific migration bookkeeping failure is resolved.
+
+### Future chat scaling design — not implemented yet
+
+We should not delete the server copy of a chat message immediately after delivery. Delivery means a device received an event; it does not prove that the message is durably recoverable. A browser can crash, IndexedDB can be cleared or evicted, a device can be lost, or the user can sign in on another device.
+
+The safer mental model is:
+
+message -> PostgreSQL encrypted history + recipient device IndexedDB
+
+PostgreSQL remains the durable source of truth. IndexedDB is the local cache/offline layer. A future encrypted backup should be created on the device and encrypted before leaving it; email can be a destination for ciphertext, not the chat database.
+
+### Message partitioning, explained simply
+
+Partitioning means splitting one very large logical message dataset into smaller physical sections so the database can manage it more efficiently. Think of one giant library being divided into labelled rooms. The application can still treat it as one logical collection.
+
+A future time-based example could look like:
+
+messages_2026_10
+messages_2026_11
+messages_2026_12
+messages_2027_01
+
+We should NOT choose the partition key just because it sounds scalable. First measure:
+
+- messages created per day/month;
+- average and percentile message/ciphertext size;
+- total table and index storage growth;
+- which history ranges users actually read;
+- query latency as the dataset grows;
+- which conversations are hot versus rarely accessed;
+- backup and restore time.
+
+Those measurements tell us whether partitioning is useful and what key makes sense. For example, if most reads are for recent messages, time-based partitions may fit well. If users constantly read very old conversations, aggressive time-based strategies may be less helpful.
+
+### Archival, explained simply
+
+Archival means moving old, rarely accessed data out of the hottest storage path while keeping it recoverable. Think of moving old books from the library's main room into a labelled storage room.
+
+A future flow could be:
+
+active PostgreSQL data -> measured age/access threshold -> colder/cheaper archive storage -> optional deletion after an explicit retention policy
+
+Again, the threshold should be measured, not guessed. We should observe storage growth, access frequency, query latency, and backup costs before deciding something like "archive after 90 days."
+
+### Partitioning versus archival
+
+Partitioning mainly organizes a large database dataset into smaller pieces. Archival mainly moves cold data to a cheaper storage tier. They can be combined. Deletion is different: it permanently removes data under a defined policy.
+
+### Why IndexedDB cannot be the only permanent chat store
+
+Browser storage is useful for recent history and offline queues, but users can clear site data and browsers can impose storage limits. A good future design is to keep recent/frequently used history locally, keep unsent messages locally until the server confirms persistence, and fetch older history from the durable server store when needed.
+
+### E2EE backup lesson
+
+Do not email raw chat history. For an E2EE backup, encrypt the backup on the user's device before it is uploaded, emailed, or stored elsewhere. The backup destination should receive ciphertext. Key recovery must also be designed explicitly: if the only decryption key is lost with a device, the backup may be useless.
+
+### Engineering principle learned
+
+Scale architecture should be driven by measured workload, not fear of future scale. The sequence is: prove the current system -> launch/test -> measure volume, access patterns, storage and latency -> identify the real bottleneck -> choose partitioning, archival, object storage or retention policy -> load-test -> migrate carefully.
+
+### Interview-ready explanations
+
+**Why keep a server copy?** Delivery acknowledgement proves receipt of an event, not durable recoverability. I would keep encrypted server history as the durable source of truth and use IndexedDB as a local cache/offline layer.
+
+**Partitioning:** I would partition a large message dataset only after measuring write volume, read patterns, index size, storage growth and query performance, then choose a partition key that matches the workload.
+
+**Archival:** I would move cold, rarely accessed history to cheaper storage based on measured access and storage patterns while preserving a recovery path.
+
+**E2EE backup:** I would encrypt the backup on the client before it leaves the device, so email or cloud storage only sees ciphertext, and I would design key recovery explicitly.
+
+**Overall:** I do not optimize for hypothetical scale. I instrument the system, measure the workload, identify the bottleneck, and then choose the appropriate scaling technique.
+
+### Current audit status
+
+Economics / entitlement truth — GREEN
+Authentication / authorization — GREEN
+AI generation runtime + frontend contract — GREEN
+Realtime + E2EE — NOT GREEN; 4 test failures remain
+Later gates remain blocked until earlier required gates are proven.
