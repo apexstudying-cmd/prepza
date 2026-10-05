@@ -562,3 +562,94 @@ The expected first verification mode is `REDIS_URL=memory://` because Flask-Sock
 - Production-style Redis path — **verification pending**
 - Calling runtime — **verification pending after fixture fix**
 - Storage/data integrity — BLOCKED until required realtime/calling verification is complete
+
+
+## 2026-10-05 — Authoritative QA inventory and release-gate discipline
+
+### What we did
+
+We stopped treating the QA work as a collection of commands that I have to remember manually. We inventoried the existing tests and separated them into:
+
+- the **74-case full local integration suite**;
+- the focused **authenticated realtime runtime** test;
+- the focused **authenticated calling runtime** test;
+- the future **Redis-backed production-style** verification;
+- later external-provider and deployed-environment gates.
+
+The full suite already contains 10 test files and 71 test functions, producing 74 collected cases because the generation-ceiling test is parametrized across four material types.
+
+### Current evidence
+
+- Full local QA: **74 passed, 0 failed, 3375 warnings**.
+- Calling runtime: **4 passed in 3.31s** after replacing fixed/hard-coded runtime identities with disposable database-backed fixtures and preserving real authentication.
+- Focused realtime runtime: the command has been part of the verification sequence, but the exact latest numeric result is not preserved in the current notes. We will not invent one. This is an evidence-quality lesson in itself.
+- Redis-backed runtime path: still a distinct gate because the full local suite intentionally sets `REDIS_URL=memory://`.
+
+### Why we are not simply adding more tests
+
+The repository already has substantial coverage. The problem is not “more test files” by itself.
+
+The real goal is:
+
+**student action -> frontend -> HTTP/Socket.IO -> Flask -> service logic -> PostgreSQL/storage -> background worker -> response/realtime event**
+
+A master QA command should therefore orchestrate existing tests and add only the missing true end-to-end behavior. Duplicating the same assertions in another file would make maintenance harder without increasing confidence.
+
+### New QA rule I learned
+
+A test can be:
+
+- implemented;
+- executed;
+- passed;
+- production-proven.
+
+Those are four different claims.
+
+For example, the 74/74 suite proves strong local integration behavior, but it deliberately uses an in-process Redis mode for its realtime tests. That does not prove the separate multi-process Redis/chat-worker deployment path.
+
+### The release gate we are building
+
+The eventual single command will report these gates:
+
+1. Environment/database
+2. Authentication/session
+3. Authorization/ownership
+4. Economics
+5. AI runtime
+6. Realtime/E2EE
+7. Calling
+8. Storage/data integrity
+9. PWA/offline
+10. Failure/concurrency
+
+Each gate should reuse the repository's existing focused tests. The overall result is GREEN only when every required gate has passing evidence.
+
+### Important economics lesson
+
+The economics gate is not merely “the plan constants are correct.”
+
+It must trace the student's actual entitlement lifecycle:
+
+**plan selected -> payment/provider result -> fulfillment/activation -> allowance granted -> AI request -> exact usage charged -> remaining allowance -> hard stop at limit -> expiry/future-start boundary**
+
+That is the level of evidence needed for the question: “Does a paying student actually receive exactly what they paid for, and does it end exactly when the contract says it ends?”
+
+### Important runtime lesson
+
+The focused calling test exposed a real source-of-truth problem: frontend calling behavior and test expectations can survive while backend signaling handlers disappear. The correct response was to restore the real authenticated backend contract, not to weaken the test.
+
+The focused runtime fixtures also taught another lesson: tests should create the database identities they depend on. Hard-coded user IDs and session versions are not stable test fixtures.
+
+### Next step
+
+The next implementation step is to create the single master local runtime QA orchestrator around this inventory. It should:
+
+- run the existing suites in a known order;
+- print a named result for each gate;
+- stop or continue according to dependency rules;
+- preserve exact command/results;
+- distinguish skipped, failed, and passed gates;
+- avoid duplicating business assertions.
+
+Only after that local gate is stable should we treat external-provider QA and deployed launch smoke as the next layers.
