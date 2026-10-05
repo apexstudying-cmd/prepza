@@ -967,3 +967,37 @@ The likely local sequence after the browser gate is:
 5. Then PWA/offline browser behavior and failure/concurrency evidence where still missing.
 
 No VPS migration or paid infrastructure change is part of this work.
+
+
+## 2026-10-05 — Browser WebRTC gate hit test-harness defects
+
+The first real browser execution was useful even though it did not reach WebRTC.
+
+It proved:
+
+- the host Playwright/Chromium setup works;
+- the script can create real disposable users/conversation data;
+- two independent browser contexts can authenticate against the running Prepza app.
+
+It then failed on an incorrect assumption in the test:
+
+    KeyError: 'id'
+
+The cleanup code also failed because login created `user_key` records that must be removed before deleting the disposable users.
+
+I corrected both issues directly on `main` in:
+
+    f3eb880c718f1f564bca83829bb62f3fddbd2786
+
+### Important interpretation
+
+This is not evidence that calls fail. It is not evidence that calls pass either. The script stopped before the actual WebRTC negotiation/media portion.
+
+Current calling gate remains:
+
+- authenticated calling/signaling: **GREEN (4/4)**
+- real browser-to-browser media: **NOT YET PROVEN**
+
+### Next action
+
+Refresh local `main` so the corrected browser gate is inside the working checkout, then rerun the browser gate. Do not proceed to Storage/Data Integrity until this gate either passes or exposes a real application defect that needs fixing.
