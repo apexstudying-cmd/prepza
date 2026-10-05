@@ -197,23 +197,12 @@ def main() -> int:
                 login(callee, fixture["callee_email"], fixture["password"])
                 print("PASS: two independent real browser contexts authenticated")
 
-                # CallExperience is mounted by the chat shell and listens for
-                # this same event used by the real Start voice call UI button.
-                caller.evaluate(
-                    """detail => window.dispatchEvent(
-                        new CustomEvent('prepza-start-call', { detail })
-                    )""",
-                    {
-                        "conversationId": fixture["conversation_id"],
-                        "peerId": None,
-                        "peerName": "Browser callee",
-                        "kind": "voice",
-                    },
-                )
-
                 # The callee's user ID is needed by the actual signaling
                 # payload. Fetch it from the authenticated /me response.
                 callee_id = callee.request.get(f"{BASE_URL}/me").json()["id"]
+
+                # CallExperience is mounted by the chat shell and listens for
+                # this same event used by the real Start voice call UI button.
                 caller.evaluate(
                     """detail => window.dispatchEvent(
                         new CustomEvent('prepza-start-call', { detail })
@@ -229,8 +218,8 @@ def main() -> int:
                 callee.get_by_role("button", name="Accept call").wait_for(timeout=10000)
                 callee.get_by_role("button", name="Accept call").click()
 
-                caller.get_by_text(lambda value: value and "Connected" in value).wait_for(timeout=20000)
-                callee.get_by_text(lambda value: value and "Connected" in value).wait_for(timeout=20000)
+                caller.get_by_text("Connected", exact=False).first.wait_for(timeout=20000)
+                callee.get_by_text("Connected", exact=False).first.wait_for(timeout=20000)
                 print("PASS: both real browsers reached WebRTC Connected state")
 
                 deadline = time.time() + 10
