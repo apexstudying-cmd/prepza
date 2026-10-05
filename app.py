@@ -10280,3 +10280,13 @@ import admin_reconciled_ambassadors  # noqa: F401 - decorator registration
 import opportunity_expiry_runtime  # noqa: F401 - decorator registration
 from opportunity_expiry_runtime import _sweep_expired_opportunities_safe
 
+
+
+# Register routes that must exist during application construction. Keeping
+# registration here avoids a secondary entrypoint adding routes after Flask
+# has already served its first request.
+from offline_activity_routes import register_offline_activity_routes
+from e2ee_production_hardening import register_e2ee_production_hardening
+
+register_offline_activity_routes(app, db)
+register_e2ee_production_hardening(app, db, Conversation, ConversationParticipant)
