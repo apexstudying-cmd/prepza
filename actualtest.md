@@ -1101,3 +1101,14 @@ The warnings are not test failures. They are primarily existing technical-debt w
 - External provider/storage recovery: **NOT YET PROVEN**
 
 The full QA result does not replace the separate browser WebRTC gate or the later storage/data-integrity and real-provider gates.
+
+
+## Browser WebRTC gate — first host run (2026-10-05)
+- Command: `python scripts/test_browser_webrtc_runtime.py`
+- Result: **RED — test harness timing failure before call initiation**.
+- Proven before failure: disposable users/conversation created; two independent browser contexts authenticated; caller opened the real conversation while callee remained on Home.
+- Failure: Playwright timed out waiting 30s for the real `Start voice call` button.
+- Interpretation: this does not yet prove a WebRTC/backend failure. The test was using a fixed 1.2s post-navigation wait before looking for a control whose rendering depends on the asynchronously loaded conversation detail/participant state.
+- Fix on `main`: browser gate now explicitly waits up to 15s for the real call button and dumps caller buttons/body text if it is still absent, so the next run distinguishes a render race from a genuine missing-control/data problem.
+- Commit: `aa67d88d326e4518606197d4569ffd0cf8ec427b`.
+- Next required run: `python scripts/test_browser_webrtc_runtime.py` after syncing to `origin/main`.
