@@ -1068,3 +1068,36 @@ This proves the current source tree can pass the Dockerized frontend prebuild/tr
 ### Lesson recorded
 
 A successful Docker build is an important boundary check, but it is not a substitute for runtime testing. The image is now proven buildable; the next step is to recreate the runtime services from this image and rerun the relevant QA/browser gates.
+
+
+## 2026-10-05 — Full local QA after production-style service recreation: GREEN
+
+### Command executed
+
+    docker compose -f docker-compose.vps.yml exec app python tools/run_local_qa.py
+
+### Result
+
+- QA database: `prepza_qa` (existing disposable database retained for inspection)
+- Alembic migrations: **OK**
+- Full real-world and route semantic QA suite: **74 passed, 0 failed**
+- Runtime: **54.89 seconds**
+- Warnings: **3375**
+
+### Interpretation
+
+This is a **GREEN full local integration/regression result** after recreating the production-style application, realtime, and chat-worker services from the successfully rebuilt image.
+
+The suite exercised authentication/session boundaries, authorization and organisation isolation, route dispatch, economics/entitlements, Paystack contract behavior, AI generation identity/reuse/ceilings, E2EE chat, realtime membership/delivery, retry idempotency, offline recovery, and Redis/chat-worker deployment contracts.
+
+The warnings are not test failures. They are primarily existing technical-debt warnings around deprecated `datetime.utcnow()` usage and one legacy SQLAlchemy `Query.get()` call.
+
+### Release-gate interpretation
+
+- Full local QA: **GREEN (74/74)**
+- Docker image build: **GREEN**
+- PostgreSQL/Redis/app/realtime/chat-worker startup: **GREEN**
+- Real browser-to-browser WebRTC media: **NOT YET PROVEN**
+- External provider/storage recovery: **NOT YET PROVEN**
+
+The full QA result does not replace the separate browser WebRTC gate or the later storage/data-integrity and real-provider gates.
