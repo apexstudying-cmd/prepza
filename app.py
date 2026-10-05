@@ -6727,123 +6727,6 @@ def study_time_heartbeat():
     })
 
 
-@app.route("/study-time/offline-baselines")
-@login_required
-def study_time_offline_baselines():
-    """Return server totals for exact Nairobi calendar dates before offline reconciliation."""
-    user_id = session.get("user_id")
-    raw_dates = (request.args.get("dates") or "").split(",")
-    dates = []
-    for raw in raw_dates:
-        value = raw.strip()
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-            try:
-                parsed = datetime.strptime(value, "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            if parsed <= _study_local_date():
-                dates.append(parsed)
-    dates = sorted(set(dates))
-    totals = {}
-    if dates:
-        rows = db.session.query(
-            StudyTimeLog.activity_date,
-            db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0),
-        ).filter(
-            StudyTimeLog.user_id == user_id,
-            StudyTimeLog.activity_date.in_(dates),
-        ).group_by(StudyTimeLog.activity_date).all()
-        totals = {day.isoformat(): min(MAX_STUDY_TIME_SECONDS_PER_DAY, int(seconds or 0)) for day, seconds in rows}
-    return jsonify({
-        "server_total_seconds_by_date": {day.isoformat(): int(totals.get(day.isoformat(), 0)) for day in dates},
-        "timezone": PREPZA_STUDY_TIMEZONE,
-        "max_daily_seconds": MAX_STUDY_TIME_SECONDS_PER_DAY,
-    })
-
-
-@app.route("/study-time/offline-sync", methods=["POST"])
-@require_csrf
-def study_time_offline_sync():
-    """Merge local-first offline totals into the server using Nairobi dates and monotonic absolute targets."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-    data = request.get_json(silent=True) or {}
-    entries = data.get("entries")
-    if not isinstance(entries, list):
-        return jsonify({"error": "entries must be an array"}), 400
-
-    today = _study_local_date()
-    accepted = {}
-    server_totals = {}
-
-    for entry in entries[:90]:
-        if not isinstance(entry, dict):
-            continue
-        date_text = str(entry.get("date") or "").strip()
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_text):
-            continue
-        try:
-            activity_date = datetime.strptime(date_text, "%Y-%m-%d").date()
-        except ValueError:
-            continue
-        if activity_date > today:
-            return jsonify({"error": "Offline study dates cannot be in the future"}), 400
-
-        requested_total = max(0, min(
-            MAX_STUDY_TIME_SECONDS_PER_DAY,
-            int(entry.get("total_seconds") or 0),
-        ))
-        rows = db.session.query(
-            StudyTimeLog.feature,
-            StudyTimeLog.study_time_seconds,
-        ).filter(
-            StudyTimeLog.user_id == user_id,
-            StudyTimeLog.activity_date == activity_date,
-        ).all()
-        existing_total = min(
-            MAX_STUDY_TIME_SECONDS_PER_DAY,
-            sum(max(0, int(seconds or 0)) for _, seconds in rows),
-        )
-        offline_row = StudyTimeLog.query.filter_by(
-            user_id=user_id,
-            activity_date=activity_date,
-            feature="offline",
-        ).first()
-        non_offline_total = existing_total - (max(0, int(offline_row.study_time_seconds)) if offline_row else 0)
-        target_offline = max(0, requested_total - non_offline_total)
-        target_total = min(MAX_STUDY_TIME_SECONDS_PER_DAY, non_offline_total + target_offline)
-
-        if offline_row is None:
-            offline_row = StudyTimeLog(
-                user_id=user_id,
-                activity_date=activity_date,
-                feature="offline",
-                study_time_seconds=target_offline,
-                last_heartbeat_at=None,
-            )
-            db.session.add(offline_row)
-            applied = target_offline
-        else:
-            before = max(0, int(offline_row.study_time_seconds or 0))
-            if target_offline > before:
-                offline_row.study_time_seconds = target_offline
-                applied = target_offline - before
-            else:
-                applied = 0
-
-        accepted[date_text] = applied
-        server_totals[date_text] = target_total
-
-    db.session.commit()
-    return jsonify({
-        "server_total_seconds_by_date": server_totals,
-        "accepted_seconds_by_date": accepted,
-        "timezone": PREPZA_STUDY_TIMEZONE,
-        "max_daily_seconds": MAX_STUDY_TIME_SECONDS_PER_DAY,
-    })
-
-
 @app.route("/study-time")
 def study_time_summary():
     """
@@ -9394,6 +9277,7 @@ CHAT_MESSAGE_BODY_MAX = 20000
 CHAT_MESSAGE_CIPHERTEXT_MAX = 30000
 CHAT_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024
 CHAT_PAGE_SIZE = 50
+from chat_realtime_dispatch import dispatch_message, dispatch_message_update
 
 def _active_participant(conversation_id, user_id):
     return ConversationParticipant.query.filter_by(
@@ -9447,8 +9331,8 @@ def _serialize_chat_message(message):
         "body": message.body,
         "nonce": message.nonce,
         "is_deleted": bool(message.is_deleted),
-        "created_at": message.created_at.isoformat() if message.created_at else None,
-        "edited_at": message.edited_at.isoformat() if message.edited_at else None,
+        "created_at": (message.created_at.replace(tzinfo=timezone.utc).isoformat() if message.created_at and message.created_at.tzinfo is None else (message.created_at.isoformat() if message.created_at else None)),
+        "edited_at": (message.edited_at.replace(tzinfo=timezone.utc).isoformat() if message.edited_at and message.edited_at.tzinfo is None else (message.edited_at.isoformat() if message.edited_at else None)),
         "e2ee_key_epoch": int(message.e2ee_key_epoch or 0),
         "attachment": attachment_payload,
     }
@@ -9783,8 +9667,8 @@ def send_chat_message(conversation_id):
     if body and len(body)>CHAT_MESSAGE_CIPHERTEXT_MAX: return jsonify({"error":"Message is too large"}),400
     if nonce is not None and (not isinstance(nonce,str) or len(nonce)>64): return jsonify({"error":"Invalid message nonce"}),400
     if not body and not attachment_id: return jsonify({"error":"Message body or attachment is required"}),400
-    if conversation.e2ee_mode=="group_v1" and body and not nonce:
-        return jsonify({"error":"Encrypted group messages require a nonce"}),409
+    if conversation.e2ee_mode in {"direct_v1", "group_v1"} and body and not nonce:
+        return jsonify({"error":"Encrypted chat messages require a nonce"}),409
     attachment=None
     if attachment_id is not None:
         attachment=db.session.get(MessageAttachment,int(attachment_id))
@@ -9830,6 +9714,7 @@ def send_chat_message(conversation_id):
 
     conversation.updated_at=datetime.utcnow()
     db.session.commit()
+    dispatch_message(conversation_id, _serialize_chat_message(message))
     return jsonify(_serialize_chat_message(message)),201
 
 @app.post("/chats/<int:conversation_id>/study-documents")
@@ -9872,6 +9757,7 @@ def share_study_document_to_chat(conversation_id):
     attachment.message_id=message.id
     db.session.get(Conversation,conversation_id).updated_at=datetime.utcnow()
     db.session.commit()
+    dispatch_message(conversation_id, _serialize_chat_message(message))
     return jsonify(_serialize_chat_message(message)),201
 
 @app.post("/chats/<int:conversation_id>/attachments/<int:attachment_id>/study-hub")
@@ -9954,11 +9840,12 @@ def edit_chat_message(conversation_id,message_id):
     if not isinstance(body,str) or not body.strip() or len(body)>CHAT_MESSAGE_CIPHERTEXT_MAX: return jsonify({"error":"Invalid message body"}),400
     message.body=body.strip()
     message.edited_at=datetime.utcnow()
-    if conversation.e2ee_mode=="group_v1":
+    if conversation.e2ee_mode in {"direct_v1", "group_v1"}:
         nonce=(request.get_json(silent=True) or {}).get("nonce")
-        if not nonce: return jsonify({"error":"Encrypted group edits require a nonce"}),409
+        if not nonce: return jsonify({"error":"Encrypted chat edits require a nonce"}),409
         message.nonce=nonce; message.e2ee_key_epoch=int(conversation.key_epoch or 0)
     db.session.commit()
+    dispatch_message_update(conversation_id, message_id, False)
     return jsonify(_serialize_chat_message(message))
 
 @app.delete("/chats/<int:conversation_id>/messages/<int:message_id>")
@@ -9972,6 +9859,7 @@ def delete_chat_message(conversation_id,message_id):
         return jsonify({"error":"Message not found"}),404
     message.is_deleted=True; message.body=None; message.nonce=None; message.edited_at=datetime.utcnow()
     db.session.commit()
+    dispatch_message_update(conversation_id, message_id, True)
     return jsonify({"message":"Deleted"})
 
 @app.get("/chats/<int:conversation_id>/messages/search")
