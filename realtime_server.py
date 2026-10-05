@@ -10,9 +10,7 @@ import redis
 from app import app, db, Conversation, ConversationParticipant
 import chat_interactions  # noqa: F401 - registers additive chat metadata hooks
 from chat_event_queue import enqueue_chat_event
-from offline_activity_routes import register_offline_activity_routes
 import chat_group_routes  # noqa: F401 - registers multi-user chat-group membership routes
-from e2ee_production_hardening import register_e2ee_production_hardening
 
 # Socket.IO is the realtime transport; HTTP/database remains the source of truth.
 REDIS_URL = os.environ.get("REDIS_URL")
@@ -43,8 +41,6 @@ socketio = SocketIO(
     message_queue=REALTIME_REDIS_URL or None,
     channel="prepza-realtime",
 )
-register_offline_activity_routes(app, db)
-register_e2ee_production_hardening(app, db, Conversation, ConversationParticipant)
 MESSAGE_PATH_RE = re.compile(r"^/chats/(\d+)/messages$")
 MESSAGE_ITEM_PATH_RE = re.compile(r"^/chats/(\d+)/messages/(\d+)$")
 _socket_rooms = {}
