@@ -1106,3 +1106,30 @@ Change committed directly on `main`: `623e7ae4d06d8b9cacd3781f49f335f2b4977b05` 
 Result classification: **TEST-HARNESS FIX / REAL APP BEHAVIOR EXPLAINED**. The WebRTC browser-to-browser gate remains **NOT YET PROVEN** until the corrected fixture reaches the call UI and completes the actual media test.
 
 Important lesson: a successful `/login` response is not sufficient evidence that a real Prepza user has reached the authenticated application shell. The browser gate must satisfy the same onboarding prerequisites a real user must satisfy.
+
+
+## 2026-10-05 — Browser WebRTC gate: fixture error-formatting defect
+
+The latest browser WebRTC run did not reach Chromium, login, calling, or WebRTC. It stopped while creating the disposable database fixture with:
+
+    NameError: name 'university' is not defined
+
+This was another **test-harness defect**. The browser fixture is generated inside an outer Python f-string. The inner generated fixture contained an f-string error message using `{university.id}`. The outer f-string evaluated that expression immediately, before the generated fixture had executed its university lookup.
+
+So the important distinction is:
+
+- the real onboarding fix from the previous run remains valid;
+- the active-university/active-program lookup was not actually reached in this run because fixture source generation failed first;
+- this run provides no evidence for or against WebRTC, calling signaling, or browser media.
+
+The correction was committed directly on `main` as:
+
+    2a256a54628fa01a3059fc3ab385affd2e80c95c
+
+The error message now uses string concatenation instead of an inner f-string expression, so the generated fixture can execute the database lookup normally.
+
+### Current status
+
+**Browser WebRTC media: NOT YET PROVEN.**
+
+The next execution should be the same browser gate after refreshing to this commit. We should not move to the storage/data-integrity release gate until this browser call path either passes or exposes a genuine application defect.
