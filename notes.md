@@ -1153,3 +1153,18 @@ The correct next action is to initialize the local QA database using that existi
 **Browser-to-browser WebRTC media: NOT YET PROVEN.**
 
 The failure is classified as **LOCAL TEST-ENVIRONMENT PREREQUISITE**, not an application defect. Do not advance to the storage/data-integrity release gate until the browser call/media path passes or exposes a genuine application failure.
+
+
+## 2026-10-05 — Browser WebRTC gate: reference data fixed; call UI mount + cleanup defects exposed
+
+The local database was correctly initialized using `seed_universities_and_programs.py`: 103 active universities and 15,038 active programs now exist. This confirms the earlier reference-data blocker was only local test-environment initialization.
+
+The next browser run proved both disposable users could authenticate in independent Chromium contexts. It then timed out waiting for the callee's Accept button. The debug page was the authenticated Home screen, which led to a repository-level finding: `CallExperience` is mounted inside `WhatsAppChatExperience`, not globally on the Home shell. Therefore the browser fixture was authenticating correctly but was not opening the conversation route that mounts the incoming-call UI.
+
+The cleanup phase also found a real test-harness dependency: first-run browser use creates `study_streak`, so the disposable users cannot be deleted until those dependent rows are removed. That is a fixture cleanup issue, not a production FK defect.
+
+I fixed the browser gate on main to open the real conversation route in both contexts and to delete `study_streak` rows before deleting the disposable users.
+
+Commit: `32d58d6612731e8129546d49c302887b20c7b71a`.
+
+**Current release-gate status: Browser-to-browser WebRTC media NOT YET PROVEN.** The next run is the first clean attempt after these two harness corrections.
