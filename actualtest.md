@@ -978,3 +978,27 @@ No fake university/program data should be invented inside the browser test. The 
 ### Status
 
 **NOT YET PROVEN.** No browser/WebRTC assertion has run in this attempt. The blocker is local database reference-data initialization.
+
+
+### 2026-10-05 — Browser WebRTC gate: reference data fixed; call UI mount + cleanup defects exposed
+
+The local reference-data prerequisite is now satisfied using the repository's existing seed mechanism:
+
+    [DRY RUN] Would create 103 new universities.
+    [DRY RUN] Would create 15038 new programs.
+    Created 103 new universities.
+    Created 15038 new programs.
+    Active universities: 103
+    Active programs: 15038
+
+The browser gate then reached real browser authentication successfully, but timed out waiting for the callee's **Accept call** button. Diagnostics showed the callee was on the authenticated Home shell. Repository inspection confirmed the reason: `CallExperience` is mounted by `WhatsAppChatExperience`, so the test was dispatching the start-call event without opening the real conversation route where the call UI exists.
+
+The same run also exposed a test-fixture cleanup defect: first-run authenticated use creates a `study_streak` row, so deleting the disposable users directly violates `study_streak_user_id_fkey`.
+
+The browser gate was corrected on main to:
+- open `/chats/{conversation_id}` in both real browser contexts before starting the call;
+- remove dependent `study_streak` rows during disposable-user cleanup.
+
+Commit: `32d58d6612731e8129546d49c302887b20c7b71a`.
+
+**Status: NOT YET PROVEN.** The application has not yet passed the real browser-to-browser WebRTC media assertion. The latest timeout was a test-navigation prerequisite, not evidence that WebRTC media is broken.
