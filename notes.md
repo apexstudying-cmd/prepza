@@ -821,3 +821,20 @@ Run it with:
 It creates disposable authenticated users and a real database-backed conversation, connects a real Socket.IO client to the separate `realtime` service, starts the real chat worker with an isolated Redis Stream/group, injects one controlled event, and verifies the client receives `chat:message`.
 
 This is deliberately a new boundary test, not a duplicate of the already-green 9-case authenticated Socket.IO suite.
+
+
+### 2026-10-05 — Cross-process client test harness correction
+
+The first run of:
+
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_redis_realtime_client_runtime.py
+
+did not reach Redis, Socket.IO, authentication, or the realtime process. It stopped immediately with:
+
+    ModuleNotFoundError: No module named 'app'
+
+Root cause: Python's script import path was `/app/scripts`, but `app.py` lives at `/app/app.py`.
+
+This was a test harness defect. The script has been corrected to insert the repository root into `sys.path` before importing Prepza modules.
+
+Status remains **NOT YET PROVEN** for the final Redis → separate realtime process → real Socket.IO client hop. No production or paid infrastructure change was made.
