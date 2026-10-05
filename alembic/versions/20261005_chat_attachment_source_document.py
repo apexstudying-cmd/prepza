@@ -4,7 +4,7 @@ from __future__ import annotations
 from alembic import op
 
 
-revision = "20261005_chat_attachment_source_document"
+revision = "20261005_chat_attach_source_doc"
 down_revision = "20261004_ai_job_reconcile"
 branch_labels = None
 depends_on = None
