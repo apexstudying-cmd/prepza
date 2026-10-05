@@ -1,0 +1,453 @@
+# Prepza — Actual QA Test Record
+
+This file is the authoritative human-readable record of the **full local QA suite** run by `tools/run_local_qa.py`.
+
+It answers four questions exactly:
+
+1. How many tests are in the full suite?
+2. How many test users/roles does the suite create?
+3. Which test files are included?
+4. What does every test actually verify?
+
+## 1. Exact suite size
+
+The full QA runner currently executes **10 test files**.
+
+Those files contain:
+
+- **71 test functions** named `test_...`
+- **74 collected pytest test cases**
+- The difference is caused by one parametrized test:
+  - `test_generation_request_ceilings_are_enforced` runs for **4 material types**: summary, podcast, flashcards, and mind map.
+  - Therefore that one function contributes 4 collected cases instead of 1.
+  - 71 functions + 3 extra parameter cases = **74 collected cases**.
+
+The latest successful full run proved:
+
+**74 passed, 0 failed, 3375 warnings.**
+
+Warnings are not failed tests. The current warnings are primarily technical-debt warnings such as deprecated `datetime.utcnow()` usage and a legacy SQLAlchemy `Query.get()` usage.
+
+## 2. Exact QA users and roles
+
+The disposable QA world is created in `tests/test_local_qa_real_world.py` and reused by the related QA modules.
+
+### Seven distinct QA user accounts are created across the full suite
+
+| User | Role / purpose | Main coverage |
+|---|---|---|
+| `qa.student.a@test.invalid` | Student; Organisation A owner | Main authenticated student, organisation owner, opportunity lifecycle, realtime sender |
+| `qa.student.b@test.invalid` | Student; Organisation B owner in authz tests | Second student, outsider/tenant-boundary checks, realtime receiver |
+| `qa.admin@test.invalid` | Administrator | Admin queue, organisation verification, admin authorization |
+| `qa.student.c@test.invalid` | Student | Targeting matrix; different year/profile |
+| `qa.student.d@test.invalid` | Student | Targeting matrix; different program/semester/profile |
+| `qa.economics@test.invalid` | Student | Free/Plus/Pro entitlement and quota lifecycle |
+| `qa.paystack@test.invalid` | Student | Paystack plan price/currency/idempotency contract |
+
+### Role count
+
+- **6 student accounts**
+- **1 admin account**
+- **7 distinct user accounts total**
+
+There are also **2 disposable organisations** used by the authorization tests:
+
+- Organisation A — owned by student A
+- Organisation B — created and owned by student B
+
+The word "owner" here is an **organisation membership role**, not a separate User role. The admin account has `is_admin=True`.
+
+### Important distinction
+
+The suite does **not** simulate seven real people connecting at once.
+
+These are controlled test identities used to exercise different authorization, entitlement, targeting, realtime, and concurrency scenarios. Some tests use two users together; the realtime/E2EE fixture uses student A, student B, and the admin as an outsider.
+
+The production-style focused scripts (`scripts/test_realtime_runtime.py` and `scripts/test_calling_runtime.py`) are separate from this 74-case disposable QA suite and currently use their own runtime test setup.
+
+## 3. How the full QA environment is built
+
+`tools/run_local_qa.py`:
+
+1. Requires a real `DATABASE_URL`.
+2. Refuses to bootstrap QA from an existing database whose name is already `prepza_qa` or ends in `_qa`.
+3. Creates/uses the disposable PostgreSQL database `prepza_qa`.
+4. Runs `alembic upgrade head`.
+5. Runs the 10 test files below with pytest.
+6. Sets `REDIS_URL=memory://` for the disposable suite so rate-limit counters and Socket.IO test behavior are isolated from the running production-style Redis service.
+7. Retains the QA database after the run so failures can be inspected.
+
+This is deliberate: the suite tests the real Flask application and PostgreSQL schema, while avoiding accidental changes to the normal application database.
+
+## 4. Exact test files and test functions
+
+### A. `tests/test_local_qa_real_world.py` — 15 test functions
+
+This is the broadest end-to-end route and business-behavior layer.
+
+1. **`test_route_inventory_contains_critical_boundaries`**
+   - Verifies critical routes are actually registered.
+   - Checks important student/admin/opportunity boundaries.
+   - Detects dangerous duplicate student-facing route registrations.
+
+2. **`test_no_duplicate_registered_route_methods`**
+   - Scans Flask's final URL map.
+   - Fails if the same route/method is registered by multiple endpoints.
+
+3. **`test_public_and_authenticated_session_boundaries`**
+   - Verifies public health access.
+   - Verifies anonymous users cannot access `/me`.
+   - Verifies an authenticated student can access `/me`.
+   - Verifies logout invalidates the session.
+
+4. **`test_university_and_program_lookup_are_real_routes`**
+   - Exercises university and program lookup through real HTTP routes.
+
+5. **`test_group_creation_is_end_to_end`**
+   - Creates a study group through the real route.
+   - Verifies listing and detail retrieval.
+
+6. **`test_organisation_opportunity_lifecycle_and_targeting`**
+   - Exercises organisation opportunity creation.
+   - Applies targeting.
+   - Verifies invalid early submission is blocked.
+   - Verifies admin organisation verification.
+   - Verifies submission, admin queue visibility, approval, publishing, student visibility, and outsider hiding.
+
+7. **`test_organisation_can_create_multiple_opportunities_under_live_rate_limit`**
+   - Re-enables the real rate limiter.
+   - Proves a legitimate organisation can create five opportunities without the limiter incorrectly blocking normal activity.
+
+8. **`test_opportunity_targeting_matrix_and_current_profile_changes`**
+   - Creates additional student profiles with deliberately different university/program/year/semester values.
+   - Exercises targeting combinations.
+   - Verifies profile changes affect targeting correctly.
+
+9. **`test_student_economics_entitlement_lifecycle_and_quota_truth`**
+   - Tests Free/Plus/Pro entitlement activation and expiry.
+   - Verifies payment success alone does not incorrectly activate a plan before fulfillment.
+   - Checks additive entitlements and exact remaining AI quota.
+   - Checks per-request ceilings and expiry/future-start boundaries.
+
+10. **`test_paystack_checkout_uses_base_plan_price_and_provider_success_is_idempotent`**
+    - Verifies checkout uses the canonical plan price.
+    - Verifies KES/monthly provider contract.
+    - Verifies provider success synchronization is idempotent.
+
+11. **`test_csrf_and_session_version_fail_closed`**
+    - Verifies state-changing requests fail safely without the correct CSRF/session contract.
+
+12. **`test_duplicate_opportunity_save_is_race_safe`**
+    - Exercises concurrent duplicate-save behavior.
+    - Verifies the operation does not create an unsafe duplicate state.
+
+13. **`test_concurrent_organisation_reads`**
+    - Exercises concurrent organisation reads to expose unsafe request/database behavior.
+
+14. **`test_every_registered_route_dispatches_without_server_error`**
+    - Walks the registered route surface with representative requests.
+    - Detects routes that exist statically but fail when actually dispatched.
+
+15. **`test_b2b_prepaid_metering_protects_advertiser_balance_and_locks_campaign_pricing`**
+    - Verifies prepaid balance protection.
+    - Verifies billable-event pricing is locked to campaign economics.
+    - Exercises B2B metering behavior against advertiser balance.
+
+### B. `tests/test_route_security_matrix.py` — 2 test functions
+
+16. **`test_every_admin_get_route_rejects_anonymous_and_non_admin_users`**
+    - Enumerates admin GET routes.
+    - Verifies anonymous users and ordinary students cannot access them.
+
+17. **`test_every_admin_mutation_fails_without_csrf_for_all_non_admins_and_admin`**
+    - Enumerates admin state-changing routes.
+    - Verifies missing/invalid CSRF protection is rejected for the security boundary.
+
+### C. `tests/test_authenticated_route_matrix.py` — 1 test function
+
+18. **`test_every_get_route_dispatches_for_authenticated_student_and_admin`**
+    - Exercises the GET route surface with authenticated student and admin identities.
+    - Detects routes that look registered but fail at runtime.
+
+### D. `tests/test_local_qa_authz.py` — 5 test functions
+
+19. **`test_student_cannot_cross_organisation_boundary`**
+    - Creates a second organisation.
+    - Verifies one student cannot use another tenant's IDs to create or mutate resources.
+    - This is an IDOR/horizontal authorization check.
+
+20. **`test_student_cannot_cross_vertical_admin_boundary`**
+    - Verifies an ordinary student cannot perform administrator-only operations.
+
+21. **`test_logout_and_session_version_rotation_invalidate_old_session`**
+    - Verifies logout and session-version rotation invalidate an old authenticated session.
+
+22. **`test_suspended_account_cannot_continue_using_existing_session`**
+    - Suspends an account.
+    - Verifies an existing authenticated session no longer grants access.
+
+23. **`test_state_changing_organisation_actions_require_csrf`**
+    - Verifies organisation mutations require the expected CSRF token.
+
+### E. `tests/test_frontend_ai_generation_contract.py` — 3 test functions
+
+24. **`test_backend_generation_routes_and_payload_keys_match_contract`**
+    - Verifies backend generation endpoints and response payload names match the expected contract.
+
+25. **`test_active_frontend_generation_contract_matches_backend`**
+    - Compares active frontend generation calls with backend route/payload expectations.
+    - Catches frontend/backend naming drift.
+
+26. **`test_frontend_usage_contract_uses_canonical_usage_endpoint`**
+    - Verifies the frontend uses the canonical usage endpoint.
+
+### F. `tests/test_ai_artifact_fingerprint.py` — 10 test functions
+
+27. **`test_shared_identity_is_deterministic`**
+    - Same generation identity inputs produce the same fingerprint.
+
+28. **`test_parameter_order_does_not_change_identity`**
+    - Reordering equivalent parameters does not create a different artifact identity.
+
+29. **`test_parameters_change_identity`**
+    - Meaningful generation parameter changes create a different identity.
+
+30. **`test_prompt_and_schema_versions_change_identity`**
+    - Prompt/schema version changes invalidate the old artifact identity.
+
+31. **`test_shared_and_private_scopes_never_collide`**
+    - Shared and private generation scopes cannot accidentally share identities.
+
+32. **`test_private_identity_is_owner_specific`**
+    - Private artifact identity includes the correct owner boundary.
+
+33. **`test_scope_is_normalized`**
+    - Scope values are normalized consistently.
+
+34. **`test_private_requires_owner`**
+    - Private generation cannot be created without an owner.
+
+35. **`test_shared_rejects_owner`**
+    - Shared generation cannot incorrectly carry a private owner identity.
+
+36. **`test_invalid_scope_is_rejected`**
+    - Unknown generation scopes are rejected.
+
+### G. `tests/test_ai_generation_store.py` — 2 test functions
+
+37. **`test_generation_lookup_shapes_are_explicit`**
+    - Verifies generation lookup states have an explicit, usable shape.
+
+38. **`test_only_owner_is_allowed_to_call_provider`**
+    - Verifies only the generation owner/producer can reach the provider path.
+
+### H. `tests/test_ai_economics.py` — 12 test functions
+
+39. **`test_ada_unit_weights_are_locked`**
+    - Locks the canonical Ada AI unit weights.
+
+40. **`test_ada_units_round_up`**
+    - Verifies AI unit calculations round up according to the economic contract.
+
+41. **`test_plan_defaults_match_locked_entitlements`**
+    - Verifies Free/Plus/Pro default limits match the locked product economics.
+
+42. **`test_plan_patch_rejects_unknown_fields`**
+    - Rejects unsupported plan fields.
+
+43. **`test_plan_patch_rejects_negative_limits`**
+    - Rejects negative quota/limit values.
+
+44. **`test_plan_patch_accepts_feature_and_access_flags`**
+    - Verifies valid feature/access flags can be patched.
+
+45. **`test_offline_study_is_core_for_free`**
+    - Verifies offline study is part of the Free entitlement.
+
+46. **`test_admin_cannot_disable_offline_study`**
+    - Protects the product contract from disabling the core offline feature.
+
+47. **`test_paystack_plan_sync_updates_provider_when_price_drifts`**
+    - Verifies provider plans are updated when the provider price is wrong.
+
+48. **`test_paystack_plan_sync_does_not_write_when_already_matching`**
+    - Verifies no unnecessary provider write occurs when the plan already matches.
+
+49. **`test_paystack_plan_sync_requires_plan_code`**
+    - Rejects provider synchronization without the required plan code.
+
+50. **`test_student_offer_definition_is_monthly_and_plan_isolated`**
+    - Verifies the student offer is monthly and plan-specific.
+
+### I. `tests/test_ai_reusable_generation.py` — 13 test functions
+
+51. **`test_normalize_parameters_is_deterministic_and_whitespace_safe`**
+    - Canonicalizes generation parameters deterministically.
+
+52. **`test_normalize_parameters_rejects_unknown_keys`**
+    - Rejects unsupported generation parameters.
+
+53. **`test_normalize_parameters_rejects_invalid_counts`**
+    - Rejects invalid generation counts.
+
+54. **`test_normalize_parameters_rejects_blank_strings`**
+    - Rejects meaningless blank generation parameters.
+
+55. **`test_normalize_parameters_rejects_unknown_material_type`**
+    - Rejects unsupported artifact/material types.
+
+56. **`test_empty_parameters_are_canonical`**
+    - Verifies empty parameter sets have a canonical representation.
+
+57. **`test_first_generation_calls_provider_and_second_identical_request_reuses`**
+    - First request calls the provider.
+    - Identical later request reuses the ready artifact instead of paying for another generation.
+
+58. **`test_inflight_identical_request_attaches_without_provider_duplicate`**
+    - Concurrent identical requests attach to the in-flight generation rather than duplicating provider work.
+
+59. **`test_reused_ready_artifact_does_not_check_entitlement`**
+    - Verifies a ready reusable artifact follows the intended reuse path without incorrectly re-consuming the generation entitlement.
+
+60. **`test_flashcard_variant_pool_rotates_four_versions_before_reuse`**
+    - Verifies four generation variants rotate before reuse.
+
+61. **`test_all_document_materials_use_the_shared_four_variant_pool`**
+    - Verifies summary, quiz, flashcards, podcast, and mind map use the shared variant-pool mechanism.
+
+62. **`test_generation_request_ceilings_are_enforced`**
+    - Parametrized over four material types:
+      - summary: maximum 10 pages
+      - podcast: maximum 50 minutes
+      - flashcards: maximum 50 cards
+      - mind map: maximum 50 nodes
+    - This is the reason the 71 functions become 74 collected pytest cases.
+
+63. **`test_generation_store_exposes_inflight_family_lookup`**
+    - Verifies the generation store exposes the in-flight family lookup required for request coalescing.
+
+### J. `tests/test_realtime_e2ee_runtime.py` — 8 test functions
+
+64. **`test_socket_membership_and_same_conversation_delivery`**
+    - Creates an E2EE direct conversation between student A and B.
+    - Verifies both members can join.
+    - Verifies the admin outsider is denied.
+    - Sends an encrypted payload through the real HTTP message route.
+    - Verifies the receiver gets the persisted encrypted message over realtime.
+
+65. **`test_direct_e2ee_plaintext_is_rejected_before_persistence`**
+    - Sends plaintext to a direct E2EE conversation.
+    - Verifies HTTP 409.
+    - Verifies plaintext was not persisted.
+
+66. **`test_chat_retry_is_idempotent_and_does_not_duplicate_message`**
+    - Sends the same client message twice.
+    - Verifies the retry returns the same message identity rather than creating a duplicate row.
+
+67. **`test_offline_receiver_recovers_from_database_history`**
+    - Sends an encrypted message while the receiver is not connected to realtime.
+    - Verifies the receiver can recover it from PostgreSQL chat history.
+
+68. **`test_socket_session_version_and_suspension_are_enforced`**
+    - Verifies a valid session can connect.
+    - Rotates the user's session version and verifies the stale socket is rejected.
+    - Suspends the user and verifies a new socket is rejected.
+
+69. **`test_frontend_realtime_contract_matches_backend`**
+    - Verifies frontend and backend agree on realtime event names and important Socket.IO behavior.
+    - Checks credentials, reconnection, disconnect behavior, and offline client message IDs.
+
+70. **`test_realtime_deployment_contains_dedicated_chat_worker`**
+    - Verifies the production-style Compose stack contains the dedicated `chat-worker`.
+    - Verifies Redis configuration and worker consumption/channel wiring.
+
+71. **`test_redis_stream_queue_is_not_treated_as_postgres_source_of_truth`**
+    - Verifies the code explicitly treats PostgreSQL as durable source of truth.
+    - Verifies Redis Stream enqueue/ack/recovery primitives exist.
+
+## 5. Coverage map
+
+The 74 collected cases cover these major boundaries:
+
+| Area | What is proven |
+|---|---|
+| Flask route registration | Critical routes exist and duplicate registrations are detected |
+| Route dispatch | Registered routes are exercised through the real Flask app |
+| Authentication | Anonymous vs authenticated access boundaries |
+| Authorization | Student/admin separation and organisation tenant isolation |
+| CSRF | State-changing security boundary |
+| Session security | Logout, session-version rotation, suspension |
+| Organisations | Creation, ownership, verification, targeting, submission |
+| Opportunities | Draft → pending review → approved → published lifecycle |
+| Targeting | University/program/year/semester targeting and profile changes |
+| Rate limiting | Real limiter still permits legitimate organisation activity |
+| Concurrency | Duplicate save and concurrent organisation-read behavior |
+| B2B economics | Prepaid balance and campaign pricing protection |
+| AI frontend contract | Frontend route/payload names match backend |
+| AI artifact identity | Fingerprint determinism, scope, owner, parameters, prompt/schema |
+| AI generation ownership | Only the intended producer can invoke provider work |
+| AI economics | Unit weights, rounding, plan defaults, feature flags, Paystack sync |
+| AI reuse | Cache reuse, in-flight coalescing, four-variant rotation |
+| AI request limits | Exact per-request ceilings |
+| Realtime membership | Only conversation members can join |
+| Realtime delivery | Same-conversation encrypted messages reach members |
+| E2EE | Plaintext is rejected before persistence |
+| Chat idempotency | Client retry does not duplicate messages |
+| Offline recovery | PostgreSQL history restores messages after missed realtime |
+| Realtime auth | Session version and suspension are enforced on sockets |
+| Frontend realtime contract | Frontend event contract matches backend |
+| Redis architecture | Dedicated worker and Redis Stream path are structurally present |
+| Source of truth | PostgreSQL remains durable chat truth; Redis is delivery infrastructure |
+
+## 6. What this suite does NOT prove by itself
+
+The 74/74 result is strong local integration evidence, but it is not the entire production deployment proof.
+
+It does **not by itself** prove:
+
+- a real external Redis multi-process Socket.IO deployment under live network conditions;
+- the separate focused `scripts/test_realtime_runtime.py` production-style runtime smoke test;
+- the separate `scripts/test_calling_runtime.py` calling runtime smoke test;
+- real OpenAI, Paystack, SES, R2, or other external provider availability;
+- real browser rendering/visual QA on every device;
+- real internet/network failure behavior;
+- production VPS performance under real traffic.
+
+Those are separate audit gates. The project should not call the realtime/calling production-style gate GREEN until those explicit runtime checks pass.
+
+## 7. Why the suite uses controlled users instead of real accounts
+
+The suite needs deterministic identities so it can safely test:
+
+- tenant boundaries;
+- admin boundaries;
+- session invalidation;
+- suspended accounts;
+- conversation membership;
+- E2EE sender/receiver behavior;
+- entitlement ownership;
+- targeting differences.
+
+All data lives in the disposable `prepza_qa` PostgreSQL database. The fixture resets that database and recreates the controlled world.
+
+This is what makes a 74-case integration run repeatable rather than dependent on whichever real accounts happen to exist on a developer laptop.
+
+## 8. Interview explanation
+
+A strong way to explain the suite is:
+
+> "I built a disposable PostgreSQL-backed integration test environment around the real Prepza Flask application. The full runner executes 10 test modules containing 71 test functions and 74 collected pytest cases. The test world creates seven controlled users—six students and one admin—with two organisation tenants. The suite exercises route registration and dispatch, authentication and authorization, CSRF and session invalidation, organisation/opportunity workflows, targeting, rate limits, B2B metering, AI economics and artifact reuse, and realtime/E2EE behavior. It deliberately uses real PostgreSQL and Alembic migrations, while isolating Redis-dependent test behavior so the test environment remains deterministic. The 74/74 result gives us evidence across the application boundaries rather than only proving individual functions exist."
+
+## 9. Current relationship to production-style runtime tests
+
+The full QA suite and the focused runtime scripts answer different questions.
+
+**Full QA suite:** "Does the application behave correctly against the disposable PostgreSQL-backed application environment across all these contracts?"
+
+**Focused realtime/calling runtime tests:** "Does the production-style Socket.IO/Redis/calling deployment path actually work when the real services are running?"
+
+Both are necessary. Passing one does not make the other unnecessary.
+
+---
+
+**Last verified full-suite result:** 74 passed, 0 failed, 3375 warnings.
