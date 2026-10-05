@@ -234,8 +234,16 @@ def main() -> int:
                     },
                 )
 
-                callee.get_by_role("button", name="Accept call").wait_for(timeout=10000)
-                callee.get_by_role("button", name="Accept call").click()
+                accept_button = callee.get_by_role("button", name="Accept call")
+                try:
+                    accept_button.wait_for(timeout=10000)
+                except PlaywrightTimeoutError as exc:
+                    buttons = callee.locator("button").all_inner_texts()
+                    body_text = callee.locator("body").inner_text(timeout=2000)
+                    print("DEBUG: callee visible buttons:", buttons, file=sys.stderr)
+                    print("DEBUG: callee visible text:", body_text[:6000], file=sys.stderr)
+                    raise exc
+                accept_button.click()
 
                 caller.get_by_text("Connected", exact=False).first.wait_for(timeout=20000)
                 callee.get_by_text("Connected", exact=False).first.wait_for(timeout=20000)
