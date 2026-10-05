@@ -15379,6 +15379,7 @@ export default function App() {
   }
 
   const isDark = ['splash','login','processing'].includes(screen)
+  const callEnabled = !['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm'].includes(screen)
 
   return (
     <>
@@ -15404,7 +15405,7 @@ export default function App() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {renderScreen()}
       <StudentOnboarding screen={screen} setScreen={setScreen} />
-      <CallExperience userId={null} />
+      {callEnabled && <CallExperience userId={null} />}
       </div>
       {/* Bottom nav */}
       {!noNav.includes(screen) && <BottomNav active={screen} setScreen={setScreen} unreadChats={unreadChats} exploreAttention={exploreAttention} setExploreAttention={setExploreAttention} />}
