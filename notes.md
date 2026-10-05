@@ -169,3 +169,52 @@ For every important change or discovery, add:
 6. How I would explain it in an interview
 
 The notes are part of the project, not an afterthought.
+
+## 2026-10-05 — Realtime/schema reconciliation in progress
+
+### What we changed today
+
+1. **Moved realtime route registration into application startup.**
+   - `offline_activity_routes.py` and `e2ee_production_hardening.py` were being registered from `realtime_server.py`.
+   - That was unsafe because `realtime_server.py` can be imported after Flask has already served a request.
+   - Route registration now happens at the end of `app.py`, after the application's models and base routes exist.
+   - `realtime_server.py` is now an entrypoint for Socket.IO behavior rather than a late route-registration mechanism.
+
+2. **Added an Alembic schema reconciliation for chat attachments.**
+   - The ORM already had `MessageAttachment.source_document_content_id`.
+   - The verified SQL migration `migrations/20260926_chat_study_document_share.sql` also existed, but the disposable QA harness runs the Alembic chain and does not automatically execute the hand-managed SQL migration directory.
+   - We added `alembic/versions/20261005_chat_attachment_source_document.py` so the Alembic-managed QA database receives the same column, foreign key, and index.
+   - The migration is idempotent for the column, constraint, and index so fresh and existing databases can converge safely.
+
+### Important lesson
+
+**`alembic upgrade head: OK` does not automatically mean the runtime schema is correct.**
+
+It only proves the migrations that Alembic knows about completed successfully. If an older migration system, manual SQL migration, baseline snapshot, or ORM change is outside that chain, the database can still disagree with the application.
+
+For Prepza, we are therefore reconciling:
+**ORM model ↔ baseline schema ↔ migration history ↔ actual disposable PostgreSQL database.**
+
+### Current evidence
+
+The previous QA run reached the real PostgreSQL-backed realtime tests and reported:
+**69 passed, 5 failed, 3362 warnings.**
+
+The two confirmed root causes were the late Flask route registration and the missing `message_attachment.source_document_content_id` column. The remaining transaction-aborted failures must be rerun after those root causes are fixed before being classified independently.
+
+The fixes are committed directly on `main`. They are **not yet considered proven** until the standard Docker rebuild + test-dependency install + full QA loop passes.
+
+### Interview-ready explanation
+
+> I found a schema-drift problem during integration testing. The ORM and an existing SQL migration knew about a column, but the Alembic-managed disposable database did not. I traced the discrepancy across the baseline schema and migration systems and added an explicit Alembic reconciliation instead of modifying the QA database manually.
+
+A second interview point:
+
+> I also learned that Flask application initialization is part of correctness. Route registration belongs in application construction, before requests are handled, rather than in a secondary realtime entrypoint that may be imported later.
+
+### Next verification
+
+- Rebuild the application image.
+- Reinstall the test requirements as part of the standard QA loop.
+- Run the full real-world QA suite again.
+- If the five realtime failures disappear, separately verify the Redis-backed production realtime path before marking the realtime gate green.
