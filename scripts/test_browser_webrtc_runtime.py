@@ -10,10 +10,11 @@ Prerequisite:
     python -m playwright install chromium
 
 The test creates disposable database users/conversation through the running
-app container, logs both browsers in through the real /login route, starts a
-voice call through the real Prepza CallExperience, accepts it in the second
-browser, and verifies that both browsers report Connected and receive a live
-remote audio MediaStream track.
+app container, logs both browsers in through the real /login route, opens the
+real conversation route so CallExperience is mounted, starts a voice call
+through the real Prepza CallExperience, accepts it in the second browser, and
+verifies that both browsers report Connected and receive a live remote audio
+MediaStream track.
 """
 from __future__ import annotations
 
@@ -147,9 +148,13 @@ with app.app_context():
     for conversation in conversations:
         ConversationParticipant.query.filter_by(conversation_id=conversation.id).delete()
         db.session.delete(conversation)
-    # Browser authentication creates account key material in user_key. Remove
-    # those dependent rows before deleting the disposable users.
+    # Browser authentication creates dependent rows. Remove them before
+    # deleting the disposable users.
     if user_ids:
+        db.session.execute(
+            db.text("DELETE FROM study_streak WHERE user_id = ANY(:user_ids)"),
+            {{"user_ids": user_ids}},
+        )
         db.session.execute(
             db.text("DELETE FROM user_key WHERE user_id = ANY(:user_ids)"),
             {{"user_ids": user_ids}},
@@ -234,7 +239,17 @@ def main() -> int:
                 callee_id = login(callee, fixture["callee_email"], fixture["password"])
                 print("PASS: two independent real browser contexts authenticated")
 
-                # CallExperience is mounted by the chat shell and listens for
+                # CallExperience is mounted by the WhatsApp chat shell, not
+                # the generic home shell. Open the real conversation route in
+                # both independent browsers before starting the call.
+                chat_url = f"{BASE_URL}/chats/{fixture['conversation_id']}"
+                caller.goto(chat_url, wait_until="domcontentloaded")
+                callee.goto(chat_url, wait_until="domcontentloaded")
+                caller.wait_for_timeout(1200)
+                callee.wait_for_timeout(1200)
+                print("PASS: both browsers opened the real conversation route")
+
+                # CallExperience listens for this same event used by the real
                 # this same event used by the real Start voice call UI button.
                 caller.evaluate(
                     """detail => window.dispatchEvent(
