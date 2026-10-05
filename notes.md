@@ -318,3 +318,25 @@ Authentication / authorization — GREEN
 AI generation runtime + frontend contract — GREEN
 Realtime + E2EE — NOT GREEN; 4 test failures remain
 Later gates remain blocked until earlier required gates are proven.
+
+## Latest Realtime/E2EE fixes — 2026-10-05
+
+### What the 70-pass / 4-fail QA run taught us
+The four failures reduced to three root causes: duplicate offline study routes, Flask realtime hooks being registered from `realtime_server.py` after the app had already served a request, and the direct E2EE message endpoint accepting a plaintext body without a nonce.
+
+### What we fixed
+- Removed the older duplicate `/study-time/offline-baselines` and `/study-time/offline-sync` implementations from `app.py`; the startup-registered `offline_activity_routes.py` implementation is now canonical.
+- Removed the three Flask `after_request` realtime hooks from `realtime_server.py`. They were lifecycle-unsafe because importing the realtime entrypoint could happen after Flask had already handled a request.
+- Added `chat_realtime_dispatch.py` so message delivery is explicitly dispatched **after the database commit**. Redis-backed deployments enqueue to the durable chat stream; local/single-instance mode lazily uses Socket.IO direct delivery. Dispatch failures are logged without pretending database persistence failed.
+- Strengthened the message and edit contract so both `direct_v1` and `group_v1` E2EE messages require a nonce whenever a body is supplied. Plaintext is rejected with HTTP 409 before persistence.
+- Moved chat timestamp normalization into `_serialize_chat_message()` instead of another late Flask response hook.
+
+### Why this design is better
+The important lifecycle rule is: **construct the Flask application and register all routes/hooks during startup; do not mutate application setup after the first request.** Realtime delivery is a post-commit side effect, not a Flask response-hook dependency. PostgreSQL remains the durable source of truth; Redis/Socket.IO are delivery infrastructure.
+
+### Evidence still required
+The code fixes are on `main`, but Gate 4 is not GREEN until the standard local QA suite is rerun and passes, followed by the Redis-backed realtime smoke test and the calling runtime test.
+
+### Interview-ready explanation
+> “We found a lifecycle bug where realtime behavior depended on importing a module that registered Flask hooks after requests had already started. I moved delivery to an explicit post-commit dispatch path and kept PostgreSQL as the source of truth. We also found a security-contract gap where direct E2EE messages could carry plaintext; the endpoint now requires an encryption nonce for E2EE bodies and rejects invalid writes before persistence.”
+
