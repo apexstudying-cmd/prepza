@@ -669,3 +669,50 @@ Exact intended command after refreshing local main:
     docker compose -f docker-compose.vps.yml exec app python scripts/test_redis_chat_worker_runtime.py
 
 Do not classify the Redis-backed realtime gate as green until this command actually passes.
+
+
+## 2026-10-05 — Redis-backed chat worker gate passed
+
+### Exact local command
+
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_redis_chat_worker_runtime.py
+
+### Exact result
+
+    PASS: real Redis chat worker consumed and acknowledged the event
+    PASS: worker published chat:message onto prepza-realtime for the conversation room
+    PASS: Redis stream entry 1791203715146-0 was processed
+
+### What this proves
+
+The real Docker Redis path is now **GREEN** for the dedicated chat-worker boundary:
+
+- the worker reached the actual Redis service;
+- the worker consumed the controlled Redis Stream event;
+- the worker acknowledged the Stream entry;
+- the worker published the expected `chat:message` event through the `prepza-realtime` Socket.IO Redis channel;
+- the event was targeted to the expected conversation room.
+
+This is separate evidence from the earlier in-process `REDIS_URL=memory://` Socket.IO tests.
+
+### What it does not yet prove
+
+It does not yet prove that a real connected Socket.IO client/browser receives that Redis-published event through the **separate realtime container**.
+
+The remaining local hop is:
+
+    Redis Socket.IO publication
+        ↓
+    separate realtime process
+        ↓
+    connected Socket.IO client
+
+### Next local gate
+
+Run:
+
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_redis_realtime_client_runtime.py
+
+This new test is intentionally different from the existing 9-case Socket.IO suite: it uses the real Docker Redis service, starts the real chat worker, connects a real Socket.IO client to the separate `realtime` container, creates real database-backed conversation membership, injects one isolated Redis Stream event, and verifies the connected client receives the resulting `chat:message`.
+
+No paid infrastructure or production deployment is involved.
