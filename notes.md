@@ -1168,3 +1168,25 @@ I fixed the browser gate on main to open the real conversation route in both con
 Commit: `32d58d6612731e8129546d49c302887b20c7b71a`.
 
 **Current release-gate status: Browser-to-browser WebRTC media NOT YET PROVEN.** The next run is the first clean attempt after these two harness corrections.
+
+
+## 2026-10-05 — Chat/calling UX audit: findings and first redesign pass
+
+I audited the actual active chat/calling code before changing the WebRTC test. The key finding is that the calling UI was not designed as a global app-level communication layer. CallExperience lived inside WhatsAppChatExperience, and a second copy existed in the legacy chat-detail component. That makes incoming-call behavior depend on which screen is mounted and risks duplicate Socket.IO listeners.
+
+The desired Prepza contract is now explicit:
+
+1. A logged-in student has one global CallExperience mounted by the main app shell.
+2. A caller can start a call from the real chat UI.
+3. A callee can be on Home or another Prepza screen and still receive the incoming-call surface.
+4. Offline/unreachable recipients must not leave the caller stuck on Calling… forever.
+5. Outgoing calls have a bounded no-answer window; incoming calls also expire if ignored.
+6. Functional UI controls use custom SVG icons and accessible labels, never Unicode emoji/symbols as the actual button graphics.
+7. User-entered emoji reactions are still allowed because they are message content, not application controls.
+8. The browser gate must exercise the real UI button rather than dispatching a synthetic start-call event when a real button is available.
+
+The first implementation pass moved CallExperience to the app shell, removed the duplicate chat-mounted instance, added bounded Socket.IO acknowledgements, added recipient-delivery detection, added no-answer/unavailable handling, and replaced call-control Unicode glyphs with custom SVG controls.
+
+The backend currently rejects call invites unless the conversation contains exactly two active participants. Therefore I am not pretending group calling is implemented yet. The next design phase should specify participant selection, add-person behavior, group call state, call history, and the server-side call state model before implementing group calls.
+
+Current status: redesign committed to main; local build/browser verification still pending.
