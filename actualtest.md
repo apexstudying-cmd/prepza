@@ -917,3 +917,12 @@ We are intentionally keeping Chromium out of the production/app Docker image bec
 The browser WebRTC gate still must pass before calling the calling gate green.
 
 The earlier failures remain classified as harness defects; no application WebRTC failure has yet been demonstrated.
+
+
+### 2026-10-05 — Browser WebRTC gate: instrumented incoming-call UI timeout
+
+The latest browser gate reached real browser authentication but timed out waiting for the callee's `Accept call` button. Rather than changing the selector blindly, the test was instrumented to print the callee's visible button labels and visible body text when that timeout occurs. This will distinguish a stale/incorrect test selector from a real failure to render or deliver the incoming-call UI.
+
+Change committed directly on `main`: `f9c15426b4ed352503e453a837d08880dffbeb23` (`test: diagnose browser call accept UI`).
+
+The WebRTC browser-to-browser gate remains **NOT YET PROVEN**. No storage/data-integrity gate should start until this browser call path is resolved and rerun.
