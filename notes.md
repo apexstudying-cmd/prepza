@@ -1133,3 +1133,23 @@ The error message now uses string concatenation instead of an inner f-string exp
 **Browser WebRTC media: NOT YET PROVEN.**
 
 The next execution should be the same browser gate after refreshing to this commit. We should not move to the storage/data-integrity release gate until this browser call path either passes or exposes a genuine application defect.
+
+
+## 2026-10-05 — Browser WebRTC gate: local reference-data prerequisite missing
+
+The corrected browser WebRTC fixture reached its real database prerequisite check and failed with:
+
+    RuntimeError: Container fixture command failed:
+    RuntimeError: No active university exists for browser WebRTC fixture
+
+This means the previous outer-f-string defect is fixed and the fixture is now executing normally. The test has still not reached Chromium or WebRTC media.
+
+Repository inspection found `seed_universities_and_programs.py` on main and it is specifically designed to seed the university/program catalog. It is idempotent: existing universities are matched by exact name and existing programs by `(university_id, name)`, so rerunning it does not intentionally duplicate the catalog.
+
+The correct next action is to initialize the local QA database using that existing seed script, rather than modifying the browser test to invent fake reference data. After seeding, rerun the browser WebRTC gate unchanged.
+
+### Current release-gate status
+
+**Browser-to-browser WebRTC media: NOT YET PROVEN.**
+
+The failure is classified as **LOCAL TEST-ENVIRONMENT PREREQUISITE**, not an application defect. Do not advance to the storage/data-integrity release gate until the browser call/media path passes or exposes a genuine application failure.
