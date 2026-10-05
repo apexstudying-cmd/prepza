@@ -460,3 +460,47 @@ A frontend can still contain a complete feature while the backend contract it de
 
 ### Verification still required
 Rebuild and force-recreate the realtime/app containers from current `main`, reinstall test requirements, then run both `scripts/test_calling_runtime.py` and `scripts/test_realtime_runtime.py`. Do not mark the realtime/calling gate green until those runtime results are pasted and passing.
+
+
+## 2026-10-05 — QA documentation and Python one-liner lesson
+
+### What we documented
+
+Added **actualtest.md** as the exact human-readable map of the full local QA suite.
+
+Current verified structure:
+- 10 QA test files
+- 71 `test_...` functions
+- 74 collected pytest cases
+- 7 controlled QA users: 6 students + 1 admin
+- 2 disposable organisation tenants used by authorization tests
+- latest full run: **74 passed, 0 failed, 3375 warnings**
+
+actualtest.md lists every test function, what it verifies, the controlled user roles, the suite boundaries, and what the 74/74 result does and does not prove.
+
+### New Python lesson
+
+The command we first tried failed with a `SyntaxError` because `python -c` executes a single simple statement and does not accept a compound `with ...:` block after a semicolon.
+
+The important idea is not a Docker problem. Flask-SQLAlchemy requires an **application context** before using `db.session`.
+
+A compact valid pattern for this kind of diagnostic is:
+
+    docker compose -f docker-compose.vps.yml exec app python -c "from app import app, db, User; ctx=app.app_context(); ctx.push(); users=[db.session.get(User,i) for i in (7,8,9)]; [print('user_id=',u.id,'session_version=',u.session_version,'suspended=',u.is_suspended) for u in users if u]; ctx.pop()"
+
+### Why this matters
+
+This taught me to distinguish:
+
+- **Python syntax/context errors** — the diagnostic command itself is invalid or lacks the Flask application context;
+- **database/application errors** — the command runs but the data or application behavior is wrong.
+
+The failed command therefore gave us no evidence yet about users 7, 8, and 9. We need a valid application-context query before changing the realtime tests.
+
+### Interview-ready explanation
+
+> "When debugging Flask-SQLAlchemy from a container shell, I have to establish the Flask application context before accessing `db.session`. I also learned that Python's `-c` mode does not allow a compound `with` block after a semicolon, so for compact diagnostics I can explicitly push and pop an application context."
+
+### Realtime test-user lesson
+
+The focused runtime scripts use persistent local database identities differently from the disposable full QA world. The full QA suite creates deterministic users dynamically; the focused scripts currently use hard-coded runtime IDs. Because socket authentication compares the session's `_session_version` with the database's current `User.session_version`, hard-coded session versions can become stale. We must inspect the actual users before weakening or changing the authentication code.
