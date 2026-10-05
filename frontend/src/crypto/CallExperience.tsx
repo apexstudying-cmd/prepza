@@ -82,7 +82,7 @@ export default function CallExperience({ userId }: Props) {
       if (event.type === 'call:ice' && event.payload) { void addIce(event.payload as RTCIceCandidateInit) }
     })
     return () => { unsubscribe() }
-  }, [userId])
+  }, [resolvedUserId])
 
   useEffect(() => () => cleanup(false), [])
   useEffect(() => () => {
