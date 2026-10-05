@@ -131,7 +131,7 @@ def test_two_members_receive_typing_read_and_persisted_message_events():
         assert not _event_named(sender.get_received(), "chat:typing")
         sender.emit("chat:read", {"conversation_id": 12, "read_at": "2026-09-13T10:00:00+00:00"})
         read_events = _event_named(receiver.get_received(), "chat:read")
-        assert read_events[-1]["args"][0]["user_id"] == 7
+        assert read_events[-1]["args"][0]["user_id"] == _USERS["primary"].id
         payload = {
             "id": 44,
             "conversation_id": 12,
