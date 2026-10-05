@@ -908,3 +908,62 @@ The corrected container then passed all four assertions.
 This closes the local Docker distributed realtime gate, but it is not the same as proving a public production deployment. We still need later environment-level evidence for things such as real browser/PWA behavior, external provider integrations, internet/network conditions, load behavior, backups/restore, and the actual deployed environment.
 
 No paid VPS migration, GPU purchase, or production infrastructure change was made by this test.
+
+
+## 2026-10-05 — Real browser-to-browser WebRTC gate prepared
+
+### What we are testing next
+
+The backend calling signaling gate is green, but I do not want to call calls fully end-to-end until two actual browser instances exchange real WebRTC media.
+
+The new test is:
+
+    scripts/test_browser_webrtc_runtime.py
+
+It uses two independent Chromium contexts with fake microphone/camera devices, real Prepza login sessions, the real calling UI event, the real Socket.IO signaling path, and real browser `RTCPeerConnection` objects created by `CallExperience.tsx`.
+
+### Exact host commands
+
+Install the browser test dependency once:
+
+    python -m pip install playwright
+    python -m playwright install chromium
+
+Keep the normal Docker stack running, then from the repo root run:
+
+    python scripts/test_browser_webrtc_runtime.py
+
+### What a green result will mean
+
+A green result will prove, locally:
+
+- two independent real browsers authenticate;
+- the caller starts the real calling experience;
+- the callee receives and accepts the call;
+- offer/answer/ICE signaling traverses the real Socket.IO backend;
+- both browsers reach the application's **Connected** state;
+- both browsers receive a live remote audio MediaStream track.
+
+That is the missing evidence for the statement **"calling works end-to-end locally."**
+
+### Current status
+
+**PREPARED / NOT YET EXECUTED.**
+
+Do not mark the calling gate green until the script actually passes.
+
+### Next release gate after browser calling
+
+If this browser WebRTC gate passes, the next release gate is **Storage/Data Integrity**, with emphasis on the launch-readiness requirement that the database and uploaded/generated data are actually recoverable.
+
+The repository launch sequence explicitly requires a successful database restore, backup + restore + rollback rehearsal, and proven storage recovery before launch-ready status. The current launch-readiness document also says R2 support exists but legacy Supabase Storage fallback remains, so we should verify the real backup/restore and storage paths rather than assuming the provider abstraction is enough.
+
+The likely local sequence after the browser gate is:
+
+1. PostgreSQL backup creation.
+2. Disposable restore into a fresh database.
+3. Restore verification against important Prepza tables/relationships.
+4. Storage/object recovery verification for the provider-neutral storage layer.
+5. Then PWA/offline browser behavior and failure/concurrency evidence where still missing.
+
+No VPS migration or paid infrastructure change is part of this work.
