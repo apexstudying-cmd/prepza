@@ -29,7 +29,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_URL = os.environ.get("PREPZA_BROWSER_BASE_URL", "http://127.0.0.1:5000")
+BASE_URL = os.environ.get("PREPZA_BROWSER_BASE_URL", "http://localhost:5000")
 COMPOSE_FILE = os.environ.get("PREPZA_COMPOSE_FILE", "docker-compose.vps.yml")
 PASSWORD = "Browser!Call12345"
 
@@ -138,7 +138,7 @@ with app.app_context():
     if user_ids:
         db.session.execute(
             db.text("DELETE FROM user_key WHERE user_id = ANY(:user_ids)"),
-            {"user_ids": user_ids},
+            {{"user_ids": user_ids}},
         )
     for user in users:
         db.session.delete(user)
@@ -147,7 +147,7 @@ with app.app_context():
     run_container_python(code)
 
 
-def login(page, email: str, password: str) -> None:
+def login(page, email: str, password: str) -> int:
     response = page.request.post(
         f"{BASE_URL}/login",
         data=json.dumps({"email": email, "password": password}),
@@ -155,8 +155,24 @@ def login(page, email: str, password: str) -> None:
     )
     if not response.ok:
         raise RuntimeError(f"/login failed with HTTP {response.status}: {response.text()}")
+
+    # The Flask app marks its session cookie Secure. Chromium treats Secure
+    # cookies as usable on the special localhost origin, so the default local
+    # browser base URL intentionally uses http://localhost rather than the
+    # numeric 127.0.0.1 address.
     page.goto(BASE_URL + "/", wait_until="domcontentloaded")
     page.wait_for_timeout(1500)
+
+    me_response = page.request.get(f"{BASE_URL}/me")
+    if not me_response.ok:
+        raise RuntimeError(
+            f"/me after login failed with HTTP {me_response.status}: {me_response.text()}"
+        )
+    me_payload = me_response.json()
+    user_id = me_payload.get("id") or me_payload.get("user", {}).get("id")
+    if user_id is None:
+        raise RuntimeError(f"/me returned unexpected payload after login: {me_payload}")
+    return int(user_id)
 
 
 def remote_audio_track_is_live(page) -> bool:
@@ -201,20 +217,8 @@ def main() -> int:
                 callee = callee_context.new_page()
 
                 login(caller, fixture["caller_email"], fixture["password"])
-                login(callee, fixture["callee_email"], fixture["password"])
+                callee_id = login(callee, fixture["callee_email"], fixture["password"])
                 print("PASS: two independent real browser contexts authenticated")
-
-                # The callee's user ID is needed by the actual signaling
-                # payload. Fetch it from the authenticated /me response.
-                me_response = callee.request.get(f"{BASE_URL}/me")
-                if not me_response.ok:
-                    raise RuntimeError(
-                        f"/me failed with HTTP {me_response.status}: {me_response.text()}"
-                    )
-                me_payload = me_response.json()
-                callee_id = me_payload.get("id") or me_payload.get("user", {}).get("id")
-                if callee_id is None:
-                    raise RuntimeError(f"/me returned unexpected payload: {me_payload}")
 
                 # CallExperience is mounted by the chat shell and listens for
                 # this same event used by the real Start voice call UI button.
