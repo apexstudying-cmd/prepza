@@ -431,3 +431,32 @@ I also learned to think of Redis as **delivery infrastructure**, not as the perm
 - Realtime production-style Redis path — **verification pending**
 - Calling runtime — **verification pending**
 - Storage/data integrity — BLOCKED until the required realtime verification is complete
+
+
+## 2026-10-05 — Calling runtime reconciliation
+
+### What we discovered
+The calling feature was supposed to exist end-to-end. The current frontend still contained the WebRTC call experience and call signaling client, and the repository still contained the calling runtime regression test and architecture audit. However, `realtime_server.py` on current `main` had lost the backend WebRTC signaling handlers and `_active_calls` state. This caused `scripts/test_calling_runtime.py` to fail during collection with `cannot import name '_active_calls'`.
+
+This was a real implementation/source-of-truth drift issue, not a Docker or Python import problem. Historical repository tooling confirmed that `tools/apply_calling.py` is the intended backend/frontend wiring patch.
+
+### What changed
+Restored the authenticated calling signaling boundary directly on `main`:
+- `_active_calls` state and lock
+- authenticated caller/target validation
+- exact two-member conversation membership check
+- voice/video invite routing
+- accept/reject/end lifecycle
+- WebRTC offer/answer/ICE routing
+- target-only delivery through Socket.IO
+
+The media itself still stays peer-to-peer through WebRTC; the server carries signaling metadata only.
+
+### Why this matters
+A frontend can still contain a complete feature while the backend contract it depends on is missing. Static/frontend checks therefore cannot prove the feature works. The runtime calling test is valuable because it exercises the actual Socket.IO handlers and authorization boundary.
+
+### Interview-ready explanation
+> "During the production-readiness audit I found a source-of-truth drift bug: the frontend and regression tests still expected WebRTC calling, but the realtime server no longer registered the corresponding signaling handlers. Instead of weakening the test, I traced the repository history to the intended calling patch, restored the authenticated signaling boundary, and then verified it through runtime tests."
+
+### Verification still required
+Rebuild and force-recreate the realtime/app containers from current `main`, reinstall test requirements, then run both `scripts/test_calling_runtime.py` and `scripts/test_realtime_runtime.py`. Do not mark the realtime/calling gate green until those runtime results are pasted and passing.
