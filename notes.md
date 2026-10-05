@@ -1036,3 +1036,51 @@ Interview-ready explanation:
 **Browser WebRTC media: NOT YET PROVEN.**
 
 The next execution is the same browser gate, now with the corrected local-origin/session handling.
+
+
+## 2026-10-05 — Browser WebRTC gate: session harness passed, call UI handoff now blocked
+
+The corrected browser gate was executed after refreshing `main` and installing the declared test dependencies.
+
+### Dependency installation clarification
+
+The requirements were intentionally installed in **two different environments**:
+
+1. `docker compose ... exec app python -m pip install -r requirements-test.txt`
+   - installs the Python test dependencies **inside the Docker app container**;
+   - this keeps container-side pytest/runtime scripts reproducible.
+
+2. `python -m pip install -r requirements-test.txt`
+   - installs the same test dependencies in the **Windows host Python environment**;
+   - this is required because `scripts/test_browser_webrtc_runtime.py` is deliberately a host-side Playwright test that launches Chromium on Windows and connects to the Dockerized application.
+
+3. `python -m playwright install chromium`
+   - installs the actual Chromium browser binary for the host-side Playwright package;
+   - pip installs the Python Playwright library, but does not install the browser binary itself.
+
+Installing the requirements twice was therefore **not duplicate work in the same environment**. It synchronized both environments needed by this particular test.
+
+### Why the corrected test got further this time
+
+The previous run failed at `/me` with HTTP 401. The corrected test changed its default browser origin from `http://127.0.0.1:5000` to `http://localhost:5000` and verifies the authenticated session immediately after login.
+
+This run reached:
+
+    PASS: disposable browser-call users and conversation created
+    PASS: two independent real browser contexts authenticated
+
+That means the previous session/authentication harness problem is resolved. The test now reaches the actual call UI stage.
+
+### New result
+
+The test then failed waiting 10 seconds for:
+
+    get_by_role("button", name="Accept call")
+
+Current result:
+
+**Browser WebRTC media: NOT YET PROVEN.**
+
+This is not yet evidence that WebRTC media is broken. The test has reached the call-incoming UI boundary, but the expected accessible button was not visible. The next investigation is to inspect the actual incoming-call UI/event flow and make the browser test target the real current UI contract rather than assuming the button text/role.
+
+The previous `/me` failure is therefore GREEN/corrected; this is now a new browser-call test/UI contract investigation.
