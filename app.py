@@ -9,7 +9,7 @@ import requests
 import sentry_sdk
 import boto3
 import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from functools import wraps
 from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
@@ -9667,8 +9667,10 @@ def send_chat_message(conversation_id):
     if body and len(body)>CHAT_MESSAGE_CIPHERTEXT_MAX: return jsonify({"error":"Message is too large"}),400
     if nonce is not None and (not isinstance(nonce,str) or len(nonce)>64): return jsonify({"error":"Invalid message nonce"}),400
     if not body and not attachment_id: return jsonify({"error":"Message body or attachment is required"}),400
-    if conversation.e2ee_mode in {"direct_v1", "group_v1"} and body and not nonce:
-        return jsonify({"error":"Encrypted chat messages require a nonce"}),409
+    if conversation.e2ee_mode == "direct_v1" and body and not nonce:
+        return jsonify({"error":"Plaintext direct messages are disabled; encrypt on the client first"}),409
+    if conversation.e2ee_mode == "group_v1" and body and not nonce:
+        return jsonify({"error":"Plaintext group messages are disabled; encrypt on the client first"}),409
     attachment=None
     if attachment_id is not None:
         attachment=db.session.get(MessageAttachment,int(attachment_id))
