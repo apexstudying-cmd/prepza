@@ -960,3 +960,21 @@ The error now builds the message with string concatenation, avoiding accidental 
 ### Status
 
 **NOT YET PROVEN.** The browser-to-browser WebRTC media gate has still not reached the actual call UI/media assertions. The next run should execute the corrected fixture and determine whether the real call flow proceeds past onboarding.
+
+
+### 2026-10-05 — Browser WebRTC gate: local reference-data prerequisite missing
+
+The corrected browser WebRTC fixture now executed its intended database lookup, but the run stopped before creating users or launching Chromium with:
+
+    RuntimeError: Container fixture command failed:
+    RuntimeError: No active university exists for browser WebRTC fixture
+
+This is not a browser selector failure, authentication failure, calling failure, or WebRTC failure. The disposable fixture correctly requires a real active university and active program so the accounts satisfy the same onboarding prerequisites as normal users.
+
+Repository inspection found the supported reference-data seed script already present on main: `seed_universities_and_programs.py`. It is documented as idempotent and seeds the university/program catalog from the repository's institution data. The local database currently has no active university row, so the browser fixture cannot honestly proceed without the reference data being present.
+
+No fake university/program data should be invented inside the browser test. The next step is to run the repository's existing seed mechanism against the local QA database, then rerun the unchanged browser WebRTC gate.
+
+### Status
+
+**NOT YET PROVEN.** No browser/WebRTC assertion has run in this attempt. The blocker is local database reference-data initialization.
