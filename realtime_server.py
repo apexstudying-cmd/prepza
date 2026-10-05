@@ -30,7 +30,8 @@ _realtime_redis = (
 )
 
 # Flask-SocketIO uses this queue to fan realtime events across multiple
-# Render instances. PostgreSQL remains the message source of truth.
+# Render instances. PostgreSQL remains the message source of truth. The HTTP
+# route dispatches only after PostgreSQL has already committed the message.
 socketio = SocketIO(
     app,
     async_mode="threading",
