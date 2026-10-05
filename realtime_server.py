@@ -289,6 +289,7 @@ def emit_to_user(user_id, event, payload):
         targets = [sid for sid, uid in _socket_users.items() if uid == user_id]
     for sid in targets:
         socketio.emit(event, payload, to=sid)
+    return len(targets)
 
 
 def call_participants(conversation_id):
@@ -335,8 +336,12 @@ def handle_call_invite(data):
             return {"ok": False, "error": "Another call is already active"}
         _active_calls[call_id] = {"caller_id": caller_id, "callee_id": target_id, "conversation_id": conversation_id, "kind": kind}
     user = db.session.get(User, caller_id)
-    emit_to_user(target_id, "call:incoming", {"call_id": call_id, "conversation_id": conversation_id, "from_user_id": caller_id, "from_name": getattr(user, "display_name", None), "to_user_id": target_id, "kind": kind})
-    return {"ok": True}
+    delivered = emit_to_user(target_id, "call:incoming", {"call_id": call_id, "conversation_id": conversation_id, "from_user_id": caller_id, "from_name": getattr(user, "display_name", None), "to_user_id": target_id, "kind": kind})
+    if delivered == 0:
+        with _active_calls_lock:
+            _active_calls.pop(call_id, None)
+        return {"ok": False, "error": "User unavailable", "delivered": 0}
+    return {"ok": True, "delivered": delivered}
 
 
 def _route_call_signal(event_name, data, final=False):
