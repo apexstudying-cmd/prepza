@@ -61,13 +61,29 @@ def create_fixture() -> dict:
 import json
 from uuid import uuid4
 from werkzeug.security import generate_password_hash
-from app import app, db, User, Conversation, ConversationParticipant
+from app import app, db, User, Conversation, ConversationParticipant, University, Program
 
 with app.app_context():
     suffix = uuid4().hex
     password = {PASSWORD!r}
     users = []
     try:
+        # The real browser shell enforces first-run onboarding. Use an
+        # existing active university/program pair so the disposable accounts
+        # enter the normal authenticated app instead of being trapped at
+        # "Finish setting up".
+        university = University.query.filter_by(is_active=True).order_by(University.id.asc()).first()
+        if university is None:
+            raise RuntimeError("No active university exists for browser WebRTC fixture")
+        program = Program.query.filter_by(
+            university_id=university.id,
+            is_active=True,
+        ).order_by(Program.id.asc()).first()
+        if program is None:
+            raise RuntimeError(
+                f"No active program exists for browser WebRTC fixture university_id={university.id}"
+            )
+
         for role in ("caller", "callee"):
             user = User(
                 email=f"browser.webrtc.{{role}}.{{suffix}}@test.invalid",
@@ -82,8 +98,8 @@ with app.app_context():
                 who_can_message="everyone",
                 who_can_follow="everyone",
                 read_receipts_enabled=True,
-                university_id=None,
-                program_id=None,
+                university_id=university.id,
+                program_id=program.id,
                 session_version=0,
             )
             db.session.add(user)
