@@ -1084,3 +1084,12 @@ Current result:
 This is not yet evidence that WebRTC media is broken. The test has reached the call-incoming UI boundary, but the expected accessible button was not visible. The next investigation is to inspect the actual incoming-call UI/event flow and make the browser test target the real current UI contract rather than assuming the button text/role.
 
 The previous `/me` failure is therefore GREEN/corrected; this is now a new browser-call test/UI contract investigation.
+
+
+### 2026-10-05 — Browser WebRTC gate: instrumented incoming-call UI timeout
+
+The latest browser gate reached real browser authentication but timed out waiting for the callee's `Accept call` button. Rather than changing the selector blindly, the test was instrumented to print the callee's visible button labels and visible body text when that timeout occurs. This will distinguish a stale/incorrect test selector from a real failure to render or deliver the incoming-call UI.
+
+Change committed directly on `main`: `f9c15426b4ed352503e453a837d08880dffbeb23` (`test: diagnose browser call accept UI`).
+
+The WebRTC browser-to-browser gate remains **NOT YET PROVEN**. No storage/data-integrity gate should start until this browser call path is resolved and rerun.
