@@ -248,7 +248,16 @@ def main() -> int:
                 callee.wait_for_timeout(1200)
                 print("PASS: caller opened the real conversation while callee remained on Home")
 
-                caller.get_by_role("button", name="Start voice call").click()
+                start_voice_button = caller.get_by_role("button", name="Start voice call")
+                try:
+                    start_voice_button.wait_for(state="visible", timeout=15000)
+                except PlaywrightTimeoutError as exc:
+                    buttons = caller.locator("button").all_inner_texts()
+                    body_text = caller.locator("body").inner_text(timeout=2000)
+                    print("DEBUG: caller visible buttons:", buttons, file=sys.stderr)
+                    print("DEBUG: caller visible text:", body_text[:6000], file=sys.stderr)
+                    raise exc
+                start_voice_button.click()
                 print("PASS: caller started voice call through the real UI button")
 
                 accept_button = callee.get_by_role("button", name="Accept call")
