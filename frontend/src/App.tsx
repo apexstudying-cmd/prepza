@@ -4761,7 +4761,6 @@ function ChatDetailScreen({ setScreen, conversationId, setActiveProfileUserId, s
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: T.pageBg, fontFamily: 'Plus Jakarta Sans' }}>
-      {meId != null && <CallExperience userId={meId} />}
       <div style={{ background: N.navy, padding: '8px 10px', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.12)', zIndex: 2 }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', minHeight: 52 }}>
           <button type="button" onClick={() => setScreen('chats')} aria-label="Back to chats" style={{ width: 40, height: 40, background: 'transparent', border: 0, borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>{Ic.back('w-6 h-6')}</button>
@@ -15405,6 +15404,7 @@ export default function App() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {renderScreen()}
       <StudentOnboarding screen={screen} setScreen={setScreen} />
+      <CallExperience userId={null} />
       </div>
       {/* Bottom nav */}
       {!noNav.includes(screen) && <BottomNav active={screen} setScreen={setScreen} unreadChats={unreadChats} exploreAttention={exploreAttention} setExploreAttention={setExploreAttention} />}
