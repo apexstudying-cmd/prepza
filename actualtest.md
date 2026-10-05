@@ -716,3 +716,16 @@ Run:
 This new test is intentionally different from the existing 9-case Socket.IO suite: it uses the real Docker Redis service, starts the real chat worker, connects a real Socket.IO client to the separate `realtime` container, creates real database-backed conversation membership, injects one isolated Redis Stream event, and verifies the connected client receives the resulting `chat:message`.
 
 No paid infrastructure or production deployment is involved.
+
+
+### 2026-10-05 — Cross-process client test harness correction
+
+The first execution of the new client-facing Redis/realtime gate was blocked before the test logic ran:
+
+    ModuleNotFoundError: No module named 'app'
+
+Cause: when Compose executes `python scripts/test_redis_realtime_client_runtime.py`, Python starts with `/app/scripts` on the import path, while the Flask application module is at the repository root `/app/app.py`.
+
+This was a test-harness import-path defect, not a realtime/runtime failure. The script was corrected to add the repository root to `sys.path` before importing the application modules.
+
+The distributed realtime assertions have **not** been scored yet. Re-run the same gate after refreshing `main`.
