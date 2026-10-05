@@ -838,3 +838,73 @@ Root cause: Python's script import path was `/app/scripts`, but `app.py` lives a
 This was a test harness defect. The script has been corrected to insert the repository root into `sys.path` before importing Prepza modules.
 
 Status remains **NOT YET PROVEN** for the final Redis → separate realtime process → real Socket.IO client hop. No production or paid infrastructure change was made.
+
+
+## 2026-10-05 — Cross-process realtime client delivery gate passed
+
+### Exact command
+
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_redis_realtime_client_runtime.py
+
+### Exact result
+
+    PASS: real Socket.IO client connected to the separate realtime process
+    PASS: authenticated client joined the real database-backed conversation
+    PASS: Redis Stream -> chat-worker -> Redis Socket.IO queue -> realtime process -> client delivered chat:message
+    PASS: Redis stream entry 1791205395549-0 was acknowledged
+
+### What this means
+
+We have now proven the missing final local distributed realtime hop. The test used the actual Docker Redis service, the actual `chat_event_worker.py`, the actual separate `realtime` container, and a real authenticated Socket.IO client.
+
+The path tested was:
+
+    Redis Stream
+        ↓
+    chat-worker
+        ↓
+    Redis Socket.IO queue
+        ↓
+    separate realtime process
+        ↓
+    connected Socket.IO client
+
+The client joined a real PostgreSQL-backed conversation and received the expected `chat:message`. The Redis Stream entry was acknowledged, so the worker did not merely publish and leave the job pending.
+
+### Why this is important
+
+Previously we had three separate pieces of evidence:
+
+- 74/74 full local QA;
+- 9/9 focused authenticated realtime tests using `REDIS_URL=memory://`;
+- the real Redis chat-worker gate.
+
+Those did not, by themselves, prove the complete multi-process client-facing path.
+
+This test closes that gap for the controlled local Docker scenario.
+
+### Debugging lesson from the failed first attempt
+
+The first cross-process test attempt failed with:
+
+    ModuleNotFoundError: No module named 'app'
+
+The failure happened before any Redis, authentication, Socket.IO, or realtime assertion. Git and the local working tree already contained the import-path correction, but the running Docker image still contained the older script.
+
+We therefore rebuilt the app image with `--no-cache`, recreated the relevant containers, verified the corrected script inside `/app/scripts/`, and reran the test.
+
+The corrected container then passed all four assertions.
+
+### Current release-gate evidence
+
+- Full local integration: **74 passed, 0 failed, 3375 warnings — GREEN**
+- Focused realtime: **9 passed in 2.98s — GREEN**
+- Focused calling: **4 passed in 3.31s — GREEN**
+- Redis-backed chat worker: **GREEN**
+- Redis-backed cross-process client delivery: **GREEN**
+
+### What is still not proven
+
+This closes the local Docker distributed realtime gate, but it is not the same as proving a public production deployment. We still need later environment-level evidence for things such as real browser/PWA behavior, external provider integrations, internet/network conditions, load behavior, backups/restore, and the actual deployed environment.
+
+No paid VPS migration, GPU purchase, or production infrastructure change was made by this test.
