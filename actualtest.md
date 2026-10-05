@@ -584,3 +584,54 @@ The remaining release-gate evidence is intentionally separate:
 - add the master orchestrator only after the existing gate inventory remains stable.
 
 No production deployment, VPS purchase, GPU purchase, or paid infrastructure change is part of this local gate.
+
+
+## 2026-10-05 — Focused authenticated realtime runtime verified
+
+The previously unpreserved focused realtime result has now been executed from a freshly rebuilt Docker application environment and recorded exactly.
+
+### Command
+
+```text
+docker compose -f docker-compose.vps.yml exec -e REDIS_URL=memory:// app python -m pytest scripts/test_realtime_runtime.py -q
+```
+
+### Result
+
+```text
+.........                                      [100%]
+9 passed in 2.98s
+```
+
+### What this proves
+
+The focused authenticated Socket.IO runtime smoke/regression suite is GREEN for its 9 cases, covering:
+
+- unauthenticated socket rejection;
+- conversation membership enforcement;
+- legitimate member join/presence;
+- repeated-join protection;
+- disconnect presence;
+- multi-tab presence;
+- explicit leave/presence behavior;
+- authenticated typing/read/message dispatch;
+- non-member leave authorization.
+
+The test uses disposable database-backed authenticated users and their real session versions. This preserves the real authentication boundary rather than bypassing it.
+
+### Important boundary
+
+This result uses `REDIS_URL=memory://` because the focused Flask-SocketIO test client is intentionally run in-process. Therefore this is evidence that the authenticated realtime application behavior works; it is **not** evidence that the production multi-process Redis + dedicated chat-worker path works.
+
+### Current focused runtime evidence
+
+- Focused realtime Socket.IO runtime: **9 passed in 2.98s — GREEN**
+- Focused calling runtime: **4 passed in 3.31s — GREEN**
+- Full local integration suite: **74 passed, 0 failed, 3375 warnings — GREEN**
+- Redis-backed production-style runtime: **NEXT GATE / NOT YET PROVEN**
+
+### Next local verification
+
+The next test must target the **actual Redis-backed Compose path**, including the running Redis service and dedicated chat worker. We should not add duplicate application assertions. The purpose is to establish whether the cross-process delivery/worker path works with the real `redis://redis:6379/0` configuration.
+
+No paid infrastructure or production deployment is involved.
