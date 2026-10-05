@@ -1,16 +1,29 @@
 """Runtime regression checks for the authenticated Socket.IO study-chat boundary."""
+import pytest
 from unittest.mock import patch
 
 from realtime_server import app, socketio
 from chat_realtime_dispatch import dispatch_message
+from runtime_test_fixtures import runtime_test_users
+
+_USERS = {}
 
 
-def _session_client(user_id=None):
+@pytest.fixture(scope="module", autouse=True)
+def runtime_users():
+    with runtime_test_users() as users:
+        _USERS.update(users)
+        yield users
+    _USERS.clear()
+
+
+def _session_client(role=None):
     flask_client = app.test_client()
-    if user_id is not None:
+    if role is not None:
+        user = _USERS[role]
         with flask_client.session_transaction() as session:
-            session["user_id"] = user_id
-            session["_session_version"] = 1
+            session["user_id"] = user.id
+            session["_session_version"] = user.session_version
     client = socketio.test_client(app, flask_test_client=flask_client)
     if client.is_connected():
         client.get_received()
@@ -27,7 +40,7 @@ def test_unauthenticated_socket_is_rejected():
 
 
 def test_join_typing_and_read_require_membership():
-    client = _session_client(7)
+    client = _session_client("primary")
     assert client.is_connected()
     with patch("realtime_server.is_active_participant", return_value=False):
         assert client.emit("join_chat", {"conversation_id": 12}, callback=True) == {"ok": False, "error": "Conversation unavailable"}
@@ -38,7 +51,7 @@ def test_join_typing_and_read_require_membership():
 
 
 def test_member_can_join_and_receive_presence():
-    client = _session_client(7)
+    client = _session_client("primary")
     assert client.is_connected()
     with patch("realtime_server.is_active_participant", return_value=True):
         assert client.emit("join_chat", {"conversation_id": 12}, callback=True) == {"ok": True, "conversation_id": 12}
@@ -47,8 +60,8 @@ def test_member_can_join_and_receive_presence():
 
 
 def test_repeated_join_does_not_duplicate_online_presence():
-    observer = _session_client(8)
-    subject = _session_client(7)
+    observer = _session_client("peer")
+    subject = _session_client("primary")
     with patch("realtime_server.is_active_participant", return_value=True):
         observer.emit("join_chat", {"conversation_id": 12}, callback=True)
         subject.emit("join_chat", {"conversation_id": 12}, callback=True)
@@ -59,22 +72,22 @@ def test_repeated_join_does_not_duplicate_online_presence():
 
 
 def test_disconnect_broadcasts_offline_presence():
-    observer = _session_client(8)
-    subject = _session_client(7)
+    observer = _session_client("peer")
+    subject = _session_client("primary")
     with patch("realtime_server.is_active_participant", return_value=True):
         observer.emit("join_chat", {"conversation_id": 12}, callback=True)
         subject.emit("join_chat", {"conversation_id": 12}, callback=True)
         observer.get_received(); subject.get_received()
         subject.disconnect()
         offline_events = _event_named(observer.get_received(), "chat:presence")
-        assert offline_events[-1]["args"][0] == {"conversation_id": 12, "user_id": 7, "online": False}
+        assert offline_events[-1]["args"][0] == {"conversation_id": 12, "user_id": _USERS["primary"].id, "online": False}
     observer.disconnect()
 
 
 def test_multiple_tabs_do_not_emit_offline_until_last_socket_disconnects():
-    observer = _session_client(8)
-    first_tab = _session_client(7)
-    second_tab = _session_client(7)
+    observer = _session_client("peer")
+    first_tab = _session_client("primary")
+    second_tab = _session_client("primary")
     with patch("realtime_server.is_active_participant", return_value=True):
         for client in (observer, first_tab, second_tab):
             assert client.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
@@ -85,14 +98,14 @@ def test_multiple_tabs_do_not_emit_offline_until_last_socket_disconnects():
         assert not _event_named(observer.get_received(), "chat:presence")
         second_tab.disconnect()
         offline_events = _event_named(observer.get_received(), "chat:presence")
-        assert offline_events[-1]["args"][0] == {"conversation_id": 12, "user_id": 7, "online": False}
+        assert offline_events[-1]["args"][0] == {"conversation_id": 12, "user_id": _USERS["primary"].id, "online": False}
     observer.disconnect()
 
 
 def test_explicit_leave_does_not_emit_offline_until_last_socket_leaves():
-    observer = _session_client(8)
-    first_tab = _session_client(7)
-    second_tab = _session_client(7)
+    observer = _session_client("peer")
+    first_tab = _session_client("primary")
+    second_tab = _session_client("primary")
     with patch("realtime_server.is_active_participant", return_value=True):
         for client in (observer, first_tab, second_tab):
             assert client.emit("join_chat", {"conversation_id": 12}, callback=True)["ok"] is True
@@ -101,36 +114,38 @@ def test_explicit_leave_does_not_emit_offline_until_last_socket_leaves():
         assert not _event_named(observer.get_received(), "chat:presence")
         assert second_tab.emit("leave_chat", {"conversation_id": 12}, callback=True)["ok"] is True
         offline_events = _event_named(observer.get_received(), "chat:presence")
-        assert offline_events[-1]["args"][0] == {"conversation_id": 12, "user_id": 7, "online": False}
+        assert offline_events[-1]["args"][0] == {"conversation_id": 12, "user_id": _USERS["primary"].id, "online": False}
     first_tab.disconnect(); second_tab.disconnect(); observer.disconnect()
 
 
 def test_two_members_receive_typing_read_and_persisted_message_events():
-    sender = _session_client(7)
-    receiver = _session_client(8)
+    sender = _session_client("primary")
+    receiver = _session_client("peer")
     with patch("realtime_server.is_active_participant", return_value=True):
         sender.emit("join_chat", {"conversation_id": 12}, callback=True)
         receiver.emit("join_chat", {"conversation_id": 12}, callback=True)
         sender.get_received(); receiver.get_received()
         sender.emit("chat:typing", {"conversation_id": 12, "typing": True})
         typing_events = _event_named(receiver.get_received(), "chat:typing")
-        assert typing_events[-1]["args"][0] == {"conversation_id": 12, "user_id": 7, "typing": True}
+        assert typing_events[-1]["args"][0] == {"conversation_id": 12, "user_id": _USERS["primary"].id, "typing": True}
         assert not _event_named(sender.get_received(), "chat:typing")
         sender.emit("chat:read", {"conversation_id": 12, "read_at": "2026-09-13T10:00:00+00:00"})
         read_events = _event_named(receiver.get_received(), "chat:read")
         assert read_events[-1]["args"][0]["user_id"] == 7
-        payload = {"message": {"id": 44, "conversation_id": 12, "body": "ciphertext-only", "sender_id": 7}}
-        response = app.response_class(response=json.dumps(payload), status=201, mimetype="application/json")
-        with app.test_request_context("/chats/12/messages", method="POST"):
-            with patch("realtime_server.is_e2ee_conversation", return_value=True):
-                assert broadcast_message_response(response) is response
-        assert _event_named(receiver.get_received(), "chat:message")[-1]["args"][0] == payload["message"]
-        assert _event_named(sender.get_received(), "chat:message")[-1]["args"][0] == payload["message"]
+        payload = {
+            "id": 44,
+            "conversation_id": 12,
+            "body": "ciphertext-only",
+            "sender_id": _USERS["primary"].id,
+        }
+        dispatch_message(12, payload)
+        assert _event_named(receiver.get_received(), "chat:message")[-1]["args"][0] == payload
+        assert _event_named(sender.get_received(), "chat:message")[-1]["args"][0] == payload
     sender.disconnect(); receiver.disconnect()
 
 
 def test_leave_requires_membership():
-    client = _session_client(7)
+    client = _session_client("primary")
     with patch("realtime_server.is_active_participant", return_value=False):
         assert client.emit("leave_chat", {"conversation_id": 12}, callback=True) == {"ok": False}
     client.disconnect()
