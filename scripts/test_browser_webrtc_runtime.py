@@ -80,9 +80,7 @@ with app.app_context():
             is_active=True,
         ).order_by(Program.id.asc()).first()
         if program is None:
-            raise RuntimeError(
-                f"No active program exists for browser WebRTC fixture university_id={university.id}"
-            )
+            raise RuntimeError(\n                "No active program exists for browser WebRTC fixture university_id="\n                + str(university.id)\n            )
 
         for role in ("caller", "callee"):
             user = User(
