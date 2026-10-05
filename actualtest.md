@@ -939,3 +939,24 @@ Change committed directly on `main`: `623e7ae4d06d8b9cacd3781f49f335f2b4977b05` 
 Result classification: **TEST-HARNESS FIX / REAL APP BEHAVIOR EXPLAINED**. The WebRTC browser-to-browser gate remains **NOT YET PROVEN** until the corrected fixture reaches the call UI and completes the actual media test.
 
 Important lesson: a successful `/login` response is not sufficient evidence that a real Prepza user has reached the authenticated application shell. The browser gate must satisfy the same onboarding prerequisites a real user must satisfy.
+
+
+### 2026-10-05 — Browser WebRTC gate: fixture error-formatting defect
+
+The next execution of the browser WebRTC gate stopped before any browser interaction because the fixture-building Python code raised:
+
+    NameError: name 'university' is not defined
+
+The defect was in the **test harness**, not the application. The browser fixture is itself constructed from an outer Python f-string, and the inner error message used `{university.id}`. Python therefore tried to evaluate that expression while constructing the fixture source string, before the generated fixture code had assigned `university`.
+
+The fixture logic itself is correct: it queries an active university and then an active program for that university. Only the error-message construction was wrong.
+
+Correction committed directly on `main`:
+
+    2a256a54628fa01a3059fc3ab385affd2e80c95c
+
+The error now builds the message with string concatenation, avoiding accidental evaluation by the outer f-string.
+
+### Status
+
+**NOT YET PROVEN.** The browser-to-browser WebRTC media gate has still not reached the actual call UI/media assertions. The next run should execute the corrected fixture and determine whether the real call flow proceeds past onboarding.
