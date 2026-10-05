@@ -340,3 +340,94 @@ The code fixes are on `main`, but Gate 4 is not GREEN until the standard local Q
 ### Interview-ready explanation
 > “We found a lifecycle bug where realtime behavior depended on importing a module that registered Flask hooks after requests had already started. I moved delivery to an explicit post-commit dispatch path and kept PostgreSQL as the source of truth. We also found a security-contract gap where direct E2EE messages could carry plaintext; the endpoint now requires an encryption nonce for E2EE bodies and rejects invalid writes before persistence.”
 
+
+
+## 2026-10-05 — Realtime/E2EE gate: full QA now GREEN
+
+### Latest evidence
+
+The standard Docker QA loop was rerun from `origin/main` at commit `fb44ed4`:
+
+- Docker image build: **successful**
+- PostgreSQL and Redis: **healthy**
+- Test dependencies: **installed**
+- Alembic upgrade head: **OK**
+- Full real-world QA suite: **74 passed, 0 failed, 3375 warnings**
+- QA database: retained for inspection
+
+The previous five realtime failures are therefore resolved at the full integration-test level.
+
+### What this proves
+
+This is stronger evidence than the earlier static checks because the suite exercised the application against the real PostgreSQL-backed local environment and reached the realtime/E2EE integration boundaries.
+
+The warning count does **not** represent failed tests. The warnings are mainly technical-debt items such as deprecated `datetime.utcnow()` usage and a legacy SQLAlchemy `Query.get()` call. They should be cleaned up later, but they do not currently block correctness.
+
+### Important architecture lesson
+
+Prepza has two different responsibilities in the realtime path:
+
+**Durable truth**
+- PostgreSQL stores the persisted message state.
+- The HTTP message route commits the database transaction first.
+
+**Delivery**
+- Socket.IO provides low-latency delivery.
+- Redis provides the cross-process/multi-instance message queue and chat event stream when configured.
+- The dedicated chat worker consumes the Redis Stream and republishes through Socket.IO.
+
+This distinction matters because receiving a realtime event is not the same thing as proving that the message is durably stored.
+
+### Why we are doing two more explicit checks
+
+The 74/74 suite is enough to move the integration suite from failing to passing, but local QA currently configures `REDIS_URL=memory://` for its realtime tests. That exercises the direct/single-instance Socket.IO path.
+
+Before declaring the production-style realtime gate completely GREEN, we therefore need explicit evidence that:
+
+1. the actual Redis-backed path connects and is enabled;
+2. the dedicated chat worker can consume Redis events;
+3. authenticated call signaling works through `scripts/test_calling_runtime.py`.
+
+### Commands to run next
+
+From `~/prepza` in Git Bash:
+
+    docker compose -f docker-compose.vps.yml up -d
+
+    docker compose -f docker-compose.vps.yml ps
+
+    docker compose -f docker-compose.vps.yml exec app python -c "from realtime_server import REALTIME_REDIS_ENABLED, REALTIME_REDIS_URL, _realtime_redis; print('REALTIME_REDIS_ENABLED=', REALTIME_REDIS_ENABLED); print('REALTIME_REDIS_URL=', REALTIME_REDIS_URL); print('REDIS_PING=', _realtime_redis.ping() if _realtime_redis else None)"
+
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_realtime_runtime.py
+
+    docker compose -f docker-compose.vps.yml exec app python scripts/test_calling_runtime.py
+
+    docker compose -f docker-compose.vps.yml logs --tail=100 chat-worker
+
+The first command proves the production-style Compose stack is running. The Redis Python check proves the application is actually configured to use the Compose Redis service rather than silently falling back.
+
+The realtime script and calling script prove the authenticated Socket.IO/calling behavior. The worker logs let us verify that the dedicated Redis chat worker starts cleanly.
+
+### Learning today
+
+I learned an important distinction:
+
+> A system can pass its integration tests while still needing a separate test of a production-only infrastructure path.
+
+That is not a contradiction. It means we deliberately test both the common application behavior and the infrastructure mode that will exist in production.
+
+I also learned to think of Redis as **delivery infrastructure**, not as the permanent database for chat messages.
+
+### Interview-ready explanation
+
+> “I separated persistence from delivery. PostgreSQL is the source of truth for chat state; Socket.IO handles low-latency delivery; Redis provides cross-process fan-out and the event stream; and a dedicated worker consumes queued events. I don't treat successful realtime delivery as proof of durable persistence, so I test those concerns separately.”
+
+### Audit status after 74/74
+
+- Economics / entitlement truth — GREEN
+- Authentication / authorization — GREEN
+- AI generation runtime + frontend contract — GREEN
+- Realtime/E2EE integration suite — GREEN
+- Realtime production-style Redis path — **verification pending**
+- Calling runtime — **verification pending**
+- Storage/data integrity — BLOCKED until the required realtime verification is complete
