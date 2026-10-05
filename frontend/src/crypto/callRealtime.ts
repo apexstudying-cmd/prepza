@@ -28,5 +28,32 @@ function getSocket() {
 
 export function installCallRealtime() { getSocket() }
 export function onCallSignal(listener: (event: CallSignal & { type: string }) => void) { listeners.add(listener); getSocket(); return () => listeners.delete(listener) }
-export function emitCall(type: string, payload: Record<string, unknown>) { if (!getSocket()) return; socket?.emit(type, payload) }
+export function emitCall(type: string, payload: Record<string, unknown>, timeoutMs = 8000): Promise<Record<string, unknown>> {
+  const current = getSocket()
+  if (!current) return Promise.resolve({ ok: false })
+  return new Promise(resolve => {
+    let settled = false
+    const finish = (value: Record<string, unknown>) => {
+      if (settled) return
+      settled = true
+      resolve(value)
+    }
+    const timer = window.setTimeout(() => finish({ ok: false, error: 'Realtime connection timed out' }), timeoutMs)
+    const send = () => {
+      current.emit(type, payload, (ack: unknown) => {
+        window.clearTimeout(timer)
+        finish(ack && typeof ack === 'object' ? ack as Record<string, unknown> : { ok: true })
+      })
+    }
+    if (current.connected) send()
+    else {
+      const onConnect = () => {
+        current.off('connect', onConnect)
+        send()
+      }
+      current.once('connect', onConnect)
+      current.connect()
+    }
+  })
+}
 export function isCallRealtimeConnected() { return connected }
