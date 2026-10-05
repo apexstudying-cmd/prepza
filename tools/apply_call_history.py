@@ -13,13 +13,13 @@ def main():
         text = text.replace(marker, history, 1)
 
     old2 = """setIncoming(null)
-      emitCall('call:accept'"""
-    new2 = """setIncoming(null)
-      window.dispatchEvent(new CustomEvent('prepza-call-history', { detail: { id: event.call_id, peerId: event.from_user_id, peerName: event.from_name || 'Student', kind: event.kind, direction: 'incoming', at: new Date().toISOString(), conversationId: event.conversation_id } }))
-      emitCall('call:accept'"""
+      if (incomingTimeoutRef.current)"""
+    new2 = """window.dispatchEvent(new CustomEvent('prepza-call-history', { detail: { id: event.call_id, peerId: event.from_user_id, peerName: event.from_name || 'Student', kind: event.kind, direction: 'incoming', at: new Date().toISOString(), conversationId: event.conversation_id } }))
+      setIncoming(null)
+      if (incomingTimeoutRef.current)"""
     if "direction: 'incoming'" not in text:
         if old2 not in text:
-            raise SystemExit("CALL_HISTORY_FAILED: accept handler missing")
+            raise SystemExit("CALL_HISTORY_FAILED: accept handler anchor missing")
         text = text.replace(old2, new2, 1)
 
     TARGET.write_text(text, encoding="utf-8")
