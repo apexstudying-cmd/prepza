@@ -1034,3 +1034,37 @@ The local Docker image build reached the frontend prebuild successfully but fail
 No browser/WebRTC test was run from this build because the frontend image was not successfully built. Docker Compose subsequently started the existing app/realtime/chat-worker containers, but those containers are not evidence that the new frontend build succeeded.
 
 The build transformer has now been reconciled to the new CallExperience structure and made idempotent. The call listener dependency was also corrected to subscribe when the resolved user identity changes. Local verification is still pending.
+
+## 2026-10-05 — Docker production-style app image rebuild: GREEN
+
+### Command executed
+
+    git fetch origin
+    git reset --hard origin/main
+    docker compose -f docker-compose.vps.yml build app
+
+### Result
+
+- Local checkout synchronized to origin/main at c09c7eb (fix global call realtime listener dependency).
+- Docker app image build completed successfully.
+- Build completed in approximately 78.4 seconds.
+- All 22/22 Docker build steps completed.
+- Frontend stage completed successfully with pnpm install --frozen-lockfile && pnpm run build.
+- Runtime image completed successfully and was exported as prepza-app:latest.
+- Previous CALL_HISTORY_FAILED: accept handler missing build blocker is resolved.
+
+### Interpretation
+
+**RESULT: GREEN — application image builds successfully from current main.**
+
+This proves the current source tree can pass the Dockerized frontend prebuild/transform chain and produce the application image. It does not yet prove runtime behavior, browser WebRTC media, or production provider integrations.
+
+### Release-gate status
+
+- Docker app image build: **GREEN**
+- Browser-to-browser WebRTC media: **NOT YET PROVEN**
+- Storage/data-integrity gate: **BLOCKED until browser calling gate is resolved**
+
+### Lesson recorded
+
+A successful Docker build is an important boundary check, but it is not a substitute for runtime testing. The image is now proven buildable; the next step is to recreate the runtime services from this image and rerun the relevant QA/browser gates.
