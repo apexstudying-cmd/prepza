@@ -504,3 +504,61 @@ The failed command therefore gave us no evidence yet about users 7, 8, and 9. We
 ### Realtime test-user lesson
 
 The focused runtime scripts use persistent local database identities differently from the disposable full QA world. The full QA suite creates deterministic users dynamically; the focused scripts currently use hard-coded runtime IDs. Because socket authentication compares the session's `_session_version` with the database's current `User.session_version`, hard-coded session versions can become stale. We must inspect the actual users before weakening or changing the authentication code.
+
+
+## 2026-10-05 — Focused realtime/calling fixtures made self-contained
+
+### What we discovered
+
+The Docker application database reported:
+
+    USER_COUNT= 0
+
+The focused runtime scripts were still assuming persistent users with IDs 7, 8, and 9. That made their socket sessions fail authentication because the realtime server correctly checks that the session user exists, is not suspended, and has the matching current session version.
+
+The full 74/74 QA suite was not affected because its disposable `prepza_qa` database creates its own controlled users.
+
+### What changed
+
+Added `scripts/runtime_test_fixtures.py`, which creates three isolated runtime users with unique `@test.invalid` emails at test start and removes them afterward.
+
+Updated:
+- `scripts/test_realtime_runtime.py`
+- `scripts/test_calling_runtime.py`
+
+Both now:
+- use dynamically created database user IDs;
+- use the users' real `session_version`;
+- avoid assumptions about IDs 7/8/9;
+- clean up their temporary users;
+- continue exercising the real authenticated Socket.IO boundary;
+- keep the membership/calling authorization checks mocked only where the test is specifically isolating realtime behavior.
+
+The realtime message test was also reconciled with the current architecture: it now calls `dispatch_message()` rather than the removed `broadcast_message_response()` helper.
+
+### Why this matters
+
+A runtime test should own the test data it depends on. Database primary keys are implementation details, not stable identities.
+
+This is also a security lesson: when a test failed because its users did not exist, the correct response was **not** to bypass authentication. The authentication failure was correct. We fixed the fixture instead.
+
+### Interview-ready explanation
+
+> "I found that a focused Socket.IO regression test depended on hard-coded database IDs and a hard-coded session version. In a fresh environment the database had zero users, so authentication correctly rejected the sockets. I made the runtime test self-contained by creating disposable users, reading their real IDs and session versions, and cleaning them up afterward. That keeps the test realistic without weakening the authentication boundary."
+
+### Verification required next
+
+Fetch current `main`, rebuild and force-recreate the app/realtime/chat-worker containers, reinstall test requirements, then run the focused realtime and calling tests.
+
+The expected first verification mode is `REDIS_URL=memory://` because Flask-SocketIO's in-process test client cannot be initialized with the production Redis message queue configured. After the Socket.IO behavior passes, separately verify the production Redis path with the real `redis://redis:6379/0` configuration and the chat worker.
+
+### Audit status
+
+- Economics / entitlement truth — GREEN
+- Authentication / authorization — GREEN
+- AI generation runtime + frontend contract — GREEN
+- Realtime/E2EE integration suite — GREEN
+- Focused realtime Socket.IO runtime — **verification pending after fixture fix**
+- Production-style Redis path — **verification pending**
+- Calling runtime — **verification pending after fixture fix**
+- Storage/data integrity — BLOCKED until required realtime/calling verification is complete
