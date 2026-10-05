@@ -4,8 +4,12 @@ TARGET = Path(__file__).resolve().parents[1] / "frontend/src/crypto/CallExperien
 
 def main():
     text=TARGET.read_text(encoding="utf-8")
-    old="""if (event.type === 'call:incoming') { setIncoming(event); return }"""
+    old="""if (event.type === 'call:incoming') {"""
     new="""if (event.type === 'call:incoming') {
+        window.dispatchEvent(new CustomEvent('prepza-call-history', { detail: { id: event.call_id, peerId: event.from_user_id, peerName: event.from_name || 'Student', kind: event.kind, direction: 'missed', at: new Date().toISOString(), conversationId: event.conversation_id } }))
+        setIncoming(event); return
+      }
+    # """
         window.dispatchEvent(new CustomEvent('prepza-call-history', { detail: { id: event.call_id, peerId: event.from_user_id, peerName: event.from_name || 'Student', kind: event.kind, direction: 'missed', at: new Date().toISOString(), conversationId: event.conversation_id } }))
         setIncoming(event); return
       }"""
