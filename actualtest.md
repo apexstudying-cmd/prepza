@@ -451,3 +451,136 @@ Both are necessary. Passing one does not make the other unnecessary.
 ---
 
 **Last verified full-suite result:** 74 passed, 0 failed, 3375 warnings.
+
+
+## 7. 2026-10-05 — Authoritative test inventory and release-gate status
+
+This section records the current inventory after the self-contained focused realtime/calling fixture work. It deliberately distinguishes **implemented**, **executed**, **passed**, and **production-proven**.
+
+### A. Tests already executed
+
+| Gate / command | Coverage | Latest known evidence | Status |
+|---|---|---|---|
+| `python tools/run_local_qa.py` | Disposable PostgreSQL + Alembic + the 10-file real-world suite below | **74 passed, 0 failed, 3375 warnings** on the documented full run | GREEN |
+| `pytest scripts/test_calling_runtime.py -q` | Authenticated Socket.IO 1:1 call signaling | **4 passed in 3.31s** after the fixture/auth reconciliation | GREEN |
+| `pytest scripts/test_realtime_runtime.py -q` | Focused authenticated Socket.IO chat presence, membership, delivery, multi-tab presence and message dispatch | Executed in the focused-runtime verification sequence; the exact latest numeric result is not preserved in the current repository notes | **Do not infer a result** |
+| Redis-backed Compose inspection | Production-style Redis configuration + dedicated chat worker | Compose/runtime path is documented separately; local full QA intentionally uses `REDIS_URL=memory://` | PARTIAL / separate gate |
+
+**Important:** the missing numeric result above is intentional. We do not turn “the command was run” into “the command passed” without preserved evidence.
+
+### B. Full local QA files — reuse, do not duplicate
+
+The authoritative full suite currently reuses these 10 files:
+
+1. `tests/test_local_qa_real_world.py`
+2. `tests/test_route_security_matrix.py`
+3. `tests/test_authenticated_route_matrix.py`
+4. `tests/test_local_qa_authz.py`
+5. `tests/test_frontend_ai_generation_contract.py`
+6. `tests/test_ai_artifact_fingerprint.py`
+7. `tests/test_ai_generation_store.py`
+8. `tests/test_ai_economics.py`
+9. `tests/test_ai_reusable_generation.py`
+10. `tests/test_realtime_e2ee_runtime.py`
+
+Together they are currently **71 test functions / 74 collected cases**.
+
+Focused runtime scripts remain outside that 74-case suite because they exercise a different purpose:
+
+- `scripts/test_realtime_runtime.py` = authenticated Socket.IO runtime smoke/regression behavior.
+- `scripts/test_calling_runtime.py` = authenticated WebRTC signaling runtime behavior.
+- `scripts/runtime_test_fixtures.py` = disposable real database users for those focused runtime tests.
+
+### C. Master release-gate model
+
+The future single command should orchestrate existing gates rather than duplicate their assertions:
+
+**Gate 1 — Environment/database**
+- Compose services healthy.
+- Database reachable.
+- Alembic/migration state valid.
+
+**Gate 2 — Authentication/session**
+- Anonymous rejection.
+- Login/session creation.
+- Logout/session-version invalidation.
+- Suspended-session rejection.
+
+**Gate 3 — Authorization/ownership**
+- Student/admin separation.
+- Organisation tenant isolation.
+- Conversation membership.
+- CSRF/state-changing boundaries.
+
+**Gate 4 — Economics**
+- Free/Plus/Pro canonical entitlements.
+- Exact quota consumption and remaining quota.
+- Per-request ceilings.
+- Expiry/future-start boundaries.
+- Paystack price/currency/idempotency contract.
+- B2B prepaid metering.
+
+**Gate 5 — AI runtime**
+- Frontend/backend generation contract.
+- Artifact identity.
+- Ownership.
+- Ready-artifact reuse.
+- In-flight coalescing.
+- Variant rotation.
+- Provider policy.
+
+**Gate 6 — Realtime/E2EE**
+- Full PostgreSQL-backed E2EE integration suite.
+- Focused authenticated Socket.IO runtime.
+- Redis-backed production-style path.
+- Dedicated chat-worker consumption/recovery.
+
+**Gate 7 — Calling**
+- Authenticated invite.
+- Exact two-member membership.
+- Offer/answer/ICE authorization.
+- Target-only signaling.
+- End/cleanup.
+
+**Gate 8 — Storage/data integrity**
+- Persistence after successful operations.
+- No plaintext E2EE persistence.
+- Attachment/document storage contracts.
+- R2/Supabase provider behavior where locally testable.
+
+**Gate 9 — PWA/offline**
+- Offline architecture checks.
+- IndexedDB/local queue behavior.
+- Recovery/synchronization boundaries.
+
+**Gate 10 — Failure/concurrency**
+- Duplicate-save race safety.
+- Concurrent reads.
+- Retry/idempotency.
+- Load/stress checks where the test can run without inventing credentials.
+
+The master runner must report each gate separately and fail the overall run if a required gate fails. Individual tests remain the diagnostic tools.
+
+### D. Evidence rules
+
+A future green release report must record four separate facts:
+
+1. **Implemented** — the code/test exists.
+2. **Executed** — the command actually ran.
+3. **Passed** — the command returned a passing result.
+4. **Proven in production-like infrastructure** — where a test depends on Redis, external providers, deployment networking, or real browser/device behavior, local unit/integration success is not enough.
+
+This prevents a common QA mistake: treating the existence of a test or a green static contract as proof that a real student operation works.
+
+### E. Current blockers / next verification
+
+The 74/74 local integration suite is GREEN and the focused calling runtime is GREEN.
+
+The remaining release-gate evidence is intentionally separate:
+
+- preserve/verify the exact latest focused realtime runtime result;
+- verify the actual Redis-backed Socket.IO/chat-worker path;
+- complete storage/provider-specific verification;
+- add the master orchestrator only after the existing gate inventory remains stable.
+
+No production deployment, VPS purchase, GPU purchase, or paid infrastructure change is part of this local gate.
