@@ -1002,3 +1002,26 @@ The browser gate was corrected on main to:
 Commit: `32d58d6612731e8129546d49c302887b20c7b71a`.
 
 **Status: NOT YET PROVEN.** The application has not yet passed the real browser-to-browser WebRTC media assertion. The latest timeout was a test-navigation prerequisite, not evidence that WebRTC media is broken.
+
+
+### 2026-10-05 — Chat/calling UX audit and global incoming-call redesign
+
+A repository-grounded audit of the active React chat/calling implementation found several important product and integration issues before the browser WebRTC gate could honestly be called green:
+
+- CallExperience was mounted inside WhatsAppChatExperience, so incoming-call UI depended on the chat route being mounted. This does not match the intended messaging-app interaction model: an authenticated student should be able to receive an incoming call while on Home or another Prepza screen.
+- A second CallExperience instance also existed in the legacy ChatDetailScreen path, creating duplicate call-listener risk if that path is ever rendered.
+- CallExperience used Unicode symbols (×, ✓, ⌁, ◉) as functional call controls. Production calling controls must use proper custom SVG controls with accessible names/tooltips. User-content emoji reactions remain valid as content; application controls do not use emoji characters.
+- Outgoing calls had no finite no-answer timeout. If the callee was offline, the server had no connected target to deliver the invite to, while the frontend could remain in Calling… indefinitely.
+- The realtime invite path did not return whether the target user was actually connected. It now reports delivery count and rejects an invite immediately as User unavailable when there is no connected target.
+- Call signaling acknowledgements were previously fire-and-forget. The client now awaits Socket.IO acknowledgements for call events, with a bounded realtime timeout.
+- The browser WebRTC gate was updated to test the intended UX contract: the caller opens the real chat and uses the real Start voice call button, while the callee remains on Home. The incoming-call UI must therefore be globally available.
+
+Implementation committed directly on main:
+- frontend/src/crypto/callRealtime.ts — bounded/acknowledged call signalling.
+- frontend/src/crypto/CallExperience.tsx — global call identity resolution, unavailable/no-answer handling, 30-second incoming/outgoing timeout, and custom SVG call controls.
+- frontend/src/crypto/WhatsAppChatExperience.tsx — removed duplicate route-local CallExperience.
+- frontend/src/App.tsx — mounted one CallExperience at the authenticated app shell level.
+- realtime_server.py — call invite now reports delivery and returns User unavailable when no target socket exists.
+- scripts/test_browser_webrtc_runtime.py — browser gate now verifies a real caller UI action and global callee incoming UI.
+
+Status: IMPLEMENTED, NOT YET LOCALLY EXECUTED. The next step is to refresh local main, run the frontend build, then run the browser WebRTC gate. If the gate reaches Accept/Connected, continue with offline, decline, timeout, and media assertions. Group-call/add-participant work remains a separate design/architecture phase because the current realtime backend explicitly limits calls to exactly two conversation participants.
