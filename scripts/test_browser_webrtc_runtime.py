@@ -239,29 +239,17 @@ def main() -> int:
                 callee_id = login(callee, fixture["callee_email"], fixture["password"])
                 print("PASS: two independent real browser contexts authenticated")
 
-                # CallExperience is mounted by the WhatsApp chat shell, not
-                # the generic home shell. Open the real conversation route in
-                # both independent browsers before starting the call.
+                # Calling is intentionally global: the caller opens the real
+                # conversation UI, while the callee stays on Home. The incoming
+                # call must still appear outside the chat route.
                 chat_url = f"{BASE_URL}/chats/{fixture['conversation_id']}"
                 caller.goto(chat_url, wait_until="domcontentloaded")
-                callee.goto(chat_url, wait_until="domcontentloaded")
                 caller.wait_for_timeout(1200)
                 callee.wait_for_timeout(1200)
-                print("PASS: both browsers opened the real conversation route")
+                print("PASS: caller opened the real conversation while callee remained on Home")
 
-                # CallExperience listens for this same event used by the real
-                # this same event used by the real Start voice call UI button.
-                caller.evaluate(
-                    """detail => window.dispatchEvent(
-                        new CustomEvent('prepza-start-call', { detail })
-                    )""",
-                    {
-                        "conversationId": fixture["conversation_id"],
-                        "peerId": callee_id,
-                        "peerName": "Browser callee",
-                        "kind": "voice",
-                    },
-                )
+                caller.get_by_role("button", name="Start voice call").click()
+                print("PASS: caller started voice call through the real UI button")
 
                 accept_button = callee.get_by_role("button", name="Accept call")
                 try:
