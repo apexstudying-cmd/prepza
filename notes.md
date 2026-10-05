@@ -1001,3 +1001,38 @@ Current calling gate remains:
 ### Next action
 
 Refresh local `main` so the corrected browser gate is inside the working checkout, then rerun the browser gate. Do not proceed to Storage/Data Integrity until this gate either passes or exposes a real application defect that needs fixing.
+
+## 2026-10-05 — Browser WebRTC harness corrected: local session and cleanup
+
+The browser calling gate reached the real browser layer but was blocked by test setup rather than by WebRTC itself.
+
+The important discovery was the Flask session-cookie configuration:
+
+    SESSION_COOKIE_SECURE = True
+
+The browser test was using `http://127.0.0.1:5000`. For this local browser test, the safer origin is `http://localhost:5000`, where Chromium treats Secure cookies as usable on the localhost development origin.
+
+The test also had a Python f-string mistake in its cleanup SQL. The SQL parameter dictionary needed escaped braces because the surrounding Docker fixture code is itself an f-string.
+
+### What we changed
+
+- Default browser test URL: `http://localhost:5000`.
+- Login helper now verifies the resulting authenticated session through `/me`.
+- The callee ID used for signaling comes directly from that verified authenticated session.
+- Cleanup dictionary braces are escaped correctly.
+- `playwright>=1.55,<2` is now declared in `requirements-test.txt`.
+- Chromium remains a separate browser installation, not a production dependency.
+
+### Why this is a good test design
+
+The test should not print "authenticated" merely because `POST /login` returned success. It should prove that the browser can subsequently use the session for an authenticated request.
+
+Interview-ready explanation:
+
+> "The first browser test was too optimistic because it treated a successful login response as proof that the browser session was usable. I changed it to verify the authenticated session with the real `/me` endpoint before starting the call. I also fixed the disposable-fixture cleanup path and made the browser dependency explicit in the test requirements."
+
+### Current status
+
+**Browser WebRTC media: NOT YET PROVEN.**
+
+The next execution is the same browser gate, now with the corrected local-origin/session handling.
