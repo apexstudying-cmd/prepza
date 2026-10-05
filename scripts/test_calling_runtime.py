@@ -48,8 +48,7 @@ def test_call_invite_routes_only_to_authenticated_peer():
     callee = _session_client("peer")
     observer = _session_client("attacker")
     try:
-        with patch('realtime_server.call_participants', return_value=[_USERS['primary'].id, _USERS['peer'].id]), patch('realtime_server.db.session.get') as get_user:
-            get_user.return_value = type('UserStub', (), {'display_name': 'Caller', 'session_version': 1, 'is_suspended': False})()
+        with patch('realtime_server.call_participants', return_value=[_USERS['primary'].id, _USERS['peer'].id]):
             result = caller.emit('call:invite', {'call_id': 'test-call-1234', 'conversation_id': 12, 'to_user_id': _USERS['peer'].id, 'kind': 'voice'}, callback=True)
         assert result == {'ok': True}
         assert len(_events(callee, 'call:incoming')) == 1
