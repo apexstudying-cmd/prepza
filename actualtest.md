@@ -791,3 +791,64 @@ The repository and local checkout already contained the fix, so we rebuilt the a
 After force-recreating the app, realtime, and chat-worker containers, the container contained the corrected import path and the actual distributed test passed.
 
 This is a useful source-of-truth lesson: when Git contains the expected code but a container executes different code, inspect the code inside the running image before diagnosing application behavior.
+
+
+## 2026-10-05 — Real browser-to-browser WebRTC calling gate prepared
+
+### Why this gate exists
+
+The focused calling runtime is already green at the authenticated Socket.IO signaling layer (**4 passed in 3.31s**), but that does not prove actual microphone/media connectivity between two browsers.
+
+The next missing calling boundary is:
+
+    Browser A
+        ↓ getUserMedia
+    RTCPeerConnection
+        ↓ offer/answer/ICE through real Socket.IO
+    Browser B
+        ↓ RTCPeerConnection
+    remote MediaStream
+
+### New test
+
+Added:
+
+    scripts/test_browser_webrtc_runtime.py
+
+The test is intentionally a host-side browser test rather than a pytest-only Socket.IO test. It:
+
+1. Creates two disposable real database users and one real PostgreSQL-backed 1:1 conversation through the running Docker app container.
+2. Launches two independent Chromium browser contexts with fake microphone/camera devices.
+3. Logs both browsers in through the real `POST /login` endpoint.
+4. Starts the call through the same `prepza-start-call` event used by the real Prepza calling UI.
+5. Accepts the incoming call in the second browser.
+6. Waits for both browsers to report the real calling UI's **Connected** state.
+7. Verifies both browser pages have a live remote audio `MediaStreamTrack`.
+8. Cleans up the disposable users/conversation.
+
+### Required host setup
+
+From the repository root:
+
+    python -m pip install playwright
+    python -m playwright install chromium
+
+The Docker production-style stack must already be running and the app must be reachable at:
+
+    http://127.0.0.1:5000
+
+Then run:
+
+    python scripts/test_browser_webrtc_runtime.py
+
+### Status
+
+**PREPARED / NOT YET EXECUTED.**
+
+This gate is deliberately different from the existing 4-case calling runtime. The earlier test proves signaling/authentication; this one is intended to prove actual browser WebRTC media.
+
+No paid infrastructure, VPS migration, GPU purchase, or public deployment is involved.
+
+### Important limitation
+
+A green local browser gate proves the implemented WebRTC path works under controlled localhost/fake-media conditions. It does **not** prove real student devices behind arbitrary NAT/firewalls can always connect. That later belongs to deployed-environment/network QA, including the configured ICE/STUN/TURN strategy if required.
