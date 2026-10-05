@@ -5,7 +5,6 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime } from './chatRealtime'
 import { ensureE2EEIdentityReady, fetchUserPublicKey, uploadGroupKeyEnvelopes } from './e2eeChatApi'
 import { provisionInitialGroupKey } from './groupProvisioning'
-import CallExperience from './CallExperience'
 import { saveStudyHubDocumentOffline } from '../offline/studyHubOffline'
 import { cacheChatAttachment, getCachedChatAttachmentUrl } from '../offline/chatAttachmentCache'
 
@@ -648,6 +647,5 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
         </>}
       </section>
     </div>
-    <CallExperience userId={meId} />
   </div>
 }
