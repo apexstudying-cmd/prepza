@@ -852,3 +852,37 @@ No paid infrastructure, VPS migration, GPU purchase, or public deployment is inv
 ### Important limitation
 
 A green local browser gate proves the implemented WebRTC path works under controlled localhost/fake-media conditions. It does **not** prove real student devices behind arbitrary NAT/firewalls can always connect. That later belongs to deployed-environment/network QA, including the configured ICE/STUN/TURN strategy if required.
+
+
+## 2026-10-05 — Browser WebRTC gate: first execution blocked by harness defects
+
+The first execution of `scripts/test_browser_webrtc_runtime.py` reached real browser authentication successfully:
+
+    PASS: disposable browser-call users and conversation created
+    PASS: two independent real browser contexts authenticated
+
+It then stopped before WebRTC signaling because the test assumed `/me` returned a top-level `id`, but the actual response shape did not match that assumption:
+
+    KeyError: 'id'
+
+The cleanup path also exposed a fixture-cleanup defect: browser authentication created dependent `user_key` rows, so deleting the disposable users directly failed with a PostgreSQL foreign-key violation.
+
+This is a **test-harness failure, not a calling failure**. The test did not reach offer/answer, ICE, RTCPeerConnection, or media assertions.
+
+### Correction made on main
+
+Commit:
+
+    f3eb880c718f1f564bca83829bb62f3fddbd2786
+
+The browser gate now:
+
+- accepts the actual `/me` payload shape (while failing clearly if it is unexpected);
+- deletes dependent `user_key` rows before deleting disposable users during cleanup.
+
+### Status
+
+**NOT YET PROVEN.**
+
+The real browser WebRTC gate must be executed again after the corrected script is present locally and the Docker app stack is refreshed as needed.
+
