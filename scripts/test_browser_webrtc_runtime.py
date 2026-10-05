@@ -133,6 +133,13 @@ with app.app_context():
     for conversation in conversations:
         ConversationParticipant.query.filter_by(conversation_id=conversation.id).delete()
         db.session.delete(conversation)
+    # Browser authentication creates account key material in user_key. Remove
+    # those dependent rows before deleting the disposable users.
+    if user_ids:
+        db.session.execute(
+            db.text("DELETE FROM user_key WHERE user_id = ANY(:user_ids)"),
+            {"user_ids": user_ids},
+        )
     for user in users:
         db.session.delete(user)
     db.session.commit()
@@ -199,7 +206,15 @@ def main() -> int:
 
                 # The callee's user ID is needed by the actual signaling
                 # payload. Fetch it from the authenticated /me response.
-                callee_id = callee.request.get(f"{BASE_URL}/me").json()["id"]
+                me_response = callee.request.get(f"{BASE_URL}/me")
+                if not me_response.ok:
+                    raise RuntimeError(
+                        f"/me failed with HTTP {me_response.status}: {me_response.text()}"
+                    )
+                me_payload = me_response.json()
+                callee_id = me_payload.get("id") or me_payload.get("user", {}).get("id")
+                if callee_id is None:
+                    raise RuntimeError(f"/me returned unexpected payload: {me_payload}")
 
                 # CallExperience is mounted by the chat shell and listens for
                 # this same event used by the real Start voice call UI button.
