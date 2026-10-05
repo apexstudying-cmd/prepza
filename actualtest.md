@@ -1025,3 +1025,12 @@ Implementation committed directly on main:
 - scripts/test_browser_webrtc_runtime.py — browser gate now verifies a real caller UI action and global callee incoming UI.
 
 Status: IMPLEMENTED, NOT YET LOCALLY EXECUTED. The next step is to refresh local main, run the frontend build, then run the browser WebRTC gate. If the gate reaches Accept/Connected, continue with offline, decline, timeout, and media assertions. Group-call/add-participant work remains a separate design/architecture phase because the current realtime backend explicitly limits calls to exactly two conversation participants.
+
+
+### 2026-10-05 — First local build after calling UX redesign: FAILED at prebuild
+
+The local Docker image build reached the frontend prebuild successfully but failed before Vite compilation. The failing prebuild step was `python3 ../tools/apply_call_history.py`, which reported `CALL_HISTORY_FAILED: incoming handler missing` because the call-history source transformer expected the old one-line incoming-call handler after the CallExperience redesign changed that handler to include global-call timeout/delivery logic.
+
+No browser/WebRTC test was run from this build because the frontend image was not successfully built. Docker Compose subsequently started the existing app/realtime/chat-worker containers, but those containers are not evidence that the new frontend build succeeded.
+
+The build transformer has now been reconciled to the new CallExperience structure and made idempotent. The call listener dependency was also corrected to subscribe when the resolved user identity changes. Local verification is still pending.
