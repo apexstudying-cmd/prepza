@@ -47,7 +47,7 @@ export default function CallExperience({ userId }: Props) {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [resolvedUserId])
+  }, [userId])
   useEffect(() => {
     if (!connectedAt) { setCallSeconds(0); return }
     const tick = () => setCallSeconds(Math.max(0, Math.floor((Date.now() - connectedAt) / 1000)))
@@ -219,9 +219,6 @@ export default function CallExperience({ userId }: Props) {
   })
 
   if (!incoming && !call && !outcome) return null
-  const iconButton = (label: string, child: JSX.Element, onClick: () => void, extra = '') => (
-    <button type="button" onClick={onClick} aria-label={label} title={label} style={{ width: 56, height: 56, border: 0, borderRadius: '50%', background: 'rgba(255,255,255,.18)', color: '#fff', cursor: 'pointer', display: 'grid', placeItems: 'center', ...extra && {} }}>{child}</button>
-  )
   return <>
     <audio ref={remoteAudio} autoPlay playsInline style={{ display: 'none' }} />
     {outcome && !incoming && !call && <div style={{ position:'fixed',left:'50%',bottom:28,transform:'translateX(-50%)',zIndex:3100,background:'#fff',color:'#111827',borderRadius:14,padding:'12px 18px',boxShadow:'0 12px 40px rgba(0,0,0,.24)',fontSize:13,fontWeight:750 }}>{outcome === 'unavailable' ? 'Student is unavailable.' : outcome === 'no-answer' ? 'No answer.' : 'Call ended.'}</div>}
