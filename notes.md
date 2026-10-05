@@ -653,3 +653,62 @@ The next implementation step is to create the single master local runtime QA orc
 - avoid duplicating business assertions.
 
 Only after that local gate is stable should we treat external-provider QA and deployed launch smoke as the next layers.
+
+
+## 2026-10-05 — Focused realtime runtime verification completed
+
+### What we did
+
+We rebuilt the current `main` Docker application from scratch, force-recreated the application container, installed the test requirements, and reran the previously unpreserved focused realtime runtime gate.
+
+The exact command was:
+
+    docker compose -f docker-compose.vps.yml exec -e REDIS_URL=memory:// app python -m pytest scripts/test_realtime_runtime.py -q
+
+### Result
+
+    .........                                      [100%]
+    9 passed in 2.98s
+
+### What this proves
+
+The focused authenticated Socket.IO runtime gate is now **GREEN**.
+
+The 9 cases verify:
+
+- unauthenticated socket rejection;
+- conversation membership enforcement;
+- member join/presence;
+- repeated join protection;
+- disconnect presence;
+- multi-tab presence;
+- explicit leave behavior;
+- authenticated typing/read/message dispatch;
+- non-member leave authorization.
+
+The tests use disposable real database users and their current session versions, so the authentication boundary remains real.
+
+### Important boundary
+
+This run uses:
+
+    REDIS_URL=memory://
+
+That is intentional for the in-process Flask-SocketIO test client. It proves the focused authenticated realtime behavior, but it does **not** prove the production-style multi-process Redis/chat-worker path.
+
+### Current release-gate evidence
+
+- Full local integration suite: **74 passed, 0 failed, 3375 warnings — GREEN**
+- Focused realtime runtime: **9 passed in 2.98s — GREEN**
+- Focused calling runtime: **4 passed in 3.31s — GREEN**
+- Redis-backed production-style realtime path: **NEXT / NOT YET PROVEN**
+
+### Next step
+
+The next local test should verify the real Docker Redis path and dedicated chat worker without duplicating the already-green Socket.IO assertions.
+
+The question is now:
+
+**Can a realtime event/message traverse the actual Redis-backed multi-process architecture, with PostgreSQL remaining the durable source of truth and the dedicated chat worker consuming/recovering Redis Stream work correctly?**
+
+No paid infrastructure, VPS migration, GPU purchase, or production deployment is part of this gate.
