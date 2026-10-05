@@ -1093,3 +1093,16 @@ The latest browser gate reached real browser authentication but timed out waitin
 Change committed directly on `main`: `f9c15426b4ed352503e453a837d08880dffbeb23` (`test: diagnose browser call accept UI`).
 
 The WebRTC browser-to-browser gate remains **NOT YET PROVEN**. No storage/data-integrity gate should start until this browser call path is resolved and rerun.
+
+
+### 2026-10-05 — Browser WebRTC gate: real onboarding blocker identified
+
+The instrumented browser run reached real authentication but the callee page rendered `1/4 Finish setting up` and no buttons. The visible page also reported that the university was not found. This proves the timeout was not an incorrect `Accept call` selector: the disposable test account was being held in the real first-run onboarding flow, so the chat/call shell was never mounted and no incoming-call UI could exist.
+
+The browser fixture has now been corrected to use an existing active university and active program from the real database when creating its disposable caller/callee accounts. It still uses the normal login and onboarding state; it does not bypass onboarding or inject a fake call UI.
+
+Change committed directly on `main`: `623e7ae4d06d8b9cacd3781f49f335f2b4977b05` (`test: satisfy onboarding in browser call fixture`).
+
+Result classification: **TEST-HARNESS FIX / REAL APP BEHAVIOR EXPLAINED**. The WebRTC browser-to-browser gate remains **NOT YET PROVEN** until the corrected fixture reaches the call UI and completes the actual media test.
+
+Important lesson: a successful `/login` response is not sufficient evidence that a real Prepza user has reached the authenticated application shell. The browser gate must satisfy the same onboarding prerequisites a real user must satisfy.
