@@ -1192,3 +1192,21 @@ Study-time tracking must not become a client-authoritative entitlement mechanism
 ### Release-gate requirement
 
 Do not call this design implementation-green until tests prove document switching, feature switching, inactivity, offline/reconnect, duplicate sync, lost-response retry, Nairobi midnight, daily ceiling, concurrent sync, authorization, and a 400-active-student load scenario.
+
+
+## 2026-10-06 — Study Hub single-clock implementation pass
+
+Implemented directly on `main`:
+
+- Replaced the per-document/20-second Study Hub heartbeat with `POST /study-time/sync` using an absolute daily Study Hub total.
+- Added browser-persistent single Study Hub accumulation with a maximum normal flush interval of about one hour plus earlier lifecycle/inactivity/reconnect flushes.
+- Removed the document-owned timer from `PdfStudyCanvas` and the native document reader's 20-second heartbeat.
+- Retired the old heartbeat endpoint with HTTP 410.
+- Added concurrency-safe reconciliation by locking the authenticated user's PostgreSQL row before the Study Hub row is read/created/updated.
+- Added migration `20261006_study_hub_time.sql` to preserve historical totals while consolidating old per-feature rows into one `study_hub` row per user/day.
+- Added `scripts/test_study_time_runtime.py` covering monotonic replay-safe sync, daily ceiling, one-row storage, concurrent reconciliation, auth/CSRF, and legacy heartbeat retirement.
+- Kept product analytics separate and cached its CSRF token to avoid repeated `/me` requests.
+
+### Verification status
+
+**Not green yet.** The implementation has been committed, but the local Docker verification gate still needs to run. Required next checks: migration apply/verify, Study Hub runtime pytest, TypeScript/Vite build, full `tools/run_local_qa.py`, and browser regression where applicable. Do not treat the design as frozen until these pass.
