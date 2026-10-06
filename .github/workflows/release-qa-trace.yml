@@ -1,0 +1,25 @@
+name: Release QA Trace
+on:
+  push:
+    branches: [main]
+    paths:
+      - "qa/**"
+      - "scripts/qa_trace.py"
+      - "app.py"
+      - "e2ee_chat_routes.py"
+      - "e2ee_chat_models.py"
+      - "study_friend_streak_routes.py"
+      - "frontend/src/**"
+      - "scripts/test_*.py"
+      - ".github/workflows/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify code trace registry
+        run: python scripts/qa_trace.py --strict
