@@ -6394,29 +6394,6 @@ def reconcile_study_time(user_id, target_seconds, activity_date=None):
     return row.study_time_seconds, accepted
 
 
-def _study_time_total(user_id, activity_date=None):
-    """Return the authoritative Study Hub total for one Nairobi calendar day."""
-    day = activity_date or _study_local_date()
-    return int(
-        db.session.query(
-            db.func.coalesce(
-                db.func.sum(
-                    db.case(
-                        (StudyTimeLog.feature == STUDY_TIME_FEATURE, StudyTimeLog.study_time_seconds),
-                        else_=0,
-                    )
-                ),
-                0,
-            )
-        )
-        .filter(
-            StudyTimeLog.user_id == user_id,
-            StudyTimeLog.activity_date == day,
-        )
-        .scalar()
-        or 0
-    )
-
 
 def check_and_unlock_achievements(user_id):
     """
