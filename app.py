@@ -3345,6 +3345,13 @@ def delete_account():
     # dispute purposes - just disassociate them from the deleted user
     # instead of deleting the rows outright.
     Payment.query.filter_by(user_id=user.id).update({"user_id": None})
+
+    # StudyStreak is derived, per-user state and has a non-null foreign key
+    # without database-level ON DELETE CASCADE. Remove it explicitly before
+    # deleting the account so a student who has studied can still exercise
+    # the account-deletion contract.
+    StudyStreak.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+
     db.session.delete(user)
     db.session.commit()
     session.clear()
