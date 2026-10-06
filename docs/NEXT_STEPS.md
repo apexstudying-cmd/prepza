@@ -1,6 +1,6 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-10-03
+Last updated: 2026-10-06
 Branch: main
 
 Status:
@@ -22,7 +22,7 @@ Rule: require evidence before marking production work complete.
 - [x] Day 10 repository-grounded technical documentation
 - [x] OpenAI-only provider/dependency cleanup
 - [x] Direct-to-main workflow retained
-- [ ] Re-run full launch-contract CI after latest Alembic/Docker changes
+- [ ] Re-run full launch-contract CI after latest Alembic/Docker/Study Hub changes
 
 ## 2. Local Docker/runtime
 - [x] Align Docker runtime with Python 3.13
@@ -36,14 +36,14 @@ Rule: require evidence before marking production work complete.
 - [x] Remove disposable local PostgreSQL/Redis volumes
 - [x] Create fresh local database
 - [x] Run Alembic upgrade head on empty database
-- [x] Verify Alembic revision = 20261002_user_model
+- [x] Verify current Alembic head = 20261005_chat_attach_source_doc
 - [x] Verify 108 public tables including Alembic bookkeeping
 - [x] Start Flask app
 - [x] Start realtime
-- [ ] Test actual Flask HTTP endpoints
-- [ ] Test local realtime authentication/connection
-- [ ] Test Redis-backed realtime/chat
-- [ ] Test representative student flows
+- [x] Test actual Flask HTTP endpoints through the disposable PostgreSQL QA suite
+- [x] Test local realtime authentication/connection
+- [x] Test Redis-backed realtime/chat, including worker and cross-process client delivery
+- [x] Test representative student flows through the 74-case local QA suite
 - [ ] Test representative AI flow with controlled credentials
 - [ ] Test local PostgreSQL backup/restore
 
@@ -57,7 +57,7 @@ Rule: require evidence before marking production work complete.
 - [x] Document fresh database migration
 - [x] Document existing database verification/stamping rules
 - [x] Prove fresh local bootstrap
-- [ ] Reconcile/document historical migrations versus new Alembic deployment procedure
+- [~] Reconcile/document historical migrations versus the current Alembic deployment procedure
 - [ ] Test a representative future Alembic migration
 - [ ] Establish production migration checklist
 - [ ] Test migration procedure against a disposable restored database
@@ -87,9 +87,9 @@ Rule: require evidence before marking production work complete.
 - [x] Redis-backed realtime/chat architecture
 - [x] Chat event acknowledgement/recovery
 - [x] Single-instance fallback
-- [ ] Exercise Redis-backed realtime locally
+- [x] Exercise Redis-backed realtime locally
 - [ ] Exercise Redis failure/reconnect locally
-- [ ] Verify queue depth/worker recovery
+- [~] Verify queue depth/worker recovery
 - [ ] Define production Redis persistence/memory policy
 - [ ] Verify production Redis monitoring
 - [ ] Verify rate limiting under realistic traffic
@@ -183,9 +183,9 @@ Rule: require evidence before marking production work complete.
 - [ ] Review firewall and SSH hardening for self-hosting
 - [ ] Review dependency vulnerabilities
 - [ ] Design/verify required RLS policies; never enable blindly
-- [ ] Run authenticated/unauthenticated endpoint smoke tests
-- [ ] Test account isolation/logout/deletion
-- [ ] Re-run E2EE regression after protocol/storage changes
+- [x] Run authenticated/unauthenticated endpoint checks in local QA/runtime tests
+- [~] Test account isolation/logout/deletion; broad FK cleanup audit remains
+- [x] Re-run E2EE regression after protocol/storage changes
 
 ## 12. Render-first deployment
 - [x] Paid VPS migration paused while budget is constrained
@@ -252,12 +252,12 @@ Rule: require evidence before marking production work complete.
 - [ ] Email verification
 - [ ] Login/logout/session invalidation
 - [ ] Onboarding persistence
-- [ ] Study Hub
+- [~] Study Hub — backend sync/reconciliation gate green; browser/offline lifecycle still pending
 - [ ] Document upload/read
 - [ ] Offline behavior
 - [ ] AI summary/flashcards/quiz/mind map
 - [ ] Podcast script/audio
-- [ ] Chat/realtime/E2EE
+- [~] Chat/realtime/E2EE — local distributed realtime gate green; browser calling still pending
 - [ ] Payment/subscription entitlement
 - [ ] Account deletion
 - [ ] Admin access
@@ -284,18 +284,18 @@ Rule: require evidence before marking production work complete.
 ## 19. Immediate execution queue
 1. [x] Finish local PostgreSQL/Alembic bootstrap
 2. [x] Start local app/realtime/Redis/PostgreSQL stack
-3. [ ] Verify actual local HTTP health/endpoints
-4. [ ] Verify local realtime behavior
-5. [ ] Re-run full launch-contract CI after latest migration/Docker changes
-6. [ ] Run representative local functional smoke tests
-7. [ ] Verify local PostgreSQL backup/restore
-8. [ ] When Render capacity is available, deploy exact tested main commit
-9. [ ] Perform controlled external-provider verification
-10. [ ] Run measured staging/load tests
-11. [ ] Decide infrastructure from evidence and budget
-12. [ ] If self-hosting is justified, execute VPS checklist
-13. [ ] Perform final backup/restore/rollback rehearsal
-14. [ ] Controlled launch
+3. [x] Verify actual local HTTP endpoints through full QA/runtime tests
+4. [x] Verify local realtime behavior, including Redis worker and cross-process client delivery
+5. [ ] Verify the new Study Hub runtime CI workflow
+6. [ ] Complete browser-to-browser WebRTC media gate
+7. [ ] Complete browser/offline Study Hub lifecycle coverage
+8. [ ] Complete storage/data-integrity backup and restore gate
+9. [ ] Complete remaining cross-system integration journeys
+10. [ ] Run full clean-environment regression/freeze suite
+11. [ ] Perform controlled external-provider verification
+12. [ ] Run measured staging/load tests after functional/browser gates are green
+13. [ ] Decide infrastructure from evidence and budget
+14. [ ] Only after freeze, execute Render/VPS deployment work
 
 ## 20. Maintenance rules
 1. Evidence before checkbox.
