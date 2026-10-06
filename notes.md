@@ -1383,3 +1383,14 @@ Before freezing implementation, test:
 - authorization/context validation;
 - 400 active students.
 
+
+
+## 2026-10-06 — Study Hub implementation notes
+
+The implementation has moved from design into code on main. The backend now accepts an absolute daily Study Hub total and only advances the PostgreSQL total by the forward difference, so retrying the same total is safe. The authenticated user's row is locked before reading/creating/updating the Study Hub row, which serializes concurrent first-sync and update races for one account.
+
+The old per-document heartbeat is retired. Historical StudyTimeLog data is consolidated by migration into one study_hub row per user/day so previous study time is not silently lost. The browser tracker is global across Study Hub learning screens; changing documents or features changes context without creating another clock. The old studyActivity module is only a compatibility facade.
+
+Product analytics remains a separate activity concept. Its CSRF token is cached so the analytics loop no longer fetches /me every minute.
+
+This is not QA-green yet. The next local run must prove migration correctness, runtime tests, frontend build, full integration QA, offline/reconnect behaviour, inactivity/visibility behaviour, and the 400-active-student performance target.
