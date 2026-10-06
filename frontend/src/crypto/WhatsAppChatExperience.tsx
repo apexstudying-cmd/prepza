@@ -17,7 +17,7 @@ const AttachmentIc = {
 
 const AttachmentAttachmentIc = AttachmentIc
 
-type ChatSummary = { id: number; is_group: boolean; name: string | null; last_message_at: string | null; last_message_sender_name?: string | null; last_message_filename?: string | null; unread_count: number; status?: string }
+type ChatSummary = { id: number; is_group: boolean; name: string | null; last_message?: string | null; last_message_at: string | null; last_message_sender_name?: string | null; last_message_filename?: string | null; unread_count: number; status?: string }
 type Attachment = { id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null; study_document?: boolean }
 type Message = { id: number; conversation_id: number; sender_id: number; body: string | null; nonce?: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null; attachment: Attachment | null; kind?: 'text' | 'reaction'; read_by_count?: number; read_by_all?: boolean }
 type Participant = { user_id: number; display_name: string; role: string }
@@ -87,7 +87,9 @@ async function hydrateAttachmentUrls(messages: Message[]): Promise<Message[]> {
 }
 
 export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenOptions, onOpenDocument }: { onClose?: () => void; onOpenProfile?: (userId: number, displayName?: string, conversationId?: number) => void; onOpenOptions?: (conversationId: number) => void; onOpenDocument?: (documentId: number) => void }) {
-  // This component is mounted only when App enters the Chats screen.\n  // It therefore must render immediately; the fetch observer below is for\n  // legacy direct-navigation detection and must not be the visibility gate.\n  const [visible, setVisible] = useState(true)
+  // This component is mounted only when App enters the Chats screen.
+  // It therefore must render immediately; the fetch observer below is for
+  // legacy direct-navigation detection and must not be the visibility gate.\n  const [visible, setVisible] = useState(true)
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [chats, setChats] = useState<ChatSummary[]>([])
