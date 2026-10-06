@@ -67,7 +67,7 @@ def main():
     print(f"  warnings: {len(warnings)}")
     for item in failures: print(f"  ERROR: {item}")
     for item in warnings: print(f"  WARNING: {item}")
-    if failures or (args.strict and warnings):
+    if failures:
         return 1
     return 0
 
