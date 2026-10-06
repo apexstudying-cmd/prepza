@@ -137,11 +137,11 @@ async function flush() {
 }
 
 export function setStudyHubActive(value: boolean) {
+  tick()
   active = value
   lastTick = performance.now()
   interactedAt = active ? lastTick : 0
-  if (active) void flush()
-  else void flush()
+  void flush()
 }
 
 export function installStudyHubActivityTracker() {
