@@ -236,6 +236,7 @@ def main() -> int:
                 # /chats/<id> is a Flask JSON API endpoint, not the SPA route.
                 # Enter through the real authenticated shell, open Chats, then
                 # select the disposable conversation through the actual UI.
+                caller.get_by_text("Chats", exact=True).wait_for(state="visible", timeout=10000)
                 caller.get_by_text("Chats", exact=True).click()
                 # Diagnose the chat-list boundary before waiting on rendered rows.
                 # If the disposable conversation is absent here, the failure is
