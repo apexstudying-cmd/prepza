@@ -1278,3 +1278,9 @@ The full local QA gate is **GREEN**. The next unresolved release gate remains th
 - `scripts/test_browser_webrtc_runtime.py` was hardened on `main` to wait explicitly for that control for up to 15s and emit diagnostic caller UI text/buttons if it remains absent.
 - Commit: `aa67d88d326e4518606197d4569ffd0cf8ec427b`.
 - Next step is to rerun the browser gate; do not classify the WebRTC path green until the real call reaches Connected and both browsers expose live remote audio tracks.
+
+
+## Browser WebRTC gate — chat-list visibility failure and fix (2026-10-06)
+The browser gate reached a useful boundary before failing: the disposable conversation existed in PostgreSQL and `GET /chats` returned it with HTTP 200, so authentication, session cookies, conversation creation, and server-side chat visibility were functioning. The failure was in the frontend shell: `WhatsAppChatExperience` was mounted for the Chats screen but started with `visible=false`; its own list request was marked internal, so the observer that could set visibility never saw that request. The API row also exposed a null direct-chat name, which the UI did not handle safely. This is a frontend state/data-shaping bug, not evidence of a WebRTC or realtime transport failure.
+
+Commit `a9300823f592f205ce91f773c7ed82273108ba9f` fixes the boundary by making the mounted Chats experience visible immediately, resolving unnamed direct-chat rows from authoritative conversation participants, and making chat-name filtering/rendering null-safe. The browser WebRTC gate must be rerun before calling calling UX/browser media readiness green.
