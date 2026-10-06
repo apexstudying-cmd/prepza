@@ -12,6 +12,7 @@ from app import (
     db,
     User,
     StudyTimeLog,
+    StudyStreak,
     STUDY_TIME_FEATURE,
     MAX_STUDY_TIME_SECONDS_PER_DAY,
     MIN_QUALIFYING_STUDY_SECONDS,
@@ -46,6 +47,7 @@ def runtime_user():
         yield user_id
 
         StudyTimeLog.query.filter_by(user_id=user_id).delete()
+        StudyStreak.query.filter_by(user_id=user_id).delete()
         db.session.delete(db.session.get(User, user_id))
         db.session.commit()
         db.session.remove()
