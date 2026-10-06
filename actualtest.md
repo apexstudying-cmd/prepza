@@ -1159,3 +1159,36 @@ The browser WebRTC gate remains **NOT YET PROVEN**. The newly built image must b
 - Browser-to-browser WebRTC media: **NOT YET PROVEN**
 - `/me` browser-test rate-limit boundary: **REQUIRES INVESTIGATION**
 - External provider/storage recovery: **NOT YET PROVEN**
+
+
+## 2026-10-06 — Study Hub study-time architecture locked for implementation
+
+The Study Hub study-time design has been documented in `designstudytime.md` and is now the implementation baseline.
+
+### Locked principles
+
+- Study Hub is tracked as **one learning-activity system per student/session**, not one authoritative timer per document.
+- Documents, pages, and features remain context for validation/analytics.
+- Switching documents or features must not reset or create a second authoritative Study Hub clock.
+- Browser-local accumulation is preferred over frequent server heartbeats.
+- Normal synchronization should be low-frequency (approximately hourly at most), with earlier flushes on inactivity, leaving Study Hub, tab visibility changes, navigation where reliable, and reconnect.
+- Synchronization must be replay-safe/idempotent because a response can be lost after PostgreSQL commits.
+- PostgreSQL remains the durable source of truth.
+- Redis must not become the authoritative study-time store.
+- The server remains authoritative for authentication, context validation, Nairobi calendar boundaries, replay protection, and the existing daily anti-gaming ceiling.
+- Global product activity and Study Hub learning time must remain separate concepts.
+- Existing local Study Activity accumulation should be reconciled and simplified rather than creating another timer system.
+
+### Current repository evidence
+
+The existing frontend already has a persistent Study Activity accumulator in `frontend/src/offline/studyActivity.ts`, including Nairobi date keys, visibility/interaction checks, local totals, synced totals, server baselines, and offline synchronization.
+
+The existing backend already has aggregated StudyTimeLog storage and server-side controls. The remaining work is therefore primarily **architecture reconciliation**: consolidate the activity producers, make Study Hub one global learning clock, and align the server synchronization contract with safe longer batching.
+
+### Important economics boundary
+
+Study-time tracking must not become a client-authoritative entitlement mechanism. Free/Plus/Pro AI economics remain server-authoritative and continue to use the existing tested entitlement/quota contracts.
+
+### Release-gate requirement
+
+Do not call this design implementation-green until tests prove document switching, feature switching, inactivity, offline/reconnect, duplicate sync, lost-response retry, Nairobi midnight, daily ceiling, concurrent sync, authorization, and a 400-active-student load scenario.
