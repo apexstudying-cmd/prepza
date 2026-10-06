@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'
-import { startOfflineStudyTracking } from '../offline/studyActivity'
 import { getOfflineStudyDocumentUrl } from '../offline/studyHubOffline'
 import { getOfflineUserId } from '../offline/generatedMaterials'
 type Props = { src: string; title: string; storageKey?: string; initialPage?: number; documentId?: number; onPageChange?: (page: number) => void; onTextSelection?: (text: string) => void }
@@ -34,7 +33,6 @@ export default function PdfStudyCanvas({ src, title, storageKey, initialPage = 1
   // offline annotations and bookmarks survive a new object URL.
   const stableStudyKey = storageKey || src
   const annotationKey = `${STORE}:${stableStudyKey}`, bookmarkKey = `${BOOKMARKS}:${stableStudyKey}`
-  useEffect(() => { const trackingDocumentId = documentId; if (trackingDocumentId == null) return; void startOfflineStudyTracking(trackingDocumentId, 'reading') }, [documentId])
   useEffect(() => { setAnnotations(loadAnnotations(annotationKey)); undoRef.current = []; setBookmarks(loadBookmarks(bookmarkKey)) }, [annotationKey, bookmarkKey])
   const commitAnnotations = (next: Annotation[]) => {
     const bounded = next.length > MAX_ANNOTATIONS ? next.slice(-MAX_ANNOTATIONS) : next
