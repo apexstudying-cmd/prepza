@@ -1288,3 +1288,47 @@ Commit `a9300823f592f205ce91f773c7ed82273108ba9f` fixes the boundary by making t
 
 ### 2026-10-06 — Browser WebRTC gate build regression and source fix
 The browser gate exposed a second-layer source/build issue after the earlier chat visibility diagnosis. The `/chats` API was still healthy, but the Docker frontend build failed before the browser test could use the rebuilt image. TypeScript reported `visible` and `setVisible` as undefined in `WhatsAppChatExperience.tsx`, plus `last_message` missing from `ChatSummary`. Inspection showed the visibility-state explanatory comment contained literal `\\n` text, swallowing the state declaration as part of the comment. The summary type also needed the optional `last_message` property because the hydration/render path reads and writes it. Fixed directly on `main` in commit `18aff73`. Next gate: sync `main`, rebuild the app image, confirm TypeScript/Vite build passes, then rerun `scripts/test_browser_webrtc_runtime.py` to continue toward the actual two-browser media test.
+
+
+### 2026-10-06 — Lesson: inspect the actual checked-out source when a supposedly fixed build error persists
+
+The first attempted fix for the chat visibility declaration appeared to be committed as `bd3e5fb`, but the local source inspection showed that the file still contained a literal `\n` inside the explanatory comment:
+
+    // legacy direct-navigation detection and must not be the visibility gate.\n  const [visible, setVisible] = useState(true)
+
+Because the declaration was swallowed by the comment, TypeScript correctly reported both `visible` and `setVisible` as undefined.
+
+The important debugging lesson was to stop making assumptions from the commit message and inspect the exact source that Docker was compiling. `grep`, `sed`, and `git diff` exposed the remaining literal characters immediately.
+
+The correction was then made directly in `frontend/src/crypto/WhatsAppChatExperience.tsx`, replacing the literal `\n` with a real newline. `git diff --check` returned clean, and the subsequent Docker build completed all **22/22 steps successfully**.
+
+### Why this matters
+
+The production-style Docker build is testing the actual source-to-image path:
+
+    checked-out source
+        -> frontend prebuild transformations
+        -> TypeScript
+        -> Vite
+        -> frontend/dist
+        -> Python runtime image
+
+A green commit message is not evidence that every byte of the checked-out source is correct. The compiler and Docker build remain authoritative boundaries.
+
+### Current lesson
+
+The chat visibility source issue is now resolved at the compiler/build boundary.
+
+The next debugging boundary is different: the browser harness previously reached authentication but received HTTP 429 from `/me`. That should be investigated as a rate-limiter/test-isolation problem before rerunning the browser WebRTC gate. It should not be incorrectly classified as a WebRTC failure.
+
+### Evidence
+
+- `git status --short`: only the intended `WhatsAppChatExperience.tsx` source correction was modified.
+- `git diff --check`: no errors.
+- Docker build: **22/22 steps completed**.
+- `prepza-app:latest`: successfully exported.
+- TypeScript no longer reports the `visible`/`setVisible` errors.
+
+### Interview-ready explanation
+
+> The browser test exposed a frontend build regression. Instead of assuming the previous fix had worked, I inspected the exact checked-out source and found that a literal `\\n` had swallowed the React state declaration inside a comment. I corrected the source, verified the diff was clean, and rebuilt the production-style Docker image. The full 22-step build then passed. I now separate that build boundary from the remaining browser rate-limit and WebRTC media gates.

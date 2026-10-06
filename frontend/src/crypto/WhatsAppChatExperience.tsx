@@ -89,7 +89,8 @@ async function hydrateAttachmentUrls(messages: Message[]): Promise<Message[]> {
 export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenOptions, onOpenDocument }: { onClose?: () => void; onOpenProfile?: (userId: number, displayName?: string, conversationId?: number) => void; onOpenOptions?: (conversationId: number) => void; onOpenDocument?: (documentId: number) => void }) {
   // This component is mounted only when App enters the Chats screen.
   // It therefore must render immediately; the fetch observer below is for
-  // legacy direct-navigation detection and must not be the visibility gate.\n  const [visible, setVisible] = useState(true)
+  // legacy direct-navigation detection and must not be the visibility gate.
+  const [visible, setVisible] = useState(true)
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [chats, setChats] = useState<ChatSummary[]>([])

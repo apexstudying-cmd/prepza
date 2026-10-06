@@ -1130,3 +1130,32 @@ The full QA result does not replace the separate browser WebRTC gate or the late
 - Root cause: the explanatory comment inserted above the visibility state contained literal `\\n` characters, so the `const [visible, setVisible] = useState(true)` declaration was effectively commented out. The `ChatSummary` type also lacked the optional `last_message` field already consumed by the chat-list hydration/rendering path.
 - Fix committed directly on `main`: `18aff73` (`fix: restore chat visibility state and summary preview type`).
 - Browser test did not reach WebRTC; the rebuilt app must pass TypeScript/build first, then the browser gate must be re-run.
+
+
+### 2026-10-06 — Browser WebRTC gate source correction and successful Docker rebuild
+
+- After commit `bd3e5fb`, inspection of the checked-out source showed that `WhatsAppChatExperience.tsx` still contained a literal `\n` inside the visibility comment.
+- This caused `const [visible, setVisible] = useState(true)` to remain part of the comment, producing the TypeScript `visible`/`setVisible` undefined errors.
+- The malformed literal was corrected directly in `frontend/src/crypto/WhatsAppChatExperience.tsx`.
+- `git diff --check`: **GREEN — no whitespace errors**.
+- Docker rebuild command:
+
+      docker compose -f docker-compose.vps.yml build app
+
+- Result: **GREEN — 22/22 Docker build steps completed successfully**.
+- Frontend `pnpm install --frozen-lockfile && pnpm run build`: **GREEN**.
+- Runtime image `prepza-app:latest`: **SUCCESSFULLY BUILT**.
+
+### Interpretation
+
+The source/build boundary is now green. The application image can again be produced from the corrected working tree, so the previous TypeScript blocker is resolved.
+
+The browser WebRTC gate remains **NOT YET PROVEN**. The newly built image must be recreated into the running application container before browser testing. The previously observed `/me` HTTP 429 is a separate rate-limit issue and must be investigated independently rather than conflated with the WebRTC path.
+
+### Current release-gate status
+
+- Docker app image build: **GREEN**
+- TypeScript/Vite frontend build: **GREEN**
+- Browser-to-browser WebRTC media: **NOT YET PROVEN**
+- `/me` browser-test rate-limit boundary: **REQUIRES INVESTIGATION**
+- External provider/storage recovery: **NOT YET PROVEN**
