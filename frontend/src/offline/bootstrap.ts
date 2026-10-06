@@ -1,6 +1,6 @@
 import { setOfflineUserId, clearOfflineUserId } from './generatedMaterials'
 import { installOfflineChatQueue } from './chatOfflineQueue'
-import { setOfflineStudyUserId, syncOfflineStudyActivity } from './studyActivity'
+import { setStudyHubUserId, installStudyHubActivityTracker, syncOfflineStudyActivity } from './studyHubActivityTracker'
 
 let started = false
 
@@ -13,6 +13,7 @@ let started = false
 export function installOfflineBootstrap(): void {
   if (started || typeof window === 'undefined') return
   started = true
+  installStudyHubActivityTracker()
   // Chat queue has its own retry/locking guard and is safe to start here.
   // This makes the persisted outgoing queue active after a cold restart.
   installOfflineChatQueue()
@@ -50,7 +51,7 @@ export function installOfflineBootstrap(): void {
       if (!Number.isInteger(userId) || userId <= 0) return
       await isolateAccount(userId)
       setOfflineUserId(userId)
-      setOfflineStudyUserId(userId)
+      setStudyHubUserId(userId)
       await syncOfflineStudyActivity(me?.csrf_token)
     } catch (_) {}
   }
