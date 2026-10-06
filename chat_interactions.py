@@ -14,7 +14,7 @@ from datetime import datetime
 from flask import request, session
 from sqlalchemy import text
 
-from app import db, ConversationParticipant
+from app import app, db, ConversationParticipant
 
 _SCHEMA_READY = False
 
