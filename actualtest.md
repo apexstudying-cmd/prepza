@@ -1112,3 +1112,13 @@ The full QA result does not replace the separate browser WebRTC gate or the late
 - Fix on `main`: browser gate now explicitly waits up to 15s for the real call button and dumps caller buttons/body text if it is still absent, so the next run distinguishes a render race from a genuine missing-control/data problem.
 - Commit: `aa67d88d326e4518606197d4569ffd0cf8ec427b`.
 - Next required run: `python scripts/test_browser_webrtc_runtime.py` after syncing to `origin/main`.
+
+
+## Browser WebRTC gate — chat-list visibility failure and fix (2026-10-06)
+- Re-ran `python scripts/test_browser_webrtc_runtime.py` from `86dbcc8`.
+- Disposable users/conversation were created and both real browser contexts authenticated.
+- Diagnostic `GET /chats` returned HTTP 200 with conversation id 12, confirming the backend/session boundary was working.
+- The returned direct-chat row had `name: null`; the browser DOM remained on the Home shell after the Chats click and the expected peer row never appeared within 10 seconds.
+- Root cause identified in `frontend/src/crypto/WhatsAppChatExperience.tsx`: the component initialized `visible=false`, while its own `/chats` request is marked internal and therefore intentionally bypasses the fetch observer that previously promoted the component to visible. Because the component is mounted only for the Chats screen, that observer must not be the primary visibility gate.
+- Fix committed directly to `main` as `a9300823f592f205ce91f773c7ed82273108ba9f`: initialize the mounted Chats experience as visible, resolve null direct-chat names from conversation participants, and make name filtering/rendering null-safe.
+- **Status: fix committed; browser WebRTC gate is pending re-run.**
