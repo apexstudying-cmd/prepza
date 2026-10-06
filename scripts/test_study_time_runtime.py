@@ -55,6 +55,14 @@ def _today():
     from app import _study_local_date
     return _study_local_date()
 
+@pytest.fixture(autouse=True)
+def clean_study_time(runtime_user):
+    with app.app_context():
+        StudyTimeLog.query.filter_by(user_id=runtime_user).delete()
+        db.session.commit()
+        yield
+        db.session.rollback()
+
 
 def test_absolute_sync_is_monotonic_and_replay_safe(runtime_user):
     with app.app_context():
