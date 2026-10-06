@@ -1219,3 +1219,28 @@ Implemented directly on main: replaced the per-document/20-second Study Hub hear
 ### Verification status
 
 **Not green yet.** Required next checks: migration apply/verify, Study Hub runtime pytest, TypeScript/Vite build, full tools/run_local_qa.py, browser regression, and later 400-active-student performance testing.
+
+
+## 2026-10-06 — Study Hub regression audit and CI gate
+
+### Regression findings
+
+The Study Hub implementation exposed a missing CI protection boundary. `scripts/test_study_time_runtime.py` existed, but no GitHub Actions workflow executed it. The existing realtime runtime workflow tests realtime/calling/chat behavior and uses SQLite; that is insufficient for validating the PostgreSQL row-locking contract required by Study Hub reconciliation.
+
+A real startup regression was also introduced during the runtime DDL removal in `chat_interactions.py`: the change removed the `app` import even though Flask request hooks still referenced `app`. This produced `NameError: name 'app' is not defined` and caused `prepza-app-1` to restart. Commit `18ed81a` restored only the required Flask app import; runtime schema mutation remains removed.
+
+The Study Hub auth/CSRF test then exposed a route decorator-order mismatch. `require_csrf` executes before the route body, so the old route returned `403` before its internal `401` authentication check. The route is now explicitly protected with `@login_required` before `@require_csrf`, making the expected unauthenticated response deterministic.
+
+### CI hardening
+
+Added `.github/workflows/study-hub-runtime-regression.yml`, using PostgreSQL 17, canonical Alembic `upgrade head`, and `scripts/test_study_time_runtime.py`. This makes the Study Hub runtime/concurrency gate a CI regression test rather than a local-only check.
+
+### Current verification state
+
+- App container: **healthy/running** after the `app` import correction.
+- pytest: **8.4.2 installed** in the current QA container.
+- Previous Study Hub runtime results before the auth/CSRF fix: first four tests passed; fifth failed with `403 != 401` rather than hanging after runtime DDL removal.
+- Corrected route has not yet been rerun through the full six-test suite.
+- CI workflow has been added but has not yet completed for the new commit.
+
+**Release gate remains NOT GREEN.**
