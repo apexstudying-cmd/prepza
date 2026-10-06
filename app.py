@@ -1188,17 +1188,12 @@ STUDY_TIME_FEATURES = {"reading", "podcast", "quiz", "flashcards", "tutor_chat",
 
 class StudyTimeLog(db.Model):
     """
-    Minutes actually spent studying, one row per user per calendar
-    day PER FEATURE (reading/podcast/quiz/flashcards/tutor_chat).
-    Deliberately a SEPARATE table from StudyActivityLog - see the
-    design note at the top of the patch script that added this.
-    study_time_seconds accumulates across every heartbeat that day
-    for that feature; last_heartbeat_at is used server-side to
-    compute each new heartbeat's elapsed time, capped per call, so a
-    backgrounded tab can never retroactively credit a large gap. The
-    8h/day anti-gaming ceiling (MAX_STUDY_TIME_SECONDS_PER_DAY) is
-    enforced across ALL of a user's feature rows for that day
-    combined, not per-feature - see record_study_time_heartbeat().
+    Authoritative Study Hub learning time, one row per user per Nairobi
+    calendar day using the single STUDY_TIME_FEATURE key. Documents,
+    pages, and features are context in the client, not independent
+    authoritative clocks. Study time is reconciled from absolute client
+    totals; last_heartbeat_at is retained only for backward schema
+    compatibility and is no longer used for credit calculation.
     """
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
@@ -6728,10 +6723,9 @@ def study_time_heartbeat_legacy():
 @app.route("/study-time")
 def study_time_summary():
     """
-    Powers TimeStudiedScreen. by_feature is not yet implemented -
-    StudyTimeLog only tracks a daily total today, not a per-feature
-    breakdown - so it's returned as an empty object rather than
-    fabricated. See the patch script that added this route for why.
+    Powers TimeStudiedScreen. Study Hub is one authoritative learning
+    total; by_feature is retained as a compatibility shape and contains
+    only the study_hub total.
     """
     user_id = session.get("user_id")
     if not user_id:
@@ -6754,6 +6748,7 @@ def study_time_summary():
         StudyTimeLog.user_id == user_id,
         StudyTimeLog.activity_date >= start_date,
         StudyTimeLog.activity_date <= today,
+        StudyTimeLog.feature == STUDY_TIME_FEATURE,
     ).group_by(StudyTimeLog.feature).all()
 
     by_feature = {feature: seconds for feature, seconds in rows}
