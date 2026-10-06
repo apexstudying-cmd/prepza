@@ -274,7 +274,11 @@ def main() -> int:
                 callee.wait_for_timeout(1200)
                 print("PASS: caller opened the real conversation through the SPA UI while callee remained on Home")
 
-                start_voice_button = caller.get_by_role("button", name="Start voice call")
+                # The conversation UI currently exposes both a header call button and
+                # a secondary call control with the same accessible name. Target the
+                # explicit header title so Playwright does not enter strict-mode
+                # ambiguity before WebRTC itself is exercised.
+                start_voice_button = caller.get_by_title("Voice call", exact=True)
                 try:
                     start_voice_button.wait_for(state="visible", timeout=15000)
                 except PlaywrightTimeoutError as exc:
