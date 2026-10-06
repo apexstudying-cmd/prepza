@@ -2567,20 +2567,9 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
   }, [])
 
-  // Study-time heartbeat: only while actually reading the document
-  // (tab === 'doc') and the browser tab is visible - backgrounding
-  // or switching to the AI/tools tab stops the clock. Errors are
-  // swallowed since a missed heartbeat just means a bit less credited
-  // time, not a broken experience.
-  useEffect(() => {
-    if (tab !== 'doc' || activeDocumentId == null) return
-    const ping = () => {
-      if (document.visibilityState !== 'visible') return
-      api('/study-time/heartbeat', { method: 'POST', headers: { 'X-CSRF-Token': heartbeatCsrf } }).catch(() => {})
-    }
-    const interval = setInterval(ping, 20000)
-    return () => clearInterval(interval)
-  }, [tab, activeDocumentId, heartbeatCsrf])
+  // Study Hub timing is owned by the global tracker installed above.
+  // There is deliberately no per-document 20-second heartbeat here.
+
 
   const REPORT_REASONS: { label: string; value: string }[] = [
     { label: 'Inaccurate content', value: 'inaccurate_content' },
