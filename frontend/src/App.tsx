@@ -8,6 +8,7 @@ import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline, saveUploadedFileOffline } from './offline/studyHubOffline'
 import { getCachedGeneratedAudioUrl, getGeneratedMaterialOffline, getLatestGeneratedMaterialForPath, listOfflineGeneratedMaterials, saveGeneratedMaterialOffline, setOfflineUserId } from './offline/generatedMaterials'
 import { installStudyHubActivityTracker, setStudyHubActive, setStudyHubUserId } from './offline/studyHubActivityTracker'
+import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
 import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'
 import B2BFinanceAdmin from './admin/B2BFinanceAdmin'
@@ -15090,6 +15091,7 @@ export default function App() {
     // Study Hub has one activity clock across all learning screens. Individual
     // documents/features only provide context; they do not own timers.
     installStudyHubActivityTracker()
+    installActivityHeartbeat()
     const localUserId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
     if (Number.isInteger(localUserId) && localUserId > 0) setStudyHubUserId(localUserId)
   }, [])
