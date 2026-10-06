@@ -189,12 +189,15 @@ def login(page, email: str, password: str) -> None:
 
 
 def remote_audio_track_is_live(page) -> bool:
-    return bool(page.locator("audio").evaluate(
-        """audio => {
+    # The call UI can render more than one <audio> element. Check every
+    # rendered element so a legitimate DOM shape cannot cause Playwright's
+    # strict locator semantics to produce a false negative.
+    return bool(page.locator("audio").evaluate_all(
+        """audios => audios.some(audio => {
             const stream = audio.srcObject;
             if (!(stream instanceof MediaStream)) return false;
             return stream.getAudioTracks().some(track => track.readyState === 'live');
-        }"""
+        })"""
     ))
 
 
