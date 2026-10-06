@@ -6645,6 +6645,7 @@ def streak_detail():
     "20 per hour",
     key_func=lambda: f"study-sync:{session.get('user_id', get_remote_address())}",
 )
+@login_required
 @require_csrf
 def study_time_sync():
     """
