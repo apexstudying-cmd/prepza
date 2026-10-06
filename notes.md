@@ -1394,3 +1394,25 @@ The old per-document heartbeat is retired. Historical StudyTimeLog data is conso
 Product analytics remains a separate activity concept. Its CSRF token is cached so the analytics loop no longer fetches /me every minute.
 
 This is not QA-green yet. The next local run must prove migration correctness, runtime tests, frontend build, full integration QA, offline/reconnect behaviour, inactivity/visibility behaviour, and the 400-active-student performance target.
+
+
+## 2026-10-06 — Study Hub regression audit
+
+A regression audit was performed after the Study Hub implementation exposed multiple failures that were not adequately protected by CI.
+
+### Findings
+
+1. `scripts/test_study_time_runtime.py` was introduced with the Study Hub work, but no GitHub Actions workflow was running it. The existing realtime runtime workflow covers realtime/calling/chat tests only and uses SQLite, which is not sufficient to prove PostgreSQL `with_for_update()` concurrency semantics.
+2. The initial `chat_interactions.py` schema-mutation removal correctly removed runtime PostgreSQL DDL, but also removed the `app` import while Flask request hooks still referenced `@app.before_request`/`@app.after_request`. This caused a real application boot regression (`NameError: app is not defined`). Commit `18ed81a` restores the import without restoring runtime DDL.
+3. The Study Hub auth/CSRF runtime test expected `401` for an unauthenticated request, while the route had `@require_csrf` before its in-function authentication check. Because decorators execute first, the observed response was `403`. The route has now been corrected to use `@login_required` before `@require_csrf`, matching the established contract documented by `require_csrf`.
+4. Earlier stale PostgreSQL lock chains were traced to obsolete runtime `ALTER TABLE` statements in `chat_interactions.py`, not to the Study Hub reconciliation locking logic itself. Those statements are now removed; Alembic owns the schema.
+
+### Regression-protection changes
+
+- Added PostgreSQL-backed `.github/workflows/study-hub-runtime-regression.yml` to run the full Study Hub runtime suite after canonical Alembic migrations.
+- The workflow is path-scoped to the Study Hub backend/runtime test, Alembic/schema, requirements, and workflow itself.
+- The Study Hub runtime gate now exercises the same database family required for the production concurrency contract instead of relying on SQLite.
+
+### Freeze status
+
+Still **not green** until the corrected route passes all six runtime tests locally and the new CI workflow completes successfully. No VPS migration or performance freeze should happen before that gate is green.
