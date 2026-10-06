@@ -243,6 +243,20 @@ def main() -> int:
                 # Enter through the real authenticated shell, open Chats, then
                 # select the disposable conversation through the actual UI.
                 caller.get_by_text("Chats", exact=True).click()
+                # Diagnose the chat-list boundary before waiting on rendered rows.
+                # If the disposable conversation is absent here, the failure is
+                # backend/session/list filtering rather than browser/WebRTC.
+                try:
+                    chats_response = caller.request.get(f"{BASE_URL}/chats")
+                    print("DEBUG: /chats HTTP:", chats_response.status)
+                    print("DEBUG: /chats payload:", chats_response.text()[:12000])
+                except Exception as exc:
+                    print("DEBUG: /chats request failed:", exc, file=sys.stderr)
+                try:
+                    print("DEBUG: caller URL after Chats click:", caller.url)
+                    print("DEBUG: caller body after Chats click:", caller.locator("body").inner_text(timeout=3000)[:12000])
+                except Exception as exc:
+                    print("DEBUG: caller DOM diagnostic failed:", exc, file=sys.stderr)
                 caller.get_by_text("Browser callee", exact=True).wait_for(timeout=10000)
                 caller.get_by_text("Browser callee", exact=True).click()
                 caller.get_by_role("button", name="Start voice call").wait_for(state="visible", timeout=10000)
