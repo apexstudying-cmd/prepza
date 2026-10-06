@@ -232,9 +232,45 @@ def main() -> int:
                 caller = caller_context.new_page()
                 callee = callee_context.new_page()
 
+                # Capture browser-side failures before touching the Chats UI. This
+                # makes an intermittent authenticated-shell failure diagnosable instead
+                # of masking the root cause behind a locator timeout.
+                def install_browser_diagnostics(page, label):
+                    page.on("console", lambda message: print(
+                        f"DEBUG: {label} console {message.type}: {message.text}",
+                        file=sys.stderr,
+                    ) if message.type in {"error", "warning"} else None)
+                    page.on("pageerror", lambda exc: print(
+                        f"DEBUG: {label} pageerror: {exc}",
+                        file=sys.stderr,
+                    ))
+                    page.on("requestfailed", lambda request: print(
+                        f"DEBUG: {label} requestfailed: {request.method} {request.url} :: {request.failure}",
+                        file=sys.stderr,
+                    ))
+                    page.on("response", lambda response: print(
+                        f"DEBUG: {label} HTTP {response.status}: {response.url}",
+                        file=sys.stderr,
+                    ) if response.status >= 400 else None)
+
+                install_browser_diagnostics(caller, "caller")
+                install_browser_diagnostics(callee, "callee")
+
                 login(caller, fixture["caller_email"], fixture["password"])
                 login(callee, fixture["callee_email"], fixture["password"])
                 print("PASS: two independent real browser contexts authenticated")
+
+                # Give the real bootstrap a moment to settle, then dump the actual
+                # authenticated shell state before waiting for a navigation control.
+                for label, page in (("caller", caller), ("callee", callee)):
+                    try:
+                        print(f"DEBUG: {label} URL after login:", page.url)
+                        print(
+                            f"DEBUG: {label} body after login:",
+                            page.locator("body").inner_text(timeout=3000)[:12000],
+                        )
+                    except Exception as exc:
+                        print(f"DEBUG: {label} post-login DOM diagnostic failed: {exc}", file=sys.stderr)
 
                 # /chats/<id> is a Flask JSON API endpoint, not the SPA route.
                 # Enter through the real authenticated shell, open Chats, then
