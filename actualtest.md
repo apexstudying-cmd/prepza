@@ -1122,3 +1122,11 @@ The full QA result does not replace the separate browser WebRTC gate or the late
 - Root cause identified in `frontend/src/crypto/WhatsAppChatExperience.tsx`: the component initialized `visible=false`, while its own `/chats` request is marked internal and therefore intentionally bypasses the fetch observer that previously promoted the component to visible. Because the component is mounted only for the Chats screen, that observer must not be the primary visibility gate.
 - Fix committed directly to `main` as `a9300823f592f205ce91f773c7ed82273108ba9f`: initialize the mounted Chats experience as visible, resolve null direct-chat names from conversation participants, and make name filtering/rendering null-safe.
 - **Status: fix committed; browser WebRTC gate is pending re-run.**
+
+
+### 2026-10-06 — Browser WebRTC gate build regression and source fix
+- Re-ran the browser WebRTC gate after the chat-list visibility fix.
+- Docker frontend build failed during TypeScript compilation in `WhatsAppChatExperience.tsx`: `visible`/`setVisible` were reported undefined and `ChatSummary.last_message` was missing from the type.
+- Root cause: the explanatory comment inserted above the visibility state contained literal `\\n` characters, so the `const [visible, setVisible] = useState(true)` declaration was effectively commented out. The `ChatSummary` type also lacked the optional `last_message` field already consumed by the chat-list hydration/rendering path.
+- Fix committed directly on `main`: `18aff73` (`fix: restore chat visibility state and summary preview type`).
+- Browser test did not reach WebRTC; the rebuilt app must pass TypeScript/build first, then the browser gate must be re-run.
