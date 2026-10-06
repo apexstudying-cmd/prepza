@@ -17,7 +17,7 @@ const AttachmentIc = {
 
 const AttachmentAttachmentIc = AttachmentIc
 
-type ChatSummary = { id: number; is_group: boolean; name: string; last_message: string | null; last_message_at: string | null; last_message_sender_name?: string | null; last_message_filename?: string | null; unread_count: number; status?: string }
+type ChatSummary = { id: number; is_group: boolean; name: string | null; last_message_at: string | null; last_message_sender_name?: string | null; last_message_filename?: string | null; unread_count: number; status?: string }
 type Attachment = { id: number; file_type: string; original_filename: string; file_size_bytes: number; view_url: string | null; study_document?: boolean }
 type Message = { id: number; conversation_id: number; sender_id: number; body: string | null; nonce?: string | null; is_deleted: boolean; created_at: string | null; edited_at: string | null; attachment: Attachment | null; kind?: 'text' | 'reaction'; read_by_count?: number; read_by_all?: boolean }
 type Participant = { user_id: number; display_name: string; role: string }
@@ -87,7 +87,7 @@ async function hydrateAttachmentUrls(messages: Message[]): Promise<Message[]> {
 }
 
 export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenOptions, onOpenDocument }: { onClose?: () => void; onOpenProfile?: (userId: number, displayName?: string, conversationId?: number) => void; onOpenOptions?: (conversationId: number) => void; onOpenDocument?: (documentId: number) => void }) {
-  const [visible, setVisible] = useState(false)
+  // This component is mounted only when App enters the Chats screen.\n  // It therefore must render immediately; the fetch observer below is for\n  // legacy direct-navigation detection and must not be the visibility gate.\n  const [visible, setVisible] = useState(true)
   const [view, setView] = useState<'list' | 'detail'>('list')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [chats, setChats] = useState<ChatSummary[]>([])
@@ -208,20 +208,33 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
       // latest message through the E2EE fetch bridge; failures keep the server
       // row intact rather than making the whole chat list fail.
       const hydrated = await Promise.all(nextChats.map(async chat => {
-        if (!chat.last_message) return chat
+        let nextChat = chat
+        // Older/direct-chat rows can legitimately have a null display name.
+        // Resolve the peer from the authoritative conversation detail so the
+        // chat list never renders an unnamed direct conversation.
+        if (!chat.name) {
+          try {
+            const detail = await api<Detail>(`/chats/${chat.id}`)
+            const peer = !detail.is_group ? detail.participants.find(item => item.user_id !== meIdRef.current) : null
+            nextChat = { ...chat, name: peer?.display_name || (detail.name || 'Conversation') }
+          } catch {
+            nextChat = { ...chat, name: chat.is_group ? 'Group chat' : 'Conversation' }
+          }
+        }
+        if (!nextChat.last_message) return nextChat
         try {
           const latest = await api<{ messages: Message[] }>(`/chats/${chat.id}/messages?preview=1`)
           const message = latest.messages?.[0]
-          if (!message) return chat
+          if (!message) return nextChat
           const envelope = parseEnvelope(message.body)
           let preview = displayText(message)
           if (!preview && envelope?.type === 'reaction') preview = `${envelope.emoji} reaction`
           if (!preview && message.attachment) preview = message.attachment.original_filename || 'Attachment'
-          if (!preview) return chat
-          const prefix = chat.is_group && chat.last_message_sender_name ? `${chat.last_message_sender_name}: ` : ''
-          return { ...chat, last_message: prefix + preview }
+          if (!preview) return nextChat
+          const prefix = nextChat.is_group && nextChat.last_message_sender_name ? `${nextChat.last_message_sender_name}: ` : ''
+          return { ...nextChat, last_message: prefix + preview }
         } catch {
-          return chat
+          return nextChat
         }
       }))
       setChats(hydrated)
@@ -280,7 +293,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   }, [visible, view, selectedId])
 
   useEffect(() => { if (view === 'detail' && messages.length) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [messages.length, view])
-  const filteredChats = useMemo(() => { const needle = search.trim().toLowerCase(); return chats.filter(chat => !needle || chat.name.toLowerCase().includes(needle)) }, [chats, search])
+  const filteredChats = useMemo(() => { const needle = search.trim().toLowerCase(); return chats.filter(chat => !needle || (chat.name || '').toLowerCase().includes(needle)) }, [chats, search])
   const reactionState = useMemo(() => buildReactionState(messages), [messages])
   const typingNames = Object.keys(typingUsers).map(id => detail?.participants.find(p => p.user_id === Number(id))?.display_name || 'Someone')
   const headerName = detail?.name || 'Conversation'
@@ -582,7 +595,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
         {listError && <div style={{ margin:10,padding:10,borderRadius:10,background:'#fff3f1',color:'#a33a35',fontSize:11 }}>{listError}</div>}
         <div style={{ flex:1,overflowY:'auto' }}>
           <div className="prepza-wa-row" onClick={() => window.dispatchEvent(new CustomEvent('prepza-open-ada'))} style={{ background:'#0b1437',color:'#fff',margin:'10px 10px 6px',borderRadius:13,border:0 }}><div style={{ width:44,height:44,borderRadius:13,background:'rgba(201,168,76,.18)',display:'flex',alignItems:'center',justifyContent:'center',color:'#e4c96a',fontWeight:900 }}>A</div><div style={{ flex:1,minWidth:0 }}><div style={{ fontWeight:850,fontSize:13 }}>Ada</div><div style={{ fontSize:11,opacity:.55 }}>Your study assistant</div></div><span style={{ fontSize:10,color:'#e4c96a' }}>AI</span></div>
-          {filteredChats.map(chat => <div key={chat.id} className="prepza-wa-row" onClick={() => chooseChat(chat.id)}><button type="button" onClick={event => { event.stopPropagation(); void openListPeerProfile(chat) }} disabled={chat.is_group || !onOpenProfile} aria-label={chat.is_group ? `Open ${chat.name} group` : `Open ${chat.name} profile`} style={{ position:'relative',width:46,height:46,border:0,padding:0,borderRadius:14,background:'transparent',cursor:chat.is_group || !onOpenProfile ? 'default' : 'pointer',flexShrink:0 }}><div style={{ position:'relative' }}><div style={{ width:46,height:46,borderRadius:14,background:'linear-gradient(135deg,#c9a84c,#e4c96a)',color:'#0b1437',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900 }}>{initials(chat.name)}</div>{chat.is_group && <span style={{ position:'absolute',right:-2,bottom:-2,width:15,height:15,borderRadius:'50%',background:'#0b1437',color:'#e4c96a',fontSize:8,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid #fff' }}>G</span>}</div></button><div style={{ flex:1,minWidth:0 }}><div style={{ display:'flex',justifyContent:'space-between',gap:8 }}><span style={{ fontWeight:750,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{chat.name}</span><span style={{ fontSize:10,color:'#9096a0',flexShrink:0 }}>{listTime(chat.last_message_at)}</span></div><div style={{ fontSize:11,color:'#737985',marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{chat.last_message || 'No messages yet'}</div></div>{chat.unread_count > 0 && <span style={{ minWidth:21,height:21,padding:'0 5px',borderRadius:99,background:'#c9a84c',color:'#0b1437',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:900 }}>{chat.unread_count > 99 ? '99+' : chat.unread_count}</span>}</div>)}
+          {filteredChats.map(chat => <div key={chat.id} className="prepza-wa-row" onClick={() => chooseChat(chat.id)}><button type="button" onClick={event => { event.stopPropagation(); void openListPeerProfile(chat) }} disabled={chat.is_group || !onOpenProfile} aria-label={chat.is_group ? `Open ${chat.name || 'Group chat'} group` : `Open ${chat.name || 'Conversation'} profile`} style={{ position:'relative',width:46,height:46,border:0,padding:0,borderRadius:14,background:'transparent',cursor:chat.is_group || !onOpenProfile ? 'default' : 'pointer',flexShrink:0 }}><div style={{ position:'relative' }}><div style={{ width:46,height:46,borderRadius:14,background:'linear-gradient(135deg,#c9a84c,#e4c96a)',color:'#0b1437',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900 }}>{initials(chat.name || 'Conversation')}</div>{chat.is_group && <span style={{ position:'absolute',right:-2,bottom:-2,width:15,height:15,borderRadius:'50%',background:'#0b1437',color:'#e4c96a',fontSize:8,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid #fff' }}>G</span>}</div></button><div style={{ flex:1,minWidth:0 }}><div style={{ display:'flex',justifyContent:'space-between',gap:8 }}><span style={{ fontWeight:750,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{chat.name || 'Conversation'}</span><span style={{ fontSize:10,color:'#9096a0',flexShrink:0 }}>{listTime(chat.last_message_at)}</span></div><div style={{ fontSize:11,color:'#737985',marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{chat.last_message || 'No messages yet'}</div></div>{chat.unread_count > 0 && <span style={{ minWidth:21,height:21,padding:'0 5px',borderRadius:99,background:'#c9a84c',color:'#0b1437',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:900 }}>{chat.unread_count > 99 ? '99+' : chat.unread_count}</span>}</div>)}
           {!filteredChats.length && <div style={{ padding:50, textAlign:'center',color:'#858b96',fontSize:12 }}>No conversations found.</div>}
         </div>
       </aside>
