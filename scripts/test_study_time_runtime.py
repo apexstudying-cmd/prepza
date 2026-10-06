@@ -94,6 +94,8 @@ def test_server_caps_client_target_at_daily_ceiling(runtime_user):
 
 def test_study_hub_uses_one_feature_row_not_document_rows(runtime_user):
     with app.app_context():
+        reconcile_study_time(runtime_user, 600, _today())
+        db.session.commit()
         rows = StudyTimeLog.query.filter_by(
             user_id=runtime_user, activity_date=_today()
         ).all()
