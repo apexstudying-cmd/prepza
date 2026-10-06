@@ -1210,3 +1210,12 @@ Implemented directly on `main`:
 ### Verification status
 
 **Not green yet.** The implementation has been committed, but the local Docker verification gate still needs to run. Required next checks: migration apply/verify, Study Hub runtime pytest, TypeScript/Vite build, full `tools/run_local_qa.py`, and browser regression where applicable. Do not treat the design as frozen until these pass.
+
+
+## 2026-10-06 — Study Hub single-clock implementation pass
+
+Implemented directly on main: replaced the per-document/20-second Study Hub heartbeat with POST /study-time/sync using an absolute daily Study Hub total; added browser-persistent single Study Hub accumulation with low-frequency and lifecycle-triggered flushing; removed document-owned timers; retired the old heartbeat with HTTP 410; added PostgreSQL concurrency-safe reconciliation by locking the authenticated user's row; added migration 20261006_study_hub_time.sql to consolidate historical per-feature rows into one study_hub row per user/day; added scripts/test_study_time_runtime.py for replay safety, daily ceiling, one-row storage, concurrency, auth/CSRF, and legacy endpoint retirement; retained product analytics separately and cached its CSRF token.
+
+### Verification status
+
+**Not green yet.** Required next checks: migration apply/verify, Study Hub runtime pytest, TypeScript/Vite build, full tools/run_local_qa.py, browser regression, and later 400-active-student performance testing.
