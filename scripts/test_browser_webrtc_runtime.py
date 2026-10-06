@@ -252,8 +252,24 @@ def main() -> int:
                     print("DEBUG: caller body after Chats click:", caller.locator("body").inner_text(timeout=3000)[:12000])
                 except Exception as exc:
                     print("DEBUG: caller DOM diagnostic failed:", exc, file=sys.stderr)
-                caller.get_by_text("Browser callee", exact=True).wait_for(timeout=10000)
-                caller.get_by_text("Browser callee", exact=True).click()
+                # The chat-list API is the authoritative identity check. The
+                # current UI renders an unnamed direct conversation as "Conversation"
+                # rather than the other participant's display name, so selecting
+                # "Browser callee" would fail before WebRTC is exercised. First prove
+                # the fixture conversation is present, then enter that rendered card.
+                try:
+                    payload = json.loads(chats_response.text())
+                    chat_ids = {int(chat.get("id")) for chat in payload.get("chats", [])}
+                except Exception:
+                    chat_ids = set()
+                expected_chat_id = int(fixture["conversation_id"])
+                if expected_chat_id not in chat_ids:
+                    raise AssertionError(
+                        f"Fixture conversation {expected_chat_id} is missing from /chats: {sorted(chat_ids)}"
+                    )
+                conversation_card = caller.get_by_text("Conversation", exact=True)
+                conversation_card.wait_for(timeout=10000)
+                conversation_card.click()
                 caller.get_by_role("button", name="Start voice call").wait_for(state="visible", timeout=10000)
                 callee.wait_for_timeout(1200)
                 print("PASS: caller opened the real conversation through the SPA UI while callee remained on Home")
