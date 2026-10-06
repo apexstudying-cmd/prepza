@@ -1332,3 +1332,54 @@ The next debugging boundary is different: the browser harness previously reached
 ### Interview-ready explanation
 
 > The browser test exposed a frontend build regression. Instead of assuming the previous fix had worked, I inspected the exact checked-out source and found that a literal `\\n` had swallowed the React state declaration inside a comment. I corrected the source, verified the diff was clean, and rebuilt the production-style Docker image. The full 22-step build then passed. I now separate that build boundary from the remaining browser rate-limit and WebRTC media gates.
+
+
+## 2026-10-06 — Study Hub study-time design decision
+
+The Study Hub study-time architecture is now captured in `designstudytime.md` before implementation changes are made.
+
+The key decision is to treat **Study Hub as one learning activity system**, not as a collection of independent document timers.
+
+A student can move from Document A to Document B to a quiz and back to Document A while the same Study Hub learning clock continues. The current document, page, and feature are context. They can be retained for analytics, but they must not become separate authoritative clocks that can accidentally double-count time.
+
+This is especially important because the repository already has a local Study Activity accumulator. The correct engineering move is to reconcile that existing mechanism with the backend rather than inventing another timer.
+
+The target data flow is:
+
+```
+Study Hub UI
+    -> one global activity tracker
+    -> browser-persistent accumulated time
+    -> low-frequency / lifecycle-triggered sync
+    -> Flask validation + idempotency + Nairobi date + daily ceiling
+    -> PostgreSQL aggregate
+```
+
+Redis remains infrastructure only and is not the source of truth for study time.
+
+### Why batching is useful
+
+The main benefit of accumulating locally for up to roughly an hour is reducing request and transaction frequency, not dramatically reducing database disk usage. PostgreSQL already aggregates StudyTimeLog data instead of storing one permanent row per heartbeat.
+
+### Safety rule
+
+The sync must be idempotent. If PostgreSQL commits a batch and the HTTP response is lost, retrying the same batch must not credit the student twice.
+
+### Design still to verify in code
+
+The current repository has more than one global activity heartbeat producer in addition to the Study Activity accumulator. These need to be consolidated so the final architecture has one clear Study Hub learning tracker and a separate broader product-activity mechanism.
+
+Before freezing implementation, test:
+
+- switching documents/features;
+- inactivity and visibility;
+- reload;
+- offline/reconnect;
+- duplicate sync;
+- response lost after commit;
+- concurrent sync;
+- Nairobi midnight;
+- daily 12-hour server ceiling;
+- authorization/context validation;
+- 400 active students.
+
