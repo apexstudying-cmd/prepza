@@ -15090,9 +15090,8 @@ export default function App() {
     // Study Hub has one activity clock across all learning screens. Individual
     // documents/features only provide context; they do not own timers.
     installStudyHubActivityTracker()
-    void api<{ id?: number }>('/me').then(me => {
-      if (me?.id) setStudyHubUserId(me.id)
-    }).catch(() => {})
+    const localUserId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
+    if (Number.isInteger(localUserId) && localUserId > 0) setStudyHubUserId(localUserId)
   }, [])
 
   const studyHubScreens = new Set<Screen>([
