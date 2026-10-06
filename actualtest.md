@@ -1244,3 +1244,45 @@ Added `.github/workflows/study-hub-runtime-regression.yml`, using PostgreSQL 17,
 - CI workflow has been added but has not yet completed for the new commit.
 
 **Release gate remains NOT GREEN.**
+
+
+## 10. 2026-10-06 — Study Hub focused runtime gate
+
+The canonical Study Hub runtime regression script is now an executed release-gate test rather than merely an implementation check.
+
+Command:
+
+    docker compose -f docker-compose.vps.yml exec app python -m pytest scripts/test_study_time_runtime.py -vv -s
+
+Latest result:
+
+    6 passed, 3 warnings in 4.47s
+
+The six cases prove:
+
+1. absolute daily sync is monotonic and replay-safe;
+2. the server enforces the 12-hour daily ceiling;
+3. Study Hub uses one aggregate `study_hub` feature row rather than document rows;
+4. concurrent reconciliation does not double-credit the same underlying total;
+5. authentication and CSRF fail closed;
+6. the legacy per-document heartbeat is retired.
+
+The concurrency case runs against PostgreSQL row-locking semantics. The warnings are non-blocking `datetime.utcnow()` deprecation warnings.
+
+### Study Hub release-gate boundary
+
+This does **not** yet prove the complete browser/offline lifecycle. Still outstanding are browser visibility/inactivity behavior, reload/reconnect reconciliation, offline accumulation/reconnect, and the final browser QA pass.
+
+### Current focused runtime inventory
+
+| Gate | Latest evidence | Status |
+|---|---|---|
+| Full local QA | 74 passed, 0 failed, 3375 warnings | GREEN |
+| Focused realtime runtime | 9 passed in 2.98s | GREEN |
+| Focused calling runtime | 4 passed in 3.31s | GREEN |
+| Redis chat-worker | real Redis event consumed/acknowledged | GREEN |
+| Redis cross-process client delivery | real Socket.IO client received `chat:message` | GREEN |
+| Study Hub runtime | 6 passed, 3 warnings | GREEN |
+| Browser WebRTC media | not yet completed | NOT YET PROVEN |
+| Browser/offline Study Hub lifecycle | not yet completed | NOT YET PROVEN |
+| Storage/backup/restore | not yet completed | NOT TESTED |
