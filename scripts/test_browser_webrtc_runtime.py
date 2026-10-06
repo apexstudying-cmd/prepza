@@ -166,7 +166,7 @@ with app.app_context():
     run_container_python(code)
 
 
-def login(page, email: str, password: str) -> int:
+def login(page, email: str, password: str) -> None:
     response = page.request.post(
         f"{BASE_URL}/login",
         data=json.dumps({"email": email, "password": password}),
@@ -179,19 +179,13 @@ def login(page, email: str, password: str) -> int:
     # cookies as usable on the special localhost origin, so the default local
     # browser base URL intentionally uses http://localhost rather than the
     # numeric 127.0.0.1 address.
+    #
+    # Do not make a second explicit /me request here. The real frontend
+    # bootstrap already calls /me after authentication; duplicating it in the
+    # test adds an unrelated authenticated DB request (including the
+    # last-active bookkeeping hook) before the browser UI is exercised.
     page.goto(BASE_URL + "/", wait_until="domcontentloaded")
     page.wait_for_timeout(1500)
-
-    me_response = page.request.get(f"{BASE_URL}/me")
-    if not me_response.ok:
-        raise RuntimeError(
-            f"/me after login failed with HTTP {me_response.status}: {me_response.text()}"
-        )
-    me_payload = me_response.json()
-    user_id = me_payload.get("id") or me_payload.get("user", {}).get("id")
-    if user_id is None:
-        raise RuntimeError(f"/me returned unexpected payload after login: {me_payload}")
-    return int(user_id)
 
 
 def remote_audio_track_is_live(page) -> bool:
@@ -236,7 +230,7 @@ def main() -> int:
                 callee = callee_context.new_page()
 
                 login(caller, fixture["caller_email"], fixture["password"])
-                callee_id = login(callee, fixture["callee_email"], fixture["password"])
+                login(callee, fixture["callee_email"], fixture["password"])
                 print("PASS: two independent real browser contexts authenticated")
 
                 # /chats/<id> is a Flask JSON API endpoint, not the SPA route.
