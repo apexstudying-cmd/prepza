@@ -578,3 +578,22 @@ Only after these gates pass should the design be considered frozen.
 - 400-student load evidence.
 
 This document is therefore a **design baseline**, not a claim that every target behaviour has already been implemented.
+
+
+## 20. Implementation status — 2026-10-06
+
+The first implementation pass has now been applied directly to `main`:
+
+- `frontend/src/offline/studyHubActivityTracker.ts` is the new single Study Hub client tracker.
+- The old `frontend/src/offline/studyActivity.ts` is now only a compatibility facade; it no longer owns per-document timers.
+- `PdfStudyCanvas` no longer starts a document-owned timer.
+- The native document reader's 20-second `/study-time/heartbeat` loop was removed.
+- `App.tsx` activates one Study Hub clock across the learning screens and keeps broader product analytics as a separate mechanism.
+- Product analytics heartbeat CSRF is cached so its normal one-minute analytics cycle does not repeatedly call `/me`.
+- `POST /study-time/sync` accepts an absolute daily Study Hub total and only advances the PostgreSQL total.
+- The old `/study-time/heartbeat` endpoint now returns HTTP 410 so the retired per-document contract cannot silently continue crediting time.
+- Study-time reconciliation locks the authenticated user's PostgreSQL row before reading/creating the Study Hub row. This serializes concurrent first-sync and update races for the same account.
+- A migration, `20261006_study_hub_time.sql`, consolidates historical feature rows into one `study_hub` row per user/day while preserving the previous daily total up to the existing 12-hour ceiling.
+- Runtime coverage was added in `scripts/test_study_time_runtime.py` for monotonic/replay-safe sync, daily ceiling, one-row behaviour, concurrency, authentication/CSRF, and retirement of the legacy heartbeat.
+
+**Important:** this implementation pass is not yet marked green. The local Docker/QA environment must run the new runtime test, migration apply/verify, TypeScript/Vite build, and the existing full `tools/run_local_qa.py` gate before the design is considered verified.
