@@ -59,7 +59,7 @@ def verify_daily_study_limit_contract() -> None:
 def main() -> None:
     generated = read('frontend/src/offline/generatedMaterials.ts')
     study = read('frontend/src/offline/studyHubOffline.ts')
-    activity = read('frontend/src/offline/studyActivity.ts')
+    activity = read('frontend/src/offline/studyHubActivityTracker.ts')
     backend_activity = read('app.py')
     bootstrap = read('frontend/src/offline/bootstrap.ts')
     queue = read('tools/apply_offline_sync_queue.py')
