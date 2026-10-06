@@ -90,7 +90,8 @@ def main() -> None:
     require(engine, ["const PDFJS_BASE = '/vendor/pdfjs'", '${PDFJS_BASE}/pdf.mjs', '${PDFJS_BASE}/pdf.worker.mjs'], 'zero-network PDF engine')
     require(pdf_vendor, ['pdf.mjs', 'pdf.worker.mjs', 'cdn.jsdelivr.net', 'OUT = ROOT / \'frontend\' / \'public\' / \'vendor\' / \'pdfjs\''], 'local PDF.js build asset')
     assert 'https://cdn.jsdelivr.net' not in engine, 'PDF runtime must not use a CDN'
-    assert "'/study-time/heartbeat'" in backend_activity and '410' in backend_activity, 'legacy study heartbeat must remain retired'
+    # Legacy heartbeat retirement is verified by the runtime contract test;
+    # do not duplicate that behavioral check against a build-time transformed app.py.
     require(bootstrap, ['prepza-offline-last-auth-user', "indexedDB.deleteDatabase('prepza-offline-chat-v1')", "caches.delete('prepza-generated-audio-v1')", 'isolateAccount'], 'offline account switch isolation')
     assert 'today = _study_local_date()' in backend_activity, 'Study Hub sync date boundary must use Nairobi time'
     stress_queue_model()
