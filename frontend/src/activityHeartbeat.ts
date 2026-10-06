@@ -4,17 +4,20 @@ let lastHeartbeatAt = 0
 let sessionStarted = false
 let started = false
 let timer: number | null = null
+let cachedCsrf: string | null = null
 
 export function recordPrepzaCoreAction() {
   coreActions = Math.min(20, coreActions + 1)
 }
 
 async function csrfToken(): Promise<string | null> {
+  if (cachedCsrf) return cachedCsrf
   try {
     const response = await fetch('/me', { credentials: 'include' })
     if (!response.ok) return null
     const body = await response.json()
-    return typeof body?.csrf_token === 'string' ? body.csrf_token : null
+    cachedCsrf = typeof body?.csrf_token === 'string' ? body.csrf_token : null
+    return cachedCsrf
   } catch {
     return null
   }
@@ -51,7 +54,10 @@ async function sendHeartbeat(force = false) {
       }),
       keepalive: true,
     })
-    if (!response.ok) return
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) cachedCsrf = null
+      return
+    }
     sessionStarted = true
     lastHeartbeatAt = now
     coreActions = 0
