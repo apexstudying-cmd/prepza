@@ -1,0 +1,200 @@
+{
+  "version": 1,
+  "purpose": "Repeatable, code-traced release QA. Source presence never substitutes for runtime evidence.",
+  "status_rules": {
+    "GREEN": "Trace + required tests + CI/browser evidence pass.",
+    "YELLOW": "Code exists but runtime certification is incomplete.",
+    "RED": "Declared trace layer or invariant is missing.",
+    "GRAY": "Code exists but is not wired into the running application.",
+    "NOT_RELEASED": "Intentionally outside release scope."
+  },
+  "features": [
+    {
+      "id": "study_hub",
+      "name": "Study Hub time and personal streak",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "frontend",
+          "path": "frontend/src/offline/studyHubActivityTracker.ts",
+          "anchors": [
+            "installStudyHubActivityTracker",
+            "syncOfflineStudyActivity",
+            "MAX_DAILY_SECONDS"
+          ]
+        },
+        {
+          "kind": "backend_route",
+          "path": "app.py",
+          "anchors": [
+            "/study-time/sync",
+            "study_time_sync"
+          ]
+        },
+        {
+          "kind": "backend_logic",
+          "path": "app.py",
+          "anchors": [
+            "reconcile_study_time",
+            "_refresh_streak_from_study_time",
+            "MIN_QUALIFYING_STUDY_SECONDS"
+          ]
+        },
+        {
+          "kind": "database_model",
+          "path": "app.py",
+          "anchors": [
+            "class StudyTimeLog",
+            "class StudyStreak"
+          ]
+        },
+        {
+          "kind": "test",
+          "path": "scripts/test_study_time_runtime.py",
+          "anchors": [
+            "test_absolute_sync_is_monotonic_and_replay_safe",
+            "test_concurrent_reconciliation_does_not_double_credit"
+          ]
+        },
+        {
+          "kind": "ci",
+          "path": ".github/workflows/study-hub-runtime-regression.yml",
+          "anchors": [
+            "test_study_time_runtime.py"
+          ]
+        }
+      ],
+      "required_test_commands": [
+        "python -m pytest scripts/test_study_time_runtime.py -q"
+      ]
+    },
+    {
+      "id": "e2ee_identity",
+      "name": "E2EE identity registration and lifecycle",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "frontend",
+          "path": "frontend/src/main.tsx",
+          "anchors": [
+            "ensureE2EEIdentityReady"
+          ]
+        },
+        {
+          "kind": "frontend_api",
+          "path": "frontend/src/crypto/e2eeChatApi.ts",
+          "anchors": [
+            "ensureE2EEIdentityReady"
+          ]
+        },
+        {
+          "kind": "backend_route",
+          "path": "e2ee_chat_routes.py",
+          "anchors": [
+            "/keys/register",
+            "IDENTITY_KEY_REPLACEMENT_REQUIRED"
+          ]
+        },
+        {
+          "kind": "database",
+          "path": "e2ee_chat_models.py",
+          "anchors": [
+            "user_key"
+          ]
+        },
+        {
+          "kind": "browser_test",
+          "path": "scripts/test_browser_webrtc_runtime.py",
+          "anchors": [
+            "DELETE FROM user_key"
+          ]
+        },
+        {
+          "kind": "ci",
+          "path": ".github/workflows/e2ee-chat-validation.yml",
+          "anchors": [
+            "pytest"
+          ]
+        }
+      ],
+      "required_test_commands": [],
+      "notes": "Dedicated identity lifecycle runtime coverage is required before GREEN. Browser WebRTC/media is separately certified."
+    },
+    {
+      "id": "personal_streak",
+      "name": "Personal streak, milestones and XP",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "backend_model",
+          "path": "app.py",
+          "anchors": [
+            "class StudyStreak"
+          ]
+        },
+        {
+          "kind": "backend_logic",
+          "path": "app.py",
+          "anchors": [
+            "_refresh_streak_from_study_time",
+            "XP_STREAK_MILESTONES",
+            "award_xp"
+          ]
+        },
+        {
+          "kind": "route",
+          "path": "app.py",
+          "anchors": [
+            "/streak",
+            "streak_detail"
+          ]
+        },
+        {
+          "kind": "test",
+          "path": "scripts/test_study_time_runtime.py",
+          "anchors": [
+            "StudyStreak"
+          ]
+        }
+      ],
+      "required_test_commands": [
+        "python -m pytest scripts/test_study_time_runtime.py -q"
+      ],
+      "notes": "Core Study Hub reconciliation is covered; milestone, date-boundary and XP idempotency need deeper dedicated regression."
+    },
+    {
+      "id": "shared_streak",
+      "name": "Shared 1:1 study streak",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "backend_module",
+          "path": "study_friend_streak_routes.py",
+          "anchors": [
+            "invite_study_streak",
+            "accept_study_streak",
+            "MIN_SHARED_STUDY_MINUTES",
+            "MAX_ACTIVE_SHARED_STREAKS"
+          ]
+        },
+        {
+          "kind": "legacy_migration",
+          "path": "migrations/20260925_study_friend_streak.sql",
+          "anchors": [
+            "study_friend_streak",
+            "study_friend_streak_activity"
+          ]
+        },
+        {
+          "kind": "validation",
+          "path": "scripts/validate_shared_study_context.py",
+          "anchors": [
+            "Shared-study context validation passed."
+          ]
+        }
+      ],
+      "required_test_commands": [],
+      "notes": "Not release-certified: route registration, canonical schema ownership, frontend wiring, lifecycle tests and concurrency tests must be proven first."
+    }
+  ]
+}
