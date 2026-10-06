@@ -61,6 +61,7 @@ def _today():
 def clean_study_time(runtime_user):
     with app.app_context():
         StudyTimeLog.query.filter_by(user_id=runtime_user).delete()
+        StudyStreak.query.filter_by(user_id=runtime_user).delete()
         db.session.commit()
         yield
         db.session.rollback()
