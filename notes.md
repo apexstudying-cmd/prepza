@@ -311,13 +311,9 @@ Scale architecture should be driven by measured workload, not fear of future sca
 
 **Overall:** I do not optimize for hypothetical scale. I instrument the system, measure the workload, identify the bottleneck, and then choose the appropriate scaling technique.
 
-### Current audit status
+### Historical audit snapshot
 
-Economics / entitlement truth — GREEN
-Authentication / authorization — GREEN
-AI generation runtime + frontend contract — GREEN
-Realtime + E2EE — NOT GREEN; 4 test failures remain
-Later gates remain blocked until earlier required gates are proven.
+At the time these notes were written, the realtime/E2EE gate still had four failures. That snapshot was subsequently resolved and must not be read as the current release status. The later 74/74 QA record is authoritative for the current full-suite result.
 
 ## Latest Realtime/E2EE fixes — 2026-10-05
 
@@ -946,11 +942,9 @@ A green result will prove, locally:
 
 That is the missing evidence for the statement **"calling works end-to-end locally."**
 
-### Current status
+### Historical status
 
-**PREPARED / NOT YET EXECUTED.**
-
-Do not mark the calling gate green until the script actually passes.
+**PREPARED / NOT YET EXECUTED** at the time of this entry. Later entries document the subsequent browser-gate attempts; the current browser-to-browser media gate remains **NOT YET PROVEN**.
 
 ### Next release gate after browser calling
 
@@ -1393,7 +1387,7 @@ The old per-document heartbeat is retired. Historical StudyTimeLog data is conso
 
 Product analytics remains a separate activity concept. Its CSRF token is cached so the analytics loop no longer fetches /me every minute.
 
-This is not QA-green yet. The next local run must prove migration correctness, runtime tests, frontend build, full integration QA, offline/reconnect behaviour, inactivity/visibility behaviour, and the 400-active-student performance target.
+At implementation time this was intentionally not QA-green. The subsequent runtime gate has now passed 6/6. The remaining Study Hub evidence is browser/offline lifecycle behavior and later performance testing; the 400-active-student test remains deferred until functional and browser gates are green.
 
 
 ## 2026-10-06 — Study Hub regression audit
@@ -1416,3 +1410,36 @@ A regression audit was performed after the Study Hub implementation exposed mult
 ### Freeze status
 
 Still **not green** until the corrected route passes all six runtime tests locally and the new CI workflow completes successfully. No VPS migration or performance freeze should happen before that gate is green.
+
+
+## 2026-10-06 — Documentation reconciliation: current release truth
+
+The three release documents are now synchronized around one rule: historical notes remain historical, while current status is determined by the latest preserved evidence.
+
+### Current evidence
+
+- Full local PostgreSQL/Alembic QA: **74 passed, 0 failed, 3375 warnings — GREEN**.
+- Focused authenticated realtime runtime: **9 passed in 2.98s — GREEN**.
+- Focused authenticated calling signaling runtime: **4 passed in 3.31s — GREEN**.
+- Redis chat-worker gate: **GREEN**.
+- Redis cross-process realtime client delivery: **GREEN**.
+- Study Hub runtime reconciliation: **6 passed, 3 warnings — GREEN**.
+- Production-style Docker frontend/app build: **GREEN** on the latest verified build.
+- Browser-to-browser WebRTC media: **NOT YET PROVEN**.
+- Browser/offline Study Hub lifecycle: **NOT YET PROVEN**.
+- Storage/backup/restore: **NOT TESTED**.
+- Full launch-contract CI after the latest changes: **NOT YET VERIFIED**.
+- 400-active-student performance testing: **DEFERRED** until functional/browser gates are green.
+- VPS/Render production deployment: **BLOCKED BY THE RELEASE FREEZE GATE**, intentionally.
+
+### Documentation roles
+
+- `actualtest.md` is the evidence ledger: what was actually executed and what each test proves.
+- `notes.md` is the learning/engineering diary: why decisions and fixes happened, including historical snapshots.
+- `docs/NEXT_STEPS.md` is the current execution plan: remaining work and its present status.
+
+If a historical entry says a gate was pending, that statement describes the state at that time; it must not be interpreted as the latest status when a later evidence entry supersedes it.
+
+### Freeze rule
+
+No VPS migration, GPU purchase, or production launch work should be treated as the next step until the remaining browser/offline, storage/recovery, CI, integration, and final regression gates are complete.
