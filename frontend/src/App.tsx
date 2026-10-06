@@ -7,7 +7,7 @@ import CallExperience from './crypto/CallExperience'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline, saveUploadedFileOffline } from './offline/studyHubOffline'
 import { getCachedGeneratedAudioUrl, getGeneratedMaterialOffline, getLatestGeneratedMaterialForPath, listOfflineGeneratedMaterials, saveGeneratedMaterialOffline, setOfflineUserId } from './offline/generatedMaterials'
-import { installActivityHeartbeat } from './activityHeartbeat'
+import { installStudyHubActivityTracker, setStudyHubActive, setStudyHubUserId } from './offline/studyHubActivityTracker'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
 import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'
 import B2BFinanceAdmin from './admin/B2BFinanceAdmin'
@@ -15098,11 +15098,22 @@ export default function App() {
   const [adminMode, setAdminMode] = useState(false)
   const [orgPortalMode, setOrgPortalMode] = useState(false)
   useEffect(() => {
-    // Product analytics: a signup/login is not an active user. The heartbeat
-    // records foreground engagement and meaningful sessions for DAU/WAU/MAU
-    // and organisation audience reporting without exposing individual presence.
-    installActivityHeartbeat()
+    // Study Hub has one activity clock across all learning screens. Individual
+    // documents/features only provide context; they do not own timers.
+    installStudyHubActivityTracker()
+    void api<{ id?: number }>('/me').then(me => {
+      if (me?.id) setStudyHubUserId(me.id)
+    }).catch(() => {})
   }, [])
+
+  const studyHubScreens = new Set<Screen>([
+    'document-study', 'document-reader', 'ai-tutor', 'flashcards', 'quiz',
+    'podcast-player', 'podcast-library', 'summary', 'mind-map', 'study-materials',
+  ])
+
+  useEffect(() => {
+    setStudyHubActive(studyHubScreens.has(screen))
+  }, [screen])
   const [oauthError, setOauthError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   // Which Document is open in SummaryScreen. Screens communicate purely via
