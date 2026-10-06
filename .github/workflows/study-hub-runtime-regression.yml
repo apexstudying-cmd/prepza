@@ -1,0 +1,70 @@
+name: Study Hub Runtime Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app.py'
+      - 'scripts/test_study_time_runtime.py'
+      - 'alembic/**'
+      - 'schema/local_baseline.sql'
+      - 'requirements.txt'
+      - 'requirements-test.txt'
+      - '.github/workflows/study-hub-runtime-regression.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app.py'
+      - 'scripts/test_study_time_runtime.py'
+      - 'alembic/**'
+      - 'schema/local_baseline.sql'
+      - 'requirements.txt'
+      - 'requirements-test.txt'
+      - '.github/workflows/study-hub-runtime-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  study-hub-runtime:
+    name: Study Hub PostgreSQL runtime tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: prepza
+          POSTGRES_PASSWORD: prepza
+          POSTGRES_DB: prepza
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prepza -d prepza"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg2://prepza:prepza@127.0.0.1:5432/prepza
+      SECRET_KEY: study-hub-ci-secret
+      PREPZA_TIMEZONE: Africa/Nairobi
+      FLASK_TESTING: "1"
+    steps:
+      - name: Check out exact commit under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Assert exact commit under test
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install backend and test dependencies
+        run: python -m pip install -r requirements.txt -r requirements-test.txt
+      - name: Apply canonical Alembic schema
+        run: python -m alembic upgrade head
+      - name: Run Study Hub runtime regression suite
+        run: python -m pytest scripts/test_study_time_runtime.py -q
