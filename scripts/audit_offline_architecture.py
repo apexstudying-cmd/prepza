@@ -49,7 +49,7 @@ def idempotent_sync_model() -> None:
 
 
 def verify_daily_study_limit_contract() -> None:
-    activity = read('frontend/src/offline/studyActivity.ts')
+    activity = read('frontend/src/offline/studyHubActivityTracker.ts')
     backend = read('offline_activity_routes.py')
     assert 'MAX_DAILY_SECONDS = 12 * 60 * 60' in activity
     assert 'max_day_seconds = 12 * 60 * 60' in backend
@@ -60,7 +60,7 @@ def main() -> None:
     generated = read('frontend/src/offline/generatedMaterials.ts')
     study = read('frontend/src/offline/studyHubOffline.ts')
     activity = read('frontend/src/offline/studyActivity.ts')
-    backend_activity = read('offline_activity_routes.py')
+    backend_activity = read('app.py')
     bootstrap = read('frontend/src/offline/bootstrap.ts')
     queue = read('tools/apply_offline_sync_queue.py')
     hardening = read('tools/apply_offline_queue_hardening.py')
@@ -76,23 +76,23 @@ def main() -> None:
     require(generated, ['getLatestGeneratedMaterialForPath', 'listGeneratedMaterialsOffline', 'deleteGeneratedMaterialOffline', 'prepza-offline-user-id', 'generatedAudio', 'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl', 'summarize', 'flashcards', 'quiz', 'mind-map', 'podcast-script', 'podcast-audio'], 'generated-material persistence')
     require(study, ['prepza-study-assets-v1', 'openAssetDb', 'putStudyAsset', 'getOfflineStudyDocumentBlob', 'getOfflineStudyDocumentUrl', 'getOfflineStudyStorageUsage'], 'offline Study Hub package')
     require(generated, ['summarize', 'flashcards', 'quiz', 'mind-map', 'podcast-script', 'podcast-audio'], 'offline generated-material package')
-    require(activity, ['recordOfflineStudySeconds', 'syncedSeconds', 'syncOfflineStudyActivity', '/study-time/offline-sync', 'total_seconds', 'server_total_seconds_by_date'], 'offline study activity')
-    require(backend_activity, ['total_seconds', 'server_total_seconds_by_date', 'new_total = max(existing_total, target)'], 'server study reconciliation')
-    require(bootstrap, ['setOfflineUserId', 'syncOfflineStudyActivity'], 'offline bootstrap')
+    require(activity, ['setStudyHubActive', 'MAX_DAILY_SECONDS', 'FLUSH_INTERVAL_MS', 'INACTIVITY_WINDOW_MS', "fetch('/study-time/sync'"], 'Study Hub activity tracker')
+    require(backend_activity, ['@app.route("/study-time/sync", methods=["POST"])', 'def reconcile_study_time', 'with_for_update()', 'MAX_STUDY_TIME_SECONDS_PER_DAY'], 'server Study Hub reconciliation')
+    require(bootstrap, ['setStudyHubUserId', 'installStudyHubActivityTracker'], 'Study Hub bootstrap')
     require(queue, ['syncQueue', 'PREPZA_OFFLINE_QUEUE_MAX_ATTEMPTS', 'flushPrepzaOfflineQueue', 'createdAt', 'lastError'], 'offline queue foundation')
     require(hardening, ['dedupeKey', 'prepzaOfflineQueueDedupeKey', 'Never replay one account', 'Conflict reconciliation:', 'freshCsrf', 'prepza:offline-queue-syncing', 'prepza:offline-queue-synced'], 'offline queue hardening')
     require(generation, ['saveGeneratedMaterialOffline', 'Offline AI boundary: generation itself always requires a connection.', 'cacheGeneratedAudioOffline', 'getCachedGeneratedAudioUrl'], 'offline AI boundary')
     require(library, ['saveStudyHubDocumentOffline', '/library/saved', 'offline_available'], 'offline Library save flow')
     require(status, ['Offline — saved study materials remain available', 'Connection restored — reconnecting…', 'Syncing your study activity', 'All caught up', 'navigator.onLine'], 'offline status UI')
     require(isolation, ["indexedDB.deleteDatabase('prepza-offline-v2')", "indexedDB.deleteDatabase('prepza-offline-v1')", "indexedDB.deleteDatabase('prepza-offline-study-v1')", "caches.delete('prepza-study-assets-v1')"], 'offline account isolation')
-    require(reader, ['startOfflineStudyTracking', 'getOfflineStudyDocumentUrl', 'getOfflineUserId', 'initialPage', 'documentId'], 'offline reader')
+    require(reader, ['getOfflineStudyDocumentUrl', 'getOfflineUserId', 'initialPage', 'documentId'], 'offline reader')
     require(progress, ['prepza-reading-progress:', 'localStorage.getItem(`prepza-reading-progress:${offlineUserId}:${documentId}`)', "X-Prepza-Offline-Queue':'true'"], 'offline reading progress')
     require(engine, ["const PDFJS_BASE = '/vendor/pdfjs'", '${PDFJS_BASE}/pdf.mjs', '${PDFJS_BASE}/pdf.worker.mjs'], 'zero-network PDF engine')
     require(pdf_vendor, ['pdf.mjs', 'pdf.worker.mjs', 'cdn.jsdelivr.net', 'OUT = ROOT / \'frontend\' / \'public\' / \'vendor\' / \'pdfjs\''], 'local PDF.js build asset')
     assert 'https://cdn.jsdelivr.net' not in engine, 'PDF runtime must not use a CDN'
+    assert "'/study-time/heartbeat'" in backend_activity and '410' in backend_activity, 'legacy study heartbeat must remain retired'
     require(bootstrap, ['prepza-offline-last-auth-user', "indexedDB.deleteDatabase('prepza-offline-chat-v1')", "caches.delete('prepza-generated-audio-v1')", 'isolateAccount'], 'offline account switch isolation')
-    assert "activity_date < _today() - timedelta(days=366)" in backend_activity, 'offline baseline date validation must use Nairobi time'
-    assert 'today = _today()' in backend_activity, 'offline sync date boundary must use Nairobi time'
+    assert 'today = _study_local_date()' in backend_activity, 'Study Hub sync date boundary must use Nairobi time'
     stress_queue_model()
     idempotent_sync_model()
     verify_daily_study_limit_contract()
