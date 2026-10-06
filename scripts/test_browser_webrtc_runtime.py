@@ -239,14 +239,15 @@ def main() -> int:
                 callee_id = login(callee, fixture["callee_email"], fixture["password"])
                 print("PASS: two independent real browser contexts authenticated")
 
-                # Calling is intentionally global: the caller opens the real
-                # conversation UI, while the callee stays on Home. The incoming
-                # call must still appear outside the chat route.
-                chat_url = f"{BASE_URL}/chats/{fixture['conversation_id']}"
-                caller.goto(chat_url, wait_until="domcontentloaded")
-                caller.wait_for_timeout(1200)
+                # /chats/<id> is a Flask JSON API endpoint, not the SPA route.
+                # Enter through the real authenticated shell, open Chats, then
+                # select the disposable conversation through the actual UI.
+                caller.get_by_text("Chats", exact=True).click()
+                caller.get_by_text("Browser callee", exact=True).wait_for(timeout=10000)
+                caller.get_by_text("Browser callee", exact=True).click()
+                caller.get_by_role("button", name="Start voice call").wait_for(state="visible", timeout=10000)
                 callee.wait_for_timeout(1200)
-                print("PASS: caller opened the real conversation while callee remained on Home")
+                print("PASS: caller opened the real conversation through the SPA UI while callee remained on Home")
 
                 start_voice_button = caller.get_by_role("button", name="Start voice call")
                 try:
