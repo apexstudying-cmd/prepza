@@ -11,18 +11,19 @@ def patch_reader():
     if not s.startswith('// @ts-nocheck'):
         s = '// @ts-nocheck\n' + s
 
-    if "./offline/studyActivity" not in s:
-        s = s.replace(
-            "import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'\n",
-            "import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'\nimport { startOfflineStudyTracking } from '../offline/studyActivity'\nimport { getOfflineStudyDocumentUrl } from '../offline/studyHubOffline'\nimport { getOfflineUserId } from '../offline/generatedMaterials'\n",
-            1,
-        )
-    elif "getOfflineStudyDocumentUrl" not in s:
-        anchor = "import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'\n"
-        additions = "import { getOfflineStudyDocumentUrl } from '../offline/studyHubOffline'\nimport { getOfflineUserId } from '../offline/generatedMaterials'\n"
-        if anchor not in s:
-            raise SystemExit('PDF offline package import anchor not found')
-        s = s.replace(anchor, anchor + additions, 1)
+    anchor = "import { getPdfPageSize, openPdf, renderPdfPage, type PdfDocument, type PdfTextItem } from './pdfStudyReaderEngine'\n"
+    if anchor not in s:
+        raise SystemExit('PDF offline package import anchor not found')
+    # Keep this transformer idempotent. Study Hub activity is now tracked by
+    # the single global tracker, so the PDF canvas must not reintroduce the
+    # retired per-document tracker.
+    imports = [
+        "import { getOfflineStudyDocumentUrl } from '../offline/studyHubOffline'\n",
+        "import { getOfflineUserId } from '../offline/generatedMaterials'\n",
+    ]
+    missing = [line for line in imports if line.strip() not in s]
+    if missing:
+        s = s.replace(anchor, anchor + ''.join(missing), 1)
 
     s = s.replace(
         "type Props = { src: string; title: string; onPageChange?: (page: number) => void; onTextSelection?: (text: string) => void }",
@@ -45,13 +46,8 @@ def patch_reader():
         1,
     )
 
-    tracker_effect = "  useEffect(() => { if (documentId == null) return; return startOfflineStudyTracking(documentId, 'reading') }, [documentId])\n"
-    if tracker_effect not in s and 'startOfflineStudyTracking' not in s:
-        anchor = "  const annotationKey = `${STORE}:${src}`, bookmarkKey = `${BOOKMARKS}:${src}`\n"
-        if anchor not in s:
-            print('PDF tracker anchor not found; tracking already provided by current canvas shape')
-            return
-        s = s.replace(anchor, tracker_effect + anchor, 1)
+    # Activity tracking intentionally lives in the global Study Hub tracker;
+    # do not add a document-scoped heartbeat/effect here.
 
     old = """const response = await window.fetch(src, { credentials: 'include' }); if (!response.ok) throw new Error(`The study document could not be loaded (${response.status}).`); const document = await openPdf(new Uint8Array(await response.arrayBuffer()));"""
     new = """let response: Response
