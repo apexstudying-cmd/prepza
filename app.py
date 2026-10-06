@@ -6339,10 +6339,11 @@ def _document_study_event_id(user_id, document_content_id):
     return row.id if row else None
 
 
-MAX_HEARTBEAT_INTERVAL_SECONDS = 30
 MAX_STUDY_TIME_SECONDS_PER_DAY = 12 * 60 * 60  # anti-gaming credit ceiling, not a study-time restriction
-MIN_QUALIFYING_STUDY_SECONDS = 10 * 60  # 10 cumulative active minutes/day
+MIN_QUALIFYING_STUDY_SECONDS = 10 * 60
 PREPZA_STUDY_TIMEZONE = os.environ.get("PREPZA_TIMEZONE", "Africa/Nairobi")
+STUDY_TIME_FEATURE = "study_hub"
+
 try:
     PREPZA_STUDY_TZ = ZoneInfo(PREPZA_STUDY_TIMEZONE)
 except Exception:
@@ -6354,50 +6355,72 @@ def _study_local_date():
     return datetime.now(PREPZA_STUDY_TZ).date()
 
 
-def record_study_time_heartbeat(user_id, feature="reading"):
+def reconcile_study_time(user_id, target_seconds, activity_date=None):
     """
-    Credits up to MAX_HEARTBEAT_INTERVAL_SECONDS for the gap since
-    this user's last heartbeat today for this FEATURE, onto that
-    feature's StudyTimeLog row for today (created on first heartbeat
-    of the day for that feature). The very first heartbeat of a
-    feature/day only sets the baseline timestamp and credits nothing,
-    since there's no prior heartbeat to measure from.
+    Reconcile one student's absolute Study Hub total for a Nairobi day.
 
-    The 8h/day anti-gaming ceiling applies across ALL of this user's
-    features combined for today, not per-feature - otherwise 8h
-    reading + 8h quiz + 8h podcast would all separately be allowed in
-    one day. Returns this user's total study time across all
-    features today, in seconds.
+    The User row is locked first so two simultaneous syncs for the same
+    account cannot both observe the same old Study Hub total and credit it
+    twice. The StudyTimeLog row is then locked when it exists. PostgreSQL
+    remains authoritative; the browser can only move the server total
+    forward, never backward.
     """
-    today = _study_local_date()
-    now = datetime.utcnow()
+    today = activity_date or _study_local_date()
+    target_seconds = max(0, min(int(target_seconds), MAX_STUDY_TIME_SECONDS_PER_DAY))
 
-    row = StudyTimeLog.query.filter_by(user_id=user_id, activity_date=today, feature=feature).first()
-    if not row:
-        row = StudyTimeLog(user_id=user_id, activity_date=today, feature=feature, study_time_seconds=0)
+    # Serialize all Study Hub reconciliations for this account. Locking the
+    # parent row also makes the "row does not exist yet" case safe against
+    # concurrent first-sync inserts.
+    user = User.query.filter_by(id=user_id).with_for_update().first()
+    if user is None:
+        raise ValueError("User not found")
+
+    row = (
+        StudyTimeLog.query
+        .filter_by(user_id=user_id, activity_date=today, feature=STUDY_TIME_FEATURE)
+        .with_for_update()
+        .first()
+    )
+    if row is None:
+        row = StudyTimeLog(
+            user_id=user_id,
+            activity_date=today,
+            feature=STUDY_TIME_FEATURE,
+            study_time_seconds=0,
+        )
         db.session.add(row)
         db.session.flush()
 
-    if row.last_heartbeat_at is not None:
-        elapsed = (now - row.last_heartbeat_at).total_seconds()
-        credited = max(0, min(elapsed, MAX_HEARTBEAT_INTERVAL_SECONDS))
-        total_today = db.session.query(
-            db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
-        ).filter(
+    server_seconds = max(0, int(row.study_time_seconds or 0))
+    accepted = max(0, min(target_seconds - server_seconds, MAX_STUDY_TIME_SECONDS_PER_DAY - server_seconds))
+    if accepted:
+        row.study_time_seconds = server_seconds + accepted
+
+    return row.study_time_seconds, accepted
+
+
+def _study_time_total(user_id, activity_date=None):
+    """Return the authoritative Study Hub total for one Nairobi calendar day."""
+    day = activity_date or _study_local_date()
+    return int(
+        db.session.query(
+            db.func.coalesce(
+                db.func.sum(
+                    db.case(
+                        (StudyTimeLog.feature == STUDY_TIME_FEATURE, StudyTimeLog.study_time_seconds),
+                        else_=0,
+                    )
+                ),
+                0,
+            )
+        )
+        .filter(
             StudyTimeLog.user_id == user_id,
-            StudyTimeLog.activity_date == today,
-        ).scalar()
-        room = max(0, MAX_STUDY_TIME_SECONDS_PER_DAY - total_today)
-        row.study_time_seconds += int(min(credited, room))
-
-    row.last_heartbeat_at = now
-
-    return db.session.query(
-        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
-    ).filter(
-        StudyTimeLog.user_id == user_id,
-        StudyTimeLog.activity_date == today,
-    ).scalar()
+            StudyTimeLog.activity_date == day,
+        )
+        .scalar()
+        or 0
+    )
 
 
 def check_and_unlock_achievements(user_id):
@@ -6645,86 +6668,61 @@ def streak_detail():
     })
 
 
-@app.route("/study-time/heartbeat", methods=["POST"])
+@app.route("/study-time/sync", methods=["POST"])
 @limiter.limit(
-    "200 per hour",
-    key_func=lambda: f"study-heartbeat:{session.get('user_id', get_remote_address())}",
+    "20 per hour",
+    key_func=lambda: f"study-sync:{session.get('user_id', get_remote_address())}",
 )
 @require_csrf
-def study_time_heartbeat():
+def study_time_sync():
     """
-    Called by the client every ~20s while a document/summary is open
-    and the tab is visible. Also marks today as a study day (streak)
-    via record_study_activity() - reading is a legitimate study
-    action - but awards no XP itself; only record_document_studied()
-    (called from the generation routes) does that.
+    Synchronize one absolute Study Hub total for the authenticated student.
+
+    This replaces the old per-document 20-second heartbeat. The client
+    accumulates active Study Hub time locally and sends an absolute daily
+    target. The server only accepts the forward difference and serializes
+    concurrent syncs per account.
     """
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
     data = request.get_json(silent=True) or {}
-    feature = data.get("feature", "reading")
-    if feature not in STUDY_TIME_FEATURES:
-        return jsonify({"error": f"feature must be one of {sorted(STUDY_TIME_FEATURES)}"}), 400
+    try:
+        target_seconds = int(data.get("total_seconds"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "total_seconds must be an integer"}), 400
 
-    document_content_id = None
-    document_id = data.get("document_id")
-    if document_id is not None:
-        if not isinstance(document_id, int) or isinstance(document_id, bool): return jsonify({"error": "document_id must be an integer"}), 400
-        pair = _get_studyable_document(user_id, document_id)
-        if not pair: return jsonify({"error": "Document not found"}), 404
-        document_content_id = pair[1].id
+    if target_seconds < 0:
+        return jsonify({"error": "total_seconds must be non-negative"}), 400
+    if target_seconds > MAX_STUDY_TIME_SECONDS_PER_DAY:
+        target_seconds = MAX_STUDY_TIME_SECONDS_PER_DAY
 
-    before_feature_seconds = int(db.session.query(
-        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
-    ).filter(
-        StudyTimeLog.user_id == user_id,
-        StudyTimeLog.activity_date == _study_local_date(),
-        StudyTimeLog.feature == feature,
-    ).scalar() or 0)
-
-    seconds_today = record_study_time_heartbeat(user_id, feature=feature)
-
-    after_feature_seconds = int(db.session.query(
-        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
-    ).filter(
-        StudyTimeLog.user_id == user_id,
-        StudyTimeLog.activity_date == _study_local_date(),
-        StudyTimeLog.feature == feature,
-    ).scalar() or 0)
-
-    credited_this_heartbeat = max(0, after_feature_seconds - before_feature_seconds)
-    # A study day requires 10 cumulative active minutes across all study
-    # features. Opening a document or completing a generation is not enough.
-    feature_session_seconds = after_feature_seconds
     today = _study_local_date()
-    total_today = int(db.session.query(
-        db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0)
-    ).filter(
-        StudyTimeLog.user_id == user_id,
-        StudyTimeLog.activity_date == today,
-    ).scalar() or 0)
-    study_day_active = total_today >= MIN_QUALIFYING_STUDY_SECONDS
+    server_seconds, accepted = reconcile_study_time(user_id, target_seconds, today)
+    study_day_active = server_seconds >= MIN_QUALIFYING_STUDY_SECONDS
 
-    if credited_this_heartbeat > 0 and document_content_id is not None and study_day_active:
-        existing = StudyActivityLog.query.filter_by(
-            user_id=user_id, document_content_id=document_content_id, activity_date=today,
-        ).first()
-        if existing is None:
-            record_study_activity(user_id, document_content_id=document_content_id)
+    if accepted:
+        _refresh_streak_from_study_time(user_id, today)
     else:
-        # Also clears a stale streak immediately after a missed day once the
-        # student next interacts with the study-time system.
         _refresh_streak_from_study_time(user_id, today)
 
     db.session.commit()
     return jsonify({
-        "study_time_seconds_today": total_today,
-        "credited_this_heartbeat": credited_this_heartbeat,
+        "study_time_seconds_today": int(server_seconds),
+        "total_seconds": int(server_seconds),
+        "accepted_seconds": int(accepted),
         "qualifying_study_seconds": MIN_QUALIFYING_STUDY_SECONDS,
         "study_day_active": study_day_active,
     })
+
+
+@app.route("/study-time/heartbeat", methods=["POST"])
+def study_time_heartbeat_legacy():
+    """The old per-document heartbeat is intentionally disabled."""
+    return jsonify({
+        "error": "The per-document study heartbeat was retired; use /study-time/sync."
+    }), 410
 
 
 @app.route("/study-time")
