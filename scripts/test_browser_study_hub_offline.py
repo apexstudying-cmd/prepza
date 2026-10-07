@@ -267,7 +267,13 @@ def main() -> int:
 
             page.reload(wait_until="domcontentloaded")
             page.get_by_text(DOCUMENT_TITLE, exact=True).wait_for(timeout=15000)
-            page.get_by_text("Continue Reading", exact=True).wait_for(timeout=15000)
+            try:
+                page.get_by_role("button", name="Continue Reading", exact=True).wait_for(timeout=15000)
+            except PlaywrightTimeoutError:
+                print("DIAGNOSTIC: Study Hub title was visible but Continue Reading was not.")
+                print("DIAGNOSTIC URL:", page.url)
+                print("DIAGNOSTIC BODY:", page.locator("body").inner_text(timeout=5000)[:6000])
+                raise
             print("PASS: real browser opened the local-first Study Hub document")
 
             page.reload(wait_until="domcontentloaded")
