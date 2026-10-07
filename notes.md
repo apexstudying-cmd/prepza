@@ -1492,3 +1492,12 @@ New browser gate:
 `scripts/test_browser_study_hub_offline_content.py`
 
 It covers multiple documents, all generated material types, podcast binary audio, reload persistence, forbidden offline generation POSTs, and the exact application storage caps. The test is on `main` but still needs to be executed locally against the rebuilt Docker app.
+
+
+## 2026-10-07 — Offline IndexedDB schema migration fixed before browser gate execution
+
+The first execution of `scripts/test_browser_study_hub_offline_content.py` did not reach the document assertions. Chromium raised `NotFoundError` because `prepza-offline-v2` existed at IndexedDB version 3 with only the `savedStudyHub` object store. The Study Hub module and generated-material module shared the same database/version but each assumed its own stores had already been created. On a fresh first-use sequence, the first opener could therefore leave the other stores missing.
+
+This was classified as a real application persistence/schema defect, not a reason to weaken the browser test. The shared offline database was migrated to version 4. Both offline modules now create all required shared stores during the v4 upgrade: `savedStudyHub`, `generatedMaterials`, and `generatedAudio`. Existing version-3 databases therefore receive the missing stores through the normal IndexedDB upgrade path.
+
+The content/artifact browser gate remains **NOT TESTED** until the rebuilt frontend is exercised locally. This gate must prove the v4 migration and then the full three-document/document-Blob/generated-artifact/podcast/reload/no-generation-POST behavior.

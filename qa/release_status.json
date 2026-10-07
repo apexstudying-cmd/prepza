@@ -118,11 +118,11 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "NOT_TESTED",
-      "evidence": "scripts/test_browser_study_hub_offline_content.py is on main and covers three documents, real PDF Blobs, summary/flashcards/quiz/mind-map replay, podcast metadata+audio Blob replay, offline reload, no generation POSTs, and exact application storage caps. Local execution against the rebuilt Docker app is still required."
+      "evidence": "First local execution reached IndexedDB seeding but exposed a real shared offline DB schema defect: prepza-offline-v2 could be version 3 with only savedStudyHub. Fixed on main with version-4 migration creating savedStudyHub, generatedMaterials and generatedAudio for fresh and existing v3 databases. Full browser execution after rebuilding the app is still required."
     }
   ],
   "next_actions": [
-    "Run scripts/test_browser_study_hub_offline_content.py locally after syncing main and rebuilding the app image.",
+    "Rebuild the app image, then rerun scripts/test_browser_study_hub_offline_content.py to verify the v4 offline IndexedDB migration and the full multi-document/artifact gate.",
     "Build and execute remaining cross-system journeys.",
     "Run existing-database migration rehearsal and final clean regression after remaining browser/recovery gates clear."
   ]

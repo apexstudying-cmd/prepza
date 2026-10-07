@@ -1369,3 +1369,16 @@ Those application defects were fixed directly on `main` before the new gate was 
 - `ecd4a8d` — podcast offline playback metadata is persisted alongside the audio Blob.
 
 The browser gate itself is **NOT YET EXECUTED**. It is now the required local test before the broader offline-content/artifact gate can be marked PASS.
+
+
+### 2026-10-07 — First execution exposed a real shared IndexedDB schema defect
+
+The first local execution of `scripts/test_browser_study_hub_offline_content.py` reached browser IndexedDB seeding and failed with:
+
+`Page.evaluate: NotFoundError: Failed to execute 'transaction' on 'IDBDatabase': One of the specified object stores was not found.`
+
+Inspection showed that `prepza-offline-v2` used the same version number in two modules, but `studyHubOffline.ts` created only `savedStudyHub` while `generatedMaterials.ts` expected `generatedMaterials` and `generatedAudio`. Because IndexedDB does not run another upgrade when opening the same version, first-use order could leave stores absent.
+
+The application was corrected on `main` with a version-4 migration. The v4 upgrade creates all three shared stores in either module, so both a fresh database and an existing broken v3 database converge on the same schema. The browser gate itself was not weakened.
+
+Current state: **NOT YET EXECUTED after the fix**. Rebuild the Docker app before rerunning the browser gate so Chromium receives the corrected frontend bundle.

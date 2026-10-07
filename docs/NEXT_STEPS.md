@@ -379,3 +379,10 @@ Required evidence before marking this gate PASS:
 - application offline storage limits remain intact.
 
 Do not call the overall offline feature frozen until this gate passes.
+
+
+### 2026-10-07 — Offline content gate found a real IndexedDB migration defect
+
+The first execution of the real offline content/artifact browser gate exposed a genuine shared IndexedDB schema issue before its document assertions ran: `prepza-offline-v2` could exist at version 3 with only `savedStudyHub`, while generated-material replay expected `generatedMaterials` and `generatedAudio`. This was fixed on `main` with a version-4 migration that creates all three stores regardless of which offline module opens the database first, including upgrading existing v3 databases.
+
+The next action is therefore unchanged but more important: rebuild the app and rerun `scripts/test_browser_study_hub_offline_content.py`. Do not mark the gate PASS until the full multi-document/artifact/offline-reload/no-generation-POST assertions pass.
