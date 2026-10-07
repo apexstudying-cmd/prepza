@@ -88,6 +88,7 @@ def main() -> int:
     # This preserves the real rate-limit rules while preventing earlier local
     # QA runs from consuming the disposable suite's request budget.
     qa_env = os.environ.copy()
+    qa_env["PREPZA_FULL_QA"] = "1"
     qa_env["REDIS_URL"] = "memory://"
 
     result = subprocess.run(
