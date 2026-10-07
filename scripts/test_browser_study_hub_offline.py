@@ -347,8 +347,11 @@ def main() -> int:
                 raise AssertionError("Study Hub did not resume after fresh interaction")
             print("PASS: fresh interaction resumes Study Hub tracking")
 
-            page.get_by_role("button", name="Continue →", exact=True).click()
-            page.wait_for_timeout(1500)
+            # We are already inside the Study Hub document after the first
+            # Continue action. There is no second "Continue →" action on this
+            # screen; keep the test on the real Study Hub surface and exercise
+            # browser history below instead of relying on a stale Home locator.
+            page.wait_for_timeout(500)
             page.go_back(wait_until="domcontentloaded")
             page.get_by_text(DOCUMENT_TITLE, exact=True).wait_for(timeout=15000)
             print("PASS: browser back returned to the same Study Hub document context")
