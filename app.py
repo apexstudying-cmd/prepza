@@ -9694,7 +9694,7 @@ def send_chat_message(conversation_id):
 
     conversation.updated_at=datetime.utcnow()
     db.session.commit()
-    dispatch_message(conversation_id, _serialize_chat_message(message))
+    dispatch_message(conversation_id, _serialize_chat_message(message), e2ee_mode=conversation.e2ee_mode)
     return jsonify(_serialize_chat_message(message)),201
 
 @app.post("/chats/<int:conversation_id>/study-documents")
