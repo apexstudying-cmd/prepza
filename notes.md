@@ -1535,3 +1535,12 @@ The correct QA invariant is therefore two-layered: the known fixture student's o
 The run also exposed teardown ordering around the deliberate non-cascading `UserKey.user_id` foreign key. The fixture now commits child `UserKey` deletion before loading/deleting the fixture users. This changes only test cleanup ordering; it does not weaken the production account-deletion FK contract.
 
 This is useful release-QA evidence: realistic surrounding database data must not make an otherwise correct aggregate endpoint look wrong, and tests should prove both per-user correctness and aggregate semantics.
+
+
+## 2026-10-07 — Admin Study Hub browser rerun: navigation path is now the blocker
+
+The corrected admin Study Hub browser gate was rerun from a disposable Docker QA container. It produced **1 passed, 4 failed** after 240.41 seconds. The four failures all timed out in Playwright at `page.goto("http://app:5000/", wait_until="commit")` immediately after a successful `POST /login`.
+
+This is materially different from the earlier test-isolation failures. The corrected fixture cleanup/baseline logic has not yet been exercised by those four cases because browser navigation never commits. Source inspection shows `/` is a Flask route serving the built frontend `index.html`; the next step is to isolate that HTTP document response and determine why Chromium inside the temporary QA container cannot receive the document. No Study Time production logic should be changed merely to make this test pass.
+
+Release evidence remains **IN PROGRESS** for the admin Study Hub visibility gate. The offline content/artifact gate and the other release gates listed in `actualtest.md` remain separate and must continue according to the repository tracker.
