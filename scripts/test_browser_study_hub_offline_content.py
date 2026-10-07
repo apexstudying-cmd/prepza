@@ -437,22 +437,27 @@ def main() -> int:
             for _, title in DOCUMENTS:
                 assert_offline_document(page, title)
 
-            # Return to Study Materials after each document and verify every
-            # supported generated artifact type. This is deliberately UI-level:
-            # the test does not merely count IndexedDB rows.
+            # Return to Study Materials after each document and verify a real
+            # artifact from every document, plus each supported material type.
+            # This is deliberately UI-level: the test does not merely count
+            # IndexedDB rows.
             page.get_by_text("My Study", exact=True).wait_for(timeout=15000)
-            for type_label, expected_text in [
-                ("AI Summary", "Offline summary"),
-                ("Flashcards", "Offline question"),
-                ("Practice Quiz", "Offline quiz question"),
-                ("Mind Map", "Offline branch"),
-            ]:
-                page.get_by_role("button", name=type_label, exact=False).first.click(timeout=15000)
-                page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
-                print(f"PASS: {type_label} opens from offline generated artifact cache")
-                page.get_by_role("button").first.click(timeout=5000)
-                page.wait_for_timeout(500)
-                page.get_by_text("My Study", exact=True).wait_for(timeout=15000)
+            for _, document_title in DOCUMENTS:
+                for type_label, expected_text in [
+                    ("AI Summary", "Offline summary"),
+                    ("Flashcards", "Offline question"),
+                    ("Practice Quiz", "Offline quiz question"),
+                    ("Mind Map", "Offline branch"),
+                ]:
+                    candidate = page.get_by_role("button").filter(
+                        has_text=document_title
+                    ).filter(has_text=type_label).first
+                    candidate.click(timeout=15000)
+                    page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
+                    print(f"PASS: {type_label} opens offline for {document_title}")
+                    page.get_by_role("button").first.click(timeout=5000)
+                    page.wait_for_timeout(500)
+                    page.get_by_text("My Study", exact=True).wait_for(timeout=15000)
 
             # Podcast is tested separately because it has both JSON metadata and
             # a binary audio Blob. The player must resolve the cached descriptor
