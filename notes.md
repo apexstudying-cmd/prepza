@@ -1455,3 +1455,14 @@ The current registry records Study Hub, E2EE identity, personal streak and Share
 Current browser evidence was reconciled: the clean two-browser WebRTC gate is GREEN, including real Socket.IO signaling, RTCPeerConnection connection and live remote audio MediaStream tracks. The observed /keys/register 409 remains an E2EE identity lifecycle investigation, not a WebRTC failure.
 
 The repository execution tracker (docs/NEXT_STEPS.md), evidence ledger (actualtest.md), engineering diary (notes.md) and Study Hub design record (designstudytime.md) are being kept synchronized so completed work and remaining work do not depend on conversational memory.
+
+
+## 2026-10-07 — Persistent release-gate source of truth
+
+The QA process has now been moved from conversation-only tracking into the repository. `qa/release_manifest.json` describes the code execution paths, `scripts/qa_trace.py` checks structural traceability, and `qa/release_status.json` records the current release state and evidence.
+
+This distinction is intentional: a trace proves that we know where a feature executes; it does not prove the feature works. Runtime, browser, integration and CI evidence are still required before a release-scoped feature becomes GREEN.
+
+The current release is **BLOCKED**, not because already-green subsystems are being reopened, but because required gates remain unfinished. Newly confirmed browser WebRTC/media evidence is GREEN. Remaining work is E2EE identity lifecycle, deeper personal streak regression, Shared Streak scope/wiring/certification, browser/offline Study Hub lifecycle, recovery/backup, cross-system journeys, CI verification and final clean regression.
+
+From this point onward, when a gate changes state, update the repository status/evidence records on `main` rather than relying on chat memory. Historical entries remain historical; `qa/release_status.json` is the current machine-readable release truth.
