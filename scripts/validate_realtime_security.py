@@ -5,6 +5,7 @@ SOURCE = Path("realtime_server.py").read_text(encoding="utf-8")
 DISPATCH = Path("chat_realtime_dispatch.py").read_text(encoding="utf-8")
 APP_SOURCE = Path("app.py").read_text(encoding="utf-8")
 FRONTEND = Path("frontend/src/crypto/chatRealtime.ts").read_text(encoding="utf-8")
+APP_UI = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
 
 REQUIRED = {
     "authenticated socket gate": 'user_id = authenticated_socket_user_id()\n    if user_id is None:',
@@ -42,7 +43,7 @@ for fragment, name in [
 for source, name, fragment in [
     (FRONTEND, "realtime teardown", "export function resetChatRealtime()"),
     (FRONTEND, "realtime socket disconnect", "socket.disconnect()"),
-    (FRONTEND, "logout realtime teardown", "if (target === 'login') resetChatRealtime()"),
+    (APP_UI, "logout realtime teardown", "if (target === 'login') resetChatRealtime()"),
 ]:
     if fragment not in source:
         raise SystemExit(f"Realtime security regression: missing {name}")
