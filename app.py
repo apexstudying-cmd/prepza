@@ -6205,14 +6205,18 @@ def award_xp(user_id, event_type, xp_amount, related_id):
     that's unique per legitimate award (e.g. a freshly-inserted row's
     own id for uncapped per-attempt events, or a shared sentinel for
     "once ever" events like streak milestones).
+
+    The insert runs inside a SAVEPOINT so an idempotent duplicate cannot
+    roll back unrelated state changes from the surrounding transaction,
+    such as a newly-computed StudyStreak row.
     """
     event = XpEvent(user_id=user_id, event_type=event_type, xp_amount=xp_amount, related_id=related_id)
-    db.session.add(event)
     try:
-        db.session.flush()
+        with db.session.begin_nested():
+            db.session.add(event)
+            db.session.flush()
         return True
     except IntegrityError:
-        db.session.rollback()
         return False
 
 
@@ -6578,12 +6582,22 @@ def streak_detail():
     view_last_day = next_month_first_day - timedelta(days=1)
 
     active_dates = {
-        row.activity_date
-        for row in StudyActivityLog.query.filter(
-            StudyActivityLog.user_id == user_id,
-            StudyActivityLog.activity_date >= view_first_day,
-            StudyActivityLog.activity_date <= view_last_day,
-        ).all()
+        activity_date
+        for activity_date, study_seconds in (
+            db.session.query(
+                StudyTimeLog.activity_date,
+                db.func.coalesce(db.func.sum(StudyTimeLog.study_time_seconds), 0),
+            )
+            .filter(
+                StudyTimeLog.user_id == user_id,
+                StudyTimeLog.feature == STUDY_TIME_FEATURE,
+                StudyTimeLog.activity_date >= view_first_day,
+                StudyTimeLog.activity_date <= view_last_day,
+            )
+            .group_by(StudyTimeLog.activity_date)
+            .all()
+        )
+        if int(study_seconds or 0) >= MIN_QUALIFYING_STUDY_SECONDS
     }
 
     # Per-day study duration (summed across all StudyTimeLog features)
