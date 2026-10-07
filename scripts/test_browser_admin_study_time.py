@@ -122,7 +122,14 @@ def browser_login(page, email: str, password: str) -> None:
     )
     if not response.ok:
         raise RuntimeError(f"/login failed: {response.status} {response.text}")
-    page.goto(BASE_URL + "/", wait_until="domcontentloaded")
+    # This gate is about browser-held sessions + live HTTP routes, not frontend
+    # bundle startup. DOMContentLoaded can be delayed by the production SPA's
+    # module graph; commit is enough to prove Chromium received the real app
+    # document before we exercise the authenticated API through the page.
+    response = page.goto(BASE_URL + "/", wait_until="commit")
+    if response is None or response.status != 200:
+        status = response.status if response is not None else "no response"
+        raise RuntimeError(f"/ navigation failed: {status}")
 
 
 def browser_json(page, path: str) -> dict:
