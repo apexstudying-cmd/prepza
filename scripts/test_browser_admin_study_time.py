@@ -8,6 +8,8 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from http.cookies import SimpleCookie
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import pytest
@@ -122,6 +124,33 @@ def browser_login(page, email: str, password: str) -> None:
     )
     if not response.ok:
         raise RuntimeError(f"/login failed: {response.status} {response.text}")
+
+    # Production deliberately marks the Flask session cookie Secure. This
+    # browser gate talks directly to the internal HTTP-only Docker service,
+    # so Chromium correctly refuses to send that cookie over http://app:5000.
+    # Keep the real /login flow, but adapt only the returned test cookie to the
+    # temporary HTTP transport. Production config remains Secure.
+    set_cookie = response.headers.get("set-cookie", "")
+    parsed = SimpleCookie()
+    parsed.load(set_cookie)
+    session_cookie = parsed.get("session")
+    if session_cookie is None:
+        raise RuntimeError("Expected Flask session cookie from /login")
+    host = urlparse(BASE_URL).hostname
+    if not host:
+        raise RuntimeError(f"Could not determine browser QA host from {BASE_URL!r}")
+    same_site = (session_cookie["samesite"] or "Lax").capitalize()
+    if same_site not in {"Lax", "Strict", "None"}:
+        same_site = "Lax"
+    page.context.add_cookies([{
+        "name": "session",
+        "value": session_cookie.value,
+        "url": BASE_URL + "/",
+        "path": session_cookie["path"] or "/",
+        "httpOnly": bool(session_cookie["httponly"]),
+        "secure": False,
+        "sameSite": same_site,
+    }])
     # Keep authentication browser-owned without depending on SPA document
     # navigation. Playwright's page.request shares cookies with this browser
     # context, so subsequent authenticated API calls use the real session.
