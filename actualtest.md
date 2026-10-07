@@ -1314,3 +1314,25 @@ This section supersedes older pending snapshots where later evidence exists.
 
 ### Repeatability rule
 For future releases, the feature trace in qa/release_manifest.json must be updated with every release-scoped feature. scripts/qa_trace.py is a structural gate only; a feature becomes GREEN only after its declared runtime/browser/integration evidence and CI evidence pass.
+
+
+## 2026-10-07 — Release-gate status reconciliation
+
+The repeatable QA registry is now backed by `qa/release_status.json`, which records the current state of every tracked release gate and prevents historical snapshots from being mistaken for current status.
+
+### Newly confirmed evidence
+- Browser-to-browser WebRTC/media: **PASS** — clean two-browser run reached Connected on both sides and both browsers observed live remote audio MediaStream tracks through the real UI/signaling path.
+- Study Hub PostgreSQL runtime: **PASS** — 6/6 tests passed; 3 non-blocking `datetime.utcnow()` deprecation warnings remain.
+- Production-style Docker app/frontend build: **PASS**.
+
+### Still open
+- E2EE identity lifecycle: **IN PROGRESS**. The observed `/keys/register` 409 is an intentional different-identity conflict and is not a WebRTC failure; dedicated first-device/reload/restart/second-device/restore tests are still required.
+- Personal streak: **IN PROGRESS**. Core Study Hub integration is exercised, but milestone/date-boundary/XP idempotency needs dedicated regression.
+- Shared Streak: **IN PROGRESS**. Existing code is not yet release-certified; wiring, canonical schema ownership, frontend exposure and lifecycle/concurrency tests must be resolved.
+- Browser/offline Study Hub lifecycle: **NOT TESTED**.
+- Storage backup/restore: **NOT TESTED**.
+- Cross-system journeys: **NOT TESTED**.
+- Latest CI workflow execution: **NOT TESTED/NOT YET VERIFIED**.
+- Final clean regression/freeze: **NOT TESTED**.
+
+The 400-user performance gate remains deliberately deferred until the functional, browser and recovery gates are green.
