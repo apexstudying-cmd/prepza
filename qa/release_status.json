@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "89376594dd850dcb4aa5822b46cbc6f10df64468",
+  "last_verified_commit": "17e20f4e3e8a45b06da7e661d5dd9a143558d1b0",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -119,10 +119,16 @@
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "NOT_TESTED",
       "evidence": "First local execution reached IndexedDB seeding but exposed a real shared offline DB schema defect: prepza-offline-v2 could be version 3 with only savedStudyHub. Fixed on main with version-4 migration creating savedStudyHub, generatedMaterials and generatedAudio for fresh and existing v3 databases. Full browser execution after rebuilding the app is still required."
+    },
+    {
+      "id": "admin_study_time_visibility",
+      "status": "NOT_TESTED",
+      "evidence": "Admin Operations now reads the same authoritative StudyTimeLog totals used by student /study-time endpoints, with Nairobi-day boundaries and admin exclusion. Runtime/browser equality test is still required."
     }
   ],
   "next_actions": [
     "Rebuild the app image, then rerun scripts/test_browser_study_hub_offline_content.py to verify the v4 offline IndexedDB migration and the full multi-document/artifact gate.",
+    "Execute the admin study-time visibility gate: known student sync -> student /study-time -> admin /admin/operations equality, including offline reconciliation, concurrency, 12-hour ceiling, Nairobi midnight and admin exclusion.",
     "Build and execute remaining cross-system journeys.",
     "Run existing-database migration rehearsal and final clean regression after remaining browser/recovery gates clear."
   ]
