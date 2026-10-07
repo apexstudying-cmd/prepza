@@ -101,10 +101,7 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
         # may legitimately reach this endpoint at the same time; locking the
         # existing User row makes same-key registration idempotent and prevents
         # two different first-use keys from racing the unique user_key insert.
-        locked_user = db.session.execute(
-            text('SELECT id FROM "user" WHERE id = :user_id FOR UPDATE'),
-            {"user_id": user_id},
-        ).scalar_one_or_none()
+        locked_user = User.query.filter_by(id=user_id).with_for_update().first()
         if locked_user is None:
             db.session.rollback()
             return jsonify({"error": "Authentication required"}), 401
