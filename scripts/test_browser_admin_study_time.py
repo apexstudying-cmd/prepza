@@ -322,7 +322,18 @@ def test_admin_accounts_are_excluded_and_students_are_isolated(fixture):
     clear_study_time(student_b)
     clear_study_time(admin_id)
 
-    code = """
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        context = browser.new_context()
+        try:
+            page = context.new_page()
+            browser_login(page, fixture["admin"]["email"], fixture["password"])
+            # Take the aggregate baseline before introducing the fixture's
+            # student/admin study rows. The endpoint intentionally reports
+            # all non-admin students globally.
+            baseline = admin_view(page)["students"]["study_seconds_today"]
+
+            code = """
 from app import app, db, StudyTimeLog, STUDY_TIME_FEATURE, _study_local_date
 with app.app_context():
     today = _study_local_date()
@@ -336,15 +347,8 @@ with app.app_context():
     db.session.commit()
 print("OK")
 """.replace("__A__", str(student_a)).replace("__B__", str(student_b)).replace("__ADMIN__", str(admin_id))
-    assert run_container_python(code).splitlines()[-1] == "OK"
+            assert run_container_python(code).splitlines()[-1] == "OK"
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context()
-        try:
-            page = context.new_page()
-            browser_login(page, fixture["admin"]["email"], fixture["password"])
-            baseline = admin_view(page)["students"]["study_seconds_today"]
             admin = admin_view(page)
             assert admin["students"]["study_seconds_today"] == baseline + 110
             ids = {int(x["id"]) for x in admin["students"]["study_top_students"]}
