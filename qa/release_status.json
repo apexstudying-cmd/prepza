@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "56639783bde2f16231ed37d802386daf5d0e5d3d",
+  "last_verified_commit": "d6a18d0",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -43,7 +43,7 @@
     {
       "id": "e2ee_identity_lifecycle",
       "status": "IN_PROGRESS",
-      "evidence": "First execution exposed test-harness defects: shared runtime fixture caused an expected 409 in a later case, cleanup nested a SQLAlchemy transaction, and browser reload hit Chromium ERR_ABORTED after first registration passed. Tests were corrected; rerun on rebuilt stack is required."
+      "evidence": "Backend runtime E2EE identity lifecycle now passes 4/4. Browser lifecycle currently fails the first local-vs-server identity equality assertion; the gate was tightened to allow only bounded async bootstrap convergence and report the differing key prefixes. CI workflow path coverage was also corrected so identity test changes trigger E2EE validation."
     },
     {
       "id": "shared_streak",
