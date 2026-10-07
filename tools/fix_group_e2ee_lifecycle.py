@@ -64,7 +64,7 @@ new_fn = '''async function groupIsE2EE(conversationId: number): Promise<boolean>
   // Legacy group: attempt secure migration. No plaintext fallback is allowed.
   try {
     const csrfToken = currentCsrfToken
-    await ensureIdentityKeyRegistered(csrfToken)
+    await ensureE2EEIdentityReady()
     const enable = await window.fetch(`/chats/${conversationId}${GROUP_ENABLE_SUFFIX}`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
