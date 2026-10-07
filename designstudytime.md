@@ -596,4 +596,4 @@ The first implementation pass has now been applied directly to `main`:
 - A migration, `20261006_study_hub_time.sql`, consolidates historical feature rows into one `study_hub` row per user/day while preserving the previous daily total up to the existing 12-hour ceiling.
 - Runtime coverage was added in `scripts/test_study_time_runtime.py` for monotonic/replay-safe sync, daily ceiling, one-row behaviour, concurrency, authentication/CSRF, and retirement of the legacy heartbeat.
 
-**Important:** this implementation pass is not yet marked green. The local Docker/QA environment must run the new runtime test, migration apply/verify, TypeScript/Vite build, and the existing full `tools/run_local_qa.py` gate before the design is considered verified.
+**Current evidence update (2026-10-07):** the PostgreSQL Study Hub runtime gate is now GREEN at 6/6, and the production-style Docker frontend/app build is GREEN. Browser/offline Study Hub lifecycle remains untested, so the overall Study Hub feature is not yet release-green. The 400-student performance gate remains deferred until functional and browser lifecycle evidence is complete.
