@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "253861f03c8263af9a3c95b3b40e3e2a9e3c90c2",
+  "last_verified_commit": "89376594dd850dcb4aa5822b46cbc6f10df64468",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
