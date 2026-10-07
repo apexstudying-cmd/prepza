@@ -51,7 +51,7 @@ export function clearOfflineUserId(): void {
 }
 
 function supported(path: string) {
-  return path.includes('/documents/') && /(summarize|quiz|flashcards|podcast-script|podcast-audio|mind-map|mindmap)/.test(path)
+  return path.includes('/documents/') && /(?:materials\/\\d+|summarize|quiz|flashcards|podcast-script|podcast-audio|mind-map|mindmap)/.test(path)
 }
 
 export async function saveGeneratedMaterialOffline(path: string, requestBody: unknown, payload: unknown) {
