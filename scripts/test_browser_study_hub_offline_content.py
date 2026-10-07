@@ -118,7 +118,7 @@ with app.app_context():
             user_id=user.id,
             document_content_id=content.id,
             title=title,
-            original_filename=f"offline-{offset}.pdf",
+            original_filename=f"offline-{{offset}}.pdf",
             status="ready",
             is_removed=False,
         )
