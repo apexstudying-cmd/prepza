@@ -13,10 +13,20 @@ def _redis_enabled():
     return value.startswith(("redis://", "rediss://"))
 
 
-def dispatch_message(conversation_id, payload):
+def dispatch_message(conversation_id, payload, *, e2ee_mode=None):
     """Queue or directly emit a newly committed E2EE chat message."""
     if not isinstance(payload, dict):
         return
+
+    # Encrypted direct/group conversations must never reach the realtime
+    # transport with a plaintext body. The HTTP sender enforces the same
+    # boundary, and this second gate protects the post-commit dispatcher.
+    if e2ee_mode in {"direct_v1", "group_v1"}:
+        body = payload.get("body")
+        nonce = payload.get("nonce")
+        if isinstance(body, str) and body.strip() and not isinstance(nonce, str):
+            return
+
     try:
         if _redis_enabled():
             from chat_event_queue import enqueue_chat_event
