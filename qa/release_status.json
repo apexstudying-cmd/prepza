@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "68c841ab803f545449ac8d9b321c94443cb5947a",
+  "last_verified_commit": "800ffc73b05c19610476db83eea052697072609a",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -123,13 +123,13 @@
     {
       "id": "admin_study_time_visibility",
       "status": "IN_PROGRESS",
-      "evidence": "First execution on 2026-10-07: 4 assertion failures plus 1 teardown error. Source review traced the assertions to test isolation/global aggregate assumptions and the teardown to UserKey child cleanup ordering. The browser gate was corrected to compare fixture contributions against live admin baselines; a clean rerun is still required."
+      "evidence": "Corrected browser gate rerun on 2026-10-07: 1 passed, 4 failed after 240.41s. All four failures timed out at Playwright page.goto(http://app:5000/, wait_until=commit) immediately after successful /login. The cases therefore did not reach their Study Time assertions. Source inspection shows / is the Flask route serving the built frontend index.html. Root-document navigation must be isolated before the gate can be certified; no Study Time logic has been weakened."
     }
   ],
   "next_actions": [
-    "Rerun scripts/test_browser_study_hub_offline_content.py after the offline v4 migration fix.",
-    "Rerun the corrected scripts/test_browser_admin_study_time.py; verify exact fixture-student equality, aggregate semantics, concurrency, 12-hour per-student ceiling, Nairobi boundary and admin exclusion.",
-    "Build and execute remaining cross-system journeys.",
-    "Run existing-database migration rehearsal and final clean regression after remaining gates clear."
+    "Isolate the temporary-container HTTP response for the Flask / document and determine why Chromium navigation to http://app:5000/ does not commit.",
+    "Rerun scripts/test_browser_admin_study_time.py after the navigation blocker is understood; require all five cases to execute and pass.",
+    "Rerun scripts/test_browser_study_hub_offline_content.py after the IndexedDB v4 migration fix.",
+    "Build and execute remaining cross-system journeys, existing-database migration rehearsal, CI verification and final clean regression."
   ]
 }
