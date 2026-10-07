@@ -149,7 +149,7 @@ def main() -> int:
             assert first_local == first_server
             print("PASS: first browser identity generated, persisted, and registered")
 
-            page.reload(wait_until="domcontentloaded")
+            page.reload(wait_until="commit")
             page.wait_for_timeout(1200)
             assert local_public_key(page) == first_local
             assert server_public_key(page, fixture["user_id"]) == first_server
