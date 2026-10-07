@@ -1510,3 +1510,16 @@ The admin Operations surface now distinguishes broad activity from actual Study 
 Admin now receives: students who studied today, students who reached the 10-minute qualifying threshold today, total Study Hub seconds today, total Study Hub seconds across the last seven Nairobi study dates, and a top-50 table of students who are either recently active or have Study Hub time, showing today/7-day study time and last active time. Admin accounts are excluded from student study aggregates. The admin study date is explicitly calculated in `PREPZA_TIMEZONE` (default Africa/Nairobi), not PostgreSQL `CURRENT_DATE`, so the dashboard follows the same Nairobi day boundary as the study-time reconciliation system.
 
 This is an implementation change, not yet a release-certified gate. The next runtime/browser proof must create a known student study total, verify the student's `/study-time` value, then verify the admin Operations response and UI report the same authoritative seconds; it must also cover offline reconciliation, concurrent sync idempotency, the 12-hour daily ceiling, Nairobi midnight, and admin/student separation.
+
+
+## 2026-10-07 — Admin Study Hub time equality gate prepared
+
+The admin Study Hub time dashboard is now backed by the same authoritative `StudyTimeLog` rows used by the student `/study-time` endpoint. I added `scripts/test_browser_admin_study_time.py`.
+
+The gate covers: 25s online -> offline +20s -> reconnect at 45s; concurrent sync idempotency; the 12-hour ceiling; the Nairobi calendar day; admin exclusion; and two-student isolation. The browser portion uses authenticated Playwright student/admin contexts, while database mutations and concurrency run inside the real Docker app container against PostgreSQL.
+
+While preparing this gate, we also found that `studyHubOffline.ts` declared shared IndexedDB version 4 but was still opening `prepza-offline-v2` at version 3. That could prevent the intended v4 migration when that module opened first. This was fixed on `main`; it now opens at the declared version 4. The offline content/artifact gate remains untested until the rebuilt frontend is exercised.
+
+**Evidence status:** the admin equality gate is not release-certified yet. The test script is on `main` and is ready for local execution after the standard Docker rebuild.
+
+**Interview explanation:** the student profile and admin dashboard should not calculate study time independently. They should read the same authoritative PostgreSQL record, with concurrency-safe reconciliation and the same daily ceiling.
