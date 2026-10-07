@@ -12,7 +12,10 @@ permissions:
   contents: read
 
 jobs:
+  # The shared pytest conftest imports the full Flask app, so give it the same disposable SQLite URL used by focused CI runtime tests.
   test:
+    env:
+      DATABASE_URL: 'sqlite:////tmp/prepza-ci-runtime.sqlite'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
