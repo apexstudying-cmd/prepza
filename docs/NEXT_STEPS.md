@@ -386,3 +386,21 @@ Do not call the overall offline feature frozen until this gate passes.
 The first execution of the real offline content/artifact browser gate exposed a genuine shared IndexedDB schema issue before its document assertions ran: `prepza-offline-v2` could exist at version 3 with only `savedStudyHub`, while generated-material replay expected `generatedMaterials` and `generatedAudio`. This was fixed on `main` with a version-4 migration that creates all three stores regardless of which offline module opens the database first, including upgrading existing v3 databases.
 
 The next action is therefore unchanged but more important: rebuild the app and rerun `scripts/test_browser_study_hub_offline_content.py`. Do not mark the gate PASS until the full multi-document/artifact/offline-reload/no-generation-POST assertions pass.
+
+
+## 24. 2026-10-07 — Admin Study Hub gate execution exposed test-isolation assumptions
+
+The first execution of `scripts/test_browser_admin_study_time.py` produced **4 failed, 1 passed, 1 teardown error**. This is not yet evidence of a production Study Hub/admin regression. Source inspection confirmed that `/admin/operations` intentionally reports aggregate Study Hub seconds across **all non-admin students**, while the first version of the browser gate assumed its three fixture users were the only students in the database.
+
+The observed values (155 vs 45, 43310 vs 43200, 140 vs 30, 220 vs 110) therefore came from comparing a global aggregate with a fixture-local expectation. The 12-hour ceiling is per student, so a global admin total can legitimately exceed 43,200 seconds when multiple students are present.
+
+The teardown error exposed the deliberate non-cascading `UserKey.user_id` FK. The test cleanup was hardened to commit fixture-owned `UserKey` rows before parent-user deletion, rather than changing the production FK contract.
+
+The gate has now been corrected to:
+- reset only its fixture StudyTimeLog rows before isolated cases;
+- compare global admin totals against a live baseline;
+- assert the exact fixture student's admin top-student row;
+- verify admin-account study rows do not increase the global student aggregate; and
+- perform child E2EE-key cleanup before fixture-user deletion.
+
+**Next action:** rerun the corrected gate on the rebuilt/current app. If it still fails, treat the new result as a real backend/browser regression and trace the actual query/reconciliation path. Do not weaken `/admin/operations` to satisfy the test.
