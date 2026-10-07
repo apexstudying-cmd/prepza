@@ -404,3 +404,17 @@ The gate has now been corrected to:
 - perform child E2EE-key cleanup before fixture-user deletion.
 
 **Next action:** rerun the corrected gate on the rebuilt/current app. If it still fails, treat the new result as a real backend/browser regression and trace the actual query/reconciliation path. Do not weaken `/admin/operations` to satisfy the test.
+
+
+## 2026-10-07 — Current admin Study Hub browser gate blocker
+
+The corrected `scripts/test_browser_admin_study_time.py` has now been rerun from the disposable Docker QA container.
+
+- Result: **1 passed, 4 failed**.
+- The four failures all time out at Playwright navigation to `http://app:5000/` with `wait_until="commit"`.
+- The preceding `POST /login` succeeds, so the four cases never reach their Study Time assertions.
+- The root route is the Flask `/` handler serving the built frontend `index.html`.
+
+**Current action:** isolate the HTTP response for `/` from inside the temporary QA container and explain the navigation timeout before modifying Study Time logic or weakening the browser gate.
+
+The release tracker remains authoritative: `admin_study_time_visibility` is **IN_PROGRESS**. The separate offline content/artifact gate is also still pending after the IndexedDB v4 migration fix and must be rerun independently.
