@@ -68,6 +68,21 @@ async function generationRequest<T = any>(
 
   if (!documentId || !feature) return api<T>(path, options)
 
+  // Resolve the selected artifact before the offline branch. The Study Materials
+  // screen deliberately records the exact material id in sessionStorage so an
+  // offline open can replay that already-entitled artifact without calling a
+  // generation endpoint.
+  try {
+    const raw = sessionStorage.getItem('prepza-open-material')
+    if (raw) {
+      const selected = JSON.parse(raw)
+      const selectedFeature = selected?.type === 'practice_questions' ? 'quiz' : selected?.type === 'mindmap' ? 'mind_map' : selected?.type
+      if (String(selected?.documentId) === String(documentId) && selectedFeature === feature && Number(selected?.materialId) > 0) {
+        selectedMaterialId = Number(selected.materialId)
+      }
+    }
+  } catch { /* malformed session state is non-fatal */ }
+
   if (!navigator.onLine && selectedMaterialId) {
     const cached = await getGeneratedMaterialOffline(
       `/documents/${documentId}/materials/${selectedMaterialId}`,
@@ -85,17 +100,6 @@ async function generationRequest<T = any>(
 
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | null = null
-  try {
-    const raw = sessionStorage.getItem('prepza-open-material')
-    if (raw) {
-      const selected = JSON.parse(raw)
-      const selectedFeature = selected?.type === 'practice_questions' ? 'quiz' : selected?.type === 'mindmap' ? 'mind_map' : selected?.type
-      if (String(selected?.documentId) === String(documentId) && selectedFeature === feature && Number(selected?.materialId) > 0) {
-        selectedMaterialId = Number(selected.materialId)
-      }
-    }
-  } catch { /* malformed session state is non-fatal */ }
-
   const requestOptions = () => {
     const nextHeaders = new Headers(options.headers || {})
     if (selectedMaterialId) nextHeaders.set('X-Prepza-Material-ID', String(selectedMaterialId))
