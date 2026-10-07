@@ -81,7 +81,12 @@ with app.app_context():
     # UserKey has a deliberate non-cascading FK to User, matching the
     # production account-deletion contract. Remove fixture-owned E2EE
     # identity rows before deleting the fixture users.
+    # UserKey deliberately has a non-cascading FK to User. Commit child-row
+    # deletion before loading/deleting parent users so ORM autoflush cannot
+    # race the FK cleanup.
     UserKey.query.filter(UserKey.user_id.in_(ids)).delete(synchronize_session=False)
+    db.session.commit()
+    db.session.expire_all()
     for user_id in ids:
         user = db.session.get(User, user_id)
         if user is not None:
@@ -97,6 +102,17 @@ def fixture():
     yield data
     cleanup_fixture(data)
 
+
+def clear_study_time(user_id: int) -> None:
+    """Reset only this fixture student's study rows before an isolated case."""
+    code = """
+from app import app, db, StudyTimeLog
+with app.app_context():
+    StudyTimeLog.query.filter_by(user_id=__USER_ID__).delete(synchronize_session=False)
+    db.session.commit()
+print("OK")
+""".replace("__USER_ID__", str(user_id))
+    assert run_container_python(code).splitlines()[-1] == "OK"
 
 def browser_login(page, email: str, password: str) -> None:
     response = page.request.post(
@@ -149,13 +165,7 @@ with app.app_context():
 def test_student_and_admin_views_agree_after_reconnect_reconciliation(fixture):
     """25s online -> offline +20s -> reconnect at 45s -> both views say 45s."""
     student_id = fixture["student_a"]["id"]
-    assert sync_with_known_session(student_id, 25)["total_seconds"] == 25
-    # The dedicated browser offline lifecycle gate proves the local clock
-    # continues while disconnected. Here we verify its reconnect result:
-    # an absolute 45s local total is reconciled into PostgreSQL.
-    result = sync_with_known_session(student_id, 45)
-    assert result["total_seconds"] == 45
-    assert result["accepted_seconds"] == 20
+    clear_study_time(student_id)
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -166,17 +176,26 @@ def test_student_and_admin_views_agree_after_reconnect_reconciliation(fixture):
             admin_page = admin_context.new_page()
             browser_login(student_page, fixture["student_a"]["email"], fixture["password"])
             browser_login(admin_page, fixture["admin"]["email"], fixture["password"])
+            baseline = admin_view(admin_page)["students"]["study_seconds_today"]
+
+            # The dedicated browser offline lifecycle gate proves the local
+            # clock continues while disconnected. Here we verify that an
+            # absolute 45s reconnect total reconciles into PostgreSQL.
+            assert sync_with_known_session(student_id, 25)["total_seconds"] == 25
+            result = sync_with_known_session(student_id, 45)
+            assert result["total_seconds"] == 45
+            assert result["accepted_seconds"] == 20
+
             student = student_view(student_page)
             admin = admin_view(admin_page)
             assert student["total_seconds"] == 45
-            assert admin["students"]["study_seconds_today"] == 45
+            assert admin["students"]["study_seconds_today"] == baseline + 45
             row = next(x for x in admin["students"]["study_top_students"] if int(x["id"]) == student_id)
             assert row["study_seconds_today"] == 45
         finally:
             student_context.close()
             admin_context.close()
             browser.close()
-
 
 def test_two_simultaneous_syncs_do_not_double_credit(fixture):
     student_id = fixture["student_a"]["id"]
@@ -236,7 +255,7 @@ print("OK")
 
 def test_daily_ceiling_is_identical_in_student_and_admin_views(fixture):
     student_id = fixture["student_a"]["id"]
-    sync_with_known_session(student_id, 999999999)
+    clear_study_time(student_id)
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -247,10 +266,12 @@ def test_daily_ceiling_is_identical_in_student_and_admin_views(fixture):
             admin_page = admin_context.new_page()
             browser_login(student_page, fixture["student_a"]["email"], fixture["password"])
             browser_login(admin_page, fixture["admin"]["email"], fixture["password"])
+            baseline = admin_view(admin_page)["students"]["study_seconds_today"]
+            sync_with_known_session(student_id, 999999999)
             student = student_view(student_page)
             admin = admin_view(admin_page)
             assert student["total_seconds"] == 43200
-            assert admin["students"]["study_seconds_today"] == 43200
+            assert admin["students"]["study_seconds_today"] == baseline + 43200
         finally:
             student_context.close()
             admin_context.close()
@@ -259,7 +280,17 @@ def test_daily_ceiling_is_identical_in_student_and_admin_views(fixture):
 
 def test_nairobi_day_boundary_is_used_by_admin(fixture):
     student_id = fixture["student_a"]["id"]
-    code = """
+    clear_study_time(student_id)
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        context = browser.new_context()
+        try:
+            page = context.new_page()
+            browser_login(page, fixture["admin"]["email"], fixture["password"])
+            baseline = admin_view(page)["students"]
+
+            code = """
 from app import app, db, StudyTimeLog, STUDY_TIME_FEATURE, _study_local_date
 from datetime import timedelta
 with app.app_context():
@@ -273,26 +304,23 @@ with app.app_context():
     db.session.commit()
 print("OK")
 """.replace("__USER_ID__", str(student_id))
-    assert run_container_python(code).splitlines()[-1] == "OK"
+            assert run_container_python(code).splitlines()[-1] == "OK"
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context()
-        try:
-            page = context.new_page()
-            browser_login(page, fixture["admin"]["email"], fixture["password"])
             admin = admin_view(page)
-            assert admin["students"]["study_seconds_today"] == 30
-            assert admin["students"]["study_seconds_7d"] == 120
+            assert admin["students"]["study_seconds_today"] == baseline["study_seconds_today"] + 30
+            assert admin["students"]["study_seconds_7d"] == baseline["study_seconds_7d"] + 120
         finally:
             context.close()
             browser.close()
-
 
 def test_admin_accounts_are_excluded_and_students_are_isolated(fixture):
     student_a = fixture["student_a"]["id"]
     student_b = fixture["student_b"]["id"]
     admin_id = fixture["admin"]["id"]
+
+    clear_study_time(student_a)
+    clear_study_time(student_b)
+    clear_study_time(admin_id)
 
     code = """
 from app import app, db, StudyTimeLog, STUDY_TIME_FEATURE, _study_local_date
@@ -316,8 +344,9 @@ print("OK")
         try:
             page = context.new_page()
             browser_login(page, fixture["admin"]["email"], fixture["password"])
+            baseline = admin_view(page)["students"]["study_seconds_today"]
             admin = admin_view(page)
-            assert admin["students"]["study_seconds_today"] == 110
+            assert admin["students"]["study_seconds_today"] == baseline + 110
             ids = {int(x["id"]) for x in admin["students"]["study_top_students"]}
             assert student_a in ids and student_b in ids and admin_id not in ids
             rows = {int(x["id"]): x["study_seconds_today"] for x in admin["students"]["study_top_students"]}
@@ -330,3 +359,8 @@ print("OK")
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# /admin/operations intentionally reports a global non-admin-student aggregate.
+# Browser assertions therefore compare fixture contributions against a live baseline
+# and assert exact fixture-student rows instead of assuming an empty database.
