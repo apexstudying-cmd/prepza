@@ -175,7 +175,10 @@ def test_student_and_admin_views_agree_after_reconnect_reconciliation(fixture):
     clear_study_time(student_id)
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(\n            headless=True,\n            args=["--disable-features=HttpsUpgrades"],\n        )
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=["--disable-features=HttpsUpgrades"],
+        )
         student_context = browser.new_context()
         admin_context = browser.new_context()
         try:
@@ -265,7 +268,10 @@ def test_daily_ceiling_is_identical_in_student_and_admin_views(fixture):
     clear_study_time(student_id)
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(\n            headless=True,\n            args=["--disable-features=HttpsUpgrades"],\n        )
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=["--disable-features=HttpsUpgrades"],
+        )
         student_context = browser.new_context()
         admin_context = browser.new_context()
         try:
@@ -290,7 +296,10 @@ def test_nairobi_day_boundary_is_used_by_admin(fixture):
     clear_study_time(student_id)
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(\n            headless=True,\n            args=["--disable-features=HttpsUpgrades"],\n        )
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=["--disable-features=HttpsUpgrades"],
+        )
         context = browser.new_context()
         try:
             page = context.new_page()
@@ -330,7 +339,10 @@ def test_admin_accounts_are_excluded_and_students_are_isolated(fixture):
     clear_study_time(admin_id)
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(\n            headless=True,\n            args=["--disable-features=HttpsUpgrades"],\n        )
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=["--disable-features=HttpsUpgrades"],
+        )
         context = browser.new_context()
         try:
             page = context.new_page()
