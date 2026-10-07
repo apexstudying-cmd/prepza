@@ -278,6 +278,8 @@ def main() -> int:
                 print("DIAGNOSTIC URL:", page.url)
                 print("DIAGNOSTIC BODY:", page.locator("body").inner_text(timeout=5000)[:6000])
                 raise
+            page.get_by_role("button", name="Continue →", exact=True).click()
+            page.wait_for_timeout(1500)
             print("PASS: real browser opened the local-first Study Hub document")
 
             page.reload(wait_until="domcontentloaded")
