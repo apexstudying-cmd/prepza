@@ -56,6 +56,21 @@ def verify_daily_study_limit_contract() -> None:
     assert "min(12 * 60 * 60, max(0, int(seconds or 0)))" in backend
 
 
+def verify_offline_storage_limits() -> None:
+    generated = read('frontend/src/offline/generatedMaterials.ts')
+    study = read('frontend/src/offline/studyHubOffline.ts')
+    expected = [
+        ('MAX_GENERATED_ROWS = 80', generated),
+        ('MAX_GENERATED_PAYLOAD_BYTES = 512 * 1024', generated),
+        ('MAX_AUDIO_CACHE_BYTES = 80 * 1024 * 1024', generated),
+        ('MAX_SINGLE_AUDIO_BYTES = 25 * 1024 * 1024', generated),
+        ('MAX_SINGLE_ASSET_BYTES = 75 * 1024 * 1024', study),
+        ('MAX_TOTAL_ASSET_BYTES = 250 * 1024 * 1024', study),
+    ]
+    for marker, source in expected:
+        assert marker in source, f'offline storage limit contract missing: {marker}'
+
+
 def main() -> None:
     generated = read('frontend/src/offline/generatedMaterials.ts')
     study = read('frontend/src/offline/studyHubOffline.ts')
@@ -97,6 +112,7 @@ def main() -> None:
     stress_queue_model()
     idempotent_sync_model()
     verify_daily_study_limit_contract()
+    verify_offline_storage_limits()
     print('Offline architecture regression audit passed.')
 
 
