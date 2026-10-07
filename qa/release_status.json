@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "17e20f4e3e8a45b06da7e661d5dd9a143558d1b0",
+  "last_verified_commit": "68c841ab803f545449ac8d9b321c94443cb5947a",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -122,14 +122,14 @@
     },
     {
       "id": "admin_study_time_visibility",
-      "status": "NOT_TESTED",
-      "evidence": "scripts/test_browser_admin_study_time.py is now on main and ready for runtime/browser execution. It covers known-total reconnect equality (25s -> 45s), concurrent sync idempotency, the 12-hour ceiling, Nairobi day boundaries, admin exclusion, and multi-student isolation. The gate remains NOT_TESTED until the rebuilt Docker app passes."
+      "status": "IN_PROGRESS",
+      "evidence": "First execution on 2026-10-07: 4 assertion failures plus 1 teardown error. Source review traced the assertions to test isolation/global aggregate assumptions and the teardown to UserKey child cleanup ordering. The browser gate was corrected to compare fixture contributions against live admin baselines; a clean rerun is still required."
     }
   ],
   "next_actions": [
-    "Rebuild the app image, then rerun scripts/test_browser_study_hub_offline_content.py to verify the v4 offline IndexedDB migration and the full multi-document/artifact gate.",
-    "Rebuild the app, then execute scripts/test_browser_admin_study_time.py to certify student /study-time and admin /admin/operations equality, including reconnect reconciliation, concurrency, 12-hour ceiling, Nairobi boundary, admin exclusion and multi-student isolation.",
+    "Rerun scripts/test_browser_study_hub_offline_content.py after the offline v4 migration fix.",
+    "Rerun the corrected scripts/test_browser_admin_study_time.py; verify exact fixture-student equality, aggregate semantics, concurrency, 12-hour per-student ceiling, Nairobi boundary and admin exclusion.",
     "Build and execute remaining cross-system journeys.",
-    "Run existing-database migration rehearsal and final clean regression after remaining browser/recovery gates clear."
+    "Run existing-database migration rehearsal and final clean regression after remaining gates clear."
   ]
 }
