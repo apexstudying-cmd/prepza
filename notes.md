@@ -1501,3 +1501,12 @@ The first execution of `scripts/test_browser_study_hub_offline_content.py` did n
 This was classified as a real application persistence/schema defect, not a reason to weaken the browser test. The shared offline database was migrated to version 4. Both offline modules now create all required shared stores during the v4 upgrade: `savedStudyHub`, `generatedMaterials`, and `generatedAudio`. Existing version-3 databases therefore receive the missing stores through the normal IndexedDB upgrade path.
 
 The content/artifact browser gate remains **NOT TESTED** until the rebuilt frontend is exercised locally. This gate must prove the v4 migration and then the full three-document/document-Blob/generated-artifact/podcast/reload/no-generation-POST behavior.
+
+
+## 2026-10-07 — Admin study-time visibility wired to the same authoritative clock
+
+The admin Operations surface now distinguishes broad activity from actual Study Hub study time. The existing `last_active_at` metrics remain the DAU-style signal for "around Prepza". New admin study metrics read the authoritative `study_time_log` / `StudyTimeLog` records used by the student Profile/Study Activity endpoints.
+
+Admin now receives: students who studied today, students who reached the 10-minute qualifying threshold today, total Study Hub seconds today, total Study Hub seconds across the last seven Nairobi study dates, and a top-50 table of students who are either recently active or have Study Hub time, showing today/7-day study time and last active time. Admin accounts are excluded from student study aggregates. The admin study date is explicitly calculated in `PREPZA_TIMEZONE` (default Africa/Nairobi), not PostgreSQL `CURRENT_DATE`, so the dashboard follows the same Nairobi day boundary as the study-time reconciliation system.
+
+This is an implementation change, not yet a release-certified gate. The next runtime/browser proof must create a known student study total, verify the student's `/study-time` value, then verify the admin Operations response and UI report the same authoritative seconds; it must also cover offline reconciliation, concurrent sync idempotency, the 12-hour daily ceiling, Nairobi midnight, and admin/student separation.
