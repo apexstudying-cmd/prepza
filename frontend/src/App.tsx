@@ -1760,7 +1760,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
             <>
               {/* Featured doc */}
               <div onClick={() => { setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} style={{ background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 18, padding: 18, cursor: 'pointer', position: 'relative', overflow: 'hidden', marginBottom: 10 }}>
-                <div style={{ position: 'absolute', right: -20, top: -20, width: 120, height: 120, background: 'rgba(201,168,76,0.07)', borderRadius: '50%' }} />
+                <div style={{ position: 'absolute', right: -20, top: -20, width: 120, height: 120, background: 'rgba(201,168,76,0.07)', borderRadius: '50%', pointerEvents: 'none' }} />
                 <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
                   <div style={{ width: 48, height: 48, background: 'rgba(201,168,76,0.15)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: N.gold, fontWeight: 800 }}>📄</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
