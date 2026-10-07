@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "13d7774c2cfb9b2287765c9295107e8067df6a81",
+  "last_verified_commit": "5ed55cc389d242b89d67b8b2b76af585c2cce3d1",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -43,7 +43,7 @@
     {
       "id": "e2ee_identity_lifecycle",
       "status": "IN_PROGRESS",
-      "evidence": "Backend runtime test and browser lifecycle test are now implemented. They have not yet been executed on the current rebuilt local stack. Browser test covers first registration, reload, persistent-profile restart and intentional fresh-device conflict."
+      "evidence": "First execution exposed test-harness defects: shared runtime fixture caused an expected 409 in a later case, cleanup nested a SQLAlchemy transaction, and browser reload hit Chromium ERR_ABORTED after first registration passed. Tests were corrected; rerun on rebuilt stack is required."
     },
     {
       "id": "shared_streak",
@@ -118,7 +118,7 @@
   ],
   "next_actions": [
     "Verify CI workflows on the current release commit.",
-    "Execute scripts/test_e2ee_identity_runtime.py against the rebuilt PostgreSQL stack, then execute scripts/test_browser_e2ee_identity.py.",
+    "Rebuild the local app stack, execute scripts/test_e2ee_identity_runtime.py, then execute scripts/test_browser_e2ee_identity.py and record the corrected gate result.",
     "Deep-test personal streak milestones, Nairobi boundaries and XP idempotency.",
     "Determine whether Shared Streak is launch scope; if yes, move it to canonical Alembic/schema/frontend/runtime certification.",
     "Build and execute browser/offline Study Hub lifecycle coverage.",
