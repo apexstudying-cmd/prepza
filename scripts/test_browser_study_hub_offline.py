@@ -347,13 +347,15 @@ def main() -> int:
                 raise AssertionError("Study Hub did not resume after fresh interaction")
             print("PASS: fresh interaction resumes Study Hub tracking")
 
-            # We are already inside the Study Hub document after the first
-            # Continue action. There is no second "Continue →" action on this
-            # screen; keep the test on the real Study Hub surface and exercise
-            # browser history below instead of relying on a stale Home locator.
+            # Browser Back returns to the Home surface. Re-enter the same
+            # saved Study Hub document through the real UI before testing the
+            # offline lifecycle; otherwise the tracker is intentionally inactive
+            # because Home is not a Study Hub screen.
             page.wait_for_timeout(500)
             page.go_back(wait_until="domcontentloaded")
             page.get_by_text(DOCUMENT_TITLE, exact=True).wait_for(timeout=15000)
+            page.get_by_role("button", name="Continue →", exact=True).click()
+            page.wait_for_timeout(1000)
             print("PASS: browser back returned to the same Study Hub document context")
 
             before_offline = read_local_seconds(page, fixture["user_id"])
