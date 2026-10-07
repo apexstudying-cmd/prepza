@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -125,6 +126,22 @@ def local_public_key(page) -> str:
     )
 
 
+def wait_for_identity_match(page, user_id: int, timeout_seconds: float = 8.0) -> tuple[str, str]:
+    deadline = time.monotonic() + timeout_seconds
+    last_local = ""
+    last_server = ""
+    while time.monotonic() < deadline:
+        last_local = local_public_key(page)
+        last_server = server_public_key(page, user_id)
+        if last_local == last_server:
+            return last_local, last_server
+        time.sleep(0.25)
+    raise AssertionError(
+        "Browser E2EE identity mismatch after bootstrap convergence window: "
+        f"local={last_local[:16]}... server={last_server[:16]}..."
+    )
+
+
 def server_public_key(page, user_id: int) -> str:
     response = page.request.get(f"{BASE_URL}/keys/{user_id}")
     if not response.ok:
@@ -144,9 +161,7 @@ def main() -> int:
             page = context.pages[0] if context.pages else context.new_page()
 
             login(page, fixture)
-            first_local = local_public_key(page)
-            first_server = server_public_key(page, fixture["user_id"])
-            assert first_local == first_server
+            first_local, first_server = wait_for_identity_match(page, fixture["user_id"])
             print("PASS: first browser identity generated, persisted, and registered")
 
             page.reload(wait_until="commit")
