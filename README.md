@@ -8,6 +8,40 @@ This documentation was written from the implementation on main at commit b63df10
 
 The repository's automated CI suite was green on that audit checkpoint. That is not the same as production deployment verification: the Render environment, live provider credentials, live storage migration, backup/restore drill, and real infrastructure capacity still require deployment-time verification.
 
+## Repository map
+
+The root is intentionally kept for files that define or start the application. Supporting material is grouped so the repository is easier to navigate:
+
+~~~text
+prepza/
+├── frontend/                 React/TypeScript PWA
+├── docs/                     Architecture, setup, operations, QA and technical reference
+│   ├── architecture/        Design decisions and system architecture
+│   ├── operations/          Deployment/infrastructure operations
+│   ├── qa/                  Authoritative QA record and working QA notes
+│   └── setup/               Provider/setup instructions
+├── tests/                    Automated integration/security tests
+├── scripts/                  Runtime/browser/QA execution scripts
+├── tools/                    QA runners, audits, diagnostics and seed helpers
+│   ├── diagnostics/          Investigation/diagnostic utilities
+│   └── seeds/                Development/QA seed utilities
+├── qa/                       Release registry and machine-readable QA status
+├── migrations/               Canonical database migration history
+├── schema/                   Baseline/schema reference material
+├── deploy/                   VPS/deployment configuration
+├── archive/                  Historical patches, one-off migrations and legacy tests
+│   ├── migrations/
+│   ├── patches/
+│   ├── schema-patches/
+│   └── tests/
+├── app.py                    Flask application entrypoint and core application code
+├── realtime_server.py        Realtime Gunicorn entrypoint
+├── Dockerfile                Production container definition
+└── docker-compose.vps.yml    Local/VPS production-style stack
+~~~
+
+**Rule:** active application code stays where the current import/runtime contract expects it. Historical patch files and one-off migration scripts are archived rather than mixed with the live application. This cleanup changes repository organization, not application behavior.
+
 ## Architecture at a glance
 
 ~~~text
@@ -49,7 +83,7 @@ Student browser
 - frontend/src/offline/ — offline study, generated material, chat, activity, avatar, and account-isolation code.
 - frontend/src/crypto/ — E2EE chat, keys, groups, calls, and secure study/chat components.
 - migrations/ — hand-managed SQL migration collection.
-- scripts/ and tools/ — audits, validators, migration/backup helpers, build transformations, and architecture checks.
+- scripts/ — focused runtime/browser/QA execution and release checks.\n- tools/ — QA runners, audits, diagnostics, seed helpers, migration/backup helpers, build transformations, and architecture checks.\n- archive/ — historical patches and one-off migration artifacts kept for reference, not used as the canonical runtime path.
 - .github/workflows/ — repository CI and validation workflows.
 - Dockerfile / docker-compose.vps.yml / deploy/vps/ — VPS deployment scaffolding.
 
@@ -184,7 +218,7 @@ At the Day 9 checkpoint, the configured 11-workflow launch-contract family passe
 See:
 
 - docs/DAY10_TECHNICAL_DOCUMENTATION.md
-- docs/DAY8_RUNTIME_READINESS.md
+- docs/DAY8_RUNTIME_READINESS.md\n- docs/operations/INFRASTRUCTURE_DEPENDENCIES.md\n- docs/operations/REALTIME_DEPLOYMENT.md\n- docs/setup/SES_OTP_SETUP.md
 - docs/LAUNCH_READINESS.md
 - docs/e2ee-multidevice-architecture.md
 - docs/e2ee-study-chat-rollout.md
