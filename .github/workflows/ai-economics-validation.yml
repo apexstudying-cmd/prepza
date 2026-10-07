@@ -49,5 +49,5 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          pytest --confcutdir=scripts -q tests/test_ai_economics.py tests/test_ai_reusable_generation.py tests/test_b2b_billing_regression.py
+          pytest -q tests/test_ai_economics.py tests/test_ai_reusable_generation.py tests/test_b2b_billing_regression.py
           python scripts/validate_ai_job_recovery.py
