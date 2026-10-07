@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -13,10 +14,14 @@ from app import (
     User,
     StudyTimeLog,
     StudyStreak,
+    XpEvent,
     STUDY_TIME_FEATURE,
     MAX_STUDY_TIME_SECONDS_PER_DAY,
     MIN_QUALIFYING_STUDY_SECONDS,
     reconcile_study_time,
+    _refresh_streak_from_study_time,
+    _study_local_date,
+    XP_STREAK_MILESTONES,
 )
 
 
@@ -48,6 +53,7 @@ def runtime_user():
 
         StudyTimeLog.query.filter_by(user_id=user_id).delete()
         StudyStreak.query.filter_by(user_id=user_id).delete()
+        XpEvent.query.filter_by(user_id=user_id).delete()
         db.session.delete(db.session.get(User, user_id))
         db.session.commit()
         db.session.remove()
@@ -142,6 +148,137 @@ def test_concurrent_reconciliation_does_not_double_credit(runtime_user):
             user_id=runtime_user, activity_date=_today(), feature=STUDY_TIME_FEATURE
         ).one()
         assert row.study_time_seconds == 3000
+
+
+
+
+def test_personal_streak_requires_the_full_ten_minutes(runtime_user):
+    """9:59 is not a study day; 10:00 is exactly the qualifying boundary."""
+    with app.app_context():
+        today = _today()
+        reconcile_study_time(runtime_user, MIN_QUALIFYING_STUDY_SECONDS - 1, today)
+        db.session.commit()
+        streak = _refresh_streak_from_study_time(runtime_user, today)
+        assert streak.current_streak == 0
+        assert streak.longest_streak == 0
+        db.session.commit()
+
+        reconcile_study_time(runtime_user, MIN_QUALIFYING_STUDY_SECONDS, today)
+        db.session.commit()
+        streak = _refresh_streak_from_study_time(runtime_user, today)
+        assert streak.current_streak == 1
+        assert streak.longest_streak == 1
+        assert streak.last_study_date == today
+        db.session.commit()
+
+
+def test_personal_streak_consecutive_days_gaps_and_longest_are_exact(runtime_user):
+    with app.app_context():
+        today = _today()
+        qualifying_dates = {
+            today - timedelta(days=5),
+            today - timedelta(days=4),
+            today - timedelta(days=3),
+            today - timedelta(days=1),
+            today,
+        }
+        for activity_date in sorted(qualifying_dates):
+            db.session.add(
+                StudyTimeLog(
+                    user_id=runtime_user,
+                    activity_date=activity_date,
+                    feature=STUDY_TIME_FEATURE,
+                    study_time_seconds=MIN_QUALIFYING_STUDY_SECONDS,
+                )
+            )
+        db.session.commit()
+
+        streak = _refresh_streak_from_study_time(runtime_user, today)
+        assert streak.current_streak == 2
+        assert streak.longest_streak == 3
+        assert streak.last_study_date == today
+        db.session.commit()
+
+
+def test_personal_streak_milestones_award_exact_xp_once(runtime_user):
+    with app.app_context():
+        today = _today()
+        for offset in range(30):
+            activity_date = today - timedelta(days=29 - offset)
+            db.session.add(
+                StudyTimeLog(
+                    user_id=runtime_user,
+                    activity_date=activity_date,
+                    feature=STUDY_TIME_FEATURE,
+                    study_time_seconds=MIN_QUALIFYING_STUDY_SECONDS,
+                )
+            )
+        db.session.commit()
+
+        # Walk the streak forward one day at a time so every milestone is
+        # reached through the same transition the production sync uses.
+        for offset in range(30):
+            activity_date = today - timedelta(days=29 - offset)
+            streak = _refresh_streak_from_study_time(runtime_user, activity_date)
+            assert streak.current_streak == offset + 1
+            db.session.commit()
+
+        events = (
+            XpEvent.query
+            .filter_by(user_id=runtime_user, event_type="streak_milestone")
+            .order_by(XpEvent.related_id.asc())
+            .all()
+        )
+        assert [(event.related_id, event.xp_amount) for event in events] == [
+            (days, XP_STREAK_MILESTONES[days])
+            for days in sorted(XP_STREAK_MILESTONES)
+        ]
+
+        # Replaying the same 30-day history cannot create duplicate milestone
+        # XP because XpEvent is uniquely keyed by user/type/related_id.
+        for activity_date in (today - timedelta(days=1), today):
+            _refresh_streak_from_study_time(runtime_user, activity_date)
+            db.session.commit()
+
+        replayed_count = XpEvent.query.filter_by(
+            user_id=runtime_user, event_type="streak_milestone"
+        ).count()
+        assert replayed_count == len(XP_STREAK_MILESTONES)
+
+
+def test_unrelated_xp_does_not_create_a_streak_day(runtime_user):
+    with app.app_context():
+        from app import award_xp
+
+        assert award_xp(runtime_user, "quiz_completed", 20, related_id=12345)
+        db.session.commit()
+
+        streak = _refresh_streak_from_study_time(runtime_user, _today())
+        assert streak.current_streak == 0
+        assert streak.longest_streak == 0
+        assert streak.last_study_date is None
+        db.session.commit()
+
+
+def test_streak_uses_nairobi_calendar_boundary(runtime_user, monkeypatch):
+    """The streak calendar must switch dates at midnight Nairobi, not UTC."""
+    import app as app_module
+
+    real_datetime = app_module.datetime
+
+    class FrozenDateTime(real_datetime):
+        frozen_utc = real_datetime(2026, 10, 7, 20, 59, tzinfo=timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            current = cls.frozen_utc
+            return current.astimezone(tz) if tz else current
+
+    monkeypatch.setattr(app_module, "datetime", FrozenDateTime)
+    assert _study_local_date() == date(2026, 10, 7)
+
+    FrozenDateTime.frozen_utc = real_datetime(2026, 10, 7, 21, 0, tzinfo=timezone.utc)
+    assert _study_local_date() == date(2026, 10, 8)
 
 
 def test_sync_endpoint_requires_auth_and_csrf(runtime_user):
