@@ -1466,3 +1466,7 @@ This distinction is intentional: a trace proves that we know where a feature exe
 The current release is **BLOCKED**, not because already-green subsystems are being reopened, but because required gates remain unfinished. Newly confirmed browser WebRTC/media evidence is GREEN. Remaining work is E2EE identity lifecycle, deeper personal streak regression, Shared Streak scope/wiring/certification, browser/offline Study Hub lifecycle, recovery/backup, cross-system journeys, CI verification and final clean regression.
 
 From this point onward, when a gate changes state, update the repository status/evidence records on `main` rather than relying on chat memory. Historical entries remain historical; `qa/release_status.json` is the current machine-readable release truth.
+
+## 2026-10-07 — E2EE gate correction
+
+The first E2EE lifecycle run exposed test-harness issues rather than a confirmed product failure. Runtime cases were sharing a user fixture, cleanup nested a transaction, and the browser reload wait hit Chromium ERR_ABORTED after first-device registration had already passed. The tests were corrected without changing application E2EE behavior. E2EE remains IN PROGRESS until the corrected gates pass.
