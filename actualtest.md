@@ -1286,3 +1286,31 @@ This does **not** yet prove the complete browser/offline lifecycle. Still outsta
 | Browser WebRTC media | not yet completed | NOT YET PROVEN |
 | Browser/offline Study Hub lifecycle | not yet completed | NOT YET PROVEN |
 | Storage/backup/restore | not yet completed | NOT TESTED |
+
+
+## 8. Current release-gate evidence — 2026-10-07
+
+This section supersedes older pending snapshots where later evidence exists.
+
+### Green evidence
+- Full disposable PostgreSQL/Alembic QA: 74 passed, 0 failed.
+- Study Hub PostgreSQL runtime reconciliation: 6 passed, 3 warnings.
+- Focused realtime runtime: GREEN.
+- Focused calling signaling runtime: GREEN.
+- Redis-backed chat worker/cross-process delivery: GREEN.
+- Production-style Docker frontend/app build: GREEN.
+- Browser-to-browser WebRTC media: GREEN — both authenticated browsers reached Connected and both received live remote audio MediaStream tracks through the real UI/signaling path.
+
+### Remaining release gates
+- E2EE identity lifecycle: NOT CERTIFIED; observed different-key /keys/register 409 requires lifecycle tests.
+- Personal streak: PARTIALLY CERTIFIED; core Study Hub integration is green, but milestone/date-boundary/XP idempotency needs dedicated regression.
+- Shared Streak: NOT RELEASE-CERTIFIED pending scope/wiring/canonical migration/runtime tests.
+- Browser/offline Study Hub lifecycle: NOT TESTED.
+- Storage backup/restore: NOT TESTED.
+- Cross-system integration journeys: NOT TESTED.
+- Current CI workflow execution after latest release-gate changes: NOT YET VERIFIED.
+- Full clean-environment freeze regression: NOT TESTED.
+- 400-user performance: DEFERRED until functional/browser/recovery gates are green.
+
+### Repeatability rule
+For future releases, the feature trace in qa/release_manifest.json must be updated with every release-scoped feature. scripts/qa_trace.py is a structural gate only; a feature becomes GREEN only after its declared runtime/browser/integration evidence and CI evidence pass.
