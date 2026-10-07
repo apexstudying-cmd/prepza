@@ -42,7 +42,7 @@ for fragment, name in [
 for source, name, fragment in [
     (FRONTEND, "realtime teardown", "export function resetChatRealtime()"),
     (FRONTEND, "realtime socket disconnect", "socket.disconnect()"),
-    (APP_SOURCE, "logout realtime teardown", "if (target === 'login') resetChatRealtime()"),
+    (FRONTEND, "logout realtime teardown", "if (target === 'login') resetChatRealtime()"),
 ]:
     if fragment not in source:
         raise SystemExit(f"Realtime security regression: missing {name}")
