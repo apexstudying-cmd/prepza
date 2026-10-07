@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import os
 import requests
 from flask import jsonify
@@ -71,33 +72,48 @@ def register_admin_operations(app, db, require_admin):
         # last_active_at. These figures come from StudyTimeLog, so the
         # admin dashboard reports the same totals the student sees after
         # server reconciliation.
+        study_tz = ZoneInfo(os.environ.get("PREPZA_TIMEZONE", "Africa/Nairobi"))
+        study_date = datetime.now(study_tz).date()
+        study_week_start = study_date - timedelta(days=6)
+
         study_today = scalar(
-            """SELECT COALESCE(SUM(study_time_seconds),0)
-               FROM study_time_log
-               WHERE activity_date = CURRENT_DATE
-                 AND feature = 'study_hub'"""
+            """SELECT COALESCE(SUM(st.study_time_seconds),0)
+               FROM study_time_log st
+               JOIN "user" u ON u.id = st.user_id
+               WHERE st.activity_date = :study_date
+                 AND st.feature = 'study_hub'
+                 AND COALESCE(u.is_admin,FALSE)=FALSE""",
+            {"study_date": study_date},
         )
         study_7d = scalar(
-            """SELECT COALESCE(SUM(study_time_seconds),0)
-               FROM study_time_log
-               WHERE activity_date >= :start_date
-                 AND activity_date <= CURRENT_DATE
-                 AND feature = 'study_hub'""",
-            {"start_date": (datetime.utcnow().date() - timedelta(days=6))},
+            """SELECT COALESCE(SUM(st.study_time_seconds),0)
+               FROM study_time_log st
+               JOIN "user" u ON u.id = st.user_id
+               WHERE st.activity_date >= :start_date
+                 AND st.activity_date <= :study_date
+                 AND st.feature = 'study_hub'
+                 AND COALESCE(u.is_admin,FALSE)=FALSE""",
+            {"start_date": study_week_start, "study_date": study_date},
         )
         students_studied_today = scalar(
-            """SELECT count(DISTINCT user_id)
-               FROM study_time_log
-               WHERE activity_date = CURRENT_DATE
-                 AND feature = 'study_hub'
-                 AND study_time_seconds > 0"""
+            """SELECT count(DISTINCT st.user_id)
+               FROM study_time_log st
+               JOIN "user" u ON u.id = st.user_id
+               WHERE st.activity_date = :study_date
+                 AND st.feature = 'study_hub'
+                 AND st.study_time_seconds > 0
+                 AND COALESCE(u.is_admin,FALSE)=FALSE""",
+            {"study_date": study_date},
         )
         students_qualifying_today = scalar(
-            """SELECT count(DISTINCT user_id)
-               FROM study_time_log
-               WHERE activity_date = CURRENT_DATE
-                 AND feature = 'study_hub'
-                 AND study_time_seconds >= 600"""
+            """SELECT count(DISTINCT st.user_id)
+               FROM study_time_log st
+               JOIN "user" u ON u.id = st.user_id
+               WHERE st.activity_date = :study_date
+                 AND st.feature = 'study_hub'
+                 AND st.study_time_seconds >= 600
+                 AND COALESCE(u.is_admin,FALSE)=FALSE""",
+            {"study_date": study_date},
         )
         study_top_students = db.session.execute(db.text(
             """SELECT u.id, u.display_name, u.email, u.last_active_at,
@@ -107,7 +123,7 @@ def register_admin_operations(app, db, require_admin):
                LEFT JOIN (
                  SELECT user_id, SUM(study_time_seconds) AS study_seconds_today
                  FROM study_time_log
-                 WHERE activity_date = CURRENT_DATE
+                 WHERE activity_date = :study_date
                    AND feature = 'study_hub'
                  GROUP BY user_id
                ) st ON st.user_id = u.id
@@ -115,7 +131,7 @@ def register_admin_operations(app, db, require_admin):
                  SELECT user_id, SUM(study_time_seconds) AS study_seconds_7d
                  FROM study_time_log
                  WHERE activity_date >= :start_date
-                   AND activity_date <= CURRENT_DATE
+                   AND activity_date <= :study_date
                    AND feature = 'study_hub'
                  GROUP BY user_id
                ) sw ON sw.user_id = u.id
@@ -126,7 +142,8 @@ def register_admin_operations(app, db, require_admin):
                         u.last_active_at DESC NULLS LAST
                LIMIT 50"""
         ), {
-            "start_date": (datetime.utcnow().date() - timedelta(days=6)),
+            "start_date": study_week_start,
+            "study_date": study_date,
             "active_cutoff": day_ago,
         }).mappings().all()
 
