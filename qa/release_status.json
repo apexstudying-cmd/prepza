@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "fc407aaa1320e0f55577973cb2d1ad76a779e97f",
+  "last_verified_commit": "80f2b0920c65a93d834ebe68a5876d208d6903c0",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -37,8 +37,8 @@
     },
     {
       "id": "personal_streak",
-      "status": "IN_PROGRESS",
-      "evidence": "Core Study Hub path exercised; milestone/date-boundary/XP idempotency still requires dedicated regression"
+      "status": "PASS",
+      "evidence": "Dedicated PostgreSQL regression: 7 passed on 2026-10-07, covering 10-minute threshold, replay-safe same-day sync, gaps/longest streak, 7/14/21/30 milestone XP idempotency, Nairobi midnight, unrelated actions, calendar source-of-truth, and concurrent sync locking."
     },
     {
       "id": "e2ee_identity_lifecycle",
@@ -47,8 +47,8 @@
     },
     {
       "id": "shared_streak",
-      "status": "IN_PROGRESS",
-      "evidence": "Existing module traced but release wiring, canonical Alembic ownership, frontend exposure and runtime lifecycle remain unresolved"
+      "status": "NOT_RELEASED",
+      "evidence": "Scope audit: study_friend_streak_routes.py is not registered by app.py, no frontend shared-streak surface exists, and its schema appears only in legacy migrations/20260925_study_friend_streak.sql plus runtime CREATE TABLE DDL. It is therefore not part of the frozen launch contract."
     },
     {
       "id": "realtime_chat",
@@ -117,8 +117,6 @@
     }
   ],
   "next_actions": [
-    "Deep-test personal streak milestones, Nairobi boundaries and XP idempotency.",
-    "Determine whether Shared Streak is launch scope; if yes, move it to canonical Alembic/schema/frontend/runtime certification.",
     "Build and execute browser/offline Study Hub lifecycle coverage.",
     "Run storage backup/restore rehearsal.",
     "Run remaining cross-system journeys.",
