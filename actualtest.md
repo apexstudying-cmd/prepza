@@ -1336,3 +1336,13 @@ The repeatable QA registry is now backed by `qa/release_status.json`, which reco
 - Final clean regression/freeze: **NOT TESTED**.
 
 The 400-user performance gate remains deliberately deferred until the functional, browser and recovery gates are green.
+
+## 2026-10-07 — E2EE identity gate test-defect correction
+
+The first execution of the new E2EE identity lifecycle gate exposed **test-harness defects**, not a confirmed application failure:
+
+- The backend runtime fixture was module-scoped, so the first test registered a primary user's key and the later peer-visibility test reused that same user, correctly receiving the application's intentional `409 IDENTITY_KEY_REPLACEMENT_REQUIRED` response.
+- The cleanup test opened an explicit transaction on a SQLAlchemy session that already had an implicit transaction, producing `InvalidRequestError: A transaction is already begun on this Session.`
+- The browser lifecycle test hit a Chromium `ERR_ABORTED` while waiting for `domcontentloaded` during reload, after the first identity registration had already passed.
+
+The gate was corrected without changing E2EE application behavior: runtime cases now receive isolated users, cleanup uses the session's existing transaction lifecycle, and the browser reload waits for navigation commit before checking persistence. The gate remains **IN PROGRESS** until the corrected tests are executed on the rebuilt local stack.
