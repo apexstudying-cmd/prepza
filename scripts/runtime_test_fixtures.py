@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from uuid import uuid4
 
+from sqlalchemy import inspect
 from werkzeug.security import generate_password_hash
 
 from app import app, db, User
@@ -54,11 +55,12 @@ def runtime_test_users():
             yield users
         finally:
             user_ids = [user.id for user in users.values() if user is not None]
-            for user_id in user_ids:
-                db.session.execute(
-                    db.text("DELETE FROM user_key WHERE user_id = :user_id"),
-                    {"user_id": user_id},
-                )
+            if inspect(db.engine).has_table("user_key"):
+                for user_id in user_ids:
+                    db.session.execute(
+                        db.text("DELETE FROM user_key WHERE user_id = :user_id"),
+                        {"user_id": user_id},
+                    )
             for user in users.values():
                 if user is not None:
                     db.session.delete(user)
