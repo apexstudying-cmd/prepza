@@ -78,7 +78,7 @@ def test_call_end_clears_active_call():
     callee = _session_client("peer")
     try:
         with patch('realtime_server.call_participants', return_value=[_USERS['primary'].id, _USERS['peer'].id]):
-            assert caller.emit('call:invite', {'call_id': 'test-call-9012', 'conversation_id': 12, 'to_user_id': _USERS['peer'].id, 'kind': 'video'}, callback=True) == {'ok': True}
+            assert caller.emit('call:invite', {'call_id': 'test-call-9012', 'conversation_id': 12, 'to_user_id': _USERS['peer'].id, 'kind': 'video'}, callback=True) == {'ok': True, 'delivered': 1}
         result = caller.emit('call:end', {'call_id': 'test-call-9012', 'conversation_id': 12, 'to_user_id': _USERS['peer'].id}, callback=True)
         assert result == {'ok': True, 'delivered': 1}
         assert 'test-call-9012' not in _active_calls
