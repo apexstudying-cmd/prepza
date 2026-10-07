@@ -286,8 +286,8 @@ Rule: require evidence before marking production work complete.
 2. [x] Start local app/realtime/Redis/PostgreSQL stack
 3. [x] Verify actual local HTTP endpoints through full QA/runtime tests
 4. [x] Verify local realtime behavior, including Redis worker and cross-process client delivery
-5. [ ] Verify the new Study Hub runtime CI workflow
-6. [ ] Complete browser-to-browser WebRTC media gate
+5. [~] Verify the new Study Hub runtime CI workflow
+6. [x] Complete browser-to-browser WebRTC media gate
 7. [ ] Complete browser/offline Study Hub lifecycle coverage
 8. [ ] Complete storage/data-integrity backup and restore gate
 9. [ ] Complete remaining cross-system integration journeys
@@ -340,3 +340,24 @@ Rule: require evidence before marking production work complete.
 code passes + database is recoverable + storage is recoverable + payments are verified + email works + realtime works + AI cost controls work + monitoring works + load-test evidence exists + rollback/recovery works.
 
 Current status: not yet launch-ready. Local runtime/bootstrap is substantially proven; production infrastructure and external-provider evidence remain outstanding.
+
+
+## 22. Persistent release-gate status — 2026-10-07
+
+The machine-readable release source of truth is now **`qa/release_status.json`**. It records the latest verified commit, every tracked release gate, its status, evidence, blockers, and next actions.
+
+Current release state: **BLOCKED**.
+
+New evidence reconciled into the tracker:
+- Browser-to-browser WebRTC/media gate: **PASS**.
+- Study Hub PostgreSQL runtime gate: **PASS (6/6)**.
+- Production-style Docker app/frontend build: **PASS**.
+- Full disposable PostgreSQL/Alembic QA: **PASS (74/74)**.
+- E2EE identity lifecycle: **IN PROGRESS**.
+- Personal streak deep regression: **IN PROGRESS**.
+- Shared Streak: **IN PROGRESS / scope and wiring decision required**.
+- Browser/offline Study Hub lifecycle: **NOT TESTED**.
+- Backup/restore, cross-system journeys, CI verification, existing-DB migration rehearsal and final clean regression: **NOT TESTED**.
+- 400-user performance: **DEFERRED** until functional/browser/recovery gates are green.
+
+Do not infer completion from an old checkbox or historical note. `qa/release_status.json` and the latest evidence entries in `actualtest.md` are authoritative for current state.
