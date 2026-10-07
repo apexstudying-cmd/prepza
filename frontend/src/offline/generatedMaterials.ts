@@ -1,5 +1,7 @@
 const DB_NAME = 'prepza-offline-v2'
+const DB_VERSION = 4
 const STORE = 'generatedMaterials'
+const META_STORE = 'savedStudyHub'
 const AUDIO_STORE = 'generatedAudio'
 const USER_KEY = 'prepza-offline-user-id'
 const MAX_GENERATED_ROWS = 80
@@ -14,11 +16,12 @@ type StoredAudio = { key: string; userId: string; sourceUrl: string; blob: Blob;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 3)
+    const request = indexedDB.open(DB_NAME, DB_VERSION)
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'key' })
       if (!db.objectStoreNames.contains(AUDIO_STORE)) db.createObjectStore(AUDIO_STORE, { keyPath: 'key' })
+      if (!db.objectStoreNames.contains(META_STORE)) db.createObjectStore(META_STORE, { keyPath: 'key' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
