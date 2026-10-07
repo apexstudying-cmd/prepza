@@ -1,9 +1,10 @@
-"""Static regression checks for the Socket.IO realtime security boundary."""
+"""Static regression checks for the current Socket.IO realtime security boundary."""
 from pathlib import Path
 
 SOURCE = Path("realtime_server.py").read_text(encoding="utf-8")
+DISPATCH = Path("chat_realtime_dispatch.py").read_text(encoding="utf-8")
+APP_SOURCE = Path("app.py").read_text(encoding="utf-8")
 FRONTEND = Path("frontend/src/crypto/chatRealtime.ts").read_text(encoding="utf-8")
-APP_SOURCE = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
 
 REQUIRED = {
     "authenticated socket gate": 'user_id = authenticated_socket_user_id()\n    if user_id is None:',
@@ -14,20 +15,30 @@ REQUIRED = {
     "leave membership gate": 'if conversation_id <= 0 or not is_active_participant(user_id, conversation_id):\n        return {"ok": False}',
     "typing membership gate": 'if conversation_id <= 0 or not is_active_participant(user_id, conversation_id):\n        return',
     "read membership gate": 'if conversation_id <= 0 or not is_active_participant(user_id, conversation_id):\n        return',
-    "E2EE broadcast gate": 'if not is_e2ee_conversation(conversation_id):\n                return response',
-    "broadcast payload validation": 'payload = safe_message_payload(response.get_json(silent=True))',
 }
 
 for name, fragment in REQUIRED.items():
     if fragment not in SOURCE:
         raise SystemExit(f"Realtime security regression: missing {name}")
 
-broadcast_start = SOURCE.index("def broadcast_message_response")
-broadcast_body = SOURCE[broadcast_start:]
-if "socketio.emit(\"chat:message\"" not in broadcast_body:
-    raise SystemExit("Realtime security regression: message broadcast path disappeared")
-if broadcast_body.index("is_e2ee_conversation") > broadcast_body.index("socketio.emit(\"chat:message\""):
-    raise SystemExit("Realtime security regression: message broadcast is not E2EE-gated")
+for fragment, name in [
+    ('def dispatch_message(conversation_id, payload, *, e2ee_mode=None):', "post-commit dispatch helper"),
+    ('if e2ee_mode in {"direct_v1", "group_v1"}:', "E2EE broadcast gate"),
+    ('if isinstance(body, str) and body.strip() and not isinstance(nonce, str):\n            return', "ciphertext payload gate"),
+    ('enqueue_chat_event(', "Redis event-queue dispatch"),
+    ('socketio.emit("chat:message", payload, to=room_for(conversation_id))', "single-instance message emit"),
+]:
+    if fragment not in DISPATCH:
+        raise SystemExit(f"Realtime security regression: missing {name}")
+
+for fragment, name in [
+    ('if conversation.e2ee_mode == "direct_v1" and body and not nonce:', "direct E2EE send gate"),
+    ('if conversation.e2ee_mode == "group_v1" and body and not nonce:', "group E2EE send gate"),
+    ('dispatch_message(conversation_id, _serialize_chat_message(message), e2ee_mode=conversation.e2ee_mode)', "mode-aware post-commit dispatch"),
+]:
+    if fragment not in APP_SOURCE:
+        raise SystemExit(f"Realtime security regression: missing {name}")
+
 for source, name, fragment in [
     (FRONTEND, "realtime teardown", "export function resetChatRealtime()"),
     (FRONTEND, "realtime socket disconnect", "socket.disconnect()"),
