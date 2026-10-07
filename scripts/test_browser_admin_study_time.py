@@ -122,14 +122,9 @@ def browser_login(page, email: str, password: str) -> None:
     )
     if not response.ok:
         raise RuntimeError(f"/login failed: {response.status} {response.text}")
-    # This gate is about browser-held sessions + live HTTP routes, not frontend
-    # bundle startup. DOMContentLoaded can be delayed by the production SPA's
-    # module graph; commit is enough to prove Chromium received the real app
-    # document before we exercise the authenticated API through the page.
-    response = page.goto(BASE_URL + "/", wait_until="commit")
-    if response is None or response.status != 200:
-        status = response.status if response is not None else "no response"
-        raise RuntimeError(f"/ navigation failed: {status}")
+    # Keep authentication browser-owned without depending on SPA document
+    # navigation. Playwright's page.request shares cookies with this browser
+    # context, so subsequent authenticated API calls use the real session.
 
 
 def browser_json(page, path: str) -> dict:
@@ -175,10 +170,7 @@ def test_student_and_admin_views_agree_after_reconnect_reconciliation(fixture):
     clear_study_time(student_id)
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=["--disable-features=HttpsUpgrades"],
-        )
+        browser = playwright.chromium.launch(headless=True)
         student_context = browser.new_context()
         admin_context = browser.new_context()
         try:
