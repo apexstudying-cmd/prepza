@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "80f2b0920c65a93d834ebe68a5876d208d6903c0",
+  "last_verified_commit": "b4fce9ff3794cba0c4484bfddbca9366c06e47af",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -63,7 +63,7 @@
     {
       "id": "browser_study_hub_offline_lifecycle",
       "status": "NOT_TESTED",
-      "evidence": "Reload, visibility, inactivity, offline/reconnect and cross-screen continuity still pending"
+      "evidence": "scripts/test_browser_study_hub_offline.py added; local Chromium execution still required before this gate can be marked PASS."
     },
     {
       "id": "mobile_responsive_visual",
@@ -83,7 +83,7 @@
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "All 12 release-scoped GitHub Actions workflows completed successfully on fc407aaa."
+      "evidence": "All 12 release-scoped GitHub Actions workflows completed successfully on b4fce9ff."
     },
     {
       "id": "existing_database_migration",
