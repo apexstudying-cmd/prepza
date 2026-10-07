@@ -3352,6 +3352,10 @@ def delete_account():
     # the account-deletion contract.
     StudyStreak.query.filter_by(user_id=user.id).delete(synchronize_session=False)
 
+    # E2EE identity material is account-owned and must be removed before the
+    # user row. UserKey.user_id is intentionally non-null and has no cascade.
+    UserKey.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+
     db.session.delete(user)
     db.session.commit()
     session.clear()
