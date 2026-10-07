@@ -100,8 +100,8 @@ jobs:
       - name: Initialize CI SQLite schema
         run: python scripts/init_ci_db.py
 
-      - name: Run realtime and chat regressions
-        run: python -m pytest scripts/test_realtime_runtime.py scripts/test_chat_interactions.py -q
+      - name: Run E2EE identity, realtime and chat regressions
+        run: python -m pytest scripts/test_e2ee_identity_runtime.py scripts/test_realtime_runtime.py scripts/test_chat_interactions.py -q
 
       - uses: actions/setup-node@v4
         with:
