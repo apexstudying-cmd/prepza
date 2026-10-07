@@ -115,12 +115,21 @@
           "anchors": [
             "pytest"
           ]
+        },
+        {
+          "kind": "browser_test",
+          "path": "scripts/test_browser_e2ee_identity.py",
+          "anchors": [
+            "launch_persistent_context",
+            "prepza-e2ee",
+            "IDENTITY_KEY_REPLACEMENT_REQUIRED"
+          ]
         }
       ],
       "required_test_commands": [
         "python -m pytest scripts/test_e2ee_identity_runtime.py -q"
       ],
-      "notes": "Backend identity contract is now covered by a runtime test: first registration, idempotent replay, intentional replacement conflict, authentication/validation, peer key retrieval, and cleanup. Browser persistence/restart/restore and multi-device lifecycle remain required before GREEN."
+      "notes": "Backend identity contract now has runtime coverage; browser coverage is implemented for first registration, reload, persistent-profile restart and intentional fresh-device conflict, but it still must be executed locally before GREEN."
     },
     {
       "id": "personal_streak",
