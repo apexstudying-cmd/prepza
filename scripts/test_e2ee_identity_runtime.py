@@ -14,7 +14,7 @@ def _public_key(seed: int) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def runtime_users():
     with runtime_test_users() as users:
         yield users
@@ -101,11 +101,11 @@ def test_registered_public_key_is_visible_to_authenticated_chat_peer(runtime_use
 
 def test_identity_cleanup_can_remove_device_record(runtime_users):
     user_id = runtime_users["primary"].id
-    with db.session.begin():
-        db.session.execute(
-            db.text("DELETE FROM user_key WHERE user_id = :user_id"),
-            {"user_id": user_id},
-        )
+    db.session.execute(
+        db.text("DELETE FROM user_key WHERE user_id = :user_id"),
+        {"user_id": user_id},
+    )
+    db.session.commit()
     row = db.session.execute(
         db.text("SELECT public_key FROM user_key WHERE user_id = :user_id"),
         {"user_id": user_id},
