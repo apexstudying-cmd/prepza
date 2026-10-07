@@ -3,13 +3,29 @@ import { useEffect, useState } from 'react'
 type OperationsData = {
   generated_at: string
   checks: { key:string; label:string; status:string }[]
-  students: { total:number; active_today:number; active_7d:number }
+  students: {
+    total:number; active_today:number; active_7d:number;
+    studied_today:number; qualifying_today:number;
+    study_seconds_today:number; study_seconds_7d:number;
+    study_top_students: {
+      id:number; display_name:string|null; email:string|null;
+      last_active_at:string|null; study_seconds_today:number; study_seconds_7d:number;
+    }[];
+  }
   database: { ok:boolean; size_bytes:number|null; active_connections:number|null; connection_limit:number|null }
   supabase: { management_billing:string; message:string }
   ai: { queued:number; processing:number; completed:number; failed:number; podcast_queued_or_processing:number; spend_7d_usd:number }
   b2b: { active_campaigns:number; events_24h:number; delivery_spend_24h_minor:number }
   render: { configured:boolean; status:string; service_id:string|null; service:any; cpu_percent:any; memory_percent:any; http_requests:any; bandwidth_gb:any; instance_count:any; error?:string|null }
   release: { main_branch:string; provider_plan_changes_automatic:boolean; message:string }
+}
+
+function fmtSeconds(seconds:number) {
+  const s = Math.max(0, Math.floor(seconds || 0))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (h) return m ? h+'h '+m+'m' : h+'h'
+  return m ? m+'m' : s+'s'
 }
 
 function fmtBytes(n:number|null) {
@@ -64,6 +80,39 @@ export default function AdminOperationsDashboard() {
       {data.checks.map(c=>{const t=tone(c.status);return <div key={c.key} style={{background:t.bg,color:t.fg,borderRadius:11,padding:12}}>
         <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase'}}>Status</div><div style={{fontSize:13,fontWeight:800,marginTop:4}}>{c.label}</div><div style={{fontSize:10,marginTop:2}}>{c.status}</div>
       </div>})}
+    </div>
+
+    <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:14}}>
+      <Card title="Student study time">
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+          <Metric label="Studied today" value={data.students.studied_today.toLocaleString()} sub="Study Hub time > 0"/>
+          <Metric label="10m+ today" value={data.students.qualifying_today.toLocaleString()} sub="streak-qualified"/>
+          <Metric label="Study time today" value={fmtSeconds(data.students.study_seconds_today)} sub="server-authoritative"/>
+          <Metric label="Study time / 7d" value={fmtSeconds(data.students.study_seconds_7d)} sub="all students"/>
+          <Metric label="Active today" value={data.students.active_today.toLocaleString()} sub="any authenticated activity"/>
+          <Metric label="Active / 7d" value={data.students.active_7d.toLocaleString()} sub="any authenticated activity"/>
+        </div>
+      </Card>
+      <Card title="Active / studying students">
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <thead><tr style={{textAlign:'left',opacity:.55}}>
+              <th style={{padding:'5px 6px'}}>Student</th><th style={{padding:'5px 6px'}}>Today</th>
+              <th style={{padding:'5px 6px'}}>7d</th><th style={{padding:'5px 6px'}}>Last active</th>
+            </tr></thead>
+            <tbody>{data.students.study_top_students.map(s=><tr key={s.id}>
+              <td style={{padding:'7px 6px',borderTop:'1px solid var(--prepza-border,#E5E7EB)'}}>
+                <div style={{fontWeight:750}}>{s.display_name || s.email || 'Student #'+s.id}</div>
+                {s.display_name && s.email && <div style={{opacity:.55,fontSize:10}}>{s.email}</div>}
+              </td>
+              <td style={{padding:'7px 6px',borderTop:'1px solid var(--prepza-border,#E5E7EB)',fontWeight:750}}>{fmtSeconds(s.study_seconds_today)}</td>
+              <td style={{padding:'7px 6px',borderTop:'1px solid var(--prepza-border,#E5E7EB)'}}>{fmtSeconds(s.study_seconds_7d)}</td>
+              <td style={{padding:'7px 6px',borderTop:'1px solid var(--prepza-border,#E5E7EB)',whiteSpace:'nowrap'}}>{s.last_active_at ? new Date(s.last_active_at).toLocaleString() : '—'}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        {data.students.study_top_students.length === 0 && <div style={{fontSize:12,opacity:.65}}>No studying or recently active students in the current window.</div>}
+      </Card>
     </div>
 
     <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:14}}>
