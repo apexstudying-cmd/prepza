@@ -50,7 +50,7 @@ def test_call_invite_routes_only_to_authenticated_peer():
     try:
         with patch('realtime_server.call_participants', return_value=[_USERS['primary'].id, _USERS['peer'].id]):
             result = caller.emit('call:invite', {'call_id': 'test-call-1234', 'conversation_id': 12, 'to_user_id': _USERS['peer'].id, 'kind': 'voice'}, callback=True)
-        assert result == {'ok': True}
+        assert result == {'ok': True, 'delivered': 1}
         assert len(_events(callee, 'call:incoming')) == 1
         assert _events(observer, 'call:incoming') == []
     finally:
@@ -60,15 +60,17 @@ def test_call_invite_routes_only_to_authenticated_peer():
 
 def test_call_signaling_requires_membership_in_active_call():
     caller = _session_client("primary")
+    callee = _session_client("peer")
     attacker = _session_client("attacker")
     try:
         with patch('realtime_server.call_participants', return_value=[_USERS['primary'].id, _USERS['peer'].id]):
-            assert caller.emit('call:invite', {'call_id': 'test-call-5678', 'conversation_id': 12, 'to_user_id': _USERS['peer'].id, 'kind': 'video'}, callback=True) == {'ok': True}
+            assert caller.emit('call:invite', {'call_id': 'test-call-5678', 'conversation_id': 12, 'to_user_id': _USERS['peer'].id, 'kind': 'video'}, callback=True) == {'ok': True, 'delivered': 1}
+        assert len(_events(callee, 'call:incoming')) == 1
         result = attacker.emit('call:offer', {'call_id': 'test-call-5678', 'conversation_id': 12, 'to_user_id': _USERS['peer'].id, 'payload': {'type': 'offer', 'sdp': 'fake'}}, callback=True)
         assert result == {'ok': False}
     finally:
         _active_calls.clear()
-        caller.disconnect(); attacker.disconnect()
+        caller.disconnect(); callee.disconnect(); attacker.disconnect()
 
 
 def test_call_end_clears_active_call():
@@ -78,7 +80,7 @@ def test_call_end_clears_active_call():
         with patch('realtime_server.call_participants', return_value=[_USERS['primary'].id, _USERS['peer'].id]):
             assert caller.emit('call:invite', {'call_id': 'test-call-9012', 'conversation_id': 12, 'to_user_id': _USERS['peer'].id, 'kind': 'video'}, callback=True) == {'ok': True}
         result = caller.emit('call:end', {'call_id': 'test-call-9012', 'conversation_id': 12, 'to_user_id': _USERS['peer'].id}, callback=True)
-        assert result == {'ok': True}
+        assert result == {'ok': True, 'delivered': 1}
         assert 'test-call-9012' not in _active_calls
         assert len(_events(callee, 'call:ended')) == 1
     finally:
