@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "b4fce9ff3794cba0c4484bfddbca9366c06e47af",
+  "last_verified_commit": "c8da8373dc4018dad7288b3bf2676b72ae28637f",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -72,8 +72,8 @@
     },
     {
       "id": "storage_backup_restore",
-      "status": "NOT_TESTED",
-      "evidence": "Actual PostgreSQL backup and disposable restore rehearsal pending"
+      "status": "PASS",
+      "evidence": "GitHub Actions PostgreSQL 17 disposable rehearsal on c8da8373: custom pg_dump, pg_restore into a fresh database, matching Alembic version, sentinel row and public-table count."
     },
     {
       "id": "cross_system_journeys",
@@ -83,7 +83,7 @@
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "All 12 release-scoped GitHub Actions workflows completed successfully on b4fce9ff."
+      "evidence": "All 12 release-triggered GitHub Actions workflows completed successfully on c8da8373."
     },
     {
       "id": "existing_database_migration",
@@ -117,9 +117,8 @@
     }
   ],
   "next_actions": [
-    "Build and execute browser/offline Study Hub lifecycle coverage.",
-    "Run storage backup/restore rehearsal.",
-    "Run remaining cross-system journeys.",
-    "Run clean full regression and final freeze only after blockers clear."
+    "Execute scripts/test_browser_study_hub_offline.py locally against the rebuilt Docker stack.",
+    "Build and execute remaining cross-system journeys.",
+    "Run clean full regression and final freeze only after the remaining browser/cross-system gates clear."
   ]
 }
