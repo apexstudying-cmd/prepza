@@ -272,7 +272,7 @@ def main() -> int:
             page.reload(wait_until="domcontentloaded")
             page.get_by_text(DOCUMENT_TITLE, exact=True).wait_for(timeout=15000)
             try:
-                page.get_by_role("button", name="Continue Reading", exact=True).wait_for(timeout=15000)
+                page.get_by_role("button", name="Continue →", exact=True).wait_for(timeout=15000)
             except PlaywrightTimeoutError:
                 print("DIAGNOSTIC: Study Hub title was visible but Continue Reading was not.")
                 print("DIAGNOSTIC URL:", page.url)
@@ -345,7 +345,7 @@ def main() -> int:
                 raise AssertionError("Study Hub did not resume after fresh interaction")
             print("PASS: fresh interaction resumes Study Hub tracking")
 
-            page.get_by_text("Continue Reading", exact=True).click()
+            page.get_by_role("button", name="Continue →", exact=True).click()
             page.wait_for_timeout(1500)
             page.go_back(wait_until="domcontentloaded")
             page.get_by_text(DOCUMENT_TITLE, exact=True).wait_for(timeout=15000)
