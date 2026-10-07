@@ -2,7 +2,7 @@ const KEY_PREFIX = 'prepza-study-hub-activity-v1'
 const USER_KEY = 'prepza-offline-user-id'
 const MAX_DAILY_SECONDS = 12 * 60 * 60
 const FLUSH_INTERVAL_MS = 60 * 60 * 1000
-const INACTIVITY_WINDOW_MS = 2 * 60 * 1000
+const INACTIVITY_WINDOW_MS = 5 * 60 * 1000
 const PREPZA_TIMEZONE = 'Africa/Nairobi'
 
 type DayEntry = { seconds: number; syncedSeconds: number }
@@ -17,6 +17,7 @@ let flushTimer: number | null = null
 let tickTimer: number | null = null
 let csrfToken: string | null = null
 let syncing = false
+let podcastAudioPlaying = false
 
 function storageKey() {
   try { return `${KEY_PREFIX}:${localStorage.getItem(USER_KEY) || 'unknown'}` } catch { return `${KEY_PREFIX}:unknown` }
@@ -76,12 +77,32 @@ async function getCsrf(): Promise<string | null> {
   } catch { return null }
 }
 
+function isPodcastAudioPlaying() {
+  if (!active) return false
+  try {
+    return Array.from(document.querySelectorAll('audio')).some((element) => {
+      const audio = element as HTMLAudioElement
+      return !audio.paused && !audio.ended
+    })
+  } catch {
+    return podcastAudioPlaying
+  }
+}
+
+function refreshPodcastPlaybackState() {
+  podcastAudioPlaying = isPodcastAudioPlaying()
+}
+
 function tick() {
   if (!installed) return
   const now = performance.now()
   if (!lastTick) { lastTick = now; return }
   const elapsed = Math.max(0, Math.min(30, (now - lastTick) / 1000))
-  const genuinelyActive = active && document.visibilityState === 'visible' && (now - interactedAt <= INACTIVITY_WINDOW_MS)
+  refreshPodcastPlaybackState()
+  const genuinelyActive = active && (
+    (document.visibilityState === 'visible' && (now - interactedAt <= INACTIVITY_WINDOW_MS)) ||
+    podcastAudioPlaying
+  )
   if (genuinelyActive) {
     fractionalSeconds += elapsed
     const whole = Math.floor(fractionalSeconds)
@@ -165,6 +186,11 @@ export function installStudyHubActivityTracker() {
     void flush()
   }
   const onPageHide = () => { tick(); void flush() }
+  const onMediaStateChange = () => {
+    refreshPodcastPlaybackState()
+    tick()
+    void flush()
+  }
 
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('pointerdown', markInteraction, { passive: true })
@@ -172,6 +198,10 @@ export function installStudyHubActivityTracker() {
   window.addEventListener('touchstart', markInteraction, { passive: true })
   window.addEventListener('scroll', markInteraction, { passive: true })
   window.addEventListener('pagehide', onPageHide)
+  document.addEventListener('play', onMediaStateChange, true)
+  document.addEventListener('playing', onMediaStateChange, true)
+  document.addEventListener('pause', onMediaStateChange, true)
+  document.addEventListener('ended', onMediaStateChange, true)
 
   tickTimer = window.setInterval(tick, 5000)
   flushTimer = window.setInterval(() => void flush(), FLUSH_INTERVAL_MS)
