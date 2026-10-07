@@ -1396,3 +1396,18 @@ The run did not certify the gate. Source review traced the four value mismatches
 The teardown error traced to fixture cleanup ordering around the deliberately non-cascading `user_key.user_id` foreign key. The test now commits fixture-owned `UserKey` deletion before deleting fixture users.
 
 The corrected gate compares fixture contributions against live admin baselines and still requires exact per-student equality, concurrency idempotency, Nairobi day-boundary correctness, admin exclusion, and cleanup. Evidence remains **IN PROGRESS** until the corrected run passes cleanly.
+
+
+## 2026-10-07 — Admin Study Hub browser rerun still blocked at frontend document navigation
+
+The corrected `scripts/test_browser_admin_study_time.py` was executed from the temporary Docker QA container against `http://app:5000`.
+
+Command result: **1 passed, 4 failed** in 240.41s.
+
+All four failures occur inside `browser_login()` at `page.goto(BASE_URL + "/", wait_until="commit")`, with Chromium timing out after 30 seconds. The POST `/login` immediately before navigation succeeds, so the failure is not currently evidence of a Study Time reconciliation, entitlement, admin aggregate, concurrency, Nairobi-boundary, or isolation regression.
+
+The first attempted test still passes because it does not require browser navigation. The four browser-dependent cases do not reach their Study Time assertions.
+
+Source inspection confirms the root route is the Flask `/` handler serving the built frontend `index.html`. The next diagnostic is therefore to isolate the HTTP response from the browser navigation path before changing Study Time logic or weakening the gate.
+
+**Gate status remains IN PROGRESS.** Do not mark this gate PASS or convert the timeout into a product failure until the root-document navigation path is explained and the four blocked cases execute their actual assertions.
