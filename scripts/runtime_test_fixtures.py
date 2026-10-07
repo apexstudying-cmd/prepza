@@ -53,6 +53,12 @@ def runtime_test_users():
             users = {role: db.session.get(User, user.id) for role, user in users.items()}
             yield users
         finally:
+            user_ids = [user.id for user in users.values() if user is not None]
+            if user_ids:
+                db.session.execute(
+                    db.text("DELETE FROM user_key WHERE user_id = ANY(:user_ids)"),
+                    {"user_ids": user_ids},
+                )
             for user in users.values():
                 if user is not None:
                     db.session.delete(user)
