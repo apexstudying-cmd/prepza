@@ -1443,3 +1443,15 @@ If a historical entry says a gate was pending, that statement describes the stat
 ### Freeze rule
 
 No VPS migration, GPU purchase, or production launch work should be treated as the next step until the remaining browser/offline, storage/recovery, CI, integration, and final regression gates are complete.
+
+
+## 2026-10-07 — Repeatable code-traced release QA system
+The repository now contains a repeatable QA trace layer in qa/release_manifest.json, verified by scripts/qa_trace.py and gated by .github/workflows/release-qa-trace.yml.
+
+The intent is to stop QA knowledge from living only in chat. Each release-scoped feature declares its frontend entry, backend route/logic, database ownership, runtime/browser tests and CI evidence. The trace verifier checks structural links; runtime tests remain the authority for behavioral correctness.
+
+The current registry records Study Hub, E2EE identity, personal streak and Shared Streak. Shared Streak is explicitly not release-certified until its wiring, canonical schema ownership and runtime lifecycle are proven. E2EE identity has a dedicated gap for the observed 409 identity-replacement lifecycle. Personal streak needs deeper milestone/date-boundary/XP regression.
+
+Current browser evidence was reconciled: the clean two-browser WebRTC gate is GREEN, including real Socket.IO signaling, RTCPeerConnection connection and live remote audio MediaStream tracks. The observed /keys/register 409 remains an E2EE identity lifecycle investigation, not a WebRTC failure.
+
+The repository execution tracker (docs/NEXT_STEPS.md), evidence ledger (actualtest.md), engineering diary (notes.md) and Study Hub design record (designstudytime.md) are being kept synchronized so completed work and remaining work do not depend on conversational memory.
