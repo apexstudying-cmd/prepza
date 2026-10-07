@@ -237,7 +237,7 @@ def main() -> int:
             context = browser.new_context()
 
             # Let the real tracker run normally, but allow the test to advance
-            # performance time past the two-minute inactivity window without
+            # performance time past the five-minute inactivity window without
             # sleeping for two minutes.
             context.add_init_script(
                 """
@@ -331,14 +331,14 @@ def main() -> int:
             print("PASS: Study Hub resumes after visibility returns")
 
             inactivity_baseline = read_local_seconds(page, fixture["user_id"])
-            page.evaluate("() => { window.__prepzaPerfOffsetMs = 121000; }")
+            page.evaluate("() => { window.__prepzaPerfOffsetMs = 301000; }")
             page.wait_for_timeout(6000)
             inactivity_after = read_local_seconds(page, fixture["user_id"])
             if inactivity_after > inactivity_baseline + 1:
                 raise AssertionError(
                     f"Study Hub credited time after the inactivity window: before={inactivity_baseline}s after={inactivity_after}s"
                 )
-            print("PASS: two-minute inactivity rule stops Study Hub crediting")
+            print("PASS: five-minute inactivity rule stops Study Hub crediting")
 
             page.dispatch_event("body", "pointerdown")
             page.wait_for_timeout(6000)
@@ -346,6 +346,60 @@ def main() -> int:
             if resumed_after_idle <= inactivity_after:
                 raise AssertionError("Study Hub did not resume after fresh interaction")
             print("PASS: fresh interaction resumes Study Hub tracking")
+
+            # Podcast playback is a deliberate exception to foreground inactivity:
+            # if an audio element is genuinely playing, Study Hub credits playback
+            # even when the document is hidden. Pausing/ending audio must stop crediting.
+            podcast_before = read_local_seconds(page, fixture["user_id"])
+            page.evaluate(
+                """() => {
+                  const audio = document.createElement('audio');
+                  audio.id = 'prepza-podcast-qa-audio';
+                  Object.defineProperty(audio, 'paused', { configurable: true, value: false });
+                  Object.defineProperty(audio, 'ended', { configurable: true, value: false });
+                  document.body.appendChild(audio);
+                  window.__prepzaQaPodcastAudio = audio;
+                  audio.dispatchEvent(new Event('play'));
+                  Object.defineProperty(document, 'visibilityState', {
+                    configurable: true,
+                    value: 'hidden',
+                  });
+                  document.dispatchEvent(new Event('visibilitychange'));
+                }()"""
+            )
+            page.wait_for_timeout(6000)
+            podcast_hidden_playing = read_local_seconds(page, fixture["user_id"])
+            if podcast_hidden_playing <= podcast_before:
+                raise AssertionError("Study Hub did not credit podcast playback while hidden")
+            print("PASS: podcast playback continues Study Hub crediting while hidden")
+
+            podcast_pause_baseline = podcast_hidden_playing
+            page.evaluate(
+                """() => {
+                  const audio = window.__prepzaQaPodcastAudio;
+                  Object.defineProperty(audio, 'paused', { configurable: true, value: true });
+                  audio.dispatchEvent(new Event('pause'));
+                }()"""
+            )
+            page.wait_for_timeout(6000)
+            podcast_paused = read_local_seconds(page, fixture["user_id"])
+            if podcast_paused > podcast_pause_baseline + 1:
+                raise AssertionError("Study Hub credited time after podcast playback was paused")
+            print("PASS: paused podcast stops Study Hub crediting")
+
+            page.evaluate(
+                """() => {
+                  const audio = window.__prepzaQaPodcastAudio;
+                  audio.remove();
+                  window.__prepzaQaPodcastAudio = null;
+                  Object.defineProperty(document, 'visibilityState', {
+                    configurable: true,
+                    value: 'visible',
+                  });
+                  document.dispatchEvent(new Event('visibilitychange'));
+                }()"""
+            )
+            print("PASS: podcast activity lifecycle returned to normal Study Hub tracking")
 
             # Browser Back returns to the Home surface. Re-enter the same
             # saved Study Hub document through the real UI before testing the
@@ -373,15 +427,16 @@ def main() -> int:
                 raise AssertionError("Offline Study Hub total regressed after page reload")
             print("PASS: offline reload preserved Study Hub state and local package")
 
+            reconnect_target = read_local_seconds(page, fixture["user_id"])
             context.set_offline(False)
             page.wait_for_timeout(5000)
             server_seconds = read_server_seconds(page)
             local_seconds = read_local_seconds(page, fixture["user_id"])
-            if server_seconds < local_seconds - 2:
+            if server_seconds < reconnect_target - 1:
                 raise AssertionError(
-                    f"Reconnect did not reconcile Study Hub time: local={local_seconds}s server={server_seconds}s"
+                    f"Reconnect did not reconcile Study Hub time: target={reconnect_target}s local_now={local_seconds}s server={server_seconds}s"
                 )
-            print(f"PASS: reconnect reconciled Study Hub time (local={local_seconds}s server={server_seconds}s)")
+            print(f"PASS: reconnect reconciled Study Hub time (target={reconnect_target}s local_now={local_seconds}s server={server_seconds}s)")
 
             print("PASS: browser Study Hub offline lifecycle gate is green")
             return 0
