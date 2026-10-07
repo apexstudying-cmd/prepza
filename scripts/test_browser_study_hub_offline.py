@@ -14,7 +14,6 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = os.environ.get("PREPZA_BROWSER_BASE_URL", "http://localhost:5000")
 COMPOSE_FILE = os.environ.get("PREPZA_COMPOSE_FILE", "docker-compose.vps.yml")
 PASSWORD = "Browser!StudyHub12345"
-DOCUMENT_ID = 9100001
 DOCUMENT_TITLE = "Offline lifecycle fixture"
 
 
@@ -80,8 +79,13 @@ with app.app_context():
     db.session.add(content)
     db.session.flush()
 
+    document_id = 9100000 + int(suffix[:6], 16)
+    while db.session.get(Document, document_id) is not None:
+        suffix = uuid4().hex
+        document_id = 9100000 + int(suffix[:6], 16)
+
     document = Document(
-        id={DOCUMENT_ID},
+        id=document_id,
         user_id=user.id,
         document_content_id=content.id,
         title={DOCUMENT_TITLE!r},
@@ -103,7 +107,7 @@ from app import app, db, User, UserKey, Document, DocumentContent, DocumentReadi
 
 with app.app_context():
     user = db.session.get(User, {fixture["user_id"]})
-    document = db.session.get(Document, {DOCUMENT_ID})
+    document = db.session.get(Document, {fixture["document_id"]})
     content_id = document.document_content_id if document else None
 
     if document is not None:
@@ -139,7 +143,7 @@ def login(page, fixture: dict) -> None:
     page.wait_for_timeout(1500)
 
 
-def seed_offline_package(page, user_id: int) -> None:
+def seed_offline_package(page, user_id: int, document_id: int) -> None:
     page.evaluate(
         """({userId, documentId, title}) => {
           localStorage.setItem('prepza-offline-user-id', String(userId));
@@ -186,7 +190,7 @@ def seed_offline_package(page, user_id: int) -> None:
             })),
           ]);
         }""",
-        {"userId": user_id, "documentId": DOCUMENT_ID, "title": DOCUMENT_TITLE},
+        {"userId": user_id, "documentId": document_id, "title": DOCUMENT_TITLE},
     )
 
 
@@ -249,7 +253,7 @@ def main() -> int:
 
             page = context.new_page()
             login(page, fixture)
-            seed_offline_package(page, fixture["user_id"])
+            seed_offline_package(page, fixture["user_id"], fixture["document_id"])
 
             page.evaluate(
                 """({documentId}) => {
@@ -262,7 +266,7 @@ def main() -> int:
                     activeOpportunityId: null,
                   }));
                 }""",
-                {"documentId": DOCUMENT_ID},
+                {"documentId": fixture["document_id"]},
             )
 
             page.reload(wait_until="domcontentloaded")
