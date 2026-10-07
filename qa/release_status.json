@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "d6a18d0",
+  "last_verified_commit": "fc407aaa1320e0f55577973cb2d1ad76a779e97f",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -42,8 +42,8 @@
     },
     {
       "id": "e2ee_identity_lifecycle",
-      "status": "IN_PROGRESS",
-      "evidence": "Backend runtime E2EE identity lifecycle now passes 4/4. Browser lifecycle currently fails the first local-vs-server identity equality assertion; the gate was tightened to allow only bounded async bootstrap convergence and report the differing key prefixes. CI workflow path coverage was also corrected so identity test changes trigger E2EE validation."
+      "status": "PASS",
+      "evidence": "Backend identity runtime 4/4 and browser identity lifecycle green on dd5418a; current fc407aaa E2EE Security Regression and Release QA Trace also pass."
     },
     {
       "id": "shared_streak",
@@ -82,8 +82,8 @@
     },
     {
       "id": "ci_release_workflows",
-      "status": "NOT_TESTED",
-      "evidence": "Latest release workflows must be observed passing on the release commit"
+      "status": "PASS",
+      "evidence": "All 12 release-scoped GitHub Actions workflows completed successfully on fc407aaa."
     },
     {
       "id": "existing_database_migration",
@@ -117,8 +117,6 @@
     }
   ],
   "next_actions": [
-    "Verify CI workflows on the current release commit.",
-    "Rebuild the local app stack, execute scripts/test_e2ee_identity_runtime.py, then execute scripts/test_browser_e2ee_identity.py and record the corrected gate result.",
     "Deep-test personal streak milestones, Nairobi boundaries and XP idempotency.",
     "Determine whether Shared Streak is launch scope; if yes, move it to canonical Alembic/schema/frontend/runtime certification.",
     "Build and execute browser/offline Study Hub lifecycle coverage.",
