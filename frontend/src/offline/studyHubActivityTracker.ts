@@ -156,10 +156,12 @@ export function installStudyHubActivityTracker() {
     if (active && document.visibilityState === 'visible') interactedAt = performance.now()
   }
   const onVisibility = () => {
+    // Visibility pauses crediting through genuinelyActive; it must not clear
+    // the route-level active state. Otherwise returning to a visible tab would
+    // leave the Study Hub clock permanently disabled until navigation occurs.
     tick()
-    active = active && document.visibilityState === 'visible'
     lastTick = performance.now()
-    if (active) interactedAt = lastTick
+    if (active && document.visibilityState === 'visible') interactedAt = lastTick
     void flush()
   }
   const onPageHide = () => { tick(); void flush() }
