@@ -2,7 +2,10 @@ import { setOfflineUserId, saveGeneratedMaterialOffline, cacheGeneratedAudioOffl
 
 const STUDY_CACHE = 'prepza-study-assets-v1'
 const META_DB = 'prepza-offline-v2'
+const META_DB_VERSION = 4
 const META_STORE = 'savedStudyHub'
+const GENERATED_STORE = 'generatedMaterials'
+const AUDIO_STORE = 'generatedAudio'
 const ASSET_DB = 'prepza-offline-study-v1'
 const ASSET_STORE = 'documents'
 const MAX_SINGLE_ASSET_BYTES = 75 * 1024 * 1024
