@@ -97,9 +97,10 @@
         },
         {
           "kind": "database",
-          "path": "e2ee_chat_models.py",
+          "path": "schema/local_baseline.sql",
           "anchors": [
-            "user_key"
+            "CREATE TABLE public.user_key",
+            "user_key_user_id_key"
           ]
         },
         {
