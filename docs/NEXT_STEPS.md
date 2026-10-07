@@ -257,7 +257,7 @@ Rule: require evidence before marking production work complete.
 - [ ] Offline behavior
 - [ ] AI summary/flashcards/quiz/mind map
 - [ ] Podcast script/audio
-- [~] Chat/realtime/E2EE — local distributed realtime gate green; browser calling still pending
+- [~] Chat/realtime/E2EE — local distributed realtime + browser WebRTC/media gate green; E2EE identity lifecycle still pending
 - [ ] Payment/subscription entitlement
 - [ ] Account deletion
 - [ ] Admin access
@@ -297,7 +297,28 @@ Rule: require evidence before marking production work complete.
 13. [ ] Decide infrastructure from evidence and budget
 14. [ ] Only after freeze, execute Render/VPS deployment work
 
-## 20. Maintenance rules
+## 20. Repeatable release QA system
+1. qa/release_manifest.json is the feature-trace source of truth.
+2. scripts/qa_trace.py verifies declared frontend/backend/database/test/CI links exist.
+3. A source trace is not a runtime certification; GREEN requires executed evidence.
+4. Every newly released feature must declare its execution path and required runtime tests before it can be called GREEN.
+5. actualtest.md records executed evidence; notes.md records engineering reasoning/history; this file records current remaining work.
+6. When a gate changes state, update all three records on main rather than relying on chat memory.
+7. New gaps discovered during tracing are added here before unrelated work continues.
+
+### Current release-gate queue
+- [~] Repeatable QA registry — structural trace implemented; runtime release gate still being expanded.
+- [~] E2EE identity lifecycle — source traced; dedicated first-device/reload/restart/second-device/restore tests remain.
+- [~] Personal streak — core path exercised through Study Hub; milestone/date-boundary/XP idempotency regression remains.
+- [ ] Shared Streak — determine launch scope, registration, canonical schema ownership, frontend wiring, then test if in scope.
+- [ ] Browser/offline Study Hub lifecycle — reload, visibility, inactivity, offline/reconnect, cross-screen clock continuity.
+- [ ] Storage/backup/restore — backup and actual restore rehearsal.
+- [ ] Cross-system journeys — payment→entitlement→usage, upload→processing→artifact, offline→reconcile, realtime failure/reconnect.
+- [ ] CI — verify current workflows actually execute and pass on the release commit.
+- [ ] Clean full regression — rerun after all remaining gates are green.
+- [ ] Final freeze — exact commit, CI, browser, docs, migration and recovery evidence.
+
+## 21. Maintenance rules
 1. Evidence before checkbox.
 2. Code/scaffolding does not equal production proof.
 3. Backup is not complete until restore is tested.
