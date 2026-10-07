@@ -83,6 +83,7 @@ def main() -> int:
         "tests/test_ai_economics.py",
         "tests/test_ai_reusable_generation.py",
         "tests/test_realtime_e2ee_runtime.py",
+        "scripts/test_personal_streak_runtime.py",
     ]
     # Keep QA rate-limit counters separate from the running app's Redis DB.
     # This preserves the real rate-limit rules while preventing earlier local
