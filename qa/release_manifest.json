@@ -117,8 +117,10 @@
           ]
         }
       ],
-      "required_test_commands": [],
-      "notes": "Dedicated identity lifecycle runtime coverage is required before GREEN. Browser WebRTC/media is separately certified."
+      "required_test_commands": [
+        "python -m pytest scripts/test_e2ee_identity_runtime.py -q"
+      ],
+      "notes": "Backend identity contract is now covered by a runtime test: first registration, idempotent replay, intentional replacement conflict, authentication/validation, peer key retrieval, and cleanup. Browser persistence/restart/restore and multi-device lifecycle remain required before GREEN."
     },
     {
       "id": "personal_streak",
