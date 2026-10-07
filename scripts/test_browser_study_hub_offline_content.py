@@ -96,7 +96,7 @@ with app.app_context():
     db.session.flush()
 
     documents = []
-    for offset, title in {DOCUMENTS!r}:
+    for offset, (_, title) in enumerate({DOCUMENTS!r}):
         content = DocumentContent(
             content_hash=(suffix + str(offset) + "content")[:64].ljust(64, "0"),
             storage_path=f"browser-offline-content/{{suffix}}/{{offset}}.pdf",
