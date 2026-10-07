@@ -32,6 +32,15 @@ def main():
     if not database_url:
         raise SystemExit("DATABASE_URL is required")
 
+    # SQLAlchemy may use a driver-qualified URL such as
+    # postgresql+psycopg2://..., but pg_dump/pg_restore use libpq URLs.
+    # Normalize only the scheme; credentials, host, port and database remain
+    # unchanged.
+    if database_url.startswith("postgresql+psycopg2://"):
+        database_url = "postgresql://" + database_url[len("postgresql+psycopg2://"):]
+    elif database_url.startswith("postgresql+psycopg://"):
+        database_url = "postgresql://" + database_url[len("postgresql+psycopg://"):]
+
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
