@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "last_verified_date": "2026-10-07",
+  "last_verified_commit": "aacbf63253755b8a8ec1bad8a53345687ea3e73b",
+  "release_status": "BLOCKED",
+  "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
+  "gates": [
+    {"id":"database_alembic","status":"PASS","evidence":"74-case disposable PostgreSQL/Alembic QA; fresh bootstrap verified"},
+    {"id":"authentication_session_csrf","status":"PASS","evidence":"74-case local QA plus focused runtime coverage"},
+    {"id":"authorization_ownership","status":"PASS","evidence":"74-case local QA"},
+    {"id":"economics_entitlements","status":"PASS","evidence":"74-case local QA including Free/Plus/Pro and paid-but-unfulfilled protection"},
+    {"id":"account_lifecycle_cleanup","status":"PASS","evidence":"account deletion hardening and StudyStreak cleanup regression"},
+    {"id":"study_hub_backend","status":"PASS","evidence":"scripts/test_study_time_runtime.py: 6 passed, 3 warnings"},
+    {"id":"personal_streak","status":"IN_PROGRESS","evidence":"Core Study Hub path exercised; milestone/date-boundary/XP idempotency still requires dedicated regression"},
+    {"id":"e2ee_identity_lifecycle","status":"IN_PROGRESS","evidence":"Source traced; browser observed intentional different-key /keys/register 409; lifecycle/restore tests still required"},
+    {"id":"shared_streak","status":"IN_PROGRESS","evidence":"Existing module traced but release wiring, canonical Alembic ownership, frontend exposure and runtime lifecycle remain unresolved"},
+    {"id":"realtime_chat","status":"PASS","evidence":"focused realtime/calling/runtime and Redis cross-process evidence green"},
+    {"id":"browser_webrtc_media","status":"PASS","evidence":"Clean two-browser run: authenticated UI, Socket.IO signaling, RTCPeerConnection Connected, live remote audio tracks"},
+    {"id":"browser_study_hub_offline_lifecycle","status":"NOT_TESTED","evidence":"Reload, visibility, inactivity, offline/reconnect and cross-screen continuity still pending"},
+    {"id":"mobile_responsive_visual","status":"NOT_TESTED","evidence":"Dedicated browser/mobile visual regression remains pending"},
+    {"id":"storage_backup_restore","status":"NOT_TESTED","evidence":"Actual PostgreSQL backup and disposable restore rehearsal pending"},
+    {"id":"cross_system_journeys","status":"NOT_TESTED","evidence":"Payment→entitlement→usage, upload→artifact→Study Hub, offline→reconcile and failure/reconnect journeys pending"},
+    {"id":"ci_release_workflows","status":"NOT_TESTED","evidence":"Latest release workflows must be observed passing on the release commit"},
+    {"id":"existing_database_migration","status":"NOT_TESTED","evidence":"Disposable upgrade from a representative existing database still pending"},
+    {"id":"clean_full_regression","status":"NOT_TESTED","evidence":"Final clean-environment regression must run after remaining gates"},
+    {"id":"external_provider_verification","status":"NOT_TESTED","evidence":"Controlled Paystack/SES/OpenAI/R2/GPU-provider checks remain pending"},
+    {"id":"performance_400_users","status":"DEFERRED","evidence":"Run only after functional, browser, recovery and CI gates are green"},
+    {"id":"documentation_audit","status":"PASS","evidence":"NEXT_STEPS, actualtest, notes and designstudytime synchronized with current evidence"},
+    {"id":"vps_or_render_deployment","status":"BLOCKED","evidence":"Intentionally prohibited until release freeze"}
+  ],
+  "next_actions": [
+    "Verify CI workflows on the current release commit.",
+    "Trace and implement/test E2EE identity lifecycle and recovery.",
+    "Deep-test personal streak milestones, Nairobi boundaries and XP idempotency.",
+    "Determine whether Shared Streak is launch scope; if yes, move it to canonical Alembic/schema/frontend/runtime certification.",
+    "Build and execute browser/offline Study Hub lifecycle coverage.",
+    "Run storage backup/restore rehearsal.",
+    "Run remaining cross-system journeys.",
+    "Run clean full regression and final freeze only after blockers clear."
+  ]
+}
