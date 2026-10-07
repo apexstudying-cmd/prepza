@@ -1382,3 +1382,17 @@ Inspection showed that `prepza-offline-v2` used the same version number in two m
 The application was corrected on `main` with a version-4 migration. The v4 upgrade creates all three shared stores in either module, so both a fresh database and an existing broken v3 database converge on the same schema. The browser gate itself was not weakened.
 
 Current state: **NOT YET EXECUTED after the fix**. Rebuild the Docker app before rerunning the browser gate so Chromium receives the corrected frontend bundle.
+
+
+## 2026-10-07 — Admin Study Hub browser gate first execution
+
+Command executed:
+`docker compose -f docker-compose.vps.yml exec app python -m pytest scripts/test_browser_admin_study_time.py -q -s`
+
+Result: **4 failed, 1 passed, 1 teardown error**.
+
+The run did not certify the gate. Source review traced the four value mismatches to test-isolation assumptions: `/admin/operations` intentionally aggregates Study Hub seconds across all non-admin students, while the test assumed an empty surrounding student population. The daily 12-hour ceiling assertion also incorrectly treated a per-student ceiling as a global admin aggregate ceiling.
+
+The teardown error traced to fixture cleanup ordering around the deliberately non-cascading `user_key.user_id` foreign key. The test now commits fixture-owned `UserKey` deletion before deleting fixture users.
+
+The corrected gate compares fixture contributions against live admin baselines and still requires exact per-student equality, concurrency idempotency, Nairobi day-boundary correctness, admin exclusion, and cleanup. Evidence remains **IN PROGRESS** until the corrected run passes cleanly.
