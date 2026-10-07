@@ -149,7 +149,7 @@ async function provisionCurrentEpochIfElected(conversationId: number): Promise<v
   if (existing) return existing
 
   const promise = (async () => {
-    await ensureIdentityKeyRegistered(currentCsrfToken)
+    await ensureE2EEIdentityReady(currentCsrfToken)
     const members = await Promise.all(activeMembers.map(async (userId: number) => ({
       userId,
       publicKey: await fetchUserPublicKey(userId),
