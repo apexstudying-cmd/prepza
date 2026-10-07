@@ -67,6 +67,69 @@ def register_admin_operations(app, db, require_admin):
         active_7d = scalar('SELECT count(*) FROM "user" WHERE last_active_at >= :cutoff',
                            {"cutoff": week_ago})
 
+        # Study Hub time is a separate, authoritative signal from
+        # last_active_at. These figures come from StudyTimeLog, so the
+        # admin dashboard reports the same totals the student sees after
+        # server reconciliation.
+        study_today = scalar(
+            """SELECT COALESCE(SUM(study_time_seconds),0)
+               FROM study_time_log
+               WHERE activity_date = CURRENT_DATE
+                 AND feature = 'study_hub'"""
+        )
+        study_7d = scalar(
+            """SELECT COALESCE(SUM(study_time_seconds),0)
+               FROM study_time_log
+               WHERE activity_date >= :start_date
+                 AND activity_date <= CURRENT_DATE
+                 AND feature = 'study_hub'""",
+            {"start_date": (datetime.utcnow().date() - timedelta(days=6))},
+        )
+        students_studied_today = scalar(
+            """SELECT count(DISTINCT user_id)
+               FROM study_time_log
+               WHERE activity_date = CURRENT_DATE
+                 AND feature = 'study_hub'
+                 AND study_time_seconds > 0"""
+        )
+        students_qualifying_today = scalar(
+            """SELECT count(DISTINCT user_id)
+               FROM study_time_log
+               WHERE activity_date = CURRENT_DATE
+                 AND feature = 'study_hub'
+                 AND study_time_seconds >= 600"""
+        )
+        study_top_students = db.session.execute(db.text(
+            """SELECT u.id, u.display_name, u.email, u.last_active_at,
+                      COALESCE(st.study_seconds_today,0) AS study_seconds_today,
+                      COALESCE(sw.study_seconds_7d,0) AS study_seconds_7d
+               FROM "user" u
+               LEFT JOIN (
+                 SELECT user_id, SUM(study_time_seconds) AS study_seconds_today
+                 FROM study_time_log
+                 WHERE activity_date = CURRENT_DATE
+                   AND feature = 'study_hub'
+                 GROUP BY user_id
+               ) st ON st.user_id = u.id
+               LEFT JOIN (
+                 SELECT user_id, SUM(study_time_seconds) AS study_seconds_7d
+                 FROM study_time_log
+                 WHERE activity_date >= :start_date
+                   AND activity_date <= CURRENT_DATE
+                   AND feature = 'study_hub'
+                 GROUP BY user_id
+               ) sw ON sw.user_id = u.id
+               WHERE COALESCE(u.is_admin,FALSE)=FALSE
+                 AND (COALESCE(st.study_seconds_today,0) > 0
+                      OR u.last_active_at >= :active_cutoff)
+               ORDER BY COALESCE(st.study_seconds_today,0) DESC,
+                        u.last_active_at DESC NULLS LAST
+               LIMIT 50"""
+        ), {
+            "start_date": (datetime.utcnow().date() - timedelta(days=6)),
+            "active_cutoff": day_ago,
+        }).mappings().all()
+
         ai = {}
         for status in ("queued", "processing", "completed", "failed"):
             ai[status] = scalar(
@@ -156,7 +219,26 @@ def register_admin_operations(app, db, require_admin):
         return jsonify({
             "generated_at": now.isoformat() + "Z",
             "checks": checks,
-            "students": {"total": int(total_students or 0), "active_today": int(active_today or 0), "active_7d": int(active_7d or 0)},
+            "students": {
+                "total": int(total_students or 0),
+                "active_today": int(active_today or 0),
+                "active_7d": int(active_7d or 0),
+                "studied_today": int(students_studied_today or 0),
+                "qualifying_today": int(students_qualifying_today or 0),
+                "study_seconds_today": int(study_today or 0),
+                "study_seconds_7d": int(study_7d or 0),
+                "study_top_students": [
+                    {
+                        "id": int(row["id"]),
+                        "display_name": row["display_name"],
+                        "email": row["email"],
+                        "last_active_at": row["last_active_at"].isoformat() if row["last_active_at"] else None,
+                        "study_seconds_today": int(row["study_seconds_today"] or 0),
+                        "study_seconds_7d": int(row["study_seconds_7d"] or 0),
+                    }
+                    for row in study_top_students
+                ],
+            },
             "database": {"ok": db_ok, "size_bytes": db_size, "active_connections": db_connections, "connection_limit": db_connection_limit},
             "supabase": supabase,
             "ai": {**{k: int(v or 0) for k, v in ai.items()}, "podcast_queued_or_processing": int(podcast_queued or 0), "spend_7d_usd": round(float(ai_spend or 0), 4)},
