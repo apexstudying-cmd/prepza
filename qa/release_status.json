@@ -123,12 +123,12 @@
     {
       "id": "admin_study_time_visibility",
       "status": "NOT_TESTED",
-      "evidence": "Admin Operations now reads the same authoritative StudyTimeLog totals used by student /study-time endpoints, with Nairobi-day boundaries and admin exclusion. Runtime/browser equality test is still required."
+      "evidence": "scripts/test_browser_admin_study_time.py is now on main and ready for runtime/browser execution. It covers known-total reconnect equality (25s -> 45s), concurrent sync idempotency, the 12-hour ceiling, Nairobi day boundaries, admin exclusion, and multi-student isolation. The gate remains NOT_TESTED until the rebuilt Docker app passes."
     }
   ],
   "next_actions": [
     "Rebuild the app image, then rerun scripts/test_browser_study_hub_offline_content.py to verify the v4 offline IndexedDB migration and the full multi-document/artifact gate.",
-    "Execute the admin study-time visibility gate: known student sync -> student /study-time -> admin /admin/operations equality, including offline reconciliation, concurrency, 12-hour ceiling, Nairobi midnight and admin exclusion.",
+    "Rebuild the app, then execute scripts/test_browser_admin_study_time.py to certify student /study-time and admin /admin/operations equality, including reconnect reconciliation, concurrency, 12-hour ceiling, Nairobi boundary, admin exclusion and multi-student isolation.",
     "Build and execute remaining cross-system journeys.",
     "Run existing-database migration rehearsal and final clean regression after remaining browser/recovery gates clear."
   ]
