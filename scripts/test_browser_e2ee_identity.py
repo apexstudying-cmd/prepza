@@ -169,11 +169,6 @@ def main() -> int:
             login(fresh_page, fixture)
             second_local = local_public_key(fresh_page)
             assert second_local != first_local
-            replacement = fresh_page.request.post(
-                f"{BASE_URL}/keys/register",
-                data=json.dumps({"public_key": second_local}),
-                headers={"X-CSRF-Token": fresh_page.evaluate("() => document.cookie.includes('session') ? '' : ''")},
-            )
             # The browser's real bootstrap already attempted this registration.
             # Verify the explicit server contract with a fresh authenticated
             # request using the real CSRF token from /me.
