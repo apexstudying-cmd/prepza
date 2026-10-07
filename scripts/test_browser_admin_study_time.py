@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from uuid import uuid4
@@ -19,8 +20,10 @@ PASSWORD = "AdminStudyTime!12345"
 
 
 def run_container_python(code: str) -> str:
+    # The test runs inside the app container. Docker is not installed there,
+    # so invoke a second Python process in the same container instead.
     result = subprocess.run(
-        ["docker", "compose", "-f", COMPOSE_FILE, "exec", "-T", "app", "python", "-"],
+        [sys.executable, "-"],
         cwd=ROOT,
         input=code,
         text=True,
