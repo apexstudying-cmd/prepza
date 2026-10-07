@@ -1,0 +1,62 @@
+name: Personal Streak Runtime Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app.py"
+      - "scripts/test_personal_streak_runtime.py"
+      - "tools/run_local_qa.py"
+      - "alembic/**"
+      - "schema/local_baseline.sql"
+      - "requirements.txt"
+      - "requirements-test.txt"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: prepza
+          POSTGRES_PASSWORD: prepza
+          POSTGRES_DB: prepza_ci_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prepza -d prepza_ci_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://prepza:prepza@127.0.0.1:5432/prepza_ci_qa
+      SECRET_KEY: personal-streak-test-secret
+      REDIS_URL: memory://
+      PREPZA_TIMEZONE: Africa/Nairobi
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-test.txt
+
+      - name: Apply Alembic migrations
+        run: alembic upgrade head
+
+      - name: Run personal streak regression
+        run: python -m pytest scripts/test_personal_streak_runtime.py -q
