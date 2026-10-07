@@ -439,29 +439,33 @@ def main() -> int:
 
             # Return to Study Materials after each document and verify a real
             # artifact from every document, plus each supported material type.
-            # This is deliberately UI-level: the test does not merely count
-            # IndexedDB rows.
+            # The material list is scoped to the selected document, so each loop
+            # explicitly selects the document first. This is deliberately UI-level:
+            # the test does not merely count IndexedDB rows.
             page.get_by_text("My Study", exact=True).wait_for(timeout=15000)
             for _, document_title in DOCUMENTS:
+                page.get_by_role("button", name=document_title, exact=True).click(timeout=15000)
+                page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
                 for type_label, expected_text in [
-                    ("AI Summary", "Offline summary"),
+                    ("Summary", "Offline summary"),
                     ("Flashcards", "Offline question"),
-                    ("Practice Quiz", "Offline quiz question"),
+                    ("Practice Questions", "Offline quiz question"),
                     ("Mind Map", "Offline branch"),
                 ]:
-                    candidate = page.get_by_role("button").filter(
-                        has_text=document_title
-                    ).filter(has_text=type_label).first
-                    candidate.click(timeout=15000)
+                    page.get_by_role("button", name=type_label, exact=False).first.click(timeout=15000)
                     page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
                     print(f"PASS: {type_label} opens offline for {document_title}")
                     page.get_by_role("button").first.click(timeout=5000)
                     page.wait_for_timeout(500)
                     page.get_by_text("My Study", exact=True).wait_for(timeout=15000)
+                    page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+                page.get_by_role("button", name="Documents", exact=True).click(timeout=15000)
 
             # Podcast is tested separately because it has both JSON metadata and
             # a binary audio Blob. The player must resolve the cached descriptor
             # and then the actual Blob-backed object URL without the network.
+            page.get_by_role("button", name=DOCUMENTS[0][1], exact=True).click(timeout=15000)
+            page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
             page.get_by_role("button", name="Podcast", exact=False).first.click(timeout=15000)
             page.locator("audio").wait_for(timeout=15000)
             audio_src = page.locator("audio").get_attribute("src") or ""
