@@ -21,3 +21,10 @@ Thumbs.db
 *.mp3
 *.wav
 *.zip
+
+# QA/test-only code and local browser artifacts are not needed in the production image.
+scripts/test_*.py
+scripts/*_test.py
+scripts/test_*.sh
+requirements-test.txt
+playwright-report
