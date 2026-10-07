@@ -337,6 +337,15 @@ export async function saveStudyHubDocumentOffline(documentId: number): Promise<S
         if (audioResponse.ok) {
           const audioPayload = await audioResponse.json()
           if (audioPayload?.audio_status === 'ready' && audioPayload?.audio_url) {
+            // Cache the small playback descriptor under the same podcast-audio
+            // path the player uses on reconnect/offline open, then cache the
+            // actual audio bytes separately. This keeps the metadata and binary
+            // artifact independently durable without invoking generation offline.
+            await saveGeneratedMaterialOffline(
+              `/documents/${documentId}/podcast-audio?material_id=${Number(privatePodcast.id)}`,
+              null,
+              audioPayload,
+            )
             await cacheGeneratedAudioOffline(String(audioPayload.audio_url))
           }
         }
