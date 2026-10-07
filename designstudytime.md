@@ -597,3 +597,42 @@ The first implementation pass has now been applied directly to `main`:
 - Runtime coverage was added in `scripts/test_study_time_runtime.py` for monotonic/replay-safe sync, daily ceiling, one-row behaviour, concurrency, authentication/CSRF, and retirement of the legacy heartbeat.
 
 **Current evidence update (2026-10-07):** the PostgreSQL Study Hub runtime gate is now GREEN at 6/6, and the production-style Docker frontend/app build is GREEN. Browser/offline Study Hub lifecycle remains untested, so the overall Study Hub feature is not yet release-green. The 400-student performance gate remains deferred until functional and browser lifecycle evidence is complete.
+
+
+## 21. Offline content persistence — release clarification (2026-10-07)
+
+Study Hub offline support has two separate release contracts:
+
+1. **Activity persistence:** local study seconds survive visibility changes, inactivity, offline mode, reload and reconnect reconciliation.
+2. **Content/artifact persistence:** the actual saved document bytes and already-entitled generated materials remain usable without the network.
+
+The first contract is now browser-tested GREEN. The second has a dedicated browser gate pending execution.
+
+### Content contract
+
+An explicit Study Hub offline save is a package, not just a metadata flag:
+
+- the complete source document is stored as a Blob in IndexedDB;
+- document metadata is stored separately and scoped by authenticated user;
+- ready private generated artifacts owned by that student are copied into the generated-material store;
+- podcast playback stores both the ready playback descriptor and the binary audio Blob;
+- reopening a cached artifact must not call an AI generation POST endpoint;
+- account isolation must prevent another account from seeing these local packages.
+
+### Application-owned storage limits
+
+The current repository limits are:
+- 75 MiB per saved document;
+- 250 MiB total saved document assets per account;
+- 80 generated-material rows per account;
+- 512 KiB per generated-material payload;
+- 25 MiB per generated audio object;
+- 80 MiB total generated-audio cache per account.
+
+These are **application policy limits**, not claims about browser vendor quotas. Browser storage quotas and eviction remain browser-specific; the application also requests persistent storage when the browser supports it.
+
+### Entitlement boundary
+
+Offline mode may replay only artifacts already present locally. It must not create a new summary/quiz/flashcard/mind-map/podcast generation entitlement while offline. Free/Plus/Pro allowances and per-generation ceilings remain server-authoritative and are not replaced by the offline cache.
+
+A deeper browser test now exercises three documents and all generated material types, including the podcast binary path.

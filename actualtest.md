@@ -1346,3 +1346,26 @@ The first execution of the new E2EE identity lifecycle gate exposed **test-harne
 - The browser lifecycle test hit a Chromium `ERR_ABORTED` while waiting for `domcontentloaded` during reload, after the first identity registration had already passed.
 
 The gate was corrected without changing E2EE application behavior: runtime cases now receive isolated users, cleanup uses the session's existing transaction lifecycle, and the browser reload waits for navigation commit before checking persistence. The gate remains **IN PROGRESS** until the corrected tests are executed on the rebuilt local stack.
+
+
+## 2026-10-07 — Offline document and generated-artifact persistence gate prepared
+
+A deeper browser gate has been added as `scripts/test_browser_study_hub_offline_content.py`. It is intentionally separate from the Study Hub clock/offline-lifecycle gate.
+
+The new gate is designed to prove, in a real Chromium session:
+
+- three independent Study Hub documents survive offline storage and reload;
+- the stored document bytes are real PDF Blobs and the native offline reader opens them;
+- summary, flashcards, quiz, and mind-map artifacts open from the offline generated-material store for **each** saved document;
+- podcast metadata resolves to a local Blob-backed audio URL;
+- offline replay does not issue generation POST requests;
+- the configured offline storage caps remain exactly 75 MB/document, 250 MB total document assets, 80 generated-material rows, 512 KiB per generated payload, 25 MB per audio object, and 80 MB total audio cache.
+
+During source inspection, the gate exposed a real offline artifact replay defect in the existing implementation: the selected material id was read from `sessionStorage` only after the offline generation branch had already checked it, and Study Hub package saving used the `/documents/<id>/materials/<id>` cache path without that path being accepted by the generated-material store. Podcast offline replay also lacked a cached playback descriptor.
+
+Those application defects were fixed directly on `main` before the new gate was declared ready:
+- `ca6b638` — selected Study Hub material is resolved before offline generation replay;
+- `1969e14` — generated-material endpoint payloads are accepted by the offline store;
+- `ecd4a8d` — podcast offline playback metadata is persisted alongside the audio Blob.
+
+The browser gate itself is **NOT YET EXECUTED**. It is now the required local test before the broader offline-content/artifact gate can be marked PASS.

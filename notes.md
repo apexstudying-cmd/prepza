@@ -1470,3 +1470,25 @@ From this point onward, when a gate changes state, update the repository status/
 ## 2026-10-07 — E2EE gate correction
 
 The first E2EE lifecycle run exposed test-harness issues rather than a confirmed product failure. Runtime cases were sharing a user fixture, cleanup nested a transaction, and the browser reload wait hit Chromium ERR_ABORTED after first-device registration had already passed. The tests were corrected without changing application E2EE behavior. E2EE remains IN PROGRESS until the corrected gates pass.
+
+
+## 2026-10-07 — Offline content/artifact audit found and fixed a real replay gap
+
+The existing green Study Hub clock test proved local time persistence, but source inspection showed that this was not enough to certify actual document/artifact offline use.
+
+The important distinction is:
+**offline metadata/state persistence is not the same as offline content usability.**
+
+The repository's intended Study Hub package already stores complete document Blobs in IndexedDB and copies ready private generated artifacts into the generated-material store. The configured product limits are 75 MB per document, 250 MB total Study Hub document assets, 80 generated-material rows, 512 KiB per generated payload, 25 MB per audio object and 80 MB total audio cache.
+
+The deeper audit found three defects in the artifact replay path:
+1. `generationRequest()` checked `selectedMaterialId` before reading it from `prepza-open-material`, so the offline branch could never select the intended cached artifact.
+2. `generatedMaterials.ts` rejected `/documents/<id>/materials/<id>` paths even though `studyHubOffline.ts` stored ready artifacts under exactly those paths.
+3. Podcast offline save cached the binary audio but not the playback descriptor used by the podcast player to locate that binary cache.
+
+These were corrected directly on `main` without weakening the tests or bypassing entitlement checks. Offline generation remains read-only: only already-ready private artifacts owned by the student are copied, and generation itself still requires connectivity.
+
+New browser gate:
+`scripts/test_browser_study_hub_offline_content.py`
+
+It covers multiple documents, all generated material types, podcast binary audio, reload persistence, forbidden offline generation POSTs, and the exact application storage caps. The test is on `main` but still needs to be executed locally against the rebuilt Docker app.

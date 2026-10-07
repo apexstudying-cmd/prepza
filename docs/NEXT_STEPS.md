@@ -1,6 +1,6 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-10-06
+Last updated: 2026-10-07
 Branch: main
 
 Status:
@@ -252,9 +252,9 @@ Rule: require evidence before marking production work complete.
 - [ ] Email verification
 - [ ] Login/logout/session invalidation
 - [ ] Onboarding persistence
-- [~] Study Hub — backend sync/reconciliation gate green; browser/offline lifecycle still pending
+- [~] Study Hub — PostgreSQL runtime and browser/offline activity lifecycle are green; multi-document/content/artifact offline gate is pending
 - [ ] Document upload/read
-- [ ] Offline behavior
+- [~] Offline behavior — Study Hub activity lifecycle is green; real multi-document/document-byte/generated-artifact persistence gate is pending
 - [ ] AI summary/flashcards/quiz/mind map
 - [ ] Podcast script/audio
 - [~] Chat/realtime/E2EE — local distributed realtime + browser WebRTC/media gate green; E2EE identity lifecycle still pending
@@ -288,14 +288,15 @@ Rule: require evidence before marking production work complete.
 4. [x] Verify local realtime behavior, including Redis worker and cross-process client delivery
 5. [~] Verify the new Study Hub runtime CI workflow
 6. [x] Complete browser-to-browser WebRTC media gate
-7. [ ] Complete browser/offline Study Hub lifecycle coverage
-8. [ ] Complete storage/data-integrity backup and restore gate
-9. [ ] Complete remaining cross-system integration journeys
-10. [ ] Run full clean-environment regression/freeze suite
-11. [ ] Perform controlled external-provider verification
-12. [ ] Run measured staging/load tests after functional/browser gates are green
-13. [ ] Decide infrastructure from evidence and budget
-14. [ ] Only after freeze, execute Render/VPS deployment work
+7. [x] Complete browser/offline Study Hub activity lifecycle coverage
+8. [ ] Complete multi-document/document-byte/generated-artifact offline persistence gate
+9. [ ] Complete storage/data-integrity backup and restore gate
+10. [ ] Complete remaining cross-system integration journeys
+11. [ ] Run full clean-environment regression/freeze suite
+12. [ ] Perform controlled external-provider verification
+13. [ ] Run measured staging/load tests after functional/browser gates are green
+14. [ ] Decide infrastructure from evidence and budget
+15. [ ] Only after freeze, execute Render/VPS deployment work
 
 ## 20. Repeatable release QA system
 1. qa/release_manifest.json is the feature-trace source of truth.
@@ -361,3 +362,20 @@ New evidence reconciled into the tracker:
 - 400-user performance: **DEFERRED** until functional/browser/recovery gates are green.
 
 Do not infer completion from an old checkbox or historical note. `qa/release_status.json` and the latest evidence entries in `actualtest.md` are authoritative for current state.
+
+
+## 23. 2026-10-07 — Next browser gate: real offline content and artifacts
+
+The Study Hub activity/offline lifecycle gate is now green. The next browser gate is deliberately stronger: `scripts/test_browser_study_hub_offline_content.py`.
+
+Run it only after syncing `main` and rebuilding the Docker app so the frontend fixes are actually served.
+
+Required evidence before marking this gate PASS:
+- multiple real document Blobs open offline;
+- all saved documents survive offline reload;
+- summary, flashcards, quiz and mind map open from cached ready artifacts across multiple documents;
+- podcast metadata and binary audio resolve locally;
+- no generation POST is attempted while offline;
+- application offline storage limits remain intact.
+
+Do not call the overall offline feature frozen until this gate passes.

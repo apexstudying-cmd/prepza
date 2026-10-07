@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-07",
-  "last_verified_commit": "c8da8373dc4018dad7288b3bf2676b72ae28637f",
+  "last_verified_commit": "253861f03c8263af9a3c95b3b40e3e2a9e3c90c2",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -62,8 +62,8 @@
     },
     {
       "id": "browser_study_hub_offline_lifecycle",
-      "status": "NOT_TESTED",
-      "evidence": "scripts/test_browser_study_hub_offline.py added; local Chromium execution still required before this gate can be marked PASS."
+      "status": "PASS",
+      "evidence": "scripts/test_browser_study_hub_offline.py executed on main: visible activity, hidden-tab pause, 5-minute inactivity, fresh interaction, podcast playback exception, browser back/re-entry, offline accumulation, offline reload persistence, and reconnect reconciliation all passed."
     },
     {
       "id": "mobile_responsive_visual",
@@ -114,11 +114,16 @@
       "id": "vps_or_render_deployment",
       "status": "BLOCKED",
       "evidence": "Intentionally prohibited until release freeze"
+    },
+    {
+      "id": "browser_study_hub_offline_content_artifacts",
+      "status": "NOT_TESTED",
+      "evidence": "scripts/test_browser_study_hub_offline_content.py is on main and covers three documents, real PDF Blobs, summary/flashcards/quiz/mind-map replay, podcast metadata+audio Blob replay, offline reload, no generation POSTs, and exact application storage caps. Local execution against the rebuilt Docker app is still required."
     }
   ],
   "next_actions": [
-    "Execute scripts/test_browser_study_hub_offline.py locally against the rebuilt Docker stack.",
+    "Run scripts/test_browser_study_hub_offline_content.py locally after syncing main and rebuilding the app image.",
     "Build and execute remaining cross-system journeys.",
-    "Run clean full regression and final freeze only after the remaining browser/cross-system gates clear."
+    "Run existing-database migration rehearsal and final clean regression after remaining browser/recovery gates clear."
   ]
 }
