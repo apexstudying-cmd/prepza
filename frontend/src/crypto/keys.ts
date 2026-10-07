@@ -19,6 +19,11 @@ const DB_VERSION = 1
 const STORE_NAME = 'identity-keys'
 const RECORD_KEY = 'self' // single identity keypair per device for now
 
+// Multiple bootstrap paths can ask for the identity at the same time. Keep
+// one in-flight creation/load operation so two callers can never generate
+// different first-use keypairs and race their IndexedDB writes.
+let identityKeyPairPromise: Promise<{ keyPair: CryptoKeyPair; isNew: boolean }> | null = null
+
 export interface IdentityKeyRecord {
   publicKey: CryptoKey
   privateKey: CryptoKey
@@ -133,11 +138,21 @@ export async function getOrCreateIdentityKeyPair(): Promise<{
   keyPair: CryptoKeyPair
   isNew: boolean
 }> {
-  const existing = await loadIdentityKeyPair()
-  if (existing) {
-    return { keyPair: existing, isNew: false }
+  if (identityKeyPairPromise) return identityKeyPairPromise
+
+  identityKeyPairPromise = (async () => {
+    const existing = await loadIdentityKeyPair()
+    if (existing) {
+      return { keyPair: existing, isNew: false }
+    }
+    const keyPair = await generateIdentityKeyPair()
+    await storeIdentityKeyPair(keyPair)
+    return { keyPair, isNew: true }
+  })()
+
+  try {
+    return await identityKeyPairPromise
+  } finally {
+    identityKeyPairPromise = null
   }
-  const keyPair = await generateIdentityKeyPair()
-  await storeIdentityKeyPair(keyPair)
-  return { keyPair, isNew: true }
 }

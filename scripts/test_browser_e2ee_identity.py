@@ -79,16 +79,20 @@ with app.app_context():
 
 def cleanup_fixture(fixture: dict) -> None:
     code = f"""
-from app import app, db, User
+from app import app, db, User, StudyStreak
 with app.app_context():
     user = db.session.get(User, {fixture["user_id"]})
     if user is not None:
-        db.session.execute(db.text("DELETE FROM user_key WHERE user_id = :user_id"), {{"user_id": user.id}})
+        db.session.execute(db.text("DELETE FROM user_key WHERE user_id = :user_id"), {"user_id": user.id})
+        # The real browser startup may legitimately credit Study Hub activity
+        # before the E2EE gate reaches its assertion. Remove the derived streak
+        # row before deleting this isolated test fixture, mirroring the
+        # production account-deletion ordering.
+        StudyStreak.query.filter_by(user_id=user.id).delete(synchronize_session=False)
         db.session.delete(user)
         db.session.commit()
 """
     run_container_python(code)
-
 
 def login(page, fixture: dict) -> None:
     response = page.request.post(

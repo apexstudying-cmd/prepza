@@ -1,7 +1,6 @@
-import { fetchGroupKeyEnvelopes, openGroupSession, encryptGroupText, decryptGroupText, uploadGroupKeyEnvelopes, fetchUserPublicKey } from './e2eeChatApi'
+import { ensureE2EEIdentityReady, fetchGroupKeyEnvelopes, openGroupSession, encryptGroupText, decryptGroupText, uploadGroupKeyEnvelopes, fetchUserPublicKey } from './e2eeChatApi'
 import { encryptGroupBytes, decryptGroupBytes } from './group'
 import { provisionInitialGroupKey, provisionRotatedGroupKey } from './groupProvisioning'
-import { getOrCreateIdentityKeyPair, exportPublicKeyBase64Url } from './keys'
 import { loadGroupConversationKey } from './groupStore'
 
 const GROUP_MESSAGES_RE = /^\/chats\/(\d+)\/messages(?:\?.*)?$/
@@ -31,7 +30,6 @@ const groupModeCache = new Map<number, boolean>()
 const pendingUploads = new Map<string, PendingUpload>()
 const blockedUploadUrls = new Set<string>()
 const pendingAttachmentMeta = new Map<number, EncryptedAttachmentMeta>()
-let identityRegistrationPromise: Promise<void> | null = null
 let currentUserId: number | null = null
 let currentCsrfToken = ''
 
@@ -86,31 +84,12 @@ async function fetchGroupDetail(conversationId: number): Promise<any> {
   return response.json()
 }
 
-async function ensureIdentityKeyRegistered(csrfToken: string): Promise<void> {
-  if (identityRegistrationPromise) return identityRegistrationPromise
-  identityRegistrationPromise = (async () => {
-    const { keyPair } = await getOrCreateIdentityKeyPair()
-    const publicKey = await exportPublicKeyBase64Url(keyPair.publicKey)
-    const response = await window.fetch('/keys/register', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-      },
-      body: JSON.stringify({ public_key: publicKey }),
-    })
-    const body: any = await response.json().catch(() => null)
-    if (!response.ok) throw new Error((body && body.error) || 'Could not register secure chat key')
-  })()
-  try { await identityRegistrationPromise } catch (error) { identityRegistrationPromise = null; throw error }
-}
 
 async function ensureGroupProvisioned(conversationId: number, csrfToken: string): Promise<void> {
   const existing = groupReadyPromises.get(conversationId)
   if (existing) return existing
   const promise = (async () => {
-    await ensureIdentityKeyRegistered(csrfToken)
+    await ensureE2EEIdentityReady()
     const enable = await window.fetch(`/chats/${conversationId}${GROUP_ENABLE_SUFFIX}`, {
       method: 'POST',
       credentials: 'include',
@@ -311,7 +290,7 @@ export function installE2EEFetchBridge(): void {
         const me = await response.clone().json().catch(() => null)
         if (me?.id) currentUserId = Number(me.id)
         if (me?.csrf_token) currentCsrfToken = me.csrf_token
-        if (me?.id && me?.csrf_token) void ensureIdentityKeyRegistered(me.csrf_token).catch(() => {})
+        if (me?.id && me?.csrf_token) void ensureE2EEIdentityReady().catch(() => {})
       }
       return response
     }

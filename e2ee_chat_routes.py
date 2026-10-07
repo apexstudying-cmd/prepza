@@ -97,6 +97,18 @@ def register_e2ee_chat_routes(app, db, Conversation, ConversationParticipant, Us
         if len(raw_public_key) != 65 or raw_public_key[0] != 0x04:
             return jsonify({"error": "public_key must be an uncompressed P-256 public key"}), 400
 
+        # Serialize registration per account. Multiple browser bootstrap paths
+        # may legitimately reach this endpoint at the same time; locking the
+        # existing User row makes same-key registration idempotent and prevents
+        # two different first-use keys from racing the unique user_key insert.
+        locked_user = db.session.execute(
+            text('SELECT id FROM "user" WHERE id = :user_id FOR UPDATE'),
+            {"user_id": user_id},
+        ).scalar_one_or_none()
+        if locked_user is None:
+            db.session.rollback()
+            return jsonify({"error": "Authentication required"}), 401
+
         existing = db.session.execute(text("SELECT public_key FROM user_key WHERE user_id = :user_id"), {"user_id": user_id}).scalar_one_or_none()
         if existing:
             if existing == public_key:
