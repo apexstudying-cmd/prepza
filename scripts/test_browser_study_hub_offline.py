@@ -365,7 +365,7 @@ def main() -> int:
                     value: 'hidden',
                   });
                   document.dispatchEvent(new Event('visibilitychange'));
-                }()"""
+                }"""
             )
             page.wait_for_timeout(6000)
             podcast_hidden_playing = read_local_seconds(page, fixture["user_id"])
@@ -379,7 +379,7 @@ def main() -> int:
                   const audio = window.__prepzaQaPodcastAudio;
                   Object.defineProperty(audio, 'paused', { configurable: true, value: true });
                   audio.dispatchEvent(new Event('pause'));
-                }()"""
+                }"""
             )
             page.wait_for_timeout(6000)
             podcast_paused = read_local_seconds(page, fixture["user_id"])
@@ -397,7 +397,7 @@ def main() -> int:
                     value: 'visible',
                   });
                   document.dispatchEvent(new Event('visibilitychange'));
-                }()"""
+                }"""
             )
             print("PASS: podcast activity lifecycle returned to normal Study Hub tracking")
 
