@@ -1523,3 +1523,15 @@ While preparing this gate, we also found that `studyHubOffline.ts` declared shar
 **Evidence status:** the admin equality gate is not release-certified yet. The test script is on `main` and is ready for local execution after the standard Docker rebuild.
 
 **Interview explanation:** the student profile and admin dashboard should not calculate study time independently. They should read the same authoritative PostgreSQL record, with concurrency-safe reconciliation and the same daily ceiling.
+
+## 2026-10-07 — Admin Study Hub gate: aggregate semantics versus test isolation
+
+The first real execution of `scripts/test_browser_admin_study_time.py` produced four assertion failures and one teardown error. Source tracing showed that the failures did not yet prove a product regression: `admin_operations.py` intentionally computes `study_seconds_today` and `study_seconds_7d` as global sums across all non-admin students. The browser gate had accidentally assumed the local PostgreSQL database contained only its three newly-created fixture users.
+
+The observed mismatches (155 vs 45, 43310 vs 43200, 140 vs 30, and 220 vs 110) are consistent with unrelated/stale student rows contributing to those global aggregates. The 12-hour ceiling is also a **per-student** daily ceiling, not a ceiling on the admin's aggregate across all students.
+
+The correct QA invariant is therefore two-layered: the known fixture student's own admin row must exactly equal the authoritative `StudyTimeLog` value, while the global admin total must change by exactly that student's contribution and admin-account rows must not contribute. The browser gate has been corrected to reset its fixture rows and compare aggregate deltas against a live baseline.
+
+The run also exposed teardown ordering around the deliberate non-cascading `UserKey.user_id` foreign key. The fixture now commits child `UserKey` deletion before loading/deleting the fixture users. This changes only test cleanup ordering; it does not weaken the production account-deletion FK contract.
+
+This is useful release-QA evidence: realistic surrounding database data must not make an otherwise correct aggregate endpoint look wrong, and tests should prove both per-user correctness and aggregate semantics.
