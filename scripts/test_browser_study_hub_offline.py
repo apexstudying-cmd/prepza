@@ -99,13 +99,15 @@ with app.app_context():
 
 def cleanup_fixture(fixture: dict) -> None:
     code = f"""
-from app import app, db, User, Document, DocumentContent, StudyTimeLog, StudyStreak
+from app import app, db, User, Document, DocumentContent, DocumentReadingProgress, StudyTimeLog, StudyStreak
 
 with app.app_context():
     user = db.session.get(User, {fixture["user_id"]})
     document = db.session.get(Document, {DOCUMENT_ID})
     content_id = document.document_content_id if document else None
 
+    if document is not None:
+        DocumentReadingProgress.query.filter_by(document_id=document.id).delete(synchronize_session=False)
     StudyTimeLog.query.filter_by(user_id={fixture["user_id"]}).delete(synchronize_session=False)
     StudyStreak.query.filter_by(user_id={fixture["user_id"]}).delete(synchronize_session=False)
 
