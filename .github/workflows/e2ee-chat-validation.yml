@@ -24,6 +24,8 @@ on:
       - 'requirements.txt'
       - 'scripts/test_realtime_runtime.py'
       - 'scripts/test_chat_interactions.py'
+      - 'scripts/test_e2ee_identity_runtime.py'
+      - 'scripts/test_browser_e2ee_identity.py'
       - 'scripts/validate_e2ee_security.py'
       - 'scripts/validate_e2ee_lifecycle.py'
       - 'scripts/validate_realtime_security.py'
