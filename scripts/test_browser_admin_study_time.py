@@ -72,12 +72,16 @@ with app.app_context():
 def cleanup_fixture(fixture: dict) -> None:
     ids = [fixture["student_a"]["id"], fixture["student_b"]["id"], fixture["admin"]["id"]]
     code = """
-from app import app, db, User, StudyTimeLog, StudyStreak, XpEvent
+from app import app, db, User, UserKey, StudyTimeLog, StudyStreak, XpEvent
 with app.app_context():
     ids = __IDS__
     StudyTimeLog.query.filter(StudyTimeLog.user_id.in_(ids)).delete(synchronize_session=False)
     StudyStreak.query.filter(StudyStreak.user_id.in_(ids)).delete(synchronize_session=False)
     XpEvent.query.filter(XpEvent.user_id.in_(ids)).delete(synchronize_session=False)
+    # UserKey has a deliberate non-cascading FK to User, matching the
+    # production account-deletion contract. Remove fixture-owned E2EE
+    # identity rows before deleting the fixture users.
+    UserKey.query.filter(UserKey.user_id.in_(ids)).delete(synchronize_session=False)
     for user_id in ids:
         user = db.session.get(User, user_id)
         if user is not None:
@@ -101,14 +105,14 @@ def browser_login(page, email: str, password: str) -> None:
         headers={"Content-Type": "application/json"},
     )
     if not response.ok:
-        raise RuntimeError(f"/login failed: {response.status} {response.text()}")
+        raise RuntimeError(f"/login failed: {response.status} {response.text}")
     page.goto(BASE_URL + "/", wait_until="domcontentloaded")
 
 
 def browser_json(page, path: str) -> dict:
     response = page.request.get(BASE_URL + path)
     if not response.ok:
-        raise RuntimeError(f"GET {path} failed: {response.status} {response.text()}")
+        raise RuntimeError(f"GET {path} failed: {response.status} {response.text}")
     return response.json()
 
 
