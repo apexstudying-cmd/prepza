@@ -35,4 +35,4 @@ jobs:
       - name: Run student order and subscription contract tests
         env:
           PYTHONPATH: .
-        run: pytest -q tests/test_student_orders.py tests/test_student_subscription_billing.py tests/test_ai_economics.py scripts/test_chat_ui_contract.py
+        run: pytest --confcutdir=scripts -q tests/test_student_orders.py tests/test_student_subscription_billing.py tests/test_ai_economics.py scripts/test_chat_ui_contract.py
