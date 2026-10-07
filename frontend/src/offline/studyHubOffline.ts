@@ -34,7 +34,7 @@ type StoredStudyAsset = {
 
 function openMetaDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(META_DB, 3)
+    const request = indexedDB.open(META_DB, META_DB_VERSION)
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(META_STORE)) db.createObjectStore(META_STORE, { keyPath: 'key' })
