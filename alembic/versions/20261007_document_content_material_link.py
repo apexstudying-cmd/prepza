@@ -10,7 +10,7 @@ from __future__ import annotations
 from alembic import op
 import sqlalchemy as sa
 
-revision = "20261007_document_content_material"
+revision = "20261007_doc_material"
 down_revision = "20261005_chat_attach_source_doc"
 branch_labels = None
 depends_on = None
