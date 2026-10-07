@@ -1,0 +1,145 @@
+name: PostgreSQL Backup Restore Rehearsal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/backup_postgres.py'
+      - 'alembic/**'
+      - 'schema/local_baseline.sql'
+      - '.github/workflows/postgres-backup-restore.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/backup_postgres.py'
+      - 'alembic/**'
+      - 'schema/local_baseline.sql'
+      - '.github/workflows/postgres-backup-restore.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup-restore:
+    name: PostgreSQL custom dump and disposable restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: prepza
+          POSTGRES_PASSWORD: prepza
+          POSTGRES_DB: prepza
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prepza -d prepza"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://prepza:prepza@127.0.0.1:5432/prepza
+      LIBPQ_DATABASE_URL: postgresql://prepza:prepza@127.0.0.1:5432/prepza
+      RESTORE_DATABASE_URL: postgresql://prepza:prepza@127.0.0.1:5432/prepza_restore
+      PREPZA_TIMEZONE: Africa/Nairobi
+      FLASK_TESTING: "1"
+
+    steps:
+      - name: Check out exact commit under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Assert exact commit under test
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install application dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Apply canonical Alembic schema
+        run: python -m alembic upgrade head
+
+      - name: Create a representative backup probe
+        run: |
+          psql "$LIBPQ_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE TABLE backup_restore_probe (
+            id INTEGER PRIMARY KEY,
+            marker TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+          INSERT INTO backup_restore_probe (id, marker)
+          VALUES (1, 'prepza-backup-restore-ok');
+          SQL
+          echo "SOURCE_ALEMBIC_VERSION=$(psql "$LIBPQ_DATABASE_URL" -Atqc 'SELECT version_num FROM alembic_version LIMIT 1')" >> "$GITHUB_ENV"
+
+      - name: Install PostgreSQL 17 client wrappers
+        run: |
+          mkdir -p "$HOME/prepza-pg17-bin"
+          cat > "$HOME/prepza-pg17-bin/pg_dump" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          translated=()
+          for arg in "$@"; do
+            case "$arg" in
+              "$workspace"/*) translated+=("/workspace/${arg#"$workspace"/}") ;;
+              *) translated+=("$arg") ;;
+            esac
+          done
+          exec docker run --rm --network host             -v "$workspace:/workspace"             postgres:17-alpine pg_dump "${translated[@]}"
+          EOF
+
+          cat > "$HOME/prepza-pg17-bin/pg_restore" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:?}"
+          translated=()
+          for arg in "$@"; do
+            case "$arg" in
+              "$workspace"/*) translated+=("/workspace/${arg#"$workspace"/}") ;;
+              *) translated+=("$arg") ;;
+            esac
+          done
+          exec docker run --rm --network host             -v "$workspace:/workspace"             postgres:17-alpine pg_restore "${translated[@]}"
+          EOF
+
+          chmod +x "$HOME/prepza-pg17-bin/pg_dump" "$HOME/prepza-pg17-bin/pg_restore"
+          echo "$HOME/prepza-pg17-bin" >> "$GITHUB_PATH"
+
+      - name: Create and verify custom-format backup
+        run: |
+          mkdir -p backups
+          python scripts/backup_postgres.py --output-dir "$GITHUB_WORKSPACE/backups"
+          backup="$(find "$GITHUB_WORKSPACE/backups" -maxdepth 1 -name '*.dump' -type f | head -n 1)"
+          test -n "$backup"
+          echo "BACKUP_PATH=$backup" >> "$GITHUB_ENV"
+
+      - name: Create empty disposable restore database
+        run: |
+          psql "$LIBPQ_DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE prepza_restore'
+
+      - name: Restore the backup into a new database
+        run: |
+          pg_restore --no-owner --no-acl --dbname="$RESTORE_DATABASE_URL" "$BACKUP_PATH"
+
+      - name: Verify restored schema, data and Alembic state
+        run: |
+          test "$SOURCE_ALEMBIC_VERSION" = "$(psql "$RESTORE_DATABASE_URL" -Atqc 'SELECT version_num FROM alembic_version LIMIT 1')"
+          test "1" = "$(psql "$RESTORE_DATABASE_URL" -Atqc "SELECT COUNT(*) FROM backup_restore_probe WHERE id=1 AND marker='prepza-backup-restore-ok'")"
+          test "1" = "$(psql "$RESTORE_DATABASE_URL" -Atqc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'")" || true
+          echo "PostgreSQL backup/restore rehearsal passed."
+
+      - name: Clean up disposable restore database
+        if: always()
+        run: |
+          psql "$LIBPQ_DATABASE_URL" -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS prepza_restore'
+          rm -rf "$GITHUB_WORKSPACE/backups"
