@@ -13,7 +13,26 @@ FROM python:3.13-slim AS runtime
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PORT=5000
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 \
+    && apt-get install -y --no-install-recommends \
+       ffmpeg \
+       libglib2.0-0 \
+       libgl1 \
+       libnspr4 \
+       libnss3 \
+       libatk1.0-0t64 \
+       libatk-bridge2.0-0t64 \
+       libcups2t64 \
+       libdrm2 \
+       libxkbcommon0 \
+       libxcomposite1 \
+       libxdamage1 \
+       libxfixes3 \
+       libxrandr2 \
+       libgbm1 \
+       libasound2t64 \
+       libpango-1.0-0 \
+       libcairo2 \
+       libatspi2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
