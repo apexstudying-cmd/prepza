@@ -1544,3 +1544,14 @@ The corrected admin Study Hub browser gate was rerun from a disposable Docker QA
 This is materially different from the earlier test-isolation failures. The corrected fixture cleanup/baseline logic has not yet been exercised by those four cases because browser navigation never commits. Source inspection shows `/` is a Flask route serving the built frontend `index.html`; the next step is to isolate that HTTP document response and determine why Chromium inside the temporary QA container cannot receive the document. No Study Time production logic should be changed merely to make this test pass.
 
 Release evidence remains **IN PROGRESS** for the admin Study Hub visibility gate. The offline content/artifact gate and the other release gates listed in `actualtest.md` remain separate and must continue according to the repository tracker.
+
+
+## 2026-10-08 — Offline content gate: separate test-fixture defects from product defects
+
+The offline generated-material browser gate has now exposed two different harness inconsistencies before reaching its product assertions.
+
+First, the fixture initially ran database setup with host Python, causing a connection attempt to `127.0.0.1:5432`. Existing browser gates already showed the intended pattern: Playwright runs on the host against `http://localhost:5000`, while database fixtures run through `docker compose exec -T app python -`. That fixture was corrected on main.
+
+Second, the fixture seeded the shared `prepza-offline-v2` IndexedDB database through three concurrent version-3 openers, each creating a different object store. This did not match the production v4 schema lifecycle and produced `NotFoundError` when one transaction requested a store another opener had not created. The fixture is now corrected to open v4 once, create `savedStudyHub`, `generatedMaterials`, and `generatedAudio` together, then seed them sequentially.
+
+Neither of these two failures is evidence that the production app is broken. They are QA-harness failures. However, the earlier discovery that production v3 offline modules could create only part of the shared schema was a genuine product persistence defect and was fixed by the v4 IndexedDB migration. The browser gate remains necessary because code-level schema correctness is not the same as proving an existing v3 browser database upgrades and the full document/artifact/podcast flow works after reload and offline transition.
