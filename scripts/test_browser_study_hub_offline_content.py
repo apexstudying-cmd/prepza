@@ -407,12 +407,12 @@ def assert_offline_document(page, title: str) -> None:
     print(f"PASS: real document bytes open offline for {title}")
 
     # The native offline reader returns to the selected document's Study Hub.
-    # Return once more through the real "My Study" control so the next
-    # document iteration starts from the document list.
+    # Return once more through the real "My Study" control; Study Materials
+    # then exposes the Documents tab and the document-row buttons.
     page.get_by_role("button", name="Back", exact=True).click(timeout=5000)
     page.get_by_role("button", name="My Study", exact=True).wait_for(timeout=15000)
     page.get_by_role("button", name="My Study", exact=True).click(timeout=5000)
-    page.get_by_role("button", name="My Study", exact=True).wait_for(timeout=15000)
+    page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
     page.wait_for_timeout(500)
 
 
@@ -484,7 +484,7 @@ def main() -> int:
             # the test does not merely count IndexedDB rows.
             page.get_by_text("My Study", exact=True).wait_for(timeout=15000)
             for _, document_title in DOCUMENTS:
-                page.get_by_role("button", name=document_title, exact=True).click(timeout=15000)
+                page.locator("button").filter(has_text=document_title).first.click(timeout=15000)
                 page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
                 for type_label, expected_text in [
                     ("Summary", "Offline summary"),
@@ -503,7 +503,7 @@ def main() -> int:
             # Podcast is tested separately because it has both JSON metadata and
             # a binary audio Blob. The player must resolve the cached descriptor
             # and then the actual Blob-backed object URL without the network.
-            page.get_by_role("button", name=DOCUMENTS[0][1], exact=True).click(timeout=15000)
+            page.locator("button").filter(has_text=DOCUMENTS[0][1]).first.click(timeout=15000)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
             page.get_by_role("button", name="Podcast", exact=False).first.click(timeout=15000)
             page.locator("audio").wait_for(timeout=15000)
