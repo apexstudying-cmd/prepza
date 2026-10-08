@@ -124,23 +124,40 @@ def browser_login(page, email: str, password: str) -> None:
     if not response.ok:
         raise RuntimeError(f"/login failed: {response.status} {response.text()}")
 
-    # The login request stores Flask's real Secure session cookie in the
-    # browser context. The app is intentionally contacted over internal HTTP
-    # in this disposable QA container, so Chromium will not send that cookie
-    # unless the test context downgrades its transport flag. Preserve the
-    # actual cookie value and scope; change only Secure for this test context.
-    cookies = page.context.cookies([BASE_URL])
-    session_cookie = next((cookie for cookie in cookies if cookie["name"] == "session"), None)
-    if session_cookie is None:
+    # Flask marks the production session cookie Secure. Because this disposable
+    # QA browser talks to the app over internal HTTP, Chromium may refuse to
+    # store that Set-Cookie header at all. Read the real cookie from the login
+    # response, then re-add the same value to this test context with Secure
+    # disabled. Production configuration remains unchanged.
+    set_cookie = response.headers.get("set-cookie")
+    if not set_cookie:
+        raise RuntimeError("Expected /login to return a session Set-Cookie header")
+
+    parsed = SimpleCookie()
+    parsed.load(set_cookie)
+    morsel = parsed.get("session")
+    if morsel is None:
         raise RuntimeError(
-            "Expected the /login response to store Flask's session cookie; "
-            f"available cookies: {[cookie['name'] for cookie in cookies]}"
+            "Expected /login Set-Cookie to contain the session cookie; "
+            f"header={set_cookie!r}"
         )
-    session_cookie["secure"] = False
+
+    cookie = {
+        "name": "session",
+        "value": morsel.value,
+        "url": BASE_URL,
+        "path": morsel["path"] or "/",
+        "secure": False,
+        "httpOnly": bool(morsel["httponly"]),
+    }
+    same_site = (morsel["samesite"] or "").lower()
+    if same_site in {"lax", "strict", "none"}:
+        cookie["sameSite"] = same_site.capitalize()
+
     page.context.clear_cookies(name="session")
-    page.context.add_cookies([session_cookie])
+    page.context.add_cookies([cookie])
     # page.request shares cookies with this browser context, so authenticated
-    # API requests use the real session. Production config remains Secure.
+    # API requests use the real session. Production configuration remains Secure.
 
 
 def browser_json(page, path: str) -> dict:
