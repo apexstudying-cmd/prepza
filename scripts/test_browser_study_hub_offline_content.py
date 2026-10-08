@@ -247,28 +247,34 @@ def seed_offline_content(page, fixture: dict) -> None:
         """({userId, documents, pdfs, wavBase64, materialTypes}) => {
           localStorage.setItem('prepza-offline-user-id', String(userId));
 
-          const open = (name, version, store) => new Promise((resolve, reject) => {
-            const request = indexedDB.open(name, version);
+          const decode = base64 => Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+          const openOfflineDb = () => new Promise((resolve, reject) => {
+            // Mirror the production shared IndexedDB schema: all three stores
+            // belong to the same database and are created together during the
+            // v4 upgrade. Opening them concurrently with separate upgrade
+            // handlers can leave one store missing and make the fixture itself
+            // fail before the browser gate reaches any product assertion.
+            const request = indexedDB.open('prepza-offline-v2', 4);
             request.onupgradeneeded = () => {
               const db = request.result;
-              if (!db.objectStoreNames.contains(store)) {
-                db.createObjectStore(store, { keyPath: 'key' });
+              for (const store of ['savedStudyHub', 'generatedMaterials', 'generatedAudio']) {
+                if (!db.objectStoreNames.contains(store)) {
+                  db.createObjectStore(store, { keyPath: 'key' });
+                }
               }
             };
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
           });
 
-          const decode = base64 => Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-
-          const put = (dbName, version, storeName, rows) =>
-            open(dbName, version, storeName).then(db => new Promise((resolve, reject) => {
-              const tx = db.transaction(storeName, 'readwrite');
-              const store = tx.objectStore(storeName);
-              for (const row of rows) store.put(row);
-              tx.oncomplete = () => { db.close(); resolve(); };
-              tx.onerror = () => reject(tx.error);
-            }));
+          const putRows = (db, storeName, rows) => new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            for (const row of rows) store.put(row);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
 
           const metaRows = documents.map((doc, index) => ({
             key: String(userId) + ':' + String(doc.document_id),
@@ -339,12 +345,31 @@ def seed_offline_content(page, fixture: dict) -> None:
             }];
           });
 
-          return Promise.all([
-            put('prepza-offline-v2', 3, 'savedStudyHub', metaRows),
-            put('prepza-offline-study-v1', 1, 'documents', assetRows),
-            put('prepza-offline-v2', 3, 'generatedMaterials', materialRows),
-            put('prepza-offline-v2', 3, 'generatedAudio', audioRows),
-          ]);
+          const sharedDb = await openOfflineDb();
+          try {
+            await putRows(sharedDb, 'savedStudyHub', metaRows);
+            await putRows(sharedDb, 'generatedMaterials', materialRows);
+            await putRows(sharedDb, 'generatedAudio', audioRows);
+          } finally {
+            sharedDb.close();
+          }
+
+          const assetDb = await new Promise((resolve, reject) => {
+            const request = indexedDB.open('prepza-offline-study-v1', 1);
+            request.onupgradeneeded = () => {
+              const db = request.result;
+              if (!db.objectStoreNames.contains('documents')) {
+                db.createObjectStore('documents', { keyPath: 'key' });
+              }
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+          try {
+            await putRows(assetDb, 'documents', assetRows);
+          } finally {
+            assetDb.close();
+          }
         }""",
         {
             "userId": fixture["user_id"],
