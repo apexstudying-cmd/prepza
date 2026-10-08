@@ -381,16 +381,116 @@ def seed_offline_content(page, fixture: dict) -> None:
     )
 
 
+def debug_document_row(page, title: str) -> None:
+    """Print the live DOM state for one document title after a locator failure."""
+    title_locator = page.get_by_text(title, exact=True)
+    details = title_locator.evaluate_all(
+        """(elements) => elements.map((el, index) => {
+            const style = window.getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            const button = el.closest('button');
+            const buttonStyle = button ? window.getComputedStyle(button) : null;
+            const buttonRect = button ? button.getBoundingClientRect() : null;
+            const visible = rect.width > 0 && rect.height > 0
+                && style.display !== 'none'
+                && style.visibility !== 'hidden'
+                && style.opacity !== '0';
+            const buttonVisible = buttonRect && buttonStyle
+                ? buttonRect.width > 0 && buttonRect.height > 0
+                    && buttonStyle.display !== 'none'
+                    && buttonStyle.visibility !== 'hidden'
+                    && buttonStyle.opacity !== '0'
+                : false;
+            return {
+                index,
+                tag: el.tagName,
+                text: (el.textContent || '').trim(),
+                visible,
+                rect: {
+                    x: Math.round(rect.x),
+                    y: Math.round(rect.y),
+                    width: Math.round(rect.width),
+                    height: Math.round(rect.height),
+                },
+                display: style.display,
+                visibility: style.visibility,
+                opacity: style.opacity,
+                outerHTML: el.outerHTML.slice(0, 1200),
+                ancestorButton: button ? {
+                    visible: buttonVisible,
+                    rect: {
+                        x: Math.round(buttonRect.x),
+                        y: Math.round(buttonRect.y),
+                        width: Math.round(buttonRect.width),
+                        height: Math.round(buttonRect.height),
+                    },
+                    outerHTML: button.outerHTML.slice(0, 1800),
+                } : null,
+            };
+        })"""
+    )
+    visible_buttons = page.locator("button").evaluate_all(
+        """(buttons) => buttons.map((button, index) => {
+            const style = window.getComputedStyle(button);
+            const rect = button.getBoundingClientRect();
+            const visible = rect.width > 0 && rect.height > 0
+                && style.display !== 'none'
+                && style.visibility !== 'hidden'
+                && style.opacity !== '0';
+            return {
+                index,
+                visible,
+                rect: {
+                    x: Math.round(rect.x),
+                    y: Math.round(rect.y),
+                    width: Math.round(rect.width),
+                    height: Math.round(rect.height),
+                },
+                text: (button.innerText || '').trim().replace(/\\s+/g, ' ').slice(0, 180),
+                outerHTML: button.outerHTML.slice(0, 900),
+            };
+        }).filter(item => item.visible).slice(0, 80)"""
+    )
+    navigation = page.evaluate(
+        """() => ({
+            url: location.href,
+            pathname: location.pathname,
+            online: navigator.onLine,
+            readyState: document.readyState,
+            activeElement: document.activeElement
+                ? {tag: document.activeElement.tagName, text: (document.activeElement.textContent || '').trim().slice(0, 120)}
+                : null,
+            navigationState: sessionStorage.getItem('prepza-navigation-state'),
+            openMaterial: sessionStorage.getItem('prepza-open-material'),
+            bodyText: document.body.innerText.slice(0, 2500),
+        })"""
+    )
+    print("DEBUG: live DOM for document title " + repr(title))
+    print(json.dumps({
+        "titleMatchCount": title_locator.count(),
+        "matches": details,
+        "visibleButtons": visible_buttons,
+        "navigation": navigation,
+    }, indent=2, ensure_ascii=False))
+
+
+def assert_offline_document(page, title: str) -> None:
+
+
 def assert_offline_document(page, title: str) -> None:
     # The production My Study document row is a <button> containing the title
     # text inside nested divs. Start from the visible title node, then climb to
     # the actual ancestor button instead of asking Playwright to choose among
     # every button that happens to contain this text.
     title_node = page.get_by_text(title, exact=True).first
-    title_node.wait_for(timeout=15000)
-    document_button = title_node.locator("xpath=ancestor::button[1]")
-    document_button.wait_for(timeout=15000)
-    document_button.click()
+    try:
+        title_node.wait_for(timeout=15000)
+        document_button = title_node.locator("xpath=ancestor::button[1]")
+        document_button.wait_for(timeout=15000)
+        document_button.click()
+    except Exception:
+        debug_document_row(page, title)
+        raise
 
     page.wait_for_timeout(500)
 
