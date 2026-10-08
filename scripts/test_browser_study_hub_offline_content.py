@@ -16,8 +16,8 @@ from __future__ import annotations
 import base64
 import json
 import os
-import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -37,17 +37,7 @@ MATERIAL_TYPES = ("summary", "flashcards", "quiz", "mind_map", "podcast")
 
 def run_container_python(code: str) -> str:
     result = subprocess.run(
-        [
-            "docker",
-            "compose",
-            "-f",
-            COMPOSE_FILE,
-            "exec",
-            "-T",
-            "app",
-            "python",
-            "-",
-        ],
+        [sys.executable, "-"],
         cwd=ROOT,
         input=code,
         text=True,
