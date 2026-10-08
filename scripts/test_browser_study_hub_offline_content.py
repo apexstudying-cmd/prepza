@@ -383,9 +383,12 @@ def seed_offline_content(page, fixture: dict) -> None:
 
 def assert_offline_document(page, title: str) -> None:
     # The production My Study document row is a <button> containing the title
-    # text. Target that actual control rather than relying on the nested text
-    # node to own the click, then prove we reached the real Study Hub screen.
-    document_button = page.locator("button").filter(has_text=title).first
+    # text inside nested divs. Start from the visible title node, then climb to
+    # the actual ancestor button instead of asking Playwright to choose among
+    # every button that happens to contain this text.
+    title_node = page.get_by_text(title, exact=True).first
+    title_node.wait_for(timeout=15000)
+    document_button = title_node.locator("xpath=ancestor::button[1]")
     document_button.wait_for(timeout=15000)
     document_button.click()
 
