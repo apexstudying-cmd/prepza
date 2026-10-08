@@ -122,33 +122,25 @@ def browser_login(page, email: str, password: str) -> None:
         headers={"Content-Type": "application/json"},
     )
     if not response.ok:
-        raise RuntimeError(f"/login failed: {response.status} {response.text}")
+        raise RuntimeError(f"/login failed: {response.status} {response.text()}")
 
-    # Production deliberately marks the Flask session cookie Secure. This
-    # browser gate talks directly to the internal HTTP-only Docker service,
-    # so Chromium correctly refuses to send that cookie over http://app:5000.
-    # Keep the real /login flow, but adapt only the returned test cookie to the
-    # temporary HTTP transport. Production config remains Secure.
-    set_cookie = response.headers.get("set-cookie", "")
-    parsed = SimpleCookie()
-    parsed.load(set_cookie)
-    session_cookie = parsed.get("session")
+    # The login request stores Flask's real Secure session cookie in the
+    # browser context. The app is intentionally contacted over internal HTTP
+    # in this disposable QA container, so Chromium will not send that cookie
+    # unless the test context downgrades its transport flag. Preserve the
+    # actual cookie value and scope; change only Secure for this test context.
+    cookies = page.context.cookies([BASE_URL])
+    session_cookie = next((cookie for cookie in cookies if cookie["name"] == "session"), None)
     if session_cookie is None:
-        raise RuntimeError("Expected Flask session cookie from /login")
-    same_site = (session_cookie["samesite"] or "Lax").capitalize()
-    if same_site not in {"Lax", "Strict", "None"}:
-        same_site = "Lax"
-    page.context.add_cookies([{
-        "name": "session",
-        "value": session_cookie.value,
-        "url": BASE_URL + "/",
-        "httpOnly": bool(session_cookie["httponly"]),
-        "secure": False,
-        "sameSite": same_site,
-    }])
-    # Keep authentication browser-owned without depending on SPA document
-    # navigation. Playwright's page.request shares cookies with this browser
-    # context, so subsequent authenticated API calls use the real session.
+        raise RuntimeError(
+            "Expected the /login response to store Flask's session cookie; "
+            f"available cookies: {[cookie['name'] for cookie in cookies]}"
+        )
+    session_cookie["secure"] = False
+    page.context.clear_cookies(name="session")
+    page.context.add_cookies([session_cookie])
+    # page.request shares cookies with this browser context, so authenticated
+    # API requests use the real session. Production config remains Secure.
 
 
 def browser_json(page, path: str) -> dict:
