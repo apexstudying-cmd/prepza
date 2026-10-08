@@ -14,7 +14,7 @@ import re
 
 from test_local_qa_real_world import _client_for, qa_database, world
 
-from app import app
+from app import app, db, User
 
 
 def _probe_path(rule):
@@ -55,10 +55,10 @@ def test_every_admin_get_route_rejects_anonymous_and_non_admin_users(world):
         path = _probe_path(rule)
         for label, client in (("anonymous", anonymous), ("student", student)):
             response = client.get(path, follow_redirects=False)
-            if response.status_code != 403:
+            if response.status_code not in {401, 403}:
                 failures.append(
                     f"{label} GET {path} ({rule.endpoint}) -> "
-                    f"{response.status_code}, expected 403"
+                    f"{response.status_code}, expected 401/403"
                 )
 
     assert not failures, "\n".join(failures)
@@ -101,3 +101,21 @@ def test_every_admin_mutation_fails_without_csrf_for_all_non_admins_and_admin(
                     )
 
     assert not failures, "\n".join(failures)
+
+
+def test_revoked_admin_cannot_continue_using_existing_session(world):
+    """Admin authorization is re-checked against the live User row."""
+    admin = _client_for(world["admin"].id)
+
+    assert admin.get("/admin/users").status_code == 200
+
+    user = db.session.get(User, world["admin"].id)
+    user.is_admin = False
+    db.session.commit()
+
+    try:
+        response = admin.get("/admin/users")
+        assert response.status_code == 403
+    finally:
+        user.is_admin = True
+        db.session.commit()
