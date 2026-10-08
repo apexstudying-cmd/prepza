@@ -384,10 +384,17 @@ def seed_offline_content(page, fixture: dict) -> None:
 def assert_offline_document(page, title: str) -> None:
     page.get_by_text(title, exact=True).wait_for(timeout=15000)
     page.get_by_text(title, exact=True).click()
+
+    # My Study opens the document's Study Hub first. The actual offline Blob
+    # reader is entered through the production "Continue Reading" action; that
+    # is where the reader can prove it resolved the saved IndexedDB document.
+    page.get_by_role("button", name="Continue Reading", exact=True).wait_for(timeout=15000)
+    page.get_by_role("button", name="Continue Reading", exact=True).click()
     page.get_by_text("OFFLINE", exact=True).wait_for(timeout=15000)
     page.get_by_text("Offline study copy", exact=True).wait_for(timeout=15000)
     print(f"PASS: real document bytes open offline for {title}")
-    page.get_by_role("button").filter(has=page.locator("svg")).first.click(timeout=5000)
+
+    page.get_by_role("button", name="Back", exact=True).click(timeout=5000)
     page.wait_for_timeout(500)
 
 
