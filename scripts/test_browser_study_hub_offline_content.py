@@ -475,9 +475,6 @@ def debug_document_row(page, title: str) -> None:
 
 
 def assert_offline_document(page, title: str) -> None:
-
-
-def assert_offline_document(page, title: str) -> None:
     # The production My Study document row is a <button> containing the title
     # text inside nested divs. Start from the visible title node, then climb to
     # the actual ancestor button instead of asking Playwright to choose among
