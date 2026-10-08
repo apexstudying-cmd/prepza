@@ -18,6 +18,7 @@ import json
 import os
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
