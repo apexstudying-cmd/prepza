@@ -17,7 +17,6 @@ import base64
 import json
 import os
 import subprocess
-import sys
 import shutil
 from pathlib import Path
 
@@ -38,7 +37,7 @@ MATERIAL_TYPES = ("summary", "flashcards", "quiz", "mind_map", "podcast")
 
 def run_container_python(code: str) -> str:
     result = subprocess.run(
-        [sys.executable, "-"],
+        ["docker", "compose", "-f", COMPOSE_FILE, "exec", "-T", "app", "python", "-"],
         cwd=ROOT,
         input=code,
         text=True,
