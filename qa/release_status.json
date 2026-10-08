@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "last_verified_date": "2026-10-07",
-  "last_verified_commit": "800ffc73b05c19610476db83eea052697072609a",
+  "last_verified_date": "2026-10-08",
+  "last_verified_commit": "e963cca1",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -122,14 +122,17 @@
     },
     {
       "id": "admin_study_time_visibility",
-      "status": "IN_PROGRESS",
-      "evidence": "Corrected browser gate rerun on 2026-10-07: 1 passed, 4 failed after 240.41s. All four failures timed out at Playwright page.goto(http://app:5000/, wait_until=commit) immediately after successful /login. The cases therefore did not reach their Study Time assertions. Source inspection shows / is the Flask route serving the built frontend index.html. Root-document navigation must be isolated before the gate can be certified; no Study Time logic has been weakened."
+      "status": "PASS",
+      "evidence": "User-executed scripts/test_browser_admin_study_time.py on 2026-10-08: 5 passed in 117.11s. All five browser cases reached their Study Time assertions; localhost browser authentication/navigation is now aligned with the other real-browser gates."
     }
   ],
   "next_actions": [
-    "Isolate the temporary-container HTTP response for the Flask / document and determine why Chromium navigation to http://app:5000/ does not commit.",
-    "Rerun scripts/test_browser_admin_study_time.py after the navigation blocker is understood; require all five cases to execute and pass.",
-    "Rerun scripts/test_browser_study_hub_offline_content.py after the IndexedDB v4 migration fix.",
-    "Build and execute remaining cross-system journeys, existing-database migration rehearsal, CI verification and final clean regression."
-  ]
+    "Run the targeted admin authorization/security tests in the disposable QA environment; do not install pytest into the production app image.",
+    "Rerun scripts/test_browser_study_hub_offline_content.py after rebuilding the app so the IndexedDB v4 migration is present in the browser bundle.",
+    "Execute the remaining cross-system journeys and existing-database migration rehearsal.",
+    "Run the final clean full regression after the remaining gates and current security changes are verified.",
+    "Keep controlled external-provider verification separate from the local release freeze unless explicitly approved as an external-provider gate."
+  ],
+  "current_main_commit": "de5564d0a6dd2faa483a7b048bbb11d0a0c5807f",
+  "verification_note": "The latest browser Study Hub gate was verified on e963cca1. Current main has later security/test/documentation commits; those changes still require the targeted route-security run and then the final clean full regression before the release record can claim the current HEAD is fully verified."
 }
