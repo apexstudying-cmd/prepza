@@ -382,13 +382,25 @@ def seed_offline_content(page, fixture: dict) -> None:
 
 
 def assert_offline_document(page, title: str) -> None:
-    page.get_by_text(title, exact=True).wait_for(timeout=15000)
-    page.get_by_text(title, exact=True).click()
+    # The production My Study document row is a <button> containing the title
+    # text. Target that actual control rather than relying on the nested text
+    # node to own the click, then prove we reached the real Study Hub screen.
+    document_button = page.locator("button").filter(has_text=title).first
+    document_button.wait_for(timeout=15000)
+    document_button.click()
+
+    page.wait_for_timeout(500)
+
+    try:
+        page.get_by_role("button", name="Continue Reading", exact=True).wait_for(timeout=15000)
+    except Exception:
+        print("DEBUG: screen after opening document:")
+        print(page.locator("body").inner_text(timeout=5000))
+        raise
 
     # My Study opens the document's Study Hub first. The actual offline Blob
     # reader is entered through the production "Continue Reading" action; that
     # is where the reader can prove it resolved the saved IndexedDB document.
-    page.get_by_role("button", name="Continue Reading", exact=True).wait_for(timeout=15000)
     page.get_by_role("button", name="Continue Reading", exact=True).click()
     page.get_by_text("OFFLINE", exact=True).wait_for(timeout=15000)
     page.get_by_text("Offline study copy", exact=True).wait_for(timeout=15000)

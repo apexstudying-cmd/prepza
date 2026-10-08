@@ -1555,3 +1555,21 @@ First, the fixture initially ran database setup with host Python, causing a conn
 Second, the fixture seeded the shared `prepza-offline-v2` IndexedDB database through three concurrent version-3 openers, each creating a different object store. This did not match the production v4 schema lifecycle and produced `NotFoundError` when one transaction requested a store another opener had not created. The fixture is now corrected to open v4 once, create `savedStudyHub`, `generatedMaterials`, and `generatedAudio` together, then seed them sequentially.
 
 Neither of these two failures is evidence that the production app is broken. They are QA-harness failures. However, the earlier discovery that production v3 offline modules could create only part of the shared schema was a genuine product persistence defect and was fixed by the v4 IndexedDB migration. The browser gate remains necessary because code-level schema correctness is not the same as proving an existing v3 browser database upgrades and the full document/artifact/podcast flow works after reload and offline transition.
+
+    
+## 2026-10-08 — Offline content gate: second-stage navigation timeout
+
+The fixture corrections allowed the browser gate to reach its first real product-level check:
+
+    PASS: multiple saved documents remain listed offline
+
+The next step failed with:
+
+    Locator.wait_for: Timeout 15000ms exceeded
+    waiting for get_by_role("button", name="Continue Reading", exact=True) to be visible
+
+I traced this against the current production flow before changing application code. The My Study document entries are real button controls whose click handler sets activeDocumentId and opens document-study. The DocumentStudyHubScreen then loads the saved offline package and renders the real Continue Reading button; the native DocumentReaderScreen is the component that subsequently proves the Blob-backed reader with OFFLINE / Offline study copy.
+
+Because the test timed out before those reader assertions, this run does not prove a production offline-reader failure. The browser test was too opaque about which UI state it had reached. The test has now been corrected to click the actual document-row button and dump the rendered page body when Continue Reading is still absent.
+
+**Production-impact classification:** currently unclassified / not proven. Do not change production navigation or offline persistence based on this timeout alone. The next run must identify the actual rendered state first.

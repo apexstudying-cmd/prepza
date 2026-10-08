@@ -1594,3 +1594,22 @@ This result is **not evidence of a production regression**. It is evidence that 
 - Host-Python fixture connecting to `127.0.0.1:5432`: **test harness only**, not production.
 - Shared IndexedDB seed race/missing-store error: **test harness only**, not production.
 - Earlier v3 shared IndexedDB migration defect discovered during this same gate preparation: **real production-impacting defect, already fixed and requires the browser gate to verify the deployed frontend migration path**.
+
+    
+## 2026-10-08 — Offline content browser gate: Study Hub navigation timeout after fixture correction
+
+User-executed command:
+
+    python scripts/test_browser_study_hub_offline_content.py -q
+
+Result:
+
+    PASS: multiple saved documents remain listed offline
+    FAIL: Locator.wait_for: Timeout 15000ms exceeded
+    waiting for get_by_role("button", name="Continue Reading", exact=True) to be visible
+
+This run reached the offline My Study list successfully, so the earlier IndexedDB fixture corrections were exercised far enough for the three saved documents to render. It then timed out while the test attempted to enter the selected document's Study Hub. Source inspection of the current production UI confirms that the document row is a button and that the Study Hub component renders the production "Continue Reading" button before entering the native offline reader.
+
+The test has therefore been corrected to target the actual document-row button and, if "Continue Reading" still fails, print the complete rendered body so the next run identifies the screen/state actually reached. This is intentionally a test-only diagnostic change. The timeout is not yet classified as a production defect because the intended reader assertions ("OFFLINE" and "Offline study copy") were never reached.
+
+**Gate status remains: NOT TESTED / BLOCKED.** The next execution must use the corrected test and its diagnostic output, if needed, before deciding whether any production navigation/offline logic is implicated.
