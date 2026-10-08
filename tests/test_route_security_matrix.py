@@ -38,7 +38,9 @@ def _admin_rules():
     return [
         rule
         for rule in app.url_map.iter_rules()
-        if rule.endpoint != "static" and rule.rule.startswith("/admin")
+        if rule.endpoint != "static" and (
+            rule.rule.startswith("/admin") or rule.rule.startswith("/api/admin")
+        )
     ]
 
 
