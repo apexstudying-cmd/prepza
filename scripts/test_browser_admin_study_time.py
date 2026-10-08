@@ -9,7 +9,6 @@ import sys
 import threading
 from pathlib import Path
 from http.cookies import SimpleCookie
-from urllib.parse import urlparse
 from uuid import uuid4
 
 import pytest
@@ -136,9 +135,6 @@ def browser_login(page, email: str, password: str) -> None:
     session_cookie = parsed.get("session")
     if session_cookie is None:
         raise RuntimeError("Expected Flask session cookie from /login")
-    host = urlparse(BASE_URL).hostname
-    if not host:
-        raise RuntimeError(f"Could not determine browser QA host from {BASE_URL!r}")
     same_site = (session_cookie["samesite"] or "Lax").capitalize()
     if same_site not in {"Lax", "Strict", "None"}:
         same_site = "Lax"
@@ -146,7 +142,6 @@ def browser_login(page, email: str, password: str) -> None:
         "name": "session",
         "value": session_cookie.value,
         "url": BASE_URL + "/",
-        "path": session_cookie["path"] or "/",
         "httpOnly": bool(session_cookie["httponly"]),
         "secure": False,
         "sameSite": same_site,
