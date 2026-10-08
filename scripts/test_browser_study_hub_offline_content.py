@@ -244,7 +244,7 @@ def seed_offline_content(page, fixture: dict) -> None:
     wav = base64.b64encode(make_wav()).decode()
 
     page.evaluate(
-        """({userId, documents, pdfs, wavBase64, materialTypes}) => {
+        """async ({userId, documents, pdfs, wavBase64, materialTypes}) => {
           localStorage.setItem('prepza-offline-user-id', String(userId));
 
           const decode = base64 => Uint8Array.from(atob(base64), c => c.charCodeAt(0));
