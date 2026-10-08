@@ -406,7 +406,13 @@ def assert_offline_document(page, title: str) -> None:
     page.get_by_text("Offline study copy", exact=True).wait_for(timeout=15000)
     print(f"PASS: real document bytes open offline for {title}")
 
+    # The native offline reader returns to the selected document's Study Hub.
+    # Return once more through the real "My Study" control so the next
+    # document iteration starts from the document list.
     page.get_by_role("button", name="Back", exact=True).click(timeout=5000)
+    page.get_by_role("button", name="My Study", exact=True).wait_for(timeout=15000)
+    page.get_by_role("button", name="My Study", exact=True).click(timeout=5000)
+    page.get_by_role("button", name="My Study", exact=True).wait_for(timeout=15000)
     page.wait_for_timeout(500)
 
 
