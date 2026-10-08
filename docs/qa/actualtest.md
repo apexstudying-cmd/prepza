@@ -247,8 +247,7 @@ This is the broadest end-to-end route and business-behavior layer.
 
 ### H. `tests/test_ai_economics.py` — 12 test functions
 
-40. **`test_ada_unit_weights_are_locked`**
-    - Locks the canonical Ada AI unit weights.
+40. **`test_ada_unit_weights_are_locked`**    - Locks the canonical Ada AI unit weights.
 
 41. **`test_ada_units_round_up`**
     - Verifies AI unit calculations round up according to the economic contract.
@@ -498,7 +497,6 @@ Focused runtime scripts remain outside that 74-case suite because they exercise 
 ### C. Master release-gate model
 
 The future single command should orchestrate existing gates rather than duplicate their assertions:
-
 **Gate 1 — Environment/database**
 - Compose services healthy.
 - Database reachable.
@@ -747,7 +745,6 @@ The distributed realtime assertions have **not** been scored yet. Re-run the sam
     PASS: authenticated client joined the real database-backed conversation
     PASS: Redis Stream -> chat-worker -> Redis Socket.IO queue -> realtime process -> client delivered chat:message
     PASS: Redis stream entry 1791205395549-0 was acknowledged
-
 ### What this proves
 
 The final Redis-backed cross-process realtime delivery gate is now **GREEN**.
@@ -998,7 +995,6 @@ The local reference-data prerequisite is now satisfied using the repository's ex
 The browser gate then reached real browser authentication successfully, but timed out waiting for the callee's **Accept call** button. Diagnostics showed the callee was on the authenticated Home shell. Repository inspection confirmed the reason: `CallExperience` is mounted by `WhatsAppChatExperience`, so the test was dispatching the start-call event without opening the real conversation route where the call UI exists.
 
 The same run also exposed a test-fixture cleanup defect: first-run authenticated use creates a `study_streak` row, so deleting the disposable users directly violates `study_streak_user_id_fkey`.
-
 The browser gate was corrected on main to:
 - open `/chats/{conversation_id}` in both real browser contexts before starting the call;
 - remove dependent `study_streak` rows during disposable-user cleanup.
@@ -1249,7 +1245,6 @@ Added `.github/workflows/study-hub-runtime-regression.yml`, using PostgreSQL 17,
 
 **Release gate remains NOT GREEN.**
 
-
 ## 10. 2026-10-06 — Study Hub focused runtime gate
 
 The canonical Study Hub runtime regression script is now an executed release-gate test rather than merely an implementation check.
@@ -1433,3 +1428,119 @@ All five cases reached their intended assertions. The gate now proves student/ad
 The earlier 1-pass/4-fail navigation result is historical and superseded. No Study Time production logic was weakened to obtain this pass.
 
 **Gate status: PASS.**
+
+## QA operating protocol — read this before changing, testing, or diagnosing anything
+
+This section is an operational reminder for future QA work. **Do not skip it just because a command looks simple.**
+
+### 1. Start from repository evidence, not assumptions
+- Check the current main commit before deciding what is already verified.
+- Read this file and qa/release_status.json before choosing the next gate.
+- Treat the latest **executed evidence** as authoritative; older failures may be historical and superseded.
+- Inspect the actual test runner/script before inventing a new command or environment.
+- Never infer that a feature is green merely because related code or a test exists.
+
+### 2. Never run destructive QA against the normal application database
+- **prepza** is the normal local application database.
+- **prepza_qa** (or another database ending in **_qa**/**_test**) is the disposable QA database.
+- A temporary Docker container is **not** the same thing as a temporary database.
+- Broad QA must use **tools/run_local_qa.py**, which creates/uses the disposable QA database, applies canonical Alembic migrations, switches DATABASE_URL, and then runs the suite.
+- If a QA safety guard says it is connected to **prepza**, **stop and fix the environment**. Never disable or bypass that guard.
+- Do not manually point the broad suite at **prepza** just to make a test run.
+
+### 3. Git Bash + Docker path rule on Windows
+When running a temporary QA container from Git Bash, use the MSYS path-conversion protection:
+
+    MSYS_NO_PATHCONV=1 docker compose -f docker-compose.vps.yml run --rm --no-deps -v "$(pwd):/workspace" -w /workspace app sh -lc '...'
+
+Without **MSYS_NO_PATHCONV=1**, Git Bash can rewrite **/workspace** into a Windows Git installation path such as **C:/Program Files/Git/workspace**, causing a Docker working-directory error.
+
+### 4. Keep production and QA environments separate
+- Do not install test dependencies into or permanently enlarge the production image just to run QA.
+- Prefer the disposable QA container for pytest/test dependencies.
+- Do not weaken production security settings to make a browser test pass.
+- In particular, do not change a production Secure session cookie to non-Secure merely because Chromium is being run against an internal Docker hostname.
+
+### 5. Browser QA must use a proven browser-origin pattern
+- Compare a failing browser gate with existing browser gates before changing application logic.
+- If Flask uses a Secure session cookie, remember that **http://localhost:5000** is a special browser origin; an internal hostname such as **http://app:5000** can behave differently.
+- Prefer the already-proven browser login/navigation pattern used by other Prepza browser gates.
+- Fix the test environment/origin when the evidence shows an environment mismatch; do not weaken application authentication/security to accommodate it.
+
+### 6. Diagnose failures in layers
+When a command fails, identify which layer failed before changing code:
+1. shell/command syntax;
+2. Docker/Compose/container creation;
+3. dependency installation;
+4. database/environment selection;
+5. migration/schema setup;
+6. test harness/fixture;
+7. application backend;
+8. browser/frontend;
+9. external provider/network;
+10. CI/deployment.
+
+A failure at an earlier layer is **not evidence of a product regression at a later layer**.
+
+### 7. Do not convert blocked tests into false failures or false passes
+- A test that never reaches its intended assertion is not a valid product-failure diagnosis.
+- A partial pass does not certify the whole gate.
+- Record the exact result and why the gate is blocked.
+- When a later run passes after a harness/environment correction, explicitly mark the earlier evidence as historical/superseded.
+- Do not weaken assertions, remove safety checks, mock away real authentication/database behavior, or change production behavior merely to obtain green output.
+
+### 8. Keep release evidence synchronized
+For every meaningful release-gate run, record:
+- date;
+- exact command;
+- current commit;
+- exact pass/fail count;
+- important warnings;
+- whether the result is local, disposable QA, browser, CI, or external-provider evidence;
+- what the test proves;
+- what it does **not** prove;
+- next gate.
+
+Update qa/release_status.json when the release status changes. Do not mark a gate PASS without actual execution evidence.
+
+### 9. Work directly on main, but make focused changes
+- Prepza release work is done directly on **main**; do not create branches/PRs unless explicitly requested.
+- Make the smallest focused change that fixes the demonstrated problem.
+- Avoid unrelated refactors during release freeze.
+- Do not create unnecessary commits; a coherent fix plus its required regression test/documentation is preferable to many tiny commits.
+
+### 10. The default workflow for the next QA task
+Before giving the user a command:
+1. inspect the relevant runner/test and its environment assumptions;
+2. confirm which database it will use;
+3. confirm whether the command is safe for the normal **prepza** database;
+4. choose the existing repository QA bootstrap when one exists;
+5. run the narrowest relevant gate first;
+6. if green, run the broader gate;
+7. record the evidence immediately;
+8. only then move to the next release gate.
+
+**Core rule:** temporary container != temporary database. Use the repository's disposable QA bootstrap, preserve production security, diagnose the failing layer first, and record evidence before declaring anything green.
+
+
+## 2026-10-08 — Full disposable QA rerun after admin-security changes
+
+User-executed command used the repository's canonical disposable QA runner from a temporary Docker container.
+
+Result:
+
+    **82 passed, 3192 warnings in 42.90s**
+
+The runner confirmed:
+
+- existing **prepza_qa** was reused safely;
+- Alembic **upgrade head** completed successfully;
+- the full runner completed without test failures;
+- the newly added centralized admin authorization/security matrix tests passed;
+- organisation authorization, economics/entitlement, AI, realtime/E2EE, and personal-streak cases in the runner passed.
+
+The warnings are non-blocking deprecation/legacy API warnings, primarily **datetime.utcnow()** and one SQLAlchemy **Query.get()** warning.
+
+This is disposable PostgreSQL/Alembic QA evidence. It does **not** replace browser, external-provider, migration-rehearsal, cross-system, or final clean-environment release gates.
+
+**Latest full disposable QA gate: PASS — 82/82.**
