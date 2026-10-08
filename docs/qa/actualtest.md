@@ -1568,3 +1568,29 @@ The warnings are non-blocking deprecation/legacy API warnings, primarily **datet
 This is disposable PostgreSQL/Alembic QA evidence. It does **not** replace browser, external-provider, migration-rehearsal, cross-system, or final clean-environment release gates.
 
 **Latest full disposable QA gate: PASS — 82/82.**
+
+
+## 2026-10-08 — Offline content browser gate exposed a second test-harness IndexedDB fixture inconsistency
+
+User-executed command:
+
+    python scripts/test_browser_study_hub_offline_content.py -q
+
+Result: **BLOCKED in the test fixture before the intended browser assertions**.
+
+Chromium failed during `seed_offline_content()` with:
+
+    NotFoundError: Failed to execute 'transaction' on 'IDBDatabase': One of the specified object stores was not found.
+
+Source comparison against the production offline modules and the already-working browser gates showed the problem was in the test fixture, not PostgreSQL, Flask, or the browser product path. The fixture opened the shared `prepza-offline-v2` database three times concurrently at version 3, with each opener responsible for creating only one store. Because `savedStudyHub`, `generatedMaterials`, and `generatedAudio` are stores in one shared database, concurrent first-open upgrade handlers could leave one opener without another store when it immediately started its transaction.
+
+The production implementation is different: `generatedMaterials.ts` and `studyHubOffline.ts` now use the shared v4 schema and create the required stores during the v4 upgrade. The test fixture has therefore been corrected to open the shared database once at version 4, create all three stores in one upgrade handler, then seed them sequentially. The separate document-asset database is also opened once and seeded after its own schema creation.
+
+This result is **not evidence of a production regression**. It is evidence that the browser QA fixture was not faithfully modelling the production IndexedDB schema lifecycle. The earlier production IndexedDB v3 migration defect remains a real historical production-impacting issue and is already fixed; this newly found fixture defect is test-only.
+
+**Gate status remains: NOT TESTED / BLOCKED.** The corrected fixture must be executed before the offline content/artifact browser gate can be marked PASS.
+
+**Important production-impact classification from this run:**
+- Host-Python fixture connecting to `127.0.0.1:5432`: **test harness only**, not production.
+- Shared IndexedDB seed race/missing-store error: **test harness only**, not production.
+- Earlier v3 shared IndexedDB migration defect discovered during this same gate preparation: **real production-impacting defect, already fixed and requires the browser gate to verify the deployed frontend migration path**.
