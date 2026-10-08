@@ -8,7 +8,6 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from http.cookies import SimpleCookie
 from uuid import uuid4
 
 import pytest
@@ -21,10 +20,11 @@ PASSWORD = "AdminStudyTime!12345"
 
 
 def run_container_python(code: str) -> str:
-    # The test runs inside the app container. Docker is not installed there,
-    # so invoke a second Python process in the same container instead.
+    # Browser execution stays on the host so Playwright can use the same
+    # http://localhost:5000 origin as the other real-browser gates. Database
+    # fixtures and direct backend assertions still run inside the app container.
     result = subprocess.run(
-        [sys.executable, "-"],
+        ["docker", "compose", "-f", COMPOSE_FILE, "exec", "-T", "app", "python", "-"],
         cwd=ROOT,
         input=code,
         text=True,
@@ -122,42 +122,13 @@ def browser_login(page, email: str, password: str) -> None:
         headers={"Content-Type": "application/json"},
     )
     if not response.ok:
-        raise RuntimeError(f"/login failed: {response.status} {response.text()}")
+        raise RuntimeError(f"/login failed: {response.status}: {response.text()}")
 
-    # Flask marks the production session cookie Secure. Because this disposable
-    # QA browser talks to the app over internal HTTP, Chromium may refuse to
-    # store that Set-Cookie header at all. Read the real cookie from the login
-    # response, then re-add the same value to this test context with Secure
-    # disabled. Production configuration remains unchanged.
-    set_cookie = response.headers.get("set-cookie")
-    if not set_cookie:
-        raise RuntimeError("Expected /login to return a session Set-Cookie header")
-
-    parsed = SimpleCookie()
-    parsed.load(set_cookie)
-    morsel = parsed.get("session")
-    if morsel is None:
-        raise RuntimeError(
-            "Expected /login Set-Cookie to contain the session cookie; "
-            f"header={set_cookie!r}"
-        )
-
-    cookie = {
-        "name": "session",
-        "value": morsel.value,
-        "url": BASE_URL,
-        "path": morsel["path"] or "/",
-        "secure": False,
-        "httpOnly": bool(morsel["httponly"]),
-    }
-    same_site = (morsel["samesite"] or "").lower()
-    if same_site in {"lax", "strict", "none"}:
-        cookie["sameSite"] = same_site.capitalize()
-
-    page.context.clear_cookies(name="session")
-    page.context.add_cookies([cookie])
-    # page.request shares cookies with this browser context, so authenticated
-    # API requests use the real session. Production configuration remains Secure.
+    # Match the proven browser-login pattern used by the other real-browser
+    # gates. BASE_URL should be http://localhost:5000 so Chromium accepts the
+    # Flask Secure session cookie on the special localhost origin.
+    page.goto(BASE_URL + "/", wait_until="domcontentloaded")
+    page.wait_for_timeout(1500)
 
 
 def browser_json(page, path: str) -> dict:
