@@ -1429,6 +1429,30 @@ The earlier 1-pass/4-fail navigation result is historical and superseded. No Stu
 
 **Gate status: PASS.**
 
+## 2026-10-08 — Organisation economics discussion: backend metering is tested, full organisation journey is not
+
+The organisation/opportunity backend is covered more deeply than the release-gate summary alone might suggest, but it is important not to overstate that evidence.
+
+The disposable QA suite currently proves organisation-side behavior including:
+- organisation opportunity creation and ownership;
+- targeting by university/program/year/semester and profile changes;
+- admin verification, review, approval and publishing;
+- student visibility and outsider/tenant isolation;
+- real organisation opportunity rate-limit behavior;
+- prepaid B2B campaign metering and advertiser-balance protection;
+- campaign pricing snapshots remain locked after funding;
+- a qualifying feed impression is billed at the configured CPM economics;
+- a qualifying click is billed at the configured CPC economics;
+- replay of the same billable event is idempotent;
+- student frequency caps prevent repeated billable delivery to the same student;
+- campaign exhaustion stops further spend and reaches zero remaining balance.
+
+The dedicated metering regression is `test_b2b_prepaid_metering_protects_advertiser_balance_and_locks_campaign_pricing`. Its tested examples include KES 350 CPM producing 35 minor units for one qualifying impression, KES 20 CPC producing 2000 minor units for one qualifying click, and a KES 350-funded campaign exhausting after 1000 qualifying impressions.
+
+**What this does NOT prove yet:** a complete real-provider organisation journey from payment/provider success -> organisation funding -> campaign delivery -> student-facing opportunity -> advertiser deduction across all external boundaries. Paystack/provider behavior is tested separately as a contract/idempotency layer, but controlled external-provider verification and the broader cross-system journey remain release gates.
+
+**Ambassador routes are also not currently a separate release gate in this ledger.** If ambassador functionality is launch-scoped, it must receive a dedicated gate covering route authorization, referral attribution, the intended commission calculation, payout eligibility/balance, duplicate/failure/refund handling, and the complete referral -> paid student -> commission -> payout-eligibility journey. Until such a gate is executed, do not claim ambassador flows are release-certified.
+
 ## QA operating protocol — read this before changing, testing, or diagnosing anything
 
 This section is an operational reminder for future QA work. **Do not skip it just because a command looks simple.**
