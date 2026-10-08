@@ -2341,17 +2341,66 @@ def sync_paystack_payment_status(reference):
     return payment
 
 
+def _admin_authorization_failure():
+    """Return a server-side denial response for the privileged admin surface."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Not logged in"}), 401
+
+    user = db.session.get(User, user_id)
+    if not user or not user.is_admin or user.is_suspended:
+        return jsonify({"error": "Forbidden"}), 403
+
+    return None
+
+
 def require_admin(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        user_id = session.get("user_id")
-        if not user_id:
-            return jsonify({"error": "Not logged in"}), 401
-        user = db.session.get(User, user_id)
-        if not user or not user.is_admin:
-            return jsonify({"error": "Forbidden"}), 403
+        denied = _admin_authorization_failure()
+        if denied:
+            return denied
         return f(*args, **kwargs)
     return decorated
+
+
+def _is_admin_surface(path):
+    return (
+        path == "/admin"
+        or path.startswith("/admin/")
+        or path == "/api/admin"
+        or path.startswith("/api/admin/")
+    )
+
+
+@app.before_request
+def enforce_admin_surface_security():
+    """
+    Central policy-enforcement point for every admin HTTP route.
+
+    Some reconciled admin modules intentionally keep their route functions
+    free of decorators because they are restored as a single runtime layer.
+    The boundary therefore cannot depend on individual route annotations:
+    every /admin and /api/admin request must be authorized here.
+
+    Mutating admin requests additionally require the existing session-bound
+    CSRF token. Individual routes may also use @require_csrf; duplicate
+    validation is harmless and keeps this central boundary fail-closed.
+    """
+    if not _is_admin_surface(request.path):
+        return None
+
+    denied = _admin_authorization_failure()
+    if denied:
+        return denied
+
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        provided = request.headers.get("X-CSRF-Token")
+        expected = session.get("csrf_token")
+        if not provided or not expected or not hmac.compare_digest(provided, expected):
+            return jsonify({"error": "Missing or invalid CSRF token"}), 403
+
+    return None
 
 
 def login_required(f):
