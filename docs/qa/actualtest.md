@@ -15,8 +15,8 @@ The full QA runner currently executes **10 test files**.
 
 Those files contain:
 
-- **71 test functions** named `test_...`
-- **74 collected pytest test cases**
+- **72 test functions** named `test_...`
+- **75 collected pytest test cases**
 - The difference is caused by one parametrized test:
   - `test_generation_request_ceilings_are_enforced` runs for **4 material types**: summary, podcast, flashcards, and mind map.
   - Therefore that one function contributes 4 collected cases instead of 1.
@@ -153,7 +153,7 @@ This is the broadest end-to-end route and business-behavior layer.
     - Verifies billable-event pricing is locked to campaign economics.
     - Exercises B2B metering behavior against advertiser balance.
 
-### B. `tests/test_route_security_matrix.py` — 2 test functions
+### B. `tests/test_route_security_matrix.py` — 3 test functions
 
 16. **`test_every_admin_get_route_rejects_anonymous_and_non_admin_users`**
     - Enumerates admin GET routes.
@@ -163,159 +163,163 @@ This is the broadest end-to-end route and business-behavior layer.
     - Enumerates admin state-changing routes.
     - Verifies missing/invalid CSRF protection is rejected for the security boundary.
 
+18. **`test_revoked_admin_cannot_continue_using_existing_session`**
+    - Logs an admin into an existing session, revokes `is_admin` in the live database row, and verifies the same session is immediately denied with 403.
+    - Restores the fixture's admin flag during cleanup.
+
 ### C. `tests/test_authenticated_route_matrix.py` — 1 test function
 
-18. **`test_every_get_route_dispatches_for_authenticated_student_and_admin`**
+19. **`test_every_get_route_dispatches_for_authenticated_student_and_admin`**
     - Exercises the GET route surface with authenticated student and admin identities.
     - Detects routes that look registered but fail at runtime.
 
 ### D. `tests/test_local_qa_authz.py` — 5 test functions
 
-19. **`test_student_cannot_cross_organisation_boundary`**
+20. **`test_student_cannot_cross_organisation_boundary`**
     - Creates a second organisation.
     - Verifies one student cannot use another tenant's IDs to create or mutate resources.
     - This is an IDOR/horizontal authorization check.
 
-20. **`test_student_cannot_cross_vertical_admin_boundary`**
+21. **`test_student_cannot_cross_vertical_admin_boundary`**
     - Verifies an ordinary student cannot perform administrator-only operations.
 
-21. **`test_logout_and_session_version_rotation_invalidate_old_session`**
+22. **`test_logout_and_session_version_rotation_invalidate_old_session`**
     - Verifies logout and session-version rotation invalidate an old authenticated session.
 
-22. **`test_suspended_account_cannot_continue_using_existing_session`**
+23. **`test_suspended_account_cannot_continue_using_existing_session`**
     - Suspends an account.
     - Verifies an existing authenticated session no longer grants access.
 
-23. **`test_state_changing_organisation_actions_require_csrf`**
+24. **`test_state_changing_organisation_actions_require_csrf`**
     - Verifies organisation mutations require the expected CSRF token.
 
 ### E. `tests/test_frontend_ai_generation_contract.py` — 3 test functions
 
-24. **`test_backend_generation_routes_and_payload_keys_match_contract`**
+25. **`test_backend_generation_routes_and_payload_keys_match_contract`**
     - Verifies backend generation endpoints and response payload names match the expected contract.
 
-25. **`test_active_frontend_generation_contract_matches_backend`**
+26. **`test_active_frontend_generation_contract_matches_backend`**
     - Compares active frontend generation calls with backend route/payload expectations.
     - Catches frontend/backend naming drift.
 
-26. **`test_frontend_usage_contract_uses_canonical_usage_endpoint`**
+27. **`test_frontend_usage_contract_uses_canonical_usage_endpoint`**
     - Verifies the frontend uses the canonical usage endpoint.
 
 ### F. `tests/test_ai_artifact_fingerprint.py` — 10 test functions
 
-27. **`test_shared_identity_is_deterministic`**
+28. **`test_shared_identity_is_deterministic`**
     - Same generation identity inputs produce the same fingerprint.
 
-28. **`test_parameter_order_does_not_change_identity`**
+29. **`test_parameter_order_does_not_change_identity`**
     - Reordering equivalent parameters does not create a different artifact identity.
 
-29. **`test_parameters_change_identity`**
+30. **`test_parameters_change_identity`**
     - Meaningful generation parameter changes create a different identity.
 
-30. **`test_prompt_and_schema_versions_change_identity`**
+31. **`test_prompt_and_schema_versions_change_identity`**
     - Prompt/schema version changes invalidate the old artifact identity.
 
-31. **`test_shared_and_private_scopes_never_collide`**
+32. **`test_shared_and_private_scopes_never_collide`**
     - Shared and private generation scopes cannot accidentally share identities.
 
-32. **`test_private_identity_is_owner_specific`**
+33. **`test_private_identity_is_owner_specific`**
     - Private artifact identity includes the correct owner boundary.
 
-33. **`test_scope_is_normalized`**
+34. **`test_scope_is_normalized`**
     - Scope values are normalized consistently.
 
-34. **`test_private_requires_owner`**
+35. **`test_private_requires_owner`**
     - Private generation cannot be created without an owner.
 
-35. **`test_shared_rejects_owner`**
+36. **`test_shared_rejects_owner`**
     - Shared generation cannot incorrectly carry a private owner identity.
 
-36. **`test_invalid_scope_is_rejected`**
+37. **`test_invalid_scope_is_rejected`**
     - Unknown generation scopes are rejected.
 
 ### G. `tests/test_ai_generation_store.py` — 2 test functions
 
-37. **`test_generation_lookup_shapes_are_explicit`**
+38. **`test_generation_lookup_shapes_are_explicit`**
     - Verifies generation lookup states have an explicit, usable shape.
 
-38. **`test_only_owner_is_allowed_to_call_provider`**
+39. **`test_only_owner_is_allowed_to_call_provider`**
     - Verifies only the generation owner/producer can reach the provider path.
 
 ### H. `tests/test_ai_economics.py` — 12 test functions
 
-39. **`test_ada_unit_weights_are_locked`**
+40. **`test_ada_unit_weights_are_locked`**
     - Locks the canonical Ada AI unit weights.
 
-40. **`test_ada_units_round_up`**
+41. **`test_ada_units_round_up`**
     - Verifies AI unit calculations round up according to the economic contract.
 
-41. **`test_plan_defaults_match_locked_entitlements`**
+42. **`test_plan_defaults_match_locked_entitlements`**
     - Verifies Free/Plus/Pro default limits match the locked product economics.
 
-42. **`test_plan_patch_rejects_unknown_fields`**
+43. **`test_plan_patch_rejects_unknown_fields`**
     - Rejects unsupported plan fields.
 
-43. **`test_plan_patch_rejects_negative_limits`**
+44. **`test_plan_patch_rejects_negative_limits`**
     - Rejects negative quota/limit values.
 
-44. **`test_plan_patch_accepts_feature_and_access_flags`**
+45. **`test_plan_patch_accepts_feature_and_access_flags`**
     - Verifies valid feature/access flags can be patched.
 
-45. **`test_offline_study_is_core_for_free`**
+46. **`test_offline_study_is_core_for_free`**
     - Verifies offline study is part of the Free entitlement.
 
-46. **`test_admin_cannot_disable_offline_study`**
+47. **`test_admin_cannot_disable_offline_study`**
     - Protects the product contract from disabling the core offline feature.
 
-47. **`test_paystack_plan_sync_updates_provider_when_price_drifts`**
+48. **`test_paystack_plan_sync_updates_provider_when_price_drifts`**
     - Verifies provider plans are updated when the provider price is wrong.
 
-48. **`test_paystack_plan_sync_does_not_write_when_already_matching`**
+49. **`test_paystack_plan_sync_does_not_write_when_already_matching`**
     - Verifies no unnecessary provider write occurs when the plan already matches.
 
-49. **`test_paystack_plan_sync_requires_plan_code`**
+50. **`test_paystack_plan_sync_requires_plan_code`**
     - Rejects provider synchronization without the required plan code.
 
-50. **`test_student_offer_definition_is_monthly_and_plan_isolated`**
+51. **`test_student_offer_definition_is_monthly_and_plan_isolated`**
     - Verifies the student offer is monthly and plan-specific.
 
 ### I. `tests/test_ai_reusable_generation.py` — 13 test functions
 
-51. **`test_normalize_parameters_is_deterministic_and_whitespace_safe`**
+52. **`test_normalize_parameters_is_deterministic_and_whitespace_safe`**
     - Canonicalizes generation parameters deterministically.
 
-52. **`test_normalize_parameters_rejects_unknown_keys`**
+53. **`test_normalize_parameters_rejects_unknown_keys`**
     - Rejects unsupported generation parameters.
 
-53. **`test_normalize_parameters_rejects_invalid_counts`**
+54. **`test_normalize_parameters_rejects_invalid_counts`**
     - Rejects invalid generation counts.
 
-54. **`test_normalize_parameters_rejects_blank_strings`**
+55. **`test_normalize_parameters_rejects_blank_strings`**
     - Rejects meaningless blank generation parameters.
 
-55. **`test_normalize_parameters_rejects_unknown_material_type`**
+56. **`test_normalize_parameters_rejects_unknown_material_type`**
     - Rejects unsupported artifact/material types.
 
-56. **`test_empty_parameters_are_canonical`**
+57. **`test_empty_parameters_are_canonical`**
     - Verifies empty parameter sets have a canonical representation.
 
-57. **`test_first_generation_calls_provider_and_second_identical_request_reuses`**
+58. **`test_first_generation_calls_provider_and_second_identical_request_reuses`**
     - First request calls the provider.
     - Identical later request reuses the ready artifact instead of paying for another generation.
 
-58. **`test_inflight_identical_request_attaches_without_provider_duplicate`**
+59. **`test_inflight_identical_request_attaches_without_provider_duplicate`**
     - Concurrent identical requests attach to the in-flight generation rather than duplicating provider work.
 
-59. **`test_reused_ready_artifact_does_not_check_entitlement`**
+60. **`test_reused_ready_artifact_does_not_check_entitlement`**
     - Verifies a ready reusable artifact follows the intended reuse path without incorrectly re-consuming the generation entitlement.
 
-60. **`test_flashcard_variant_pool_rotates_four_versions_before_reuse`**
+61. **`test_flashcard_variant_pool_rotates_four_versions_before_reuse`**
     - Verifies four generation variants rotate before reuse.
 
-61. **`test_all_document_materials_use_the_shared_four_variant_pool`**
+62. **`test_all_document_materials_use_the_shared_four_variant_pool`**
     - Verifies summary, quiz, flashcards, podcast, and mind map use the shared variant-pool mechanism.
 
-62. **`test_generation_request_ceilings_are_enforced`**
+63. **`test_generation_request_ceilings_are_enforced`**
     - Parametrized over four material types:
       - summary: maximum 10 pages
       - podcast: maximum 50 minutes
@@ -323,45 +327,45 @@ This is the broadest end-to-end route and business-behavior layer.
       - mind map: maximum 50 nodes
     - This is the reason the 71 functions become 74 collected pytest cases.
 
-63. **`test_generation_store_exposes_inflight_family_lookup`**
+64. **`test_generation_store_exposes_inflight_family_lookup`**
     - Verifies the generation store exposes the in-flight family lookup required for request coalescing.
 
 ### J. `tests/test_realtime_e2ee_runtime.py` — 8 test functions
 
-64. **`test_socket_membership_and_same_conversation_delivery`**
+65. **`test_socket_membership_and_same_conversation_delivery`**
     - Creates an E2EE direct conversation between student A and B.
     - Verifies both members can join.
     - Verifies the admin outsider is denied.
     - Sends an encrypted payload through the real HTTP message route.
     - Verifies the receiver gets the persisted encrypted message over realtime.
 
-65. **`test_direct_e2ee_plaintext_is_rejected_before_persistence`**
+66. **`test_direct_e2ee_plaintext_is_rejected_before_persistence`**
     - Sends plaintext to a direct E2EE conversation.
     - Verifies HTTP 409.
     - Verifies plaintext was not persisted.
 
-66. **`test_chat_retry_is_idempotent_and_does_not_duplicate_message`**
+67. **`test_chat_retry_is_idempotent_and_does_not_duplicate_message`**
     - Sends the same client message twice.
     - Verifies the retry returns the same message identity rather than creating a duplicate row.
 
-67. **`test_offline_receiver_recovers_from_database_history`**
+68. **`test_offline_receiver_recovers_from_database_history`**
     - Sends an encrypted message while the receiver is not connected to realtime.
     - Verifies the receiver can recover it from PostgreSQL chat history.
 
-68. **`test_socket_session_version_and_suspension_are_enforced`**
+69. **`test_socket_session_version_and_suspension_are_enforced`**
     - Verifies a valid session can connect.
     - Rotates the user's session version and verifies the stale socket is rejected.
     - Suspends the user and verifies a new socket is rejected.
 
-69. **`test_frontend_realtime_contract_matches_backend`**
+70. **`test_frontend_realtime_contract_matches_backend`**
     - Verifies frontend and backend agree on realtime event names and important Socket.IO behavior.
     - Checks credentials, reconnection, disconnect behavior, and offline client message IDs.
 
-70. **`test_realtime_deployment_contains_dedicated_chat_worker`**
+71. **`test_realtime_deployment_contains_dedicated_chat_worker`**
     - Verifies the production-style Compose stack contains the dedicated `chat-worker`.
     - Verifies Redis configuration and worker consumption/channel wiring.
 
-71. **`test_redis_stream_queue_is_not_treated_as_postgres_source_of_truth`**
+72. **`test_redis_stream_queue_is_not_treated_as_postgres_source_of_truth`**
     - Verifies the code explicitly treats PostgreSQL as durable source of truth.
     - Verifies Redis Stream enqueue/ack/recovery primitives exist.
 
@@ -1411,3 +1415,21 @@ The first attempted test still passes because it does not require browser naviga
 Source inspection confirms the root route is the Flask `/` handler serving the built frontend `index.html`. The next diagnostic is therefore to isolate the HTTP response from the browser navigation path before changing Study Time logic or weakening the gate.
 
 **Gate status remains IN PROGRESS.** Do not mark this gate PASS or convert the timeout into a product failure until the root-document navigation path is explained and the four blocked cases execute their actual assertions.
+
+## 2026-10-08 — Admin Study Hub browser gate cleared
+
+The browser authentication/navigation defect was isolated to the test running Chromium against the internal Docker hostname `http://app:5000`. The corrected gate now follows the same proven browser-login pattern as the other real-browser gates and uses `http://localhost:5000`, allowing Chromium to accept the Flask Secure session cookie on the special localhost origin.
+
+User-executed command:
+
+    python scripts/test_browser_admin_study_time.py -q
+
+Result:
+
+    **5 passed in 117.11s**
+
+All five cases reached their intended assertions. The gate now proves student/admin view agreement after reconnect reconciliation, concurrent sync does not double-credit, the 12-hour daily ceiling is identical in both views, the Nairobi day boundary is respected, and admin accounts are excluded while students remain isolated.
+
+The earlier 1-pass/4-fail navigation result is historical and superseded. No Study Time production logic was weakened to obtain this pass.
+
+**Gate status: PASS.**
