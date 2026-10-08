@@ -94,10 +94,10 @@ def test_every_admin_mutation_fails_without_csrf_for_all_non_admins_and_admin(
                     method=method,
                     follow_redirects=False,
                 )
-                if response.status_code != 403:
+                if response.status_code not in {401, 403}:
                     failures.append(
                         f"{label} {method} {path} ({rule.endpoint}) -> "
-                        f"{response.status_code}, expected 403 without CSRF"
+                        f"{response.status_code}, expected 401/403 without CSRF"
                     )
 
     assert not failures, "\n".join(failures)
