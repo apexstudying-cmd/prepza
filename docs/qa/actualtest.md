@@ -1613,3 +1613,24 @@ This run reached the offline My Study list successfully, so the earlier IndexedD
 The test has therefore been corrected to target the actual document-row button and, if "Continue Reading" still fails, print the complete rendered body so the next run identifies the screen/state actually reached. This is intentionally a test-only diagnostic change. The timeout is not yet classified as a production defect because the intended reader assertions ("OFFLINE" and "Offline study copy") were never reached.
 
 **Gate status remains: NOT TESTED / BLOCKED.** The next execution must use the corrected test and its diagnostic output, if needed, before deciding whether any production navigation/offline logic is implicated.
+
+## 2026-10-08 — Offline content gate: document iteration returned to the wrong UI level
+
+User-executed command:
+
+    python scripts/test_browser_study_hub_offline_content.py -q
+
+Result:
+
+    PASS: multiple saved documents remain listed offline
+    FAIL: waiting for locator("button").filter(has_text="Offline Economics Notes").first
+
+The failure is a test navigation bug. The production offline reader Back control returns to the selected document Study Hub. The test then immediately tried to find document-row buttons, which exist on the parent Study Materials screen.
+
+The test is now corrected to follow the real UI path after each offline reader assertion:
+
+    offline reader -> Back -> document Study Hub -> My Study -> document list
+
+This does not change production offline behavior and does not generate any materials. The generated-material portion seeds already-ready artifacts, opens them through the real replay UI while offline, and asserts that no generation POST is sent.
+
+Gate status remains NOT TESTED / BLOCKED until the corrected browser script is executed.

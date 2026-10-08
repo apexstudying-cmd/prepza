@@ -1573,3 +1573,15 @@ I traced this against the current production flow before changing application co
 Because the test timed out before those reader assertions, this run does not prove a production offline-reader failure. The browser test was too opaque about which UI state it had reached. The test has now been corrected to click the actual document-row button and dump the rendered page body when Continue Reading is still absent.
 
 **Production-impact classification:** currently unclassified / not proven. Do not change production navigation or offline persistence based on this timeout alone. The next run must identify the actual rendered state first.
+
+## 2026-10-08 — Offline content gate: final navigation-layer diagnosis
+
+The newest failure was:
+
+    waiting for locator("button").filter(has_text="Offline Economics Notes").first
+
+This is not an offline-cache or generation failure. The test had already proved that all three saved documents remained listed offline. The failure occurred because the offline reader Back button returns to the document Study Hub, not directly to the parent Study Materials list.
+
+The corrected test now follows the actual production navigation hierarchy: reader -> document Study Hub -> My Study -> document list.
+
+The generated-material objective remains unchanged: artifacts are seeded as already-ready local records, the browser is taken offline, and the existing material replay screens must resolve those cached payloads without sending any generation POST request. This gate is about offline persistence/replay, not offline generation.
