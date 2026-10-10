@@ -118,7 +118,7 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "NOT_TESTED",
-      "evidence": "Last user-executed run was against 4f1ed663 and stopped during async IndexedDB seeding because the service-worker controllerchange reload destroyed the evaluate context; no artifact assertion ran. Current main fixes canonical offline caching for exact ready private-owned materials (the screen POST response was not the canonical stored-record shape), caches the selected ready podcast descriptor and audio Blob, and rewrites the gate to seed ready private GeneratedMaterial rows in PostgreSQL then populate IndexedDB through the actual UI online. The browser guard blocks material-generation POSTs without X-Prepza-Material-ID before Flask can enqueue AI work; podcast readiness/audio are stubbed at the HTTP boundary. Offline replay, zero-generation-POST and reload assertions still require user execution after rebuilding. Gate remains NOT_TESTED."
+      "evidence": "Last user-executed run was against 4f1ed663 and stopped during async IndexedDB seeding because the service-worker controllerchange reload destroyed the evaluate context; no artifact assertion ran. Current main fixes canonical offline caching for exact ready private-owned materials (the screen POST response was not the canonical stored-record shape), caches the selected ready podcast descriptor and audio Blob, and rewrites the gate to seed ready private GeneratedMaterial rows in PostgreSQL then populate IndexedDB through the actual UI online. The browser guard blocks material-generation POSTs without X-Prepza-Material-ID before Flask can enqueue AI work; podcast readiness/audio are stubbed at the HTTP boundary. Offline replay, zero-generation-POST and reload assertions still require user execution after rebuilding. Gate remains NOT_TESTED. Local run on checkout f0b848274311a982e277428ef5751936ef8f590b failed after GET /documents fixture validation: first Summary card did not render expected `Offline summary` within 15 seconds. This is not a latest-main result; latest-main real-browser gate remains unverified. Do not mark PASS."
     },
     {
       "id": "admin_study_time_visibility",
@@ -127,6 +127,7 @@
     }
   ],
   "next_actions": [
+    "Diagnose the selected ready-material replay failure: GET /documents fixture contract passed, but the Summary screen did not render the existing `Offline summary` payload on local checkout f0b8482. Inspect prepza-open-material handoff and canonical GET/cache/render path; do not weaken the assertion or invoke new generation.",
     "Run the targeted admin authorization/security tests in the disposable QA environment; do not install pytest into the production app image.",
     "Rebuild the app image and run scripts/test_browser_study_hub_offline_content.py -q against current main; the latest version blocks unguarded AI-generation POSTs and proves the real online cache writer before the offline replay/reload assertions. Keep this gate NOT_TESTED until the full local browser run passes.",
     "Execute the remaining cross-system journeys and existing-database migration rehearsal.",
@@ -134,5 +135,5 @@
     "Keep controlled external-provider verification separate from the local release freeze unless explicitly approved as an external-provider gate."
   ],
   "current_main_commit": "bb21f91f166b103d8c4dd67d55b5b5266273fc96",
-  "verification_note": "Current main (bb21f91f) includes offline replay source/test fixes that have not yet been executed by the browser content/artifact gate. Keep that gate NOT_TESTED until the rebuilt browser run reaches and passes artifact replay, zero-generation-POST, podcast-Blob, and offline-reload assertions. The separate Study Hub lifecycle gate's historical verified commit remains e963cca1."
+  "verification_note": "Latest code head e610fbfe6b44e9cd6a13510c545aa55e64fc738f still requires the local real-browser gate. The user's reported run on older checkout f0b848274311a982e277428ef5751936ef8f590b failed after the GET /documents fixture contract passed but before the selected ready Summary payload rendered. Preserve local uncommitted changes, safely sync/rebuild the exact target commit, diagnose ready-material selection-to-screen restoration, then rerun both offline Study Hub browser gates. No PASS is claimed."
 }
