@@ -1029,7 +1029,7 @@ function DocumentStudyHubScreen({
           if (saved) {
             const cached = await listOfflineGeneratedMaterials()
             const offlineMaterials = cached.flatMap(row => {
-              const match = row.path.match(/^\\/documents\\/(\\d+)\\/materials\\/(\\d+)$/)
+              const match = row.path.match(/^\/documents\/(\d+)\/materials\/(\d+)$/)
               if (!match || Number(match[1]) !== activeDocumentId) return []
               const payload = row.payload as any
               if (!payload?.type || payload?.status !== 'ready') return []
