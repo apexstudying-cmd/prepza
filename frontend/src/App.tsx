@@ -111,6 +111,7 @@ async function cachePrivateReadyGeneratedMaterialOffline(
     status: string
     parameters?: Record<string, unknown>
     payload: unknown
+    private_to_current_user?: boolean
   },
 ): Promise<boolean> {
   const id = Number(materialId)
@@ -118,23 +119,6 @@ async function cachePrivateReadyGeneratedMaterialOffline(
   if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(ownerId) || ownerId <= 0) return false
 
   try {
-    const detail = await api<{
-      materials?: Array<{
-        id: number
-        type: string
-        status: string
-        scope?: string
-        owner_user_id?: number | null
-      }>
-    }>(`/documents/${documentId}`)
-    const listed = (detail.materials || []).find(material => Number(material.id) === id)
-    if (
-      !listed ||
-      listed.status !== 'ready' ||
-      listed.scope !== 'private' ||
-      Number(listed.owner_user_id) !== ownerId
-    ) return false
-
     const path = `/documents/${documentId}/materials/${id}`
     const canonical = canonicalOverride ?? await api<{
       material_id: number
@@ -142,19 +126,20 @@ async function cachePrivateReadyGeneratedMaterialOffline(
       status: string
       parameters?: Record<string, unknown>
       payload: unknown
+      private_to_current_user?: boolean
     }>(path)
     if (
       Number(canonical.material_id) !== id ||
-      canonical.type !== listed.type ||
       canonical.status !== 'ready' ||
-      canonical.payload == null
+      canonical.payload == null ||
+      canonical.private_to_current_user !== true
     ) return false
 
     await saveGeneratedMaterialOffline(path, null, canonical)
     return true
   } catch {
-    // Offline persistence is best-effort. Reopening the Study Hub while online
-    // can reconcile a ready private material if this request was interrupted.
+    // Offline persistence is best-effort. A failed cache write must never
+    // interrupt opening a material that the server has already authorized.
     return false
   }
 }
