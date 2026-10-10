@@ -1749,3 +1749,16 @@ Commit `b212a9193702ad4446bc1f45143ca11bbc900c9a` changes the test to poll for t
 **Fix:** Commit `45965bfeeebdf804a122a432621a17455b2d7589` adds a deduplicating merge by `documentId + materialId` and uses it for both online and offline results. Either source can now complete first without erasing rows from the other source. This is a frontend source change and requires rebuilding/recreating the local app container before the browser rerun.
 
 **Verification status: FIX IMPLEMENTED, RERUN REQUIRED.** The existing browser test is the regression check, but the fix has not yet been verified in the user's rebuilt runtime. Do not mark the offline content gate PASS until the complete online-cache/offline-reopen test finishes.
+
+
+## 2026-10-10 — My Study should replay local artifacts without generation POSTs
+
+**User requirement:** Uploaded My Study documents are saved as complete local IndexedDB Blobs during upload. Reopening them should use that local package instead of repeatedly asking Flask to serve the same source document. Library is a separate path and was not changed.
+
+**Implementation on main:** Commit `0630f358c1e844adfd2736c0f31d53264a8b3b2d` makes `DocumentStudyHubScreen` check the active user's validated local Study Hub package before calling document-detail/reading endpoints. For already-saved uploads it builds the Study Hub metadata and cached-material list locally, and restores reading position from local storage. The previous online path remains as a fallback for records without a valid local package, including Library-originated items; the Library route and saved-item API were left untouched. The offline document listing also reuses the locally remembered account ID instead of making a second `/me` call.
+
+Ready generated materials now follow an explicit replay path: use the selected IndexedDB artifact first (even when online); if it is not cached and the browser is online, fetch the single canonical `GET /documents/<id>/materials/<material_id>` record and cache it only after the existing owner/scope check confirms it is private to the signed-in student. A selected replay never falls back to a generation POST. New generation without a selected ready material still uses the established generation flow. Shared Library materials are not written into the private offline artifact cache.
+
+**Regression gate updated:** `scripts/test_browser_study_hub_offline_content.py` now blocks generation POSTs during ready-material replay, requires at least 12 canonical material GETs for the initial online cache-fill, and reports the rendered page body if a payload still fails to appear. It continues to test offline replay and podcast audio persistence.
+
+**Verification status: PATCHED, REBUILD/RERUN REQUIRED.** The user's last execution occurred before this change and stopped at the first Summary payload. No pass is claimed for this new code. Rebuild the app container and rerun the full browser gate; mark it passed only after every online material, offline replay, podcast Blob, and zero-generation-POST assertion completes.
