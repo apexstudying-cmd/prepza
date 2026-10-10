@@ -752,11 +752,39 @@ function TopBar({ title, onBack, setScreen, rightEl }: { title?: string; onBack?
 
 
 // ─── MY STUDY ────────────────────────────────────────────────────────────────
+type StudyMaterialRow = {
+  documentId: number
+  documentTitle: string
+  materialId: number
+  type: string
+  parameters?: Record<string, unknown>
+}
+
+/**
+ * The online /documents response and the IndexedDB lookup intentionally run
+ * in parallel. Keep rows from both sources whichever resolves first; replacing
+ * the whole array lets a late, empty offline lookup erase online materials.
+ */
+function mergeStudyMaterialRows(
+  current: StudyMaterialRow[],
+  incoming: StudyMaterialRow[],
+): StudyMaterialRow[] {
+  const merged = current.slice()
+  const seen = new Set(current.map(row => `${row.documentId}:${row.materialId}`))
+  for (const row of incoming) {
+    const key = `${row.documentId}:${row.materialId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(row)
+  }
+  return merged
+}
+
 function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
   const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'documents' | 'materials'>('documents')
   const [documents, setDocuments] = useState<HomeDocument[]>([])
-  const [materials, setMaterials] = useState<{ documentId: number; documentTitle: string; materialId: number; type: string; parameters?: Record<string, unknown> }[]>([])
+  const [materials, setMaterials] = useState<StudyMaterialRow[]>([])
   const [offlineDocuments, setOfflineDocuments] = useState<HomeDocument[]>([])
   const [savedLibrary, setSavedLibrary] = useState<SavedLibraryItem[]>([])
   const [csrfToken, setCsrfToken] = useState('')
@@ -811,7 +839,11 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
               parameters: payload.parameters || {},
             }]
           })
-          if (!cancelled) setMaterials(cachedMaterials)
+          // This IndexedDB lookup races the online /documents request. Merge
+          // instead of replacing, so an empty cache result cannot erase API rows.
+          if (!cancelled) {
+            setMaterials(current => mergeStudyMaterialRows(current, cachedMaterials))
+          }
         }
       } catch { /* offline package lookup is non-fatal */ }
     }
@@ -835,7 +867,11 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
           type: m.type,
           parameters: m.parameters,
         })))
-      if (!cancelled) setMaterials(rows)
+      // Merge for the same reason as loadOffline(): whichever source resolves
+      // first must not erase rows contributed by the other source.
+      if (!cancelled) {
+        setMaterials(current => mergeStudyMaterialRows(current, rows))
+      }
     }).catch(e => {
       if (!cancelled) {
         setError(e instanceof ApiError ? e.message : 'Could not load your study library.')
