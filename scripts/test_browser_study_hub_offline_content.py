@@ -211,7 +211,60 @@ def login(page, fixture: dict) -> None:
         "service_worker_console": [],
         "script_responses": [],
         "script_request_failures": [],
+        "page_errors": [],
+        "devtools_worker_errors": [],
+        "devtools_registration_updates": [],
+        "devtools_version_updates": [],
     }
+
+    # Page console events do not consistently expose exceptions raised inside
+    # the service-worker execution context. Subscribe to Chromium's own
+    # ServiceWorker protocol before navigating so failed installs and lifecycle
+    # transitions are preserved even when no worker becomes active.
+    try:
+        devtools = page.context.new_cdp_session(page)
+
+        def record_worker_error(event):
+            startup_diagnostics["devtools_worker_errors"].append({
+                key: event.get(key)
+                for key in (
+                    "errorMessage", "registrationId", "versionId",
+                    "sourceURL", "lineNumber", "columnNumber",
+                )
+            })
+
+        def record_registration_update(event):
+            registrations = event.get("registrations", [])
+            startup_diagnostics["devtools_registration_updates"].append([
+                {
+                    key: registration.get(key)
+                    for key in ("registrationId", "scopeURL", "isDeleted")
+                }
+                for registration in registrations
+            ])
+
+        def record_worker_version_update(event):
+            versions = event.get("versions", [])
+            startup_diagnostics["devtools_version_updates"].append([
+                {
+                    key: version.get(key)
+                    for key in (
+                        "versionId", "registrationId", "scriptURL",
+                        "runningStatus", "status", "controlledClients",
+                        "targetId",
+                    )
+                }
+                for version in versions
+            ])
+
+        devtools.on("ServiceWorker.workerErrorReported", record_worker_error)
+        devtools.on("ServiceWorker.workerRegistrationUpdated", record_registration_update)
+        devtools.on("ServiceWorker.workerVersionUpdated", record_worker_version_update)
+        devtools.send("ServiceWorker.enable")
+    except Exception as exc:
+        startup_diagnostics["devtools_setup_error"] = (
+            f"{type(exc).__name__}: {exc}"
+        )
 
     def record_main_frame_navigation(frame):
         if frame == page.main_frame:
@@ -242,6 +295,7 @@ def login(page, fixture: dict) -> None:
             })
 
     page.on("console", record_startup_console)
+    page.on("pageerror", lambda error: startup_diagnostics["page_errors"].append(str(error)[:1000]))
     page.on("response", record_startup_response)
     page.on("requestfailed", record_startup_request_failure)
     page.on("framenavigated", record_main_frame_navigation)
