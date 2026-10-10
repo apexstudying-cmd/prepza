@@ -1702,3 +1702,12 @@ Commit `12e5a901` changes diagnostics only: the wrapper now includes the underly
 **Diagnostic follow-up:** Commit `3f28284f2cffb3e67c07923284decf43e75f1687` listens to Chromium DevTools Protocol service-worker error, registration-update, and version-update events before navigation. It also captures page-level uncaught errors. These are diagnostic-only changes; they do not alter worker registration or bypass the control assertion.
 
 **Gate status: NOT TESTED / BLOCKED.** The next run should reveal worker parse/install errors or show which lifecycle states Chromium reports. Do not mark the offline artifacts gate PASS until the worker is active and the end-to-end offline content test completes.
+
+
+## 2026-10-10 — Probe the install-time shell assets
+
+**Observed lifecycle:** Chromium now reports a worker version for `/sw.js` with status `installing` and running state `running`, but no `active` worker and no worker error. The worker's install handler awaits `precacheShell()`, which fetches four local shell assets before activation. The evidence makes this install-time wait the next area to isolate; it does not prove which operation is waiting.
+
+**Diagnostic follow-up:** Commit `36a22b29c4860ec103b40d00ae6da761396dc3a2` extends the browser diagnostic to probe `/offline.html`, `/manifest.json`, `/icon-192.png`, and `/icon-512.png` with bounded per-request observation, alongside the service-worker script probes. This remains diagnostic-only and does not weaken the test or modify production service-worker behavior.
+
+**Gate status: NOT TESTED / BLOCKED.** Use each probe's HTTP status and elapsed time to determine whether a local shell asset is stalling. If they all respond promptly, investigate the worker's install/cache operation separately rather than blaming external providers.
