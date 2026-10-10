@@ -1,14 +1,14 @@
 """Real-browser offline content/artifact persistence regression.
 
 This complements scripts/test_browser_study_hub_offline.py. It proves that
-multiple saved documents and already-entitled generated artifacts can be
-reopened and used after a network loss/reload, rather than merely proving that
-the Study Hub clock survives offline.
+already-ready materials survive the real online-to-offline cache path, can be
+reopened through Study Materials after a network loss/reload, and do not trigger
+fresh generation while offline.
 
-The test intentionally does not call a real AI provider. It seeds realistic
-ready-artifact payloads into the browser's production IndexedDB shape, then
-exercises the same Study Materials/document/artifact UI that students use.
-The generation endpoints are observed while offline and must not be called.
+It creates ready private artifacts in PostgreSQL directly, so the browser uses
+the real generation-reuse endpoints without invoking an AI provider. The
+document bytes are pre-saved locally; the generated-material cache itself is
+populated by Prepza's UI/runtime code and then tested offline.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import re
 import subprocess
 import shutil
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import sync_playwright
 
@@ -55,7 +56,7 @@ def create_fixture() -> dict:
 import json
 from uuid import uuid4
 from werkzeug.security import generate_password_hash
-from app import app, db, User, University, Program, DocumentContent, Document
+from app import app, db, User, University, Program, DocumentContent, Document, GeneratedMaterial
 
 with app.app_context():
     suffix = uuid4().hex
@@ -114,10 +115,35 @@ with app.app_context():
             is_removed=False,
         )
         db.session.add(document)
+        material_specs = [
+            ("summary", f"Offline summary for {{title}}"),
+            ("flashcards", {{"cards": [{{"q": "Offline question", "a": "Offline answer"}}]}}),
+            ("quiz", {{"questions": [{{"question": "Offline quiz question", "options": ["A", "B"], "answer_index": 0}}]}}),
+            ("mind_map", {{"center": title, "branches": ["Offline branch"]}}),
+            ("podcast", {{"title": title, "script": "Offline podcast script"}}),
+        ]
+        material_ids = {{}}
+        for material_type, payload in material_specs:
+            material = GeneratedMaterial(
+                document_content_id=content.id,
+                material_type=material_type,
+                status="ready",
+                payload=json.dumps(payload),
+                generation_fingerprint=f"browser-offline-content:{{suffix}}:{{offset}}:{{material_type}}",
+                generation_parameters={{}},
+                generation_version="v2",
+                scope="private",
+                owner_user_id=user.id,
+            )
+            db.session.add(material)
+            db.session.flush()
+            material_ids[material_type] = material.id
+
         documents.append({{
             "document_id": document_id,
             "content_id": content.id,
             "title": title,
+            "materials": material_ids,
         }})
 
     db.session.commit()
@@ -135,9 +161,13 @@ def cleanup_fixture(fixture: dict) -> None:
     document_ids = [item["document_id"] for item in fixture["documents"]]
     content_ids = [item["content_id"] for item in fixture["documents"]]
     code = f"""
-from app import app, db, User, UserKey, Document, DocumentContent, DocumentReadingProgress, StudyTimeLog, StudyStreak
+from app import app, db, User, UserKey, Document, DocumentContent, DocumentReadingProgress, StudyTimeLog, StudyStreak, GeneratedMaterial
 
 with app.app_context():
+    GeneratedMaterial.query.filter(
+        GeneratedMaterial.document_content_id.in_({content_ids!r})
+    ).delete(synchronize_session=False)
+
     for document_id in {document_ids!r}:
         DocumentReadingProgress.query.filter_by(document_id=document_id).delete(synchronize_session=False)
         document = db.session.get(Document, document_id)
@@ -309,42 +339,38 @@ def make_wav() -> bytes:
 
 
 def seed_offline_content(page, fixture: dict) -> None:
+    """Save only the source documents locally; let Prepza populate material caches."""
     documents = fixture["documents"]
-    pdfs = [
-        base64.b64encode(make_pdf(title)).decode()
-        for _, title in DOCUMENTS
-    ]
-    wav = base64.b64encode(make_wav()).decode()
+    pdfs = [base64.b64encode(make_pdf(title)).decode() for _, title in DOCUMENTS]
 
     page.evaluate(
-        """async ({userId, documents, pdfs, wavBase64, materialTypes}) => {
+        """async ({userId, documents, pdfs}) => {
           localStorage.setItem('prepza-offline-user-id', String(userId));
-
           const decode = base64 => Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 
-          const openOfflineDb = () => new Promise((resolve, reject) => {
-            // Mirror the production shared IndexedDB schema: all three stores
-            // belong to the same database and are created together during the
-            // v4 upgrade. Opening them concurrently with separate upgrade
-            // handlers can leave one store missing and make the fixture itself
-            // fail before the browser gate reaches any product assertion.
-            const request = indexedDB.open('prepza-offline-v2', 4);
+          const openDb = (name, version, stores) => new Promise((resolve, reject) => {
+            const request = indexedDB.open(name, version);
             request.onupgradeneeded = () => {
               const db = request.result;
-              for (const store of ['savedStudyHub', 'generatedMaterials', 'generatedAudio']) {
-                if (!db.objectStoreNames.contains(store)) {
-                  db.createObjectStore(store, { keyPath: 'key' });
-                }
+              for (const store of stores) {
+                if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: 'key' });
               }
             };
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
           });
 
-          const putRows = (db, storeName, rows) => new Promise((resolve, reject) => {
-            const tx = db.transaction(storeName, 'readwrite');
-            const store = tx.objectStore(storeName);
+          const putRows = (db, name, rows) => new Promise((resolve, reject) => {
+            const tx = db.transaction(name, 'readwrite');
+            const store = tx.objectStore(name);
             for (const row of rows) store.put(row);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+
+          const clearStore = (db, name) => new Promise((resolve, reject) => {
+            const tx = db.transaction(name, 'readwrite');
+            tx.objectStore(name).clear();
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
           });
@@ -360,7 +386,6 @@ def seed_offline_content(page, fixture: dict) -> None:
             savedAt: Date.now() + index,
             assetUrls: [],
           }));
-
           const assetRows = documents.map((doc, index) => ({
             key: String(userId) + ':' + String(doc.document_id),
             userId,
@@ -370,74 +395,23 @@ def seed_offline_content(page, fixture: dict) -> None:
             savedAt: Date.now() + index,
           }));
 
-          const materialRows = [];
-          for (let docIndex = 0; docIndex < documents.length; docIndex++) {
-            const doc = documents[docIndex];
-            for (const type of materialTypes) {
-              const materialId = doc.document_id * 10 + materialTypes.indexOf(type) + 1;
-              let payload;
-              if (type === 'summary') {
-                payload = { material_id: materialId, type, status: 'ready', payload: 'Offline summary for ' + doc.title };
-              } else if (type === 'flashcards') {
-                payload = { material_id: materialId, type, status: 'ready', payload: { cards: [{ q: 'Offline question', a: 'Offline answer' }] } };
-              } else if (type === 'quiz') {
-                payload = { material_id: materialId, type, status: 'ready', payload: { questions: [{ question: 'Offline quiz question', options: ['A', 'B'], answer_index: 0 }] } };
-              } else if (type === 'mind_map') {
-                payload = { material_id: materialId, type, status: 'ready', payload: { center: doc.title, branches: ['Offline branch'] } };
-              } else {
-                payload = { material_id: materialId, type, status: 'ready', payload: { script: 'Offline podcast script', audio_url: '/offline-fixture-audio/' + String(materialId), duration_seconds: 0.1 } };
-              }
-              materialRows.push({
-                key: String(userId) + ':/documents/' + String(doc.document_id) + '/materials/' + String(materialId) + ':null:' + String(Date.now()) + ':' + Math.random().toString(36).slice(2),
-                path: '/documents/' + String(doc.document_id) + '/materials/' + String(materialId),
-                requestBody: null,
-                payload,
-                savedAt: Date.now(),
-              });
-              if (type === 'podcast') {
-                materialRows.push({
-                  key: String(userId) + ':/documents/' + String(doc.document_id) + '/podcast-audio?material_id=' + String(materialId) + ':null:' + String(Date.now()) + ':' + Math.random().toString(36).slice(2),
-                  path: '/documents/' + String(doc.document_id) + '/podcast-audio?material_id=' + String(materialId),
-                  requestBody: null,
-                  payload: { audio_status: 'ready', audio_url: '/offline-fixture-audio/' + String(materialId), duration_seconds: 0.1 },
-                  savedAt: Date.now(),
-                });
-              }
-            }
-          }
-
-          const audioRows = documents.flatMap(doc => {
-            const materialId = doc.document_id * 10 + materialTypes.indexOf('podcast') + 1;
-            const sourceUrl = '/offline-fixture-audio/' + String(materialId);
-            return [{
-              key: String(userId) + ':' + sourceUrl,
-              userId: String(userId),
-              sourceUrl,
-              blob: new Blob([decode(wavBase64)], { type: 'audio/wav' }),
-              savedAt: Date.now(),
-            }];
-          });
-
-          const sharedDb = await openOfflineDb();
+          // Create all stores in one upgrade handler, then start with empty
+          // material/audio stores. Those stores must be populated by Prepza's
+          // real online replay/cache code below, not by this fixture.
+          const sharedDb = await openDb(
+            'prepza-offline-v2',
+            4,
+            ['savedStudyHub', 'generatedMaterials', 'generatedAudio'],
+          );
           try {
             await putRows(sharedDb, 'savedStudyHub', metaRows);
-            await putRows(sharedDb, 'generatedMaterials', materialRows);
-            await putRows(sharedDb, 'generatedAudio', audioRows);
+            await clearStore(sharedDb, 'generatedMaterials');
+            await clearStore(sharedDb, 'generatedAudio');
           } finally {
             sharedDb.close();
           }
 
-          const assetDb = await new Promise((resolve, reject) => {
-            const request = indexedDB.open('prepza-offline-study-v1', 1);
-            request.onupgradeneeded = () => {
-              const db = request.result;
-              if (!db.objectStoreNames.contains('documents')) {
-                db.createObjectStore('documents', { keyPath: 'key' });
-              }
-            };
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-          });
+          const assetDb = await openDb('prepza-offline-study-v1', 1, ['documents']);
           try {
             await putRows(assetDb, 'documents', assetRows);
           } finally {
@@ -448,10 +422,89 @@ def seed_offline_content(page, fixture: dict) -> None:
             "userId": fixture["user_id"],
             "documents": documents,
             "pdfs": pdfs,
-            "wavBase64": wav,
-            "materialTypes": list(MATERIAL_TYPES),
         },
     )
+
+
+def mock_ready_podcast_audio(route, unexpected_posts: list[str]) -> None:
+    """Give the UI ready audio without invoking any provider/GPU service."""
+    request = route.request
+    if request.method != "GET":
+        unexpected_posts.append(request.url)
+        route.fulfill(
+            status=409,
+            content_type="application/json",
+            body=json.dumps({"error": "Unexpected podcast audio generation in fixture"}),
+        )
+        return
+
+    material_id = parse_qs(urlparse(request.url).query).get("material_id", ["0"])[0]
+    route.fulfill(
+        status=200,
+        content_type="application/json",
+        body=json.dumps({
+            "audio_status": "ready",
+            "audio_url": f"/offline-fixture-audio/{material_id}",
+            "duration_seconds": 0.1,
+        }),
+    )
+
+
+def mock_podcast_wav(route) -> None:
+    route.fulfill(status=200, content_type="audio/wav", body=make_wav())
+
+
+def wait_for_cached_podcast(page, fixture: dict, document_id: int, material_id: int) -> None:
+    page.wait_for_function(
+        """async ({userId, documentId, materialId}) => {
+          const openDb = () => new Promise((resolve, reject) => {
+            const request = indexedDB.open('prepza-offline-v2', 4);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+          const readAll = (db, storeName) => new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readonly');
+            const request = tx.objectStore(storeName).getAll();
+            request.onsuccess = () => resolve(request.result || []);
+            request.onerror = () => reject(request.error);
+          });
+          const db = await openDb();
+          try {
+            const materials = await readAll(db, 'generatedMaterials');
+            const audio = await readAll(db, 'generatedAudio');
+            const materialPath = '/documents/' + documentId + '/materials/' + materialId;
+            const audioPath = '/documents/' + documentId + '/podcast-audio?material_id=' + materialId;
+            const canonicalMaterial = materials.some(row =>
+              row.path === materialPath &&
+              row.payload?.type === 'podcast' &&
+              row.payload?.status === 'ready' &&
+              row.payload?.material_id === materialId
+            );
+            const audioDescriptor = materials.some(row =>
+              row.path === audioPath &&
+              row.payload?.audio_status === 'ready' &&
+              row.payload?.audio_url === '/offline-fixture-audio/' + materialId
+            );
+            const audioBlob = audio.some(row =>
+              row.userId === String(userId) &&
+              row.sourceUrl === '/offline-fixture-audio/' + materialId &&
+              row.blob instanceof Blob &&
+              row.blob.size > 0
+            );
+            return canonicalMaterial && audioDescriptor && audioBlob;
+          } finally {
+            db.close();
+          }
+        }""",
+        {
+            "userId": fixture["user_id"],
+            "documentId": document_id,
+            "materialId": material_id,
+        },
+        timeout=15000,
+    )
+
+
 
 def main() -> int:
     if shutil.which("docker") is None:
