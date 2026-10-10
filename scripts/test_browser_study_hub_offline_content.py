@@ -171,8 +171,51 @@ def login(page, fixture: dict) -> None:
     if not response.ok:
         raise RuntimeError(f"/login failed: {response.status} {response.text()}")
 
-    page.goto(BASE_URL + "/", wait_until="domcontentloaded")
-    page.wait_for_timeout(1200)
+    # A fresh Playwright context has no active service worker. In this app,
+    # sw.js immediately activates/claims clients and sw-register.js reloads on
+    # the first controllerchange. Wait for that startup reload to finish before
+    # running async IndexedDB seeding; otherwise it can destroy the evaluate
+    # context halfway through the fixture.
+    navigation_events = []
+
+    def record_main_frame_navigation(frame):
+        if frame == page.main_frame:
+            navigation_events.append(frame.url)
+
+    page.on("framenavigated", record_main_frame_navigation)
+    try:
+        page.goto(BASE_URL + "/", wait_until="load", timeout=15000)
+    except Exception:
+        # The controllerchange reload can abort the initial navigation. Only
+        # treat that as the known lifecycle when the second main-frame
+        # navigation was actually observed; all other failures stay failures.
+        if len(navigation_events) < 2:
+            raise
+
+    try:
+        while len(navigation_events) < 2:
+            page.wait_for_event(
+                "framenavigated",
+                predicate=lambda frame: frame == page.main_frame,
+                timeout=15000,
+            )
+        page.wait_for_load_state("load", timeout=15000)
+        worker_state = page.evaluate(
+            """() => ({
+              supported: 'serviceWorker' in navigator,
+              controlled: Boolean(navigator.serviceWorker && navigator.serviceWorker.controller),
+            })"""
+        )
+        if not worker_state["supported"] or not worker_state["controlled"]:
+            raise RuntimeError(f"Service worker did not control the settled page: {worker_state}")
+    except Exception as exc:
+        raise RuntimeError(
+            "Service-worker startup did not settle before IndexedDB seeding; "
+            f"main-frame navigations={navigation_events}"
+        ) from exc
+
+    # Wait for the real signed-in Home UI, not a guessed startup delay.
+    page.get_by_role("button", name=re.compile(r"My Study$")).wait_for(timeout=15000)
 
 
 def make_pdf(label: str) -> bytes:
@@ -399,7 +442,7 @@ def main() -> int:
 
             # Navigate through the real student UI before going offline. The test
             # must not depend on an internal sessionStorage navigation shape.
-            page.get_by_role("button", name=re.compile(r"^My Study$")).click(timeout=15000)
+            page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
 
             context.set_offline(True)
@@ -409,7 +452,7 @@ def main() -> int:
             # bottom-nav My Study action to reach the offline Study Materials
             # surface instead of assuming a particular React navigation stack.
             if not page.get_by_role("button", name="Documents", exact=True).is_visible():
-                page.get_by_role("button", name=re.compile(r"^My Study$")).click(timeout=15000)
+                page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
 
             body = page.locator("body").inner_text(timeout=5000)
@@ -450,7 +493,9 @@ def main() -> int:
                     page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
                     print(f"PASS: {type_label} opens offline for {document_title}")
                     page.go_back(wait_until="commit")
-                    page.get_by_role("button", name="Study Materials", exact=True).wait_for(timeout=15000)
+                    # StudyMaterialsScreen remounts on return, so its local tab
+                    # resets to Documents. Re-select the actual materials tab.
+                    page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
             # Podcast is separate because it combines a saved JSON descriptor with
             # a binary audio Blob. The player must resolve the descriptor and then
@@ -466,6 +511,14 @@ def main() -> int:
                 raise AssertionError(f"Offline podcast did not resolve to a local Blob URL: {audio_src}")
             print("PASS: generated podcast metadata and actual audio Blob open offline")
 
+            # Leave the podcast player through browser back before reload. The
+            # real React navigation stack then restores Study Materials, rather
+            # than restoring an immersive player when persistence checks expect
+            # the document list.
+            page.go_back(wait_until="commit")
+            page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
+            page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+
             if generation_posts:
                 raise AssertionError(
                     "Offline artifact replay attempted generation POSTs: "
@@ -478,7 +531,7 @@ def main() -> int:
             # not just SPA navigation.
             page.reload(wait_until="domcontentloaded")
             if not page.get_by_role("button", name="Documents", exact=True).is_visible():
-                page.get_by_role("button", name=re.compile(r"^My Study$")).click(timeout=15000)
+                page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
             body_after_reload = page.locator("body").inner_text(timeout=5000)
             for _, title in DOCUMENTS:
@@ -501,7 +554,7 @@ def main() -> int:
                 page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
                 print(f"PASS: {type_label} persists and reopens after offline reload")
                 page.go_back(wait_until="commit")
-                page.get_by_role("button", name="Study Materials", exact=True).wait_for(timeout=15000)
+                page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
             podcast_button = page.get_by_role(
                 "button",
