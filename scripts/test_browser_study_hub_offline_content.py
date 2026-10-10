@@ -330,19 +330,31 @@ def login(page, fixture: dict) -> None:
               }) : null;
               const registrations = await navigator.serviceWorker.getRegistrations();
               const probe = async path => {
+                const started = performance.now();
+                const abort = new AbortController();
+                const timeoutId = setTimeout(() => abort.abort(), 3000);
                 try {
-                  const response = await fetch(path, { cache: 'no-store' });
-                  const body = await response.text();
+                  const response = await fetch(path, {
+                    cache: 'no-store',
+                    signal: abort.signal,
+                  });
+                  const body = await response.arrayBuffer();
                   return {
                     path,
                     status: response.status,
                     ok: response.ok,
                     contentType: response.headers.get('content-type'),
-                    bytes: body.length,
-                    prefix: body.slice(0, 120),
+                    bytes: body.byteLength,
+                    elapsedMs: Math.round(performance.now() - started),
                   };
                 } catch (error) {
-                  return { path, error: String(error) };
+                  return {
+                    path,
+                    error: String(error),
+                    elapsedMs: Math.round(performance.now() - started),
+                  };
+                } finally {
+                  clearTimeout(timeoutId);
                 }
               };
               return {
@@ -357,7 +369,14 @@ def login(page, fixture: dict) -> None:
                   waiting: summarizeWorker(registration.waiting),
                   active: summarizeWorker(registration.active),
                 })),
-                assetProbes: await Promise.all(['/sw-register.js', '/sw.js'].map(probe)),
+                assetProbes: await Promise.all([
+                  '/sw-register.js',
+                  '/sw.js',
+                  '/offline.html',
+                  '/manifest.json',
+                  '/icon-192.png',
+                  '/icon-512.png',
+                ].map(probe)),
               };
             }"""
         )
