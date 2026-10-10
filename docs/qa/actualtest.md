@@ -1684,3 +1684,12 @@ Commit `12e5a901` changes diagnostics only: the wrapper now includes the underly
 **Next verification:** rebuild the app image from current `main` and rerun `scripts/test_browser_study_hub_offline_content.py -q`. Capture the new `underlying=...` detail. Use that evidence to identify the failing wait/state transition before changing behavior.
 
 **Gate status: NOT TESTED.** No artifact, offline replay, zero-generation-POST, podcast-Blob, or offline-reload assertion has yet passed in this run. This diagnostic commit is not a browser-test pass.
+
+
+## 2026-10-10 — Diagnose an uncontrolled service-worker page
+
+**Observed result:** The updated offline browser test still fails before IndexedDB seeding with `supported: true` and `controlled: false`, after two main-frame navigations to `http://localhost:5000/`. This confirms the browser exposes the Service Worker API, but it does not establish that `/sw.js` registered, installed, activated, or claimed the page. It is not evidence of an external-provider outage.
+
+**Diagnostic follow-up:** Commit `8022890ef729824b8156c5f26dfca9375c3d6f03` adds failure-only evidence for current registrations and their worker states, root service-worker asset HTTP responses, and related browser console/request errors. This instrumentation does not alter the app's service-worker behavior or relax the assertion.
+
+**Gate status: NOT TESTED / BLOCKED.** The next run must identify whether registration is absent, script delivery/installation failed, or an active worker did not claim the page. Do not proceed to offline artifact assertions or mark this gate PASS until the root cause is addressed and the complete test passes.
