@@ -1733,3 +1733,14 @@ The offline material cache helper also validates the canonical artifact's type a
 
 
 **CI completion update:** All listed GitHub automation runs completed successfully on code commit `62da5f40301230fa9919013e770fad41c9631308`, including frontend typecheck/build, Screen Loading Audit and student/admin/economics/realtime/security contracts. The earlier in-progress status above is now closed. The complete local browser assertions have not been executed by GitHub or verified in the user's Docker runtime, so the release gate remains pending.
+
+
+## 2026-10-10 — A ready Summary card must restore its existing artifact
+
+The real-browser offline-content gate was run locally at commit `f0b848274311a982e277428ef5751936ef8f590b`. The fixture/API contract passed: `GET /documents` returned all three test documents and all five ready material types. The run then failed waiting for `Offline summary` after the first Summary card was clicked. The test exited `1` before offline replay, reload, podcast audio, or zero-generation-POST assertions ran.
+
+The useful distinction is that the API has the ready material row, but that alone does not prove the UI can open it. In the inspected frontend, `StudyMaterialsScreen.openMaterial` saves the chosen `{ documentId, materialId, type }` to `sessionStorage` as `prepza-open-material` and routes to the feature screen. `SummaryGenerationScreen` initializes in `config` and loads identity/document/usage, but does not consume that selection to restore the existing payload. That mismatch is the leading root-cause hypothesis and must be fixed at the ready-material replay boundary, not by relaxing the browser assertion or starting new AI generation.
+
+The local checkout was behind the GitHub/Graphify code head and had uncommitted `docker-compose.vps.yml` changes plus an untracked `hello world` file. Preserve both; do not use `git reset --hard` to sync. First capture the current diff and identify the untracked file, then safely stash or commit only intentional local changes before updating the checkout. Rebuild the app image from the exact target commit before repeating browser tests.
+
+**Learning:** a green bulk API assertion proves fixture visibility, not the user journey. A ready-artifact gate must prove the selected artifact's ID/type flows from the Study Materials card into the generation screen, that the canonical GET/cache path returns the right payload, and that the UI renders it without an AI-generation POST. Latest-main browser status remains unverified until rerun.
