@@ -847,6 +847,66 @@ def main() -> int:
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
+            # Prove the real API is exposing the database fixtures before
+            # interpreting a missing UI card as a frontend or locator failure.
+            documents_response = page.request.get(f"{BASE_URL}/documents")
+            if not documents_response.ok:
+                raise AssertionError(
+                    "GET /documents failed for the signed-in fixture user: "
+                    f"{documents_response.status} {documents_response.text()[:2000]}"
+                )
+            documents_payload = documents_response.json()
+            fixture_ids = {
+                int(item["document_id"]): item["title"]
+                for item in fixture["documents"]
+            }
+            api_fixture_rows = [
+                {
+                    "id": row.get("id"),
+                    "title": row.get("title"),
+                    "status": row.get("status"),
+                    "materials": [
+                        {
+                            "id": material.get("id"),
+                            "type": material.get("type"),
+                            "status": material.get("status"),
+                            "scope": material.get("scope"),
+                        }
+                        for material in row.get("materials", [])
+                    ],
+                }
+                for row in documents_payload.get("documents", [])
+                if row.get("id") in fixture_ids
+            ]
+            missing_fixture_ids = sorted(set(fixture_ids) - {
+                row.get("id") for row in api_fixture_rows
+            })
+            expected_types = {"summary", "flashcards", "quiz", "mind_map", "podcast"}
+            api_material_gaps = {
+                row["title"]: sorted(expected_types - {
+                    str(material.get("type"))
+                    for material in row["materials"]
+                    if material.get("status") == "ready"
+                })
+                for row in api_fixture_rows
+                if expected_types - {
+                    str(material.get("type"))
+                    for material in row["materials"]
+                    if material.get("status") == "ready"
+                }
+            }
+            if missing_fixture_ids or api_material_gaps:
+                raise AssertionError(
+                    "Study Materials fixture rows are missing from GET /documents; "
+                    f"missing_document_ids={missing_fixture_ids}; "
+                    f"material_gaps={api_material_gaps}; "
+                    f"api_fixture_rows={json.dumps(api_fixture_rows, sort_keys=True)}"
+                )
+            print(
+                "PASS: GET /documents returned all three fixture documents with all five "
+                "ready material types"
+            )
+
             for _, document_title in DOCUMENTS:
                 for type_label, expected_text in [
                     ("Summary", "Offline summary"),
@@ -858,7 +918,32 @@ def main() -> int:
                         "button",
                         name=re.compile(rf"{re.escape(type_label)}.*From: {re.escape(document_title)}"),
                     ).first
-                    material_button.click(timeout=15000)
+                    try:
+                        material_button.click(timeout=15000)
+                    except Exception as exc:
+                        try:
+                            rendered_body = page.locator("body").inner_text(timeout=5000)[:5000]
+                        except Exception as body_exc:
+                            rendered_body = (
+                                f"<could not capture body: {type(body_exc).__name__}: {body_exc}>"
+                            )
+                        try:
+                            visible_buttons = [
+                                text.strip()
+                                for text in page.locator("button").all_inner_texts()
+                                if text.strip()
+                            ]
+                        except Exception as buttons_exc:
+                            visible_buttons = [
+                                f"<could not capture buttons: {type(buttons_exc).__name__}: {buttons_exc}>"
+                            ]
+                        raise AssertionError(
+                            f"Study Materials button not found/clickable for "
+                            f"{type_label} from {document_title}; "
+                            f"api_fixture_rows={json.dumps(api_fixture_rows, sort_keys=True)}; "
+                            f"current_url={page.url}; visible_buttons={json.dumps(visible_buttons[:80])}; "
+                            f"body={rendered_body!r}; click_error={type(exc).__name__}: {exc}"
+                        ) from exc
                     page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
                     print(f"PASS: existing online {type_label} opens for {document_title}")
                     page.go_back(wait_until="commit")
