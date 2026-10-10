@@ -113,6 +113,7 @@ async function cachePrivateReadyGeneratedMaterialOffline(
     payload: unknown
     private_to_current_user?: boolean
   },
+  expectedType?: string,
 ): Promise<boolean> {
   const id = Number(materialId)
   const ownerId = Number(userId)
@@ -132,7 +133,9 @@ async function cachePrivateReadyGeneratedMaterialOffline(
       Number(canonical.material_id) !== id ||
       canonical.status !== 'ready' ||
       canonical.payload == null ||
-      canonical.private_to_current_user !== true
+      canonical.private_to_current_user !== true ||
+      (expectedType != null &&
+        normalizeGeneratedMaterialFeature(canonical.type) !== normalizeGeneratedMaterialFeature(expectedType))
     ) return false
 
     await saveGeneratedMaterialOffline(path, null, canonical)
@@ -206,14 +209,15 @@ async function generationRequest<T = any>(
       throw new Error('The selected study material is no longer available.')
     }
 
-    // The detail response verifies ownership/scope before this canonical
-    // record is persisted. Shared Library material remains outside this cache.
+    // The authenticated canonical response says whether this artifact is
+    // private to this student. Shared Library material remains outside this cache.
     if (currentUserId != null) {
       await cachePrivateReadyGeneratedMaterialOffline(
         documentId,
         selectedMaterialId,
         currentUserId,
         canonical,
+        feature,
       )
     }
 
@@ -272,7 +276,7 @@ async function generationRequest<T = any>(
     }
     if (!result?.async || !result?.job_id) {
       if (result?.material_id) {
-        await cachePrivateReadyGeneratedMaterialOffline(documentId, result.material_id, currentUserId)
+        await cachePrivateReadyGeneratedMaterialOffline(documentId, result.material_id, currentUserId, undefined, feature)
       }
       publish({
         found: true,
@@ -298,7 +302,7 @@ async function generationRequest<T = any>(
     const resolveHeaders = new Headers(options.headers || {})
     resolveHeaders.set('X-Prepza-Resolve-Generation', '1')
     const resolved = await api<T>(path, { ...options, headers: resolveHeaders })
-    await cachePrivateReadyGeneratedMaterialOffline(documentId, (resolved as any)?.material_id, currentUserId)
+    await cachePrivateReadyGeneratedMaterialOffline(documentId, (resolved as any)?.material_id, currentUserId, undefined, feature)
     publish({
       found: true,
       status: 'completed',
@@ -3811,6 +3815,8 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
           activeDocumentId,
           selectedPodcastMaterialId,
           me.id,
+          undefined,
+          'podcast',
         )
         if (!eligible) return
         await saveGeneratedMaterialOffline(podcastAudioPath, null, status)
