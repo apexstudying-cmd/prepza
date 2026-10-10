@@ -1738,3 +1738,14 @@ Commit `b212a9193702ad4446bc1f45143ca11bbc900c9a` changes the test to poll for t
 **Diagnostic follow-up:** Commit `920e80ebb515321014cba3b886904a6bb9dc8668` checks the authenticated `GET /documents` contract before clicking artifacts and requires each fixture document to expose all five expected ready material types. If the API contract is correct but a card is still not clickable, the test records the fixture rows, current URL, visible button labels, and body text. This distinguishes backend/data visibility from the UI/selector layer without changing production code.
 
 **Offline content gate status: NOT TESTED / BLOCKED.** Startup is past the earlier gate, but no online artifact click, cache replay, offline reopen, or no-generation assertion has yet completed in this run.
+
+
+## 2026-10-10 — Fix Study Materials online/offline state overwrite race
+
+**Observed failure:** The authenticated `GET /documents` contract returned all three fixture documents and all five expected ready types for each, but the visible Study Materials tab rendered “No study materials yet.” The page body showed the empty-state button, not a missing-API error.
+
+**Root cause identified in `frontend/src/App.tsx`:** `StudyMaterialsScreen` started `loadOffline()` and the online `api('/documents')` request concurrently. Both asynchronously wrote to the same `materials` state. The online request populated the 15 rows, but when IndexedDB contained no cached materials, a later `setMaterials(cachedMaterials)` replaced the populated list with an empty array. The request-order race explains why the API assertion passed while the UI showed its empty state.
+
+**Fix:** Commit `45965bfeeebdf804a122a432621a17455b2d7589` adds a deduplicating merge by `documentId + materialId` and uses it for both online and offline results. Either source can now complete first without erasing rows from the other source. This is a frontend source change and requires rebuilding/recreating the local app container before the browser rerun.
+
+**Verification status: FIX IMPLEMENTED, RERUN REQUIRED.** The existing browser test is the regression check, but the fix has not yet been verified in the user's rebuilt runtime. Do not mark the offline content gate PASS until the complete online-cache/offline-reopen test finishes.
