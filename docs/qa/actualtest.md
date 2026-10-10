@@ -1720,3 +1720,12 @@ Commit `12e5a901` changes diagnostics only: the wrapper now includes the underly
 **Diagnostic follow-up:** Commit `fdbb2aa66c4b910654ccd2aaed785c9f17fe0b86` records Playwright's service-worker console/close events and captures the worker-initiated requests for the four precache assets at request, response, finish, or failure. This should distinguish a worker request that stalls/fails from a worker lifecycle problem after those requests complete.
 
 **Gate status: NOT TESTED / BLOCKED.** We still have no demonstrated successful service-worker control or end-to-end offline artifact replay. Do not infer a production failure solely from this localhost test, but treat offline readiness as unproven until the gate passes.
+
+
+## 2026-10-10 — Replace navigation-count readiness with actual control polling
+
+**Correction to the test harness:** Earlier revisions treated two main-frame navigations as proof that the service worker startup reload had settled. They also captured `controlled` and registration state before awaiting six diagnostic asset probes, then reported the pre-probe snapshot as if it were the final state. This could produce a false failure if the worker activated during the asynchronous probes. The collected output proved the page requests and worker-owned precache requests completed, but did not prove the worker would remain inactive.
+
+Commit `b212a9193702ad4446bc1f45143ca11bbc900c9a` changes the test to poll for the actual condition it needs: a complete root page controlled by the service worker, stable across a short check for controller-triggered reloads. If that does not happen within 15 seconds, it reports a fresh post-probe worker/registration snapshot. This is a test-harness correction, not a confirmed production fix; the gate still requires a successful full run.
+
+**Gate status: NOT TESTED / BLOCKED pending rerun.**
