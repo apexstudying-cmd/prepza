@@ -207,11 +207,43 @@ def login(page, fixture: dict) -> None:
     # running async IndexedDB seeding; otherwise it can destroy the evaluate
     # context halfway through the fixture.
     navigation_events = []
+    startup_diagnostics = {
+        "service_worker_console": [],
+        "script_responses": [],
+        "script_request_failures": [],
+    }
 
     def record_main_frame_navigation(frame):
         if frame == page.main_frame:
             navigation_events.append(frame.url)
 
+    def record_startup_console(message):
+        message_text = message.text
+        if any(marker in message_text.lower() for marker in ("service worker", "sw.js", "sw-register.js")):
+            startup_diagnostics["service_worker_console"].append(
+                {"type": message.type, "text": message_text[:500]}
+            )
+
+    def record_startup_response(response):
+        path = urlparse(response.url).path
+        if path in {"/sw.js", "/sw-register.js"}:
+            startup_diagnostics["script_responses"].append({
+                "path": path,
+                "status": response.status,
+                "content_type": response.headers.get("content-type"),
+            })
+
+    def record_startup_request_failure(request):
+        path = urlparse(request.url).path
+        if path in {"/sw.js", "/sw-register.js"}:
+            startup_diagnostics["script_request_failures"].append({
+                "path": path,
+                "failure": request.failure,
+            })
+
+    page.on("console", record_startup_console)
+    page.on("response", record_startup_response)
+    page.on("requestfailed", record_startup_request_failure)
     page.on("framenavigated", record_main_frame_navigation)
     try:
         page.goto(BASE_URL + "/", wait_until="load", timeout=15000)
@@ -237,10 +269,43 @@ def login(page, fixture: dict) -> None:
                 f"observed main-frame navigations={navigation_events}"
             )
         worker_state = page.evaluate(
-            """() => ({
-              supported: 'serviceWorker' in navigator,
-              controlled: Boolean(navigator.serviceWorker && navigator.serviceWorker.controller),
-            })"""
+            """async () => {
+              const summarizeWorker = worker => worker ? ({
+                scriptURL: worker.scriptURL,
+                state: worker.state,
+              }) : null;
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              const probe = async path => {
+                try {
+                  const response = await fetch(path, { cache: 'no-store' });
+                  const body = await response.text();
+                  return {
+                    path,
+                    status: response.status,
+                    ok: response.ok,
+                    contentType: response.headers.get('content-type'),
+                    bytes: body.length,
+                    prefix: body.slice(0, 120),
+                  };
+                } catch (error) {
+                  return { path, error: String(error) };
+                }
+              };
+              return {
+                supported: 'serviceWorker' in navigator,
+                controlled: Boolean(navigator.serviceWorker && navigator.serviceWorker.controller),
+                controllerScriptURL: navigator.serviceWorker.controller?.scriptURL ?? null,
+                readyState: document.readyState,
+                registrationScriptPresent: Boolean(document.querySelector('script[src="/sw-register.js"]')),
+                registrations: registrations.map(registration => ({
+                  scope: registration.scope,
+                  installing: summarizeWorker(registration.installing),
+                  waiting: summarizeWorker(registration.waiting),
+                  active: summarizeWorker(registration.active),
+                })),
+                assetProbes: await Promise.all(['/sw-register.js', '/sw.js'].map(probe)),
+              };
+            }"""
         )
         if not worker_state["supported"] or not worker_state["controlled"]:
             raise RuntimeError(f"Service worker did not control the settled page: {worker_state}")
@@ -248,7 +313,8 @@ def login(page, fixture: dict) -> None:
         raise RuntimeError(
             "Service-worker startup did not settle before IndexedDB seeding; "
             f"main-frame navigations={navigation_events}; "
-            f"underlying={type(exc).__name__}: {exc}; current_url={page.url}"
+            f"underlying={type(exc).__name__}: {exc}; current_url={page.url}; "
+            f"startup_diagnostics={json.dumps(startup_diagnostics, sort_keys=True)}"
         ) from exc
 
     # Wait for the real signed-in Home UI, not a guessed startup delay.
