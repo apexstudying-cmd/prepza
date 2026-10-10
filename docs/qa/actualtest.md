@@ -1693,3 +1693,12 @@ Commit `12e5a901` changes diagnostics only: the wrapper now includes the underly
 **Diagnostic follow-up:** Commit `8022890ef729824b8156c5f26dfca9375c3d6f03` adds failure-only evidence for current registrations and their worker states, root service-worker asset HTTP responses, and related browser console/request errors. This instrumentation does not alter the app's service-worker behavior or relax the assertion.
 
 **Gate status: NOT TESTED / BLOCKED.** The next run must identify whether registration is absent, script delivery/installation failed, or an active worker did not claim the page. Do not proceed to offline artifact assertions or mark this gate PASS until the root cause is addressed and the complete test passes.
+
+
+## 2026-10-10 — Chromium-level service-worker lifecycle diagnostics
+
+**New evidence from the latest local run:** `/sw-register.js` and `/sw.js` both return HTTP 200 with JavaScript content types; neither request failed. A root-scope registration exists, but `installing`, `waiting`, and `active` are all null at the time of inspection, and the page has no controller. The same-origin page had two navigations. This narrows the failure to an unobserved service-worker lifecycle/registration state rather than missing static files, but it does not yet establish the root cause.
+
+**Diagnostic follow-up:** Commit `3f28284f2cffb3e67c07923284decf43e75f1687` listens to Chromium DevTools Protocol service-worker error, registration-update, and version-update events before navigation. It also captures page-level uncaught errors. These are diagnostic-only changes; they do not alter worker registration or bypass the control assertion.
+
+**Gate status: NOT TESTED / BLOCKED.** The next run should reveal worker parse/install errors or show which lifecycle states Chromium reports. Do not mark the offline artifacts gate PASS until the worker is active and the end-to-end offline content test completes.
