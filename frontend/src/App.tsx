@@ -3081,11 +3081,31 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
     }
     const load = async () => {
       try {
-        if (!navigator.onLine) {
+        // The reader should consume the upload-time local Blob first, even
+        // while online. Only records without a complete local copy need the
+        // server-rendered page route or a document-detail lookup.
+        try {
           const localDoc = await loadLocal()
-          if (!cancelled) { setDoc(localDoc); setOfflineSrc(objectUrl) }
+          if (!cancelled) {
+            setDoc(localDoc)
+            setOfflineSrc(objectUrl)
+          }
+          // Keep online-only reader actions and the Study Hub heartbeat working
+          // without waiting for /me before the locally stored document opens.
+          if (navigator.onLine) {
+            void api<{csrf_token:string}>('/me')
+              .then(me => { if (!cancelled) setCsrfToken(me.csrf_token) })
+              .catch(() => {})
+          }
           return
+        } catch (localError) {
+          if (!navigator.onLine) throw localError
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl)
+            objectUrl = null
+          }
         }
+
         const [detail, progress, me] = await Promise.all([
           api<DocumentDetail>(`/documents/${activeDocumentId}`),
           api<{page_num:number}>(`/documents/${activeDocumentId}/reading`),
@@ -3096,17 +3116,11 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
         setPage(progress.page_num || 0)
         setSavedPage(progress.page_num || 0)
         setCsrfToken(me.csrf_token)
-        // The native reader is itself a Study Hub entry point. Persist the
-        // complete source locally so a student can return offline even if
-        // they entered the reader directly rather than through My Study.
+        // The native reader is also an entry point for records that did not
+        // already have a local copy. Persist their bytes for the next open.
         void saveStudyHubDocumentOffline(activeDocumentId).catch(() => {})
       } catch (e) {
-        try {
-          const localDoc = await loadLocal()
-          if (!cancelled) { setDoc(localDoc); setOfflineSrc(objectUrl); setPage(0); setSavedPage(0) }
-        } catch (_) {
-          if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not open this document.')
-        }
+        if (!cancelled) setError(e instanceof ApiError ? e.message : 'Could not open this document.')
       } finally {
         if (!cancelled) setLoading(false)
       }
