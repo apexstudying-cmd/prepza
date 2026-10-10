@@ -1729,3 +1729,12 @@ Commit `12e5a901` changes diagnostics only: the wrapper now includes the underly
 Commit `b212a9193702ad4446bc1f45143ca11bbc900c9a` changes the test to poll for the actual condition it needs: a complete root page controlled by the service worker, stable across a short check for controller-triggered reloads. If that does not happen within 15 seconds, it reports a fresh post-probe worker/registration snapshot. This is a test-harness correction, not a confirmed production fix; the gate still requires a successful full run.
 
 **Gate status: NOT TESTED / BLOCKED pending rerun.**
+
+
+## 2026-10-10 — Browser now reaches Study Materials; missing first card
+
+**Observed result:** The corrected startup gate no longer stops the script. The test reaches the real Study Materials screen but times out locating the first Summary card for `Offline Economics Notes`. This is a later failure than the prior service-worker startup failure. It does not, by itself, prove whether the API omits the fixture artifacts or the rendered UI differs from the locator.
+
+**Diagnostic follow-up:** Commit `920e80ebb515321014cba3b886904a6bb9dc8668` checks the authenticated `GET /documents` contract before clicking artifacts and requires each fixture document to expose all five expected ready material types. If the API contract is correct but a card is still not clickable, the test records the fixture rows, current URL, visible button labels, and body text. This distinguishes backend/data visibility from the UI/selector layer without changing production code.
+
+**Offline content gate status: NOT TESTED / BLOCKED.** Startup is past the earlier gate, but no online artifact click, cache replay, offline reopen, or no-generation assertion has yet completed in this run.
