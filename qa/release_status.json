@@ -118,7 +118,7 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "NOT_TESTED",
-      "evidence": "First local execution reached IndexedDB seeding but exposed a real shared offline DB schema defect: prepza-offline-v2 could be version 3 with only savedStudyHub. Fixed on main with version-4 migration creating savedStudyHub, generatedMaterials and generatedAudio for fresh and existing v3 databases. Full browser execution after rebuilding the app is still required."
+      "evidence": "User-executed scripts/test_browser_study_hub_offline_content.py against rebuilt image at 4f1ed663 stopped inside asynchronous IndexedDB seeding with 'Page.evaluate: Execution context was destroyed, most likely because of a navigation'; no intended artifact assertion ran. Source audit identified the service-worker controllerchange reload as a plausible cause and an independent /me-before-offline-replay defect in Summary/Flashcards/Quiz/Mind Map. Main now waits for/validates the worker startup reload, fixes feature normalization and offline replay paths, corrects Mind Map fixture shape, and awaits offline rows. Rebuild and rerun are still required; this gate is not PASS."
     },
     {
       "id": "admin_study_time_visibility",
@@ -128,11 +128,11 @@
   ],
   "next_actions": [
     "Run the targeted admin authorization/security tests in the disposable QA environment; do not install pytest into the production app image.",
-    "Rerun scripts/test_browser_study_hub_offline_content.py after rebuilding the app so the IndexedDB v4 migration is present in the browser bundle.",
+    "Rebuild the app image and rerun scripts/test_browser_study_hub_offline_content.py; the last run stopped during IndexedDB fixture seeding, and source/test fixes are not verified until the full artifact replay, zero-generation-POST and offline-reload assertions complete.",
     "Execute the remaining cross-system journeys and existing-database migration rehearsal.",
     "Run the final clean full regression after the remaining gates and current security changes are verified.",
     "Keep controlled external-provider verification separate from the local release freeze unless explicitly approved as an external-provider gate."
   ],
-  "current_main_commit": "de5564d0a6dd2faa483a7b048bbb11d0a0c5807f",
-  "verification_note": "The latest browser Study Hub gate was verified on e963cca1. Current main has later security/test/documentation commits; those changes still require the targeted route-security run and then the final clean full regression before the release record can claim the current HEAD is fully verified."
+  "current_main_commit": "9cb5a6f56100e249fc87969b4342731b6d0e811d",
+  "verification_note": "The current source/test work on 9cb5a6f5 has not yet been executed by the offline content/artifact browser gate. The latest separate verified Study Hub gate remains e963cca1; do not treat the offline content/artifact gate as passed until the rebuilt-browser assertions complete."
 }

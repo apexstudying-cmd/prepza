@@ -1585,3 +1585,18 @@ This is not an offline-cache or generation failure. The test had already proved 
 The corrected test now follows the actual production navigation hierarchy: reader -> document Study Hub -> My Study -> document list.
 
 The generated-material objective remains unchanged: artifacts are seeded as already-ready local records, the browser is taken offline, and the existing material replay screens must resolve those cached payloads without sending any generation POST request. This gate is about offline persistence/replay, not offline generation.
+
+
+## 2026-10-10 — Offline content gate: worker startup race and offline replay logic audited
+
+The user rebuilt and ran the content/artifact browser gate at commit `4f1ed663`. It stopped at:
+
+    FAIL: Page.evaluate: Execution context was destroyed, most likely because of a navigation
+
+The failing evaluate is the asynchronous IndexedDB fixture seed; the test did not reach its material replay assertions. This is recorded as **blocked before product assertions**, not as a feature failure.
+
+I compared the exception with the actual service-worker implementation. The worker calls `skipWaiting()` on install and `clients.claim()` during activation; the registration script responds to `controllerchange` with `window.location.reload()`. The test had an arbitrary 1.2-second delay after `page.goto`, so fixture seeding could overlap that full document reload. The gate now records navigation events and requires the source-described same-origin startup reload plus service-worker control before running the seed. It also waits for document rows instead of reading the page immediately after the tabs render.
+
+That source review exposed a separate real app defect: the four standard material screens requested `/me` before calling `generationRequest()`. Offline `/me` failure prevented the cached-material branch from being reached. The offline selection matcher also treated UI type `summary` as different from route feature `summarize`; the offline response was keyed as `summarize`, while SummaryScreen reads `summary`. The current main changes normalize these aliases, replay the exact selected ready artifact without auth/network lookup, and prohibit a generation POST fallback while offline. I also adjusted the Mind Map fixture to seed a string branch because the current renderer expects `branches: string[]`, not `{label: ...}` objects.
+
+No release PASS is claimed: these source/test changes need a rebuilt local browser run. Required evidence remains successful replay of Summary, Flashcards, Practice Questions, Mind Map and Podcast after offline transition and reload, with zero generation POSTs.

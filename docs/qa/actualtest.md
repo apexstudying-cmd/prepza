@@ -1634,3 +1634,22 @@ The test is now corrected to follow the real UI path after each offline reader a
 This does not change production offline behavior and does not generate any materials. The generated-material portion seeds already-ready artifacts, opens them through the real replay UI while offline, and asserts that no generation POST is sent.
 
 Gate status remains NOT TESTED / BLOCKED until the corrected browser script is executed.
+
+
+## 2026-10-10 — Offline content/artifact gate: execution context destroyed during fixture seeding
+
+User-executed command against a rebuilt app image at `4f1ed663`:
+
+    python scripts/test_browser_study_hub_offline_content.py -q
+
+Result:
+
+    FAIL: Page.evaluate: Execution context was destroyed, most likely because of a navigation
+
+This exception occurs inside `seed_offline_content()`, before the browser asserts that saved materials can be replayed. It is therefore **not yet evidence of an offline-artifact product failure** and does not satisfy the gate.
+
+Source inspection found a specific startup navigation path that could interrupt the asynchronous IndexedDB fixture: `frontend/public/sw.js` calls `skipWaiting()` during install and `clients.claim()` during activation; `frontend/public/sw-register.js` reloads the page on every `controllerchange`. The test previously waited only 1.2 seconds after navigation before starting a multi-store IndexedDB seed. The corrected test records main-frame navigations, requires the same-origin startup reload and a controlled service worker to be established, and waits for the real Home UI instead of relying on that fixed delay. This expected lifecycle is now explicitly checked by the test rather than silently assumed; the next run will confirm whether the observed runtime sequence matches the source path.
+
+The same source audit found an independent **production offline-replay defect**. Summary, Flashcards, Practice Questions and Mind Map first requested `/me`; an offline failure there prevented the offline-aware `generationRequest()` from running. In addition, `summary` was not normalized to the `/summarize` feature name, and the offline response key did not match the Summary screen's expected `summary` property. The application now resolves the exact selected, ready material from IndexedDB before any network generation call, normalizes these feature names and returns an error instead of falling through to a generation POST when offline material is unavailable. The fixture's Mind Map branch shape was also corrected to match what the renderer consumes.
+
+**Gate status remains: NOT TESTED / BLOCKED.** These changes are on main but have not yet been executed. Rebuild the app image and rerun the gate; only the full run can prove each material screen, podcast Blob playback, zero generation POSTs and offline reload persistence.
