@@ -200,6 +200,12 @@ def login(page, fixture: dict) -> None:
                 timeout=15000,
             )
         page.wait_for_load_state("load", timeout=15000)
+        expected_url = BASE_URL.rstrip("/") + "/"
+        if len(navigation_events) < 2 or navigation_events[0] != expected_url or navigation_events[1] != expected_url:
+            raise RuntimeError(
+                f"Expected the same-origin service-worker startup reload at {expected_url}; "
+                f"observed main-frame navigations={navigation_events}"
+            )
         worker_state = page.evaluate(
             """() => ({
               supported: 'serviceWorker' in navigator,
@@ -455,6 +461,8 @@ def main() -> int:
                 page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
 
+            for _, title in DOCUMENTS:
+                page.get_by_text(title, exact=True).wait_for(timeout=15000)
             body = page.locator("body").inner_text(timeout=5000)
             for _, title in DOCUMENTS:
                 if title not in body:
@@ -533,6 +541,8 @@ def main() -> int:
             if not page.get_by_role("button", name="Documents", exact=True).is_visible():
                 page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
+            for _, title in DOCUMENTS:
+                page.get_by_text(title, exact=True).wait_for(timeout=15000)
             body_after_reload = page.locator("body").inner_text(timeout=5000)
             for _, title in DOCUMENTS:
                 if title not in body_after_reload:
