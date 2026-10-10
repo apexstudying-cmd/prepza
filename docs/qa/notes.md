@@ -1690,3 +1690,14 @@ Commit `920e80ebb515321014cba3b886904a6bb9dc8668` adds that API contract check a
 The API assertion and visible empty state gave the important clue: the server returned all expected materials while the component displayed none. In `StudyMaterialsScreen`, online `/documents` data and `loadOffline()`'s IndexedDB result write to the same state concurrently. An empty cache lookup can finish after the online request and erase its rows.
 
 Commit `45965bfeeebdf804a122a432621a17455b2d7589` replaces both state overwrites with a deduplicating merge keyed by document ID and material ID. The browser regression needs a rebuilt app image before verification. Treat this as an identified and patched race, not yet a verified release pass.
+
+
+## 2026-10-10 — Keep My Study source documents local-first
+
+The user clarified the intended boundary: upload already writes the original document Blob and metadata into the student's local Study Hub package; Library remains the remote/browsing surface. I therefore changed only the My Study path, not the Library implementation.
+
+When opening a document with a valid IndexedDB package for the current locally remembered account, `DocumentStudyHubScreen` now uses saved metadata, cached material summaries, and local reading position before considering any network request. Documents without a usable local package retain the prior online fallback, so Library-originated items were not intentionally broken. I also removed the duplicate `/me` lookup from the local-listing routine; the separate `/me` request for Library action CSRF remains.
+
+Selected ready materials now use a local-first replay contract. If cached, they open directly from IndexedDB whether the browser is online or offline. If not cached and online, the screen reads the exact canonical material record by GET, then saves it only after the existing server detail check confirms it is a private artifact owned by the active student. It does not POST to an AI generation endpoint to reopen a ready artifact. Shared artifacts are not copied into the private offline cache.
+
+The focused browser gate was changed to make that contract measurable: the initial cache-fill stage expects canonical GETs and rejects generation POSTs; offline replay still runs with the browser disconnected and records any unexpected POST. The preceding local run failed before this patch, so there is no passing browser result yet. Rebuild and run `python scripts/test_browser_study_hub_offline_content.py -q` before declaring the fix verified.
