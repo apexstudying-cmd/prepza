@@ -1701,3 +1701,13 @@ When opening a document with a valid IndexedDB package for the current locally r
 Selected ready materials now use a local-first replay contract. If cached, they open directly from IndexedDB whether the browser is online or offline. If not cached and online, the screen reads the exact canonical material record by GET, then saves it only after the existing server detail check confirms it is a private artifact owned by the active student. It does not POST to an AI generation endpoint to reopen a ready artifact. Shared artifacts are not copied into the private offline cache.
 
 The focused browser gate was changed to make that contract measurable: the initial cache-fill stage expects canonical GETs and rejects generation POSTs; offline replay still runs with the browser disconnected and records any unexpected POST. The preceding local run failed before this patch, so there is no passing browser result yet. Rebuild and run `python scripts/test_browser_study_hub_offline_content.py -q` before declaring the fix verified.
+
+## 2026-10-10 — The PDF reader must prefer the upload-time local copy
+
+A follow-up inspection found the PDF reader still called document-detail, reading-progress, and rendered-page endpoints first whenever the browser had connectivity. That contradicted the local-first requirement even though the Study Hub screen itself could read its IndexedDB metadata.
+
+The reader now tries the current user's verified IndexedDB Blob first whether online or offline. Its old server fallback remains for records without a complete local package; this preserves the existing route for content that is not available locally. The separate background `/me` request remains for authenticated reader actions, while the document bytes/rendering come from the local Blob. No Library implementation was changed.
+
+The browser lifecycle regression now seeds a real one-page PDF (rather than a placeholder text Blob), intercepts source-document detail/reading/page GETs before My Study navigation, and requires the online reader to reach the PDF's parsed one-page canvas with the offline-copy indicator. It fails on any attempted source-document GET. This provides a concrete regression check for the behavior the user requested.
+
+**Not yet browser-verified:** the last reported local failure occurred before this reader fix. Run both `python scripts/test_browser_study_hub_offline.py -q` and `python scripts/test_browser_study_hub_offline_content.py -q` after rebuilding the app image. Static CI success is not a substitute for these real-browser gates.
