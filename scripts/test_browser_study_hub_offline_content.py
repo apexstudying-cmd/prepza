@@ -522,6 +522,42 @@ def main() -> int:
             login(page, fixture)
             seed_offline_content(page, fixture)
 
+            # Guard every online generation endpoint: only a POST carrying the
+            # exact selected material ID may reach Flask. Without that header the
+            # browser returns 412 here, before the route can enqueue an AI job.
+            online_reuse_posts = []
+            unguarded_generation_posts = []
+
+            def guard_generation_reuse(route):
+                request = route.request
+                endpoint = urlparse(request.url).path.rsplit("/", 1)[-1]
+                guarded_endpoints = {
+                    "summarize", "flashcards", "quiz", "mind-map",
+                    "podcast-script", "podcast-audio",
+                }
+                if request.method != "POST" or endpoint not in guarded_endpoints:
+                    route.continue_()
+                    return
+                material_id = request.headers.get("x-prepza-material-id", "")
+                online_reuse_posts.append({
+                    "url": request.url,
+                    "material_id": material_id,
+                })
+                if not material_id.isdigit() or int(material_id) <= 0:
+                    unguarded_generation_posts.append(request.url)
+                    route.fulfill(
+                        status=412,
+                        content_type="application/json",
+                        body=json.dumps({"error": "Test blocked POST without selected ready material ID"}),
+                    )
+                    return
+                route.continue_()
+
+            page.route(
+                re.compile(r".*/documents/\\d+/(summarize|flashcards|quiz|mind-map|podcast-script|podcast-audio)(?:\\?.*)?$"),
+                guard_generation_reuse,
+            )
+
             # First exercise the actual online UI against ready PostgreSQL rows.
             # Their exact-ID endpoints return existing artifacts, so no provider
             # or GPU generation is involved. The app must cache canonical records.
@@ -546,6 +582,21 @@ def main() -> int:
                     page.go_back(wait_until="commit")
                     # StudyMaterialsScreen remounts on return and selects Documents.
                     page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+
+            if unguarded_generation_posts:
+                raise AssertionError(
+                    "Test blocked a generation POST that lacked X-Prepza-Material-ID: "
+                    + ", ".join(unguarded_generation_posts)
+                )
+            if len(online_reuse_posts) < 12:
+                raise AssertionError(
+                    f"Expected at least 12 exact-material online reuse POSTs, got {len(online_reuse_posts)}: "
+                    + json.dumps(online_reuse_posts)
+                )
+            print(
+                f"PASS: {len(online_reuse_posts)} online material requests carried exact IDs; "
+                "unguarded AI generation requests were blocked"
+            )
 
             # Podcast's ready descriptor/audio are stubbed at the HTTP boundary.
             # This gives the real player valid audio while making a provider/GPU
