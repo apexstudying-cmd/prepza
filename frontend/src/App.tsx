@@ -50,6 +50,51 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
 
 type GenerationProgress = { progress_percent: number; progress_stage: string; status: string; found?: boolean; error_message?: string | null }
 
+function normalizeGeneratedMaterialFeature(value: unknown): string {
+  const feature = String(value || '').toLowerCase().replace(/-/g, '_')
+  if (feature === 'summary') return 'summarize'
+  if (feature === 'practice_questions') return 'quiz'
+  if (feature === 'mindmap') return 'mind_map'
+  return feature
+}
+
+function getSelectedGeneratedMaterialId(documentId: string | number, feature: string): number | null {
+  try {
+    const raw = sessionStorage.getItem('prepza-open-material')
+    if (!raw) return null
+    const selected = JSON.parse(raw)
+    const materialId = Number(selected?.materialId)
+    if (
+      String(selected?.documentId) === String(documentId) &&
+      normalizeGeneratedMaterialFeature(selected?.type) === normalizeGeneratedMaterialFeature(feature) &&
+      Number.isInteger(materialId) &&
+      materialId > 0
+    ) return materialId
+  } catch { /* malformed session state is non-fatal */ }
+  return null
+}
+
+async function replaySelectedGeneratedMaterialOffline(documentId: string | number, feature: string): Promise<any | null> {
+  const materialId = getSelectedGeneratedMaterialId(documentId, feature)
+  if (!materialId) return null
+
+  const cached = await getGeneratedMaterialOffline(
+    `/documents/${documentId}/materials/${materialId}`,
+    null,
+  )
+  if (
+    !cached ||
+    Number(cached.material_id) !== materialId ||
+    cached.status !== 'ready' ||
+    normalizeGeneratedMaterialFeature(cached.type) !== normalizeGeneratedMaterialFeature(feature) ||
+    cached.payload == null
+  ) return null
+
+  const normalizedFeature = normalizeGeneratedMaterialFeature(feature)
+  const payloadKey = normalizedFeature === 'summarize' ? 'summary' : normalizedFeature
+  return { material_id: materialId, reused: true, [payloadKey]: cached.payload }
+}
+
 async function generationRequest<T = any>(
   path: string,
   options: RequestInit = {},
@@ -68,34 +113,17 @@ async function generationRequest<T = any>(
 
   if (!documentId || !feature) return api<T>(path, options)
 
-  // Resolve the selected artifact before the offline branch. The Study Materials
-  // screen deliberately records the exact material id in sessionStorage so an
-  // offline open can replay that already-entitled artifact without calling a
-  // generation endpoint.
-  try {
-    const raw = sessionStorage.getItem('prepza-open-material')
-    if (raw) {
-      const selected = JSON.parse(raw)
-      const selectedFeature = selected?.type === 'practice_questions' ? 'quiz' : selected?.type === 'mindmap' ? 'mind_map' : selected?.type
-      if (String(selected?.documentId) === String(documentId) && selectedFeature === feature && Number(selected?.materialId) > 0) {
-        selectedMaterialId = Number(selected.materialId)
-      }
-    }
-  } catch { /* malformed session state is non-fatal */ }
+  // Resolve the exact ready artifact selected by the student. Feature aliases
+  // are normalized here because the UI labels summary as "summary" while its
+  // generation endpoint is /summarize, and quiz/mind-map have legacy aliases.
+  const selectedMaterialId = getSelectedGeneratedMaterialId(documentId, feature)
 
-  if (!navigator.onLine && selectedMaterialId) {
-    const cached = await getGeneratedMaterialOffline(
-      `/documents/${documentId}/materials/${selectedMaterialId}`,
-      null,
-    )
-    if (cached?.payload && cached?.type) {
-      const payloadKey = feature === 'mind_map' ? 'mind_map' : feature
-      return {
-        material_id: cached.material_id,
-        reused: true,
-        [payloadKey]: cached.payload,
-      } as T
-    }
+  // Offline means replay only. Never fall through to an API generation POST
+  // when no matching already-ready artifact exists on this device.
+  if (!navigator.onLine) {
+    const replay = await replaySelectedGeneratedMaterialOffline(documentId, feature)
+    if (replay) return replay as T
+    throw new Error('This study material is not saved for offline use on this device.')
   }
 
   let stopped = false
@@ -3253,18 +3281,23 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
 
   useEffect(() => {
     if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
-    api<{ csrf_token: string }>('/me')
-      .then(me => {
-        setCsrfToken(me.csrf_token)
-        return generationRequest<{ material_id: number; reused: boolean; flashcards: any }>(`/documents/${activeDocumentId}/flashcards`, {
-          method: 'POST',
-          headers: { 'X-CSRF-Token': me.csrf_token },
-        })
+    const path = `/documents/${activeDocumentId}/flashcards`
+    const loadFlashcards = async () => {
+      if (!navigator.onLine) return generationRequest<{ material_id: number; reused: boolean; flashcards: any }>(path)
+      const me = await api<{ csrf_token: string }>('/me')
+      setCsrfToken(me.csrf_token)
+      return generationRequest<{ material_id: number; reused: boolean; flashcards: any }>(path, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': me.csrf_token },
       })
+    }
+    void loadFlashcards()
       .then(res => { setMaterialId(res.material_id); setCards(normalizeCards(res.flashcards)) })
       .catch(async e => {
-        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/flashcards`)
-        if (cached) { setCards(normalizeCards(cached)); setError('') }
+        const selected = await replaySelectedGeneratedMaterialOffline(activeDocumentId, 'flashcards')
+        if (selected) { setMaterialId(selected.material_id); setCards(normalizeCards(selected.flashcards)); setError(''); return }
+        const cached = await getLatestGeneratedMaterialForPath(path)
+        if (cached) { setMaterialId(cached.material_id ?? null); setCards(normalizeCards(cached.flashcards ?? cached.payload ?? cached)); setError('') }
         else if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
         else setError(e instanceof ApiError ? e.message : 'Could not generate flashcards. Please try again.')
@@ -3400,18 +3433,23 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) =>
 
   useEffect(() => {
     if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
-    api<{ csrf_token: string }>('/me')
-      .then(me => {
-        setCsrfToken(me.csrf_token)
-        return generationRequest<{ material_id: number; reused: boolean; quiz: any }>(`/documents/${activeDocumentId}/quiz`, {
-          method: 'POST',
-          headers: { 'X-CSRF-Token': me.csrf_token },
-        })
+    const path = `/documents/${activeDocumentId}/quiz`
+    const loadQuiz = async () => {
+      if (!navigator.onLine) return generationRequest<{ material_id: number; reused: boolean; quiz: any }>(path)
+      const me = await api<{ csrf_token: string }>('/me')
+      setCsrfToken(me.csrf_token)
+      return generationRequest<{ material_id: number; reused: boolean; quiz: any }>(path, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': me.csrf_token },
       })
+    }
+    void loadQuiz()
       .then(res => { setMaterialId(res.material_id); setQuestions(normalizeQuiz(res.quiz)) })
       .catch(async e => {
-        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/quiz`)
-        if (cached) { setQuestions(normalizeQuiz(cached)); setError('') }
+        const selected = await replaySelectedGeneratedMaterialOffline(activeDocumentId, 'quiz')
+        if (selected) { setMaterialId(selected.material_id); setQuestions(normalizeQuiz(selected.quiz)); setError(''); return }
+        const cached = await getLatestGeneratedMaterialForPath(path)
+        if (cached) { setMaterialId(cached.material_id ?? null); setQuestions(normalizeQuiz(cached.quiz ?? cached.payload ?? cached)); setError('') }
         else if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
         else setError(e instanceof ApiError ? e.message : 'Could not generate a quiz. Please try again.')
@@ -3816,18 +3854,25 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 
   useEffect(() => {
     if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
-    api<{ csrf_token: string }>('/me')
-      .then(me => {
-        setHeartbeatCsrf(me.csrf_token)
-        return generationRequest<{ material_id: number; reused: boolean; summary: any }>(`/documents/${activeDocumentId}/summarize`, {
-          method: 'POST',
-          headers: { 'X-CSRF-Token': me.csrf_token },
-        })
+    const path = `/documents/${activeDocumentId}/summarize`
+    const loadSummary = async () => {
+      // Do not put /me in front of the offline replay branch: /me needs the
+      // network, but an already-saved summary does not.
+      if (!navigator.onLine) return generationRequest<{ material_id: number; reused: boolean; summary: any }>(path)
+      const me = await api<{ csrf_token: string }>('/me')
+      setHeartbeatCsrf(me.csrf_token)
+      return generationRequest<{ material_id: number; reused: boolean; summary: any }>(path, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': me.csrf_token },
       })
+    }
+    void loadSummary()
       .then(res => setSummary(res.summary))
       .catch(async e => {
-        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/summarize`)
-        if (cached) { setSummary(cached); setError('') }
+        const selected = await replaySelectedGeneratedMaterialOffline(activeDocumentId, 'summarize')
+        if (selected) { setSummary(selected.summary); setError(''); return }
+        const cached = await getLatestGeneratedMaterialForPath(path)
+        if (cached) { setSummary(cached.summary ?? cached.payload ?? cached); setError('') }
         else if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
         else setError(e instanceof ApiError ? e.message : 'Could not generate a summary. Please try again.')
@@ -7223,18 +7268,23 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 
   useEffect(() => {
     if (activeDocumentId == null) { setLoading(false); setError('No document selected.'); return }
-    api<{ csrf_token: string }>('/me')
-      .then(me => {
-        setHeartbeatCsrf(me.csrf_token)
-        return generationRequest<{ material_id: number; reused: boolean; mind_map: any }>(`/documents/${activeDocumentId}/mind-map`, {
-          method: 'POST',
-          headers: { 'X-CSRF-Token': me.csrf_token },
-        })
+    const path = `/documents/${activeDocumentId}/mind-map`
+    const loadMindMap = async () => {
+      if (!navigator.onLine) return generationRequest<{ material_id: number; reused: boolean; mind_map: any }>(path)
+      const me = await api<{ csrf_token: string }>('/me')
+      setHeartbeatCsrf(me.csrf_token)
+      return generationRequest<{ material_id: number; reused: boolean; mind_map: any }>(path, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': me.csrf_token },
       })
+    }
+    void loadMindMap()
       .then(res => setRaw(res.mind_map))
       .catch(async e => {
-        const cached = await getLatestGeneratedMaterialForPath(`/documents/${activeDocumentId}/mind-map`)
-        if (cached) { setRaw(cached); setError('') }
+        const selected = await replaySelectedGeneratedMaterialOffline(activeDocumentId, 'mind_map')
+        if (selected) { setRaw(selected.mind_map); setError(''); return }
+        const cached = await getLatestGeneratedMaterialForPath(path)
+        if (cached) { setRaw(cached.mind_map ?? cached.payload ?? cached); setError('') }
         else if (e instanceof ApiError && e.status === 429) setError("You've hit the hourly generation limit - try again later.")
         else if (e instanceof ApiError && e.status === 503) setError('AI budget exceeded for now - try again later.')
         else setError(e instanceof ApiError ? e.message : 'Could not generate a mind map. Please try again.')
