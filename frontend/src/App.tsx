@@ -104,7 +104,6 @@ async function generationRequest<T = any>(
     onProgress?.(progress)
     window.dispatchEvent(new CustomEvent('prepza:generation-progress', { detail: progress }))
   }
-  let selectedMaterialId: number | null = null
   const match = path.match(/^\/documents\/(\d+)\/(summarize|quiz|flashcards|mind-map|podcast-script)$/)
   const documentId = match?.[1]
   const feature = match?.[2] === 'podcast-script' ? 'podcast'
