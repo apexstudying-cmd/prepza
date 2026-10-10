@@ -4164,6 +4164,14 @@ def get_generated_material(document_id, material_id):
         "status": material.status,
         "parameters": material.generation_parameters or {},
         "payload": json.loads(material.payload),
+        # The caller can cache this response without a second document-detail
+        # request. Only private artifacts owned by this same student qualify;
+        # authorized shared/Library material remains read-only and uncached.
+        "private_to_current_user": bool(
+            material.scope == "private"
+            and material.owner_user_id == user_id
+            and document.user_id == user_id
+        ),
     }), 200
 
 
