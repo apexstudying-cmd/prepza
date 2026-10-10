@@ -318,14 +318,9 @@ def main() -> int:
                 print("DIAGNOSTIC URL:", page.url)
                 print("DIAGNOSTIC BODY:", page.locator("body").inner_text(timeout=5000)[:6000])
                 raise
-            page.get_by_role("button", name="Continue →", exact=True).click()
-            page.get_by_role("button", name=re.compile(r"Continue Reading")).wait_for(timeout=15000)
-            print("PASS: real browser opened the local-first Study Hub document")
-
-            # Opening a document already present in IndexedDB must use its Blob,
-            # not hit Flask's document-detail, reading-progress, or rendered-page
-            # endpoints again. Abort such requests so the test also prevents a
-            # regression from silently serving the original source over HTTP.
+            # Guard the local-first navigation from the moment My Study opens.
+            # A valid local Blob must be enough to render the uploaded PDF online;
+            # detail/progress/page endpoints are blocked and counted as regressions.
             source_document_requests = []
             def block_saved_document_requests(route):
                 request = route.request
@@ -348,16 +343,21 @@ def main() -> int:
                 re.compile(rf".*/documents/{fixture['document_id']}(?:/reading(?:/page/\d+)?)?$"),
                 block_saved_document_requests,
             )
+            page.get_by_role("button", name="Continue →", exact=True).click()
+            page.get_by_role("button", name=re.compile(r"Continue Reading")).wait_for(timeout=15000)
+            print("PASS: real browser opened the local-first Study Hub document")
+
             page.get_by_role("button", name=re.compile(r"Continue Reading")).click(timeout=15000)
             page.get_by_text("Offline study copy", exact=True).wait_for(timeout=15000)
             page.get_by_text("OFFLINE", exact=True).wait_for(timeout=15000)
-            page.locator("canvas").wait_for(timeout=15000)
-            page.wait_for_function(
-                "() => { const c = document.querySelector('canvas'); return !!c && c.width > 0 && c.height > 0; }",
-                timeout=15000,
-            )
-            if page.get_by_text("Could not open this PDF.", exact=False).count():
-                raise AssertionError("Local Study Hub Blob was selected but the PDF failed to render.")
+            # PdfStudyCanvas changes the accessible name from 'PDF' to the real
+            # page count only after it successfully parses and renders the Blob.
+            page.locator('canvas[aria-label="Page 1 of 1"]').wait_for(timeout=15000)
+            if page.get_by_role("alert").count():
+                raise AssertionError(
+                    "Local Study Hub Blob was selected but the PDF reader reported an error: "
+                    + page.get_by_role("alert").first.inner_text()
+                )
             if source_document_requests:
                 raise AssertionError(
                     "Local My Study reader tried to fetch the saved source from Flask: "
