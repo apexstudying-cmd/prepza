@@ -247,7 +247,8 @@ def login(page, fixture: dict) -> None:
     except Exception as exc:
         raise RuntimeError(
             "Service-worker startup did not settle before IndexedDB seeding; "
-            f"main-frame navigations={navigation_events}"
+            f"main-frame navigations={navigation_events}; "
+            f"underlying={type(exc).__name__}: {exc}; current_url={page.url}"
         ) from exc
 
     # Wait for the real signed-in Home UI, not a guessed startup delay.
