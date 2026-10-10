@@ -1676,3 +1676,10 @@ Commit `fdbb2aa66c4b910654ccd2aaed785c9f17fe0b86` records Playwright service-wor
 The repeated output showed all worker-owned precache requests finishing, but each diagnostic reported `controlled` and registration state sampled before the asynchronous asset probes finished. Two main-frame navigations are not a reliable substitute for the actual control condition. That meant we were collecting more evidence without waiting on the property the test ultimately needs.
 
 Commit `b212a9193702ad4446bc1f45143ca11bbc900c9a` now polls for a complete root document whose `navigator.serviceWorker.controller` is present, and makes the failure snapshot after the probes. If it still times out with no active worker, that will be much stronger evidence of a real lifecycle failure. Do not mark the offline gate passed until the full end-to-end test succeeds.
+
+
+## 2026-10-10 — Separate missing API materials from missing rendered cards
+
+The test has progressed beyond service-worker startup and now times out on the first Summary card. Before changing the UI or weakening its locator, verify the authenticated `GET /documents` response for the fixture user's three documents and their five expected ready types. The UI reads this bulk endpoint and maps each item's `id`, `type`, `status`, and `parameters` into buttons titled with the source document.
+
+Commit `920e80ebb515321014cba3b886904a6bb9dc8668` adds that API contract check and reports visible buttons/page text if the API is correct but the card is absent. Use those results to make the smallest evidenced correction; do not assume another service-worker failure or change production behavior speculatively.
