@@ -1673,3 +1673,14 @@ The browser gate itself has also changed so it no longer fakes the generated-mat
 The startup fixture waits for the service-worker control/reload described by `frontend/public/sw.js` and `frontend/public/sw-register.js` rather than relying on the earlier fixed 1.2-second delay. The generation-route guard also matches digit-only document IDs; this pattern was checked against the actual request paths.
 
 **Verification status:** source changes are on `main`; GitHub's Python-syntax and prior frontend-build checks have passed on preceding commits, but the newest guarded test change has not yet been executed by the user in a local browser. Rebuild the app image and rerun `scripts/test_browser_study_hub_offline_content.py -q`. Do not mark this release gate PASS until the complete online-cache -> offline replay -> reload assertions complete.
+
+
+## 2026-10-10 — Preserve the underlying offline browser startup exception
+
+The latest reported run still stops in `login()`, before IndexedDB seeding and before any offline-artifact assertions. Its visible output recorded two main-frame navigations to `http://localhost:5000/`, but the helper wrapped the inner exception in a `RuntimeError` and the top-level runner printed only the wrapper message. That meant the actual wait/state failure was not visible in the concise test output.
+
+Commit `12e5a901` changes diagnostics only: the wrapper now includes the underlying exception type/message and the current page URL. It does **not** increase timeouts, suppress the failure, or change service-worker behavior.
+
+**Next verification:** rebuild the app image from current `main` and rerun `scripts/test_browser_study_hub_offline_content.py -q`. Capture the new `underlying=...` detail. Use that evidence to identify the failing wait/state transition before changing behavior.
+
+**Gate status: NOT TESTED.** No artifact, offline replay, zero-generation-POST, podcast-Blob, or offline-reload assertion has yet passed in this run. This diagnostic commit is not a browser-test pass.
