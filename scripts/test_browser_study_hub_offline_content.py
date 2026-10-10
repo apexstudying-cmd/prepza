@@ -215,6 +215,8 @@ def login(page, fixture: dict) -> None:
         "devtools_worker_errors": [],
         "devtools_registration_updates": [],
         "devtools_version_updates": [],
+        "playwright_service_workers": [],
+        "worker_shell_requests": [],
     }
 
     # Page console events do not consistently expose exceptions raised inside
@@ -293,6 +295,100 @@ def login(page, fixture: dict) -> None:
                 "path": path,
                 "failure": request.failure,
             })
+
+    def record_service_worker(worker):
+        worker_record = {
+            "url": worker.url,
+            "console": [],
+            "close_events": 0,
+        }
+        startup_diagnostics["playwright_service_workers"].append(worker_record)
+
+        def record_worker_console(message):
+            worker_record["console"].append({
+                "type": message.type,
+                "text": message.text[:1000],
+            })
+
+        try:
+            worker.on("console", record_worker_console)
+        except Exception as exc:
+            worker_record["console_listener_error"] = f"{type(exc).__name__}: {exc}"
+
+        try:
+            worker.on(
+                "close",
+                lambda: worker_record.__setitem__(
+                    "close_events", worker_record["close_events"] + 1
+                ),
+            )
+        except Exception as exc:
+            worker_record["close_listener_error"] = f"{type(exc).__name__}: {exc}"
+
+    page.context.on("serviceworker", record_service_worker)
+
+    def is_shell_asset_request(request):
+        return urlparse(request.url).path in {
+            "/offline.html", "/manifest.json", "/icon-192.png", "/icon-512.png"
+        }
+
+    def record_context_request(request):
+        if not is_shell_asset_request(request):
+            return
+        worker = getattr(request, "service_worker", None)
+        if worker is None:
+            return
+        startup_diagnostics["worker_shell_requests"].append({
+            "event": "request",
+            "path": urlparse(request.url).path,
+            "worker_url": worker.url,
+            "method": request.method,
+        })
+
+    def record_context_response(response):
+        request = response.request
+        if not is_shell_asset_request(request):
+            return
+        worker = getattr(request, "service_worker", None)
+        if worker is None:
+            return
+        startup_diagnostics["worker_shell_requests"].append({
+            "event": "response",
+            "path": urlparse(response.url).path,
+            "worker_url": worker.url,
+            "status": response.status,
+            "content_type": response.headers.get("content-type"),
+        })
+
+    def record_context_request_finished(request):
+        if not is_shell_asset_request(request):
+            return
+        worker = getattr(request, "service_worker", None)
+        if worker is None:
+            return
+        startup_diagnostics["worker_shell_requests"].append({
+            "event": "finished",
+            "path": urlparse(request.url).path,
+            "worker_url": worker.url,
+        })
+
+    def record_context_request_failed(request):
+        if not is_shell_asset_request(request):
+            return
+        worker = getattr(request, "service_worker", None)
+        if worker is None:
+            return
+        startup_diagnostics["worker_shell_requests"].append({
+            "event": "failed",
+            "path": urlparse(request.url).path,
+            "worker_url": worker.url,
+            "failure": request.failure,
+        })
+
+    page.context.on("request", record_context_request)
+    page.context.on("response", record_context_response)
+    page.context.on("requestfinished", record_context_request_finished)
+    page.context.on("requestfailed", record_context_request_failed)
 
     page.on("console", record_startup_console)
     page.on("pageerror", lambda error: startup_diagnostics["page_errors"].append(str(error)[:1000]))
