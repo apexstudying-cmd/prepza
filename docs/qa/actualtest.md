@@ -1653,3 +1653,23 @@ Source inspection found a specific startup navigation path that could interrupt 
 The same source audit found an independent **production offline-replay defect**. Summary, Flashcards, Practice Questions and Mind Map first requested `/me`; an offline failure there prevented the offline-aware `generationRequest()` from running. In addition, `summary` was not normalized to the `/summarize` feature name, and the offline response key did not match the Summary screen's expected `summary` property. The application now resolves the exact selected, ready material from IndexedDB before any network generation call, normalizes these feature names and returns an error instead of falling through to a generation POST when offline material is unavailable. The fixture's Mind Map branch shape was also corrected to match what the renderer consumes.
 
 **Gate status remains: NOT TESTED / BLOCKED.** These changes are on main but have not yet been executed. Rebuild the app image and rerun the gate; only the full run can prove each material screen, podcast Blob playback, zero generation POSTs and offline reload persistence.
+
+
+## 2026-10-10 — Offline artifact gate redesigned around verified cache contracts
+
+The last user-executed browser run was against commit `4f1ed663` and stopped during the asynchronous IndexedDB fixture seed with:
+
+    FAIL: Page.evaluate: Execution context was destroyed, most likely because of a navigation
+
+That failure occurred before any intended artifact assertion. It does not establish that offline replay failed.
+
+Source inspection then identified two product/harness issues that are now addressed on `main`:
+
+1. `generationRequest()` previously saved the UI response from a generation endpoint (for example `{material_id, reused, summary}`) under the canonical offline-material path. The real GET `/documents/<id>/materials/<material_id>` returns a different shape: `{material_id, type, status, parameters, payload}`. The app now resolves and saves that canonical response only after checking that the exact ready artifact is private and owned by the current student. Shared Library material is not promoted into an offline entitlement.
+2. A ready podcast could play without necessarily leaving both its descriptor and the audio Blob available offline. The player now best-effort caches the selected private podcast artifact, the ready audio descriptor, and its fetched audio Blob.
+
+The browser gate itself has also changed so it no longer fakes the generated-material cache. It seeds only the saved source-document package and creates ready private `GeneratedMaterial` rows in the test fixture database. The real UI then opens each existing material while online; exact-material reuse requests must carry `X-Prepza-Material-ID`. A Playwright request guard blocks any material-generation POST missing that ID before it can reach Flask and potentially enqueue AI work. Podcast readiness/audio are stubbed at the browser HTTP boundary, so the gate does not call OpenAI or a GPU service. The test then goes offline and verifies that the actual cache written by Prepza can reopen Summary, Flashcards, Practice Questions, Mind Map and Podcast, survives a browser reload, and triggers no generation POST while offline.
+
+The startup fixture waits for the service-worker control/reload described by `frontend/public/sw.js` and `frontend/public/sw-register.js` rather than relying on the earlier fixed 1.2-second delay. The generation-route guard also matches digit-only document IDs; this pattern was checked against the actual request paths.
+
+**Verification status:** source changes are on `main`; GitHub's Python-syntax and prior frontend-build checks have passed on preceding commits, but the newest guarded test change has not yet been executed by the user in a local browser. Rebuild the app image and rerun `scripts/test_browser_study_hub_offline_content.py -q`. Do not mark this release gate PASS until the complete online-cache -> offline replay -> reload assertions complete.
