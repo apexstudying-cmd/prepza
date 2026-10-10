@@ -1713,3 +1713,13 @@ The browser lifecycle regression now seeds a real one-page PDF (rather than a pl
 **Not yet browser-verified:** the last reported local failure occurred before this reader fix. Run both `python scripts/test_browser_study_hub_offline.py -q` and `python scripts/test_browser_study_hub_offline_content.py -q` after rebuilding the app image. Static CI success is not a substitute for these real-browser gates.
 
 **CI status update (2026-10-10):** GitHub's Python syntax, frontend build, screen loading, student contract/frontend, security regression, and standard test checks were green for the same code/test state. This validates syntax/build and existing automated contracts, not that the local browser rendered the IndexedDB PDF and replayed all materials; those real-browser checks remain pending.
+
+## 2026-10-10 — Make private cache eligibility part of the canonical response
+
+A canonical ready-material GET now includes `private_to_current_user`, computed by Flask from the authenticated user, the source document owner, and the artifact's privacy scope. This lets the frontend cache that exact canonical row without first asking for the whole document detail and then fetching the artifact separately. The helper also checks that the row's material type matches the type being opened, so a malformed selection cannot be cached under the wrong expectation.
+
+The flag is false for shared/Library artifacts. The app may still open a shared material when the existing route authorizes it, but this cache helper will not copy it into the student's private offline material store. No Library frontend or publication code was changed.
+
+The browser contract now verifies that the initial online material cache-fill made canonical GETs (not generation POSTs), all responses returned HTTP 200 and explicitly confirmed private ownership for the fixture student, and opening a saved My Study document did not request its document detail or reading state again. Actual local PDF parsing/rendering remains covered by the separate `test_browser_study_hub_offline.py` gate.
+
+GitHub CI had passed frontend build and the listed contract checks on commit `125dbe31234692c65a187c1556efb3811cad4725`. The additional expected-type guard is on the newer commit `628a8e031e492b8b7b4200a38303ee36e3250ceb`, whose CI is still running at the time of this note. No local browser result has yet been supplied after these changes.
