@@ -360,7 +360,7 @@ def seed_offline_content(page, fixture: dict) -> None:
               } else if (type === 'quiz') {
                 payload = { material_id: materialId, type, status: 'ready', payload: { questions: [{ question: 'Offline quiz question', options: ['A', 'B'], answer_index: 0 }] } };
               } else if (type === 'mind_map') {
-                payload = { material_id: materialId, type, status: 'ready', payload: { center: doc.title, branches: [{ label: 'Offline branch' }] } };
+                payload = { material_id: materialId, type, status: 'ready', payload: { center: doc.title, branches: ['Offline branch'] } };
               } else {
                 payload = { material_id: materialId, type, status: 'ready', payload: { script: 'Offline podcast script', audio_url: '/offline-fixture-audio/' + String(materialId), duration_seconds: 0.1 } };
               }
