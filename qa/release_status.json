@@ -133,6 +133,6 @@
     "Run the final clean full regression after the remaining gates and current security changes are verified.",
     "Keep controlled external-provider verification separate from the local release freeze unless explicitly approved as an external-provider gate."
   ],
-  "current_main_commit": "9cb5a6f56100e249fc87969b4342731b6d0e811d",
-  "verification_note": "The current source/test work on 9cb5a6f5 has not yet been executed by the offline content/artifact browser gate. The latest separate verified Study Hub gate remains e963cca1; do not treat the offline content/artifact gate as passed until the rebuilt-browser assertions complete."
+  "current_main_commit": "bb21f91f166b103d8c4dd67d55b5b5266273fc96",
+  "verification_note": "Current main (bb21f91f) includes offline replay source/test fixes that have not yet been executed by the browser content/artifact gate. Keep that gate NOT_TESTED until the rebuilt browser run reaches and passes artifact replay, zero-generation-POST, podcast-Blob, and offline-reload assertions. The separate Study Hub lifecycle gate's historical verified commit remains e963cca1."
 }
