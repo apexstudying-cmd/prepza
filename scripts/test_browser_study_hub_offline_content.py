@@ -804,12 +804,25 @@ def main() -> int:
             login(page, fixture)
             seed_offline_content(page, fixture)
 
+            # Opening a locally saved My Study document must not re-download
+            # its detail or reading state. The original PDF Blob was seeded
+            # locally, as upload does in production.
+            source_document_reads = []
+
+            def observe_source_document_read(request):
+                path = urlparse(request.url).path
+                if request.method == "GET" and re.fullmatch(r"/documents/\d+(?:/reading)?", path):
+                    source_document_reads.append(request.url)
+
+            page.on("request", observe_source_document_read)
+
             # Replaying a ready item must read its canonical artifact record
             # with GET, not POST to a generation endpoint. Block every POST for
             # these routes before Flask so this test can never spend AI credits.
             online_reuse_posts = []
             unguarded_generation_posts = []
             online_material_reads = []
+            online_material_responses = []
 
             def guard_generation_reuse(route):
                 request = route.request
@@ -841,7 +854,26 @@ def main() -> int:
                 ):
                     online_material_reads.append(request.url)
 
+            def observe_canonical_material_response(response):
+                request = response.request
+                if (
+                    request.method != "GET"
+                    or not re.fullmatch(r"/documents/\d+/materials/\d+", urlparse(request.url).path)
+                ):
+                    return
+                try:
+                    payload = response.json()
+                except Exception as exc:
+                    payload = {"response_parse_error": f"{type(exc).__name__}: {exc}"}
+                online_material_responses.append({
+                    "url": request.url,
+                    "status": response.status,
+                    "private_to_current_user": payload.get("private_to_current_user"),
+                    "response_parse_error": payload.get("response_parse_error"),
+                })
+
             page.on("request", observe_online_material_read)
+            page.on("response", observe_canonical_material_response)
             page.route(
                 re.compile(r".*/documents/\d+/(summarize|flashcards|quiz|mind-map|podcast-script|podcast-audio)(?:\?.*)?$"),
                 guard_generation_reuse,
@@ -850,6 +882,22 @@ def main() -> int:
             # First exercise the actual online UI against ready PostgreSQL rows.
             # Their exact-ID endpoints return existing artifacts, so no provider
             # or GPU generation is involved. The app must cache canonical records.
+            page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
+            page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
+
+            source_reads_before_open = len(source_document_reads)
+            page.get_by_role(
+                "button",
+                name=re.compile(re.escape(DOCUMENTS[0][1])),
+            ).first.click(timeout=15000)
+            page.get_by_role("button", name=re.compile(r"Continue Reading")).wait_for(timeout=15000)
+            source_reads_during_open = source_document_reads[source_reads_before_open:]
+            if source_reads_during_open:
+                raise AssertionError(
+                    "Opening locally saved My Study content fetched document detail/reading from Flask: "
+                    + json.dumps(source_reads_during_open)
+                )
+            print("PASS: saved My Study document opens from IndexedDB with zero document-detail/reading GETs")
             page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
@@ -985,9 +1033,22 @@ def main() -> int:
                     f"Expected at least 12 canonical material GETs, got {len(online_material_reads)}: "
                     + json.dumps(online_material_reads, sort_keys=True)
                 )
+            bad_cache_flags = [
+                row for row in online_material_responses
+                if row.get("status") != 200 or row.get("private_to_current_user") is not True
+            ]
+            if len(online_material_responses) < 12 or bad_cache_flags:
+                raise AssertionError(
+                    "Canonical material responses were not all marked private/cacheable for the owner: "
+                    + json.dumps({
+                        "response_count": len(online_material_responses),
+                        "bad_responses": bad_cache_flags,
+                        "all_responses": online_material_responses,
+                    }, sort_keys=True)
+                )
             print(
                 f"PASS: {len(online_material_reads)} canonical material GETs populated local cache; "
-                "zero generation POSTs were sent"
+                "the server confirmed private ownership; zero generation POSTs were sent"
             )
 
             # Podcast's ready descriptor/audio are stubbed at the HTTP boundary.
