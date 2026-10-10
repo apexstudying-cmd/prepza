@@ -1723,3 +1723,10 @@ The flag is false for shared/Library artifacts. The app may still open a shared 
 The browser contract now verifies that the initial online material cache-fill made canonical GETs (not generation POSTs), all responses returned HTTP 200 and explicitly confirmed private ownership for the fixture student, and opening a saved My Study document did not request its document detail or reading state again. Actual local PDF parsing/rendering remains covered by the separate `test_browser_study_hub_offline.py` gate.
 
 GitHub CI had passed frontend build and the listed contract checks on commit `125dbe31234692c65a187c1556efb3811cad4725`. The additional expected-type guard is on the newer commit `628a8e031e492b8b7b4200a38303ee36e3250ceb`, whose CI is still running at the time of this note. No local browser result has yet been supplied after these changes.
+
+
+## 2026-10-10 — Preserve account isolation while removing duplicate identity requests
+
+Do not replace session validation with only the last local account ID. My Study now shares one `/me` promise: it refreshes the remembered user ID when connected and sets the Library-action CSRF token from the same response. When disconnected, it safely falls back to the existing local ID for offline-only access. That keeps the reduced request count without letting a prior browser account ID become the only account check.
+
+The offline material cache helper also validates the canonical artifact's type against the exact selected feature before saving. Both protections are included in commit `62da5f40301230fa9919013e770fad41c9631308`. Current CI had passed Release QA Trace and Admin Route Contract; frontend build steps (including typecheck/build) had passed while the job was completing cleanup, with several other workflows still running. Real browser verification still requires both documented local tests after rebuilding Docker.
