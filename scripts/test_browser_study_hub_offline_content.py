@@ -318,7 +318,7 @@ def login(page, fixture: dict) -> None:
         try:
             worker.on(
                 "close",
-                lambda: worker_record.__setitem__(
+                lambda *_args: worker_record.__setitem__(
                     "close_events", worker_record["close_events"] + 1
                 ),
             )
