@@ -1655,3 +1655,10 @@ The follow-up diagnostic commit `8022890ef729824b8156c5f26dfca9375c3d6f03` adds 
 The latest browser probe receives HTTP 200 for both worker scripts and sees a root-scope registration, but all three registration worker slots (`installing`, `waiting`, `active`) are null, with no controller. This is consistent with a worker that failed before becoming active, but the evidence does not prove the exact cause. Page console alone can miss errors raised in the worker execution target.
 
 Commit `3f28284f2cffb3e67c07923284decf43e75f1687` adds Chrome DevTools Protocol event capture for `ServiceWorker.workerErrorReported`, registration updates, and version/lifecycle updates before page navigation. Read that evidence before changing production code. Keep the test assertion strict and the offline release gate blocked until the actual lifecycle failure is resolved.
+
+
+## 2026-10-10 — Local shell fetches are part of worker installation
+
+Prepza's service worker waits for `precacheShell()` in its install event; that function fetches `/offline.html`, `/manifest.json`, `/icon-192.png`, and `/icon-512.png`. Chromium reports the worker still `installing` with no worker error, so these requests are the next bounded check. This narrows the diagnostic target without assuming that an asset or cache operation is the cause.
+
+Commit `36a22b29c4860ec103b40d00ae6da761396dc3a2` records HTTP status, content type, byte count and elapsed time for those local resources. If all are prompt and successful, do not keep adding waits; move on to instrumenting the installation/cache step itself.
