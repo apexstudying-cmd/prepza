@@ -1641,3 +1641,10 @@ I updated `scripts/test_browser_study_hub_offline_content.py` in commit `12e5a90
 **Lesson:** exception chaining preserves the cause for a traceback, but a test harness that catches the exception and prints only `str(exc)` can hide that cause. Diagnostic context should be surfaced explicitly at the point where the harness converts the exception.
 
 **Next step:** rebuild the current image, rerun the focused browser test, and use the new `underlying=...` output to choose the smallest evidence-based fix. The gate remains **NOT TESTED** until the complete online-cache → offline replay → zero-generation-POST → reload assertions pass.
+
+
+## 2026-10-10 — Separate service-worker support from control
+
+The browser failure now says `supported: true`, `controlled: false`. That is not enough to blame an outside dependency: API support is present, but registration and lifecycle are still unknown. In particular, two same-URL navigations do not prove that the second page is controlled.
+
+The follow-up diagnostic commit `8022890ef729824b8156c5f26dfca9375c3d6f03` adds the current registration scope and worker states, checks the HTTP response/content type for `/sw-register.js` and `/sw.js`, and records relevant console and request failures. Use that output to choose the smallest root-cause fix; do not add sleep-only workarounds, suppress the assertion, or mark the offline gate passed.
