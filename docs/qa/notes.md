@@ -1648,3 +1648,10 @@ I updated `scripts/test_browser_study_hub_offline_content.py` in commit `12e5a90
 The browser failure now says `supported: true`, `controlled: false`. That is not enough to blame an outside dependency: API support is present, but registration and lifecycle are still unknown. In particular, two same-URL navigations do not prove that the second page is controlled.
 
 The follow-up diagnostic commit `8022890ef729824b8156c5f26dfca9375c3d6f03` adds the current registration scope and worker states, checks the HTTP response/content type for `/sw-register.js` and `/sw.js`, and records relevant console and request failures. Use that output to choose the smallest root-cause fix; do not add sleep-only workarounds, suppress the assertion, or mark the offline gate passed.
+
+
+## 2026-10-10 — Inspect Chromium worker lifecycle, not just page console
+
+The latest browser probe receives HTTP 200 for both worker scripts and sees a root-scope registration, but all three registration worker slots (`installing`, `waiting`, `active`) are null, with no controller. This is consistent with a worker that failed before becoming active, but the evidence does not prove the exact cause. Page console alone can miss errors raised in the worker execution target.
+
+Commit `3f28284f2cffb3e67c07923284decf43e75f1687` adds Chrome DevTools Protocol event capture for `ServiceWorker.workerErrorReported`, registration updates, and version/lifecycle updates before page navigation. Read that evidence before changing production code. Keep the test assertion strict and the offline release gate blocked until the actual lifecycle failure is resolved.
