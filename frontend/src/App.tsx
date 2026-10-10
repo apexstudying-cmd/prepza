@@ -856,10 +856,19 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
     let cancelled = false
     const loadOffline = async () => {
       try {
-        // Upload persists the owning account ID with the offline copy.
-        // Reuse that local identity rather than making another /me request.
-        const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
-        if (!Number.isInteger(userId) || userId <= 0) return
+        // Reuse the current session's /me request so local packages remain
+        // account-scoped without issuing a duplicate authentication request.
+        let userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
+        if (!Number.isInteger(userId) || userId <= 0) userId = 0
+        try {
+          const me = await meRequest
+          const serverUserId = Number(me.id || 0)
+          if (Number.isInteger(serverUserId) && serverUserId > 0) {
+            userId = serverUserId
+            setOfflineUserId(serverUserId)
+          }
+        } catch { /* offline: keep the last local account id */ }
+        if (userId <= 0) return
         const saved = await listSavedStudyHubOffline(userId)
         if (!cancelled) {
           const offlineDocs = saved.map(row => ({
@@ -898,8 +907,13 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
         }
       } catch { /* offline package lookup is non-fatal */ }
     }
+    const meRequest = api<{ id?: number; csrf_token?: string }>('/me')
     void loadOffline()
-    api<{ csrf_token?: string }>('/me').then(me => { if (me.csrf_token) setCsrfToken(me.csrf_token) }).catch(() => {})
+    meRequest.then(me => {
+      const serverUserId = Number(me.id || 0)
+      if (Number.isInteger(serverUserId) && serverUserId > 0) setOfflineUserId(serverUserId)
+      if (me.csrf_token) setCsrfToken(me.csrf_token)
+    }).catch(() => {})
     api<{ saved: SavedLibraryItem[] }>('/library/saved').then(res => {
       if (!cancelled) setSavedLibrary(res.saved || [])
     }).catch(() => {})
