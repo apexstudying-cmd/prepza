@@ -522,11 +522,83 @@ def main() -> int:
             login(page, fixture)
             seed_offline_content(page, fixture)
 
-            # Navigate through the real student UI before going offline. The test
-            # must not depend on an internal sessionStorage navigation shape.
+            # First exercise the actual online UI against ready PostgreSQL rows.
+            # Their exact-ID endpoints return existing artifacts, so no provider
+            # or GPU generation is involved. The app must cache canonical records.
             page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
+            page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
+            for _, document_title in DOCUMENTS:
+                for type_label, expected_text in [
+                    ("Summary", "Offline summary"),
+                    ("Flashcards", "Offline question"),
+                    ("Practice Questions", "Offline quiz question"),
+                    ("Mind Map", "Offline branch"),
+                ]:
+                    material_button = page.get_by_role(
+                        "button",
+                        name=re.compile(rf"{re.escape(type_label)}.*From: {re.escape(document_title)}"),
+                    ).first
+                    material_button.click(timeout=15000)
+                    page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
+                    print(f"PASS: existing online {type_label} opens for {document_title}")
+                    page.go_back(wait_until="commit")
+                    # StudyMaterialsScreen remounts on return and selects Documents.
+                    page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+
+            # Podcast's ready descriptor/audio are stubbed at the HTTP boundary.
+            # This gives the real player valid audio while making a provider/GPU
+            # request impossible. The runtime itself must persist both descriptor
+            # and blob before the browser goes offline.
+            unexpected_audio_posts = []
+
+            def serve_ready_podcast(route):
+                mock_ready_podcast_audio(route, unexpected_audio_posts)
+
+            def serve_podcast_wav(route):
+                mock_podcast_wav(route)
+
+            page.route("**/documents/*/podcast-audio*", serve_ready_podcast)
+            page.route("**/offline-fixture-audio/*", serve_podcast_wav)
+            podcast_material_id = fixture["documents"][0]["materials"]["podcast"]
+            podcast_button = page.get_by_role(
+                "button",
+                name=re.compile(rf"Podcast.*From: {re.escape(DOCUMENTS[0][1])}"),
+            ).first
+            podcast_button.click(timeout=15000)
+            page.locator("audio").wait_for(timeout=15000)
+            wait_for_cached_podcast(
+                page,
+                fixture,
+                fixture["documents"][0]["document_id"],
+                podcast_material_id,
+            )
+            if unexpected_audio_posts:
+                raise AssertionError(
+                    "A ready podcast tried to start audio generation: "
+                    + ", ".join(unexpected_audio_posts)
+                )
+            print("PASS: online podcast replay caches its private script, ready descriptor, and audio Blob")
+
+            # Return to the real list, then remove the HTTP stubs so offline replay
+            # cannot pass by accidentally receiving their fake online responses.
+            page.go_back(wait_until="commit")
+            page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
+            page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+            page.unroute("**/documents/*/podcast-audio*", serve_ready_podcast)
+            page.unroute("**/offline-fixture-audio/*", serve_podcast_wav)
+
+            generation_posts = []
+
+            def observe_request(request):
+                if request.method == "POST" and any(
+                    marker in request.url
+                    for marker in ("/summarize", "/flashcards", "/quiz", "/mind-map", "/podcast-script", "/podcast-audio")
+                ):
+                    generation_posts.append(request.url)
+
+            page.on("request", observe_request)
             context.set_offline(True)
             page.reload(wait_until="domcontentloaded")
 
@@ -542,22 +614,8 @@ def main() -> int:
                     raise AssertionError(f"Offline Study Materials did not retain document: {title}")
             print("PASS: multiple saved documents remain listed offline")
 
-            # Capture forbidden generation attempts. The browser is offline,
-            # so the correct implementation must satisfy generationRequest from
-            # the already-cached material and return before calling POST.
-            generation_posts = []
-            def observe_request(request):
-                if request.method == "POST" and any(
-                    marker in request.url
-                    for marker in ("/summarize", "/flashcards", "/quiz", "/mind-map", "/podcast-script", "/podcast-audio")
-                ):
-                    generation_posts.append(request.url)
-            page.on("request", observe_request)
-
-            # The content/artifact gate is deliberately separate from the PDF
-            # reader gate. The existing offline lifecycle test already proves the
-            # saved document bytes open offline. Here we prove that already-ready
-            # generated materials replay through the real Study Materials UI.
+            # The app itself populated generatedMaterials. Replaying these rows
+            # offline must never call a generation POST.
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
             for _, document_title in DOCUMENTS:
                 for type_label, expected_text in [
@@ -572,15 +630,12 @@ def main() -> int:
                     ).first
                     material_button.click(timeout=15000)
                     page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
-                    print(f"PASS: {type_label} opens offline for {document_title}")
+                    print(f"PASS: {type_label} replays offline for {document_title}")
                     page.go_back(wait_until="commit")
-                    # StudyMaterialsScreen remounts on return, so its local tab
-                    # resets to Documents. Re-select the actual materials tab.
                     page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
-            # Podcast is separate because it combines a saved JSON descriptor with
-            # a binary audio Blob. The player must resolve the descriptor and then
-            # expose a blob: URL without POSTing script or audio generation.
+            # Podcast must now resolve from its cached descriptor and Blob, with
+            # both the audio HTTP stub and normal network unavailable.
             podcast_button = page.get_by_role(
                 "button",
                 name=re.compile(rf"Podcast.*From: {re.escape(DOCUMENTS[0][1])}"),
@@ -590,12 +645,8 @@ def main() -> int:
             audio_src = page.locator("audio").get_attribute("src") or ""
             if not audio_src.startswith("blob:"):
                 raise AssertionError(f"Offline podcast did not resolve to a local Blob URL: {audio_src}")
-            print("PASS: generated podcast metadata and actual audio Blob open offline")
+            print("PASS: cached podcast descriptor and actual audio Blob open offline")
 
-            # Leave the podcast player through browser back before reload. The
-            # real React navigation stack then restores Study Materials, rather
-            # than restoring an immersive player when persistence checks expect
-            # the document list.
             page.go_back(wait_until="commit")
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
@@ -607,9 +658,8 @@ def main() -> int:
                 )
             print("PASS: offline artifact replay made no generation POST requests")
 
-            # Reload while still offline and repeat the most important proof:
-            # local documents and generated materials survive a real browser reload,
-            # not just SPA navigation.
+            # A cold browser reload while still offline must not lose the cached
+            # documents, generated materials, audio descriptor, or actual audio.
             page.reload(wait_until="domcontentloaded")
             ensure_study_materials_documents_tab(page)
             for _, title in DOCUMENTS:
@@ -633,7 +683,7 @@ def main() -> int:
                 ).first
                 material_button.click(timeout=15000)
                 page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
-                print(f"PASS: {type_label} persists and reopens after offline reload")
+                print(f"PASS: {type_label} survives reload and reopens offline")
                 page.go_back(wait_until="commit")
                 page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
@@ -646,11 +696,10 @@ def main() -> int:
             reload_audio_src = page.locator("audio").get_attribute("src") or ""
             if not reload_audio_src.startswith("blob:"):
                 raise AssertionError(f"Offline podcast lost its cached Blob after reload: {reload_audio_src}")
-            print("PASS: Podcast persists and reopens after offline reload")
+            print("PASS: Podcast survives reload and reopens from its cached Blob")
 
-            # These are product-owned limits, not browser/vendor quotas. Browser
-            # quotas are separate and browser-specific; this verifies that the
-            # exact application caps remain encoded in the implementation.
+            # These are product-owned storage limits. Browser/IndexedDB quotas
+            # differ by browser and remain separate from Prepza's own caps.
             generated_source = (ROOT / "frontend" / "src" / "offline" / "generatedMaterials.ts").read_text(encoding="utf-8")
             study_source = (ROOT / "frontend" / "src" / "offline" / "studyHubOffline.ts").read_text(encoding="utf-8")
             assert "MAX_GENERATED_ROWS = 80" in generated_source
@@ -659,7 +708,7 @@ def main() -> int:
             assert "MAX_SINGLE_AUDIO_BYTES = 25 * 1024 * 1024" in generated_source
             assert "MAX_SINGLE_ASSET_BYTES = 75 * 1024 * 1024" in study_source
             assert "MAX_TOTAL_ASSET_BYTES = 250 * 1024 * 1024" in study_source
-            print("PASS: offline document/artifact storage limits are the intended 75MB/doc, 250MB total, 80 material rows, 512KB/material payload, 25MB/audio and 80MB/audio-cache caps")
+            print("PASS: storage limits match 75MB/doc, 250MB total, 80 material rows, 512KB/material, 25MB/audio and 80MB/audio-cache")
 
             print("PASS: browser Study Hub offline content/artifact gate is green")
             return 0
