@@ -1630,3 +1630,14 @@ The latest source commits and their GitHub Python-syntax check are not equivalen
 ### What I learned
 
 A cache test must distinguish the API response used by a screen from the canonical persisted object. It must also prove the cache writer runs; directly seeding the final material-cache rows can make the UI assertion green while bypassing the very code whose correctness we need to test.
+
+
+## 2026-10-10 — Make the offline startup failure explain itself
+
+The latest browser run still stopped before the artifact checks. The test reported two navigations to the same homepage, but its `login()` helper caught the underlying exception and raised a new `RuntimeError` that included only the navigation list. The outer test runner then printed only the exception message, so the cause of the failed wait or browser state check was hidden from the user-facing output.
+
+I updated `scripts/test_browser_study_hub_offline_content.py` in commit `12e5a901` to include the original exception's type and message plus the current page URL. This is diagnostic instrumentation only: I deliberately did not add a sleep, increase the timeout, bypass service-worker control, or mark the gate green.
+
+**Lesson:** exception chaining preserves the cause for a traceback, but a test harness that catches the exception and prints only `str(exc)` can hide that cause. Diagnostic context should be surfaced explicitly at the point where the harness converts the exception.
+
+**Next step:** rebuild the current image, rerun the focused browser test, and use the new `underlying=...` output to choose the smallest evidence-based fix. The gate remains **NOT TESTED** until the complete online-cache → offline replay → zero-generation-POST → reload assertions pass.
