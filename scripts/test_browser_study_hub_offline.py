@@ -157,8 +157,8 @@ def make_pdf(label: str) -> bytes:
     ]
     safe_label = label.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
     stream = f"BT /F1 18 Tf 72 720 Td ({safe_label}) Tj ET".encode()
-    objects[3] = b"<< /Length {length} >>\\nstream\\n{stream}\\nendstream"
-    header = b"%PDF-1.4\\n"
+    objects[3] = b"<< /Length {length} >>\nstream\n{stream}\nendstream"
+    header = b"%PDF-1.4\n"
     body = bytearray(header)
     offsets = [0]
     for index, obj in enumerate(objects, start=1):
@@ -167,17 +167,17 @@ def make_pdf(label: str) -> bytes:
             if index == 4 else obj
         )
         offsets.append(len(body))
-        body.extend(f"{index} 0 obj\\n".encode())
+        body.extend(f"{index} 0 obj\n".encode())
         body.extend(rendered)
-        body.extend(b"\\nendobj\\n")
+        body.extend(b"\nendobj\n")
     xref_offset = len(body)
     body.extend(f"xref\\n0 {len(objects) + 1}\\n".encode())
-    body.extend(b"0000000000 65535 f \\n")
+    body.extend(b"0000000000 65535 f \n")
     for offset in offsets[1:]:
-        body.extend(f"{offset:010d} 00000 n \\n".encode())
+        body.extend(f"{offset:010d} 00000 n \n".encode())
     body.extend(
-        f"trailer\\n<< /Size {len(objects) + 1} /Root 1 0 R >>\\n"
-        f"startxref\\n{xref_offset}\\n%%EOF\\n".encode()
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_offset}\n%%EOF\n".encode()
     )
     return bytes(body)
 
@@ -331,7 +331,7 @@ def main() -> int:
                 request = route.request
                 path = urlparse(request.url).path
                 source_path = re.fullmatch(
-                    rf"/documents/{fixture['document_id']}(?:/reading(?:/page/\\d+)?)?",
+                    rf"/documents/{fixture['document_id']}(?:/reading(?:/page/\d+)?)?",
                     path,
                 )
                 if request.method == "GET" and source_path:
