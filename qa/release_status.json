@@ -118,7 +118,7 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "NOT_TESTED",
-      "evidence": "User-executed scripts/test_browser_study_hub_offline_content.py against rebuilt image at 4f1ed663 stopped inside asynchronous IndexedDB seeding with 'Page.evaluate: Execution context was destroyed, most likely because of a navigation'; no intended artifact assertion ran. Source audit identified the service-worker controllerchange reload as a plausible cause and an independent /me-before-offline-replay defect in Summary/Flashcards/Quiz/Mind Map. Main now waits for/validates the worker startup reload, fixes feature normalization and offline replay paths, corrects Mind Map fixture shape, and awaits offline rows. Rebuild and rerun are still required; this gate is not PASS."
+      "evidence": "Last user-executed run was against 4f1ed663 and stopped during async IndexedDB seeding because the service-worker controllerchange reload destroyed the evaluate context; no artifact assertion ran. Current main fixes canonical offline caching for exact ready private-owned materials (the screen POST response was not the canonical stored-record shape), caches the selected ready podcast descriptor and audio Blob, and rewrites the gate to seed ready private GeneratedMaterial rows in PostgreSQL then populate IndexedDB through the actual UI online. The browser guard blocks material-generation POSTs without X-Prepza-Material-ID before Flask can enqueue AI work; podcast readiness/audio are stubbed at the HTTP boundary. Offline replay, zero-generation-POST and reload assertions still require user execution after rebuilding. Gate remains NOT_TESTED."
     },
     {
       "id": "admin_study_time_visibility",
@@ -128,7 +128,7 @@
   ],
   "next_actions": [
     "Run the targeted admin authorization/security tests in the disposable QA environment; do not install pytest into the production app image.",
-    "Rebuild the app image and rerun scripts/test_browser_study_hub_offline_content.py; the last run stopped during IndexedDB fixture seeding, and source/test fixes are not verified until the full artifact replay, zero-generation-POST and offline-reload assertions complete.",
+    "Rebuild the app image and run scripts/test_browser_study_hub_offline_content.py -q against current main; the latest version blocks unguarded AI-generation POSTs and proves the real online cache writer before the offline replay/reload assertions. Keep this gate NOT_TESTED until the full local browser run passes.",
     "Execute the remaining cross-system journeys and existing-database migration rehearsal.",
     "Run the final clean full regression after the remaining gates and current security changes are verified.",
     "Keep controlled external-provider verification separate from the local release freeze unless explicitly approved as an external-provider gate."
