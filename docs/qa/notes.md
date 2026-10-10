@@ -1669,3 +1669,10 @@ Commit `36a22b29c4860ec103b40d00ae6da761396dc3a2` records HTTP status, content t
 The latest six page-level probes for `/sw-register.js`, `/sw.js`, `/offline.html`, `/manifest.json`, `/icon-192.png`, and `/icon-512.png` all returned HTTP 200 in under one second. That rules against a simple missing/slow asset explanation for those page fetches, but not against the worker's install code or CacheStorage operations: the page's probe requests are not the same requests initiated by `precacheShell()`.
 
 Commit `fdbb2aa66c4b910654ccd2aaed785c9f17fe0b86` records Playwright service-worker console/close events and worker-owned shell requests at request/response/completion/failure. Use that timeline to identify whether installation is awaiting worker fetches or failing after completion. No production behavior or pass criteria were changed.
+
+
+## 2026-10-10 — Do not use navigation count as a service-worker readiness signal
+
+The repeated output showed all worker-owned precache requests finishing, but each diagnostic reported `controlled` and registration state sampled before the asynchronous asset probes finished. Two main-frame navigations are not a reliable substitute for the actual control condition. That meant we were collecting more evidence without waiting on the property the test ultimately needs.
+
+Commit `b212a9193702ad4446bc1f45143ca11bbc900c9a` now polls for a complete root document whose `navigator.serviceWorker.controller` is present, and makes the failure snapshot after the probes. If it still times out with no active worker, that will be much stronger evidence of a real lifecycle failure. Do not mark the offline gate passed until the full end-to-end test succeeds.
