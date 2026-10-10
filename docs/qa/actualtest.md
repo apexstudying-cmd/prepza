@@ -1762,3 +1762,13 @@ Ready generated materials now follow an explicit replay path: use the selected I
 **Regression gate updated:** `scripts/test_browser_study_hub_offline_content.py` now blocks generation POSTs during ready-material replay, requires at least 12 canonical material GETs for the initial online cache-fill, and reports the rendered page body if a payload still fails to appear. It continues to test offline replay and podcast audio persistence.
 
 **Verification status: PATCHED, REBUILD/RERUN REQUIRED.** The user's last execution occurred before this change and stopped at the first Summary payload. No pass is claimed for this new code. Rebuild the app container and rerun the full browser gate; mark it passed only after every online material, offline replay, podcast Blob, and zero-generation-POST assertion completes.
+
+## 2026-10-10 — Open saved My Study PDFs from the local Blob while online
+
+The prior local-first fix covered the document study hub but review found the native PDF reader still preferred `GET /documents/<id>`, `GET /documents/<id>/reading`, and server-rendered page endpoints whenever `navigator.onLine` was true. That would still re-serve the user's uploaded source on an online open.
+
+**Fix:** Commit `d7490e8f53ee34c56c5d97302bf20ec018880708` makes `DocumentReaderScreen` try the validated IndexedDB Blob first in both online and offline states. Only items without a valid local package fall back to the previous online detail/reader path. The background `/me` request remains for online reader actions/CSRF and is not a source-document fetch. The Library code is unchanged.
+
+**Browser regression:** Commits `e848e3b87e8f87a9baa8c9c4467473253d8ae89f`, `df794a8f395a91bfec7952a3ee0725f3c8e24bc4`, `7e5c0c636729ce6e452e7bc66102896ce57d4d21`, and `a0ecec0a07db4e4abf62be53cb108aa3cfd21c4c` update `scripts/test_browser_study_hub_offline.py` with a real, valid one-page PDF Blob. The test now blocks and records source-document detail/reading/page GETs before My Study opens, opens Continue Reading while online, and requires the local-reader marker plus a successfully parsed `canvas[aria-label="Page 1 of 1"]`. Any source-document GET or PDF rendering error fails the gate.
+
+**Verification status: CODE AND TEST UPDATED; FULL BROWSER RERUN STILL REQUIRED.** The user's reported failure predates these changes. GitHub's Python syntax and frontend build checks should be confirmed on the latest head; neither a green build nor a static audit proves that the browser actually displayed the local PDF and replayed all generated materials. Do not mark My Study's local-first browser gate PASS until both `scripts/test_browser_study_hub_offline.py` and `scripts/test_browser_study_hub_offline_content.py` complete successfully.
