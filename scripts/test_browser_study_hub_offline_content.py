@@ -898,6 +898,19 @@ def main() -> int:
                     + json.dumps(source_reads_during_open)
                 )
             print("PASS: saved My Study document opens from IndexedDB with zero document-detail/reading GETs")
+
+            source_reads_before_reader = len(source_document_reads)
+            page.get_by_role("button", name=re.compile(r"Continue Reading")).click(timeout=15000)
+            page.get_by_text("Offline study copy", exact=True).wait_for(timeout=15000)
+            source_reads_during_reader = source_document_reads[source_reads_before_reader:]
+            if source_reads_during_reader:
+                raise AssertionError(
+                    "Opening the locally saved PDF reader fetched document detail/reading from Flask: "
+                    + json.dumps(source_reads_during_reader)
+                )
+            print("PASS: PDF reader uses the local Blob while online; zero document-detail/reading GETs")
+            page.go_back(wait_until="commit")
+            page.get_by_role("button", name=re.compile(r"Continue Reading")).wait_for(timeout=15000)
             page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
