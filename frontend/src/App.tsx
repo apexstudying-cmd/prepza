@@ -105,6 +105,13 @@ async function cachePrivateReadyGeneratedMaterialOffline(
   documentId: string | number,
   materialId: unknown,
   userId: unknown,
+  canonicalOverride?: {
+    material_id: number
+    type: string
+    status: string
+    parameters?: Record<string, unknown>
+    payload: unknown
+  },
 ): Promise<boolean> {
   const id = Number(materialId)
   const ownerId = Number(userId)
@@ -129,7 +136,7 @@ async function cachePrivateReadyGeneratedMaterialOffline(
     ) return false
 
     const path = `/documents/${documentId}/materials/${id}`
-    const canonical = await api<{
+    const canonical = canonicalOverride ?? await api<{
       material_id: number
       type: string
       status: string
@@ -175,11 +182,77 @@ async function generationRequest<T = any>(
   // generation endpoint is /summarize, and quiz/mind-map have legacy aliases.
   const selectedMaterialId = getSelectedGeneratedMaterialId(documentId, feature)
 
-  // Offline means replay only. Never fall through to an API generation POST
-  // when no matching already-ready artifact exists on this device.
-  if (!navigator.onLine) {
+  // A selected ready artifact is replay-only, online or offline. Prefer the
+  // device cache. If this device has not cached it yet, fetch the one canonical
+  // material record (GET), never POST to a generation endpoint just to replay it.
+  if (selectedMaterialId) {
     const replay = await replaySelectedGeneratedMaterialOffline(documentId, feature)
-    if (replay) return replay as T
+    if (replay) {
+      if (feature !== 'podcast') {
+        try { sessionStorage.removeItem('prepza-open-material') } catch {}
+      }
+      publish({
+        found: true,
+        status: 'completed',
+        progress_percent: 100,
+        progress_stage: 'Found your saved material',
+      })
+      return replay as T
+    }
+
+    if (!navigator.onLine) {
+      throw new Error('This study material is not saved for offline use on this device.')
+    }
+
+    const materialPath = `/documents/${documentId}/materials/${selectedMaterialId}`
+    const canonical = await api<{
+      material_id: number
+      type: string
+      status: string
+      parameters?: Record<string, unknown>
+      payload: unknown
+    }>(materialPath)
+    if (
+      Number(canonical.material_id) !== selectedMaterialId ||
+      canonical.status !== 'ready' ||
+      canonical.payload == null ||
+      normalizeGeneratedMaterialFeature(canonical.type) !== normalizeGeneratedMaterialFeature(feature)
+    ) {
+      throw new Error('The selected study material is no longer available.')
+    }
+
+    // The detail response verifies ownership/scope before this canonical
+    // record is persisted. Shared Library material remains outside this cache.
+    if (currentUserId != null) {
+      await cachePrivateReadyGeneratedMaterialOffline(
+        documentId,
+        selectedMaterialId,
+        currentUserId,
+        canonical,
+      )
+    }
+
+    const normalizedFeature = normalizeGeneratedMaterialFeature(feature)
+    const payloadKey = normalizedFeature === 'summarize' ? 'summary' : normalizedFeature
+    if (feature !== 'podcast') {
+      try { sessionStorage.removeItem('prepza-open-material') } catch {}
+    }
+    publish({
+      found: true,
+      status: 'completed',
+      progress_percent: 100,
+      progress_stage: 'Found your saved material',
+    })
+    return {
+      material_id: selectedMaterialId,
+      reused: true,
+      [payloadKey]: canonical.payload,
+    } as T
+  }
+
+  // A request without an explicitly selected artifact is a create/generate
+  // operation. Offline mode must never allow that request to reach the server.
+  if (!navigator.onLine) {
     throw new Error('This study material is not saved for offline use on this device.')
   }
 
@@ -794,21 +867,10 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
     let cancelled = false
     const loadOffline = async () => {
       try {
-        // The server may be unreachable while offline. Use the last
-        // authenticated local user immediately, then refresh it from /me
-        // when connectivity allows. Never fall back to another account's
-        // offline package.
-        let userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
-        if (!Number.isInteger(userId) || userId <= 0) userId = 0
-        try {
-          const me = await api<{ id?: number }>('/me')
-          const serverUserId = Number(me.id || 0)
-          if (Number.isInteger(serverUserId) && serverUserId > 0) {
-            userId = serverUserId
-            setOfflineUserId(serverUserId)
-          }
-        } catch { /* offline: keep the last local account id */ }
-        if (userId <= 0) return
+        // Upload persists the owning account ID with the offline copy.
+        // Reuse that local identity rather than making another /me request.
+        const userId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
+        if (!Number.isInteger(userId) || userId <= 0) return
         const saved = await listSavedStudyHubOffline(userId)
         if (!cancelled) {
           const offlineDocs = saved.map(row => ({
@@ -957,6 +1019,53 @@ function DocumentStudyHubScreen({
     setError('')
     const load = async () => {
       try {
+        // My Study source files are persisted as complete IndexedDB Blobs during
+        // upload. Prefer that local package before asking Flask for document
+        // detail/reading state; this avoids re-serving the same study item.
+        const localUserId = Number(localStorage.getItem('prepza-offline-user-id') || 0)
+        if (Number.isInteger(localUserId) && localUserId > 0) {
+          const localRows = await listSavedStudyHubOffline(localUserId)
+          const saved = localRows.find(row => row.documentId === activeDocumentId)
+          if (saved) {
+            const cached = await listOfflineGeneratedMaterials()
+            const offlineMaterials = cached.flatMap(row => {
+              const match = row.path.match(/^\\/documents\\/(\\d+)\\/materials\\/(\\d+)$/)
+              if (!match || Number(match[1]) !== activeDocumentId) return []
+              const payload = row.payload as any
+              if (!payload?.type || payload?.status !== 'ready') return []
+              return [{
+                id: Number(match[2]),
+                type: payload.type,
+                status: 'ready',
+                parameters: payload.parameters || {},
+              }]
+            })
+            if (cancelled) return
+            setDocument({
+              id: activeDocumentId,
+              title: saved.title || 'Saved study document',
+              original_filename: saved.title || 'Study document',
+              status: 'ready',
+              file_type: saved.fileType || 'pdf',
+              file_size_bytes: null,
+              page_count: saved.pageCount || null,
+              error_message: null,
+              view_url: null,
+              materials: offlineMaterials,
+              created_at: new Date(saved.savedAt).toISOString(),
+            })
+            let offlinePage = 0
+            try {
+              const storedPage = Number(localStorage.getItem(`prepza-offline-reading:${localUserId}:${activeDocumentId}`) || 0)
+              if (Number.isInteger(storedPage) && storedPage >= 0) offlinePage = storedPage
+            } catch (_) {}
+            setReadingPage(offlinePage)
+            return
+          }
+        }
+
+        // Documents sourced from Library or older non-local records retain the
+        // existing online path. Their behavior is deliberately unchanged.
         if (!navigator.onLine) throw new Error('offline')
         const [data, progress] = await Promise.all([
           api<DocumentDetail>(`/documents/${activeDocumentId}`),
