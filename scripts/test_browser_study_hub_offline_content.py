@@ -224,6 +224,29 @@ def login(page, fixture: dict) -> None:
     page.get_by_role("button", name=re.compile(r"My Study$")).wait_for(timeout=15000)
 
 
+def ensure_study_materials_documents_tab(page) -> None:
+    """Wait for a real Home-or-My-Study surface, then use UI navigation if needed."""
+    page.wait_for_function(
+        """() => {
+          const visible = element => {
+            const style = getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0 &&
+              style.display !== 'none' && style.visibility !== 'hidden' &&
+              style.opacity !== '0';
+          };
+          const buttons = Array.from(document.querySelectorAll('button')).filter(visible);
+          return buttons.some(button => (button.innerText || '').trim() === 'Documents') ||
+            buttons.some(button => /My Study$/.test((button.innerText || '').trim()));
+        }""",
+        timeout=15000,
+    )
+    documents_tab = page.get_by_role("button", name="Documents", exact=True)
+    if not documents_tab.is_visible():
+        page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
+    documents_tab.wait_for(timeout=15000)
+
+
 def make_pdf(label: str) -> bytes:
     """Create a tiny valid one-page PDF without adding a test dependency."""
     objects = [
@@ -454,12 +477,9 @@ def main() -> int:
             context.set_offline(True)
             page.reload(wait_until="domcontentloaded")
 
-            # Startup navigation may legitimately restore Home; use the real
-            # bottom-nav My Study action to reach the offline Study Materials
-            # surface instead of assuming a particular React navigation stack.
-            if not page.get_by_role("button", name="Documents", exact=True).is_visible():
-                page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
-            page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
+            # Wait for React to render after reload. Continue from either
+            # restored My Study or Home using the visible, real UI.
+            ensure_study_materials_documents_tab(page)
 
             for _, title in DOCUMENTS:
                 page.get_by_text(title, exact=True).wait_for(timeout=15000)
@@ -538,9 +558,7 @@ def main() -> int:
             # local documents and generated materials survive a real browser reload,
             # not just SPA navigation.
             page.reload(wait_until="domcontentloaded")
-            if not page.get_by_role("button", name="Documents", exact=True).is_visible():
-                page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
-            page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
+            ensure_study_materials_documents_tab(page)
             for _, title in DOCUMENTS:
                 page.get_by_text(title, exact=True).wait_for(timeout=15000)
             body_after_reload = page.locator("body").inner_text(timeout=5000)
