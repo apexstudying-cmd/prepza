@@ -1662,3 +1662,10 @@ Commit `3f28284f2cffb3e67c07923284decf43e75f1687` adds Chrome DevTools Protocol 
 Prepza's service worker waits for `precacheShell()` in its install event; that function fetches `/offline.html`, `/manifest.json`, `/icon-192.png`, and `/icon-512.png`. Chromium reports the worker still `installing` with no worker error, so these requests are the next bounded check. This narrows the diagnostic target without assuming that an asset or cache operation is the cause.
 
 Commit `36a22b29c4860ec103b40d00ae6da761396dc3a2` records HTTP status, content type, byte count and elapsed time for those local resources. If all are prompt and successful, do not keep adding waits; move on to instrumenting the installation/cache step itself.
+
+
+## 2026-10-10 — Watch the service worker's own requests
+
+The latest six page-level probes for `/sw-register.js`, `/sw.js`, `/offline.html`, `/manifest.json`, `/icon-192.png`, and `/icon-512.png` all returned HTTP 200 in under one second. That rules against a simple missing/slow asset explanation for those page fetches, but not against the worker's install code or CacheStorage operations: the page's probe requests are not the same requests initiated by `precacheShell()`.
+
+Commit `fdbb2aa66c4b910654ccd2aaed785c9f17fe0b86` records Playwright service-worker console/close events and worker-owned shell requests at request/response/completion/failure. Use that timeline to identify whether installation is awaiting worker fetches or failing after completion. No production behavior or pass criteria were changed.
