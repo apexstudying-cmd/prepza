@@ -6,7 +6,7 @@ import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealti
 import CallExperience from './crypto/CallExperience'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrl, getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline, saveUploadedFileOffline } from './offline/studyHubOffline'
-import { getCachedGeneratedAudioUrl, getGeneratedMaterialOffline, getLatestGeneratedMaterialForPath, listOfflineGeneratedMaterials, saveGeneratedMaterialOffline, setOfflineUserId } from './offline/generatedMaterials'
+import { cacheGeneratedAudioOffline, getCachedGeneratedAudioUrl, getGeneratedMaterialOffline, getLatestGeneratedMaterialForPath, listOfflineGeneratedMaterials, saveGeneratedMaterialOffline, setOfflineUserId } from './offline/generatedMaterials'
 import { installStudyHubActivityTracker, setStudyHubActive, setStudyHubUserId } from './offline/studyHubActivityTracker'
 import { installActivityHeartbeat } from './activityHeartbeat'
 import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'
@@ -95,10 +95,68 @@ async function replaySelectedGeneratedMaterialOffline(documentId: string | numbe
   return { material_id: materialId, reused: true, [payloadKey]: cached.payload }
 }
 
+
+// Save the canonical API representation of a private material only when the
+// signed-in student owns it. The generation POST response is a UI response
+// (summary/flashcards/etc.), not the ready-material record needed for offline
+// listing and replay. Shared Library materials must not become offline
+// entitlements just because a student can currently view them.
+async function cachePrivateReadyGeneratedMaterialOffline(
+  documentId: string | number,
+  materialId: unknown,
+  userId: unknown,
+): Promise<boolean> {
+  const id = Number(materialId)
+  const ownerId = Number(userId)
+  if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(ownerId) || ownerId <= 0) return false
+
+  try {
+    const detail = await api<{
+      materials?: Array<{
+        id: number
+        type: string
+        status: string
+        scope?: string
+        owner_user_id?: number | null
+      }>
+    }>(`/documents/${documentId}`)
+    const listed = (detail.materials || []).find(material => Number(material.id) === id)
+    if (
+      !listed ||
+      listed.status !== 'ready' ||
+      listed.scope !== 'private' ||
+      Number(listed.owner_user_id) !== ownerId
+    ) return false
+
+    const path = `/documents/${documentId}/materials/${id}`
+    const canonical = await api<{
+      material_id: number
+      type: string
+      status: string
+      parameters?: Record<string, unknown>
+      payload: unknown
+    }>(path)
+    if (
+      Number(canonical.material_id) !== id ||
+      canonical.type !== listed.type ||
+      canonical.status !== 'ready' ||
+      canonical.payload == null
+    ) return false
+
+    await saveGeneratedMaterialOffline(path, null, canonical)
+    return true
+  } catch {
+    // Offline persistence is best-effort. Reopening the Study Hub while online
+    // can reconcile a ready private material if this request was interrupted.
+    return false
+  }
+}
+
 async function generationRequest<T = any>(
   path: string,
   options: RequestInit = {},
   onProgress?: (progress: GenerationProgress) => void,
+  currentUserId?: number,
 ): Promise<T> {
   const publish = (progress: GenerationProgress) => {
     onProgress?.(progress)
@@ -156,13 +214,7 @@ async function generationRequest<T = any>(
     }
     if (!result?.async || !result?.job_id) {
       if (result?.material_id) {
-        try {
-          await saveGeneratedMaterialOffline(
-            `/documents/${documentId}/materials/${result.material_id}`,
-            null,
-            result,
-          )
-        } catch { /* offline cache is best-effort */ }
+        await cachePrivateReadyGeneratedMaterialOffline(documentId, result.material_id, currentUserId)
       }
       publish({
         found: true,
@@ -188,6 +240,7 @@ async function generationRequest<T = any>(
     const resolveHeaders = new Headers(options.headers || {})
     resolveHeaders.set('X-Prepza-Resolve-Generation', '1')
     const resolved = await api<T>(path, { ...options, headers: resolveHeaders })
+    await cachePrivateReadyGeneratedMaterialOffline(documentId, (resolved as any)?.material_id, currentUserId)
     publish({
       found: true,
       status: 'completed',
@@ -3283,12 +3336,12 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
     const path = `/documents/${activeDocumentId}/flashcards`
     const loadFlashcards = async () => {
       if (!navigator.onLine) return generationRequest<{ material_id: number; reused: boolean; flashcards: any }>(path)
-      const me = await api<{ csrf_token: string }>('/me')
+      const me = await api<{ id: number; csrf_token: string }>('/me')
       setCsrfToken(me.csrf_token)
       return generationRequest<{ material_id: number; reused: boolean; flashcards: any }>(path, {
         method: 'POST',
         headers: { 'X-CSRF-Token': me.csrf_token },
-      })
+      }, undefined, me.id)
     }
     void loadFlashcards()
       .then(res => { setMaterialId(res.material_id); setCards(normalizeCards(res.flashcards)) })
@@ -3435,12 +3488,12 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) =>
     const path = `/documents/${activeDocumentId}/quiz`
     const loadQuiz = async () => {
       if (!navigator.onLine) return generationRequest<{ material_id: number; reused: boolean; quiz: any }>(path)
-      const me = await api<{ csrf_token: string }>('/me')
+      const me = await api<{ id: number; csrf_token: string }>('/me')
       setCsrfToken(me.csrf_token)
       return generationRequest<{ material_id: number; reused: boolean; quiz: any }>(path, {
         method: 'POST',
         headers: { 'X-CSRF-Token': me.csrf_token },
-      })
+      }, undefined, me.id)
     }
     void loadQuiz()
       .then(res => { setMaterialId(res.material_id); setQuestions(normalizeQuiz(res.quiz)) })
@@ -3594,6 +3647,36 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
     ? `/documents/${activeDocumentId}/podcast-audio?material_id=${selectedPodcastMaterialId}`
     : `/documents/${activeDocumentId}/podcast-audio`
 
+  const cacheReadyPodcastOffline = (status: {
+    audio_status: string
+    audio_url: string | null
+    duration_seconds: number | null
+  }) => {
+    if (
+      !navigator.onLine ||
+      activeDocumentId == null ||
+      !selectedPodcastMaterialId ||
+      status.audio_status !== 'ready' ||
+      !status.audio_url
+    ) return
+
+    void (async () => {
+      try {
+        const me = await api<{ id: number }>('/me')
+        const eligible = await cachePrivateReadyGeneratedMaterialOffline(
+          activeDocumentId,
+          selectedPodcastMaterialId,
+          me.id,
+        )
+        if (!eligible) return
+        await saveGeneratedMaterialOffline(podcastAudioPath, null, status)
+        await cacheGeneratedAudioOffline(status.audio_url!)
+      } catch {
+        // Best-effort persistence must not delay or interrupt playback.
+      }
+    })()
+  }
+
   useEffect(() => {
     api<{ csrf_token: string }>('/me').then(me => setHeartbeatCsrf(me.csrf_token)).catch(() => {})
   }, [])
@@ -3621,6 +3704,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
         const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
         if (cancelled) return
         if (existing.audio_status === 'ready' && existing.audio_url) {
+          cacheReadyPodcastOffline(existing)
           setAudioUrl(existing.audio_url)
           setDuration(existing.duration_seconds || 0)
           setGenerationPercent(100)
@@ -3640,6 +3724,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
             setGenerationPercent(Math.max(0, Math.min(100, Number(status.progress_percent || 0))))
             setGenerationStage(status.progress_stage || 'Generating audio…')
             if (status.audio_status === 'ready' && status.audio_url) {
+              cacheReadyPodcastOffline(status)
               setAudioUrl(status.audio_url)
               setDuration(status.duration_seconds || 0)
               setGenerationPercent(100)
@@ -3655,13 +3740,13 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
           return
         }
 
-        const me = await api<{ csrf_token: string }>('/me')
+        const me = await api<{ id: number; csrf_token: string }>('/me')
         if (cancelled) return
         setGenerationPercent(2)
         setGenerationStage('Generating podcast script…')
         const scriptRes = await generationRequest<{ material_id: number; reused: boolean; podcast: any }>(`/documents/${activeDocumentId}/podcast-script`, {
           method: 'POST', headers: { 'X-CSRF-Token': me.csrf_token },
-        }, (p) => { setGenerationPercent(p.progress_percent); setGenerationStage(p.progress_stage) })
+        }, (p) => { setGenerationPercent(p.progress_percent); setGenerationStage(p.progress_stage) }, me.id)
         if (scriptRes.podcast?.title) setTitle(scriptRes.podcast.title)
         if (cancelled) return
         setGenerationPercent(5)
@@ -3679,6 +3764,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunity
           setGenerationPercent(Math.max(0, Math.min(100, Number(status.progress_percent || 0))))
           setGenerationStage(status.progress_stage || 'Generating audio…')
           if (status.audio_status === 'ready' && status.audio_url) {
+            cacheReadyPodcastOffline(status)
             setAudioUrl(status.audio_url)
             setDuration(status.duration_seconds || 0)
             setGenerationPercent(100)
@@ -3858,12 +3944,12 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
       // Do not put /me in front of the offline replay branch: /me needs the
       // network, but an already-saved summary does not.
       if (!navigator.onLine) return generationRequest<{ material_id: number; reused: boolean; summary: any }>(path)
-      const me = await api<{ csrf_token: string }>('/me')
+      const me = await api<{ id: number; csrf_token: string }>('/me')
       setHeartbeatCsrf(me.csrf_token)
       return generationRequest<{ material_id: number; reused: boolean; summary: any }>(path, {
         method: 'POST',
         headers: { 'X-CSRF-Token': me.csrf_token },
-      })
+      }, undefined, me.id)
     }
     void loadSummary()
       .then(res => setSummary(res.summary))
@@ -7270,12 +7356,12 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
     const path = `/documents/${activeDocumentId}/mind-map`
     const loadMindMap = async () => {
       if (!navigator.onLine) return generationRequest<{ material_id: number; reused: boolean; mind_map: any }>(path)
-      const me = await api<{ csrf_token: string }>('/me')
+      const me = await api<{ id: number; csrf_token: string }>('/me')
       setHeartbeatCsrf(me.csrf_token)
       return generationRequest<{ material_id: number; reused: boolean; mind_map: any }>(path, {
         method: 'POST',
         headers: { 'X-CSRF-Token': me.csrf_token },
-      })
+      }, undefined, me.id)
     }
     void loadMindMap()
       .then(res => setRaw(res.mind_map))
