@@ -1711,3 +1711,12 @@ Commit `12e5a901` changes diagnostics only: the wrapper now includes the underly
 **Diagnostic follow-up:** Commit `36a22b29c4860ec103b40d00ae6da761396dc3a2` extends the browser diagnostic to probe `/offline.html`, `/manifest.json`, `/icon-192.png`, and `/icon-512.png` with bounded per-request observation, alongside the service-worker script probes. This remains diagnostic-only and does not weaken the test or modify production service-worker behavior.
 
 **Gate status: NOT TESTED / BLOCKED.** Use each probe's HTTP status and elapsed time to determine whether a local shell asset is stalling. If they all respond promptly, investigate the worker's install/cache operation separately rather than blaming external providers.
+
+
+## 2026-10-10 — Distinguish page asset probes from worker install fetches
+
+**Observed latest run:** all six page-level asset probes returned HTTP 200 (including both icons and `/offline.html`) in under one second each. Despite that, the browser's registration had no installing, waiting, or active worker by the time state was inspected; earlier Chromium events showed the worker reach `installing` with no reported worker error. These page-level probes alone do not prove that the service worker's own install-time fetch and cache operations completed.
+
+**Diagnostic follow-up:** Commit `fdbb2aa66c4b910654ccd2aaed785c9f17fe0b86` records Playwright's service-worker console/close events and captures the worker-initiated requests for the four precache assets at request, response, finish, or failure. This should distinguish a worker request that stalls/fails from a worker lifecycle problem after those requests complete.
+
+**Gate status: NOT TESTED / BLOCKED.** We still have no demonstrated successful service-worker control or end-to-end offline artifact replay. Do not infer a production failure solely from this localhost test, but treat offline readiness as unproven until the gate passes.
