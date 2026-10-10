@@ -804,11 +804,12 @@ def main() -> int:
             login(page, fixture)
             seed_offline_content(page, fixture)
 
-            # Guard every online generation endpoint: only a POST carrying the
-            # exact selected material ID may reach Flask. Without that header the
-            # browser returns 412 here, before the route can enqueue an AI job.
+            # Replaying a ready item must read its canonical artifact record
+            # with GET, not POST to a generation endpoint. Block every POST for
+            # these routes before Flask so this test can never spend AI credits.
             online_reuse_posts = []
             unguarded_generation_posts = []
+            online_material_reads = []
 
             def guard_generation_reuse(route):
                 request = route.request
@@ -827,14 +828,20 @@ def main() -> int:
                 })
                 if not material_id.isdigit() or int(material_id) <= 0:
                     unguarded_generation_posts.append(request.url)
-                    route.fulfill(
-                        status=412,
-                        content_type="application/json",
-                        body=json.dumps({"error": "Test blocked POST without selected ready material ID"}),
-                    )
-                    return
-                route.continue_()
+                route.fulfill(
+                    status=412,
+                    content_type="application/json",
+                    body=json.dumps({"error": "Test blocked POST while replaying a ready study material"}),
+                )
 
+            def observe_online_material_read(request):
+                if (
+                    request.method == "GET"
+                    and re.fullmatch(r"/documents/\d+/materials/\d+", urlparse(request.url).path)
+                ):
+                    online_material_reads.append(request.url)
+
+            page.on("request", observe_online_material_read)
             page.route(
                 re.compile(r".*/documents/\d+/(summarize|flashcards|quiz|mind-map|podcast-script|podcast-audio)(?:\?.*)?$"),
                 guard_generation_reuse,
@@ -944,7 +951,20 @@ def main() -> int:
                             f"current_url={page.url}; visible_buttons={json.dumps(visible_buttons[:80])}; "
                             f"body={rendered_body!r}; click_error={type(exc).__name__}: {exc}"
                         ) from exc
-                    page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
+                    try:
+                        page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
+                    except Exception as exc:
+                        try:
+                            rendered_body = page.locator("body").inner_text(timeout=5000)[:5000]
+                        except Exception as body_exc:
+                            rendered_body = f"<could not capture body: {type(body_exc).__name__}: {body_exc}>"
+                        raise AssertionError(
+                            f"Ready material payload did not render online: {type_label} from {document_title}; "
+                            f"current_url={page.url}; body={rendered_body!r}; "
+                            f"selected_material_posts={json.dumps(online_reuse_posts, sort_keys=True)}; "
+                            f"canonical_material_reads={json.dumps(online_material_reads, sort_keys=True)}; "
+                            f"wait_error={type(exc).__name__}: {exc}"
+                        ) from exc
                     print(f"PASS: existing online {type_label} opens for {document_title}")
                     page.go_back(wait_until="commit")
                     # StudyMaterialsScreen remounts on return and selects Documents.
@@ -955,14 +975,19 @@ def main() -> int:
                     "Test blocked a generation POST that lacked X-Prepza-Material-ID: "
                     + ", ".join(unguarded_generation_posts)
                 )
-            if len(online_reuse_posts) < 12:
+            if online_reuse_posts:
                 raise AssertionError(
-                    f"Expected at least 12 exact-material online reuse POSTs, got {len(online_reuse_posts)}: "
-                    + json.dumps(online_reuse_posts)
+                    "Replaying existing Study Materials issued POSTs instead of canonical GETs: "
+                    + json.dumps(online_reuse_posts, sort_keys=True)
+                )
+            if len(online_material_reads) < 12:
+                raise AssertionError(
+                    f"Expected at least 12 canonical material GETs, got {len(online_material_reads)}: "
+                    + json.dumps(online_material_reads, sort_keys=True)
                 )
             print(
-                f"PASS: {len(online_reuse_posts)} online material requests carried exact IDs; "
-                "unguarded AI generation requests were blocked"
+                f"PASS: {len(online_material_reads)} canonical material GETs populated local cache; "
+                "zero generation POSTs were sent"
             )
 
             # Podcast's ready descriptor/audio are stubbed at the HTTP boundary.
