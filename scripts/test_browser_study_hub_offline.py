@@ -1,11 +1,14 @@
 """Real-browser Study Hub offline lifecycle regression."""
 from __future__ import annotations
 
+import base64
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
@@ -143,9 +146,46 @@ def login(page, fixture: dict) -> None:
     page.wait_for_timeout(1500)
 
 
+def make_pdf(label: str) -> bytes:
+    """Create a tiny valid one-page PDF so the browser proves local rendering."""
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        None,
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    safe_label = label.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = f"BT /F1 18 Tf 72 720 Td ({safe_label}) Tj ET".encode()
+    objects[3] = b"<< /Length {length} >>\\nstream\\n{stream}\\nendstream"
+    header = b"%PDF-1.4\\n"
+    body = bytearray(header)
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        rendered = (
+            objects[3].replace(b"{length}", str(len(stream)).encode()).replace(b"{stream}", stream)
+            if index == 4 else obj
+        )
+        offsets.append(len(body))
+        body.extend(f"{index} 0 obj\\n".encode())
+        body.extend(rendered)
+        body.extend(b"\\nendobj\\n")
+    xref_offset = len(body)
+    body.extend(f"xref\\n0 {len(objects) + 1}\\n".encode())
+    body.extend(b"0000000000 65535 f \\n")
+    for offset in offsets[1:]:
+        body.extend(f"{offset:010d} 00000 n \\n".encode())
+    body.extend(
+        f"trailer\\n<< /Size {len(objects) + 1} /Root 1 0 R >>\\n"
+        f"startxref\\n{xref_offset}\\n%%EOF\\n".encode()
+    )
+    return bytes(body)
+
+
 def seed_offline_package(page, user_id: int, document_id: int) -> None:
+    pdf_base64 = base64.b64encode(make_pdf(DOCUMENT_TITLE)).decode("ascii")
     page.evaluate(
-        """({userId, documentId, title}) => {
+        """({userId, documentId, title, pdfBase64}) => {
           localStorage.setItem('prepza-offline-user-id', String(userId));
 
           const open = (name, version, store) => new Promise((resolve, reject) => {
@@ -181,7 +221,7 @@ def seed_offline_package(page, user_id: int, document_id: int) -> None:
                 key: String(userId) + ':' + String(documentId),
                 userId,
                 documentId,
-                blob: new Blob(['offline study fixture'], { type: 'application/pdf' }),
+                blob: new Blob([Uint8Array.from(atob(pdfBase64), character => character.charCodeAt(0))], { type: 'application/pdf' }),
                 contentHash: 'offline-' + String(documentId),
                 savedAt: Date.now(),
               });
@@ -190,7 +230,7 @@ def seed_offline_package(page, user_id: int, document_id: int) -> None:
             })),
           ]);
         }""",
-        {"userId": user_id, "documentId": document_id, "title": DOCUMENT_TITLE},
+        {"userId": user_id, "documentId": document_id, "title": DOCUMENT_TITLE, "pdfBase64": pdf_base64},
     )
 
 
@@ -279,8 +319,51 @@ def main() -> int:
                 print("DIAGNOSTIC BODY:", page.locator("body").inner_text(timeout=5000)[:6000])
                 raise
             page.get_by_role("button", name="Continue →", exact=True).click()
-            page.wait_for_timeout(1500)
+            page.get_by_role("button", name=re.compile(r"Continue Reading")).wait_for(timeout=15000)
             print("PASS: real browser opened the local-first Study Hub document")
+
+            # Opening a document already present in IndexedDB must use its Blob,
+            # not hit Flask's document-detail, reading-progress, or rendered-page
+            # endpoints again. Abort such requests so the test also prevents a
+            # regression from silently serving the original source over HTTP.
+            source_document_requests = []
+            def block_saved_document_requests(route):
+                request = route.request
+                path = urlparse(request.url).path
+                source_path = re.fullmatch(
+                    rf"/documents/{fixture['document_id']}(?:/reading(?:/page/\\d+)?)?",
+                    path,
+                )
+                if request.method == "GET" and source_path:
+                    source_document_requests.append(request.url)
+                    route.fulfill(
+                        status=412,
+                        content_type="application/json",
+                        body='{"error":"Local Study Hub reader must not fetch the saved source document"}',
+                    )
+                    return
+                route.continue_()
+
+            page.route(
+                re.compile(rf".*/documents/{fixture['document_id']}(?:/reading(?:/page/\\d+)?)?$"),
+                block_saved_document_requests,
+            )
+            page.get_by_role("button", name=re.compile(r"Continue Reading")).click(timeout=15000)
+            page.get_by_text("Offline study copy", exact=True).wait_for(timeout=15000)
+            page.get_by_text("OFFLINE", exact=True).wait_for(timeout=15000)
+            page.locator("canvas").wait_for(timeout=15000)
+            page.wait_for_function(
+                "() => { const c = document.querySelector('canvas'); return !!c && c.width > 0 && c.height > 0; }",
+                timeout=15000,
+            )
+            if page.get_by_text("Could not open this PDF.", exact=False).count():
+                raise AssertionError("Local Study Hub Blob was selected but the PDF failed to render.")
+            if source_document_requests:
+                raise AssertionError(
+                    "Local My Study reader tried to fetch the saved source from Flask: "
+                    + ", ".join(source_document_requests)
+                )
+            print("PASS: online My Study reader rendered the local PDF Blob with zero source-document GETs")
 
             page.reload(wait_until="domcontentloaded")
             page.wait_for_timeout(1200)
