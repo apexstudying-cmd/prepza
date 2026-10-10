@@ -171,7 +171,7 @@ def make_pdf(label: str) -> bytes:
         body.extend(rendered)
         body.extend(b"\nendobj\n")
     xref_offset = len(body)
-    body.extend(f"xref\\n0 {len(objects) + 1}\\n".encode())
+    body.extend(f"xref\n0 {len(objects) + 1}\n".encode())
     body.extend(b"0000000000 65535 f \n")
     for offset in offsets[1:]:
         body.extend(f"{offset:010d} 00000 n \n".encode())
@@ -345,7 +345,7 @@ def main() -> int:
                 route.continue_()
 
             page.route(
-                re.compile(rf".*/documents/{fixture['document_id']}(?:/reading(?:/page/\\d+)?)?$"),
+                re.compile(rf".*/documents/{fixture['document_id']}(?:/reading(?:/page/\d+)?)?$"),
                 block_saved_document_requests,
             )
             page.get_by_role("button", name=re.compile(r"Continue Reading")).click(timeout=15000)
