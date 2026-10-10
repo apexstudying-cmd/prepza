@@ -1683,3 +1683,10 @@ Commit `b212a9193702ad4446bc1f45143ca11bbc900c9a` now polls for a complete root 
 The test has progressed beyond service-worker startup and now times out on the first Summary card. Before changing the UI or weakening its locator, verify the authenticated `GET /documents` response for the fixture user's three documents and their five expected ready types. The UI reads this bulk endpoint and maps each item's `id`, `type`, `status`, and `parameters` into buttons titled with the source document.
 
 Commit `920e80ebb515321014cba3b886904a6bb9dc8668` adds that API contract check and reports visible buttons/page text if the API is correct but the card is absent. Use those results to make the smallest evidenced correction; do not assume another service-worker failure or change production behavior speculatively.
+
+
+## 2026-10-10 — Concurrent online and IndexedDB loads must merge
+
+The API assertion and visible empty state gave the important clue: the server returned all expected materials while the component displayed none. In `StudyMaterialsScreen`, online `/documents` data and `loadOffline()`'s IndexedDB result write to the same state concurrently. An empty cache lookup can finish after the online request and erase its rows.
+
+Commit `45965bfeeebdf804a122a432621a17455b2d7589` replaces both state overwrites with a deduplicating merge keyed by document ID and material ID. The browser regression needs a rebuilt app image before verification. Treat this as an identified and patched race, not yet a verified release pass.
