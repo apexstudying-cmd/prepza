@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import shutil
+import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -395,36 +396,80 @@ def login(page, fixture: dict) -> None:
     page.on("response", record_startup_response)
     page.on("requestfailed", record_startup_request_failure)
     page.on("framenavigated", record_main_frame_navigation)
+    expected_url = BASE_URL.rstrip("/") + "/"
     try:
         page.goto(BASE_URL + "/", wait_until="load", timeout=15000)
-    except Exception:
-        # The controllerchange reload can abort the initial navigation. Only
-        # treat that as the known lifecycle when the second main-frame
-        # navigation was actually observed; all other failures stay failures.
-        if len(navigation_events) < 2:
+    except Exception as exc:
+        # The first controllerchange can reload this page and abort goto. Do
+        # not treat a navigation count as proof of readiness; continue polling
+        # the actual controller state and fail with lifecycle evidence if it
+        # never settles.
+        if page.is_closed() or page.url.rstrip("/") + "/" != expected_url:
             raise
+        startup_diagnostics["initial_navigation_interruption"] = (
+            f"{type(exc).__name__}: {exc}"
+        )
 
-    try:
-        while len(navigation_events) < 2:
-            page.wait_for_event(
-                "framenavigated",
-                predicate=lambda frame: frame == page.main_frame,
-                timeout=15000,
-            )
-        page.wait_for_load_state("load", timeout=15000)
-        expected_url = BASE_URL.rstrip("/") + "/"
-        if len(navigation_events) < 2 or navigation_events[0] != expected_url or navigation_events[1] != expected_url:
-            raise RuntimeError(
-                f"Expected the same-origin service-worker startup reload at {expected_url}; "
-                f"observed main-frame navigations={navigation_events}"
-            )
+    def read_control_state():
+        return page.evaluate(
+            """() => ({
+              supported: 'serviceWorker' in navigator,
+              controlled: Boolean(navigator.serviceWorker && navigator.serviceWorker.controller),
+              readyState: document.readyState,
+              url: location.href,
+            })"""
+        )
+
+    # A second navigation is not a service-worker lifecycle signal: it can
+    # happen before installation/activation finishes. Wait for the property
+    # the test actually needs, and ensure controllerchange-triggered reloads
+    # have settled before IndexedDB evaluate calls begin.
+    deadline = time.monotonic() + 15
+    last_control_state = None
+    last_state_error = None
+    controlled_and_settled = False
+    while time.monotonic() < deadline:
+        try:
+            state = read_control_state()
+            last_control_state = state
+            last_state_error = None
+            if (
+                state.get("supported")
+                and state.get("controlled")
+                and state.get("readyState") == "complete"
+                and state.get("url") == expected_url
+            ):
+                navigation_count = len(navigation_events)
+                # This short stability check is not a readiness substitute;
+                # control and a complete document are already required above.
+                # It gives the app's controllerchange reload a chance to begin.
+                page.wait_for_timeout(250)
+                settled = read_control_state()
+                last_control_state = settled
+                if (
+                    settled.get("supported")
+                    and settled.get("controlled")
+                    and settled.get("readyState") == "complete"
+                    and settled.get("url") == expected_url
+                    and len(navigation_events) == navigation_count
+                ):
+                    controlled_and_settled = True
+                    break
+        except Exception as exc:
+            # A controllerchange reload may destroy the current execution
+            # context between polls. Re-check the new document instead.
+            last_state_error = f"{type(exc).__name__}: {exc}"
+        page.wait_for_timeout(100)
+
+    if not controlled_and_settled:
+        # On failure, probe shell assets first and sample control/registration
+        # state afterwards so the report is not a stale pre-probe snapshot.
         worker_state = page.evaluate(
             """async () => {
               const summarizeWorker = worker => worker ? ({
                 scriptURL: worker.scriptURL,
                 state: worker.state,
               }) : null;
-              const registrations = await navigator.serviceWorker.getRegistrations();
               const probe = async path => {
                 const started = performance.now();
                 const abort = new AbortController();
@@ -453,6 +498,15 @@ def login(page, fixture: dict) -> None:
                   clearTimeout(timeoutId);
                 }
               };
+              const assetProbes = await Promise.all([
+                '/sw-register.js',
+                '/sw.js',
+                '/offline.html',
+                '/manifest.json',
+                '/icon-192.png',
+                '/icon-512.png',
+              ].map(probe));
+              const registrations = await navigator.serviceWorker.getRegistrations();
               return {
                 supported: 'serviceWorker' in navigator,
                 controlled: Boolean(navigator.serviceWorker && navigator.serviceWorker.controller),
@@ -465,26 +519,18 @@ def login(page, fixture: dict) -> None:
                   waiting: summarizeWorker(registration.waiting),
                   active: summarizeWorker(registration.active),
                 })),
-                assetProbes: await Promise.all([
-                  '/sw-register.js',
-                  '/sw.js',
-                  '/offline.html',
-                  '/manifest.json',
-                  '/icon-192.png',
-                  '/icon-512.png',
-                ].map(probe)),
+                assetProbes,
               };
             }"""
         )
-        if not worker_state["supported"] or not worker_state["controlled"]:
-            raise RuntimeError(f"Service worker did not control the settled page: {worker_state}")
-    except Exception as exc:
         raise RuntimeError(
-            "Service-worker startup did not settle before IndexedDB seeding; "
+            "Service-worker startup did not reach a stable controlled page within 15 seconds; "
             f"main-frame navigations={navigation_events}; "
-            f"underlying={type(exc).__name__}: {exc}; current_url={page.url}; "
+            f"last_control_state={last_control_state}; "
+            f"last_state_error={last_state_error}; "
+            f"final_worker_state={json.dumps(worker_state, sort_keys=True)}; "
             f"startup_diagnostics={json.dumps(startup_diagnostics, sort_keys=True)}"
-        ) from exc
+        )
 
     # Wait for the real signed-in Home UI, not a guessed startup delay.
     page.get_by_role("button", name=re.compile(r"My Study$")).wait_for(timeout=15000)
