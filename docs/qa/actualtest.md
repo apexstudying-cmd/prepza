@@ -1794,3 +1794,14 @@ Current code commit: `62da5f40301230fa9919013e770fad41c9631308`. On this head, G
 
 
 **CI completion update (2026-10-10):** The CI runs for code commit `62da5f40301230fa9919013e770fad41c9631308` have now all completed successfully, including Frontend Build, Screen Loading Audit, Student Frontend Contract, Student Contract, Admin Route Contract, B2B, AI economics, Realtime Runtime Regression, E2EE Chat/Security, Kokoro GPU worker validation, and Release QA Trace. This closes the earlier in-progress status above. It still does **not** certify the two local Playwright/Docker browser gates; those remain the only outstanding verification for this change.
+
+
+## 2026-10-10 — Browser offline-content gate failed at first Summary replay (local commit f0b8482)
+
+**Observed local run:** `python scripts/test_browser_study_hub_offline_content.py -q` exited `1`. The test printed `PASS: GET /documents returned all three fixture documents with all five ready material types`, then timed out after 15 seconds waiting for the visible text `Offline summary` immediately after clicking the first Summary card. This run does not prove the offline/reload/podcast assertions because it stopped before reaching them.
+
+**Environment/evidence:** the local checkout was `f0b848274311a982e277428ef5751936ef8f590b`. `docker compose -f docker-compose.vps.yml ps` showed the app container up, but the working tree was not clean: `docker-compose.vps.yml` was modified and `hello world` was untracked. Those local changes must be preserved. GitHub/Graphify had already advanced to `e610fbfe6b44e9cd6a13510c545aa55e64fc738f`; therefore this failed result is evidence for the reported local checkout, not a final verdict on the latest main commit.
+
+**Likely root cause from source inspection:** `StudyMaterialsScreen` stores the selected ready artifact in `sessionStorage` under `prepza-open-material` and switches to the corresponding generation screen. `SummaryGenerationScreen` currently starts in its `config` phase and its initialization effect loads `/me`, document metadata and usage; it does not consume the selected material ID/type to restore and render the existing ready payload. The browser gate expects an existing artifact to open, not a fresh-generation configuration screen. Confirm with the next browser trace and implement exact ready-material replay; do not increase the timeout, loosen the text assertion, or trigger AI generation as a workaround.
+
+**Status: FAIL on local commit f0b8482; latest-main browser status remains unverified.** Preserve the failure evidence, safely reconcile the local dirty tree before syncing, rebuild the Docker app from the exact commit under test, and rerun both `scripts/test_browser_study_hub_offline_content.py -q` and `scripts/test_browser_study_hub_offline.py -q` before claiming the local-first browser gate is green.
