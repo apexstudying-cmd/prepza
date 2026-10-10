@@ -1600,3 +1600,33 @@ I compared the exception with the actual service-worker implementation. The work
 That source review exposed a separate real app defect: the four standard material screens requested `/me` before calling `generationRequest()`. Offline `/me` failure prevented the cached-material branch from being reached. The offline selection matcher also treated UI type `summary` as different from route feature `summarize`; the offline response was keyed as `summarize`, while SummaryScreen reads `summary`. The current main changes normalize these aliases, replay the exact selected ready artifact without auth/network lookup, and prohibit a generation POST fallback while offline. I also adjusted the Mind Map fixture to seed a string branch because the current renderer expects `branches: string[]`, not `{label: ...}` objects.
 
 No release PASS is claimed: these source/test changes need a rebuilt local browser run. Required evidence remains successful replay of Summary, Flashcards, Practice Questions, Mind Map and Podcast after offline transition and reload, with zero generation POSTs.
+
+
+## 2026-10-10 — Make offline artifact QA exercise the cache the app actually writes
+
+The browser gate kept failing before its artifact assertions, so I stopped trying new locators and compared the actual runtime contract end to end.
+
+### Evidence from source
+
+- The backend exact-ready-material route returns the canonical stored record: `material_id`, `type`, `status`, `parameters`, and `payload`.
+- The standard generation endpoints return screen-oriented responses such as `summary`, `flashcards`, `quiz`, or `mind_map`. Saving those response objects under the canonical `/materials/<id>` offline path was a shape mismatch.
+- `GET /documents/<id>` exposes the artifact scope and owner. That gives the client a verified boundary: only a ready `private` artifact whose `owner_user_id` equals the signed-in account is saved by this path.
+- A podcast's ready audio descriptor and binary media are separate. The player must persist both if it is to replay that podcast without revisiting the document screen while online.
+- The service worker's `controllerchange` handler reloads the page. That explains why a long async IndexedDB seeding operation can be interrupted unless browser startup has actually settled.
+
+### What changed
+
+1. The app now saves the canonical exact-material response after confirming owner/scope/status; online generation reuse no longer caches the wrong UI response shape. The async-generation resolve path uses the same verification.
+2. When a selected private podcast has ready audio, the app also persists the ready audio descriptor and fetched audio Blob, without blocking playback.
+3. The gate creates existing ready private material rows in PostgreSQL and writes only source-document metadata/bytes into IndexedDB. It then opens materials through the actual UI while online, so the app—not the fixture—must populate `generatedMaterials` and `generatedAudio`.
+4. The test's request guard allows online material POSTs through only when they carry the exact selected `X-Prepza-Material-ID`. Requests without that header are returned as HTTP 412 by the browser harness before Flask can enqueue a fresh generation job.
+5. Podcast HTTP responses are stubbed at the browser boundary to return ready metadata and a tiny WAV. No AI API key, AI provider, or GPU is needed for this regression.
+6. The test then goes offline, opens the cached artifacts, reloads, and reopens them. Offline generation POSTs remain forbidden. The test still checks source limits separately from browser-specific storage quota.
+
+### What is and is not proven
+
+The latest source commits and their GitHub Python-syntax check are not equivalent to a browser pass. The user has not yet run this latest guard-and-cache version locally. The gate remains **NOT TESTED** until the test completes the online cache, offline replay, zero-generation-POST, and offline reload assertions.
+
+### What I learned
+
+A cache test must distinguish the API response used by a screen from the canonical persisted object. It must also prove the cache writer runs; directly seeding the final material-cache rows can make the UI assertion green while bypassing the very code whose correctness we need to test.
