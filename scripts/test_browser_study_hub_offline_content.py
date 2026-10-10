@@ -554,7 +554,7 @@ def main() -> int:
                 route.continue_()
 
             page.route(
-                re.compile(r".*/documents/\\d+/(summarize|flashcards|quiz|mind-map|podcast-script|podcast-audio)(?:\\?.*)?$"),
+                re.compile(r".*/documents/\d+/(summarize|flashcards|quiz|mind-map|podcast-script|podcast-audio)(?:\?.*)?$"),
                 guard_generation_reuse,
             )
 
