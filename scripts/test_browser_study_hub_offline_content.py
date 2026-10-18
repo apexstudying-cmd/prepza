@@ -1121,10 +1121,77 @@ def main() -> int:
             # control instead of treating a hidden media element as a UI failure.
             audio_element = page.locator("audio").first
             audio_element.wait_for(state="attached", timeout=15000)
-            page.get_by_role("button", name="Play", exact=True).wait_for(
-                state="visible",
-                timeout=15000,
-            )
+            try:
+                # Playback state may update the accessible label from Play to
+                # Pause; either visible custom control proves the player UI
+                # mounted. Do not confuse the hidden native <audio> with the UI.
+                page.get_by_role(
+                    "button",
+                    name=re.compile(r"^(Play|Pause)$"),
+                ).wait_for(state="visible", timeout=15000)
+            except Exception as exc:
+                runtime_state = page.evaluate(
+                    """() => {
+                      const describe = element => {
+                        const style = getComputedStyle(element);
+                        const rect = element.getBoundingClientRect();
+                        return {
+                          tag: element.tagName,
+                          ariaLabel: element.getAttribute('aria-label'),
+                          title: element.getAttribute('title'),
+                          text: String(element.innerText || element.textContent || '').trim().slice(0, 100),
+                          display: style.display,
+                          visibility: style.visibility,
+                          opacity: style.opacity,
+                          rect: {
+                            x: Math.round(rect.x), y: Math.round(rect.y),
+                            width: Math.round(rect.width), height: Math.round(rect.height)
+                          }
+                        };
+                      };
+                      return {
+                        url: location.href,
+                        navigationState: (() => {
+                          try { return JSON.parse(localStorage.getItem('prepza-navigation-state') || 'null'); }
+                          catch { return localStorage.getItem('prepza-navigation-state'); }
+                        })(),
+                        audio: Array.from(document.querySelectorAll('audio')).map(element => ({
+                          ...describe(element),
+                          src: element.getAttribute('src'),
+                          currentSrc: element.currentSrc,
+                          readyState: element.readyState,
+                          networkState: element.networkState,
+                          error: element.error ? {
+                            code: element.error.code,
+                            message: element.error.message || null
+                          } : null
+                        })),
+                        playPauseButtons: Array.from(document.querySelectorAll('button'))
+                          .filter(element => /play|pause/i.test(
+                            (element.getAttribute('aria-label') || '') + ' ' +
+                            (element.getAttribute('title') || '') + ' ' +
+                            (element.innerText || '')
+                          ))
+                          .map(describe),
+                        visibleButtons: Array.from(document.querySelectorAll('button'))
+                          .filter(element => {
+                            const rect = element.getBoundingClientRect();
+                            const style = getComputedStyle(element);
+                            return rect.width > 0 && rect.height > 0 &&
+                              style.display !== 'none' && style.visibility !== 'hidden' &&
+                              Number(style.opacity) > 0;
+                          })
+                          .slice(0, 30).map(describe),
+                        bodyText: (document.body.innerText || '').slice(0, 2200)
+                      };
+                    }"""
+                )
+                raise AssertionError(
+                    "Podcast audio element attached, but the visible custom Play/Pause "
+                    "control did not appear. "
+                    f"cause={type(exc).__name__}: {exc}; "
+                    f"runtime_state={json.dumps(runtime_state, sort_keys=True)}"
+                ) from exc
             audio_src = audio_element.get_attribute("src") or ""
             if not audio_src.startswith("/offline-fixture-audio/"):
                 raise AssertionError(
