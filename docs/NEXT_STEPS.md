@@ -1,6 +1,6 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-10-07
+Last updated: 2026-10-18
 Branch: main
 
 Status:
@@ -19,7 +19,8 @@ Rule: require evidence before marking production work complete.
 - [x] Day 7 auth/session/ownership/offline/realtime/failure audit
 - [x] Day 8 runtime/storage/database/migration/jobs/backups/self-hosting audit
 - [x] Day 9 freeze/regression and launch-contract CI work
-- [x] Day 10 repository-grounded technical documentation
+- [x] Day 10 initial repository-grounded technical reference (historical snapshot; not the final deep application walkthrough)
+- [ ] Deep technical app study + complete source-grounded frontend/backend architecture diagram — intentionally deferred until the remaining functional, browser and recovery gates are green; finish and verify against current `main` before the final freeze.
 - [x] OpenAI-only provider/dependency cleanup
 - [x] Direct-to-main workflow retained
 - [ ] Re-run full launch-contract CI after latest Alembic/Docker/Study Hub changes
@@ -317,6 +318,7 @@ Rule: require evidence before marking production work complete.
 - [ ] Cross-system journeys — payment→entitlement→usage, upload→processing→artifact, offline→reconcile, realtime failure/reconnect.
 - [ ] CI — verify current workflows actually execute and pass on the release commit.
 - [ ] Clean full regression — rerun after all remaining gates are green.
+- [ ] Deep technical app study + complete source-grounded frontend/backend architecture diagram — intentionally deferred until the remaining functional, browser and recovery gates are green; finish and verify against current `main` before the final freeze.
 - [ ] Final freeze — exact commit, CI, browser, docs, migration and recovery evidence.
 
 ## 21. Maintenance rules
@@ -418,3 +420,20 @@ The corrected `scripts/test_browser_admin_study_time.py` has now been rerun from
 **Current action:** isolate the HTTP response for `/` from inside the temporary QA container and explain the navigation timeout before modifying Study Time logic or weakening the browser gate.
 
 The release tracker remains authoritative: `admin_study_time_visibility` is **IN_PROGRESS**. The separate offline content/artifact gate is also still pending after the IndexedDB v4 migration fix and must be rerun independently.
+
+
+## 25. 2026-10-18 — Mind Map ready-artifact replay diagnosis and deferred deep study
+
+### Current browser evidence
+The user ran `python scripts/test_browser_study_hub_offline_content.py -q` on checkout `400a6ce` after rebuilding the app. My Study local document opening and the API fixture contract passed. Existing ready Summary, Flashcards and Practice Questions rendered. Mind Map did not render its existing `Offline branch` payload and remained on the map-depth configuration screen. No canonical material GET for Mind Map was observed, and the test recorded no material-generation POSTs. The generated-artifact browser gate remains **NOT TESTED**, not PASS.
+
+### Source-level root cause identified
+The active build runs `tools/apply_generation_ui_build.py`, which wires the screen from `StudyGenerationScreensClean.tsx`. The build then executes `tools/apply_study_generation_polish.py`, whose replacement template overwrites `MindMapGenerationScreen`. The selected-ready-material replay effect existed in the component source but was missing from the replacement template, so the build erased the fix before serving the UI.
+
+The template was updated in commit `ea149abe` to retain the selected ready-material GET/replay effect. A focused contract test was added in commit `ce7a0afd` to execute the transformer in an isolated temporary tree and assert that the replay wiring survives. Neither the new focused test nor the post-fix real-browser gate has yet been executed in the user's rebuilt checkout; no pass is claimed.
+
+### Next action
+Sync current `main`, rebuild the app so the prebuild transforms run, execute the focused frontend generation contract tests, then rerun `scripts/test_browser_study_hub_offline_content.py -q`. Do not weaken the browser assertions, call AI generation, or mark the offline artifact gate green until the complete post-fix run passes.
+
+### Documentation deliverable boundary
+The checked-in `docs/DAY10_TECHNICAL_DOCUMENTATION.md` remains an initial reference audited against commit `b63df104` dated 2026-10-01. That historical documentation checkbox does **not** close the separately tracked deep technical app study and complete architecture diagram. Keep that deliverable pending until functional/browser/recovery gates pass, then update the walkthrough and diagram against the verified source before final freeze.
