@@ -135,3 +135,12 @@ def test_generation_screens_follow_manual_theme_tokens():
         assert f"'--prepza-generation-{token}'" in app
     assert "background: 'var(--prepza-generation-page, #F8F9FC)'" in build_transform
 
+def test_generation_controls_have_accessible_selection_and_large_back_target():
+    source = Path("frontend/src/generation/GenerationScreens.tsx").read_text(encoding="utf-8")
+
+    assert 'aria-label="Back"' in source
+    assert "width: 44, height: 44" in source
+    assert "aria-pressed={selected}" in source
+    assert "color: disabled ? C.muted : C.text" in source
+    assert "background: disabled ? C.border" in source
+
