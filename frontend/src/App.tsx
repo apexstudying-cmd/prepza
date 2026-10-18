@@ -724,7 +724,18 @@ let currentThemeMode: ThemeMode = (typeof window !== 'undefined' && (window.loca
 const themeListeners = new Set<() => void>()
 function applyThemeDocument(mode: ThemeMode) {
   if (typeof document === 'undefined') return
-  document.documentElement.dataset.prepzaTheme = mode
+  const theme = mode === 'dark' ? DARK_THEME : LIGHT_THEME
+  const root = document.documentElement
+  root.dataset.prepzaTheme = mode
+
+  // Generation screens live in their own module, but share the same theme
+  // source. Update variables on the document root so a theme toggle updates
+  // those screens immediately without introducing a second React theme store.
+  root.style.setProperty('--prepza-generation-text', theme.text)
+  root.style.setProperty('--prepza-generation-page', theme.pageBg)
+  root.style.setProperty('--prepza-generation-card', theme.card)
+  root.style.setProperty('--prepza-generation-muted', mode === 'dark' ? '#AAB4C8' : '#596579')
+  root.style.setProperty('--prepza-generation-border', mode === 'dark' ? '#2A3654' : '#E1E5ED')
 }
 function setThemeMode(next: ThemeMode) {
   currentThemeMode = next
