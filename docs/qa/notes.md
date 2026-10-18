@@ -1744,3 +1744,27 @@ The useful distinction is that the API has the ready material row, but that alon
 The local checkout was behind the GitHub/Graphify code head and had uncommitted `docker-compose.vps.yml` changes plus an untracked `hello world` file. Preserve both; do not use `git reset --hard` to sync. First capture the current diff and identify the untracked file, then safely stash or commit only intentional local changes before updating the checkout. Rebuild the app image from the exact target commit before repeating browser tests.
 
 **Learning:** a green bulk API assertion proves fixture visibility, not the user journey. A ready-artifact gate must prove the selected artifact's ID/type flows from the Study Materials card into the generation screen, that the canonical GET/cache path returns the right payload, and that the UI renders it without an AI-generation POST. Latest-main browser status remains unverified until rerun.
+
+## 2026-10-18 — Mind Map replay was being erased by the prebuild transformer
+
+### What the browser showed
+
+The rebuilt app on `400a6ce` passed the local-first source-document check and showed all fixture materials in `GET /documents`. Summary, Flashcards and Practice Questions opened their existing ready payloads. Mind Map stayed on its configuration screen and never made its expected canonical material GET; the browser test saw no generation POSTs.
+
+### Root cause
+
+The source component was not the only source of truth. During `pnpm prebuild`, `tools/apply_generation_ui_build.py` wires the newer generation screen components into `App.tsx`; its call to `tools/apply_study_generation_polish.py` rewrites the body of `MindMapGenerationScreen`. The replacement template had the `/me` and document-title effect plus the generation handler, but did not preserve the effect that reads `prepza-open-material`, fetches the exact ready material and restores it to the map. Therefore a patch to the component source alone was not enough: the build deleted that behavior before Vite built the frontend.
+
+### What changed in source
+
+- Commit `ea149abe` adds the selected ready-material replay effect to the replacement template, including validation, cancellation on unmount, and error display.
+- Commit `ce7a0afd` adds a regression test that copies the transformer and screen into an isolated temporary repository, executes the actual transformer, and verifies the replay effect survives its rewrite.
+- The release tracker now keeps the replay gate and the final deep technical study/architecture diagram explicitly unfinished.
+
+### Verification boundary
+
+The new focused test and a fresh browser run against the post-fix build have **not yet been executed** in the user's local checkout. The earlier run is evidence for the pre-fix failure only. Do not report Mind Map replay as fixed until the focused contract tests and the full post-fix browser gate pass.
+
+### Engineering lesson
+
+When the frontend build runs source-transforming scripts, the transform template is production source too. A durable regression test should run the transformer, not merely search the pre-transform component file for the desired code.
