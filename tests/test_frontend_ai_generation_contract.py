@@ -5,6 +5,7 @@ provider-free generation tests cover the reusable generation pipeline.
 """
 
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -150,4 +151,25 @@ def test_generation_controls_have_accessible_selection_and_large_back_target():
     assert "aria-pressed={selected}" in source
     assert "color: disabled ? C.muted : C.text" in source
     assert "background: disabled ? C.border" in source
+
+def test_theme_muted_text_meets_wcag_aa_on_light_and_dark_surfaces():
+    source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    light_match = re.search(r"const LIGHT_THEME: ThemeTokens = \{[^\n]*textMuted: '([^']+)'", source)
+    dark_match = re.search(r"const DARK_THEME: ThemeTokens = \{[^\n]*textMuted: '([^']+)'", source)
+    assert light_match and dark_match
+
+    def relative_luminance(color):
+        channels = [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    def contrast_ratio(foreground, background):
+        foreground_luminance = relative_luminance(foreground)
+        background_luminance = relative_luminance(background)
+        lighter, darker = sorted((foreground_luminance, background_luminance), reverse=True)
+        return (lighter + 0.05) / (darker + 0.05)
+
+    assert contrast_ratio(light_match.group(1), "#F8F9FC") >= 4.5
+    assert contrast_ratio(light_match.group(1), "#FFFFFF") >= 4.5
+    assert contrast_ratio(dark_match.group(1), "#0A0E1A") >= 4.5
 
