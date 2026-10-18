@@ -1127,7 +1127,7 @@ def main() -> int:
                 # mounted. Do not confuse the hidden native <audio> with the UI.
                 page.get_by_role(
                     "button",
-                    name=re.compile(r"^(Play|Pause)$"),
+                    name=re.compile(r"^(Play|Pause) podcast$"),
                 ).wait_for(state="visible", timeout=15000)
             except Exception as exc:
                 runtime_state = page.evaluate(
@@ -1193,9 +1193,11 @@ def main() -> int:
                     f"runtime_state={json.dumps(runtime_state, sort_keys=True)}"
                 ) from exc
             audio_src = audio_element.get_attribute("src") or ""
-            if not audio_src.startswith("/offline-fixture-audio/"):
+            expected_audio_src = f"/offline-fixture-audio/{podcast_material_id}"
+            if audio_src != expected_audio_src:
                 raise AssertionError(
-                    f"Podcast player did not attach the fixture audio URL: {audio_src!r}"
+                    "Podcast player did not resolve audio for the selected ready material: "
+                    f"expected {expected_audio_src!r}, received {audio_src!r}"
                 )
             wait_for_cached_podcast(
                 page,
