@@ -1833,3 +1833,14 @@ The build chain invokes `tools/apply_generation_ui_build.py`, which uses `tools/
 - Post-fix focused test and real-browser run: **pending**.
 
 **Gate status remains IN_PROGRESS.** Rebuild from current `main`, run `pytest -q tests/test_frontend_ai_generation_contract.py`, then rerun the browser gate. Do not weaken assertions or allow generation POSTs to satisfy the test.
+
+## 2026-10-18 — GitHub Actions runs for latest observed main commit (CI unresolved)
+
+**Commit queried:** `15cffb59e6834b746a0892aa5fd41869a213ce85` (`main` at the time of the query).
+
+- GitHub API listed 11 workflow runs for that commit.
+- All 11 runs reported `conclusion=failure`; creation time was `2026-10-18T12:00:18Z` and observed completion/update time was approximately three seconds later.
+- Job metadata returned `steps=null` and `logs_url=null`.
+- Requesting decoded logs for the Student Frontend Contract job failed with `BlobNotFound`.
+
+**Interpretation:** CI is not green. The available data is insufficient to attribute these failures to application code because no job steps or actionable logs were returned. The CI release gate is **IN_PROGRESS** while log/runner availability and the workflow result are investigated. Do not mark PASS based on earlier runs on older commits.
