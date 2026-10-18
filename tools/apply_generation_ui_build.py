@@ -64,19 +64,19 @@ text = text.replace(base_style, scroll_style)
 replacements = [
     ('// ─── PODCAST PLAYER', '// ─── SUMMARY', '''// ─── PODCAST PLAYER
 function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-  return <div style={{ colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'light-dark(#F7F8FB,#080D1D)' }}><PodcastGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+  return <div style={{ colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PodcastGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
 
 '''),
     ('// ─── FLASHCARDS', '// ─── QUIZ', '''// ─── FLASHCARDS
 function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-  return <div style={{ colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'light-dark(#F7F8FB,#080D1D)' }}><FlashcardsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+  return <div style={{ colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><FlashcardsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
 
 '''),
     ('// ─── SUMMARY', '// ─── CHATS', '''// ─── SUMMARY
 function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-  return <div style={{ colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'light-dark(#F7F8FB,#080D1D)' }}><SummaryGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+  return <div style={{ colorScheme: 'light dark', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><SummaryGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
 
 '''),
@@ -95,11 +95,11 @@ for start_marker, end_marker, replacement in replacements:
 
 text = text.replace(
     "return <PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
-    "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'light-dark(#F7F8FB,#080D1D)' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
+    "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
 )
 text = text.replace(
     "return <MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
-    "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'light-dark(#F7F8FB,#080D1D)' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
+    "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
 )
 
 def replace_section(start_marker: str, replacement: str, aliases: tuple[str, ...] = ()):
@@ -123,13 +123,13 @@ def replace_section(start_marker: str, replacement: str, aliases: tuple[str, ...
 
 replace_section('// ─── QUIZ', '''// ─── QUIZ
 function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-  return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'light-dark(#F7F8FB,#080D1D)' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+  return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
 
 ''')
 replace_section('// ─── MIND MAP', '''// ─── MIND MAP
 function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-  return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'light-dark(#F7F8FB,#080D1D)' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+  return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
 
 ''', aliases=('// ─── MINDMAP',))
