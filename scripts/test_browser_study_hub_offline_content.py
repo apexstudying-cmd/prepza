@@ -817,7 +817,7 @@ def wait_for_cached_podcast(page, fixture: dict, document_id: int, material_id: 
             db.close();
           }
         }""",
-        {
+        arg={
             "userId": fixture["user_id"],
             "documentId": document_id,
             "materialId": material_id,
