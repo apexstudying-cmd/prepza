@@ -971,7 +971,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
   const icon = (type: string) => ({ summary:'▤', flashcards:'▦', quiz:'?', practice_questions:'?', mind_map:'⌘', mindmap:'⌘', podcast:'◉' } as Record<string,string>)[type.toLowerCase()] || '•'
   return <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',background:T.pageBg}}>
     <div style={{background:N.navy,padding:'0 18px 20px',flexShrink:0}}>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}><button onClick={()=>setScreen('home')} style={{width:34,height:34,background:'rgba(255,255,255,0.1)',border:'none',borderRadius:10,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#fff'}}>{Ic.back()}</div></button><div><div style={{fontWeight:800,fontSize:18,color:'#fff'}}>My Study</div><div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginTop:2}}>Documents and the materials created from them</div></div></div>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}><button type="button" aria-label="Back to Home" onClick={()=>setScreen('home')} style={{width:44,height:44,flexShrink:0,background:'rgba(255,255,255,0.1)',border:'none',borderRadius:12,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><div aria-hidden="true" style={{color:'#fff'}}>{Ic.back()}</div></button><div><div style={{fontWeight:800,fontSize:18,color:'#fff'}}>My Study</div><div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginTop:2}}>Documents and the materials created from them</div></div></div>
       <div style={{display:'flex',gap:8}}>{([['documents','Documents'],['materials','Study Materials']] as const).map(([key,name])=><button key={key} onClick={()=>setTab(key)} style={{flex:1,padding:'8px 10px',borderRadius:11,background:tab===key?N.gold:'rgba(255,255,255,0.08)',color:tab===key?N.navy:'rgba(255,255,255,0.7)',border:'none',fontWeight:800,fontSize:11,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}>{name}</button>)}</div>
     </div>
     <div style={{flex:1,overflowY:'auto',padding:16}} className="scrollbar-hide">
@@ -1255,12 +1255,12 @@ function BottomNav({ active, setScreen, unreadChats = 0, exploreAttention = fals
   const tabs = [
     { key: 'home' as Screen, icon: Ic.home, label: 'Home', hit: isHome },
     { key: 'explore' as Screen, icon: Ic.explore, label: 'Explore', hit: isExp },
-    { key: 'create-modal' as Screen, icon: Ic.plus, label: '', hit: false },
+    { key: 'create-modal' as Screen, icon: Ic.plus, label: 'Create', hit: false },
     { key: 'chats' as Screen, icon: Ic.chat, label: 'Chats', hit: isChat },
     { key: 'profile' as Screen, icon: Ic.person, label: 'Profile', hit: isProf },
   ]
   return (
-    <div style={{ background: N.navy, borderTop: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', paddingBottom: 6, flexShrink: 0 }}>
+    <div role="navigation" aria-label="Primary navigation" style={{ background: N.navy, borderTop: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', paddingBottom: 6, flexShrink: 0 }}>
       {tabs.map((tab) => {
         const isCta = tab.key === 'create-modal'
         const badge = tab.key === 'chats' ? unreadChats : 0
@@ -1273,7 +1273,7 @@ function BottomNav({ active, setScreen, unreadChats = 0, exploreAttention = fals
           setScreen(tab.key)
         }
         return (
-          <button key={tab.key} onClick={handleClick} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: isCta ? '0 0 4px' : '8px 0 4px', position: 'relative' }}>
+          <button type="button" key={tab.key} onClick={handleClick} aria-label={tab.label} aria-current={tab.hit ? 'page' : undefined} style={{ flex: 1, minWidth: 44, minHeight: 44, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: isCta ? '0 0 4px' : '8px 0 4px', position: 'relative' }}>
             {isCta ? (
               <div style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: '0 4px 18px rgba(201,168,76,.55)' }}>
                 <div style={{ color: N.navy }}>{Ic.plus()}</div>
@@ -1281,12 +1281,12 @@ function BottomNav({ active, setScreen, unreadChats = 0, exploreAttention = fals
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                 {tab.hit && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 18, height: 2, background: N.gold, borderRadius: 2 }} />}
-                <div style={{ position: 'relative', color: tab.hit ? N.gold : 'rgba(255,255,255,.38)' }}>
+                <div style={{ position: 'relative', color: tab.hit ? N.gold : 'rgba(255,255,255,.70)' }}>
                   {tab.icon()}
                   {badge > 0 && <span aria-label={`${badge} unread messages`} style={{ position: 'absolute', top: -7, right: -10, minWidth: 17, height: 17, padding: '0 4px', borderRadius: 99, background: '#C94C4C', color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${N.navy}` }}>{badge > 99 ? '99+' : badge}</span>}
                   {attention && <span aria-label="New opportunities" style={{ position: 'absolute', top: -5, right: -5, width: 8, height: 8, borderRadius: '50%', background: N.goldL, border: `2px solid ${N.navy}`, boxShadow: '0 0 0 4px rgba(232,201,126,.12)' }} />}
                 </div>
-                <span style={{ fontSize: 10, fontWeight: tab.hit ? 800 : 500, color: tab.hit ? N.gold : 'rgba(255,255,255,.38)', fontFamily: 'Plus Jakarta Sans' }}>{tab.label}</span>
+                <span style={{ fontSize: 11, fontWeight: tab.hit ? 800 : 600, color: tab.hit ? N.gold : 'rgba(255,255,255,.70)', fontFamily: 'Plus Jakarta Sans' }}>{tab.label}</span>
               </div>
             )}
           </button>
