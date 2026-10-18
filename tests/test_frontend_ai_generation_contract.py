@@ -142,6 +142,8 @@ def test_generation_screens_follow_manual_theme_tokens():
         assert f"var(--prepza-generation-{token}," in generation
         assert f"'--prepza-generation-{token}'" in app
     assert "background: 'var(--prepza-generation-page, #F8F9FC)'" in build_transform
+    assert "'--prepza-generation-color-scheme', mode" in app
+    assert "colorScheme: 'var(--prepza-generation-color-scheme, light)'" in build_transform
 
 def test_generation_controls_have_accessible_selection_and_large_back_target():
     source = Path("frontend/src/generation/GenerationScreens.tsx").read_text(encoding="utf-8")
