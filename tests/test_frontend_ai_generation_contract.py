@@ -9,10 +9,10 @@ import shutil
 import subprocess
 import sys
 
-from app import app
-
 
 def test_backend_generation_routes_and_payload_keys_match_contract():
+    from app import app
+
     expected = {
         "/documents/<int:document_id>/summarize": "summary",
         "/documents/<int:document_id>/quiz": "quiz",
