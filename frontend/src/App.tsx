@@ -979,7 +979,15 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
     if ((key === 'mind_map' || key === 'mindmap') && Number(parameters?.node_count) > 0) return `${base} · ${parameters?.node_count} nodes`
     return base
   }
-  const icon = (type: string) => ({ summary:'▤', flashcards:'▦', quiz:'?', practice_questions:'?', mind_map:'⌘', mindmap:'⌘', podcast:'◉' } as Record<string,string>)[type.toLowerCase()] || '•'
+  const icon = (type: string) => {
+    const key = type.toLowerCase().replace(/-/g, '_')
+    if (key === 'summary') return Ic.book('w-5 h-5')
+    if (key === 'flashcards') return <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v12M9 9h6M9 13h6"/></svg>
+    if (key === 'quiz' || key === 'practice_questions') return Ic.check('w-5 h-5')
+    if (key === 'mind_map' || key === 'mindmap') return <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M12 7v4M12 11 6 16M12 11l6 5"/></svg>
+    if (key === 'podcast') return Ic.podcast('w-5 h-5')
+    return Ic.book('w-5 h-5')
+  }
   return <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',background:T.pageBg}}>
     <div style={{background:N.navy,padding:'0 18px 20px',flexShrink:0}}>
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}><button type="button" aria-label="Back to Home" onClick={()=>setScreen('home')} style={{width:44,height:44,flexShrink:0,background:'rgba(255,255,255,0.1)',border:'none',borderRadius:12,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><div aria-hidden="true" style={{color:'#fff'}}>{Ic.back()}</div></button><div><div style={{fontWeight:800,fontSize:18,color:'#fff'}}>My Study</div><div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginTop:2}}>Documents and the materials created from them</div></div></div>
@@ -995,7 +1003,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
             <button aria-label={`Remove ${item.title} from Study Hub`} title="Remove from Study Hub" onClick={async()=>{if(!csrfToken)return;try{await api(`/library/${item.id}/save`,{method:'DELETE',headers:{'X-CSRF-Token':csrfToken}});setSavedLibrary(items=>items.filter(x=>x.id!==item.id));if(id>0)setDocuments(items=>items.filter(d=>d.id!==id))}catch{}}} style={{width:42,border:'none',background:'transparent',color:T.textMuted,cursor:'pointer',fontSize:20,borderRadius:10}}>×</button>
           </div>})}
         </div>}
-      </>}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div style={{width:44,height:44,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:18}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type, m.parameters)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
+      </>}</> : <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Everything here was created from one of your documents. Tap a material to replay it.</div>{materials.length===0?<EmptyState icon="✦" title="No study materials yet" sub="Open a document and create a summary, flashcards, practice questions, mind map, or podcast." action="Open My Documents" onAction={()=>setTab('documents')}/>:materials.map((m,i)=><button key={`${m.documentId}-${m.type}-${i}`} onClick={()=>openMaterial(m)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div aria-hidden="true" style={{width:44,height:44,flexShrink:0,borderRadius:12,background:`${N.navy}0D`,color:N.navy,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}}>{icon(m.type)}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}}>{label(m.type, m.parameters)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}} className="line-clamp-1">From: {m.documentTitle}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}</>}
       <div style={{height:'calc(90px + env(safe-area-inset-bottom, 0px))'}}/>
     </div>
   </div>
@@ -1286,9 +1294,10 @@ function BottomNav({ active, setScreen, unreadChats = 0, exploreAttention = fals
         return (
           <button type="button" key={tab.key} onClick={handleClick} aria-label={tab.label} aria-current={tab.hit ? 'page' : undefined} style={{ flex: 1, minWidth: 44, minHeight: 44, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: isCta ? '0 0 4px' : '8px 0 4px', position: 'relative' }}>
             {isCta ? (
-              <div style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: '0 4px 18px rgba(201,168,76,.55)' }}>
+              <div aria-hidden="true" style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: '0 4px 18px rgba(201,168,76,.55)' }}>
                 <div style={{ color: N.navy }}>{Ic.plus()}</div>
               </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: N.gold, fontFamily: 'Plus Jakarta Sans' }}>Create</span>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                 {tab.hit && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 18, height: 2, background: N.gold, borderRadius: 2 }} />}
