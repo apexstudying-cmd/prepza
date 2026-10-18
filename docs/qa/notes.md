@@ -1768,3 +1768,12 @@ The new focused test and a fresh browser run against the post-fix build have **n
 ### Engineering lesson
 
 When the frontend build runs source-transforming scripts, the transform template is production source too. A durable regression test should run the transformer, not merely search the pre-transform component file for the desired code.
+
+## 2026-10-18 — CI failures without job logs are not a passing gate or a diagnosed code defect
+
+The latest observed main commit had 11 GitHub Actions workflow runs, all reporting failure within about three seconds. The job metadata exposed no steps or log URL, and the log-download API returned `BlobNotFound`. This means two conclusions are both important:
+
+- CI cannot be called green; the release gate is unresolved.
+- The underlying code failure cannot be diagnosed from this response alone. Do not change application code speculatively just to address an absent log.
+
+Next: obtain actionable job output or rerun after checking the runner/log path, while separately running the focused local generation contract and post-fix browser regression. Release remains blocked.
