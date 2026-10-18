@@ -14,6 +14,42 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
   return body as T
 }
 
+
+function normalizeSelectedMaterialType(value: unknown): string {
+  const type = String(value || '').toLowerCase().replace(/-/g, '_')
+  if (type === 'summary') return 'summarize'
+  if (type === 'practice_questions') return 'quiz'
+  if (type === 'mindmap') return 'mind_map'
+  return type
+}
+
+async function loadSelectedGeneratedMaterial(documentId: number, feature: string): Promise<{ material_id: number; payload: any } | null> {
+  let selected: any = null
+  try {
+    const raw = sessionStorage.getItem('prepza-open-material')
+    selected = raw ? JSON.parse(raw) : null
+  } catch { return null }
+
+  const materialId = Number(selected?.materialId)
+  if (
+    String(selected?.documentId) !== String(documentId) ||
+    normalizeSelectedMaterialType(selected?.type) !== normalizeSelectedMaterialType(feature) ||
+    !Number.isInteger(materialId) ||
+    materialId <= 0
+  ) return null
+
+  const material = await api<any>(`/documents/${documentId}/materials/${materialId}`)
+  if (
+    Number(material?.material_id) !== materialId ||
+    material?.status !== 'ready' ||
+    material?.payload == null ||
+    normalizeSelectedMaterialType(material?.type) !== normalizeSelectedMaterialType(feature)
+  ) throw new Error('The selected study material is no longer available.')
+
+  try { sessionStorage.removeItem('prepza-open-material') } catch {}
+  return { material_id: materialId, payload: material.payload }
+}
+
 async function pollJob<T = any>(jobId: number, onProgress?: (percent: number, stage: string) => void): Promise<T> {
   for (;;) {
     const job = await api<{ status: string; progress_percent: number; progress_stage: string; error?: string; payload?: T }>(`/ai-jobs/${jobId}`)
@@ -94,6 +130,30 @@ export function PracticeQuestionsGenerationScreen({ setScreen, activeDocumentId 
   const [count, setCount] = useState(20); const [difficulty, setDifficulty] = useState('balanced'); const [csrf, setCsrf] = useState(''); const [title, setTitle] = useState('Practice Questions')
   const [phase, setPhase] = useState<'config'|'loading'|'quiz'|'error'>('config'); const [generationPercent, setGenerationPercent] = useState(0); const [generationStage, setGenerationStage] = useState('preparing'); const [questions, setQuestions] = useState<any[]>([]); const [index, setIndex] = useState(0); const [selected, setSelected] = useState<string | null>(null); const [score, setScore] = useState(0); const [error, setError] = useState(''); const [usage, setUsage] = useState<PrepzaUsage | null>(null)
   useEffect(() => { if (activeDocumentId == null) return; api<any>('/me').then(v => setCsrf(v.csrf_token || '')).catch(e => setError(e.message)); api<any>(`/documents/${activeDocumentId}`).then(v => setTitle(v.title || 'Practice Questions')).catch(() => {}); fetchPrepzaUsage().then(setUsage).catch(() => {}) }, [activeDocumentId])
+
+  // Open the selected ready practice set without invoking its generation endpoint.
+  useEffect(() => {
+    if (activeDocumentId == null) return
+    let cancelled = false
+    void loadSelectedGeneratedMaterial(activeDocumentId, 'quiz')
+      .then(selected => {
+        if (!selected || cancelled) return
+        const next = questionsFrom(selected.payload)
+        if (!next.length) throw new Error('The saved practice set is empty.')
+        setQuestions(next)
+        setIndex(0)
+        setSelected(null)
+        setScore(0)
+        setPhase('quiz')
+      })
+      .catch(error => {
+        if (cancelled) return
+        setError(error instanceof Error ? error.message : 'Could not open the saved practice set.')
+        setPhase('error')
+      })
+    return () => { cancelled = true }
+  }, [activeDocumentId])
+
   const current = questions[index]; const options = useMemo(() => qOptions(current), [current]); const submitted = selected !== null
   const answer = qAnswer(current); const correct = submitted && (String(selected) === String(answer) || (typeof answer === 'number' && options[answer] === selected))
   const generate = async () => { if (activeDocumentId == null || !csrf || !canGenerate(usage, 'quiz', count)) return; setError(''); setGenerationPercent(0); setGenerationStage('preparing'); setPhase('loading'); try { const started = await api<{ job_id: number }>(`/documents/${activeDocumentId}/quiz?async=1`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ question_count: count, difficulty, language: 'en' }) }); const result = await pollJob<any>(started.job_id, (p, s) => { setGenerationPercent(p); setGenerationStage(s) }); const next = questionsFrom(result); if (!next.length) throw new Error('The generated practice set was empty. Please try again.'); setQuestions(next); setIndex(0); setSelected(null); setScore(0); setPhase('quiz') } catch (e) { setError(e instanceof Error ? e.message : 'Could not generate practice questions.'); setPhase('error') } }
@@ -114,6 +174,27 @@ function MindNode({ node, depth, T }: { node: any; depth: number; T: Theme }) { 
 export function MindMapGenerationScreen({ setScreen, activeDocumentId }: { setScreen: SetScreen; activeDocumentId: number | null }) {
   const dark = useDarkMode(); const T = theme(dark); const [nodes, setNodes] = useState(30); const [csrf, setCsrf] = useState(''); const [title, setTitle] = useState('Mind Map'); const [phase, setPhase] = useState<'config'|'loading'|'ready'|'error'>('config'); const [generationPercent, setGenerationPercent] = useState(0); const [generationStage, setGenerationStage] = useState('preparing'); const [map, setMap] = useState<any>(null); const [error, setError] = useState(''); const [usage, setUsage] = useState<PrepzaUsage | null>(null)
   useEffect(() => { if (activeDocumentId == null) return; api<any>('/me').then(v => setCsrf(v.csrf_token || '')).catch(e => setError(e.message)); api<any>(`/documents/${activeDocumentId}`).then(v => setTitle(v.title || 'Mind Map')).catch(() => {}); fetchPrepzaUsage().then(setUsage).catch(() => {}) }, [activeDocumentId])
+
+  // Open the selected ready map from its canonical record instead of regenerating it.
+  useEffect(() => {
+    if (activeDocumentId == null) return
+    let cancelled = false
+    void loadSelectedGeneratedMaterial(activeDocumentId, 'mind_map')
+      .then(selected => {
+        if (!selected || cancelled) return
+        const root = mapRoot(selected.payload)
+        if (!root || (typeof root === 'object' && !Object.keys(root).length)) throw new Error('The saved mind map is empty.')
+        setMap(root)
+        setPhase('ready')
+      })
+      .catch(error => {
+        if (cancelled) return
+        setError(error instanceof Error ? error.message : 'Could not open the saved mind map.')
+        setPhase('error')
+      })
+    return () => { cancelled = true }
+  }, [activeDocumentId])
+
   const generate = async () => { if (activeDocumentId == null || !csrf || !canGenerate(usage, 'mind_map', nodes)) return; setError(''); setPhase('loading'); try { const started = await api<{ job_id: number }>(`/documents/${activeDocumentId}/mind-map?async=1`, { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ node_count: nodes, language: 'en' }) }); const payload = await pollJob<any>(started.job_id, (p, s) => { setGenerationPercent(p); setGenerationStage(s) }); const root = mapRoot(payload); if (!root || (typeof root === 'object' && !Object.keys(root).length)) throw new Error('The generated mind map was empty. Please try again.'); setMap(root); setPhase('ready') } catch (e) { setError(e instanceof Error ? e.message : 'Could not generate the mind map.'); setPhase('error') } }
   if (activeDocumentId == null) return <Failure message="No document selected." onBack={() => setScreen('document-study')} onRetry={() => setScreen('document-study')} T={T}/>
   if (phase === 'error') return <Failure message={error} onBack={() => setPhase('config')} onRetry={generate} T={T}/>
