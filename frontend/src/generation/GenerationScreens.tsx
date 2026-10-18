@@ -179,7 +179,7 @@ function GenerationHeader({ title, subtitle, onBack }: { title: string; subtitle
   return (
     <div style={headerStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button onClick={onBack} style={{ width: 34, height: 34, border: 'none', borderRadius: 10, background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 20, cursor: 'pointer' }}>Back</button>
+        <button type="button" aria-label="Back" onClick={onBack} style={{ width: 44, height: 44, minWidth: 44, minHeight: 44, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 12, background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Back</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 16 }}>{title}</div>
           {subtitle && <div style={{ marginTop: 2, fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{subtitle}</div>}
@@ -191,14 +191,14 @@ function GenerationHeader({ title, subtitle, onBack }: { title: string; subtitle
 
 function ChoiceCard({ selected, title, description, onClick, badge, disabled }: { selected: boolean; title: string; description?: string; onClick: () => void; badge?: string; disabled?: boolean }) {
   return (
-    <button disabled={disabled} onClick={onClick} style={{ width: '100%', textAlign: 'left', border: `1.5px solid ${selected ? C.gold : C.border}`, background: disabled ? '#F1F3F6' : selected ? 'rgba(201,168,76,0.07)' : C.card, color: disabled ? C.muted : undefined, opacity: disabled ? 0.6 : 1, borderRadius: 15, padding: '13px 14px', marginBottom: 8, ...buttonBase, cursor: disabled ? 'not-allowed' : 'pointer' }}>
+    <button type="button" disabled={disabled} aria-pressed={selected} onClick={onClick} style={{ width: '100%', minHeight: 56, textAlign: 'left', border: `1.5px solid ${selected ? C.gold : C.border}`, background: disabled ? C.border : selected ? 'rgba(201,168,76,0.07)' : C.card, color: disabled ? C.muted : C.text, borderRadius: 15, padding: '13px 14px', marginBottom: 8, ...buttonBase, cursor: disabled ? 'not-allowed' : 'pointer' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-        <div style={{ width: 19, height: 19, borderRadius: '50%', border: `2px solid ${selected ? C.gold : '#B9BFCC'}`, background: selected ? C.gold : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div aria-hidden="true" style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected ? C.gold : C.muted}`, background: selected ? C.gold : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {selected && <div style={{ width: 7, height: 7, borderRadius: '50%', background: C.navy }} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <div style={{ color: C.text, fontSize: 13 }}>{title}</div>
+            <div style={{ color: disabled ? C.muted : C.text, fontSize: 13, fontWeight: selected ? 800 : 650 }}>{title}</div>
             {badge && <span style={{ background: C.navy, color: C.gold, borderRadius: 99, padding: '3px 7px', fontSize: 9, fontWeight: 800 }}>{badge}</span>}
           </div>
           {description && <div style={{ color: C.muted, fontSize: 11, lineHeight: 1.45, marginTop: 2 }}>{description}</div>}
@@ -209,7 +209,7 @@ function ChoiceCard({ selected, title, description, onClick, badge, disabled }: 
 }
 
 function GenerateButton({ disabled, children, onClick }: { disabled?: boolean; children: React.ReactNode; onClick: () => void }) {
-  return <button disabled={disabled} onClick={onClick} style={{ width: '100%', border: 'none', borderRadius: 15, padding: '14px 16px', background: disabled ? '#D9DDE5' : `linear-gradient(135deg,${C.gold},${C.goldLight})`, color: disabled ? '#7D8492' : C.navy, fontSize: 14, ...buttonBase }}>{children}</button>
+  return <button type="button" disabled={disabled} onClick={onClick} style={{ width: '100%', minHeight: 48, border: disabled ? `1px solid ${C.border}` : 'none', borderRadius: 15, padding: '14px 16px', background: disabled ? C.border : `linear-gradient(135deg,${C.gold},${C.goldLight})`, color: disabled ? C.muted : C.navy, fontSize: 14, ...buttonBase }}>{children}</button>
 }
 
 function GenerationFailure({ error, onBack, onRetry }: { error: string; onBack: () => void; onRetry: () => void }) {
