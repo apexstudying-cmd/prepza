@@ -1115,7 +1115,21 @@ def main() -> int:
                 name=re.compile(rf"Podcast.*From: {re.escape(DOCUMENTS[0][1])}"),
             ).first
             podcast_button.click(timeout=15000)
-            page.locator("audio").wait_for(timeout=15000)
+            # The podcast UI uses custom controls; its native <audio> element
+            # intentionally has no "controls" attribute and therefore is not a
+            # visible widget. Wait for attachment and the actual visible player
+            # control instead of treating a hidden media element as a UI failure.
+            audio_element = page.locator("audio").first
+            audio_element.wait_for(state="attached", timeout=15000)
+            page.get_by_role("button", name="Play", exact=True).wait_for(
+                state="visible",
+                timeout=15000,
+            )
+            audio_src = audio_element.get_attribute("src") or ""
+            if not audio_src.startswith("/offline-fixture-audio/"):
+                raise AssertionError(
+                    f"Podcast player did not attach the fixture audio URL: {audio_src!r}"
+                )
             wait_for_cached_podcast(
                 page,
                 fixture,
