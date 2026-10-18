@@ -26,6 +26,30 @@ replacement = r'''export function MindMapGenerationScreen({ setScreen, activeDoc
       .catch(e => setError(e instanceof Error ? e.message : 'Could not load the document.'))
   }, [activeDocumentId])
 
+  // Reopen the exact ready artifact selected in Study Materials. This effect
+  // must live in this build-time transformer, not only in the raw component:
+  // pnpm prebuild replaces MindMapGenerationScreen from this template.
+  useEffect(() => {
+    if (activeDocumentId == null) return
+    let cancelled = false
+    void loadSelectedGeneratedMaterial(activeDocumentId, 'mind_map')
+      .then(selected => {
+        if (!selected || cancelled) return
+        const root = mapRoot(selected.payload)
+        if (!root || (typeof root === 'object' && !Object.keys(root).length)) {
+          throw new Error('The saved mind map is empty.')
+        }
+        setMap(root)
+        setPhase('ready')
+      })
+      .catch(error => {
+        if (cancelled) return
+        setError(error instanceof Error ? error.message : 'Could not open the saved mind map.')
+        setPhase('error')
+      })
+    return () => { cancelled = true }
+  }, [activeDocumentId])
+
   const generate = async () => {
     if (activeDocumentId == null || !csrf) return
     setError('')
