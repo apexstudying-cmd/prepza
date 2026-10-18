@@ -731,6 +731,7 @@ function applyThemeDocument(mode: ThemeMode) {
   // Generation screens live in their own module, but share the same theme
   // source. Update variables on the document root so a theme toggle updates
   // those screens immediately without introducing a second React theme store.
+  root.style.setProperty('--prepza-generation-color-scheme', mode)
   root.style.setProperty('--prepza-generation-text', theme.text)
   root.style.setProperty('--prepza-generation-page', theme.pageBg)
   root.style.setProperty('--prepza-generation-card', theme.card)
