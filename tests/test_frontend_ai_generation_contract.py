@@ -119,3 +119,7 @@ def test_primary_bottom_navigation_exposes_accessible_names_and_current_location
     assert "aria-current={tab.hit ? 'page' : undefined}" in nav
     assert "minWidth: 44" in nav
     assert "minHeight: 44" in nav
+
+    styles = Path("frontend/src/index.css").read_text(encoding="utf-8")
+    assert ":focus-visible" in styles
+    assert "prefers-reduced-motion: reduce" in styles
