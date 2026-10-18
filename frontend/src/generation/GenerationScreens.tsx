@@ -254,9 +254,35 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
 
   useEffect(() => {
     if (activeDocumentId == null) return
-    Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string; page_count: number | null }>(`/documents/${activeDocumentId}`), fetchPrepzaUsage()])
-      .then(([me, doc, planUsage]) => { setCsrf(me.csrf_token); setTitle(doc.title); setPages(doc.page_count); setUsage(planUsage) })
-      .catch(e => setError(e instanceof Error ? e.message : 'Could not load the document.'))
+    let cancelled = false
+
+    // The saved document and session identity are needed to replay an existing
+    // podcast. Usage limits are only needed to create a new one, so a failed
+    // online usage refresh must never block cached material from opening.
+    Promise.all([
+      generationApi<{ csrf_token: string }>('/me'),
+      generationApi<{ title: string; page_count: number | null }>(`/documents/${activeDocumentId}`),
+    ])
+      .then(([me, doc]) => {
+        if (cancelled) return
+        setCsrf(me.csrf_token || '')
+        setTitle(doc.title)
+        setPages(doc.page_count)
+      })
+      .catch(e => {
+        if (!cancelled && navigator.onLine) {
+          setError(e instanceof Error ? e.message : 'Could not load the document.')
+        }
+      })
+
+    void fetchPrepzaUsage()
+      .then(planUsage => { if (!cancelled) setUsage(planUsage) })
+      .catch(() => {
+        // The usage endpoint may be unreachable offline. Existing artifacts
+        // remain replayable; generating a new podcast still requires quota data.
+      })
+
+    return () => { cancelled = true }
   }, [activeDocumentId])
 
   useEffect(() => {
@@ -265,9 +291,11 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
   }, [minutes, phase])
 
   useEffect(() => {
-    if (activeDocumentId == null || !csrf || phase !== 'config') return
-    let cancelled = false
+    if (activeDocumentId == null || phase !== 'config') return
     const selectedId = readSelectedPodcastMaterialId(activeDocumentId)
+    if (navigator.onLine && !csrf) return
+    if (!navigator.onLine && selectedId == null) return
+    let cancelled = false
     const checkSavedPodcast = async () => {
       let requestedMaterialId = selectedId ?? materialId
       try {
