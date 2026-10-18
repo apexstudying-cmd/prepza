@@ -1805,3 +1805,31 @@ Current code commit: `62da5f40301230fa9919013e770fad41c9631308`. On this head, G
 **Likely root cause from source inspection:** `StudyMaterialsScreen` stores the selected ready artifact in `sessionStorage` under `prepza-open-material` and switches to the corresponding generation screen. `SummaryGenerationScreen` currently starts in its `config` phase and its initialization effect loads `/me`, document metadata and usage; it does not consume the selected material ID/type to restore and render the existing ready payload. The browser gate expects an existing artifact to open, not a fresh-generation configuration screen. Confirm with the next browser trace and implement exact ready-material replay; do not increase the timeout, loosen the text assertion, or trigger AI generation as a workaround.
 
 **Status: FAIL on local commit f0b8482; latest-main browser status remains unverified.** Preserve the failure evidence, safely reconcile the local dirty tree before syncing, rebuild the Docker app from the exact commit under test, and rerun both `scripts/test_browser_study_hub_offline_content.py -q` and `scripts/test_browser_study_hub_offline.py -q` before claiming the local-first browser gate is green.
+
+## 2026-10-18 — Targeted offline generated-material replay run (pre-fix baseline; FAILED at Mind Map)
+
+**Command:** `python scripts/test_browser_study_hub_offline_content.py -q`  
+**Code baseline:** `400a6ce` (after Docker app image rebuild and container recreation)  
+**Environment:** user Windows host Playwright browser against `http://localhost:5000`; PostgreSQL and Redis reported healthy; Docker app image build succeeded.
+
+### Observed result
+
+- **PASS:** saved My Study document opened from IndexedDB with zero document-detail/reading GETs.
+- **PASS:** `GET /documents` exposed all three fixture documents and all five ready material types.
+- **PASS:** existing online Summary rendered for Offline Economics Notes.
+- **PASS:** existing online Flashcards rendered for Offline Economics Notes.
+- **PASS:** existing online Practice Questions rendered for Offline Economics Notes.
+- **FAIL:** the selected ready Mind Map stayed on the “Choose map depth” configuration screen; “Offline branch” did not render within 15 seconds.
+- **Evidence:** only the three earlier canonical material GETs for Summary, Flashcards and Practice Questions were observed. No canonical Mind Map GET and no material-generation POST was recorded.
+
+This run is **not a pass of the offline generated-material gate**. Because it ran on `400a6ce`, it does not verify the later source fix.
+
+### Root cause found after the run
+
+The build chain invokes `tools/apply_generation_ui_build.py`, which uses `tools/apply_study_generation_polish.py` to replace the `MindMapGenerationScreen` implementation. The replacement template omitted the selected-ready-artifact replay effect, so direct fixes to `frontend/src/generation/StudyGenerationScreensClean.tsx` could be erased during `pnpm prebuild`.
+
+- Template fix: commit `ea149abe`.
+- Isolated transformer regression test: commit `ce7a0afd`.
+- Post-fix focused test and real-browser run: **pending**.
+
+**Gate status remains IN_PROGRESS.** Rebuild from current `main`, run `pytest -q tests/test_frontend_ai_generation_contract.py`, then rerun the browser gate. Do not weaken assertions or allow generation POSTs to satisfy the test.
