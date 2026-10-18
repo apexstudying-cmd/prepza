@@ -82,8 +82,8 @@
     },
     {
       "id": "ci_release_workflows",
-      "status": "PASS",
-      "evidence": "All 12 release-triggered GitHub Actions workflows completed successfully on c8da8373."
+      "status": "IN_PROGRESS",
+      "evidence": "The latest observed push commit 15cffb59e6834b746a0892aa5fd41869a213ce85 triggered 11 listed GitHub Actions workflows on 2026-10-18 at 12:00:18Z; all reported conclusion=failure by 12:00:21Z. The job API returned steps=null and logs_url=null. Fetching the job logs returned BlobNotFound. This does not establish whether the underlying failures are code defects or a GitHub Actions/logging infrastructure problem; diagnose and obtain actionable job output before marking CI PASS."
     },
     {
       "id": "existing_database_migration",
@@ -127,13 +127,14 @@
     }
   ],
   "next_actions": [
-    "Sync main and rebuild the app so frontend prebuild transformations run; execute tests/test_frontend_ai_generation_contract.py, including the isolated prebuild-transform guard, then run scripts/test_browser_study_hub_offline_content.py -q. Mind Map replay fix is in ea149abe; test guard is in ce7a0afd. Keep the gate IN_PROGRESS until the full post-fix real-browser run passes.",
+    "Sync main and rebuild the app so frontend prebuild transformations run; execute tests/test_frontend_ai_generation_contract.py, including the isolated prebuild-transform guard, then run scripts/test_browser_study_hub_offline_content.py -q. Keep the artifact gate IN_PROGRESS until the complete post-fix browser run passes.",
+    "Diagnose GitHub Actions: 11 workflows for the latest observed push commit returned failure within about three seconds, with no step list or logs available from the connector (BlobNotFound). Obtain actionable workflow output or rerun after confirming runner/log availability; do not mark CI PASS or infer a code root cause from missing logs.",
     "Run the targeted admin authorization/security suite in the disposable QA environment; do not install pytest into the production app image.",
     "Execute the remaining cross-system journeys and the representative existing-database migration rehearsal.",
     "Complete mobile visual checks and controlled external-provider checks, recording which providers were actually exercised; do not infer production readiness from mocked local tests.",
     "Run the clean full regression after all release-scoped functional, browser, recovery and CI gates have fresh evidence.",
     "After those gates are green, complete the separately tracked deep technical app study and full source-grounded frontend/backend architecture diagram, reconcile the docs, and only then evaluate the final freeze."
   ],
-  "current_main_commit": "7edc764b0fa9ab568d41178bcf569504ce31715e",
-  "verification_note": "Release-status file refreshed on 2026-10-18 after reviewing source at 7edc764b0fa9ab568d41178bcf569504ce31715e. The user's latest browser run was executed on the immediately preceding code baseline 400a6ce and failed specifically at Mind Map ready-artifact replay; the correction now lives in the prebuild replacement template. The new focused transform regression test and post-fix browser gate have not yet run in the user's rebuilt checkout. Release remains BLOCKED; there are still NOT_TESTED and IN_PROGRESS gates. Preserve local uncommitted changes, test with the real current checkout, and do not claim a freeze."
+  "current_main_commit": "15cffb59e6834b746a0892aa5fd41869a213ce85",
+  "verification_note": "Updated on 2026-10-18 using the user's real-browser output from 400a6ce, source inspection and GitHub Actions metadata for main commit 15cffb59e6834b746a0892aa5fd41869a213ce85. The Mind Map replay correction is present in tools/apply_study_generation_polish.py and a focused isolated-transformer regression test exists, but post-fix local execution is pending. Eleven GitHub Actions workflows currently report failure with no returned steps/logs and a BlobNotFound log retrieval error; CI cause remains unresolved. Release remains BLOCKED and no freeze or overall PASS is claimed."
 }
