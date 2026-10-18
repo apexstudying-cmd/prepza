@@ -107,3 +107,15 @@ def test_podcast_replay_cache_wait_uses_playwright_keyword_argument():
 
     assert "arg={" in helper
     assert "timeout=15000" in helper
+
+def test_primary_bottom_navigation_exposes_accessible_names_and_current_location():
+    source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    start = source.index("function BottomNav(")
+    end = source.index("// ─── LOADING SYSTEM", start)
+    nav = source[start:end]
+
+    assert "{ key: 'create-modal' as Screen, icon: Ic.plus, label: 'Create', hit: false }" in nav
+    assert "aria-label={tab.label}" in nav
+    assert "aria-current={tab.hit ? 'page' : undefined}" in nav
+    assert "minWidth: 44" in nav
+    assert "minHeight: 44" in nav
