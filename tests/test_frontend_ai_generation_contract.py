@@ -124,3 +124,14 @@ def test_primary_bottom_navigation_exposes_accessible_names_and_current_location
     styles = Path("frontend/src/index.css").read_text(encoding="utf-8")
     assert ":focus-visible" in styles
     assert "prefers-reduced-motion: reduce" in styles
+
+def test_generation_screens_follow_manual_theme_tokens():
+    generation = Path("frontend/src/generation/GenerationScreens.tsx").read_text(encoding="utf-8")
+    app = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    build_transform = Path("tools/apply_generation_ui_build.py").read_text(encoding="utf-8")
+
+    for token in ("text", "muted", "page", "card", "border"):
+        assert f"var(--prepza-generation-{token}," in generation
+        assert f"'--prepza-generation-{token}'" in app
+    assert "background: 'var(--prepza-generation-page, #F8F9FC)'" in build_transform
+
