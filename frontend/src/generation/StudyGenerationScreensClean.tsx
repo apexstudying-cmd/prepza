@@ -16,7 +16,7 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
 
 
 function normalizeSelectedMaterialType(value: unknown): string {
-  const type = String(value || '').toLowerCase().replace(/-/g, '_')
+  const type = String(value || '').trim().toLowerCase().replace(/[\\s-]+/g, '_')
   if (type === 'summary') return 'summarize'
   if (type === 'practice_questions') return 'quiz'
   if (type === 'mindmap') return 'mind_map'
@@ -167,7 +167,7 @@ export function PracticeQuestionsGenerationScreen({ setScreen, activeDocumentId 
 }
 
 function mapRoot(payload: any) { const root = payload?.mind_map || payload?.mindmap || payload?.map || payload; return root?.root || root }
-function mapTitle(node: any) { return node?.title || node?.label || node?.name || node?.topic || 'Concept' }
+function mapTitle(node: any) { return typeof node === 'string' ? node : node?.title || node?.label || node?.name || node?.topic || node?.center || 'Concept' }
 function mapChildren(node: any): any[] { const value = node?.children || node?.branches || node?.nodes || []; return Array.isArray(value) ? value : [] }
 function MindNode({ node, depth, T }: { node: any; depth: number; T: Theme }) { const [open, setOpen] = useState(depth < 2); const children = mapChildren(node); return <div style={{ marginLeft: depth ? 16 : 0, borderLeft: depth ? `1px solid ${T.border}` : 'none', paddingLeft: depth ? 12 : 0, marginTop: 8 }}><button onClick={() => children.length && setOpen(v => !v)} style={{ width: '100%', textAlign: 'left', border: `1px solid ${depth === 0 ? T.gold : T.border}`, background: depth === 0 ? T.goldSoft : T.card, color: T.text, borderRadius: 13, padding: depth === 0 ? 14 : 11, fontWeight: depth < 2 ? 850 : 700, fontSize: depth === 0 ? 15 : 12 }}>{children.length ? (open ? '- ' : '+ ') : ''}{mapTitle(node)}</button>{open && children.map((child, i) => <MindNode key={`${mapTitle(child)}-${i}`} node={child} depth={depth + 1} T={T}/>)}</div> }
 
