@@ -344,6 +344,9 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
   // lose the job merely because its local React state was unmounted.
   useEffect(() => {
     if (activeDocumentId == null || !csrf || phase !== 'config') return
+    // A student-selected ready artifact takes precedence over any unrelated
+    // document-level job that may still be recorded as the latest podcast job.
+    if (readSelectedPodcastMaterialId(activeDocumentId) != null) return
     let cancelled = false
     const recover = async () => {
       try {
