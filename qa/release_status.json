@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-18",
-  "last_verified_commit": "cf181e4",
+  "last_verified_commit": "03fe14e",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -118,7 +118,7 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "IN_PROGRESS",
-      "evidence": "User-executed real-browser run after rebuilding app code at cf181e4 on 2026-10-18: local-first My Study open and GET /documents fixture contract passed; Summary, Flashcards, Quiz and Mind Map rendered for Offline Economics Notes; Summary, Flashcards and Quiz rendered for Offline Statistics Notes; the next Mind Map card was visible/stable but another div intercepted pointer events. The full suite stopped before remaining artifact/offline assertions. Commit 6355db53 adds DOM hit-test diagnostics; rerun pending. Original replay fix is active for at least one fixture but full gate is not PASS."
+      "evidence": "User rebuilt the app at 03fe14e and ran the browser gate on 2026-10-18. Local-first My Study opening and the /documents contract passed; Summary, Flashcards, Quiz and Mind Map replayed for all three fixture documents; 12 canonical material GETs were marked private/cacheable and no generation POSTs were issued. The podcast player then rendered its transformed PodcastGenerationScreen, but its GET omitted the selected material_id (the fixture consequently served /offline-fixture-audio/0) and its custom Play control had no accessible label. This isolated a product-level selected-artifact/audio-identity gap, plus an offline usage-refresh dependency. Main now contains fixes and source/browser contract guards in commits through 3dea9a8; those changes have not yet been rebuilt or browser-verified. Do not mark PASS until the current-main rebuild, exact podcast identity, descriptor/Blob cache, offline replay/reload, and no-generation-POST assertions all pass."
     },
     {
       "id": "admin_study_time_visibility",
@@ -127,8 +127,8 @@
     }
   ],
   "next_actions": [
-    "Pull current main and run `python -m pytest -q tests/test_frontend_ai_generation_contract.py -k mind_map_replay`; the test now defers Flask app import into its backend-route test. Capture the actual result.",
-    "Rerun `python scripts/test_browser_study_hub_offline_content.py -q` without force-click. The test now reports the DOM hit-test stack if a card click is intercepted; use that output to identify and fix the actual overlay/layout/state source.",
+    "Pull current main, run `python -m py_compile scripts/test_browser_study_hub_offline_content.py tests/test_frontend_ai_generation_contract.py` and `python -m pytest -q tests/test_frontend_ai_generation_contract.py -k podcast_replay`.",
+    "Rebuild/recreate the Docker app from current main and rerun `python scripts/test_browser_study_hub_offline_content.py -q`. Require the selected podcast material ID, ready descriptor and real audio Blob to be cached and reopened offline after reload before marking this gate PASS.",
     "After fixing the click blocker, rebuild the app and rerun the entire online/offline multi-document/artifact/podcast/reload/no-generation-POST gate; require all assertions to pass before marking this gate PASS.",
     "Diagnose GitHub Actions start/runner availability: latest job metadata has runner_id=0, empty runner name and steps=[], and no logs. Obtain an actual started run with actionable output before changing application code speculatively or marking CI PASS.",
     "Execute the remaining cross-system journeys and representative existing-database migration rehearsal; complete mobile visual checks and controlled external-provider verification.",
@@ -136,6 +136,6 @@
     "Run clean full regression after the release-scoped functional, browser, recovery and CI gates have fresh evidence.",
     "Then complete the separately tracked deep technical app study and full source-grounded frontend/backend architecture diagram, reconcile all documentation, and only then evaluate final freeze."
   ],
-  "current_main_commit": "d4dd452cd29de84e3d95818e76642f6db1a2c82d",
+  "current_main_commit": "3dea9a8c397cc5d59110da023c67553cca3e812f",
   "verification_note": "Updated on 2026-10-18 using the user's real-browser output from 400a6ce, source inspection and GitHub Actions metadata for main commit 15cffb59e6834b746a0892aa5fd41869a213ce85. The Mind Map replay correction is present in tools/apply_study_generation_polish.py and a focused isolated-transformer regression test exists, but post-fix local execution is pending. Eleven GitHub Actions workflows currently report failure with no returned steps/logs and a BlobNotFound log retrieval error; CI cause remains unresolved. Release remains BLOCKED and no freeze or overall PASS is claimed."
 }
