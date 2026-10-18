@@ -105,6 +105,28 @@ body {
   max-width: 100%;
 }
 
+/* Keyboard focus remains visible on both the navy shell and light content
+ * surfaces. The contrasting outer ring supplements the gold outline so focus
+ * is not communicated by color alone. */
+#root :is(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 3px solid #E8C97E !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px #0B1437 !important;
+}
+
+/* Respect the operating-system reduced-motion preference for page and
+ * component transitions, pulsing indicators, skeletons, and spinners. */
+@media (prefers-reduced-motion: reduce) {
+  #root *,
+  #root *::before,
+  #root *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
