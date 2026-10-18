@@ -20,7 +20,7 @@ Rule: require evidence before marking production work complete.
 - [x] Day 8 runtime/storage/database/migration/jobs/backups/self-hosting audit
 - [x] Day 9 freeze/regression and launch-contract CI work
 - [x] Day 10 initial repository-grounded technical reference (historical snapshot; not the final deep application walkthrough)
-- [ ] Deep technical app study + complete source-grounded frontend/backend architecture diagram — intentionally deferred until the remaining functional, browser and recovery gates are green; finish and verify against current `main` before the final freeze.
+- The final deep technical app study and complete source-grounded frontend/backend architecture diagram is separately tracked as an unfinished item in Section 20.
 - [x] OpenAI-only provider/dependency cleanup
 - [x] Direct-to-main workflow retained
 - [ ] Re-run full launch-contract CI after latest Alembic/Docker/Study Hub changes
