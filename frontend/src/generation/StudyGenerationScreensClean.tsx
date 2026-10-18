@@ -16,7 +16,7 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
 
 
 function normalizeSelectedMaterialType(value: unknown): string {
-  const type = String(value || '').trim().toLowerCase().replace(/[\\s-]+/g, '_')
+  const type = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
   if (type === 'summary') return 'summarize'
   if (type === 'practice_questions') return 'quiz'
   if (type === 'mindmap') return 'mind_map'
