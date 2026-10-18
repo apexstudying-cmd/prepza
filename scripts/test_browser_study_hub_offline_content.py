@@ -38,6 +38,45 @@ DOCUMENTS = [
 MATERIAL_TYPES = ("summary", "flashcards", "quiz", "mind_map", "podcast")
 
 
+def describe_click_hit_test(locator) -> dict:
+    """Report the actual DOM element covering the click point when Playwright is intercepted."""
+    try:
+        return locator.evaluate(
+            """element => {
+              const rect = element.getBoundingClientRect();
+              const x = Math.max(0, Math.min(window.innerWidth - 1, rect.left + rect.width / 2));
+              const y = Math.max(0, Math.min(window.innerHeight - 1, rect.top + rect.height / 2));
+              const describe = node => {
+                if (!node) return null;
+                const style = window.getComputedStyle(node);
+                const bounds = node.getBoundingClientRect();
+                return {
+                  tag: node.tagName,
+                  id: node.id || null,
+                  className: typeof node.className === 'string' ? node.className : null,
+                  text: String(node.innerText || node.textContent || '').trim().slice(0, 140),
+                  pointerEvents: style.pointerEvents,
+                  position: style.position,
+                  zIndex: style.zIndex,
+                  rect: {
+                    x: Math.round(bounds.x), y: Math.round(bounds.y),
+                    width: Math.round(bounds.width), height: Math.round(bounds.height)
+                  }
+                };
+              };
+              return {
+                viewport: { width: window.innerWidth, height: window.innerHeight },
+                clickPoint: { x: Math.round(x), y: Math.round(y) },
+                target: describe(element),
+                elementAtPoint: describe(document.elementFromPoint(x, y)),
+                stackAtPoint: document.elementsFromPoint(x, y).slice(0, 8).map(describe)
+              };
+            }"""
+        )
+    except Exception as exc:
+        return {"diagnostic_error": f"{type(exc).__name__}: {exc}"}
+
+
 def run_container_python(code: str) -> str:
     result = subprocess.run(
         ["docker", "compose", "-f", COMPOSE_FILE, "exec", "-T", "app", "python", "-"],
@@ -1001,6 +1040,7 @@ def main() -> int:
                             f"{type_label} from {document_title}; "
                             f"api_fixture_rows={json.dumps(api_fixture_rows, sort_keys=True)}; "
                             f"current_url={page.url}; visible_buttons={json.dumps(visible_buttons[:80])}; "
+                            f"hit_test={json.dumps(describe_click_hit_test(material_button), sort_keys=True)}; "
                             f"body={rendered_body!r}; click_error={type(exc).__name__}: {exc}"
                         ) from exc
                     try:
