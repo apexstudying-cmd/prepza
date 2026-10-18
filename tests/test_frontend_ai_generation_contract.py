@@ -83,3 +83,13 @@ def test_mind_map_replay_survives_prebuild_transform(tmp_path):
     assert "The saved mind map is empty." in transformed
     assert "setMap(root)" in transformed
     assert "setPhase('ready')" in transformed
+
+def test_podcast_replay_uses_selected_material_and_accessible_player_controls():
+    """Podcast replay must use the chosen ready artifact, not a document-wide latest audio."""
+    source = Path("frontend/src/generation/GenerationScreens.tsx").read_text(encoding="utf-8")
+    offline_transform = Path("tools/apply_offline_generation_persistence.py").read_text(encoding="utf-8")
+
+    assert "loadSelectedGeneratedMaterial(activeDocumentId, 'podcast')" in source
+    assert "material_id=${audioMaterialId}" in source
+    assert "aria-label={playing ? 'Pause podcast' : 'Play podcast'}" in source
+    assert "path.split('?')[0].endsWith('/podcast-audio')" in offline_transform
