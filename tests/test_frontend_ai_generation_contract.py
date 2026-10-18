@@ -97,3 +97,13 @@ def test_podcast_replay_uses_selected_material_and_accessible_player_controls():
     assert "void fetchPrepzaUsage()" in source
     assert "if (readSelectedPodcastMaterialId(activeDocumentId) != null) return" in source
     assert "path.split('?')[0].endsWith('/podcast-audio')" in offline_transform
+
+def test_podcast_replay_cache_wait_uses_playwright_keyword_argument():
+    """The installed Playwright API makes the evaluation payload keyword-only."""
+    browser_test = Path("scripts/test_browser_study_hub_offline_content.py").read_text(encoding="utf-8")
+    helper_start = browser_test.index("def wait_for_cached_podcast(")
+    helper_end = browser_test.index("\n\ndef main()", helper_start)
+    helper = browser_test[helper_start:helper_end]
+
+    assert "arg={" in helper
+    assert "timeout=15000" in helper
