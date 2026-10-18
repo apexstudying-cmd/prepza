@@ -95,4 +95,5 @@ def test_podcast_replay_uses_selected_material_and_accessible_player_controls():
     assert "if (navigator.onLine && !csrf) return" in source
     assert "if (!navigator.onLine && selectedId == null) return" in source
     assert "void fetchPrepzaUsage()" in source
+    assert "if (readSelectedPodcastMaterialId(activeDocumentId) != null) return" in source
     assert "path.split('?')[0].endsWith('/podcast-audio')" in offline_transform
