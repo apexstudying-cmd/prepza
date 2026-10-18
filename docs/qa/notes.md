@@ -1791,3 +1791,11 @@ The first focused pytest command did not run assertions because importing the Fl
 
 ### Avoiding duplicate source authority
 The immediate replay correction was applied to the component replacement template because that template owns the built implementation. The raw `.tsx` component and the template still duplicate an entire screen implementation, however. After resolving the click blocker and restoring the full browser gate, carefully consolidate the intended implementation into one canonical source and make the build script validate or patch narrowly. Retain a transform-level regression test; build output must not erase application behavior.
+
+## 2026-10-18 — Podcast replay fix queued for runtime verification
+
+The latest browser run confirmed the My Study layout fix and all 12 summary/flashcards/quiz/mind-map replays, with canonical private-material GETs and no generation POSTs. Podcast replay exposed a second issue: the active generated screen came from `PodcastGenerationScreen` in `frontend/src/generation/GenerationScreens.tsx`, not the legacy player in `App.tsx`. It fetched audio without the selected `material_id`, producing the fixture URL `/offline-fixture-audio/0`; its visible `>` button had no accessible name.
+
+Current `main` fixes exact ready-podcast selection, binds all audio status/start/retry/recovery paths to the selected material ID, adds accessible Play/Pause labels, updates audio caching for query-bearing paths, and allows cached replay without an online usage refresh. The test now checks the exact audio URL, cached script/descriptor/Blob, and Blob-backed offline replay after reload.
+
+**Status: not yet runtime-verified.** Pull current `main`, run the focused `podcast_replay` contract test, rebuild the Docker app, and run the complete `scripts/test_browser_study_hub_offline_content.py -q` gate. Do not mark the gate PASS before offline podcast replay and reload assertions pass.
