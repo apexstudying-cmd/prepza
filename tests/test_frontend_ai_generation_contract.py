@@ -120,6 +120,13 @@ def test_primary_bottom_navigation_exposes_accessible_names_and_current_location
     assert "aria-current={tab.hit ? 'page' : undefined}" in nav
     assert "minWidth: 44" in nav
     assert "minHeight: 44" in nav
+    assert "<span style={{ fontSize: 11, fontWeight: 700, color: N.gold, fontFamily: 'Plus Jakarta Sans' }}>Create</span>" in nav
+
+    study_start = source.index("function StudyMaterialsScreen")
+    study_end = source.index("// ─── DOCUMENT STUDY HUB", study_start)
+    study = source[study_start:study_end]
+    assert "if (key === 'quiz' || key === 'practice_questions') return Ic.check('w-5 h-5')" in study
+    assert "aria-hidden=\"true\"" in study
 
     styles = Path("frontend/src/index.css").read_text(encoding="utf-8")
     assert ":focus-visible" in styles
