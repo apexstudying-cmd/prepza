@@ -29,6 +29,42 @@ async function generationApi<T = any>(path: string, options: RequestInit = {}): 
   if (!res.ok) throw new GenerationApiError(body?.error || body?.message || `Request failed (${res.status})`, res.status, body?.code, body?.remaining_units)
   return body as T
 }
+
+function normalizeSelectedMaterialType(value: unknown): string {
+  const type = String(value || '').toLowerCase().replace(/-/g, '_')
+  if (type === 'summary') return 'summarize'
+  if (type === 'practice_questions') return 'quiz'
+  if (type === 'mindmap') return 'mind_map'
+  return type
+}
+
+async function loadSelectedGeneratedMaterial(documentId: number, feature: string): Promise<{ material_id: number; payload: any } | null> {
+  let selected: any = null
+  try {
+    const raw = sessionStorage.getItem('prepza-open-material')
+    selected = raw ? JSON.parse(raw) : null
+  } catch { return null }
+
+  const materialId = Number(selected?.materialId)
+  if (
+    String(selected?.documentId) !== String(documentId) ||
+    normalizeSelectedMaterialType(selected?.type) !== normalizeSelectedMaterialType(feature) ||
+    !Number.isInteger(materialId) ||
+    materialId <= 0
+  ) return null
+
+  const material = await generationApi<any>(`/documents/${documentId}/materials/${materialId}`)
+  if (
+    Number(material?.material_id) !== materialId ||
+    material?.status !== 'ready' ||
+    material?.payload == null ||
+    normalizeSelectedMaterialType(material?.type) !== normalizeSelectedMaterialType(feature)
+  ) throw new Error('The selected study material is no longer available.')
+
+  try { sessionStorage.removeItem('prepza-open-material') } catch {}
+  return { material_id: materialId, payload: material.payload }
+}
+
 async function pollGenerationJob<T = any>(jobId: number, onProgress?: (percent: number, stage: string) => void): Promise<{ payload: T; materialId: number | null }> {
   for (;;) {
     const job = await generationApi<{ status: string; progress_percent: number; progress_stage: string; error?: string; payload?: T; material_id?: number | null }>(`/ai-jobs/${jobId}`)
@@ -403,6 +439,31 @@ export function FlashcardsGenerationScreen({ setScreen, activeDocumentId }: { se
       .catch(e => setError(e instanceof Error ? e.message : 'Could not load the document.'))
   }, [activeDocumentId])
 
+
+  // A selected flashcard deck is restored by its canonical material ID.
+  useEffect(() => {
+    if (activeDocumentId == null) return
+    let cancelled = false
+    void loadSelectedGeneratedMaterial(activeDocumentId, 'flashcards')
+      .then(selected => {
+        if (!selected || cancelled) return
+        const next = normalize(selected.payload)
+        if (!next.length) throw new Error('The saved flashcard deck is empty.')
+        setMaterialId(selected.material_id)
+        setCards(next)
+        setIdx(0)
+        setFlipped(false)
+        setKnown([])
+        setPhase('review')
+      })
+      .catch(error => {
+        if (cancelled) return
+        setError(error instanceof Error ? error.message : 'Could not open the saved flashcards.')
+        setPhase('error')
+      })
+    return () => { cancelled = true }
+  }, [activeDocumentId])
+
   const normalize = (raw: any) => {
     const list = Array.isArray(raw) ? raw : Array.isArray(raw?.cards) ? raw.cards : Array.isArray(raw?.flashcards) ? raw.flashcards : []
     return list.map((item: any) => ({ q: item.q || item.question || item.front || 'Question', a: item.a || item.answer || item.back || 'Answer' }))
@@ -466,6 +527,25 @@ export function SummaryGenerationScreen({ setScreen, activeDocumentId }: { setSc
     Promise.all([generationApi<{ csrf_token: string }>('/me'), generationApi<{ title: string }>(`/documents/${activeDocumentId}`), fetchPrepzaUsage()])
       .then(([me, doc, planUsage]) => { setCsrf(me.csrf_token); setTitle(doc.title); setUsage(planUsage) })
       .catch(e => setError(e instanceof Error ? e.message : 'Could not load the document.'))
+  }, [activeDocumentId])
+
+
+  // Opening a ready artifact is a read-only replay, never a new generation.
+  useEffect(() => {
+    if (activeDocumentId == null) return
+    let cancelled = false
+    void loadSelectedGeneratedMaterial(activeDocumentId, 'summary')
+      .then(selected => {
+        if (!selected || cancelled) return
+        setSummary(selected.payload)
+        setPhase('ready')
+      })
+      .catch(error => {
+        if (cancelled) return
+        setError(error instanceof Error ? error.message : 'Could not open the saved summary.')
+        setPhase('error')
+      })
+    return () => { cancelled = true }
   }, [activeDocumentId])
 
   const generate = async () => {
