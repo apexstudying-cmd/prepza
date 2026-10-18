@@ -92,4 +92,7 @@ def test_podcast_replay_uses_selected_material_and_accessible_player_controls():
     assert "loadSelectedGeneratedMaterial(activeDocumentId, 'podcast')" in source
     assert "material_id=${audioMaterialId}" in source
     assert "aria-label={playing ? 'Pause podcast' : 'Play podcast'}" in source
+    assert "if (navigator.onLine && !csrf) return" in source
+    assert "if (!navigator.onLine && selectedId == null) return" in source
+    assert "void fetchPrepzaUsage()" in source
     assert "path.split('?')[0].endsWith('/podcast-audio')" in offline_transform
