@@ -969,7 +969,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
     return base
   }
   const icon = (type: string) => ({ summary:'▤', flashcards:'▦', quiz:'?', practice_questions:'?', mind_map:'⌘', mindmap:'⌘', podcast:'◉' } as Record<string,string>)[type.toLowerCase()] || '•'
-  return <div style={{flex:1,display:'flex',flexDirection:'column',background:T.pageBg}}>
+  return <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',background:T.pageBg}}>
     <div style={{background:N.navy,padding:'0 18px 20px',flexShrink:0}}>
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}><button onClick={()=>setScreen('home')} style={{width:34,height:34,background:'rgba(255,255,255,0.1)',border:'none',borderRadius:10,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'#fff'}}>{Ic.back()}</div></button><div><div style={{fontWeight:800,fontSize:18,color:'#fff'}}>My Study</div><div style={{fontSize:11,color:'rgba(255,255,255,0.45)',marginTop:2}}>Documents and the materials created from them</div></div></div>
       <div style={{display:'flex',gap:8}}>{([['documents','Documents'],['materials','Study Materials']] as const).map(([key,name])=><button key={key} onClick={()=>setTab(key)} style={{flex:1,padding:'8px 10px',borderRadius:11,background:tab===key?N.gold:'rgba(255,255,255,0.08)',color:tab===key?N.navy:'rgba(255,255,255,0.7)',border:'none',fontWeight:800,fontSize:11,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}>{name}</button>)}</div>
