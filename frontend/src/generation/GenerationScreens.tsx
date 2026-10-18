@@ -145,11 +145,13 @@ const C = {
   navy3: '#24345B',
   gold: '#C9A84C',
   goldLight: '#E3C873',
-  text: '#172033',
-  muted: '#7A8498',
-  page: '#F7F8FB',
-  card: '#FFFFFF',
-  border: '#E7E9EF',
+  // These values resolve from App.tsx's single theme source and update without
+  // remounting the active generation screen when the student changes mode.
+  text: 'var(--prepza-generation-text, #172033)',
+  muted: 'var(--prepza-generation-muted, #596579)',
+  page: 'var(--prepza-generation-page, #F8F9FC)',
+  card: 'var(--prepza-generation-card, #FFFFFF)',
+  border: 'var(--prepza-generation-border, #E1E5ED)',
   green: '#4CC97B',
   red: '#C94C4C',
 }
