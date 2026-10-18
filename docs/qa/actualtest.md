@@ -1844,3 +1844,21 @@ The build chain invokes `tools/apply_generation_ui_build.py`, which uses `tools/
 - Requesting decoded logs for the Student Frontend Contract job failed with `BlobNotFound`.
 
 **Interpretation:** CI is not green. The available data is insufficient to attribute these failures to application code because no job steps or actionable logs were returned. The CI release gate is **IN_PROGRESS** while log/runner availability and the workflow result are investigated. Do not mark PASS based on earlier runs on older commits.
+
+## 2026-10-18 — Post-template-fix browser run reached a separate click-interception failure
+
+**App build baseline:** `cf181e4` (Docker build succeeded; app container recreated).
+
+Observed in order:
+- My Study document opened locally with zero document-detail/reading GETs.
+- `GET /documents` contained all three fixture documents and all five ready material types.
+- Summary, Flashcards, Practice Questions and Mind Map rendered for Offline Economics Notes.
+- Summary, Flashcards and Practice Questions rendered for Offline Statistics Notes.
+- The next button, Mind Map from Offline Statistics Notes, was visible/stable but a different `<div>` intercepted pointer events. The browser gate stopped there; it did not reach all fixtures, the podcast replay/cache checks, or the offline/reload/no-generation assertions.
+
+This confirms the specific missing-Mind-Map-replay defect is no longer reproduced for the first fixture, but the browser gate is still **IN_PROGRESS**, not PASS. The remaining click failure needs its DOM hit target diagnosed.
+
+### Focused pytest command did not execute tests
+The attempted `python -m pytest -q tests/test_frontend_ai_generation_contract.py` failed during test collection when module-level `from app import app` initialized SQLAlchemy schema against the Windows host's `postgres` hostname (not resolvable outside Compose). No test assertion ran. Commit `d4dd452c` makes the Flask import lazy inside the backend-route test; the focused source-only command is `python -m pytest -q tests/test_frontend_ai_generation_contract.py -k mind_map_replay`. Its result is pending.
+
+Commit `6355db53` adds diagnostic output for the target element and DOM hit-test stack on subsequent click failure. No force-click workaround was introduced.

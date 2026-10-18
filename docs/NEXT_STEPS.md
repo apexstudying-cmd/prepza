@@ -446,3 +446,25 @@ GitHub's Actions API lists **11 workflows** for commit `15cffb59e6834b746a0892aa
 This is a real failed CI state, but the available evidence does not show whether the cause is in the repository code or GitHub Actions runner/log availability. Do not classify those failures as a source-code defect without actionable logs; equally, do not leave the CI gate marked PASS.
 
 **Next action:** retrieve useful job logs or rerun the workflows after confirming runner/log availability. In parallel, perform the local focused generation-contract test and post-fix browser gate. The final freeze remains blocked until CI is resolved and all other release-scoped gates have fresh evidence.
+
+## 27. 2026-10-18 — Updated browser evidence: replay passes once, then a card click is intercepted
+
+### Environment and result
+The user synchronized `main` at `cf181e4`, ran the focused pytest command from the Windows host, rebuilt and recreated the Docker app, and then ran `python scripts/test_browser_study_hub_offline_content.py -q`. The Docker build passed. The local pytest command did **not** collect tests: importing `app.py` during module collection ran database schema initialization and attempted to resolve the container-only hostname `postgres` from Windows. It failed before assertions ran; this is an environment/import-coupling issue, not a failed assertion.
+
+The contract test now imports Flask's `app` inside only the backend-route test, so the source-only regression can be selected without booting the backend. That import-isolation change is in commit `d4dd452c`; the intended host command is `python -m pytest -q tests/test_frontend_ai_generation_contract.py -k mind_map_replay`. This command is not yet locally verified.
+
+### Browser evidence
+- My Study document reopened from IndexedDB without document-detail or reading GETs.
+- `GET /documents` exposed all three fixtures and all five ready material types.
+- Existing Summary, Flashcards, Practice Questions **and Mind Map** rendered for Offline Economics Notes, confirming the original missing-template replay path now works for at least that document in the rebuilt app.
+- Existing Summary, Flashcards and Practice Questions rendered for Offline Statistics Notes.
+- The next Mind Map card for Offline Statistics Notes was visible and stable, but Playwright could not click it because a different `<div>` intercepted pointer events. The test stopped before the remaining materials/documents and later offline assertions. Therefore the full generated-artifact browser gate still has not passed.
+
+### Diagnostic and cautious next step
+Commit `6355db53` adds an additive DOM hit-test report to the browser test's click-failure message. It records the target and the elements at its center point, including tag, class, bounding rectangle, positioning, `z-index` and `pointer-events`. This is intended to identify the real obstruction rather than use `force=True` or weaken the UI-level test. The new diagnostic has not yet been run.
+
+### Source-of-truth/duplication follow-up
+The incident also exposed duplicated authority: the checked-in component contains a version of `MindMapGenerationScreen`, while `tools/apply_study_generation_polish.py` fully replaces it during prebuild. The immediate safe fix updated the active replacement template and added a test that executes it. Track a follow-up to promote the intended polished component into the canonical TypeScript source and reduce the transformer to a narrow, idempotent patch or validator. Do this carefully after the current browser regression is resolved, then rebuild and rerun the relevant gates; do not attempt a large build-system refactor in the same change as the active click blocker.
+
+**Next:** pull current `main`; run the focused source-transform test with `-k mind_map_replay`; rerun the browser gate (the latest changes only alter tests/diagnostics, so the already rebuilt runtime source remains applicable); inspect the new hit-test details and fix the owning overlay/layout or state bug. Do not use forced clicks.

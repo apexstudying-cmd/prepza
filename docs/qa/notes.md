@@ -1777,3 +1777,17 @@ The latest observed main commit had 11 GitHub Actions workflow runs, all reporti
 - The underlying code failure cannot be diagnosed from this response alone. Do not change application code speculatively just to address an absent log.
 
 Next: obtain actionable job output or rerun after checking the runner/log path, while separately running the focused local generation contract and post-fix browser regression. Release remains blocked.
+
+## 2026-10-18 — Follow-up failure is a click hit-test issue, not the first replay bug
+
+The newly rebuilt app rendered the ready Mind Map payload for Offline Economics Notes. That is the expected behavior after adding the selected-ready-material effect to `tools/apply_study_generation_polish.py`'s replacement template.
+
+The run later stopped on the Mind Map card for Offline Statistics Notes. Playwright found the button and reported it was visible and stable, but another `<div>` intercepted the click. Because the exact interceptor was not named by the original failure output, the safe response is to add DOM hit-test diagnostics and rerun, not use `force=True` or guess at CSS.
+
+The new browser test commit `6355db53` adds an additive diagnostic with the hit point, top element and `elementsFromPoint` stack. This should identify whether the blocker is a fixed overlay, the app navigation, or another positioned element.
+
+### Running source-only tests on Windows
+The first focused pytest command did not run assertions because importing the Flask app during collection triggered database startup against the Compose-only hostname `postgres`. Moving `from app import app` into the backend-route test (commit `d4dd452c`) isolates source-only tests. Use `python -m pytest -q tests/test_frontend_ai_generation_contract.py -k mind_map_replay`; do not claim it passed before seeing output.
+
+### Avoiding duplicate source authority
+The immediate replay correction was applied to the component replacement template because that template owns the built implementation. The raw `.tsx` component and the template still duplicate an entire screen implementation, however. After resolving the click blocker and restoring the full browser gate, carefully consolidate the intended implementation into one canonical source and make the build script validate or patch narrowly. Retain a transform-level regression test; build output must not erase application behavior.
