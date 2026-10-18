@@ -1272,8 +1272,17 @@ def main() -> int:
                 name=re.compile(rf"Podcast.*From: {re.escape(DOCUMENTS[0][1])}"),
             ).first
             podcast_button.click(timeout=15000)
-            page.locator("audio").wait_for(timeout=15000)
-            audio_src = page.locator("audio").get_attribute("src") or ""
+            page.get_by_role(
+                "button",
+                name=re.compile(r"^(Play|Pause) podcast$"),
+            ).wait_for(state="visible", timeout=15000)
+            page.wait_for_function(
+                """() => Array.from(document.querySelectorAll('audio')).some(
+                  audio => (audio.getAttribute('src') || '').startsWith('blob:')
+                )""",
+                timeout=15000,
+            )
+            audio_src = page.locator('audio[src^="blob:"]').first.get_attribute("src") or ""
             if not audio_src.startswith("blob:"):
                 raise AssertionError(f"Offline podcast did not resolve to a local Blob URL: {audio_src}")
             print("PASS: cached podcast descriptor and actual audio Blob open offline")
@@ -1323,8 +1332,17 @@ def main() -> int:
                 name=re.compile(rf"Podcast.*From: {re.escape(DOCUMENTS[0][1])}"),
             ).first
             podcast_button.click(timeout=15000)
-            page.locator("audio").wait_for(timeout=15000)
-            reload_audio_src = page.locator("audio").get_attribute("src") or ""
+            page.get_by_role(
+                "button",
+                name=re.compile(r"^(Play|Pause) podcast$"),
+            ).wait_for(state="visible", timeout=15000)
+            page.wait_for_function(
+                """() => Array.from(document.querySelectorAll('audio')).some(
+                  audio => (audio.getAttribute('src') || '').startsWith('blob:')
+                )""",
+                timeout=15000,
+            )
+            reload_audio_src = page.locator('audio[src^="blob:"]').first.get_attribute("src") or ""
             if not reload_audio_src.startswith("blob:"):
                 raise AssertionError(f"Offline podcast lost its cached Blob after reload: {reload_audio_src}")
             print("PASS: Podcast survives reload and reopens from its cached Blob")
