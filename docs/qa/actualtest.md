@@ -1862,3 +1862,21 @@ This confirms the specific missing-Mind-Map-replay defect is no longer reproduce
 The attempted `python -m pytest -q tests/test_frontend_ai_generation_contract.py` failed during test collection when module-level `from app import app` initialized SQLAlchemy schema against the Windows host's `postgres` hostname (not resolvable outside Compose). No test assertion ran. Commit `d4dd452c` makes the Flask import lazy inside the backend-route test; the focused source-only command is `python -m pytest -q tests/test_frontend_ai_generation_contract.py -k mind_map_replay`. Its result is pending.
 
 Commit `6355db53` adds diagnostic output for the target element and DOM hit-test stack on subsequent click failure. No force-click workaround was introduced.
+
+## 2026-10-18 — Podcast selected-artifact identity and offline replay diagnosis
+
+### Latest user-executed evidence
+
+The Docker app was rebuilt from code at `03fe14e`. The browser gate passed local-first My Study document opening, the `/documents` fixture contract, and Summary/Flashcards/Practice Questions/Mind Map replays for all three fixture documents. It also confirmed 12 canonical generated-material GETs were private/cacheable and that replay sent zero generation POSTs.
+
+The podcast stage then showed the transformed player text (`Ready to study`, `Focused Revision`, and a custom `>` control) while the hidden native `<audio>` had source `/offline-fixture-audio/0`. Source tracing found that the production build wires `PodcastGenerationScreen` from `frontend/src/generation/GenerationScreens.tsx`; the older `PodcastPlayerScreen` in `App.tsx` was not the active component. The active component did not request the selected podcast's canonical material and queried audio without `material_id`, so the fixture returned ID zero. Its custom Play button also lacked an accessible name.
+
+### Fixes now on main — not yet verified in the rebuilt app
+
+- The active podcast screen now loads and validates the exact selected ready podcast material before resolving its audio, and uses that material ID for audio status, polling, generation/retry, and recovery requests.
+- The custom Play/Pause control has an accessible label.
+- `tools/apply_offline_generation_persistence.py` recognizes query-bearing `/podcast-audio?material_id=...` paths when caching the actual audio Blob.
+- Cached podcast replay no longer waits for a successful usage-limit refresh or online CSRF token, and job recovery must not override an explicitly selected artifact.
+- Contract/browser checks assert the exact fixture audio identity and wait for the real local Blob during offline replay and after reload.
+
+The focused contract test, new Docker build, and full browser regression have **not yet been run against these latest changes**. Keep `browser_study_hub_offline_content_artifacts` **IN_PROGRESS** and the release **BLOCKED** until those checks pass.
