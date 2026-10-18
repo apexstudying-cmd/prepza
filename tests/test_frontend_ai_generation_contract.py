@@ -5,6 +5,9 @@ provider-free generation tests cover the reusable generation pipeline.
 """
 
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 
 from app import app
 
@@ -53,3 +56,30 @@ def test_frontend_usage_contract_uses_canonical_usage_endpoint():
     assert "remaining_units" in usage
     assert "max_units_per_generation" in usage
     assert "return units <= maxPerGeneration" in usage
+
+
+def test_mind_map_replay_survives_prebuild_transform(tmp_path):
+    """The prebuild source transformer must not erase ready-artifact replay."""
+    root = Path(__file__).resolve().parents[1]
+    isolated = tmp_path / "prepza-transform-fixture"
+    script_rel = Path("tools/apply_study_generation_polish.py")
+    screen_rel = Path("frontend/src/generation/StudyGenerationScreensClean.tsx")
+
+    for relative_path in (script_rel, screen_rel):
+        destination = isolated / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / relative_path, destination)
+
+    subprocess.run(
+        [sys.executable, str(isolated / script_rel)],
+        cwd=isolated,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    transformed = (isolated / screen_rel).read_text(encoding="utf-8")
+    assert "loadSelectedGeneratedMaterial(activeDocumentId, 'mind_map')" in transformed
+    assert "The saved mind map is empty." in transformed
+    assert "setMap(root)" in transformed
+    assert "setPhase('ready')" in transformed
