@@ -468,3 +468,19 @@ Commit `6355db53` adds an additive DOM hit-test report to the browser test's cli
 The incident also exposed duplicated authority: the checked-in component contains a version of `MindMapGenerationScreen`, while `tools/apply_study_generation_polish.py` fully replaces it during prebuild. The immediate safe fix updated the active replacement template and added a test that executes it. Track a follow-up to promote the intended polished component into the canonical TypeScript source and reduce the transformer to a narrow, idempotent patch or validator. Do this carefully after the current browser regression is resolved, then rebuild and rerun the relevant gates; do not attempt a large build-system refactor in the same change as the active click blocker.
 
 **Next:** pull current `main`; run the focused source-transform test with `-k mind_map_replay`; rerun the browser gate (the latest changes only alter tests/diagnostics, so the already rebuilt runtime source remains applicable); inspect the new hit-test details and fix the owning overlay/layout or state bug. Do not use forced clicks.
+
+## 28. 2026-10-18 — Podcast selected-artifact identity and offline replay
+
+The latest user run passed the repaired My Study layout and all 12 Summary/Flashcards/Practice Questions/Mind Map replays, including the private/cacheable canonical GET contract and zero generation POSTs. It then failed at podcast readiness. DOM output showed the custom player from `PodcastGenerationScreen` and audio source `/offline-fixture-audio/0`. The active component was requesting `/podcast-audio` without the selected ready material ID; its custom Play button had no accessible name.
+
+The fix is now committed on `main`: selected canonical podcast material is fetched and validated first, all audio status/poll/start/retry/recovery requests preserve its `material_id`, the custom control has a Play/Pause accessible name, the build-time cache patch recognizes query strings, offline replay is not blocked by a failed usage refresh, and job recovery cannot override the selected artifact. Regression tests assert the selected audio ID and offline Blob replay.
+
+### Next verification
+
+1. Pull latest `main`.
+2. Run `python -m py_compile scripts/test_browser_study_hub_offline_content.py tests/test_frontend_ai_generation_contract.py`.
+3. Run `python -m pytest -q tests/test_frontend_ai_generation_contract.py -k podcast_replay`.
+4. Rebuild and recreate `app` with `docker compose -f docker-compose.vps.yml build app` and `docker compose -f docker-compose.vps.yml up -d --force-recreate app`.
+5. Run `python scripts/test_browser_study_hub_offline_content.py -q` and require exact podcast material identity, descriptor/audio Blob caching, offline replay, offline reload, and no-generation-POST assertions to pass.
+
+This browser gate remains **IN_PROGRESS**, and release remains **BLOCKED**, until the rebuilt runtime passes. Do not use force-click, bypass the online/offline assertions, or claim PASS from source inspection alone.
