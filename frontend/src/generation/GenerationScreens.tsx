@@ -38,6 +38,31 @@ function normalizeSelectedMaterialType(value: unknown): string {
   return type
 }
 
+function readSelectedPodcastMaterialId(documentId: number | null): number | null {
+  if (documentId == null || typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem('prepza-open-material')
+    const selected = raw ? JSON.parse(raw) : null
+    const materialId = Number(selected?.materialId)
+    if (
+      String(selected?.documentId) !== String(documentId) ||
+      normalizeSelectedMaterialType(selected?.type) !== 'podcast' ||
+      !Number.isInteger(materialId) ||
+      materialId <= 0
+    ) return null
+    return materialId
+  } catch {
+    return null
+  }
+}
+
+function podcastAudioPathFor(documentId: number, audioMaterialId: number | null): string {
+  const path = `/documents/${documentId}/podcast-audio`
+  return audioMaterialId != null && Number.isInteger(audioMaterialId) && audioMaterialId > 0
+    ? `${path}?material_id=${audioMaterialId}`
+    : path
+}
+
 async function loadSelectedGeneratedMaterial(documentId: number, feature: string): Promise<{ material_id: number; payload: any } | null> {
   let selected: any = null
   try {
@@ -242,17 +267,47 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
   useEffect(() => {
     if (activeDocumentId == null || !csrf || phase !== 'config') return
     let cancelled = false
-    generationApi<{ audio_status: string; audio_url: string | null; duration_seconds: number | null }>('/documents/' + activeDocumentId + '/podcast-audio')
-      .then(res => {
+    const selectedId = readSelectedPodcastMaterialId(activeDocumentId)
+    const checkSavedPodcast = async () => {
+      let requestedMaterialId = selectedId ?? materialId
+      try {
+        if (selectedId != null) {
+          // Fetch the exact ready script the student tapped before resolving
+          // its audio. The shared helper validates ownership/type/status and
+          // caches the canonical material response for offline replay.
+          const selected = await loadSelectedGeneratedMaterial(activeDocumentId, 'podcast')
+          if (cancelled) return
+          if (!selected || selected.material_id !== selectedId) {
+            throw new Error('The selected study podcast is no longer available.')
+          }
+          requestedMaterialId = selected.material_id
+          setMaterialId(selected.material_id)
+          const selectedTitle = selected.payload?.title
+          if (typeof selectedTitle === 'string' && selectedTitle.trim()) setTitle(selectedTitle)
+        }
+
+        const res = await generationApi<{
+          audio_status: string
+          audio_url: string | null
+          duration_seconds: number | null
+        }>(podcastAudioPathFor(activeDocumentId, requestedMaterialId))
         if (cancelled) return
-        if (res.audio_status === 'processing') setPhase('audio')
-        else if (res.audio_status === 'ready' && res.audio_url) {
+        if (res.audio_status === 'processing') {
+          if (requestedMaterialId != null) setMaterialId(requestedMaterialId)
+          setPhase('audio')
+        } else if (res.audio_status === 'ready' && res.audio_url) {
+          if (requestedMaterialId != null) setMaterialId(requestedMaterialId)
           setAudioUrl(res.audio_url)
           setAudioDuration(res.duration_seconds || 0)
           setPhase('ready')
         }
-      })
-      .catch(() => {})
+      } catch (e) {
+        if (cancelled || selectedId == null) return
+        setError(e instanceof Error ? e.message : 'Could not open this saved podcast.')
+        setPhase('error')
+      }
+    }
+    void checkSavedPodcast()
     return () => { cancelled = true }
   }, [activeDocumentId, csrf, phase])
 
@@ -287,11 +342,12 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
             },
           )
           if (cancelled) return
-          setMaterialId(result.materialId ?? status.material_id ?? null)
+          const recoveredMaterialId = result.materialId ?? status.material_id ?? null
+          setMaterialId(recoveredMaterialId)
           setGenerationPercent(65)
           setGenerationStage('starting audio synthesis')
           setPhase('audio')
-          await generationApi(`/documents/${activeDocumentId}/podcast-audio`, {
+          await generationApi(podcastAudioPathFor(activeDocumentId, recoveredMaterialId), {
             method: 'POST',
             headers: { 'X-CSRF-Token': csrf },
           })
@@ -306,7 +362,7 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
             duration_seconds: number | null
             progress_percent?: number
             progress_stage?: string
-          }>(`/documents/${activeDocumentId}/podcast-audio`)
+          }>(podcastAudioPathFor(activeDocumentId, status.material_id))
           if (cancelled) return
           if (audio.audio_status === 'ready' && audio.audio_url) {
             setAudioUrl(audio.audio_url)
@@ -333,7 +389,9 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
     let cancelled = false
     const poll = async () => {
       try {
-        const res = await generationApi<{ audio_status: string; audio_url: string | null; duration_seconds: number | null }>(`/documents/${activeDocumentId}/podcast-audio`)
+        const res = await generationApi<{ audio_status: string; audio_url: string | null; duration_seconds: number | null }>(
+          podcastAudioPathFor(activeDocumentId, readSelectedPodcastMaterialId(activeDocumentId) ?? materialId),
+        )
         if (cancelled) return
         if (res.audio_status === 'ready' && res.audio_url) {
           setAudioUrl(res.audio_url); setAudioDuration(res.duration_seconds || 0); setPhase('ready'); return
@@ -345,7 +403,7 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
     }
     poll()
     return () => { cancelled = true }
-  }, [phase, activeDocumentId])
+  }, [phase, activeDocumentId, materialId])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -366,14 +424,14 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
       setMaterialId(scriptResult.materialId)
       setGenerationPercent(65); setGenerationStage('starting audio synthesis')
       setPhase('audio')
-      await generationApi(`/documents/${activeDocumentId}/podcast-audio`, { method: 'POST', headers: { 'X-CSRF-Token': csrf } })
+      await generationApi(podcastAudioPathFor(activeDocumentId, scriptResult.materialId), { method: 'POST', headers: { 'X-CSRF-Token': csrf } })
     } catch (e) { setError(friendlyGenerationError(e)); setPhase('error') }
   }
 
   const retryAudio = async () => {
     if (activeDocumentId == null || !csrf || !materialId) return
     setError(''); setPhase('audio')
-    try { await generationApi(`/documents/${activeDocumentId}/podcast-audio`, { method: 'POST', headers: { 'X-CSRF-Token': csrf } }) }
+    try { await generationApi(podcastAudioPathFor(activeDocumentId, materialId), { method: 'POST', headers: { 'X-CSRF-Token': csrf } }) }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not restart audio generation.'); setPhase('error') }
   }
 
@@ -384,7 +442,7 @@ export function PodcastGenerationScreen({ setScreen, activeDocumentId }: { setSc
   }
   if (phase === 'ready' && audioUrl) {
     const pct = audioDuration ? Math.min(100, (progress / audioDuration) * 100) : 0
-    return <div style={{ flex: 1, background: C.page }}><GenerationHeader title="Study Podcast" subtitle={title} onBack={() => setScreen('document-study')} /><div style={{ padding: 22, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 380 }}><div style={{ background: `linear-gradient(145deg,${C.navy},${C.navy3})`, borderRadius: 24, padding: 24, color: '#fff' }}><div style={{ color: C.gold, fontSize: 10, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase' }}>Ready to study</div><div style={{ fontSize: 20, fontWeight: 800, margin: '8px 0' }}>{PODCAST_OPTIONS.find(o => o.minutes === minutes)?.label}</div><div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, marginBottom: 18 }}>{minutes} minutes  -  3 voices  -  AI-generated from your document</div><audio ref={audioRef} src={audioUrl} preload="metadata" /><div style={{ height: 5, background: 'rgba(255,255,255,0.12)', borderRadius: 99, overflow: 'hidden' }}><div style={{ width: `${pct}%`, height: '100%', background: C.gold }} /></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: 'rgba(255,255,255,0.45)' }}><span>{Math.floor(progress / 60)}:{String(Math.floor(progress % 60)).padStart(2, '0')}</span><span>{Math.floor(audioDuration / 60)}:{String(Math.floor(audioDuration % 60)).padStart(2, '0')}</span></div><button onClick={async () => { const a = audioRef.current; if (!a) return; if (a.paused) { await a.play(); setPlaying(true) } else { a.pause(); setPlaying(false) } }} style={{ width: 58, height: 58, margin: '18px auto 0', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', border: 'none', background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, color: C.navy, fontSize: 21, cursor: 'pointer' }}>{playing ? 'II' : '>'}</button></div><button onClick={() => setPhase('config')} style={{ width: '100%', marginTop: 12, border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, background: C.card, color: C.text, ...buttonBase }}>Create another version</button></div></div>
+    return <div style={{ flex: 1, background: C.page }}><GenerationHeader title="Study Podcast" subtitle={title} onBack={() => setScreen('document-study')} /><div style={{ padding: 22, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 380 }}><div style={{ background: `linear-gradient(145deg,${C.navy},${C.navy3})`, borderRadius: 24, padding: 24, color: '#fff' }}><div style={{ color: C.gold, fontSize: 10, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase' }}>Ready to study</div><div style={{ fontSize: 20, fontWeight: 800, margin: '8px 0' }}>{PODCAST_OPTIONS.find(o => o.minutes === minutes)?.label}</div><div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, marginBottom: 18 }}>{minutes} minutes  -  3 voices  -  AI-generated from your document</div><audio ref={audioRef} src={audioUrl} preload="metadata" /><div style={{ height: 5, background: 'rgba(255,255,255,0.12)', borderRadius: 99, overflow: 'hidden' }}><div style={{ width: `${pct}%`, height: '100%', background: C.gold }} /></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: 'rgba(255,255,255,0.45)' }}><span>{Math.floor(progress / 60)}:{String(Math.floor(progress % 60)).padStart(2, '0')}</span><span>{Math.floor(audioDuration / 60)}:{String(Math.floor(audioDuration % 60)).padStart(2, '0')}</span></div><button aria-label={playing ? 'Pause podcast' : 'Play podcast'} onClick={async () => { const a = audioRef.current; if (!a) return; if (a.paused) { await a.play(); setPlaying(true) } else { a.pause(); setPlaying(false) } }} style={{ width: 58, height: 58, margin: '18px auto 0', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', border: 'none', background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, color: C.navy, fontSize: 21, cursor: 'pointer' }}>{playing ? 'II' : '>'}</button></div><button onClick={() => { setMaterialId(null); setAudioUrl(null); setAudioDuration(0); setProgress(0); setPlaying(false); setError(''); try { sessionStorage.removeItem('prepza-open-material') } catch {} setPhase('config') }} style={{ width: '100%', marginTop: 12, border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, background: C.card, color: C.text, ...buttonBase }}>Create another version</button></div></div>
   }
   const selected = PODCAST_OPTIONS.find(o => o.minutes === minutes) || PODCAST_OPTIONS[2]
   const podcastLimit = usage?.limits.podcast_minutes ?? 0
