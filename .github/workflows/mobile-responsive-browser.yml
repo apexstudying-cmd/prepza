@@ -1,4 +1,4 @@
-name: Mobile Responsive Browser Regression
+name: Release Browser and Cross-System Regression
 
 on:
   push:
@@ -23,9 +23,9 @@ permissions:
 
 jobs:
   mobile-responsive:
-    name: Chromium phone and tablet layout smoke
+    name: Responsive, offline and cross-system release gates
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - name: Check out exact commit under test
         uses: actions/checkout@v4
@@ -76,6 +76,23 @@ jobs:
 
       - name: Run mobile and tablet responsive browser checks
         run: python scripts/test_browser_mobile_responsive.py
+
+      - name: Run full disposable PostgreSQL QA suite
+        run: docker compose -f docker-compose.vps.yml exec -T app python tools/run_local_qa.py
+
+      - name: Run online/offline and generated-artifact browser journeys
+        shell: bash
+        run: |
+          set +e
+          python scripts/test_browser_study_hub_offline.py -q
+          offline_status=$?
+          python scripts/test_browser_study_hub_offline_content.py -q
+          artifact_status=$?
+          set -e
+          if [ "$offline_status" -ne 0 ] || [ "$artifact_status" -ne 0 ]; then
+            echo "Browser journey failures: offline_lifecycle=$offline_status artifact_replay=$artifact_status"
+            exit 1
+          fi
 
       - name: Upload responsive screenshots
         if: always()
