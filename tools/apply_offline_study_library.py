@@ -76,7 +76,7 @@ def patch_app():
             gate_prefix = destructure + method_line
         else:
             method_match = re.search(
-                r"^  const method = String\\((?:restOptions|fetchOptions|requestOptions|options)\\.method \\|\\| ['\"]GET['\"]\\)\\.toUpperCase\\(\\)\\n",
+                r"^  const method = String\(.*\.method \|\| ['\"]GET['\"]\)\.toUpperCase\(\)\n",
                 api_block,
                 re.MULTILINE,
             )
@@ -84,15 +84,13 @@ def patch_app():
                 gate_anchor = method_match.group(0)
                 gate_prefix = gate_anchor
             else:
-                function_open = api_block.find("{")
-                if function_open < 0:
-                    raise SystemExit('Offline library: api helper opening brace not found')
-                gate_anchor = api_block[function_open + 1:]
+                # In the rare case that the helper has no recognizable method
+                # declaration or options destructuring, insert at its first
+                # newline. The gate ends with a newline, preserving the body.
+                if "\n" not in api_block:
+                    raise SystemExit('Offline library: api helper opening line not found')
+                gate_anchor = "\n"
                 gate_prefix = options_method_line
-                # Insert the gate at the helper's start, leaving the original
-                # implementation intact after it.
-                api_block = api_block[:function_open + 1] + "\\n" + api_block[function_open + 1:]
-                gate_anchor = api_block[function_open + 2:]
 
         offline_gate = f"""{gate_prefix}  const offline = typeof navigator !== 'undefined' && !navigator.onLine
   const offlineUserId = getOfflineUserId()
