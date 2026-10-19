@@ -22,14 +22,14 @@ if start < 0:
 if start < 0:
     raise SystemExit('Offline status UI: App function not found')
 
-root_return_pattern = re.compile(
-    r"return\s*\(\s*<div style=\{\{\s*width:\s*'100%'\s*,\s*height:\s*'100dvh'",
+root_container_pattern = re.compile(
+    r"<div style=\{\{\s*width:\s*'100%'\s*,\s*height:\s*'100dvh'",
     re.MULTILINE,
 )
-root_return = root_return_pattern.search(text, start)
-if not root_return:
-    raise SystemExit('Offline status UI: App root return anchor not found; expected a full-height app root.')
-return_pos = root_return.start()
+root_container = root_container_pattern.search(text, start)
+if not root_container:
+    raise SystemExit('Offline status UI: App root container anchor not found; expected a full-height app root.')
+return_pos = root_container.start()
 
 
 banner = '      <OfflineStatusBanner />\n'
