@@ -100,6 +100,31 @@ def main() -> int:
                                 f"{name}: broken Prepza logo image(s): {' | '.join(broken_logos)}"
                             )
 
+                        tool_icons = page.evaluate(
+                            """() => {
+                              const labels = ['Upload', 'My Study', 'Library', 'Ada', 'Podcasts'];
+                              return labels.map(label => {
+                                const button = Array.from(document.querySelectorAll('button')).find(
+                                  candidate => Array.from(candidate.querySelectorAll('span')).some(
+                                    span => span.textContent.trim() === label
+                                  )
+                                );
+                                const iconBox = button?.querySelector('div');
+                                return {
+                                  label,
+                                  found: Boolean(button),
+                                  svgCount: iconBox?.querySelectorAll('svg').length || 0,
+                                  iconText: (iconBox?.innerText || '').trim(),
+                                };
+                              });
+                            }"""
+                        )
+                        for item in tool_icons:
+                            if not item["found"] or item["svgCount"] == 0 or item["iconText"]:
+                                failures.append(
+                                    f"{name}: {item['label']} quick-action must use a non-text SVG icon: {item}"
+                                )
+
                         if page_errors:
                             failures.append(
                                 f"{name}: uncaught browser errors: {' | '.join(page_errors)}"

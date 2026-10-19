@@ -2017,7 +2017,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
               <div onClick={() => { setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} style={{ background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 18, padding: 18, cursor: 'pointer', position: 'relative', overflow: 'hidden', marginBottom: 10 }}>
                 <div style={{ position: 'absolute', right: -20, top: -20, width: 120, height: 120, background: 'rgba(201,168,76,0.07)', borderRadius: '50%', pointerEvents: 'none' }} />
                 <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
-                  <div style={{ width: 48, height: 48, background: 'rgba(201,168,76,0.15)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: N.gold, fontWeight: 800 }}>📄</div>
+                  <div style={{ width: 48, height: 48, background: 'rgba(201,168,76,0.15)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: N.gold, fontWeight: 800 }}>{Ic.book('w-6 h-6')}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }} className="line-clamp-1">{featuredDoc.title}</div>
                     <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2, textTransform: 'capitalize' }}>{featuredDoc.status}</div>
@@ -2030,7 +2030,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
               {/* Other docs */}
               {restDocs.map(d => (
                 <div key={d.id} onClick={() => { setActiveDocumentId(d.id); setScreen('document-study') }} style={{ background: T.card, borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
-                  <div style={{ width: 40, height: 40, background: N.gold + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: N.gold, fontWeight: 800 }}>📄</div>
+                  <div style={{ width: 40, height: 40, background: N.gold + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: N.gold, fontWeight: 800 }}>{Ic.book('w-5 h-5')}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{d.title}</div>
                     <div style={{ fontSize: 11, color: T.textMuted, textTransform: 'capitalize' }}>{d.status}</div>
@@ -2046,10 +2046,10 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
           <div style={{ fontWeight: 800, fontSize: 15, color: T.text, marginBottom: 14 }}>AI Study Tools</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
             {[
-              { icon: '📤', label: 'Upload', action: () => setScreen('upload') },
-              { icon: '▣', label: 'My Study', action: () => setScreen('study-materials') },
-              { icon: '✦', label: 'Ada', action: () => setScreen('ai-tutor') },
-              { icon: '🎙️', label: 'Podcasts', action: () => setScreen('podcast-library') },
+              { icon: Ic.upload('w-6 h-6'), label: 'Upload', action: () => setScreen('upload') },
+              { icon: Ic.book('w-6 h-6'), label: 'My Study', action: () => setScreen('study-materials') },
+              { icon: Ic.flash('w-6 h-6'), label: 'Ada', action: () => setScreen('ai-tutor') },
+              { icon: Ic.podcast('w-6 h-6'), label: 'Podcasts', action: () => setScreen('podcast-library') },
             ].map((t, i) => (
               <button key={i} onClick={t.action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                 <div style={{ width: 52, height: 52, borderRadius: 16, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, border: '1px solid rgba(201,168,76,0.15)' }}>{t.icon}</div>
@@ -2063,7 +2063,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
         {homePodcasts.length > 0 && (
           <section>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 18px', marginBottom: 12 }}>
-              <span style={{ fontWeight: 800, fontSize: 15, color: T.text }}>Study Podcasts 🎙️</span>
+              <span style={{ fontWeight: 800, fontSize: 15, color: T.text }}>Study Podcasts</span>
               <span onClick={() => setScreen('podcast-library')} style={{ fontSize: 12, color: N.gold, fontWeight: 700, cursor: 'pointer' }}>See all →</span>
             </div>
             <div style={{ display: 'flex', gap: 12, padding: '0 18px', overflowX: 'auto' }} className="scrollbar-hide">
@@ -2071,7 +2071,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
                 const color = podcastColor(p.document_id)
                 return (
                   <div key={p.document_id} onClick={() => { setActiveDocumentId(p.document_id); setScreen('podcast-player') }} style={{ flexShrink: 0, width: 140, borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.09)', cursor: 'pointer' }}>
-                    <div style={{ height: 90, background: `linear-gradient(135deg,${color},${color}99)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#fff', fontWeight: 800 }}>🎙️</div>
+                    <div style={{ height: 90, background: `linear-gradient(135deg,${color},${color}99)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#fff', fontWeight: 800 }}>{Ic.podcast('w-8 h-8')}</div>
                     <div style={{ background: T.card, padding: '10px 10px 12px' }}>
                       <div style={{ fontWeight: 700, fontSize: 12, color: T.text, marginBottom: 5 }} className="line-clamp-1">{p.title}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

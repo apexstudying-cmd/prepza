@@ -17,7 +17,7 @@ def main() -> None:
     before, home, after = home_section(text)
 
     home = home.replace(
-        "{ icon: '▣', label: 'My Study', action: () => setScreen('study-materials') },\n              { icon: '✦', label: 'Ada'",
+        "{ icon: Ic.book('w-6 h-6'), label: 'My Study', action: () => setScreen('study-materials') },\n              { icon: Ic.explore('w-6 h-6'), label: 'Library', action: () => setScreen('library') },\n              { icon: Ic.flash('w-6 h-6'), label: 'Ada'",
         "{ icon: '▣', label: 'My Study', action: () => setScreen('study-materials') },\n              { icon: '▤', label: 'Library', action: () => setScreen('library') },\n              { icon: '✦', label: 'Ada'",
         1,
     )
