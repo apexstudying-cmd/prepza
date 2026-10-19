@@ -99,7 +99,19 @@ def patch_reader():
     s = s.replace("}, [src, onPageChange])", "}, [src, initialPage, documentId, onPageChange])", 1)
 
     if s == original:
-        raise SystemExit('offline PDF reader patch made no changes')
+        required = (
+            "getOfflineStudyDocumentUrl(documentId",
+            "initialPage?: number; documentId?: number;",
+            "initialPage = 1, documentId",
+        )
+        missing = [marker for marker in required if marker not in s]
+        if missing:
+            raise SystemExit(
+                "PDF offline reader patch made no changes and required wiring is missing: "
+                + ", ".join(missing)
+            )
+        print("Offline PDF reader patch already applied; no changes needed.")
+        return
     READER.write_text(s, encoding='utf-8')
 
 
