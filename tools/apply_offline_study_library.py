@@ -22,6 +22,34 @@ def patch_generated_user_id():
     GEN.write_text(s, encoding='utf-8')
 
 
+
+def insert_library_save_hook(api_block: str, save_hook: str) -> str:
+    """Insert the save hook before the successful API return, regardless of nesting."""
+    if 'Library save -> offline asset download' in api_block:
+        return api_block
+
+    # Earlier offline-data/queue transformers wrap the fetch path in try/catch,
+    # which indents this return one level deeper than the original helper.
+    # Match the statement structurally and reuse its indentation rather than
+    # depending on one exact whitespace layout.
+    match = re.search(
+        r"(?m)^([ \\t]*)return\\s+body\\s+as\\s+T\\s*;?[ \\t]*$",
+        api_block,
+    )
+    if not match:
+        raise SystemExit('Offline library: successful API return anchor not found')
+
+    indent = match.group(1)
+    lines = save_hook.strip("\\n").splitlines()
+    nonempty_indents = [
+        len(line) - len(line.lstrip(" \\t"))
+        for line in lines if line.strip()
+    ]
+    baseline = min(nonempty_indents, default=0)
+    normalized = [line[baseline:] if line.strip() else "" for line in lines]
+    indented_hook = "\\n".join(indent + line if line else "" for line in normalized)
+    return api_block[:match.start()] + indented_hook + "\\n" + api_block[match.start():]
+
 def patch_app():
     s = APP.read_text(encoding='utf-8')
     # The realtime import has been rewritten by several earlier frontend transforms over time.
@@ -175,10 +203,7 @@ def patch_app():
     } catch (_) {}
   }
 """
-        return_anchor = "  return body as T\n"
-        if return_anchor not in api_block:
-            raise SystemExit('Offline library: API return anchor not found')
-        api_block = api_block.replace(return_anchor, save_hook + return_anchor, 1)
+        api_block = insert_library_save_hook(api_block, save_hook)
 
     s = s[:api_start] + api_block + s[api_end:]
     required = [
