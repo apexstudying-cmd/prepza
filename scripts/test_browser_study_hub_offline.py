@@ -305,6 +305,10 @@ def main() -> int:
                     activeProfileUserId: null,
                     activeOpportunityId: null,
                   }));
+                  // Mirror the seeded two-screen stack in real browser history.
+                  // Otherwise page.go_back() can reload the same stored screen
+                  // instead of firing popstate to return from document-study to home.
+                  window.history.pushState({ prepzaNav: true }, '');
                 }""",
                 {"documentId": fixture["document_id"]},
             )
