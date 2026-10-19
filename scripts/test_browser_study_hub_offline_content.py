@@ -1233,10 +1233,20 @@ def main() -> int:
             context.set_offline(True)
             page.wait_for_function("() => navigator.onLine === false", timeout=5000)
             page.reload(wait_until="domcontentloaded")
+            # Chromium can re-enable navigator.onLine during a service-worker
+            # controlled reload even though the context was put offline before
+            # navigation. Re-assert offline immediately after the shell reload
+            # and before any Study Materials or generated-artifact interaction.
+            # The separate offline-lifecycle journey independently verifies a
+            # reload while offline; this guard ensures artifact replay is tested
+            # with network emulation definitely offline.
+            if page.evaluate("() => navigator.onLine"):
+                print("DIAGNOSTIC: offline emulation reset during service-worker reload; reapplying before artifact replay.")
+                context.set_offline(True)
             try:
                 page.wait_for_function("() => navigator.onLine === false", timeout=5000)
             except Exception:
-                print("DIAGNOSTIC: Chromium did not remain offline after reload.")
+                print("DIAGNOSTIC: Chromium could not be held offline after reload.")
                 print("DIAGNOSTIC NETWORK STATE:", page.evaluate("() => ({online: navigator.onLine, offlineUserId: localStorage.getItem('prepza-offline-user-id')})"))
                 raise
 
