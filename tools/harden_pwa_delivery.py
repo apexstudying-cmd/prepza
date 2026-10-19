@@ -10,23 +10,29 @@ SOURCE_ICONS = PUBLIC
 
 
 def patch_app_headers() -> None:
+    """Verify the production Flask source owns its cache policy.
+
+    Do not patch app.py during a frontend build: the Docker runtime stage copies
+    backend source from the original build context, not from the frontend stage.
+    A build-only mutation would therefore never reach the deployed Flask app.
+    """
     text = APP.read_text(encoding="utf-8")
     marker = '    if request.path.startswith("/assets/"):\n'
     if marker not in text:
         raise SystemExit("PWA hardening: expected static cache header anchor was not found in app.py")
 
-    block = '''    # PWA control documents must never be served from an intermediary/browser
-    # HTTP cache. A stale index/manifest/service-worker registration can make a
-    # successful Render deployment look like an old release on a phone.
-    if request.path in {"/", "/index.html", "/manifest.json", "/sw.js", "/sw-register.js"}:
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-
-'''
-    if 'PWA control documents must never be served' not in text:
-        text = text.replace(marker, block + marker, 1)
-        APP.write_text(text, encoding="utf-8")
+    required = (
+        'PWA control documents must be revalidated on every visit',
+        'response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"',
+        'response.headers["Pragma"] = "no-cache"',
+        'response.headers["Expires"] = "0"',
+    )
+    missing = [item for item in required if item not in text]
+    if missing:
+        raise SystemExit(
+            "PWA hardening: production app.py is missing committed control-document cache headers: "
+            + ", ".join(missing)
+        )
 
 
 def install_brand_icons() -> None:
