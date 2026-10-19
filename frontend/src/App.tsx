@@ -1295,10 +1295,12 @@ function BottomNav({ active, setScreen, unreadChats = 0, exploreAttention = fals
         return (
           <button type="button" key={tab.key} onClick={handleClick} aria-label={tab.label} aria-current={tab.hit ? 'page' : undefined} style={{ flex: 1, minWidth: 44, minHeight: 44, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: isCta ? '0 0 4px' : '8px 0 4px', position: 'relative' }}>
             {isCta ? (
-              <div aria-hidden="true" style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: '0 4px 18px rgba(201,168,76,.55)' }}>
-                <div style={{ color: N.navy }}>{Ic.plus()}</div>
-              </div>
-              <span style={{ fontSize: 11, fontWeight: 700, color: N.gold, fontFamily: 'Plus Jakarta Sans' }}>Create</span>
+              <>
+                <div aria-hidden="true" style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: '0 4px 18px rgba(201,168,76,.55)' }}>
+                  <div style={{ color: N.navy }}>{Ic.plus()}</div>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: N.gold, fontFamily: 'Plus Jakarta Sans' }}>Create</span>
+              </>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                 {tab.hit && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 18, height: 2, background: N.gold, borderRadius: 2 }} />}
