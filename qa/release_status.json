@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "last_verified_date": "2026-10-18",
-  "last_verified_commit": "03fe14e",
+  "last_verified_date": "2026-10-19",
+  "last_verified_commit": "6bd7881",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -82,8 +82,8 @@
     },
     {
       "id": "ci_release_workflows",
-      "status": "IN_PROGRESS",
-      "evidence": "GitHub Actions runs on observed commits report failure within about one second, but direct job metadata for Student Frontend Contract had runner_id=0, empty runner name, and steps=[]; decoded job logs returned BlobNotFound. This points to a run/runner availability or pre-start problem rather than a diagnosed test assertion, but the precise cause is unresolved. CI must remain IN_PROGRESS until a run executes with actionable evidence."
+      "status": "PASS",
+      "evidence": "Current-main GitHub Actions run set on 6bd7881 completed successfully: Frontend Build (TypeScript, service-worker validation and production build), Screen Loading Audit, Realtime Runtime Regression, E2EE Security Regression, E2EE Chat Validation, Student Frontend Contract, Student Contract, Chat UX, Admin Route, B2B, AI economics, Kokoro worker, and Release QA Trace. Earlier failures on db5df0b were fixed by the BottomNav fragment correction; no deployment performed."
     },
     {
       "id": "existing_database_migration",
@@ -118,7 +118,7 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "IN_PROGRESS",
-      "evidence": "User rebuilt the app at 03fe14e and ran the browser gate on 2026-10-18. Local-first My Study opening and the /documents contract passed; Summary, Flashcards, Quiz and Mind Map replayed for all three fixture documents; 12 canonical material GETs were marked private/cacheable and no generation POSTs were issued. The podcast player then rendered its transformed PodcastGenerationScreen, but its GET omitted the selected material_id (the fixture consequently served /offline-fixture-audio/0) and its custom Play control had no accessible label. This isolated a product-level selected-artifact/audio-identity gap, plus an offline usage-refresh dependency. Main now contains fixes and source/browser contract guards in commits through 3dea9a8; those changes have not yet been rebuilt or browser-verified. Do not mark PASS until the current-main rebuild, exact podcast identity, descriptor/Blob cache, offline replay/reload, and no-generation-POST assertions all pass."
+      "evidence": "The prior browser run isolated selected podcast material identity and accessible Play control issues. Code-level fixes and guards are present on main; the current-main Docker rebuild and full browser run have not yet been executed, so this gate remains IN_PROGRESS."
     },
     {
       "id": "admin_study_time_visibility",
@@ -127,15 +127,15 @@
     }
   ],
   "next_actions": [
-    "Pull current main, run `python -m py_compile scripts/test_browser_study_hub_offline_content.py tests/test_frontend_ai_generation_contract.py` and `python -m pytest -q tests/test_frontend_ai_generation_contract.py -k podcast_replay`.",
-    "Rebuild/recreate the Docker app from current main and rerun `python scripts/test_browser_study_hub_offline_content.py -q`. Require the selected podcast material ID, ready descriptor and real audio Blob to be cached and reopened offline after reload before marking this gate PASS.",
-    "After fixing the click blocker, rebuild the app and rerun the entire online/offline multi-document/artifact/podcast/reload/no-generation-POST gate; require all assertions to pass before marking this gate PASS.",
-    "Diagnose GitHub Actions start/runner availability: latest job metadata has runner_id=0, empty runner name and steps=[], and no logs. Obtain an actual started run with actionable output before changing application code speculatively or marking CI PASS.",
-    "Execute the remaining cross-system journeys and representative existing-database migration rehearsal; complete mobile visual checks and controlled external-provider verification.",
-    "After the current browser issue is resolved, consolidate the full MindMapGenerationScreen replacement template and source component into one canonical implementation or reduce the transformer to a narrow idempotent patch/validator. Re-run build and transform regression after this cleanup.",
-    "Run clean full regression after the release-scoped functional, browser, recovery and CI gates have fresh evidence.",
-    "Then complete the separately tracked deep technical app study and full source-grounded frontend/backend architecture diagram, reconcile all documentation, and only then evaluate final freeze."
+    "Pull current main, run `python -m py_compile scripts/test_browser_study_hub_offline_content.py tests/test_frontend_ai_generation_contract.py` and `python -m pytest -q tests/test_frontend_ai_generation_contract.py -k podcast_replay`; rebuild/recreate the Docker app and run `python scripts/test_browser_study_hub_offline_content.py -q`. Require exact selected podcast material ID, ready descriptor and real audio Blob, offline replay after reload, and no generation POSTs before marking PASS.",
+    "Add and execute a real-browser mobile responsive visual pass against the current-main app at phone and tablet viewports. Capture screenshots and check horizontal overflow, navigation, dialogs, key Study Hub/Library/Ada flows, touch targets, contrast and browser console errors; keep NOT_TESTED until artifacts and results exist.",
+    "Execute the cross-system journeys with isolated test fixtures: payment/provider test event → entitlement fulfillment → usage/quota; upload → stored artifact → Study Hub reuse; offline generation/artifact replay → reconnect reconciliation; and failure/retry/reconnect behavior. Verify database state and network requests, not only visible success messages.",
+    "Run a representative existing-database upgrade rehearsal using a sanitized prior-release database snapshot or a documented previous Alembic revision, then upgrade to current head and verify Alembic state, critical table/column/index invariants, row counts and representative records. Do not substitute a fresh bootstrap or backup restore for this gate.",
+    "Perform controlled external-provider verification using test/sandbox credentials for Paystack, SES, OpenAI, R2 and the configured GPU/audio provider. Never trigger a live payment or paid GPU workload without explicit approval; if credentials or a safe staging environment are unavailable, leave the gate NOT_TESTED and record the blocker.",
+    "After all functional, browser, recovery and CI gates are green, run `tools/run_local_qa.py` from a clean disposable PostgreSQL database plus focused realtime, E2EE, calling, migration, backup/restore and browser regressions; preserve exact commands, commit SHA and output.",
+    "Complete the documentation audit and source-grounded architecture walkthrough/diagram after functional gates are stable. Reconcile notes, actualtest, release_status.json and next-step documentation to the same verified commit.",
+    "Keep the 400-user performance test DEFERRED until functional, browser, recovery and CI gates are green."
   ],
-  "current_main_commit": "3dea9a8c397cc5d59110da023c67553cca3e812f",
+  "current_main_commit": "d22a7587089753c1888b0004b066b772e9f65e92",
   "verification_note": "Updated on 2026-10-18 using the user's real-browser output from 400a6ce, source inspection and GitHub Actions metadata for main commit 15cffb59e6834b746a0892aa5fd41869a213ce85. The Mind Map replay correction is present in tools/apply_study_generation_polish.py and a focused isolated-transformer regression test exists, but post-fix local execution is pending. Eleven GitHub Actions workflows currently report failure with no returned steps/logs and a BlobNotFound log retrieval error; CI cause remains unresolved. Release remains BLOCKED and no freeze or overall PASS is claimed."
 }
