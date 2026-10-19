@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
-import logoImg from './imports/logo.png'
+import logoImg from './imports/logo.svg'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime, resetChatRealtime } from './crypto/chatRealtime'
 import CallExperience from './crypto/CallExperience'
