@@ -47,7 +47,7 @@ def test_library_save_hook_supports_try_catch_wrapped_api_return() -> None:
     assert patched.index("Library save -> offline asset download") < patched.index("return body as T")
     assert "    // Library save -> offline asset download" in patched
     assert "    if (method === 'POST' && cleanPath.endsWith('/save'))" in patched
-    assert "      body.offline_available = true" in patched
+    assert "        body.offline_available = true" in patched
     assert "    return body as T" in patched
 
 
