@@ -74,6 +74,20 @@ def main() -> int:
                             failures.append(f"{name}: primary navigation is not visible")
                         elif nav.bounding_box() is None:
                             failures.append(f"{name}: primary navigation has no layout box")
+                        else:
+                            nav_buttons = nav.get_by_role("button")
+                            if nav_buttons.count() == 0:
+                                failures.append(f"{name}: primary navigation has no buttons")
+                            for index in range(nav_buttons.count()):
+                                button = nav_buttons.nth(index)
+                                label = button.get_attribute("aria-label") or ""
+                                bounds = button.bounding_box()
+                                if not label.strip():
+                                    failures.append(f"{name}: navigation button {index} has no accessible name")
+                                if bounds and (bounds["width"] < 44 or bounds["height"] < 44):
+                                    failures.append(
+                                        f"{name}: navigation target {label!r} is smaller than 44x44 CSS px: {bounds}"
+                                    )
 
                         if page_errors:
                             failures.append(
