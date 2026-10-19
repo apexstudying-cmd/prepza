@@ -57,16 +57,42 @@ def patch_app():
 
     if 'getSavedStudyHubOffline' not in api_block:
         destructure = "  const { headers: extraHeaders, ...restOptions } = options\n"
-        if destructure not in api_block:
-            raise SystemExit('Offline library: api options anchor not found')
-
         method_line = "  const method = String(restOptions.method || 'GET').toUpperCase()\n"
+        options_method_line = "  const method = String(options.method || 'GET').toUpperCase()\n"
+
+        # The API helper has been rewritten by several independent build
+        # transformations in local worktrees. Reuse an existing method
+        # declaration where possible; otherwise insert a small, compatible
+        # declaration at the start of the helper instead of requiring one
+        # exact destructuring spelling.
         if method_line in api_block:
             gate_anchor = method_line
             gate_prefix = method_line
-        else:
+        elif options_method_line in api_block:
+            gate_anchor = options_method_line
+            gate_prefix = options_method_line
+        elif destructure in api_block:
             gate_anchor = destructure
             gate_prefix = destructure + method_line
+        else:
+            method_match = re.search(
+                r"^  const method = String\\((?:restOptions|fetchOptions|requestOptions|options)\\.method \\|\\| ['\"]GET['\"]\\)\\.toUpperCase\\(\\)\\n",
+                api_block,
+                re.MULTILINE,
+            )
+            if method_match:
+                gate_anchor = method_match.group(0)
+                gate_prefix = gate_anchor
+            else:
+                function_open = api_block.find("{")
+                if function_open < 0:
+                    raise SystemExit('Offline library: api helper opening brace not found')
+                gate_anchor = api_block[function_open + 1:]
+                gate_prefix = options_method_line
+                # Insert the gate at the helper's start, leaving the original
+                # implementation intact after it.
+                api_block = api_block[:function_open + 1] + "\\n" + api_block[function_open + 1:]
+                gate_anchor = api_block[function_open + 2:]
 
         offline_gate = f"""{gate_prefix}  const offline = typeof navigator !== 'undefined' && !navigator.onLine
   const offlineUserId = getOfflineUserId()
