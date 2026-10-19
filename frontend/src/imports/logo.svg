@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-labelledby="title">
+  <title id="title">Prepza</title>
+  <rect width="192" height="192" rx="42" fill="#101a3a"/>
+  <path d="M36 61c20-7 40-3 60 10v68c-20-13-40-17-60-10V61Z" fill="#f7f4eb" stroke="#d4b45e" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M156 61c-20-7-40-3-60 10v68c20-13 40-17 60-10V61Z" fill="#fffdf7" stroke="#d4b45e" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M96 71v68" stroke="#d4b45e" stroke-width="5" stroke-linecap="round"/>
+  <path d="M49 81c11-2 22 0 33 6M49 98c11-2 22 0 33 6M143 81c-11-2-22 0-33 6M143 98c-11-2-22 0-33 6" fill="none" stroke="#23345e" stroke-width="4" stroke-linecap="round"/>
+  <path d="M143 34l5 12 12 5-12 5-5 12-5-12-12-5 12-5 5-12Z" fill="#d4b45e"/>
+</svg>
