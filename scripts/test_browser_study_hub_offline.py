@@ -491,7 +491,14 @@ def main() -> int:
             page.wait_for_timeout(500)
             page.go_back(wait_until="domcontentloaded")
             page.get_by_text(DOCUMENT_TITLE, exact=True).wait_for(timeout=15000)
-            page.get_by_role("button", name="Continue →", exact=True).click()
+            try:
+                page.get_by_role("button", name="Continue →", exact=True).click(timeout=5000)
+            except PlaywrightTimeoutError:
+                print("DIAGNOSTIC: Browser back restored the title but not the Home continue action.")
+                print("DIAGNOSTIC URL:", page.url)
+                print("DIAGNOSTIC NAV STATE:", page.evaluate("sessionStorage.getItem('prepza-navigation-state')"))
+                print("DIAGNOSTIC BODY:", page.locator("body").inner_text(timeout=5000)[:6000])
+                raise
             page.wait_for_timeout(1000)
             print("PASS: browser back returned to the same Study Hub document context")
 
