@@ -88,10 +88,11 @@ def apply_rules(source: str) -> str:
         "Library save source visibility", new_save_visibility,
     )
 
-    # Save means "put this into my Study Hub". Reject an additional copy when an
-    # active personal Document already points at the same deduplicated content.
-    save_anchor = "    studyhub_document = _ensure_studyhub_document_for_publication(user_id, publication)\n"
-    save_guard = """    existing_studyhub = Document.query.filter_by(
+    # The endpoint already handles repeated saves idempotently: it reuses the
+    # student's existing Study Hub document and returns 200. Remove the older
+    # early-409 guard if a previous prebuild run inserted it; it bypasses that
+    # established behavior and prevents an existing bookmark from being handled.
+    obsolete_save_guard = """    existing_studyhub = Document.query.filter_by(
         user_id=user_id,
         document_content_id=source.document_content_id,
         is_removed=False,
@@ -103,13 +104,11 @@ def apply_rules(source: str) -> str:
         }), 409
 
 """
-    source = replace_once_or_already_applied(
-        source,
-        save_anchor,
-        save_guard + save_anchor,
-        "duplicate Study Hub save guard",
-        save_guard + save_anchor,
-    )
+    guard_count = source.count(obsolete_save_guard)
+    if guard_count > 1:
+        raise RuntimeError("Study Hub/Library backend patch failed (obsolete duplicate save guard): anchor is not unique")
+    if guard_count == 1:
+        source = source.replace(obsolete_save_guard, "", 1)
 
     # Removing a Library save removes the student's personal Study Hub copy too,
     # but never deletes or soft-removes the public Library source document.
