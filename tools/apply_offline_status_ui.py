@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
@@ -21,12 +22,15 @@ if start < 0:
 if start < 0:
     raise SystemExit('Offline status UI: App function not found')
 
-return_marker = "  return (\n    <div style={{ width: '100%', height: '100dvh'"
-return_pos = text.find(return_marker, start)
-if return_pos < 0:
-    print('Offline status UI: App root return anchor not found; skipping safely for current App architecture.')
-    APP.write_text(text, encoding='utf-8')
-    raise SystemExit(0)
+root_return_pattern = re.compile(
+    r"return\s*\(\s*<div style=\{\{\s*width:\s*'100%'\s*,\s*height:\s*'100dvh'",
+    re.MULTILINE,
+)
+root_return = root_return_pattern.search(text, start)
+if not root_return:
+    raise SystemExit('Offline status UI: App root return anchor not found; expected a full-height app root.')
+return_pos = root_return.start()
+
 
 banner = '      <OfflineStatusBanner />\n'
 root_child_anchor = "      {/* Content */}"
