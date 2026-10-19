@@ -33,22 +33,23 @@ def insert_library_save_hook(api_block: str, save_hook: str) -> str:
     # Match the statement structurally and reuse its indentation rather than
     # depending on one exact whitespace layout.
     match = re.search(
-        r"(?m)^([ \\t]*)return\\s+body\\s+as\\s+T\\s*;?[ \\t]*$",
+        r"(?m)^([ \t]*)return\s+body\s+as\s+T\s*;?[ \t]*$",
         api_block,
     )
     if not match:
         raise SystemExit('Offline library: successful API return anchor not found')
 
     indent = match.group(1)
-    lines = save_hook.strip("\\n").splitlines()
+    lines = save_hook.strip("\n").splitlines()
     nonempty_indents = [
-        len(line) - len(line.lstrip(" \\t"))
+        len(line) - len(line.lstrip(" \t"))
         for line in lines if line.strip()
     ]
     baseline = min(nonempty_indents, default=0)
     normalized = [line[baseline:] if line.strip() else "" for line in lines]
-    indented_hook = "\\n".join(indent + line if line else "" for line in normalized)
-    return api_block[:match.start()] + indented_hook + "\\n" + api_block[match.start():]
+    indented_hook = "\n".join(indent + line if line else "" for line in normalized)
+    return api_block[:match.start()] + indented_hook + "\n" + api_block[match.start():]
+
 
 def patch_app():
     s = APP.read_text(encoding='utf-8')
