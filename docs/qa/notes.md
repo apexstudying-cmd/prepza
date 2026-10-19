@@ -1799,3 +1799,21 @@ The latest browser run confirmed the My Study layout fix and all 12 summary/flas
 Current `main` fixes exact ready-podcast selection, binds all audio status/start/retry/recovery paths to the selected material ID, adds accessible Play/Pause labels, updates audio caching for query-bearing paths, and allows cached replay without an online usage refresh. The test now checks the exact audio URL, cached script/descriptor/Blob, and Blob-backed offline replay after reload.
 
 **Status: not yet runtime-verified.** Pull current `main`, run the focused `podcast_replay` contract test, rebuild the Docker app, and run the complete `scripts/test_browser_study_hub_offline_content.py -q` gate. Do not mark the gate PASS before offline podcast replay and reload assertions pass.
+
+## 2026-10-19 — Current-main frontend, realtime and E2EE checks are green
+
+The current-main commit `6bd7881c6c778ae93ed6460243e9ee2cf656f86c` fixes the BottomNav Create CTA JSX parse/type error by grouping its two children in a fragment. Before the fix, the Frontend Build failed TypeScript with TS2657 at `frontend/src/App.tsx(1298,15)`, and Screen Loading Audit stopped while generating production source at the same JSX block.
+
+After the direct-to-main fix, the following GitHub Actions runs completed successfully on that exact commit:
+
+- Frontend Build (TypeScript typecheck, service-worker validation, production build)
+- Screen Loading Audit
+- Realtime Runtime Regression
+- E2EE Security Regression
+- E2EE Chat Validation
+- Student Frontend Contract and Student Contract validation
+- Chat UX Contract, Admin Route Contract, B2B contract validation, AI economics validation, Kokoro GPU worker validation, Release QA Trace
+
+This closes the specific current-main CI/JSX/realtime/E2EE failures. It does **not** prove all release gates are complete. The Study Hub offline artifact/podcast browser gate is still IN_PROGRESS because its latest documented run predates the fixes and needs a rebuild plus full browser execution. Mobile responsive visual checks, cross-system journeys, representative existing-database upgrade rehearsal, clean full regression, and real external-provider checks also remain open. The 400-user load test stays deferred until functional, browser, recovery and CI gates are green.
+
+No production deployment was performed. No external payment, email, AI or storage provider was contacted as part of these CI checks.
