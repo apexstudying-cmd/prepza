@@ -1,6 +1,6 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 Branch: main
 
 Status:
@@ -337,6 +337,19 @@ Rule: require evidence before marking production work complete.
 13. Add newly discovered future work here before unrelated work.
 14. Record abandoned work rather than silently deleting it.
 15. Verified repository/runtime evidence outranks old assumptions.
+
+
+## 29. 2026-10-19 — Offline Library patch-script regression
+
+- Root cause found in the ordered frontend prebuild transformations: `apply_offline_data_foundation.py` wraps the shared `api<T>` request path in `try/catch`, changing the successful `return body as T` indentation from two spaces to four. The following offline queue transformer retains that nesting, while `apply_offline_study_library.py` previously required the exact two-space string. This is a transformation-order/anchor-contract bug, not evidence that the offline feature itself has stopped working.
+- [x] Make the Library save-hook insertion recognize the successful return with flexible indentation and preserve the surrounding scope.
+- [x] Add focused tests for original and `try/catch`-wrapped helpers, indentation preservation, idempotence, and a clear error when the expected return is absent.
+- [x] Add the focused regression test to the Frontend Build workflow.
+- [~] Wait for GitHub Actions on commit `5f012fa464407b2b5778f08259a25efab5acde5d`; at documentation time the runs were queued, so the fix is **not yet CI-verified**.
+- [ ] Once CI is green, pull main locally and rerun the actual Windows prebuild/build against the user's existing working tree. Preserve all uncommitted local changes; do not reset or overwrite `App.tsx`.
+- [ ] Audit the remaining prebuild scripts for exact-text anchors, safe repeatability, and deterministic output; add focused tests for the highest-risk transformations before broad refactoring.
+- [ ] Only after frontend build succeeds, rebuild the production-style Docker image and run the offline artifact browser regression. Do not mark the offline artifact gate PASS from a successful TypeScript build alone.
+
 
 ## Definition of launch-ready
 
