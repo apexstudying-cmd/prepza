@@ -45,7 +45,10 @@ def main() -> int:
                     page.on("pageerror", lambda error: page_errors.append(str(error)))
                     try:
                         login(page, fixture)
-                        page.wait_for_load_state("networkidle", timeout=15000)
+                        page.get_by_role(
+                            "navigation", name="Primary navigation"
+                        ).wait_for(state="visible", timeout=20000)
+                        page.wait_for_timeout(300)
                         page.screenshot(
                             path=str(ARTIFACTS / f"{name}.png"),
                             full_page=True,
