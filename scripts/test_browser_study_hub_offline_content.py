@@ -1260,7 +1260,16 @@ def main() -> int:
                         name=re.compile(rf"{re.escape(type_label)}.*From: {re.escape(document_title)}"),
                     ).first
                     material_button.click(timeout=15000)
-                    page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
+                    try:
+                        page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
+                    except Exception:
+                        print("DIAGNOSTIC: offline generated material did not render expected content.")
+                        print("DIAGNOSTIC TYPE / DOCUMENT:", type_label, document_title)
+                        print("DIAGNOSTIC URL:", page.url)
+                        print("DIAGNOSTIC NAV STATE:", page.evaluate("sessionStorage.getItem('prepza-navigation-state')"))
+                        print("DIAGNOSTIC SELECTED MATERIAL:", page.evaluate("sessionStorage.getItem('prepza-open-material')"))
+                        print("DIAGNOSTIC BODY:", page.locator("body").inner_text(timeout=5000)[:6000])
+                        raise
                     print(f"PASS: {type_label} replays offline for {document_title}")
                     page.go_back(wait_until="commit")
                     page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
