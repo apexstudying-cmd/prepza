@@ -120,7 +120,15 @@ jobs:
         run: python scripts/test_browser_mobile_responsive.py
 
       - name: Run full disposable PostgreSQL QA suite
-        run: docker compose -f docker-compose.vps.yml exec -T app python tools/run_local_qa.py
+        run: |
+          # Use an ephemeral test container with the checked-out source mounted.
+          # The production app image intentionally excludes QA files and pytest.
+          docker compose -f docker-compose.vps.yml run --rm --no-deps \\
+            -v "${GITHUB_WORKSPACE}:/workspace" \\
+            -w /workspace \\
+            -e DATABASE_URL="postgresql+psycopg2://prepza:prepza-ci-password@postgres:5432/prepza" \\
+            -e SECRET_KEY="prepza-ci-only-secret" \\
+            app sh -lc 'python -m pip install "pytest>=8,<9" && python tools/run_local_qa.py'
 
       - name: Run online/offline and generated-artifact browser journeys
         shell: bash
