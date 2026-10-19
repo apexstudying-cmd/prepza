@@ -56,7 +56,7 @@ def test_library_rules_patch_is_idempotent() -> None:
 
 def test_library_rules_patch_removes_legacy_conflicting_save_guard() -> None:
     patched = MODULE.apply_rules(source_before_patch())
-    save_anchor = "    studyhub_document = _ensure_studyhub_document_for_publication(user_id, publication)\\n"
+    save_anchor = "    studyhub_document = _ensure_studyhub_document_for_publication(user_id, publication)\n"
     obsolete_guard = """    existing_studyhub = Document.query.filter_by(
         user_id=user_id,
         document_content_id=source.document_content_id,
