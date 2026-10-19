@@ -1,0 +1,95 @@
+name: Mobile Responsive Browser Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/test_browser_mobile_responsive.py'
+      - 'scripts/test_browser_study_hub_offline_content.py'
+      - 'frontend/src/**'
+      - 'frontend/public/**'
+      - 'app.py'
+      - 'alembic/**'
+      - 'schema/local_baseline.sql'
+      - 'Dockerfile'
+      - 'docker-compose.vps.yml'
+      - 'requirements.txt'
+      - 'requirements-test.txt'
+      - '.github/workflows/mobile-responsive-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-responsive:
+    name: Chromium phone and tablet layout smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out exact commit under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Assert exact commit under test
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Create isolated CI environment
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=prepza
+          POSTGRES_PASSWORD=prepza-ci-password
+          POSTGRES_DB=prepza
+          SECRET_KEY=prepza-ci-only-secret
+          FLASK_TESTING=1
+          PREPZA_TIMEZONE=Africa/Nairobi
+          EOF
+
+      - name: Build the production app image
+        run: docker compose -f docker-compose.vps.yml build app
+
+      - name: Start disposable PostgreSQL and Redis
+        run: docker compose -f docker-compose.vps.yml up -d postgres redis
+
+      - name: Apply Alembic migrations to disposable database
+        run: docker compose -f docker-compose.vps.yml run --rm app python -m alembic upgrade head
+
+      - name: Start app
+        run: |
+          docker compose -f docker-compose.vps.yml up -d app
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:5000/ >/dev/null; then
+              echo "Prepza app is responding."
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.vps.yml logs --tail=200 app
+          exit 1
+
+      - name: Install browser test dependencies
+        run: |
+          python -m pip install -r requirements-test.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run mobile and tablet responsive browser checks
+        run: python scripts/test_browser_mobile_responsive.py
+
+      - name: Upload responsive screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prepza-mobile-responsive-screenshots
+          path: artifacts/mobile-responsive/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Collect app logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.vps.yml logs --tail=300 app postgres redis
+
+      - name: Stop disposable services
+        if: always()
+        run: docker compose -f docker-compose.vps.yml down -v
