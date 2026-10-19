@@ -92,6 +92,14 @@ def main() -> int:
                                         f"{name}: navigation target {label!r} is smaller than 44x44 CSS px: {bounds}"
                                     )
 
+                        broken_logos = page.locator('img[alt="Prepza"]').evaluate_all(
+                            "(images) => images.filter(image => !image.complete || image.naturalWidth === 0).map(image => image.currentSrc || image.src)"
+                        )
+                        if broken_logos:
+                            failures.append(
+                                f"{name}: broken Prepza logo image(s): {' | '.join(broken_logos)}"
+                            )
+
                         if page_errors:
                             failures.append(
                                 f"{name}: uncaught browser errors: {' | '.join(page_errors)}"
