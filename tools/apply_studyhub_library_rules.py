@@ -16,11 +16,11 @@ def replace_once_or_already_applied(
     old_count = source.count(old)
     applied_count = source.count(already_applied)
 
+    if applied_count == 1 and (old_count == 0 or old in already_applied):
+        return source
+
     if old_count == 1 and applied_count == 0:
         return source.replace(old, new, 1)
-
-    if old_count == 0 and applied_count == 1:
-        return source
 
     if old_count > 1:
         reason = "original anchor is not unique"
