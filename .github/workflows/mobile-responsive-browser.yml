@@ -79,6 +79,43 @@ jobs:
           python -m pip install -r requirements-test.txt
           python -m playwright install --with-deps chromium
 
+      - name: Seed academic catalog for isolated student fixtures
+        run: |
+          docker compose -f docker-compose.vps.yml run --rm -T app python - <<'PY'
+          from app import app, db, University, Program
+
+          with app.app_context():
+              university = (
+                  University.query.filter_by(is_active=True)
+                  .order_by(University.id.asc()).first()
+              )
+              if university is None:
+                  university = University(
+                      name="Prepza CI University",
+                      short_code="CI-RELEASE",
+                      country="Kenya",
+                      is_active=True,
+                  )
+                  db.session.add(university)
+                  db.session.flush()
+
+              program = (
+                  Program.query.filter_by(
+                      university_id=university.id, is_active=True
+                  ).order_by(Program.id.asc()).first()
+              )
+              if program is None:
+                  db.session.add(Program(
+                      university_id=university.id,
+                      name="CI Test Program",
+                      degree_level="undergraduate",
+                      discipline_category="general",
+                      is_active=True,
+                  ))
+              db.session.commit()
+              print(f"Academic catalog ready for browser fixtures: university_id={university.id}")
+          PY
+
       - name: Run mobile and tablet responsive browser checks
         run: python scripts/test_browser_mobile_responsive.py
 
