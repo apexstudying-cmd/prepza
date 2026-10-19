@@ -6,7 +6,23 @@ text = APP.read_text(encoding='utf-8')
 
 MARKER = "const PREPZA_OFFLINE_DB = 'prepza-offline-v1'"
 if MARKER in text:
-    print('Offline data foundation already applied.')
+    required = (
+        "const PREPZA_OFFLINE_STORE = 'responses'",
+        'function openPrepzaOfflineDb()',
+        'async function readPrepzaOffline',
+        'async function writePrepzaOffline',
+        'async function clearPrepzaOfflineData',
+        'async function api<T = any>',
+        'const canUseOfflineData =',
+        'return body as T',
+    )
+    missing = [item for item in required if item not in text]
+    if missing:
+        raise SystemExit(
+            'Offline data foundation marker exists but required wiring is missing: '
+            + ', '.join(missing)
+        )
+    print('Offline data foundation already applied and verified.')
     raise SystemExit(0)
 
 OLD = '''async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {

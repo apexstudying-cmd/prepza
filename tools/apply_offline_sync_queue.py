@@ -6,7 +6,24 @@ text = APP.read_text(encoding='utf-8')
 
 MARKER = "const PREPZA_OFFLINE_QUEUE_STORE = 'syncQueue'"
 if MARKER in text:
-    print('Offline sync queue foundation already applied.')
+    required = (
+        'async function enqueuePrepzaOfflineMutation',
+        'async function readPrepzaOfflineQueue',
+        'async function updatePrepzaOfflineQueueItem',
+        'async function deletePrepzaOfflineQueueItem',
+        'async function flushPrepzaOfflineQueue',
+        'function startPrepzaOfflineQueue',
+        'queueOffline &&',
+        "window.addEventListener('online'",
+        'X-Prepza-Offline-Queue',
+    )
+    missing = [item for item in required if item not in text]
+    if missing:
+        raise SystemExit(
+            'Offline sync queue marker exists but required wiring is missing: '
+            + ', '.join(missing)
+        )
+    print('Offline sync queue foundation already applied and verified.')
     raise SystemExit(0)
 
 DB_MARKER = "const PREPZA_OFFLINE_DB = 'prepza-offline-v1'"
