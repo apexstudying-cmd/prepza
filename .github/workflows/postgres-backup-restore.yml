@@ -21,6 +21,84 @@ permissions:
   contents: read
 
 jobs:
+  existing-database-upgrade:
+    name: Existing database upgrade and data preservation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: prepza
+          POSTGRES_PASSWORD: prepza
+          POSTGRES_DB: prepza
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prepza -d prepza"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg2://prepza:prepza@127.0.0.1:5432/prepza
+      FLASK_TESTING: "1"
+    steps:
+      - name: Check out exact commit under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Assert exact commit under test
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install application dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Create a representative prior-revision database
+        run: |
+          python -m alembic upgrade 20261005_chat_attach_source_doc
+          psql "postgresql://prepza:prepza@127.0.0.1:5432/prepza" -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO public.document_content
+            (content_hash, storage_path, file_type, file_size_bytes, page_count, status, extracted_text)
+          VALUES
+            ('release-upgrade-sentinel-20261019', 'qa/upgrade-sentinel.pdf', 'pdf', 1234, 2, 'ready', 'preserve-this-existing-row');
+          SQL
+          test "20261005_chat_attach_source_doc" = "$(psql "postgresql://prepza:prepza@127.0.0.1:5432/prepza" -Atqc 'SELECT version_num FROM alembic_version LIMIT 1')"
+          if psql "postgresql://prepza:prepza@127.0.0.1:5432/prepza" -Atqc "SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='document_content' AND column_name='material_id'" | grep -q 1; then
+            echo "The prior revision unexpectedly already contains document_content.material_id"
+            exit 1
+          fi
+      - name: Upgrade existing database to current head
+        run: python -m alembic upgrade head
+      - name: Verify preserved data and new schema
+        run: |
+          psql "postgresql://prepza:prepza@127.0.0.1:5432/prepza" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM public.document_content
+              WHERE content_hash = 'release-upgrade-sentinel-20261019'
+                AND storage_path = 'qa/upgrade-sentinel.pdf'
+                AND extracted_text = 'preserve-this-existing-row'
+            ) THEN
+              RAISE EXCEPTION 'Existing document_content row was not preserved during upgrade';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema='public'
+                AND table_name='document_content'
+                AND column_name='material_id'
+            ) THEN
+              RAISE EXCEPTION 'Expected document_content.material_id migration is missing';
+            END IF;
+          END
+          $;
+          SQL
+          test "$(python -m alembic current | tail -n 1 | awk '{print $1}')" = "20261007_doc_material"
+          echo "Existing database upgrade passed: prior revision data preserved and current Alembic head applied."
+
   backup-restore:
     name: PostgreSQL custom dump and disposable restore
     runs-on: ubuntu-latest
