@@ -69,6 +69,11 @@ jobs:
           docker compose -f docker-compose.vps.yml logs --tail=200 app
           exit 1
 
+      - name: Set up Python 3.13 for browser test dependencies
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
       - name: Install browser test dependencies
         run: |
           python -m pip install -r requirements-test.txt
