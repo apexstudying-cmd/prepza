@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import logoImg from '../imports/logo.png'
+import logoImg from '../imports/logo.svg'
 
 type ShareSheetProps = { onClose: () => void }
 type Day = { date:string; studied:boolean; is_future:boolean; study_seconds:number }
