@@ -184,11 +184,16 @@ def set_security_headers(response):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
 
-    # Long-lived caching for static assets (images, CSS, JS) so repeat
-    # visitors don't re-download unchanged files on every page load.
-    # Unrelated to the "no-store" header on the watermarked PDF viewer route
-    # below - that one intentionally stays uncached since it's private,
-    # paid content.
+    # HTML/PWA control documents must be revalidated on every visit. A stale
+    # app shell, manifest, or service-worker registration can leave a phone
+    # running an older release after a successful deployment.
+    if request.path in {"/", "/index.html", "/manifest.json", "/sw.js", "/sw-register.js"}:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
+    # Long-lived caching for content-hashed Vite assets only. Never apply this
+    # policy to HTML or PWA control documents, which must be able to update.
     if request.path.startswith("/assets/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
 
