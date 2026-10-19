@@ -1231,6 +1231,7 @@ def main() -> int:
 
             page.on("request", observe_request)
             context.set_offline(True)
+            page.wait_for_function("() => navigator.onLine === false", timeout=5000)
             page.reload(wait_until="domcontentloaded")
 
             # Wait for React to render after reload. Continue from either
