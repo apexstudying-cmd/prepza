@@ -1233,6 +1233,12 @@ def main() -> int:
             context.set_offline(True)
             page.wait_for_function("() => navigator.onLine === false", timeout=5000)
             page.reload(wait_until="domcontentloaded")
+            try:
+                page.wait_for_function("() => navigator.onLine === false", timeout=5000)
+            except Exception:
+                print("DIAGNOSTIC: Chromium did not remain offline after reload.")
+                print("DIAGNOSTIC NETWORK STATE:", page.evaluate("() => ({online: navigator.onLine, offlineUserId: localStorage.getItem('prepza-offline-user-id')})"))
+                raise
 
             # Wait for React to render after reload. Continue from either
             # restored My Study or Home using the visible, real UI.
@@ -1269,6 +1275,25 @@ def main() -> int:
                         print("DIAGNOSTIC URL:", page.url)
                         print("DIAGNOSTIC NAV STATE:", page.evaluate("sessionStorage.getItem('prepza-navigation-state')"))
                         print("DIAGNOSTIC SELECTED MATERIAL:", page.evaluate("sessionStorage.getItem('prepza-open-material')"))
+                        print("DIAGNOSTIC NETWORK STATE:", page.evaluate("() => ({online: navigator.onLine, offlineUserId: localStorage.getItem('prepza-offline-user-id')})"))
+                        print("DIAGNOSTIC CACHE:", page.evaluate("""async () => {
+                          const db = await new Promise((resolve, reject) => {
+                            const request = indexedDB.open('prepza-offline-v2', 4);
+                            request.onsuccess = () => resolve(request.result);
+                            request.onerror = () => reject(request.error);
+                          });
+                          try {
+                            return await new Promise((resolve, reject) => {
+                              const tx = db.transaction('generatedMaterials', 'readonly');
+                              const request = tx.objectStore('generatedMaterials').getAll();
+                              request.onsuccess = () => resolve((request.result || []).map(row => ({
+                                key: row.key, path: row.path, type: row.payload?.type,
+                                status: row.payload?.status, material_id: row.payload?.material_id,
+                              })));
+                              request.onerror = () => reject(request.error);
+                            });
+                          } finally { db.close(); }
+                        }"""))
                         print("DIAGNOSTIC BODY:", page.locator("body").inner_text(timeout=5000)[:6000])
                         raise
                     print(f"PASS: {type_label} replays offline for {document_title}")
