@@ -1081,7 +1081,9 @@ def main() -> int:
                         ) from exc
                     print(f"PASS: existing online {type_label} opens for {document_title}")
                     page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
-                    # StudyMaterialsScreen remounts on return and selects Documents.
+                    # Reader Back returns to the document screen; its My Study
+                    # control returns to the Study Materials documents tab.
+                    ensure_study_materials_documents_tab(page)
                     page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
             if unguarded_generation_posts:
@@ -1239,7 +1241,8 @@ def main() -> int:
             # Return through the actual podcast reader Back control, not browser
             # history, which is not guaranteed to mirror the React screen stack.
             page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
-            wait_for_study_materials_button(page)
+            # Podcast Back returns to Document Study, not directly to the list.
+            ensure_study_materials_documents_tab(page)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
             page.unroute("**/documents/*/podcast-audio*", serve_ready_podcast)
             page.unroute("**/offline-fixture-audio/*", serve_podcast_wav)
