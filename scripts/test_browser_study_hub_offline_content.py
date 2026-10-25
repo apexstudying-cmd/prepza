@@ -1236,7 +1236,9 @@ def main() -> int:
 
             # Return to the real list, then remove the HTTP stubs so offline replay
             # cannot pass by accidentally receiving their fake online responses.
-            page.go_back(wait_until="commit")
+            # Return through the actual podcast reader Back control, not browser
+            # history, which is not guaranteed to mirror the React screen stack.
+            page.get_by_role("button").first.click(timeout=15000)
             wait_for_study_materials_button(page)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
             page.unroute("**/documents/*/podcast-audio*", serve_ready_podcast)
@@ -1349,7 +1351,10 @@ def main() -> int:
                         print("DIAGNOSTIC BODY:", page.locator("body").inner_text(timeout=5000)[:6000])
                         raise
                     print(f"PASS: {type_label} replays offline for {document_title}")
-                    page.go_back(wait_until="commit")
+                    # Use the reader's real Back control. App navigation stores a
+                    # React screen stack separately from browser history; page.go_back()
+                    # can pop a stale history entry and leave us on a different screen.
+                    page.get_by_role("button").first.click(timeout=15000)
                     ensure_study_materials_documents_tab(page)
                     page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
@@ -1412,7 +1417,7 @@ def main() -> int:
                 material_button.click(timeout=15000)
                 page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
                 print(f"PASS: {type_label} survives reload and reopens offline")
-                page.go_back(wait_until="commit")
+                page.get_by_role("button").first.click(timeout=15000)
                 ensure_study_materials_documents_tab(page)
                 page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
