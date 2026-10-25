@@ -598,6 +598,28 @@ def ensure_study_materials_documents_tab(page) -> None:
     documents_tab.wait_for(timeout=15000)
 
 
+def wait_for_study_materials_button(page) -> None:
+    """Wait until React has rendered a visible, stable Study Materials control."""
+    page.wait_for_function(
+        """() => new Promise(resolve => requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            const button = Array.from(document.querySelectorAll('button')).find(
+              item => (item.innerText || '').trim() === 'Study Materials' &&
+                item.getClientRects().length > 0 &&
+                getComputedStyle(item).display !== 'none' &&
+                getComputedStyle(item).visibility !== 'hidden' &&
+                getComputedStyle(item).opacity !== '0'
+            );
+            resolve(Boolean(button));
+          })
+        ))""",
+        timeout=15000,
+    )
+    page.get_by_role("button", name="Study Materials", exact=True).wait_for(
+        state="visible", timeout=15000
+    )
+
+
 def make_pdf(label: str) -> bytes:
     """Create a tiny valid one-page PDF without adding a test dependency."""
     objects = [
