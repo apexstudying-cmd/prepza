@@ -1328,6 +1328,7 @@ def main() -> int:
                         raise
                     print(f"PASS: {type_label} replays offline for {document_title}")
                     page.go_back(wait_until="commit")
+                    ensure_study_materials_documents_tab(page)
                     page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
             # Podcast must now resolve from its cached descriptor and Blob, with
@@ -1390,6 +1391,7 @@ def main() -> int:
                 page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
                 print(f"PASS: {type_label} survives reload and reopens offline")
                 page.go_back(wait_until="commit")
+                ensure_study_materials_documents_tab(page)
                 page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
             podcast_button = page.get_by_role(
