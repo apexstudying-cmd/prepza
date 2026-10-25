@@ -577,6 +577,25 @@ def login(page, fixture: dict) -> None:
 
 def ensure_study_materials_documents_tab(page) -> None:
     """Wait for a real Home-or-My-Study surface, then use UI navigation if needed."""
+    try:
+        _wait_documents_or_my_study(page)
+    except Exception as exc:
+        try:
+            body = page.locator("body").inner_text(timeout=5000)[:3000]
+            buttons = [t.strip() for t in page.locator("button").all_inner_texts() if t.strip()]
+        except Exception as diag_exc:
+            body, buttons = f"<diag failed: {diag_exc}>", []
+        raise AssertionError(
+            f"ensure_study_materials_documents_tab timed out; url={page.url}; "
+            f"buttons={buttons[:60]}; body={body!r}; error={exc}"
+        ) from exc
+    documents_tab = page.get_by_role("button", name="Documents", exact=True)
+    if not documents_tab.is_visible():
+        page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
+    documents_tab.wait_for(timeout=15000)
+
+
+def _wait_documents_or_my_study(page) -> None:
     page.wait_for_function(
         """() => {
           const visible = element => {
@@ -592,10 +611,6 @@ def ensure_study_materials_documents_tab(page) -> None:
         }""",
         timeout=15000,
     )
-    documents_tab = page.get_by_role("button", name="Documents", exact=True)
-    if not documents_tab.is_visible():
-        page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
-    documents_tab.wait_for(timeout=15000)
 
 
 def wait_for_study_materials_button(page) -> None:
