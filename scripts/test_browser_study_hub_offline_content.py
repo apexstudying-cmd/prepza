@@ -1215,7 +1215,7 @@ def main() -> int:
             # Return to the real list, then remove the HTTP stubs so offline replay
             # cannot pass by accidentally receiving their fake online responses.
             page.go_back(wait_until="commit")
-            page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
+            wait_for_study_materials_button(page)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
             page.unroute("**/documents/*/podcast-audio*", serve_ready_podcast)
             page.unroute("**/offline-fixture-audio/*", serve_podcast_wav)
@@ -1354,7 +1354,7 @@ def main() -> int:
             print("PASS: cached podcast descriptor and actual audio Blob open offline")
 
             page.go_back(wait_until="commit")
-            page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
+            wait_for_study_materials_button(page)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
             if generation_posts:
