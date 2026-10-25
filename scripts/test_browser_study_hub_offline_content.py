@@ -1246,9 +1246,29 @@ def main() -> int:
             try:
                 page.wait_for_function("() => navigator.onLine === false", timeout=5000)
             except Exception:
-                print("DIAGNOSTIC: Chromium could not be held offline after reload.")
-                print("DIAGNOSTIC NETWORK STATE:", page.evaluate("() => ({online: navigator.onLine, offlineUserId: localStorage.getItem('prepza-offline-user-id')})"))
-                raise
+                # Chromium can occasionally leave navigator.onLine unchanged
+                # when context-level emulation races a service-worker-controlled
+                # reload. Apply the equivalent network condition directly to
+                # this Chromium target, then verify the observable offline state.
+                print("DIAGNOSTIC: context-level offline emulation did not survive reload; applying Chromium Network emulation.")
+                network_cdp = context.new_cdp_session(page)
+                network_cdp.send("Network.enable")
+                network_cdp.send(
+                    "Network.emulateNetworkConditions",
+                    {
+                        "offline": True,
+                        "latency": 0,
+                        "downloadThroughput": 0,
+                        "uploadThroughput": 0,
+                        "connectionType": "none",
+                    },
+                )
+                try:
+                    page.wait_for_function("() => navigator.onLine === false", timeout=5000)
+                except Exception:
+                    print("DIAGNOSTIC: Chromium could not be held offline after reload.")
+                    print("DIAGNOSTIC NETWORK STATE:", page.evaluate("() => ({online: navigator.onLine, offlineUserId: localStorage.getItem('prepza-offline-user-id')})"))
+                    raise
 
             # Wait for React to render after reload. Continue from either
             # restored My Study or Home using the visible, real UI.
