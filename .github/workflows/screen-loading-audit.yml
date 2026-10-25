@@ -18,8 +18,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+          run_install: false
+
       - name: Setup Node
         uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -27,10 +36,10 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       - name: Generate production source
-        run: npx vite build
+        run: pnpm exec vite build
 
       - name: Audit loading gates
         working-directory: .

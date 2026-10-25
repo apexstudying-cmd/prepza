@@ -107,18 +107,23 @@ jobs:
       - name: Run E2EE identity, realtime and chat regressions
         run: python -m pytest scripts/test_e2ee_identity_runtime.py scripts/test_realtime_runtime.py scripts/test_chat_interactions.py -q
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+          run_install: false
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend
         working-directory: frontend
-        run: npm run build
+        run: pnpm run build
 
 # Day 7 final synchronization run.
