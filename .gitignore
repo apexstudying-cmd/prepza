@@ -34,3 +34,4 @@ remove_*.py
 # Local database backup archives (never commit DB dumps)
 /backups/
 *.dump
+typescript-check.log
