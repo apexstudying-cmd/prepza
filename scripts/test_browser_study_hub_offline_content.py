@@ -1080,7 +1080,7 @@ def main() -> int:
                             f"wait_error={type(exc).__name__}: {exc}"
                         ) from exc
                     print(f"PASS: existing online {type_label} opens for {document_title}")
-                    page.go_back(wait_until="commit")
+                    page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
                     # StudyMaterialsScreen remounts on return and selects Documents.
                     page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
@@ -1238,7 +1238,7 @@ def main() -> int:
             # cannot pass by accidentally receiving their fake online responses.
             # Return through the actual podcast reader Back control, not browser
             # history, which is not guaranteed to mirror the React screen stack.
-            page.get_by_role("button").first.click(timeout=15000)
+            page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
             wait_for_study_materials_button(page)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
             page.unroute("**/documents/*/podcast-audio*", serve_ready_podcast)
@@ -1354,7 +1354,7 @@ def main() -> int:
                     # Use the reader's real Back control. App navigation stores a
                     # React screen stack separately from browser history; page.go_back()
                     # can pop a stale history entry and leave us on a different screen.
-                    page.get_by_role("button").first.click(timeout=15000)
+                    page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
                     ensure_study_materials_documents_tab(page)
                     page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
@@ -1380,7 +1380,7 @@ def main() -> int:
                 raise AssertionError(f"Offline podcast did not resolve to a local Blob URL: {audio_src}")
             print("PASS: cached podcast descriptor and actual audio Blob open offline")
 
-            page.go_back(wait_until="commit")
+            page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
             wait_for_study_materials_button(page)
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
@@ -1417,7 +1417,7 @@ def main() -> int:
                 material_button.click(timeout=15000)
                 page.get_by_text(expected_text, exact=False).wait_for(timeout=15000)
                 print(f"PASS: {type_label} survives reload and reopens offline")
-                page.get_by_role("button").first.click(timeout=15000)
+                page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
                 ensure_study_materials_documents_tab(page)
                 page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
 
