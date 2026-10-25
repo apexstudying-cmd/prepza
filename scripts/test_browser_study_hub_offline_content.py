@@ -586,13 +586,23 @@ def ensure_study_materials_documents_tab(page) -> None:
         except Exception as diag_exc:
             body, buttons = f"<diag failed: {diag_exc}>", []
         raise AssertionError(
-            f"ensure_study_materials_documents_tab timed out; url={page.url}; "
+            f"ensure_study_materials_documents_tab timed out; url={page.url}; nav={_nav_state(page)}; "
             f"buttons={buttons[:60]}; body={body!r}; error={exc}"
         ) from exc
     documents_tab = page.get_by_role("button", name="Documents", exact=True)
     if not documents_tab.is_visible():
         page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
     documents_tab.wait_for(timeout=15000)
+
+
+def _nav_state(page) -> str:
+    try:
+        return str(page.evaluate(
+            "() => JSON.stringify({stack: (JSON.parse(localStorage.getItem('prepza-navigation-state') || '{}')).stack, "
+            "open: sessionStorage.getItem('prepza-open-material'), hist: history.length})"
+        ))
+    except Exception as exc:
+        return f"<nav failed: {exc}>"
 
 
 def _wait_documents_or_my_study(page) -> None:
