@@ -6,6 +6,8 @@ on:
     paths:
       - 'scripts/test_browser_mobile_responsive.py'
       - 'scripts/test_browser_study_hub_offline_content.py'
+      - 'chat_event_queue.py'
+      - 'chat_event_worker.py'
       - 'frontend/src/**'
       - 'frontend/public/**'
       - 'tools/**'
