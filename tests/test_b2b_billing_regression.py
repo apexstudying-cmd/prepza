@@ -134,3 +134,26 @@ def test_billable_event_id_requires_a_valid_stable_uuid():
     assert _normalize_billable_event_id("   ") is None
     assert _normalize_billable_event_id("not-a-uuid") is None
     assert _normalize_billable_event_id("c7e1f4b1-5c3e-4e4b-a9d7-9b90d1f4a001" + "x") is None
+
+
+def test_sponsored_impression_requires_1500ms_continuous_visibility_and_tab_reset():
+    source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    start = source.index("function SponsoredOpportunityCard")
+    end = source.index("const OPP_FILTERS", start)
+    component = source[start:end]
+    assert "entry.intersectionRatio >= 0.5" in component
+    assert "}, 1500)" in component
+    assert "visibilitychange" in component
+    assert "document.visibilityState" in component
+
+
+def test_sponsored_click_uses_stable_uuid_without_forcing_an_impression():
+    source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    start = source.index("function SponsoredOpportunityCard")
+    end = source.index("const OPP_FILTERS", start)
+    component = source[start:end]
+    assert "clickEventId" in component
+    assert "body: JSON.stringify({ event_id: clickEventId.current })" in component
+    open_start = component.index("const open = async () =>")
+    open_end = component.index("\n  return (", open_start)
+    assert "await recordImpression()" not in component[open_start:open_end]
