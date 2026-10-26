@@ -1847,3 +1847,22 @@ GitHub Actions [Existing Database Migration Rehearsal run 1](https://github.com/
 The workflow built the production app image, migrated disposable PostgreSQL to prior revision `20261005_chat_attach_source_doc`, seeded existing document-content and generated-material rows, then upgraded to `20261007_doc_material`. It verified that old record contents survived, legacy rows remained valid with NULL `material_id`, and the new foreign-key relationship accepted a valid material link.
 
 A fresh bootstrap proves the schema can be created; a populated revision-to-revision rehearsal additionally checks upgrade preservation. The rehearsal used deterministic CI fixtures, not a production snapshot. Provider checks, remaining recovery testing, final regression and the full architecture/documentation audit still block release. No deployment was triggered.
+
+
+## 2026-10-26 — Redis worker reconnect test found and fixed a real crash
+
+The first run of [Redis Worker Reconnect Recovery](https://github.com/apexstudying-cmd/prepza/actions/runs/40328751982) failed for a useful reason. The test started the real `chat_event_worker.py`, restarted Redis while it was consuming messages, and caught the process exiting with `redis.ConnectionError`.
+
+### Root cause
+
+The queue loop already caught timeout/connection errors around `XREADGROUP`, but called `_claim_stale_messages()` before that guarded block. If Redis restarted at that exact point, `XAUTOCLAIM` raised `ConnectionError` and crashed the worker before the existing retry behavior could run.
+
+### Fix and proof
+
+We changed `chat_event_queue.py` to treat transient Redis timeout/connection errors during stale-message reclaim as recoverable. The regression now restarts disposable Redis during a live worker, then verifies a post-restart event is published to the correct conversation and acknowledged.
+
+[Redis Worker Reconnect Recovery run 3](https://github.com/apexstudying-cmd/prepza/actions/runs/40329059178) passed on code commit `9d041e5c60a2bff2ea6379acae61d51e780afd65`. The same commit's Realtime Runtime Regression, Frontend Build, Screen Loading Audit, E2EE Security Regression, Release QA Trace and related contract checks also passed.
+
+### What remains
+
+This closes only the exercised worker/Redis reconnect path. Controlled provider tests (Paystack, SES, OpenAI, R2 and the GPU/audio provider), webhook retry/idempotency, restore plus application smoke tests, final clean regression and the source-grounded architecture/documentation audit remain outstanding. Release stays blocked and deployment remains prohibited.
