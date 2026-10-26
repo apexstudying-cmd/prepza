@@ -1885,3 +1885,10 @@ The podcast stage then showed the transformed player text (`Ready to study`, `Fo
 - Contract/browser checks assert the exact fixture audio identity and wait for the real local Blob during offline replay and after reload.
 
 The focused contract test, new Docker build, and full browser regression have **not yet been run against these latest changes**. Keep `browser_study_hub_offline_content_artifacts` **IN_PROGRESS** and the release **BLOCKED** until those checks pass.
+
+
+## 2026-10-26 — Existing database migration rehearsal
+
+The [Existing Database Migration Rehearsal](https://github.com/apexstudying-cmd/prepza/actions/runs/40327691259) passed on code commit `4584de061162a5dc010b03847d4d09a7aea81e1c`.
+
+The workflow used an isolated PostgreSQL database and the production app image. It upgraded the schema to prior revision `20261005_chat_attach_source_doc`, seeded a document-content record and generated-material record, upgraded to `20261007_doc_material`, then verified record/content preservation, the current Alembic revision, nullable `material_id` for pre-existing rows, and the new foreign-key relationship. The CI database was torn down after completion. This is an explicit populated revision-to-revision upgrade test; it is not a restore of a production snapshot and does not by itself complete the provider or recovery gates.
