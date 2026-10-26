@@ -23,15 +23,15 @@ The B2B contract workflow passed in the 2026-10-26 run set (run [40329949857](ht
 
 ## Gaps against the proposed model
 
-1. **Viewability is not verified.** The impression endpoint accepts a POST; it does not prove the ad was at least 50% visible for 1.5 continuous seconds. No frontend `IntersectionObserver`/visibility timer was found in the source search. Treat current events as submitted impressions, not independently verified viewable impressions.
-2. **Retry idempotency was a backend gap and is now being hardened.** Commit `df1552801186bdb4f01821afb5d9569fe838238f` makes impression and click endpoints require a valid UUID `event_id` and uses it to construct the idempotency key, rather than generating a new random key when it is missing. The focused B2B workflow for this change is still pending verification; the student-facing caller must reuse the same UUID when retrying the same event.
+1. **Viewability logic is now corrected in the frontend, but not browser-verified yet.** `SponsoredOpportunityCard` in `frontend/src/App.tsx` now requires at least 50% intersection for 1.5 continuous seconds, cancels the timer when the card leaves view, and resets it when the document becomes hidden. A click no longer calls the impression function directly. The backend still cannot independently prove viewport visibility from a POST, so a real browser-to-ledger test is required before claiming viewable-impression verification.
+2. **Retry idempotency is hardened at the API boundary and wired into the card.** Commit `df1552801186bdb4f01821afb5d9569fe838238f` makes impression and click endpoints require a valid UUID `event_id`. Commit `b79bd0197c2b4dca786e5d9a22c687837105e625` keeps stable impression/click UUIDs in refs and sends the click UUID to the endpoint. B2B contract workflow run [40351270116](https://github.com/apexstudying-cmd/prepza/actions/runs/40351270116) passed on `b79bd019`; frontend build run [40351270131](https://github.com/apexstudying-cmd/prepza/actions/runs/40351270131) was still running at the time of this update. Browser retry/duplicate-debit behavior remains unverified.
 3. **Raw and unique clicks are not separate metrics.** Current counters/analytics expose delivered clicks; no distinct unique-click metric was found. Do not promise “50 raw clicks / 1 unique click” yet.
 4. **The 750 ms debounce rule is not implemented in the searched source.** Client debounce alone would not be sufficient; server-side rate/fraud rules must remain authoritative.
 5. **Reporting is incomplete for the proposed sales contract.** The organisation campaign analytics endpoint returns daily impression/click/application counts and campaign data, but no calculated CTR, unique reach/clicks, or CSV/PDF performance-report export was found. Invoice PDFs are not campaign evidence reports.
 6. **Campus attribution is not explicit.** Targeting uses university/program/year/semester; no validated `campus_id` event dimension was found. Do not promise KU-campus-only reporting until attribution is implemented.
 7. **Conversion attribution is not proven end to end.** The discovery API has an application event, but the reviewed tests do not prove outbound-link attribution, coupon/WhatsApp reconciliation, or duplicate conversion handling.
-8. **The frontend integration is not established.** Code search found the backend impression/click routes and the organisation-side campaign console, but did not find a student-facing component calling those routes. Before implementing a viewability timer, identify or build the actual sponsored-card surface and connect its event lifecycle to these endpoints.
-9. **Some tests are source-text assertions.** These are useful regression guards, but do not prove route authorization, real browser viewability, transaction rollback, concurrent billing, or a complete advertiser journey. The UUID validation test passed in B2B CI run 40350611960 on code commit `df1552801186bdb4f01821afb5d9569fe838238f`.
+8. **Browser-to-ledger evidence is still missing.** The sponsored card and API routes are connected in source, but no dedicated B2B browser regression was found. We still need a browser test that observes timer reset, successful viewability billing, click attribution, and retry idempotency against disposable PostgreSQL.
+9. **Some tests are source-text assertions.** These are useful regression guards, but do not prove route authorization, real browser viewability, transaction rollback, concurrent billing, or a complete advertiser journey. UUID validation and the new frontend contract checks passed B2B CI run [40351270116](https://github.com/apexstudying-cmd/prepza/actions/runs/40351270116) on code commit `b79bd0197c2b4dca786e5d9a22c687837105e625`.
 
 ## Recommended product decisions
 
@@ -43,8 +43,9 @@ The B2B contract workflow passed in the 2026-10-26 run set (run [40329949857](ht
 
 ## Required before performance-based ads can be called verified
 
-- [ ] Implement at least 50% visibility for 1.5 continuous seconds in the actual student-facing ad component; reset if it falls below threshold or the tab becomes hidden.
-- [ ] Verify the stable event UUID requirement and missing/malformed-key tests pass in CI; wire the student-facing caller to reuse the same UUID across retries and add endpoint-level retry tests.
+- [x] Implement at least 50% visibility for 1.5 continuous seconds in `SponsoredOpportunityCard`; reset if it falls below threshold or the tab becomes hidden (code commit `b79bd0197c2b4dca786e5d9a22c687837105e625`; browser verification remains open).
+- [x] Require stable UUIDs at the impression/click API boundary and send stable UUIDs from the sponsored card (B2B CI run `40351270116` passed).
+- [ ] Add endpoint/browser retry tests proving a lost response and repeated request cannot debit twice.
 - [ ] Store raw click attempts separately from billable/unique click decisions; define unique-click window and server-side abuse/debounce policy.
 - [ ] Add disposable-PostgreSQL tests for consent/targeting, cross-organisation access, campaign states, low balance, duplicate provider webhooks, concurrency, reversals, and ledger reconciliation.
 - [ ] Add aggregate reports with date/campaign/university filters, reach, raw clicks, unique clicks, CTR with zero-impression handling, spend, and CSV export; verify no student-level data leaks.
