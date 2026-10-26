@@ -1922,3 +1922,8 @@ This is partial verification only. No proof was found for a frontend 50%-visible
 ### B2B stable event-ID hardening follow-up
 
 Added `_normalize_billable_event_id` and changed the impression/click endpoints to reject missing or malformed UUIDs rather than silently generating a new random key per request. Regression test `test_billable_event_id_requires_a_valid_stable_uuid` was introduced first and the B2B workflow failed on that test-only commit as expected; after implementation, B2B contract workflow [40350611960](https://github.com/apexstudying-cmd/prepza/actions/runs/40350611960) passed on code commit `df1552801186bdb4f01821afb5d9569fe838238f`. This hardens retry identity at the backend boundary; frontend UUID reuse and end-to-end duplicate-request billing are still unverified.
+
+
+### B2B sponsored-card viewability follow-up — 2026-10-26
+
+Updated `SponsoredOpportunityCard` in `frontend/src/App.tsx` to require >=50% viewport intersection for 1.5 continuous seconds, cancel the timer when the card goes offscreen, and reset the timer when the document becomes hidden. Clicking no longer directly calls impression recording; clicks now send a stable UUID, and backend impression/click routes reject missing or malformed UUIDs. B2B contract workflow [40351270116](https://github.com/apexstudying-cmd/prepza/actions/runs/40351270116) and Frontend Build [40351270131](https://github.com/apexstudying-cmd/prepza/actions/runs/40351270131) both passed on code commit `b79bd0197c2b4dca786e5d9a22c687837105e625`. This is code/build evidence, not a browser-to-ledger proof; no dedicated B2B browser regression has yet validated the 1.5-second timer or exactly-once ledger debit.
