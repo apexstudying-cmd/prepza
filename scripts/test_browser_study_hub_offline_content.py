@@ -1110,6 +1110,13 @@ def main() -> int:
                             f"wait_error={type(exc).__name__}: {exc}"
                         ) from exc
                     print(f"PASS: existing online {type_label} opens for {document_title}")
+                    if type_label == "Mind Map":
+                        page.wait_for_timeout(1500)
+                        print(
+                            f"PRE-BACK-MINDMAP nav={_nav_state(page)} "
+                            f"body={page.locator('body').inner_text(timeout=5000)[:600]!r}",
+                            flush=True,
+                        )
                     page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
                     # Reader Back returns to the document screen; its My Study
                     # control returns to the Study Materials documents tab.
