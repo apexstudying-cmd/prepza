@@ -577,6 +577,11 @@ def login(page, fixture: dict) -> None:
 
 def ensure_study_materials_documents_tab(page) -> None:
     """Wait for a real Home-or-My-Study surface, then use UI navigation if needed."""
+    print(
+        f"NAV-AFTER-BACK nav={_nav_state(page)} "
+        f"buttons={[t.strip() for t in page.locator('button').all_inner_texts() if t.strip()][:12]}",
+        flush=True,
+    )
     try:
         _wait_documents_or_my_study(page)
     except Exception as exc:
