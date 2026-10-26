@@ -8,6 +8,7 @@ on:
       - 'scripts/test_browser_study_hub_offline_content.py'
       - 'frontend/src/**'
       - 'frontend/public/**'
+      - 'tools/**'
       - 'app.py'
       - 'alembic/**'
       - 'schema/local_baseline.sql'
