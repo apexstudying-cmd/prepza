@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from b2b_campaign_metering import _unit_price_minor, record_billable_event
+from discovery_billing import _normalize_billable_event_id
 
 
 def campaign(**overrides):
@@ -125,3 +126,11 @@ def test_click_guard_happens_before_price_and_ledger_work():
     price = source.index("price = _unit_price_minor")
     ledger = source.index("delivery_", price)
     assert guard < price < ledger
+
+
+def test_billable_event_id_requires_a_valid_stable_uuid():
+    assert _normalize_billable_event_id("c7e1f4b1-5c3e-4e4b-a9d7-9b90d1f4a001") == "c7e1f4b1-5c3e-4e4b-a9d7-9b90d1f4a001"
+    assert _normalize_billable_event_id(None) is None
+    assert _normalize_billable_event_id("   ") is None
+    assert _normalize_billable_event_id("not-a-uuid") is None
+    assert _normalize_billable_event_id("c7e1f4b1-5c3e-4e4b-a9d7-9b90d1f4a001" + "x") is None
