@@ -1892,3 +1892,14 @@ The focused contract test, new Docker build, and full browser regression have **
 The [Existing Database Migration Rehearsal](https://github.com/apexstudying-cmd/prepza/actions/runs/40327691259) passed on code commit `4584de061162a5dc010b03847d4d09a7aea81e1c`.
 
 The workflow used an isolated PostgreSQL database and the production app image. It upgraded the schema to prior revision `20261005_chat_attach_source_doc`, seeded a document-content record and generated-material record, upgraded to `20261007_doc_material`, then verified record/content preservation, the current Alembic revision, nullable `material_id` for pre-existing rows, and the new foreign-key relationship. The CI database was torn down after completion. This is an explicit populated revision-to-revision upgrade test; it is not a restore of a production snapshot and does not by itself complete the provider or recovery gates.
+
+
+## 2026-10-26 — Real Redis worker reconnect regression
+
+[Redis Worker Reconnect Recovery run 3](https://github.com/apexstudying-cmd/prepza/actions/runs/40329059178) passed on code commit `9d041e5c60a2bff2ea6379acae61d51e780afd65`.
+
+The workflow initialized the isolated CI SQLite runtime schema, started Redis 8 in a disposable Docker container, ran the real `chat_event_worker.py`, restarted Redis while the worker was active, then verified a new stream event was published to its expected conversation and acknowledged.
+
+The first run failed with a real regression: `redis.ConnectionError` from `_claim_stale_messages()` escaped the loop and terminated the worker. The queue code was changed so transient connection/time-out errors in that reclaim attempt are treated as recoverable; the worker then reached the existing read/retry path and recovered. The updated test passed after the fix.
+
+This is evidence for the exercised Redis worker reconnect path only. It does not establish Redis production monitoring/persistence policy, all worker failure modes, provider/webhook idempotency, or production readiness.
