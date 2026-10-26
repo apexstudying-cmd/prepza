@@ -1878,3 +1878,8 @@ This closes the specific CI gate for a basic application smoke test against rest
 ## 2026-10-26 — B2B monetization gate remains open
 
 See `docs/qa/B2B_MONETIZATION_AUDIT_2026-10-26.md`. The current B2B contract workflow passing is evidence for its implemented checks, not the whole advertising product. Open gaps include viewability qualification, stable retry keys, raw-versus-unique clicks, server-side debounce/abuse handling, campus attribution, CTR/CSV campaign reports, and end-to-end conversion evidence. `qa/release_status.json` tracks `b2b_monetization_integrity` as IN_PROGRESS. Keep release BLOCKED until the end-to-end gate passes; do not invoice performance metrics that have not been verified.
+
+
+### B2B event IDs — follow-up verification
+
+The backend impression/click endpoints now reject missing/malformed event UUIDs instead of generating a random event key per request. B2B contract workflow [40350611960](https://github.com/apexstudying-cmd/prepza/actions/runs/40350611960) passed on code commit `df1552801186bdb4f01821afb5d9569fe838238f`; the test-only commit failed before the implementation as expected. Frontend UUID reuse and full browser-to-ledger retry proof remain open, so the overall `b2b_monetization_integrity` gate stays IN_PROGRESS.
