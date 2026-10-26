@@ -1,0 +1,74 @@
+name: Redis Worker Reconnect Recovery
+
+'on':
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/redis-worker-reconnect.yml'
+      - 'scripts/test_redis_chat_worker_reconnect.py'
+      - 'scripts/init_ci_db.py'
+      - 'chat_event_worker.py'
+      - 'chat_event_queue.py'
+      - 'requirements.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  redis-worker-reconnect:
+    name: Verify real chat worker after Redis restart
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: sqlite:////tmp/prepza-ci-redis-reconnect.sqlite
+      SECRET_KEY: prepza-ci-redis-reconnect-only
+      REDIS_URL: redis://127.0.0.1:6379/0
+      PREPZA_REDIS_CONTAINER: prepza-redis-reconnect
+    steps:
+      - name: Check out exact commit under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Assert exact commit under test
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install application dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Initialize isolated SQLite runtime schema
+        run: python scripts/init_ci_db.py
+
+      - name: Start disposable Redis with durable test state
+        run: |
+          docker run --detach --name "${PREPZA_REDIS_CONTAINER}" \
+            --publish 6379:6379 redis:8-alpine \
+            redis-server --appendonly yes --appendfsync always
+          for attempt in $(seq 1 30); do
+            if docker exec "${PREPZA_REDIS_CONTAINER}" redis-cli ping | grep -q PONG; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "${PREPZA_REDIS_CONTAINER}"
+          exit 1
+
+      - name: Verify worker reconnect and delivery after Redis restart
+        run: python scripts/test_redis_chat_worker_reconnect.py
+
+      - name: Collect worker/Redis diagnostics on failure
+        if: failure()
+        run: |
+          docker logs "${PREPZA_REDIS_CONTAINER}" || true
+          docker ps -a || true
+
+      - name: Remove disposable Redis
+        if: always()
+        run: docker rm --force "${PREPZA_REDIS_CONTAINER}" || true
