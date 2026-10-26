@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-26",
-  "last_verified_commit": "4584de061162a5dc010b03847d4d09a7aea81e1c",
+  "last_verified_commit": "9d041e5c60a2bff2ea6379acae61d51e780afd65",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -53,7 +53,7 @@
     {
       "id": "realtime_chat",
       "status": "PASS",
-      "evidence": "focused realtime/calling/runtime and Redis cross-process evidence green"
+      "evidence": "Realtime Runtime Regression passed on current code commit 9d041e5c60a2bff2ea6379acae61d51e780afd65 (run 40329059505). Separate real-Redis stream worker reconnect recovery passed on the same commit (run 40329059178): after a Redis restart, worker stayed alive, delivered a chat event to the expected conversation and acknowledged the stream entry."
     },
     {
       "id": "browser_webrtc_media",
@@ -124,15 +124,20 @@
       "id": "admin_study_time_visibility",
       "status": "PASS",
       "evidence": "User-executed scripts/test_browser_admin_study_time.py on 2026-10-08: 5 passed in 117.11s. All five browser cases reached their Study Time assertions; localhost browser authentication/navigation is now aligned with the other real-browser gates."
+    },
+    {
+      "id": "redis_worker_failure_recovery",
+      "status": "PASS",
+      "evidence": "GitHub Actions Redis Worker Reconnect Recovery run 3 passed on 2026-10-26 at code commit 9d041e5c60a2bff2ea6379acae61d51e780afd65. The test used the real chat_event_worker.py and Redis 8 with durable disposable test state, restarted Redis while the worker was active, then verified the worker stayed alive, published a post-restart stream event to the correct conversation, and acknowledged it. The first run exposed and reproduced an unhandled ConnectionError in _claim_stale_messages; chat_event_queue.py now treats redis timeout/connection errors in this reclaim path as transient."
     }
   ],
   "next_actions": [
-    "Perform controlled external-provider verification using test/sandbox credentials for Paystack, SES, OpenAI, R2 and the configured GPU/audio provider. Never trigger a live payment or paid GPU workload without explicit approval; if safe credentials or staging configuration are unavailable, leave the gate NOT_TESTED and record the blocker.",
-    "Run remaining recovery-specific checks not covered by passing workflows, especially Redis/worker failure and reconnect, provider/webhook retry/idempotency, and backup restore followed by application smoke tests.",
-    "After provider and recovery gates are green, run the clean full regression from a disposable PostgreSQL database plus focused realtime, E2EE, calling, migration, backup/restore and browser regressions; preserve exact commands, commit SHA and output.",
-    "Complete the documentation audit and source-grounded architecture walkthrough/diagram. Reconcile NEXT_STEPS, actualtest, notes and release_status.json to the same verified runtime code revision.",
+    "Perform controlled external-provider verification using sandbox/test credentials for Paystack, SES, OpenAI, R2 and the configured GPU/audio provider. Never trigger a live payment or paid GPU workload without explicit approval; if safe credentials or staging configuration are unavailable, leave the gate NOT_TESTED and record the blocker.",
+    "Complete remaining recovery checks not covered by the passing Redis worker test: provider/webhook retry and idempotency with safe test fixtures, plus restoring a PostgreSQL backup and running application smoke tests against the restored database. The prior backup/restore schema rehearsal is not a substitute for the application smoke test.",
+    "After provider and remaining recovery gates are green, run the clean full regression from a disposable PostgreSQL database plus focused realtime, E2EE, calling, migration, backup/restore and browser regressions; preserve exact commands, commit SHA and output.",
+    "Complete the documentation audit and source-grounded architecture walkthrough/diagram. Reconcile NEXT_STEPS, actualtest, notes and release_status.json to the verified runtime code revision.",
     "Keep the 400-user performance test DEFERRED until functional, browser, recovery and CI gates are green. Do not deploy or freeze release while any required gate remains NOT_TESTED or IN_PROGRESS."
   ],
-  "current_main_commit": "4584de061162a5dc010b03847d4d09a7aea81e1c",
-  "verification_note": "Updated 2026-10-26 from GitHub Actions evidence. The responsive/offline release workflow passed on runtime code commit 6c88a908c5088d23f869d6a564b9ff1c90b8caed. The new Existing Database Migration Rehearsal and the current-main release/contract check set passed on 4584de061162a5dc010b03847d4d09a7aea81e1c. The migration rehearsal upgraded a populated previous-Alembic-revision database to head and proved existing document and generated-material rows persisted, legacy rows remained valid with nullable material_id, and the new FK worked. Mobile responsive visual, tested cross-system journeys, offline generated-artifact browser journey, migration rehearsal and CI release workflows are PASS. Controlled external-provider verification, remaining recovery-specific checks, final clean regression, and full source-grounded architecture/documentation audit remain outstanding. Shared streak remains intentionally NOT_RELEASED; 400-user performance remains DEFERRED. Release remains BLOCKED and no freeze/deployment is claimed."
+  "current_main_commit": "9d041e5c60a2bff2ea6379acae61d51e780afd65",
+  "verification_note": "Updated 2026-10-26 using GitHub Actions evidence. Responsive/offline release browser workflow passed on runtime code commit 6c88a908c5088d23f869d6a564b9ff1c90b8caed. The populated existing-database migration rehearsal passed on 4584de061162a5dc010b03847d4d09a7aea81e1c. After adding a real Redis outage/reconnect regression, the runtime fix commit 9d041e5c60a2bff2ea6379acae61d51e780afd65 passed the reconnect workflow plus Realtime Runtime Regression, Frontend Build, Screen Loading Audit, E2EE Security Regression, Release QA Trace and related contracts. The failure that motivated the fix was reproduced: Redis ConnectionError during _claim_stale_messages terminated the worker before the existing xreadgroup recovery handler. The fix and test now pass. Mobile responsive visual, covered cross-system journeys, offline artifacts, existing-revision migration rehearsal, Redis worker reconnect and CI gates are PASS. Controlled external-provider verification, provider/webhook retry/idempotency, restored-database application smoke tests, final clean regression and full source-grounded architecture/documentation audit remain outstanding. Shared streak remains intentionally NOT_RELEASED; 400-user performance remains DEFERRED. Release remains BLOCKED and no freeze/deployment is claimed."
 }
