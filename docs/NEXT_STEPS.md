@@ -71,9 +71,9 @@ Rule: require evidence before marking production work complete.
 - [ ] Secure database access
 - [ ] Configure secrets
 - [ ] Back up before schema changes
-- [ ] Restore backup into disposable database
-- [ ] Verify restored schema/data
-- [ ] Run application smoke tests against restored data
+- [x] Restore backup into disposable PostgreSQL 17 database in GitHub Actions
+- [x] Verify restored schema/data and Alembic state
+- [x] Run Flask application smoke tests against restored data (`/health`, database-backed `/universities`, SQLAlchemy sentinel read) — [PostgreSQL Backup Restore Rehearsal run 8](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949883), 2026-10-26
 - [ ] Run migration procedure against production-like database
 - [ ] Verify final migration revision
 - [ ] Document rollback/recovery
