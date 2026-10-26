@@ -201,6 +201,34 @@ jobs:
           test "$SOURCE_TABLE_COUNT" = "$RESTORED_TABLE_COUNT"
           echo "PostgreSQL backup/restore rehearsal passed: Alembic state, sentinel data, and public table count match."
 
+      - name: Smoke-test the application against restored data
+        env:
+          DATABASE_URL: postgresql+psycopg2://prepza:prepza@127.0.0.1:5432/prepza_restore
+          SECRET_KEY: prepza-restore-ci-only
+          BASE_URL: https://example.invalid
+          FLASK_TESTING: "1"
+        run: |
+          python - <<'PY'
+          from sqlalchemy import text
+          from app import app, db
+
+          with app.app_context():
+              marker = db.session.execute(
+                  text("SELECT marker FROM public.backup_restore_probe WHERE id = 1")
+              ).scalar_one()
+              assert marker == "prepza-backup-restore-ok", marker
+
+          client = app.test_client()
+          health = client.get("/health")
+          assert health.status_code == 200, health.get_data(as_text=True)
+          universities = client.get("/universities")
+          assert universities.status_code == 200, universities.get_data(as_text=True)
+          assert isinstance(universities.get_json(), list), universities.get_json()
+          print("PASS: application connected to the restored database")
+          print("PASS: restored sentinel row is readable through SQLAlchemy")
+          print("PASS: /health and database-backed /universities smoke requests succeeded")
+          PY
+
       - name: Clean up disposable restore database
         if: always()
         run: |
