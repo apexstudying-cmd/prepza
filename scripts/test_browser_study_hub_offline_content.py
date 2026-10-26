@@ -655,7 +655,16 @@ def click_study_materials(page) -> None:
     last = None
     for _ in range(4):
         try:
-            wait_for_study_materials_button(page)
+            try:
+                wait_for_study_materials_button(page)
+            except Exception:
+                print(
+                    f"STUDY-MATERIALS-MISSING url={page.url} nav={_nav_state(page)} "
+                    f"buttons={[t.strip() for t in page.locator('button').all_inner_texts() if t.strip()][:15]} "
+                    f"body={page.locator('body').inner_text(timeout=5000)[:400]!r}",
+                    flush=True,
+                )
+                raise
             page.get_by_role("button", name="Study Materials", exact=True).click(timeout=4000)
             return
         except Exception as exc:
