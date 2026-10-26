@@ -1866,3 +1866,10 @@ We changed `chat_event_queue.py` to treat transient Redis timeout/connection err
 ### What remains
 
 This closes only the exercised worker/Redis reconnect path. Controlled provider tests (Paystack, SES, OpenAI, R2 and the GPU/audio provider), webhook retry/idempotency, restore plus application smoke tests, final clean regression and the source-grounded architecture/documentation audit remain outstanding. Release stays blocked and deployment remains prohibited.
+
+
+## 24. Restored PostgreSQL application smoke test — 2026-10-26
+
+The [PostgreSQL Backup Restore Rehearsal run 8](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949883) passed on commit `69cc6e6a65edc2897ebc5e99dac57f963e8f5d75`. Both jobs passed: the existing-database upgrade/data-preservation rehearsal and the custom-format backup/restore rehearsal. The restore job restored a PostgreSQL 17 custom-format dump into a new disposable database, checked matching Alembic state, public-table count and sentinel data, then configured Flask against the restored database and passed the SQLAlchemy sentinel read plus `/health` and database-backed `/universities` requests. The restore database was removed after the run.
+
+This closes the specific CI gate for a basic application smoke test against restored data. It does not prove a real production backup, external provider behavior, or end-to-end recovery of provider/webhook queues. Release remains BLOCKED. The latest commit includes verification/workflow changes; prior runtime/browser evidence remains associated with its exact recorded commit, not retroactively attributed to this SHA.
