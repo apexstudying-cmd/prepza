@@ -24,13 +24,13 @@ The B2B contract workflow passed in the 2026-10-26 run set (run [40329949857](ht
 ## Gaps against the proposed model
 
 1. **Viewability is not verified.** The impression endpoint accepts a POST; it does not prove the ad was at least 50% visible for 1.5 continuous seconds. No frontend `IntersectionObserver`/visibility timer was found in the source search. Treat current events as submitted impressions, not independently verified viewable impressions.
-2. **Retry idempotency depends on the caller.** The impression endpoint creates a random key if `event_id` is absent; the click endpoint creates a random key per request. Retrying without reusing a stable event ID can create a different event. Frequency caps reduce abuse but are not transport idempotency.
+2. **Retry idempotency was a backend gap and is now being hardened.** Commit `df1552801186bdb4f01821afb5d9569fe838238f` makes impression and click endpoints require a valid UUID `event_id` and uses it to construct the idempotency key, rather than generating a new random key when it is missing. The focused B2B workflow for this change is still pending verification; the student-facing caller must reuse the same UUID when retrying the same event.
 3. **Raw and unique clicks are not separate metrics.** Current counters/analytics expose delivered clicks; no distinct unique-click metric was found. Do not promise “50 raw clicks / 1 unique click” yet.
 4. **The 750 ms debounce rule is not implemented in the searched source.** Client debounce alone would not be sufficient; server-side rate/fraud rules must remain authoritative.
 5. **Reporting is incomplete for the proposed sales contract.** The organisation campaign analytics endpoint returns daily impression/click/application counts and campaign data, but no calculated CTR, unique reach/clicks, or CSV/PDF performance-report export was found. Invoice PDFs are not campaign evidence reports.
 6. **Campus attribution is not explicit.** Targeting uses university/program/year/semester; no validated `campus_id` event dimension was found. Do not promise KU-campus-only reporting until attribution is implemented.
 7. **Conversion attribution is not proven end to end.** The discovery API has an application event, but the reviewed tests do not prove outbound-link attribution, coupon/WhatsApp reconciliation, or duplicate conversion handling.
-8. **Some tests are source-text assertions.** These are useful regression guards, but do not prove route authorization, real browser viewability, transaction rollback, concurrent billing, or a complete advertiser journey.
+8. **Some tests are source-text assertions.** These are useful regression guards, but do not prove route authorization, real browser viewability, transaction rollback, concurrent billing, or a complete advertiser journey. The new UUID validation test also needs its B2B CI run to pass before it is treated as verified.
 
 ## Recommended product decisions
 
@@ -43,7 +43,7 @@ The B2B contract workflow passed in the 2026-10-26 run set (run [40329949857](ht
 ## Required before performance-based ads can be called verified
 
 - [ ] Implement at least 50% visibility for 1.5 continuous seconds in the actual student-facing ad component; reset if it falls below threshold or the tab becomes hidden.
-- [ ] Require stable event UUID/idempotency keys; test missing/malformed keys and network retries.
+- [ ] Verify the stable event UUID requirement and missing/malformed-key tests pass in CI; wire the student-facing caller to reuse the same UUID across retries and add endpoint-level retry tests.
 - [ ] Store raw click attempts separately from billable/unique click decisions; define unique-click window and server-side abuse/debounce policy.
 - [ ] Add disposable-PostgreSQL tests for consent/targeting, cross-organisation access, campaign states, low balance, duplicate provider webhooks, concurrency, reversals, and ledger reconciliation.
 - [ ] Add aggregate reports with date/campaign/university filters, reach, raw clicks, unique clicks, CTR with zero-impression handling, spend, and CSV export; verify no student-level data leaks.
