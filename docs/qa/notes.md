@@ -1883,3 +1883,8 @@ See `docs/qa/B2B_MONETIZATION_AUDIT_2026-10-26.md`. The current B2B contract wor
 ### B2B event IDs — follow-up verification
 
 The backend impression/click endpoints now reject missing/malformed event UUIDs instead of generating a random event key per request. B2B contract workflow [40350611960](https://github.com/apexstudying-cmd/prepza/actions/runs/40350611960) passed on code commit `df1552801186bdb4f01821afb5d9569fe838238f`; the test-only commit failed before the implementation as expected. Frontend UUID reuse and full browser-to-ledger retry proof remain open, so the overall `b2b_monetization_integrity` gate stays IN_PROGRESS.
+
+
+### B2B viewability code follow-up — 2026-10-26
+
+The sponsored opportunity card now requires >=50% visibility for 1.5 continuous seconds and resets the timer when offscreen or the document is hidden; a click no longer forces an impression, and the click route receives a stable UUID. Backend impression/click endpoints require valid UUIDs. B2B contract workflow [40351270116](https://github.com/apexstudying-cmd/prepza/actions/runs/40351270116) and Frontend Build [40351270131](https://github.com/apexstudying-cmd/prepza/actions/runs/40351270131) passed on runtime code commit `b79bd0197c2b4dca786e5d9a22c687837105e625`. Browser-to-ledger viewability/retry tests remain outstanding, so the B2B monetization gate stays IN_PROGRESS.
