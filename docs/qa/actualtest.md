@@ -1910,3 +1910,10 @@ This is evidence for the exercised Redis worker reconnect path only. It does not
 The [PostgreSQL Backup Restore Rehearsal run 8](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949883) passed on commit `69cc6e6a65edc2897ebc5e99dac57f963e8f5d75`. Both jobs passed: the existing-database upgrade/data-preservation rehearsal and the custom-format backup/restore rehearsal. The restore job restored a PostgreSQL 17 custom-format dump into a new disposable database, checked matching Alembic state, public-table count and sentinel data, then configured Flask against the restored database and passed the SQLAlchemy sentinel read plus `/health` and database-backed `/universities` requests. The restore database was removed after the run.
 
 This closes the specific CI gate for a basic application smoke test against restored data. It does not prove a real production backup, external provider behavior, or end-to-end recovery of provider/webhook queues. Release remains BLOCKED. The latest commit includes verification/workflow changes; prior runtime/browser evidence remains associated with its exact recorded commit, not retroactively attributed to this SHA.
+
+
+## 2026-10-26 — B2B monetization audit
+
+Source/test audit: `docs/qa/B2B_MONETIZATION_AUDIT_2026-10-26.md`. Existing B2B contract workflow run [40329949857](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949857) passed on code commit `69cc6e6a65edc2897ebc5e99dac57f963e8f5d75`. Tests cover billing primitives including frozen price math, click-without-impression rejection, same-key replay, frequency-cap/locking contract, payment-signature/refund contracts; broader disposable PostgreSQL QA exercises prepaid billing.
+
+This is partial verification only. No proof was found for a frontend 50%-visible/1.5-second viewability timer, separate raw/unique click metrics, 750ms debounce, explicit campus attribution, calculated CTR/CSV campaign reports, or a complete browser-to-ledger advertiser journey. The B2B monetization release gate is IN_PROGRESS, not PASS; no live-provider verification is implied.
