@@ -1838,3 +1838,12 @@ Related current-commit checks also passed: [Frontend Build](https://github.com/a
 ### Next gate
 
 Prioritize a representative existing-database migration rehearsal. A fresh database bootstrap is already exercised by CI but is not a substitute for upgrading a populated prior-version schema and checking its existing records and constraints.
+
+
+## 2026-10-26 — Existing-database migration rehearsal passed
+
+GitHub Actions [Existing Database Migration Rehearsal run 1](https://github.com/apexstudying-cmd/prepza/actions/runs/40327691259) passed on code commit `4584de061162a5dc010b03847d4d09a7aea81e1c`.
+
+The workflow built the production app image, migrated disposable PostgreSQL to prior revision `20261005_chat_attach_source_doc`, seeded existing document-content and generated-material rows, then upgraded to `20261007_doc_material`. It verified that old record contents survived, legacy rows remained valid with NULL `material_id`, and the new foreign-key relationship accepted a valid material link.
+
+A fresh bootstrap proves the schema can be created; a populated revision-to-revision rehearsal additionally checks upgrade preservation. The rehearsal used deterministic CI fixtures, not a production snapshot. Provider checks, remaining recovery testing, final regression and the full architecture/documentation audit still block release. No deployment was triggered.
