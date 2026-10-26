@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-26",
-  "last_verified_commit": "9d041e5c60a2bff2ea6379acae61d51e780afd65",
+  "last_verified_commit": "69cc6e6a65edc2897ebc5e99dac57f963e8f5d75",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -73,7 +73,7 @@
     {
       "id": "storage_backup_restore",
       "status": "PASS",
-      "evidence": "GitHub Actions PostgreSQL 17 disposable rehearsal on c8da8373: custom pg_dump, pg_restore into a fresh database, matching Alembic version, sentinel row and public-table count."
+      "evidence": "GitHub Actions PostgreSQL Backup Restore Rehearsal run 8 passed on main commit 69cc6e6a65edc2897ebc5e99dac57f963e8f5d75 (2026-10-26): PostgreSQL 17 custom-format pg_dump, pg_restore into a new disposable database, matching Alembic version and public-table count, sentinel row preserved, then Flask application connected to restored data and passed SQLAlchemy sentinel read plus /health and database-backed /universities smoke requests. The separate existing-database upgrade job also passed in the same workflow run."
     },
     {
       "id": "cross_system_journeys",
@@ -93,7 +93,7 @@
     {
       "id": "clean_full_regression",
       "status": "NOT_TESTED",
-      "evidence": "Final clean-environment regression must run after remaining gates"
+      "evidence": "NOT YET RUN against the latest main commit after the restored-database smoke-test change and provider/recovery follow-ups; schedule only after those gates are resolved."
     },
     {
       "id": "external_provider_verification",
@@ -133,11 +133,11 @@
   ],
   "next_actions": [
     "Perform controlled external-provider verification using sandbox/test credentials for Paystack, SES, OpenAI, R2 and the configured GPU/audio provider. Never trigger a live payment or paid GPU workload without explicit approval; if safe credentials or staging configuration are unavailable, leave the gate NOT_TESTED and record the blocker.",
-    "Complete remaining recovery checks not covered by the passing Redis worker test: provider/webhook retry and idempotency with safe test fixtures, plus restoring a PostgreSQL backup and running application smoke tests against the restored database. The prior backup/restore schema rehearsal is not a substitute for the application smoke test.",
-    "After provider and remaining recovery gates are green, run the clean full regression from a disposable PostgreSQL database plus focused realtime, E2EE, calling, migration, backup/restore and browser regressions; preserve exact commands, commit SHA and output.",
-    "Complete the documentation audit and source-grounded architecture walkthrough/diagram. Reconcile NEXT_STEPS, actualtest, notes and release_status.json to the verified runtime code revision.",
+    "Complete provider/webhook retry and idempotency checks with safe fixtures, including signature rejection, duplicate delivery, and entitlement transition behavior; do not invoke live payment or billable GPU operations without explicit approval.",
+    "After provider and recovery gates are green, run the clean full regression from a disposable PostgreSQL database plus focused realtime, E2EE, calling, migration, backup/restore and browser regressions; preserve exact commands, commit SHA and output.",
+    "Complete the documentation audit and source-grounded architecture walkthrough/diagram. Reconcile NEXT_STEPS, actualtest, notes and release_status.json to the verified runtime code revision and label historical evidence by exact commit.",
     "Keep the 400-user performance test DEFERRED until functional, browser, recovery and CI gates are green. Do not deploy or freeze release while any required gate remains NOT_TESTED or IN_PROGRESS."
   ],
-  "current_main_commit": "9d041e5c60a2bff2ea6379acae61d51e780afd65",
-  "verification_note": "Updated 2026-10-26 using GitHub Actions evidence. Responsive/offline release browser workflow passed on runtime code commit 6c88a908c5088d23f869d6a564b9ff1c90b8caed. The populated existing-database migration rehearsal passed on 4584de061162a5dc010b03847d4d09a7aea81e1c. After adding a real Redis outage/reconnect regression, the runtime fix commit 9d041e5c60a2bff2ea6379acae61d51e780afd65 passed the reconnect workflow plus Realtime Runtime Regression, Frontend Build, Screen Loading Audit, E2EE Security Regression, Release QA Trace and related contracts. The failure that motivated the fix was reproduced: Redis ConnectionError during _claim_stale_messages terminated the worker before the existing xreadgroup recovery handler. The fix and test now pass. Mobile responsive visual, covered cross-system journeys, offline artifacts, existing-revision migration rehearsal, Redis worker reconnect and CI gates are PASS. Controlled external-provider verification, provider/webhook retry/idempotency, restored-database application smoke tests, final clean regression and full source-grounded architecture/documentation audit remain outstanding. Shared streak remains intentionally NOT_RELEASED; 400-user performance remains DEFERRED. Release remains BLOCKED and no freeze/deployment is claimed."
+  "current_main_commit": "69cc6e6a65edc2897ebc5e99dac57f963e8f5d75",
+  "verification_note": "Updated 2026-10-26 against main commit 69cc6e6a65edc2897ebc5e99dac57f963e8f5d75. Prior evidence remains tied to the exact commits/runs recorded per gate. New PostgreSQL Backup Restore Rehearsal run 8 passed on this commit, including application smoke requests against the restored database; the existing-database upgrade job in the same workflow passed. Redis worker recovery and runtime regressions passed on 9d041e5c60a2bff2ea6379acae61d51e780afd65; responsive/offline browser regression passed on 6c88a908c5088d23f869d6a564b9ff1c90b8caed. Latest main includes test/workflow changes after those runtime commits; do not imply every historical workflow ran on 69cc6e6a. Controlled external-provider verification, provider/webhook retry/idempotency, final clean regression, and full source-grounded architecture/documentation audit remain outstanding. Shared streak remains intentionally NOT_RELEASED; 400-user performance remains DEFERRED. Release remains BLOCKED; no release freeze or production deployment is authorized."
 }
