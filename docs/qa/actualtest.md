@@ -1903,3 +1903,10 @@ The workflow initialized the isolated CI SQLite runtime schema, started Redis 8 
 The first run failed with a real regression: `redis.ConnectionError` from `_claim_stale_messages()` escaped the loop and terminated the worker. The queue code was changed so transient connection/time-out errors in that reclaim attempt are treated as recoverable; the worker then reached the existing read/retry path and recovered. The updated test passed after the fix.
 
 This is evidence for the exercised Redis worker reconnect path only. It does not establish Redis production monitoring/persistence policy, all worker failure modes, provider/webhook idempotency, or production readiness.
+
+
+## 24. Restored PostgreSQL application smoke test — 2026-10-26
+
+The [PostgreSQL Backup Restore Rehearsal run 8](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949883) passed on commit `69cc6e6a65edc2897ebc5e99dac57f963e8f5d75`. Both jobs passed: the existing-database upgrade/data-preservation rehearsal and the custom-format backup/restore rehearsal. The restore job restored a PostgreSQL 17 custom-format dump into a new disposable database, checked matching Alembic state, public-table count and sentinel data, then configured Flask against the restored database and passed the SQLAlchemy sentinel read plus `/health` and database-backed `/universities` requests. The restore database was removed after the run.
+
+This closes the specific CI gate for a basic application smoke test against restored data. It does not prove a real production backup, external provider behavior, or end-to-end recovery of provider/webhook queues. Release remains BLOCKED. The latest commit includes verification/workflow changes; prior runtime/browser evidence remains associated with its exact recorded commit, not retroactively attributed to this SHA.
