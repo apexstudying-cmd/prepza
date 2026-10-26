@@ -157,6 +157,17 @@ def main() -> int:
             raise AssertionError(
                 "worker did not publish a queued chat event after Redis recovered"
             )
+
+        # Publication happens inside the handler just before XACK. Allow the
+        # worker's acknowledgement to complete instead of racing that boundary.
+        ack_deadline = time.time() + 5
+        while time.time() < ack_deadline and _pending_count(client, stream, group) != 0:
+            if worker.poll() is not None:
+                output = worker.stdout.read() if worker.stdout else ""
+                raise AssertionError(
+                    f"chat worker exited before acknowledging the event: {output}"
+                )
+            time.sleep(0.05)
         if _pending_count(client, stream, group) != 0:
             raise AssertionError("worker published the event but did not acknowledge it")
 
