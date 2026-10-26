@@ -81,6 +81,11 @@ def _claim_stale_messages(client) -> list[tuple[str, dict[str, str]]]:
         # Older Redis-compatible services may not expose XAUTOCLAIM. In that
         # case the entry remains pending and can be reclaimed operationally.
         return []
+    except (redis.TimeoutError, redis.ConnectionError):
+        # Redis can restart between loops. Treat failure to reclaim stale
+        # messages as transient, then let consume_forever's read path retry
+        # against the connection pool rather than terminating the worker.
+        return []
 
     if not result:
         return []
