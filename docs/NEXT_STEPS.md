@@ -544,9 +544,11 @@ The first run reproduced a real bug: `_claim_stale_messages()` let a Redis conne
 
 Audit: `docs/qa/B2B_MONETIZATION_AUDIT_2026-10-26.md`. Existing prepaid ledger, frozen pricing, consent/eligibility checks, frequency caps, keyed-event replay, and payment/refund contract checks are useful controls. B2B contract CI is not full advertiser-engine verification.
 
-- [ ] Browser-tested 50%-visible for 1.5 continuous seconds impression qualification, resetting when hidden/offscreen.
+- [x] Implement 50%-visible for 1.5 continuous seconds impression qualification in `SponsoredOpportunityCard`, resetting when hidden/offscreen (code commit `b79bd0197c2b4dca786e5d9a22c687837105e625`).
+- [ ] Browser-test timer reset and prove the resulting billable event reaches the disposable PostgreSQL ledger exactly once.
 - [x] Backend requires a valid stable UUID event ID for impression/click submissions; B2B CI run 40350611960 passed the UUID validation test on code commit df1552801186bdb4f01821afb5d9569fe838238f.
 - [ ] Wire the student-facing caller to reuse one UUID across retries and add endpoint/browser tests for network retries and duplicate billing.
+- [x] Require UUID event IDs in backend impression/click routes and send stable impression/click IDs from the sponsored card (B2B workflow run `40351270116` passed).
 - [ ] Raw click attempts separate from unique/billable clicks; define server-side debounce/abuse policy.
 - [ ] Campaign report with CTR, unique reach/clicks, date/university filters, and CSV export without student-level identifiers.
 - [ ] Define and verify campus attribution and outbound conversion attribution.
