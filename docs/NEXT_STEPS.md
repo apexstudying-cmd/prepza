@@ -538,3 +538,17 @@ The [Redis Worker Reconnect Recovery run 3](https://github.com/apexstudying-cmd/
 The test started the real `chat_event_worker.py`, restarted a disposable Redis 8 container while the worker was active, then verified the worker stayed alive, published a post-restart chat event to the right conversation, and acknowledged the Redis Stream entry.
 
 The first run reproduced a real bug: `_claim_stale_messages()` let a Redis connection-reset error escape, so the process died before reaching the existing retry handler around `XREADGROUP`. The fix catches transient connection/time-out errors in that stale-message reclaim path. The regression passed after the fix. This validates this specific recovery path; provider/webhook idempotency and restore-plus-application-smoke testing remain open.
+
+
+## B2B advertising monetization verification — 2026-10-26
+
+Audit: `docs/qa/B2B_MONETIZATION_AUDIT_2026-10-26.md`. Existing prepaid ledger, frozen pricing, consent/eligibility checks, frequency caps, keyed-event replay, and payment/refund contract checks are useful controls. B2B contract CI is not full advertiser-engine verification.
+
+- [ ] Browser-tested 50%-visible for 1.5 continuous seconds impression qualification, resetting when hidden/offscreen.
+- [ ] Stable event IDs for impression/click retries; test missing IDs and repeated network requests.
+- [ ] Raw click attempts separate from unique/billable clicks; define server-side debounce/abuse policy.
+- [ ] Campaign report with CTR, unique reach/clicks, date/university filters, and CSV export without student-level identifiers.
+- [ ] Define and verify campus attribution and outbound conversion attribution.
+- [ ] End-to-end browser-to-ledger tests; rerun B2B workflow and disposable PostgreSQL regression on the resulting SHA.
+
+The `b2b_monetization_integrity` release gate is IN_PROGRESS. Overall release remains BLOCKED until the evidence supports PASS.
