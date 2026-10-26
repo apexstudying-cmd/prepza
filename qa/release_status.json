@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-26",
-  "last_verified_commit": "6c88a908c5088d23f869d6a564b9ff1c90b8caed",
+  "last_verified_commit": "4584de061162a5dc010b03847d4d09a7aea81e1c",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -83,12 +83,12 @@
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "Current-main GitHub Actions run set on 6c88a908c5088d23f869d6a564b9ff1c90b8caed passed on 2026-10-26, including Release Browser and Cross-System Regression run 41, Frontend Build run 2865, E2EE Security Regression run 2974, Realtime Runtime Regression run 2223, Screen Loading Audit run 2086, Release QA Trace and student/chat/admin/B2B/AI/Kokoro contract checks. Release job 121576628770 built production image, migrated disposable PostgreSQL, passed mobile/tablet checks, disposable DB QA and online/offline artifact browser journeys. No deployment performed."
+      "evidence": "Current-main GitHub Actions run set on 4584de061162a5dc010b03847d4d09a7aea81e1c completed successfully on 2026-10-26: Existing Database Migration Rehearsal, Frontend Build, Screen Loading Audit, Realtime Runtime Regression, E2EE Security Regression, Personal Streak Runtime Regression, Release QA Trace, student/chat/admin/B2B/AI/Kokoro contract checks. The responsive/offline release browser workflow also passed at 6c88a908c5088d23f869d6a564b9ff1c90b8caed. Runtime code was unchanged by the later migration-rehearsal script/workflow commits. No deployment performed."
     },
     {
       "id": "existing_database_migration",
-      "status": "NOT_TESTED",
-      "evidence": "Disposable upgrade from a representative existing database still pending"
+      "status": "PASS",
+      "evidence": "GitHub Actions Existing Database Migration Rehearsal run 1 passed on main commit 4584de061162a5dc010b03847d4d09a7aea81e1c (2026-10-26): built the production app image; migrated a disposable database to prior revision 20261005_chat_attach_source_doc; seeded an existing document-content row and generated-material row; upgraded to 20261007_doc_material; verified Alembic head, original content/payload preservation, nullable material_id for legacy rows, and the new material_id foreign-key relationship. Isolated database was removed after the run."
     },
     {
       "id": "clean_full_regression",
@@ -127,13 +127,12 @@
     }
   ],
   "next_actions": [
-    "Run the representative existing-database migration rehearsal: restore a sanitized prior-release database snapshot or construct the documented previous Alembic revision, upgrade to current head, then verify revision, critical schema/index invariants, row counts and representative records. Do not substitute fresh bootstrap or backup/restore-only evidence.",
-    "Perform controlled external-provider verification using sandbox/test credentials for Paystack, SES, OpenAI, R2 and configured GPU/audio provider. Never trigger a live payment or paid GPU workload without explicit approval; if safe credentials/environment are unavailable, leave NOT_TESTED and record the blocker.",
-    "Run recovery-specific checks still not covered by the release workflow, especially Redis/worker failure and reconnect, backup restore plus app smoke tests, and retry/idempotency across provider boundaries.",
-    "After the remaining functional, migration, provider and recovery gates are green, run the clean full regression from a disposable PostgreSQL database plus focused realtime, E2EE, calling, migration, backup/restore and browser regressions; preserve exact commands, commit SHA and output.",
-    "Complete the documentation audit and source-grounded architecture walkthrough/diagram after functional gates are stable. Reconcile notes, actualtest, release_status.json and next-step documentation to the same verified code commit.",
-    "Keep the 400-user performance test DEFERRED until functional, browser, recovery and CI gates are green."
+    "Perform controlled external-provider verification using test/sandbox credentials for Paystack, SES, OpenAI, R2 and the configured GPU/audio provider. Never trigger a live payment or paid GPU workload without explicit approval; if safe credentials or staging configuration are unavailable, leave the gate NOT_TESTED and record the blocker.",
+    "Run remaining recovery-specific checks not covered by passing workflows, especially Redis/worker failure and reconnect, provider/webhook retry/idempotency, and backup restore followed by application smoke tests.",
+    "After provider and recovery gates are green, run the clean full regression from a disposable PostgreSQL database plus focused realtime, E2EE, calling, migration, backup/restore and browser regressions; preserve exact commands, commit SHA and output.",
+    "Complete the documentation audit and source-grounded architecture walkthrough/diagram. Reconcile NEXT_STEPS, actualtest, notes and release_status.json to the same verified runtime code revision.",
+    "Keep the 400-user performance test DEFERRED until functional, browser, recovery and CI gates are green. Do not deploy or freeze release while any required gate remains NOT_TESTED or IN_PROGRESS."
   ],
-  "current_main_commit": "6c88a908c5088d23f869d6a564b9ff1c90b8caed",
-  "verification_note": "Updated 2026-10-26 from GitHub Actions evidence for main code commit 6c88a908c5088d23f869d6a564b9ff1c90b8caed. Release Browser and Cross-System Regression run 41 succeeded: production image build, disposable PostgreSQL/Redis, Alembic migration, mobile/tablet responsive checks, full disposable PostgreSQL QA, online/offline and generated-artifact browser journeys, and screenshot upload. Frontend Build, E2EE Security Regression, Realtime Runtime Regression, Screen Loading Audit, Release QA Trace and related contract workflows also passed on the same SHA. Mobile responsive visual, cross-system journeys covered by the workflow, offline content/artifact replay and CI release workflows are now PASS. Existing-database upgrade, controlled external-provider verification, final clean regression and documentation audit remain outstanding. Release remains BLOCKED; no freeze or deployment is claimed."
+  "current_main_commit": "4584de061162a5dc010b03847d4d09a7aea81e1c",
+  "verification_note": "Updated 2026-10-26 from GitHub Actions evidence. The responsive/offline release workflow passed on runtime code commit 6c88a908c5088d23f869d6a564b9ff1c90b8caed. The new Existing Database Migration Rehearsal and the current-main release/contract check set passed on 4584de061162a5dc010b03847d4d09a7aea81e1c. The migration rehearsal upgraded a populated previous-Alembic-revision database to head and proved existing document and generated-material rows persisted, legacy rows remained valid with nullable material_id, and the new FK worked. Mobile responsive visual, tested cross-system journeys, offline generated-artifact browser journey, migration rehearsal and CI release workflows are PASS. Controlled external-provider verification, remaining recovery-specific checks, final clean regression, and full source-grounded architecture/documentation audit remain outstanding. Shared streak remains intentionally NOT_RELEASED; 400-user performance remains DEFERRED. Release remains BLOCKED and no freeze/deployment is claimed."
 }
