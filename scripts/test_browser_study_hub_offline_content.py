@@ -661,6 +661,7 @@ def click_study_materials(page) -> None:
                 print(
                     f"STUDY-MATERIALS-MISSING url={page.url} nav={_nav_state(page)} "
                     f"buttons={[t.strip() for t in page.locator('button').all_inner_texts() if t.strip()][:15]} "
+                    f"fullbody={page.locator('body').inner_text(timeout=5000)[:1500]!r} "
                     f"body={page.locator('body').inner_text(timeout=5000)[:400]!r}",
                     flush=True,
                 )
@@ -1327,6 +1328,8 @@ def main() -> int:
                     generation_posts.append(request.url)
 
             page.on("request", observe_request)
+            page.on("pageerror", lambda e: print(f"PAGE-ERROR {e}"[:1500], flush=True))
+            page.on("console", lambda m: print(f"CONSOLE-ERROR {m.text}"[:1500], flush=True) if m.type == "error" else None)
             context.set_offline(True)
             page.wait_for_function("() => navigator.onLine === false", timeout=5000)
             page.reload(wait_until="domcontentloaded")
