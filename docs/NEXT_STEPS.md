@@ -1,6 +1,6 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-10-19
+Last updated: 2026-10-26
 Branch: main
 
 Status:
@@ -23,7 +23,7 @@ Rule: require evidence before marking production work complete.
 - The final deep technical app study and complete source-grounded frontend/backend architecture diagram is separately tracked as an unfinished item in Section 20.
 - [x] OpenAI-only provider/dependency cleanup
 - [x] Direct-to-main workflow retained
-- [ ] Re-run full launch-contract CI after latest Alembic/Docker/Study Hub changes
+- [x] Re-run full launch-contract CI after latest Alembic/Docker/Study Hub changes — GitHub Actions passed on code commit `6c88a908c5088d23f869d6a564b9ff1c90b8caed`
 
 ## 2. Local Docker/runtime
 - [x] Align Docker runtime with Python 3.13
@@ -60,6 +60,7 @@ Rule: require evidence before marking production work complete.
 - [x] Prove fresh local bootstrap
 - [~] Reconcile/document historical migrations versus the current Alembic deployment procedure
 - [ ] Test a representative future Alembic migration
+- [ ] Upgrade a representative existing database to current Alembic head and verify schema/data invariants (still a release blocker)
 - [ ] Establish production migration checklist
 - [ ] Test migration procedure against a disposable restored database
 - [ ] Never stamp production/self-hosted DB without independent schema verification
@@ -497,3 +498,20 @@ The fix is now committed on `main`: selected canonical podcast material is fetch
 5. Run `python scripts/test_browser_study_hub_offline_content.py -q` and require exact podcast material identity, descriptor/audio Blob caching, offline replay, offline reload, and no-generation-POST assertions to pass.
 
 This browser gate remains **IN_PROGRESS**, and release remains **BLOCKED**, until the rebuilt runtime passes. Do not use force-click, bypass the online/offline assertions, or claim PASS from source inspection alone.
+
+
+## 21. Release gate update — 2026-10-26
+
+Verified code commit: `6c88a908c5088d23f869d6a564b9ff1c90b8caed`.
+
+The following GitHub Actions evidence is green on this exact code commit:
+
+- [Release Browser and Cross-System Regression run 41](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221821): production Docker image build, disposable PostgreSQL/Redis, Alembic migration, mobile/tablet responsive browser checks, full disposable PostgreSQL QA, online/offline and generated-artifact browser journeys, responsive screenshot upload.
+- [Frontend Build run 2865](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221443).
+- [E2EE Security Regression run 2974](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221387).
+- [Realtime Runtime Regression run 2223](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221275).
+- [Screen Loading Audit run 2086](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221236), plus Release QA Trace and student/chat/admin/B2B/AI/Kokoro contract checks.
+
+Newly evidenced PASS gates: mobile responsive visual, the cross-system journeys covered by this workflow, Study Hub offline content/generated-artifact browser journey, and release CI workflows. This is CI/browser evidence, not proof of every physical device or every live provider integration.
+
+Still blocking release: representative existing-database migration rehearsal, controlled external-provider verification, recovery-specific gaps not covered by the workflow, final clean regression, and the source-grounded architecture/documentation audit. Shared streak remains intentionally NOT_RELEASED. The 400-user load test remains DEFERRED. No deployment or release freeze is authorized by these results.
