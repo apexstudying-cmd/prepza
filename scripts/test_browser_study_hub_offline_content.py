@@ -577,11 +577,6 @@ def login(page, fixture: dict) -> None:
 
 def ensure_study_materials_documents_tab(page) -> None:
     """Wait for a real Home-or-My-Study surface, then use UI navigation if needed."""
-    print(
-        f"NAV-AFTER-BACK nav={_nav_state(page)} "
-        f"buttons={[t.strip() for t in page.locator('button').all_inner_texts() if t.strip()][:12]}",
-        flush=True,
-    )
     try:
         _wait_documents_or_my_study(page)
     except Exception as exc:
@@ -1144,13 +1139,6 @@ def main() -> int:
                             f"wait_error={type(exc).__name__}: {exc}"
                         ) from exc
                     print(f"PASS: existing online {type_label} opens for {document_title}")
-                    if type_label == "Mind Map":
-                        page.wait_for_timeout(1500)
-                        print(
-                            f"PRE-BACK-MINDMAP nav={_nav_state(page)} "
-                            f"body={page.locator('body').inner_text(timeout=5000)[:600]!r}",
-                            flush=True,
-                        )
                     page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
                     # Reader Back returns to the document screen; its My Study
                     # control returns to the Study Materials documents tab.
@@ -1328,8 +1316,6 @@ def main() -> int:
                     generation_posts.append(request.url)
 
             page.on("request", observe_request)
-            page.on("pageerror", lambda e: print(f"PAGE-ERROR {e}"[:1500], flush=True))
-            page.on("console", lambda m: print(f"CONSOLE-ERROR {m.text}"[:1500], flush=True) if m.type == "error" else None)
             context.set_offline(True)
             page.wait_for_function("() => navigator.onLine === false", timeout=5000)
             page.reload(wait_until="domcontentloaded")
