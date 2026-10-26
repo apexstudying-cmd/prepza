@@ -1,5 +1,10 @@
 # Prepza — Actual QA Test Record
 
+## Latest CI evidence — 2026-10-26
+
+GitHub Actions [Release Browser and Cross-System Regression run 41](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221821) passed on code commit `6c88a908c5088d23f869d6a564b9ff1c90b8caed`. Its successful job built the production app image, started disposable PostgreSQL and Redis, applied Alembic migrations, ran the full disposable PostgreSQL QA suite, completed mobile/tablet responsive checks and online/offline/generated-artifact browser journeys, and uploaded responsive screenshots. This is a CI run record; it does not replace the exact suite inventory below or prove external live-provider behavior. The release status remains BLOCKED pending remaining gates.
+
+
 This file is the authoritative human-readable record of the **full local QA suite** run by `tools/run_local_qa.py`.
 
 It answers four questions exactly:
