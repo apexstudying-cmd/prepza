@@ -1375,7 +1375,7 @@ def main() -> int:
             ensure_study_materials_documents_tab(page)
 
             for _, title in DOCUMENTS:
-                page.get_by_text(title, exact=True).wait_for(timeout=15000)
+                page.get_by_text(title, exact=True).first.wait_for(timeout=15000)
             body = page.locator("body").inner_text(timeout=5000)
             for _, title in DOCUMENTS:
                 if title not in body:
@@ -1472,7 +1472,7 @@ def main() -> int:
             page.reload(wait_until="domcontentloaded")
             ensure_study_materials_documents_tab(page)
             for _, title in DOCUMENTS:
-                page.get_by_text(title, exact=True).wait_for(timeout=15000)
+                page.get_by_text(title, exact=True).first.wait_for(timeout=15000)
             body_after_reload = page.locator("body").inner_text(timeout=5000)
             for _, title in DOCUMENTS:
                 if title not in body_after_reload:
