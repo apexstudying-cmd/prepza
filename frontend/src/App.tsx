@@ -588,15 +588,28 @@ function SponsoredOpportunityCard({
   const { tokens: T } = useTheme()
   const cardRef = useRef<HTMLButtonElement | null>(null)
   const impressionSent = useRef(false)
+  const impressionRecorded = useRef(false)
   const eventId = useRef<string | null>(null)
+  const clickEventId = useRef<string | null>(null)
   const timerRef = useRef<number | null>(null)
+  const visibleEnough = useRef(false)
   const opp = campaign.opportunity
+
+  const createEventId = () => {
+    const cryptoApi = crypto as Crypto & { randomUUID?: () => string }
+    if (typeof cryptoApi.randomUUID === 'function') return cryptoApi.randomUUID()
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char => {
+      const random = Math.floor(Math.random() * 16)
+      return (char === 'x' ? random : (random & 0x3) | 0x8).toString(16)
+    })
+  }
   const meta = oppTypeMeta(opp.opportunity_type)
 
   const recordImpression = async () => {
-    if (impressionSent.current) return true
+    if (impressionRecorded.current) return true
+    if (impressionSent.current) return false
     impressionSent.current = true
-    eventId.current = (crypto as any).randomUUID?.() || String(Date.now()) + '-' + Math.random().toString(36).slice(2)
+    if (!eventId.current) eventId.current = createEventId()
     try {
       const result = await api<{ eligible?: boolean; recorded?: boolean }>(
         '/api/discovery/campaigns/' + campaign.campaign_id + '/impression',
@@ -609,6 +622,7 @@ function SponsoredOpportunityCard({
         impressionSent.current = false
         return false
       }
+      impressionRecorded.current = true
       return true
     } catch {
       impressionSent.current = false
@@ -619,32 +633,57 @@ function SponsoredOpportunityCard({
   useEffect(() => {
     const node = cardRef.current
     if (!node || typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver(entries => {
-      const entry = entries[0]
-      if (entry?.isIntersecting && entry.intersectionRatio >= 0.5) {
-        if (timerRef.current == null) {
-          timerRef.current = window.setTimeout(() => {
-            timerRef.current = null
-            void recordImpression()
-          }, 1000)
-        }
-      } else if (timerRef.current != null) {
+
+    const clearTimer = () => {
+      if (timerRef.current != null) {
         window.clearTimeout(timerRef.current)
         timerRef.current = null
       }
+    }
+    const scheduleImpression = () => {
+      if (
+        timerRef.current != null ||
+        impressionRecorded.current ||
+        impressionSent.current ||
+        !visibleEnough.current ||
+        document.visibilityState !== 'visible'
+      ) return
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null
+        if (!visibleEnough.current || document.visibilityState !== 'visible') return
+        void recordImpression()
+      }, 1500)
+    }
+    const observer = new IntersectionObserver(entries => {
+      const entry = entries.find(item => item.target === node) || entries[0]
+      visibleEnough.current = Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.5)
+      if (visibleEnough.current && document.visibilityState === 'visible') scheduleImpression()
+      else clearTimer()
     }, { threshold: [0, 0.5, 1] })
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') clearTimer()
+      else if (visibleEnough.current) scheduleImpression()
+    }
+
     observer.observe(node)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       observer.disconnect()
-      if (timerRef.current != null) window.clearTimeout(timerRef.current)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      clearTimer()
     }
   }, [campaign.campaign_id])
 
   const open = async () => {
-    await recordImpression()
-    try {
-      await api('/api/discovery/campaigns/' + campaign.campaign_id + '/click', { method: 'POST' })
-    } catch {}
+    if (impressionRecorded.current) {
+      if (!clickEventId.current) clickEventId.current = createEventId()
+      try {
+        await api('/api/discovery/campaigns/' + campaign.campaign_id + '/click', {
+          method: 'POST',
+          body: JSON.stringify({ event_id: clickEventId.current }),
+        })
+      } catch {}
+    }
     if (opp.id) {
       setActiveOpportunityId(opp.id)
       setScreen('opportunity-detail')
