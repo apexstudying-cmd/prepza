@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import uuid
 from datetime import datetime, timedelta, date
 from flask import jsonify, request, session
 from sqlalchemy import text
@@ -17,6 +18,18 @@ from usage_billing import get_organisation_plans
 
 PUSH_CAP_PER_48_HOURS = 1
 PUSH_CAP_PER_7_DAYS = 3
+
+
+def _normalize_billable_event_id(value):
+    """Return a canonical UUID for retry-safe client event submissions, else None."""
+    if not isinstance(value, str) or not value.strip() or len(value.strip()) > 36:
+        return None
+    try:
+        parsed = uuid.UUID(value.strip())
+    except (ValueError, AttributeError, TypeError):
+        return None
+    # Require the canonical UUID textual length to reject truncated/ambiguous IDs.
+    return str(parsed) if len(value.strip()) == 36 else None
 
 
 def _canonical_discovery_pricing(db):
@@ -594,8 +607,10 @@ def register_discovery(app, db):
         if not target_matches(uid, target):
             return jsonify({"eligible": False}), 200
         data = request.get_json(silent=True) or {}
-        supplied_key = str(data.get("event_id") or "").strip()
-        event_key = f"imp:{campaign_id}:{uid}:{supplied_key[:100]}" if supplied_key else f"imp:{campaign_id}:{uid}:{secrets.token_hex(16)}"
+        supplied_key = _normalize_billable_event_id(data.get("event_id"))
+        if not supplied_key:
+            return jsonify({"error": "A stable event_id UUID is required"}), 400
+        event_key = f"imp:{campaign_id}:{uid}:{supplied_key}"
         result = record_billable_event(db, campaign_id, uid, "impression", row["placement"], event_key)
         if result.get("ok"):
             db.session.commit()
@@ -619,7 +634,11 @@ def register_discovery(app, db):
             return jsonify({"error": "Campaign unavailable"}), 404
         if not target_matches(uid, row["target_json"] or {}):
             return jsonify({"eligible": False}), 200
-        event_key = f"click:{campaign_id}:{uid}:{secrets.token_hex(16)}"
+        data = request.get_json(silent=True) or {}
+        supplied_key = _normalize_billable_event_id(data.get("event_id"))
+        if not supplied_key:
+            return jsonify({"error": "A stable event_id UUID is required"}), 400
+        event_key = f"click:{campaign_id}:{uid}:{supplied_key}"
         result = record_billable_event(db, campaign_id, uid, "click", row["placement"], event_key)
         if result.get("ok"):
             db.session.commit()
