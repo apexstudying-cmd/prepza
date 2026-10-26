@@ -1,0 +1,87 @@
+name: Existing Database Migration Rehearsal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/existing-database-migration.yml"
+      - "alembic/**"
+      - "schema/local_baseline.sql"
+      - "scripts/test_existing_database_migration.py"
+      - "Dockerfile"
+      - "docker-compose.vps.yml"
+      - "requirements.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade-existing-schema:
+    name: Upgrade populated prior-revision database
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact commit under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Assert exact commit under test
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Create isolated CI environment
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=prepza
+          POSTGRES_PASSWORD=prepza-migration-ci-password
+          POSTGRES_DB=prepza
+          SECRET_KEY=prepza-migration-ci-only-secret
+          FLASK_TESTING=1
+          PREPZA_TIMEZONE=Africa/Nairobi
+          EOF
+
+      - name: Build the production app image
+        run: docker compose -f docker-compose.vps.yml build app
+
+      - name: Start disposable PostgreSQL
+        run: |
+          docker compose -f docker-compose.vps.yml up -d postgres
+          for attempt in $(seq 1 45); do
+            if docker compose -f docker-compose.vps.yml exec -T postgres pg_isready -U prepza -d prepza; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.vps.yml logs --tail=150 postgres
+          exit 1
+
+      - name: Create a populated prior-revision database
+        run: |
+          docker compose -f docker-compose.vps.yml run --rm --no-deps \
+            -v "${GITHUB_WORKSPACE}:/workspace" -w /workspace app \
+            python -m alembic upgrade 20261005_chat_attach_source_doc
+          docker compose -f docker-compose.vps.yml run --rm --no-deps \
+            -v "${GITHUB_WORKSPACE}:/workspace" -w /workspace app \
+            python scripts/test_existing_database_migration.py --phase seed
+
+      - name: Upgrade the existing database to current head
+        run: |
+          docker compose -f docker-compose.vps.yml run --rm --no-deps \
+            -v "${GITHUB_WORKSPACE}:/workspace" -w /workspace app \
+            python -m alembic upgrade head
+
+      - name: Verify existing rows, revision, and new relationship
+        run: |
+          docker compose -f docker-compose.vps.yml run --rm --no-deps \
+            -v "${GITHUB_WORKSPACE}:/workspace" -w /workspace app \
+            python scripts/test_existing_database_migration.py --phase verify
+
+      - name: Collect PostgreSQL logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.vps.yml logs --tail=250 postgres
+
+      - name: Stop disposable services and remove test data
+        if: always()
+        run: docker compose -f docker-compose.vps.yml down -v
