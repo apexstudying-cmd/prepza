@@ -650,6 +650,30 @@ def wait_for_study_materials_button(page) -> None:
     )
 
 
+def click_study_materials(page) -> None:
+    """Click Study Materials, surviving React re-renders that detach the button."""
+    last = None
+    for _ in range(4):
+        try:
+            wait_for_study_materials_button(page)
+            page.get_by_role("button", name="Study Materials", exact=True).click(timeout=4000)
+            return
+        except Exception as exc:
+            last = exc
+            page.wait_for_timeout(500)
+    clicked = page.evaluate(
+        """() => {
+          const b = Array.from(document.querySelectorAll('button'))
+            .find(i => (i.innerText || '').trim() === 'Study Materials');
+          if (!b) return false;
+          b.click();
+          return true;
+        }"""
+    )
+    if not clicked:
+        raise last
+
+
 def make_pdf(label: str) -> bytes:
     """Create a tiny valid one-page PDF without adding a test dependency."""
     objects = [
@@ -995,7 +1019,7 @@ def main() -> int:
             # generated-material persistence after proving My Study opens locally.
             page.get_by_role("button", name=re.compile(r"My Study$")).click(timeout=15000)
             page.get_by_role("button", name="Documents", exact=True).wait_for(timeout=15000)
-            page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+            click_study_materials(page)
 
             # Prove the real API is exposing the database fixtures before
             # interpreting a missing UI card as a frontend or locator failure.
@@ -1121,7 +1145,7 @@ def main() -> int:
                     # Reader Back returns to the document screen; its My Study
                     # control returns to the Study Materials documents tab.
                     ensure_study_materials_documents_tab(page)
-                    page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+                    click_study_materials(page)
 
             if unguarded_generation_posts:
                 raise AssertionError(
@@ -1280,7 +1304,7 @@ def main() -> int:
             page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
             # Podcast Back returns to Document Study, not directly to the list.
             ensure_study_materials_documents_tab(page)
-            page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+            click_study_materials(page)
             page.unroute("**/documents/*/podcast-audio*", serve_ready_podcast)
             page.unroute("**/offline-fixture-audio/*", serve_podcast_wav)
 
@@ -1348,7 +1372,7 @@ def main() -> int:
 
             # The app itself populated generatedMaterials. Replaying these rows
             # offline must never call a generation POST.
-            page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+            click_study_materials(page)
             for _, document_title in DOCUMENTS:
                 for type_label, expected_text in [
                     ("Summary", "Offline summary"),
@@ -1396,7 +1420,7 @@ def main() -> int:
                     # can pop a stale history entry and leave us on a different screen.
                     page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
                     ensure_study_materials_documents_tab(page)
-                    page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+                    click_study_materials(page)
 
             # Podcast must now resolve from its cached descriptor and Blob, with
             # both the audio HTTP stub and normal network unavailable.
@@ -1422,7 +1446,7 @@ def main() -> int:
 
             page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
             wait_for_study_materials_button(page)
-            page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+            click_study_materials(page)
 
             if generation_posts:
                 raise AssertionError(
@@ -1443,7 +1467,7 @@ def main() -> int:
                     raise AssertionError(f"Document disappeared after offline reload: {title}")
             print("PASS: multiple documents survive offline reload")
 
-            page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+            click_study_materials(page)
             for type_label, expected_text in [
                 ("Summary", "Offline summary"),
                 ("Flashcards", "Offline question"),
@@ -1459,7 +1483,7 @@ def main() -> int:
                 print(f"PASS: {type_label} survives reload and reopens offline")
                 page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
                 ensure_study_materials_documents_tab(page)
-                page.get_by_role("button", name="Study Materials", exact=True).click(timeout=15000)
+                click_study_materials(page)
 
             podcast_button = page.get_by_role(
                 "button",
