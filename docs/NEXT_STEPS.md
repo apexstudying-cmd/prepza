@@ -60,7 +60,7 @@ Rule: require evidence before marking production work complete.
 - [x] Prove fresh local bootstrap
 - [~] Reconcile/document historical migrations versus the current Alembic deployment procedure
 - [ ] Test a representative future Alembic migration
-- [ ] Upgrade a representative existing database to current Alembic head and verify schema/data invariants (still a release blocker)
+- [x] Upgrade a populated prior-Alembic-revision database to current head and verify schema/data invariants in GitHub Actions run [Existing Database Migration Rehearsal](https://github.com/apexstudying-cmd/prepza/actions/runs/40327691259) (passed 2026-10-26); a sanitized production-like historical snapshot is still useful additional confidence, not claimed by this CI fixture
 - [ ] Establish production migration checklist
 - [ ] Test migration procedure against a disposable restored database
 - [ ] Never stamp production/self-hosted DB without independent schema verification
@@ -515,3 +515,17 @@ The following GitHub Actions evidence is green on this exact code commit:
 Newly evidenced PASS gates: mobile responsive visual, the cross-system journeys covered by this workflow, Study Hub offline content/generated-artifact browser journey, and release CI workflows. This is CI/browser evidence, not proof of every physical device or every live provider integration.
 
 Still blocking release: representative existing-database migration rehearsal, controlled external-provider verification, recovery-specific gaps not covered by the workflow, final clean regression, and the source-grounded architecture/documentation audit. Shared streak remains intentionally NOT_RELEASED. The 400-user load test remains DEFERRED. No deployment or release freeze is authorized by these results.
+
+
+## 22. Existing-database migration rehearsal — 2026-10-26
+
+The new [Existing Database Migration Rehearsal](https://github.com/apexstudying-cmd/prepza/actions/runs/40327691259) passed on code commit `4584de061162a5dc010b03847d4d09a7aea81e1c`.
+
+The workflow builds the production app image, creates an isolated PostgreSQL 17 database, migrates it to the documented prior revision `20261005_chat_attach_source_doc`, inserts representative existing document-content and generated-material rows, upgrades to `20261007_doc_material`, and verifies:
+- the existing document and generated-material records retain their content;
+- old content remains valid with a NULL `material_id`;
+- the migration adds the expected nullable `material_id` column and foreign key;
+- assigning a valid material link persists successfully;
+- the database reaches the expected Alembic head.
+
+The CI fixture is disposable and is removed after the run. It proves the tested Alembic revision-to-revision upgrade path; it is not a claim that a real production snapshot was restored. Live provider verification and remaining recovery/final regression gates remain open.
