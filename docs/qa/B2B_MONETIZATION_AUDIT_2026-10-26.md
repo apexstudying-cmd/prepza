@@ -30,7 +30,8 @@ The B2B contract workflow passed in the 2026-10-26 run set (run [40329949857](ht
 5. **Reporting is incomplete for the proposed sales contract.** The organisation campaign analytics endpoint returns daily impression/click/application counts and campaign data, but no calculated CTR, unique reach/clicks, or CSV/PDF performance-report export was found. Invoice PDFs are not campaign evidence reports.
 6. **Campus attribution is not explicit.** Targeting uses university/program/year/semester; no validated `campus_id` event dimension was found. Do not promise KU-campus-only reporting until attribution is implemented.
 7. **Conversion attribution is not proven end to end.** The discovery API has an application event, but the reviewed tests do not prove outbound-link attribution, coupon/WhatsApp reconciliation, or duplicate conversion handling.
-8. **Some tests are source-text assertions.** These are useful regression guards, but do not prove route authorization, real browser viewability, transaction rollback, concurrent billing, or a complete advertiser journey. The new UUID validation test also needs its B2B CI run to pass before it is treated as verified.
+8. **The frontend integration is not established.** Code search found the backend impression/click routes and the organisation-side campaign console, but did not find a student-facing component calling those routes. Before implementing a viewability timer, identify or build the actual sponsored-card surface and connect its event lifecycle to these endpoints.
+9. **Some tests are source-text assertions.** These are useful regression guards, but do not prove route authorization, real browser viewability, transaction rollback, concurrent billing, or a complete advertiser journey. The UUID validation test passed in B2B CI run 40350611960 on code commit `df1552801186bdb4f01821afb5d9569fe838238f`.
 
 ## Recommended product decisions
 
