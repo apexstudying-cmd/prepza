@@ -1457,7 +1457,7 @@ def main() -> int:
             print("PASS: cached podcast descriptor and actual audio Blob open offline")
 
             page.get_by_role("button", name="Back", exact=True).click(timeout=15000)
-            wait_for_study_materials_button(page)
+            ensure_study_materials_documents_tab(page)
             click_study_materials(page)
 
             if generation_posts:
