@@ -1817,3 +1817,24 @@ After the direct-to-main fix, the following GitHub Actions runs completed succes
 This closes the specific current-main CI/JSX/realtime/E2EE failures. It does **not** prove all release gates are complete. The Study Hub offline artifact/podcast browser gate is still IN_PROGRESS because its latest documented run predates the fixes and needs a rebuild plus full browser execution. Mobile responsive visual checks, cross-system journeys, representative existing-database upgrade rehearsal, clean full regression, and real external-provider checks also remain open. The 400-user load test stays deferred until functional, browser, recovery and CI gates are green.
 
 No production deployment was performed. No external payment, email, AI or storage provider was contacted as part of these CI checks.
+
+
+## 2026-10-26 — Offline artifact regression and responsive release evidence
+
+### What changed in the evidence
+
+The latest tested code commit is `6c88a908c5088d23f869d6a564b9ff1c90b8caed`. GitHub Actions [Release Browser and Cross-System Regression run 41](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221821) passed. The successful release job built the production app image, started isolated PostgreSQL/Redis services, applied Alembic migrations, ran the full disposable PostgreSQL QA suite, passed mobile/tablet responsive browser checks, passed online/offline and generated-artifact browser journeys, and uploaded responsive screenshots.
+
+Related current-commit checks also passed: [Frontend Build](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221443), [E2EE Security Regression](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221387), [Realtime Runtime Regression](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221275), and [Screen Loading Audit](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221236).
+
+### What this proves—and what it does not
+
+- It provides current-main CI evidence for the Study Hub offline/generated-artifact journey and the mobile/tablet responsive checks.
+- It exercises the application in an isolated container/database environment rather than relying on the laptop's possibly stale Docker image.
+- It does **not** prove every device/browser combination, test live payment or email delivery, validate every real provider credential, or establish production readiness.
+- Release remains blocked until the existing-database upgrade rehearsal, controlled provider checks, remaining recovery checks, final clean regression, and source-grounded architecture/documentation audit are completed.
+- No production deployment was performed; the 400-user load test remains deferred.
+
+### Next gate
+
+Prioritize a representative existing-database migration rehearsal. A fresh database bootstrap is already exercised by CI but is not a substitute for upgrading a populated prior-version schema and checking its existing records and constraints.
