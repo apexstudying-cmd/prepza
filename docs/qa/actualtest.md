@@ -1917,3 +1917,8 @@ This closes the specific CI gate for a basic application smoke test against rest
 Source/test audit: `docs/qa/B2B_MONETIZATION_AUDIT_2026-10-26.md`. Existing B2B contract workflow run [40329949857](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949857) passed on code commit `69cc6e6a65edc2897ebc5e99dac57f963e8f5d75`. Tests cover billing primitives including frozen price math, click-without-impression rejection, same-key replay, frequency-cap/locking contract, payment-signature/refund contracts; broader disposable PostgreSQL QA exercises prepaid billing.
 
 This is partial verification only. No proof was found for a frontend 50%-visible/1.5-second viewability timer, separate raw/unique click metrics, 750ms debounce, explicit campus attribution, calculated CTR/CSV campaign reports, or a complete browser-to-ledger advertiser journey. The B2B monetization release gate is IN_PROGRESS, not PASS; no live-provider verification is implied.
+
+
+### B2B stable event-ID hardening follow-up
+
+Added `_normalize_billable_event_id` and changed the impression/click endpoints to reject missing or malformed UUIDs rather than silently generating a new random key per request. Regression test `test_billable_event_id_requires_a_valid_stable_uuid` was introduced first and the B2B workflow failed on that test-only commit as expected; after implementation, B2B contract workflow [40350611960](https://github.com/apexstudying-cmd/prepza/actions/runs/40350611960) passed on code commit `df1552801186bdb4f01821afb5d9569fe838238f`. This hardens retry identity at the backend boundary; frontend UUID reuse and end-to-end duplicate-request billing are still unverified.
