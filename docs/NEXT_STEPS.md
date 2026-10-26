@@ -552,6 +552,7 @@ Audit: `docs/qa/B2B_MONETIZATION_AUDIT_2026-10-26.md`. Existing prepaid ledger, 
 - [ ] Raw click attempts separate from unique/billable clicks; define server-side debounce/abuse policy.
 - [ ] Campaign report with CTR, unique reach/clicks, date/university filters, and CSV export without student-level identifiers.
 - [ ] Define and verify campus attribution and outbound conversion attribution.
+- [ ] Decide whether flat monthly placement fees and CPA/sprint packages are launch scope; current metering supports impression/click/push delivery, not proven CPA billing.
 - [ ] End-to-end browser-to-ledger tests; rerun B2B workflow and disposable PostgreSQL regression on the resulting SHA.
 
 The `b2b_monetization_integrity` release gate is IN_PROGRESS. Overall release remains BLOCKED until the evidence supports PASS.
