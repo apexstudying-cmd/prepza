@@ -90,7 +90,7 @@ Rule: require evidence before marking production work complete.
 - [x] Chat event acknowledgement/recovery
 - [x] Single-instance fallback
 - [x] Exercise Redis-backed realtime locally
-- [ ] Exercise Redis failure/reconnect locally
+- [x] Verify real chat worker survives Redis restart and resumes delivery in GitHub Actions [run 3](https://github.com/apexstudying-cmd/prepza/actions/runs/40329059178)
 - [~] Verify queue depth/worker recovery
 - [ ] Define production Redis persistence/memory policy
 - [ ] Verify production Redis monitoring
@@ -529,3 +529,12 @@ The workflow builds the production app image, creates an isolated PostgreSQL 17 
 - the database reaches the expected Alembic head.
 
 The CI fixture is disposable and is removed after the run. It proves the tested Alembic revision-to-revision upgrade path; it is not a claim that a real production snapshot was restored. Live provider verification and remaining recovery/final regression gates remain open.
+
+
+## 23. Redis worker outage/reconnect rehearsal — 2026-10-26
+
+The [Redis Worker Reconnect Recovery run 3](https://github.com/apexstudying-cmd/prepza/actions/runs/40329059178) passed on code commit `9d041e5c60a2bff2ea6379acae61d51e780afd65`.
+
+The test started the real `chat_event_worker.py`, restarted a disposable Redis 8 container while the worker was active, then verified the worker stayed alive, published a post-restart chat event to the right conversation, and acknowledged the Redis Stream entry.
+
+The first run reproduced a real bug: `_claim_stale_messages()` let a Redis connection-reset error escape, so the process died before reaching the existing retry handler around `XREADGROUP`. The fix catches transient connection/time-out errors in that stale-message reclaim path. The regression passed after the fix. This validates this specific recovery path; provider/webhook idempotency and restore-plus-application-smoke testing remain open.
