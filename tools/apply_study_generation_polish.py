@@ -76,7 +76,7 @@ replacement = r'''export function MindMapGenerationScreen({ setScreen, activeDoc
 
   if (phase === 'loading') {
     return <div style={{ flex: 1, minHeight: '100dvh', background: T.page, color: T.text, display: 'flex', flexDirection: 'column' }}>
-      <Header title="Building your mind map" subtitle={title} onBack={() => setPhase('config')} T={T}/>
+      <Header title="Building your mind map" subtitle={title} onBack={() => setScreen('document-study')} T={T}/>
       <div style={{ flex: 1, minHeight: 0, padding: 16, display: 'flex', alignItems: 'stretch' }}>
         <div style={{ flex: 1, minHeight: 360, background: T.card, border: `1px solid ${T.border}`, borderRadius: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, textAlign: 'center', boxSizing: 'border-box' }}>
           <div style={{ width: 50, height: 50, borderRadius: 16, background: T.goldSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
@@ -101,7 +101,7 @@ replacement = r'''export function MindMapGenerationScreen({ setScreen, activeDoc
     })
 
     return <div style={{ flex: 1, minHeight: '100dvh', background: T.page, color: T.text, display: 'flex', flexDirection: 'column' }}>
-      <Header title="Mind Map" subtitle={title} onBack={() => setPhase('config')} T={T}/>
+      <Header title="Mind Map" subtitle={title} onBack={() => setScreen('document-study')} T={T}/>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 22, overflow: 'hidden', boxShadow: dark ? '0 14px 40px rgba(0,0,0,.25)' : '0 8px 30px rgba(11,20,55,.08)' }}>
           <div style={{ padding: '16px 16px 12px', borderBottom: `1px solid ${T.border}`, background: T.card2 }}>
