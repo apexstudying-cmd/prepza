@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "last_verified_date": "2026-10-19",
-  "last_verified_commit": "6bd7881",
+  "last_verified_date": "2026-10-26",
+  "last_verified_commit": "6c88a908c5088d23f869d6a564b9ff1c90b8caed",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -67,8 +67,8 @@
     },
     {
       "id": "mobile_responsive_visual",
-      "status": "NOT_TESTED",
-      "evidence": "Dedicated browser/mobile visual regression remains pending"
+      "status": "PASS",
+      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 41 passed on main at 6c88a908c5088d23f869d6a564b9ff1c90b8caed (2026-10-26). Job 121576628770 completed the mobile/tablet responsive browser checks and uploaded responsive screenshots."
     },
     {
       "id": "storage_backup_restore",
@@ -77,13 +77,13 @@
     },
     {
       "id": "cross_system_journeys",
-      "status": "NOT_TESTED",
-      "evidence": "Payment→entitlement→usage, upload→artifact→Study Hub, offline→reconcile and failure/reconnect journeys pending"
+      "status": "PASS",
+      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 41 passed on main at 6c88a908c5088d23f869d6a564b9ff1c90b8caed (2026-10-26): full disposable PostgreSQL QA suite and online/offline/generated-artifact browser journeys passed. This verifies the journeys covered by this workflow; external live-provider verification remains a separate gate."
     },
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "Current-main GitHub Actions run set on 6bd7881 completed successfully: Frontend Build (TypeScript, service-worker validation and production build), Screen Loading Audit, Realtime Runtime Regression, E2EE Security Regression, E2EE Chat Validation, Student Frontend Contract, Student Contract, Chat UX, Admin Route, B2B, AI economics, Kokoro worker, and Release QA Trace. Earlier failures on db5df0b were fixed by the BottomNav fragment correction; no deployment performed."
+      "evidence": "Current-main GitHub Actions run set on 6c88a908c5088d23f869d6a564b9ff1c90b8caed passed on 2026-10-26, including Release Browser and Cross-System Regression run 41, Frontend Build run 2865, E2EE Security Regression run 2974, Realtime Runtime Regression run 2223, Screen Loading Audit run 2086, Release QA Trace and student/chat/admin/B2B/AI/Kokoro contract checks. Release job 121576628770 built production image, migrated disposable PostgreSQL, passed mobile/tablet checks, disposable DB QA and online/offline artifact browser journeys. No deployment performed."
     },
     {
       "id": "existing_database_migration",
@@ -117,8 +117,8 @@
     },
     {
       "id": "browser_study_hub_offline_content_artifacts",
-      "status": "IN_PROGRESS",
-      "evidence": "The prior browser run isolated selected podcast material identity and accessible Play control issues. Code-level fixes and guards are present on main; the current-main Docker rebuild and full browser run have not yet been executed, so this gate remains IN_PROGRESS."
+      "status": "PASS",
+      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 41 passed on main at 6c88a908c5088d23f869d6a564b9ff1c90b8caed (2026-10-26). Production app image built; disposable PostgreSQL/Redis started; Alembic applied; online/offline and generated-artifact browser journeys passed; responsive screenshots uploaded."
     },
     {
       "id": "admin_study_time_visibility",
@@ -127,15 +127,13 @@
     }
   ],
   "next_actions": [
-    "Pull current main, run `python -m py_compile scripts/test_browser_study_hub_offline_content.py tests/test_frontend_ai_generation_contract.py` and `python -m pytest -q tests/test_frontend_ai_generation_contract.py -k podcast_replay`; rebuild/recreate the Docker app and run `python scripts/test_browser_study_hub_offline_content.py -q`. Require exact selected podcast material ID, ready descriptor and real audio Blob, offline replay after reload, and no generation POSTs before marking PASS.",
-    "Add and execute a real-browser mobile responsive visual pass against the current-main app at phone and tablet viewports. Capture screenshots and check horizontal overflow, navigation, dialogs, key Study Hub/Library/Ada flows, touch targets, contrast and browser console errors; keep NOT_TESTED until artifacts and results exist.",
-    "Execute the cross-system journeys with isolated test fixtures: payment/provider test event → entitlement fulfillment → usage/quota; upload → stored artifact → Study Hub reuse; offline generation/artifact replay → reconnect reconciliation; and failure/retry/reconnect behavior. Verify database state and network requests, not only visible success messages.",
-    "Run a representative existing-database upgrade rehearsal using a sanitized prior-release database snapshot or a documented previous Alembic revision, then upgrade to current head and verify Alembic state, critical table/column/index invariants, row counts and representative records. Do not substitute a fresh bootstrap or backup restore for this gate.",
-    "Perform controlled external-provider verification using test/sandbox credentials for Paystack, SES, OpenAI, R2 and the configured GPU/audio provider. Never trigger a live payment or paid GPU workload without explicit approval; if credentials or a safe staging environment are unavailable, leave the gate NOT_TESTED and record the blocker.",
-    "After all functional, browser, recovery and CI gates are green, run `tools/run_local_qa.py` from a clean disposable PostgreSQL database plus focused realtime, E2EE, calling, migration, backup/restore and browser regressions; preserve exact commands, commit SHA and output.",
-    "Complete the documentation audit and source-grounded architecture walkthrough/diagram after functional gates are stable. Reconcile notes, actualtest, release_status.json and next-step documentation to the same verified commit.",
+    "Run the representative existing-database migration rehearsal: restore a sanitized prior-release database snapshot or construct the documented previous Alembic revision, upgrade to current head, then verify revision, critical schema/index invariants, row counts and representative records. Do not substitute fresh bootstrap or backup/restore-only evidence.",
+    "Perform controlled external-provider verification using sandbox/test credentials for Paystack, SES, OpenAI, R2 and configured GPU/audio provider. Never trigger a live payment or paid GPU workload without explicit approval; if safe credentials/environment are unavailable, leave NOT_TESTED and record the blocker.",
+    "Run recovery-specific checks still not covered by the release workflow, especially Redis/worker failure and reconnect, backup restore plus app smoke tests, and retry/idempotency across provider boundaries.",
+    "After the remaining functional, migration, provider and recovery gates are green, run the clean full regression from a disposable PostgreSQL database plus focused realtime, E2EE, calling, migration, backup/restore and browser regressions; preserve exact commands, commit SHA and output.",
+    "Complete the documentation audit and source-grounded architecture walkthrough/diagram after functional gates are stable. Reconcile notes, actualtest, release_status.json and next-step documentation to the same verified code commit.",
     "Keep the 400-user performance test DEFERRED until functional, browser, recovery and CI gates are green."
   ],
-  "current_main_commit": "d22a7587089753c1888b0004b066b772e9f65e92",
-  "verification_note": "Updated on 2026-10-18 using the user's real-browser output from 400a6ce, source inspection and GitHub Actions metadata for main commit 15cffb59e6834b746a0892aa5fd41869a213ce85. The Mind Map replay correction is present in tools/apply_study_generation_polish.py and a focused isolated-transformer regression test exists, but post-fix local execution is pending. Eleven GitHub Actions workflows currently report failure with no returned steps/logs and a BlobNotFound log retrieval error; CI cause remains unresolved. Release remains BLOCKED and no freeze or overall PASS is claimed."
+  "current_main_commit": "6c88a908c5088d23f869d6a564b9ff1c90b8caed",
+  "verification_note": "Updated 2026-10-26 from GitHub Actions evidence for main code commit 6c88a908c5088d23f869d6a564b9ff1c90b8caed. Release Browser and Cross-System Regression run 41 succeeded: production image build, disposable PostgreSQL/Redis, Alembic migration, mobile/tablet responsive checks, full disposable PostgreSQL QA, online/offline and generated-artifact browser journeys, and screenshot upload. Frontend Build, E2EE Security Regression, Realtime Runtime Regression, Screen Loading Audit, Release QA Trace and related contract workflows also passed on the same SHA. Mobile responsive visual, cross-system journeys covered by the workflow, offline content/artifact replay and CI release workflows are now PASS. Existing-database upgrade, controlled external-provider verification, final clean regression and documentation audit remain outstanding. Release remains BLOCKED; no freeze or deployment is claimed."
 }
