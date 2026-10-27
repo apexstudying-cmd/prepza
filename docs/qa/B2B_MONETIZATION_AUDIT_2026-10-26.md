@@ -58,3 +58,9 @@ The B2B contract workflow passed in the 2026-10-26 run set (run [40329949857](ht
 ## Release interpretation
 
 B2B accounting controls are a promising foundation, not full verification of the proposed ad engine. Keep `b2b_monetization_integrity` open until end-to-end evidence exists. A green contract workflow alone is not sufficient to mark this gate PASS.
+
+## 2026-10-27 verification update — browser-to-ledger regression now passed
+
+The earlier sections above describe the pre-browser-test audit state and are historical. The dedicated browser-to-ledger evidence is now available: [GitHub Actions run 40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254) passed on code commit `74f0f0380d731223ea791054350e3ba4abbc9fb6`. It ran the real application in a browser against disposable PostgreSQL, passed the full disposable PostgreSQL suite, and verified viewability timer/offscreen behavior, offline behavior, lost-response retry without double debit, click attribution, JSON/CSV reporting and the campus raw-click regression (10 reached accounts, 10 raw clicks). The raw-click aggregation fix counts distinct interaction IDs across `click_raw` and `click` variants.
+
+This updates the earlier statement that browser-to-ledger evidence was missing. It does **not** close every B2B integrity question: keep `b2b_monetization_integrity` IN_PROGRESS while reviewing server-side debounce/abuse protection and the fact that browser-observed viewability is not independently proven by the backend. Do not imply fixed-monthly or CPA billing support. External Paystack sandbox, SES, bounded OpenAI, R2 and audio/GPU provider verification remain separate and NOT_TESTED until safe provider-side evidence is recorded. The overall release remains BLOCKED.
