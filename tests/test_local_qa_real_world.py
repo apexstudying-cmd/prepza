@@ -2000,6 +2000,7 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     from io import BytesIO
     import app as app_module
     import object_storage
+    import shop_marketplace
 
     seller_id = world["student_a"].id
     buyer_id = world["student_b"].id
@@ -2145,7 +2146,7 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     # Callback/webhook retries must not charge twice or move the listing twice.
     duplicate_verify = app_module.sync_paystack_payment_status(reference)
     assert duplicate_verify.status == "success"
-    assert db.session.get(app_module.ShopListing, second_listing["id"]).posting_fee_paid is True
+    assert db.session.get(shop_marketplace._ShopListing, second_listing["id"]).posting_fee_paid is True
 
     second_publish = seller.post(
         f"/api/shop/listings/{second_listing['id']}/publish",
