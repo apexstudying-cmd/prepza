@@ -1893,7 +1893,7 @@ def paystack_request(method, path, **kwargs):
     return data
 
 
-def create_paystack_transaction(reference, amount, description, user, paystack_plan_code=None):
+def create_paystack_transaction(reference, amount, description, user, paystack_plan_code=None, callback_url=None):
     """
     Initializes a Paystack transaction. amount is in whole KES (same unit
     the rest of this file uses) - Paystack expects the lowest currency
@@ -1909,7 +1909,7 @@ def create_paystack_transaction(reference, amount, description, user, paystack_p
         "amount": amount * 100,
         "currency": "KES",
         "email": user.email,
-        "callback_url": f"{BASE_URL}/payment/paystack/callback",
+        "callback_url": callback_url or f"{BASE_URL}/payment/paystack/callback",
         "metadata": {"description": description[:100]},
     }
     # Passing a Paystack plan code turns the first checkout into a recurring
@@ -2333,6 +2333,15 @@ def sync_paystack_payment_status(reference):
                     payment.subscription_starts_at = starts_at
                     payment.subscription_expires_at = expires_at
                     payment.subscription_allowance_snapshot = _subscription_allowance_snapshot(payment.plan)
+            elif payment.payment_type == "shop_posting":
+                # The fee buys only the right to publish a listing. It does not
+                # represent or settle a buyer's product purchase.
+                from shop_marketplace import fulfill_shop_posting_payment
+                if not fulfill_shop_posting_payment(db, payment):
+                    print(
+                        f"Shop posting payment {payment.id} is paid but listing "
+                        "fulfillment needs reconciliation"
+                    )
 
             if payment.status == "success":
                 _maybe_award_referral_commission(payment)
@@ -10238,3 +10247,7 @@ from e2ee_production_hardening import register_e2ee_production_hardening
 
 register_offline_activity_routes(app, db)
 register_e2ee_production_hardening(app, db, Conversation, ConversationParticipant)
+
+# Register Shop only after the core user, payment and chat models are available.
+from shop_marketplace import register_shop_routes
+register_shop_routes(app, db, User, Payment, Conversation, ConversationParticipant, limiter, create_paystack_transaction)
