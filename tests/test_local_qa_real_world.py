@@ -1826,6 +1826,52 @@ def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaig
     """), {"cid": campaign_id}).scalar_one()
     assert int(refund_rows) == 1
 
+    # Two distinct partial refunds can have the same amount. When the provider
+    # payload has no explicit refund id, stable payload identity must still
+    # distinguish them while deduplicating a replay of each payload.
+    second_refund_payload = {
+        "event": "refund.processed",
+        "data": {
+            "transaction_reference": body["reference"],
+            "amount": 10000,
+            "created_at": "2026-10-27T12:30:00Z",
+        },
+    }
+    second_refund_raw = json.dumps(
+        second_refund_payload, separators=(",", ":")
+    ).encode("utf-8")
+    second_refund_signature = hmac.new(
+        b"sk_test_mock_only_not_a_real_secret",
+        second_refund_raw,
+        hashlib.sha512,
+    ).hexdigest()
+    second_refund = client.post(
+        "/payment/paystack/b2b-webhook",
+        data=second_refund_raw,
+        content_type="application/json",
+        headers={"x-paystack-signature": second_refund_signature},
+    )
+    assert second_refund.status_code == 200, second_refund.get_json()
+
+    second_refund_replay = client.post(
+        "/payment/paystack/b2b-webhook",
+        data=second_refund_raw,
+        content_type="application/json",
+        headers={"x-paystack-signature": second_refund_signature},
+    )
+    assert second_refund_replay.status_code == 200, second_refund_replay.get_json()
+    assert second_refund_replay.get_json()["duplicate"] is True
+
+    payment_after_second_refund = db.session.execute(text("""
+        SELECT refunded_amount_minor FROM b2b_payment WHERE campaign_id=:cid
+    """), {"cid": campaign_id}).scalar_one()
+    assert int(payment_after_second_refund) == 20000
+    refund_rows_after_second = db.session.execute(text("""
+        SELECT COUNT(*) FROM b2b_campaign_ledger
+        WHERE campaign_id=:cid AND entry_type='refund'
+    """), {"cid": campaign_id}).scalar_one()
+    assert int(refund_rows_after_second) == 2
+
 
 
 def test_b2b_campus_report_shows_aggregate_only_at_ten_reached_accounts(world):
