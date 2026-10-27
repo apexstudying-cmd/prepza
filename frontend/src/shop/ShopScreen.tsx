@@ -13,6 +13,7 @@ const money = (amount: number) => 'KSh ' + Math.round(amount).toLocaleString('en
 // saved/is_mine flags or payment/admin responses in browser storage.
 const BROWSE_CACHE_TTL_MS = 5 * 60 * 1000
 const browseSnapshots = new Map<string, { listings: Listing[]; savedAt: number }>()
+const invalidateBrowseSnapshots = () => browseSnapshots.clear()
 const conditionLabel = (value: string) => CONDITIONS.find(item => item.value === value)?.label || value
 const ui: Record<string, CSSProperties> = {
   root: { flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--prepza-generation-page, #F8F9FC)', color: 'var(--prepza-generation-text, #0B1437)', fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif' },
@@ -245,6 +246,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
       if (action === 'publish') { await publish(listing.id); return }
       if (action === 'remove') await shopApi('/api/shop/listings/' + listing.id, { method: 'DELETE', headers: { 'X-CSRF-Token': csrf } })
       else await shopApi('/api/shop/listings/' + listing.id + '/' + (action === 'pause' ? 'pause' : 'mark-sold'), { method: 'POST', headers: { 'X-CSRF-Token': csrf } })
+      invalidateBrowseSnapshots()
       await loadMine(); if (selected?.id === listing.id) setSelected({ ...selected, status: action === 'pause' ? 'paused' : action === 'mark-sold' ? 'sold' : 'removed' })
       setNotice(action === 'pause' ? 'Listing paused.' : action === 'mark-sold' ? 'Marked as sold.' : 'Listing removed.')
     } catch (e: any) { setError(e?.message || 'Could not update listing.') }
