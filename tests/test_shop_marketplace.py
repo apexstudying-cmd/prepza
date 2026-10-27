@@ -13,9 +13,9 @@ from shop_marketplace import (
 )
 
 
-def test_first_listing_is_free_and_each_later_post_costs_kes_100():
-    assert listing_fee_for_post_number(1) == 0
-    assert listing_fee_for_post_number(2) == LISTING_POST_FEE_KES == 100
+def test_every_listing_including_first_costs_kes_100():
+    assert listing_fee_for_post_number(1) == LISTING_POST_FEE_KES == 100
+    assert listing_fee_for_post_number(2) == 100
     assert listing_fee_for_post_number(3) == 100
 
 
