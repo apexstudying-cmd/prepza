@@ -563,8 +563,8 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
                 from shop_marketplace import fulfill_shop_posting_payment
                 fulfill_shop_posting_payment(db, existing_payment)
                 listing = listing_for_owner(listing_id, user.id)
-                if listing and listing.posting_fee_paid:
-                    return jsonify({"error": "This listing's posting fee is already covered"}), 409
+                if listing and listing.posting_fee_paid and listing.posting_fee_expires_at and listing.posting_fee_expires_at > datetime.utcnow():
+                    return jsonify({"error": "This listing's 30-day posting period is already covered"}), 409
             if listing:
                 listing.status = "draft"
                 listing.checkout_url = None
