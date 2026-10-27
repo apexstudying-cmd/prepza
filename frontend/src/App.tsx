@@ -690,31 +690,6 @@ function SponsoredOpportunityCard({
   }
   const meta = oppTypeMeta(opp.opportunity_type)
 
-  const recordImpression = async () => {
-    if (impressionRecorded.current) return true
-    if (impressionSent.current) return false
-    impressionSent.current = true
-    if (!eventId.current) eventId.current = createEventId()
-    try {
-      const result = await api<{ eligible?: boolean; recorded?: boolean }>(
-        '/api/discovery/campaigns/' + campaign.campaign_id + '/impression',
-        {
-          method: 'POST',
-          body: JSON.stringify({ event_id: eventId.current }),
-        },
-      )
-      if (result.eligible === false) {
-        impressionSent.current = false
-        return false
-      }
-      impressionRecorded.current = true
-      return true
-    } catch {
-      impressionSent.current = false
-      return false
-    }
-  }
-
   useEffect(() => {
     const node = cardRef.current
     if (!node || typeof IntersectionObserver === 'undefined') return
