@@ -380,7 +380,9 @@
             "def shop_create_listing",
             "def shop_checkout_posting_fee",
             "def shop_admin_queue",
-            "def fulfill_shop_posting_payment"
+            "def fulfill_shop_posting_payment",
+            "def shop_admin_resolve_payment_issue",
+            "mark_shop_posting_payment_mismatch"
           ]
         },
         {
