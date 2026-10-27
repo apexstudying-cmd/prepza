@@ -10261,4 +10261,4 @@ register_e2ee_production_hardening(app, db, Conversation, ConversationParticipan
 
 # Register Shop only after the core user, payment and chat models are available.
 from shop_marketplace import register_shop_routes
-register_shop_routes(app, db, User, Payment, Conversation, ConversationParticipant, limiter, create_paystack_transaction)
+register_shop_routes(app, db, User, Payment, Conversation, ConversationParticipant, limiter, create_paystack_transaction, sync_paystack_payment_status)
