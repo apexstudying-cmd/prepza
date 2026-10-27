@@ -118,7 +118,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "Release Browser and Cross-System Regression run 40502457332 passed on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015. Updated qa/release_status.json, docs/qa/actualtest.md, docs/qa/notes.md, docs/qa/B2B_MONETIZATION_AUDIT_2026-10-26.md, docs/NEXT_STEPS.md, and docs/architecture/VERIFIED_SYSTEM_WALKTHROUGH_2026-10-27.md with exact run evidence and remaining limitations. The source-grounded walkthrough documents that browser IntersectionObserver is not independently verified by the backend. Gate remains IN_PROGRESS until a final cross-document/source audit confirms no current-status contradictions and the clean full regression/provider disposition is recorded."
+      "evidence": "The runtime release browser/disposable-PostgreSQL run 40502457332 passed on code SHA e1d9ef42b533c9fb3fb14de2a4a3d66e30714015. Current QA evidence was reconciled across actualtest.md, notes.md, B2B audit, NEXT_STEPS.md, architecture walkthrough and this tracker. qa/release_manifest.json now traces B2B monetization, payment recovery/idempotency and external-provider boundaries; its structural trace workflow initially found two invalid B2B source anchors, which were corrected and passed in Release QA Trace run 40503963385. Gate remains IN_PROGRESS until the final source/cross-document audit is complete and the clean full regression/provider disposition is recorded."
     },
     {
       "id": "vps_or_render_deployment",
