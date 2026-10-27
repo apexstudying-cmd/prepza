@@ -403,8 +403,8 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         listing = listing_for_owner(listing_id, user.id)
         if not listing:
             return jsonify({"error": "Listing not found"}), 404
-        if listing.status in {"sold", "removed"}:
-            return jsonify({"error": "This listing can no longer be edited"}), 409
+        if listing.status in {"sold", "removed", "payment_review"}:
+            return jsonify({"error": "This listing cannot be edited until its posting payment is reconciled"}), 409
         try:
             payload = validate_listing_payload(request.get_json(silent=True) or {})
         except ValueError as exc:
@@ -678,8 +678,8 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         listing = listing_for_owner(listing_id, user.id)
         if not listing:
             return jsonify({"error": "Listing not found"}), 404
-        if listing.status == "pending_payment":
-            return jsonify({"error": "Finish or cancel the posting-fee checkout before removing this listing"}), 409
+        if listing.status in {"pending_payment", "payment_review"}:
+            return jsonify({"error": "Finish or reconcile the posting-fee checkout before removing this listing"}), 409
         # Delete product images on explicit removal to stop charging storage for
         # objects the seller no longer wants published. S3 DeleteObject is
         # idempotent, so a retry safely handles partial provider failures.
