@@ -458,25 +458,49 @@ def register_b2b_campaign_payments(app, db):
             return {"ok": True, "ignored": True, "reason": "unknown_reference"}
         amount = int(data.get("amount") or 0)
         if event_name == "refund.processed":
+            # Paystack may retry the same processed-refund webhook. Track the
+            # provider refund identity on the locked payment row as well as in
+            # the campaign ledger, so a duplicate cannot inflate the
+            # cumulative refunded amount even when no prepaid balance remains.
+            refund_identity = str(
+                data.get("refund_reference") or data.get("id") or f"{reference}:{amount}"
+            ).strip()
+            idem = f"refund:{reference}:{refund_identity}"
+            metadata = payment.get("metadata") or {}
+            if isinstance(metadata, str):
+                try:
+                    metadata = json.loads(metadata)
+                except (TypeError, ValueError):
+                    metadata = {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            processed_refunds = metadata.get("processed_refund_events")
+            if not isinstance(processed_refunds, list):
+                processed_refunds = []
+            if refund_identity in processed_refunds:
+                return {"ok": True, "duplicate": True}
+
             available = refund_available_balance(int(payment["campaign_id"]))
             campaign_refund = min(amount, available)
             if campaign_refund > 0:
-                idem = f"refund:{reference}:{amount}"
-                exists = db.session.execute(text("SELECT id FROM b2b_campaign_ledger WHERE idempotency_key=:key"), {"key": idem}).scalar_one_or_none()
-                if not exists:
-                    db.session.execute(text("""
-                        INSERT INTO b2b_campaign_ledger
-                            (campaign_id,entry_type,signed_amount_minor,currency,idempotency_key,payment_id,description,metadata)
-                        VALUES (:cid,'refund',:amount,'KES',:key,:pid,'Prepaid campaign value reversed after processed refund',CAST(:meta AS jsonb))
-                    """), {"cid": int(payment["campaign_id"]), "amount": -campaign_refund, "key": idem,
-                           "pid": int(payment["id"]), "meta": json.dumps({"refund_amount_minor": amount, "reversed_campaign_value_minor": campaign_refund, "refund_reference": data.get("refund_reference")})})
+                db.session.execute(text("""
+                    INSERT INTO b2b_campaign_ledger
+                        (campaign_id,entry_type,signed_amount_minor,currency,idempotency_key,payment_id,description,metadata)
+                    VALUES (:cid,'refund',:amount,'KES',:key,:pid,'Prepaid campaign value reversed after processed refund',CAST(:meta AS jsonb))
+                    ON CONFLICT (idempotency_key) DO NOTHING
+                """), {"cid": int(payment["campaign_id"]), "amount": -campaign_refund, "key": idem,
+                       "pid": int(payment["id"]), "meta": json.dumps({"refund_amount_minor": amount, "reversed_campaign_value_minor": campaign_refund, "refund_reference": refund_identity})})
+            metadata["processed_refund_events"] = [*processed_refunds, refund_identity][-100:]
             db.session.execute(text("""
                 UPDATE b2b_payment
                 SET status='refunded', refund_status='processed',
                     refunded_amount_minor=COALESCE(refunded_amount_minor,0)+:amount,
-                    refund_processed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+                    refund_processed_at=CURRENT_TIMESTAMP,
+                    metadata=COALESCE(metadata,'{}'::jsonb) || CAST(:metadata AS jsonb),
+                    updated_at=CURRENT_TIMESTAMP
                 WHERE id=:pid
-            """), {"pid": int(payment["id"]), "amount": amount})
+            """), {"pid": int(payment["id"]), "amount": amount,
+                   "metadata": json.dumps({"processed_refund_events": metadata["processed_refund_events"]})})
             db.session.execute(text("""
                 UPDATE discovery_campaign SET status='refunded', funding_status='refunded', updated_at=CURRENT_TIMESTAMP
                 WHERE id=:cid
