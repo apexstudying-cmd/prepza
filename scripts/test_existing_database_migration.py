@@ -12,7 +12,7 @@ import sys
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "20261005_chat_attach_source_doc"
-EXPECTED_HEAD = "20261027_shop_marketplace"
+EXPECTED_HEAD = "20261029_shop_period_payment"
 FIXTURE_ID = 987_654_321
 CONTENT_HASH = "existing-db-migration-rehearsal-v1"
 
