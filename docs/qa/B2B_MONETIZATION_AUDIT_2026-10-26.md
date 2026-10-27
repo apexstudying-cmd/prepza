@@ -73,3 +73,8 @@ This updates the earlier statement that browser-to-ledger evidence was missing. 
 - **Refund recovery:** a further edge case was covered by the new same-amount/distinct-refund regression; a stable payload hash is now used when the provider payload lacks a refund ID. The disposable-PostgreSQL/full browser CI for the latest code has not yet completed, so neither the new refund edge case nor the new browser debounce assertion is recorded as a pass here.
 
 Release remains **BLOCKED**. Do not represent CPM/CPC metering as independently verified viewability or CPA/conversion billing.
+
+
+### Verification update — 2026-10-27
+
+The follow-up [run 40502457332](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457332) passed the B2B browser-to-ledger step, including the added rapid-click debounce check, and the full disposable PostgreSQL QA suite passed the refund replay and same-amount-distinct-refund cases on runtime commit `e1d9ef42b533c9fb3fb14de2a4a3d66e30714015`. The earlier run failed only at the now-corrected reporting expectation after the new raw-only interaction was added; the corrected rerun passed this B2B step. This closes the tested recovery/debounce scenarios, not the full B2B gate: viewport qualification is still client-supplied and must not be represented as tamper-proof. The overall release-browser run remains in progress pending the online/offline generated-artifact step at the time of this note.
