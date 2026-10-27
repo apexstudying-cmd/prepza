@@ -589,9 +589,13 @@ function SponsoredOpportunityCard({
   const cardRef = useRef<HTMLButtonElement | null>(null)
   const impressionSent = useRef(false)
   const impressionRecorded = useRef(false)
+  const impressionRejected = useRef(false)
+  const impressionQualified = useRef(false)
   const eventId = useRef<string | null>(null)
   const clickEventId = useRef<string | null>(null)
   const timerRef = useRef<number | null>(null)
+  const retryTimerRef = useRef<number | null>(null)
+  const retryAttempts = useRef(0)
   const visibleEnough = useRef(false)
   const opp = campaign.opportunity
 
@@ -602,6 +606,87 @@ function SponsoredOpportunityCard({
       const random = Math.floor(Math.random() * 16)
       return (char === 'x' ? random : (random & 0x3) | 0x8).toString(16)
     })
+  }
+
+  const impressionStorageKey = 'prepza:b2b:impression-pending:' + campaign.campaign_id
+  const clickStorageKey = 'prepza:b2b:click-pending:' + campaign.campaign_id
+
+  const pendingEventId = (storageKey: string, current: React.MutableRefObject<string | null>) => {
+    if (current.current) return current.current
+    try {
+      current.current = sessionStorage.getItem(storageKey)
+      if (current.current) return current.current
+    } catch { /* session storage may be unavailable */ }
+    current.current = createEventId()
+    try { sessionStorage.setItem(storageKey, current.current) } catch { /* keep in memory */ }
+    return current.current
+  }
+
+  const clearPendingEvent = (storageKey: string) => {
+    try { sessionStorage.removeItem(storageKey) } catch { /* best effort */ }
+  }
+
+  const clearRetryTimer = () => {
+    if (retryTimerRef.current != null) {
+      window.clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
+  }
+
+  const scheduleImpressionRetry = () => {
+    if (
+      retryTimerRef.current != null ||
+      impressionRecorded.current ||
+      impressionRejected.current ||
+      !impressionQualified.current ||
+      document.visibilityState !== 'visible' ||
+      !navigator.onLine
+    ) return
+    // A lost HTTP response may mean the server already charged. Keep the
+    // same UUID and use capped exponential backoff to make retries safe.
+    const delay = Math.min(30000, 1000 * (2 ** Math.min(retryAttempts.current, 5)))
+    retryAttempts.current += 1
+    retryTimerRef.current = window.setTimeout(() => {
+      retryTimerRef.current = null
+      if (navigator.onLine && document.visibilityState === 'visible') {
+        void recordImpression()
+      }
+    }, delay)
+  }
+
+  const recordImpression = async () => {
+    if (impressionRecorded.current) return true
+    if (impressionRejected.current || impressionSent.current) return false
+    // Do not queue a stale view while disconnected. After reconnect, qualify
+    // a fresh continuous visible period before sending an impression.
+    if (!navigator.onLine) return false
+    impressionSent.current = true
+    const stableEventId = pendingEventId(impressionStorageKey, eventId)
+    try {
+      const result = await api<{ eligible?: boolean; recorded?: boolean }>(
+        '/api/discovery/campaigns/' + campaign.campaign_id + '/impression',
+        {
+          method: 'POST',
+          body: JSON.stringify({ event_id: stableEventId }),
+        },
+      )
+      impressionSent.current = false
+      if (result.eligible === false) {
+        impressionRejected.current = true
+        clearRetryTimer()
+        clearPendingEvent(impressionStorageKey)
+        return false
+      }
+      impressionRecorded.current = true
+      retryAttempts.current = 0
+      clearRetryTimer()
+      clearPendingEvent(impressionStorageKey)
+      return true
+    } catch {
+      impressionSent.current = false
+      scheduleImpressionRetry()
+      return false
+    }
   }
   const meta = oppTypeMeta(opp.opportunity_type)
 
@@ -644,45 +729,82 @@ function SponsoredOpportunityCard({
       if (
         timerRef.current != null ||
         impressionRecorded.current ||
+        impressionRejected.current ||
         impressionSent.current ||
+        impressionQualified.current ||
         !visibleEnough.current ||
         document.visibilityState !== 'visible'
       ) return
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null
         if (!visibleEnough.current || document.visibilityState !== 'visible') return
+        // If offline, wait for reconnection and then require a fresh 1.5s
+        // visible period. Never bill a cached ad merely because it was shown
+        // while disconnected.
+        if (!navigator.onLine) return
+        impressionQualified.current = true
         void recordImpression()
       }, 1500)
     }
     const observer = new IntersectionObserver(entries => {
       const entry = entries.find(item => item.target === node) || entries[0]
       visibleEnough.current = Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.5)
-      if (visibleEnough.current && document.visibilityState === 'visible') scheduleImpression()
-      else clearTimer()
+      if (visibleEnough.current && document.visibilityState === 'visible') {
+        if (impressionQualified.current) scheduleImpressionRetry()
+        else scheduleImpression()
+      } else {
+        clearTimer()
+      }
     }, { threshold: [0, 0.5, 1] })
     const onVisibilityChange = () => {
-      if (document.visibilityState !== 'visible') clearTimer()
-      else if (visibleEnough.current) scheduleImpression()
+      if (document.visibilityState !== 'visible') {
+        clearTimer()
+        clearRetryTimer()
+      } else if (impressionQualified.current) {
+        scheduleImpressionRetry()
+      } else if (visibleEnough.current) {
+        scheduleImpression()
+      }
+    }
+    const onOnline = () => {
+      if (!visibleEnough.current || document.visibilityState !== 'visible') return
+      if (impressionQualified.current) {
+        clearRetryTimer()
+        void recordImpression()
+      } else {
+        // Requalify after the network returns; do not backdate an offline view.
+        scheduleImpression()
+      }
     }
 
     observer.observe(node)
     document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('online', onOnline)
     return () => {
       observer.disconnect()
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('online', onOnline)
       clearTimer()
+      clearRetryTimer()
     }
   }, [campaign.campaign_id])
 
   const open = async () => {
     if (impressionRecorded.current) {
-      if (!clickEventId.current) clickEventId.current = createEventId()
+      const stableClickId = pendingEventId(clickStorageKey, clickEventId)
       try {
-        await api('/api/discovery/campaigns/' + campaign.campaign_id + '/click', {
-          method: 'POST',
-          body: JSON.stringify({ event_id: clickEventId.current }),
-        })
-      } catch {}
+        const result = await api<{ eligible?: boolean }>(
+          '/api/discovery/campaigns/' + campaign.campaign_id + '/click',
+          {
+            method: 'POST',
+            body: JSON.stringify({ event_id: stableClickId }),
+          },
+        )
+        if (result.eligible !== false) clearPendingEvent(clickStorageKey)
+      } catch {
+        // Keep the UUID in sessionStorage. A retry after reconnection or a
+        // later visit will reuse it, even if the first response was lost.
+      }
     }
     if (opp.id) {
       setActiveOpportunityId(opp.id)
