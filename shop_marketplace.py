@@ -115,8 +115,11 @@ def fulfill_shop_posting_payment(db, payment):
     if not listing or int(payment.amount) != LISTING_POST_FEE_KES:
         return False
     now = datetime.utcnow()
+    if listing.posting_period_payment_reference == payment.reference and listing.posting_fee_expires_at:
+        return True
     listing.posting_fee_paid = True
     listing.posting_fee_expires_at = listing_period_expiry(now)
+    listing.posting_period_payment_reference = payment.reference
     listing.posting_payment_reference = payment.reference
     if listing.status == "pending_payment":
         listing.status = "draft"
@@ -192,6 +195,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         posting_fee_kes = db.Column(db.Integer, nullable=False, default=0)
         posting_fee_paid = db.Column(db.Boolean, nullable=False, default=False)
         posting_fee_expires_at = db.Column(db.DateTime, nullable=True, index=True)
+        posting_period_payment_reference = db.Column(db.String(50), nullable=True, unique=True)
         posting_payment_reference = db.Column(db.String(50), nullable=True, unique=True)
         checkout_url = db.Column(db.String(500), nullable=True)
         moderation_note = db.Column(db.String(500), nullable=True)
@@ -364,7 +368,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         if denied:
             return denied
         listing = db.session.get(ShopListing, listing_id)
-        if not listing or (listing.status != "active" and listing.seller_id != user.id):
+        if not listing or (listing.status != "active" and listing.seller_id != user.id) or (listing.status == "active" and (not listing.posting_fee_expires_at or listing.posting_fee_expires_at <= datetime.utcnow()) and listing.seller_id != user.id):
             return jsonify({"error": "Listing not found"}), 404
         return jsonify({"listing": listing_json(listing, user.id, detail=True)})
 
@@ -736,7 +740,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             return denied
         if not csrf_valid():
             return jsonify({"error": "Invalid CSRF token"}), 403
-        listing = ShopListing.query.filter_by(id=listing_id, status="active").first()
+        listing = ShopListing.query.filter_by(id=listing_id, status="active").filter(ShopListing.posting_fee_expires_at > datetime.utcnow()).first()
         if not listing:
             return jsonify({"error": "Listing not found"}), 404
         saved = ShopSavedListing.query.filter_by(user_id=user.id, listing_id=listing_id).first()
@@ -765,7 +769,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         if denied:
             return denied
         rows = (ShopListing.query.join(ShopSavedListing, ShopSavedListing.listing_id == ShopListing.id)
-                .filter(ShopSavedListing.user_id == user.id, ShopListing.status == "active")
+                .filter(ShopSavedListing.user_id == user.id, ShopListing.status == "active", ShopListing.posting_fee_expires_at > datetime.utcnow())
                 .order_by(ShopSavedListing.created_at.desc()).limit(100).all())
         return jsonify({"listings": [listing_json(row, user.id, detail=True) for row in rows]})
 
@@ -777,7 +781,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             return denied
         if not csrf_valid():
             return jsonify({"error": "Invalid CSRF token"}), 403
-        listing = ShopListing.query.filter_by(id=listing_id, status="active").first()
+        listing = ShopListing.query.filter_by(id=listing_id, status="active").filter(ShopListing.posting_fee_expires_at > datetime.utcnow()).first()
         if not listing or listing.seller_id == user.id:
             return jsonify({"error": "Listing not found"}), 404
         data = request.get_json(silent=True) or {}
@@ -841,8 +845,8 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
                 listing.updated_at = datetime.utcnow()
                 db.session.commit()
                 return jsonify({"error": "Legacy listing requires the KES 100 posting fee before approval"}), 409
-            if not listing.posting_fee_paid:
-                return jsonify({"error": "Posting fee is not verified"}), 409
+            if not listing.posting_fee_paid or not listing.posting_fee_expires_at or listing.posting_fee_expires_at <= datetime.utcnow():
+                return jsonify({"error": "The current 30-day posting fee is not verified"}), 409
             listing.status = "active"
         elif action == "reject":
             listing.status = "rejected"
