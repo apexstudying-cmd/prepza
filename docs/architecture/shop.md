@@ -149,16 +149,16 @@ Require title, category, price (or explicit “free”), condition, description,
 
 ## 5. Business model recommendation
 
-### Phase 1: Free listings + paid visibility tests
+### Earlier market-entry hypothesis (superseded by launch pricing decision)
 
-Launch with free basic listings for early liquidity. The first business problem is marketplace density and completed buyer-seller matches, not extracting revenue from a marketplace with no activity.
+Earlier research considered free basic listings to reduce marketplace friction. The current launch decision supersedes that hypothesis: every listing costs KES 100 to discourage throwaway listings and establish a simple posting price. Validate conversion and abuse rates in a small pilot before reconsidering pricing.
 
 Potential revenue experiments after there are active listings and repeat buyer traffic:
 - **Featured listing:** test KES 50–100 for a clearly labelled 7-day boost as a pricing hypothesis, not an established market price.
 - **Category/campus sponsorship:** use the existing B2B sponsored-inventory capability only if Shop placements are explicitly added to the campaign contract, reporting, targeting, and billing rules. Do not silently sell a new placement under an existing campaign type.
 - **Verified business seller tools:** later offer local bookstores, repair shops, printing shops, and campus-adjacent merchants a paid storefront or listing bundle, with clear verification and renewal terms.
 
-Keep ordinary listing creation free during the pilot. Do not charge both a seller subscription and a commission by default.
+The launch policy is a flat KES 100 per listing, with no product-sale commission and no in-app purchase handling. Do not add a seller subscription by default.
 
 ### Phase 2: Checkout and transaction revenue
 
@@ -332,7 +332,7 @@ These are proposed concepts only; no existing schema is claimed and no migration
 - No in-app checkout, escrow, wallet, automated payouts, or delivery promises.
 
 ### Stage 2 — paid visibility
-- Launch free listings first.
+- Launch with the server-enforced KES 100 fee for every listing; no first-post exception.
 - Test one clearly labelled paid boost.
 - Record payment confirmation, duration, placement, impressions, clicks, and refunds.
 - Validate willingness to pay and net contribution after provider fees and support effort.
@@ -384,7 +384,7 @@ Market-pricing hypotheses in this document (KES 50–100 boosts, a 5% future sel
 The implementation direction is approved for direct work on `main`:
 
 - Home retains exactly five quick actions. Replace Podcasts with Shop; retain Upload, My Study, Library, and Ada. Podcasts remain available through My Study and the existing podcast library. Explore and the five-item bottom navigation are unchanged.
-- The first listing per account is free for the account lifetime. Every later product listing costs **KES 100** to post. The browser never chooses the fee, and a listing cannot be published until a paid fee has been verified server-side. Rejected/removed listings do not refund or reset the free-post allowance.
+- Every product listing costs **KES 100** to post, including the seller's first listing. There is no free-post allowance based on account age or listing count, so creating multiple accounts does not unlock a free listing. The browser never chooses the fee, and a listing cannot be published until the exact KES 100 payment has been verified server-side. A rejected/removed listing does not automatically refund the posting fee.
 - Prepza does not handle product purchases. No buyer checkout, cart, wallet, escrow, order payment, seller settlement or delivery promise is part of this MVP. Contact is through a seller-provided WhatsApp link and Prepza's existing in-app chat flow.
 - A listing starts as a private draft, requires at least one photo, then enters moderation. Only approved listings are visible in public browse/search. The seller can edit, pause, mark sold or remove their own listing; authenticated users can save/report; admins can review listings and reports.
 - If Paystack reports a successful posting-fee transaction with an amount/currency mismatch, the listing enters `payment_review`, remains unpublished, and cannot be edited, removed or charged again until an admin records a manual reconciliation note. This avoids treating a provider-successful but incorrect charge as an ordinary failed payment.
