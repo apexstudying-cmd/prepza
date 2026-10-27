@@ -437,13 +437,16 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             assert len(final["campus_ids"]) == 1, (
                 "billable delivery events did not capture campus attribution: " + str(final)
             )
-            assert campaign_report["raw_clicks"] == 2
+            # The report counts the billable click plus two distinct
+            # raw-only interactions, including the first request in the
+            # rapid-click debounce pair. The second rapid request is dropped.
+            assert campaign_report["raw_clicks"] == 3
             assert campaign_report["unique_clicks"] == 1
             assert campaign_report["billable_clicks"] == 1
             assert campaign_report["unique_billable_clickers"] == 1
             assert campaign_report["ctr_percent"] == 100.0
             assert campaign_report["billable_ctr_percent"] == 100.0
-            assert campaign_report["raw_ctr_percent"] == 200.0
+            assert campaign_report["raw_ctr_percent"] == 300.0
             assert campaign_report["unique_ctr_percent"] == 100.0
             assert campaign_report["unique_billable_ctr_percent"] == 100.0
             assert campaign_report["net_spend_kes"] == 20.35, campaign_report
