@@ -61,6 +61,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const [formId, setFormId] = useState<number | null>(null)
   const [form, setForm] = useState({ title: '', description: '', category: CATEGORIES[0], condition: 'good', price_kes: '0', location_area: '', whatsapp_number: '' })
   const [files, setFiles] = useState<File[]>([])
+  const [formImages, setFormImages] = useState<ImageRef[]>([])
   const [reporting, setReporting] = useState(false)
   const [reportReason, setReportReason] = useState('scam')
   const [reportDetails, setReportDetails] = useState('')
@@ -128,7 +129,16 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const startCreate = (listing?: Listing) => {
     feedback(); setFormId(listing?.id ?? null)
     setForm({ title: listing?.title || '', description: listing?.description || '', category: listing?.category || CATEGORIES[0], condition: listing?.condition || 'good', price_kes: String(listing?.price_kes ?? 0), location_area: listing?.location_area || '', whatsapp_number: '' })
-    setFiles([]); setPage('create')
+    setFiles([]); setFormImages(listing?.images || []); setPage('create')
+  }
+  const removeFormImage = async (index: number) => {
+    if (!formId) return
+    feedback()
+    try {
+      const result = await shopApi<{ images: ImageRef[] }>('/api/shop/listings/' + formId + '/images/' + index, { method: 'DELETE', headers: { 'X-CSRF-Token': csrf } })
+      setFormImages(result.images || [])
+      setNotice('Photo removed.')
+    } catch (e: any) { setError(e?.message || 'Could not remove photo.') }
   }
   const uploadFiles = async (listingId: number, chosen: File[]) => {
     for (const file of chosen) {
@@ -259,7 +269,8 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
           <Field label="WhatsApp number (optional)"><input style={ui.input} inputMode="tel" value={form.whatsapp_number} onChange={e => setForm(f => ({ ...f, whatsapp_number: e.target.value }))} placeholder="0712345678" /></Field>
         </div>
         <div style={{ marginTop: 13 }}><Field label="Description"><textarea style={{ ...ui.input, resize: 'vertical', minHeight: 105 }} value={form.description} maxLength={2000} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe the item honestly, including wear, defects and what is included." required /></Field><div style={{ color: '#69748A', textAlign: 'right', fontSize: 10 }}>{form.description.length}/2000</div></div>
-        <div style={{ marginTop: 13 }}><Field label="Product photos (JPEG, PNG or WebP; up to 6 photos, 5 MB each)"><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e: ChangeEvent<HTMLInputElement>) => setFiles(Array.from(e.target.files || []).slice(0, 6))} style={{ ...ui.input, padding: 10 }} /></Field><p style={{ color: '#69748A', fontSize: 10, lineHeight: 1.5 }}>Use clear photos of the actual item. Photos are stored separately from the database to keep database and backups small.</p>{files.length > 0 && <div style={{ fontSize: 11, marginBottom: 8 }}>{files.length} photo(s) selected: {files.map(f => f.name).join(', ')}</div>}</div>
+        {formImages.length > 0 && <div style={{ marginTop: 13 }}><div style={{ fontSize: 11, fontWeight: 800, marginBottom: 7 }}>Current photos</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(92px,1fr))', gap: 8 }}>{formImages.map((image, index) => <div key={image.key} style={{ border: '1px solid #E4E8F0', borderRadius: 10, padding: 6 }}>{image.url ? <img src={image.url} alt={'Current product photo ' + (index + 1)} style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: 7 }} /> : <div style={{ aspectRatio: '1 / 1', background: '#EEF1F6', borderRadius: 7 }} />}<button type="button" onClick={() => removeFormImage(index)} style={{ width: '100%', marginTop: 5, border: 0, background: '#FFF0F0', color: '#8C2828', borderRadius: 7, padding: 6, fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Remove</button></div>)}</div></div>}
+        <div style={{ marginTop: 13 }}><Field label={'Add photos (' + Math.max(0, 6 - formImages.length) + ' slots left; JPEG, PNG or WebP; 5 MB each)'}><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e: ChangeEvent<HTMLInputElement>) => setFiles(Array.from(e.target.files || []).slice(0, Math.max(0, 6 - formImages.length)))} style={{ ...ui.input, padding: 10 }} disabled={formImages.length >= 6} /></Field><p style={{ color: '#69748A', fontSize: 10, lineHeight: 1.5 }}>Use clear photos of the actual item. Photos are resized and location metadata is removed before storage.</p>{files.length > 0 && <div style={{ fontSize: 11, marginBottom: 8 }}>{files.length} photo(s) selected: {files.map(f => f.name).join(', ')}</div>}<p style={{ color: '#8C2828', fontSize: 10, lineHeight: 1.5 }}>Do not list stolen or counterfeit goods, weapons, medicines, alcohol, tobacco/nicotine, or other prohibited or regulated items.</p></div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}><ShopButton onClick={saveForm} disabled={saving}>{saving ? 'Saving…' : formId ? 'Save changes' : 'Save & publish'}</ShopButton><ShopButton secondary onClick={() => setPage('mine')}>Cancel</ShopButton></div>
       </section>}
 
