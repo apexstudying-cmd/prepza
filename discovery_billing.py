@@ -830,9 +830,9 @@ def register_discovery(app, db):
                 GROUP BY campaign_id
             ),
             ledger_totals AS (
-                SELECT campaign_id,
+                SELECT l.campaign_id,
                     GREATEST(0,
-                        -COALESCE(SUM(signed_amount_minor) FILTER (
+                        -COALESCE(SUM(l.signed_amount_minor) FILTER (
                             WHERE entry_type IN (
                                 'delivery_impression','delivery_click','delivery_push_delivery'
                             ) OR entry_type='delivery_reversal'
