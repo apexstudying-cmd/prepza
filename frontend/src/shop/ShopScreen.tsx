@@ -1,7 +1,7 @@
 import { useEffect, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
 
 type ImageRef = { key: string; url: string | null }
-type Listing = { id: number; title: string; description: string | null; category: string; condition: string; price_kes: number; location_area: string; images: ImageRef[]; status: string; seller_id: number; seller_name: string; whatsapp_url?: string | null; whatsapp_number?: string | null; saved: boolean; is_mine: boolean; is_free_post: boolean; posting_fee_kes: number; posting_fee_paid: boolean; moderation_note?: string | null }
+type Listing = { id: number; title: string; description: string | null; category: string; condition: string; price_kes: number; location_area: string; images: ImageRef[]; status: string; seller_id: number; seller_name: string; whatsapp_url?: string | null; whatsapp_number?: string | null; saved: boolean; is_mine: boolean; is_free_post: boolean; posting_fee_kes: number; posting_fee_paid: boolean; posting_payment_reference?: string | null; posting_payment_review_note?: string | null; moderation_note?: string | null }
 type Page = 'browse' | 'detail' | 'create' | 'mine' | 'saved' | 'admin'
 type Props = { setScreen: (screen: any) => void; setActiveConversationId: (id: number) => void }
 const CATEGORIES = ['Books & study', 'Electronics', 'Hostel & home', 'Fashion', 'Accessories', 'Sports & fitness', 'Other']
@@ -48,6 +48,8 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const [csrf, setCsrf] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminListings, setAdminListings] = useState<Listing[]>([])
+  const [paymentReviews, setPaymentReviews] = useState<Listing[]>([])
+  const [paymentReviewNotes, setPaymentReviewNotes] = useState<Record<number, string>>({})
   const [reports, setReports] = useState<any[]>([])
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('')
@@ -79,8 +81,9 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const loadMine = async () => setMine((await shopApi<{ listings: Listing[] }>('/api/shop/my-listings')).listings || [])
   const loadSaved = async () => setSaved((await shopApi<{ listings: Listing[] }>('/api/shop/saved')).listings || [])
   const loadAdmin = async () => {
-    const data = await shopApi<{ listings: Listing[]; reports: any[] }>('/api/shop/admin/queue')
+    const data = await shopApi<{ listings: Listing[]; payment_reviews: Listing[]; reports: any[] }>('/api/shop/admin/queue')
     setAdminListings(data.listings || [])
+    setPaymentReviews(data.payment_reviews || [])
     setReports(data.reports || [])
   }
 
@@ -93,7 +96,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     const reference = new URLSearchParams(window.location.search).get('shop_payment')
     if (reference) {
       shopApi<{ status: string }>( '/api/shop/payments/' + encodeURIComponent(reference))
-        .then(result => { if (alive) { setPage('mine'); setNotice(result.status === 'success' ? 'Posting fee confirmed. Your draft is ready to publish.' : result.status === 'pending' ? 'Paystack is still confirming the posting fee. Refresh My Listings shortly.' : 'Payment was not completed. Your draft remains available to retry.') } })
+        .then(result => { if (alive) { setPage('mine'); setNotice(result.status === 'success' ? 'Posting fee confirmed. Your draft is ready to publish.' : result.status === 'pending' ? 'Paystack is still confirming the posting fee. Refresh My Listings shortly.' : result.status === 'mismatched' ? 'Payment needs manual verification. Do not retry this charge; contact Prepza support.' : 'Payment was not completed. Your draft remains available to retry.') } })
         .catch(() => { if (alive) setError('Could not verify the posting payment yet. Check My Listings before retrying.') })
         .finally(() => { const url = new URL(window.location.href); url.searchParams.delete('shop_payment'); window.history.replaceState({}, '', url.toString()) })
     }
@@ -119,7 +122,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     return () => window.clearTimeout(timer)
   }, [query, category, condition, location, sort])
 
-  const statusLabel = (status: string) => ({ draft: 'Draft', pending_payment: 'Payment pending', pending_review: 'Awaiting review', active: 'Live', paused: 'Paused', sold: 'Sold', rejected: 'Needs changes', removed: 'Removed' } as Record<string, string>)[status] || status
+  const statusLabel = (status: string) => ({ draft: 'Draft', pending_payment: 'Payment pending', payment_review: 'Payment review required', pending_review: 'Awaiting review', active: 'Live', paused: 'Paused', sold: 'Sold', rejected: 'Needs changes', removed: 'Removed' } as Record<string, string>)[status] || status
   const imageFor = (listing: Listing) => listing.images?.find(image => image.url)?.url || null
   const openDetail = async (listing: Listing) => {
     feedback()
@@ -233,6 +236,16 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     try { await shopApi('/api/shop/admin/reports/' + id + '/resolve', { method: 'POST', headers: { 'X-CSRF-Token': csrf } }); await loadAdmin() }
     catch (e: any) { setError(e?.message || 'Could not resolve report.') }
   }
+  const resolvePaymentReview = async (id: number, action: 'confirm_paid' | 'allow_retry') => {
+    const note = (paymentReviewNotes[id] || '').trim()
+    if (note.length < 10) { setError('Record at least 10 characters describing the provider-side verification before resolving this payment.'); return }
+    try {
+      await shopApi('/api/shop/admin/listings/' + id + '/resolve-payment', { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ action, note }) })
+      setPaymentReviewNotes(current => ({ ...current, [id]: '' }))
+      await loadAdmin()
+      setNotice(action === 'confirm_paid' ? 'Payment manually reconciled. The seller can now submit the draft.' : 'Payment review closed. The seller can retry after you confirmed no fee remains captured.')
+    } catch (e: any) { setError(e?.message || 'Could not resolve the posting payment.') }
+  }
   const nav: { id: Page; label: string }[] = [{ id: 'browse', label: 'Browse' }, { id: 'mine', label: 'My listings' }, { id: 'saved', label: 'Saved' }, ...(isAdmin ? [{ id: 'admin' as Page, label: 'Moderation' }] : [])]
   const card = (item: Listing, owned = false) => <article key={item.id} onClick={() => openDetail(item)} style={{ ...ui.panel, padding: 0, overflow: 'hidden', minWidth: 0, cursor: 'pointer' }}>
     {imageFor(item) ? <img src={imageFor(item)!} alt={item.title} loading="lazy" style={{ width: '100%', height: 148, objectFit: 'cover', display: 'block', background: '#EEF1F6' }} /> : <div style={{ height: 148, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg,#E9EDF5,#F8F9FC)', color: '#758099', fontSize: 12 }}>Photo unavailable</div>}
@@ -295,7 +308,10 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
         <div style={{ marginTop: 18, background: '#FFF8E7', border: '1px solid #F1DFAB', borderRadius: 12, padding: 13, fontSize: 11, lineHeight: 1.6, color: '#604A16' }}><strong>Stay safe:</strong> inspect items before paying, meet in a public place, avoid advance-payment pressure, and never share passwords, OTPs or M-Pesa PINs. Prepza does not handle purchases or guarantee seller transactions.</div>
       </section>}
 
-      {page === 'admin' && isAdmin && <section style={{ display: 'grid', gap: 18 }}><div><h2 style={{ margin: '0 0 5px', fontSize: 18 }}>Listing moderation</h2><p style={{ margin: 0, fontSize: 11, color: '#69748A' }}>Review products before they become visible to students.</p></div>{adminListings.length ? adminListings.map(item => <div key={item.id} style={{ ...ui.panel, display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' }}>{imageFor(item) && <img src={imageFor(item)!} alt="" style={{ width: 74, height: 74, borderRadius: 10, objectFit: 'cover' }} />}<div style={{ flex: 1, minWidth: 170 }}><strong>{item.title}</strong><div style={{ fontSize: 11, color: '#69748A', marginTop: 4 }}>{item.seller_name} · {money(item.price_kes)} · {item.location_area}</div><div style={{ fontSize: 11, marginTop: 5 }}>{item.description}</div></div><ShopButton onClick={() => moderate(item.id, 'approve')}>Approve</ShopButton><ShopButton secondary onClick={() => moderate(item.id, 'reject')}>Reject</ShopButton></div>) : <div style={ui.panel}>No listings awaiting review.</div>}<div><h2 style={{ fontSize: 17 }}>Reports</h2>{reports.length ? reports.map(report => <div key={report.id} style={{ ...ui.panel, marginBottom: 9 }}><strong>Listing #{report.listing_id} · {report.reason}</strong><p style={{ fontSize: 11 }}>{report.details || 'No extra details.'}</p><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><ShopButton secondary onClick={() => moderate(report.listing_id, 'remove')}>Remove listing</ShopButton><ShopButton secondary onClick={() => resolveReport(report.id)}>Resolve report</ShopButton></div></div>) : <div style={ui.panel}>No open reports.</div>}</div></section>}
+      {page === 'admin' && isAdmin && <section style={{ display: 'grid', gap: 18 }}><div><h2 style={{ margin: '0 0 5px', fontSize: 18 }}>Listing moderation</h2><p style={{ margin: 0, fontSize: 11, color: '#69748A' }}>Review products before they become visible to students.</p></div>
+        <div><h3 style={{ fontSize: 15 }}>Posting payment exceptions</h3><p style={{ fontSize: 11, color: '#69748A' }}>Verify the exact reference, KES amount and currency in Paystack before confirming a charge. Do not allow a retry until you confirm no money remains captured or the incorrect charge is handled.</p>{paymentReviews.length ? paymentReviews.map(item => <div key={item.id} style={{ ...ui.panel, marginBottom: 10, borderColor: '#E6B9B9' }}><strong>{item.title} · Listing #{item.id}</strong><div style={{ fontSize: 11, color: '#69748A', marginTop: 5 }}>Seller: {item.seller_name} · Reference: {item.posting_payment_reference || 'missing'}</div><p style={{ fontSize: 11 }}>{item.posting_payment_review_note || 'Posting payment amount/currency requires manual verification.'}</p><Field label="Provider verification note"><textarea style={ui.input} rows={2} maxLength={500} value={paymentReviewNotes[item.id] || ''} onChange={e => setPaymentReviewNotes(notes => ({ ...notes, [item.id]: e.target.value }))} placeholder="Record provider reference, amount/currency verified, and outcome." /></Field><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 9 }}><ShopButton onClick={() => resolvePaymentReview(item.id, 'confirm_paid')}>Confirm verified KES 100 payment</ShopButton><ShopButton secondary onClick={() => resolvePaymentReview(item.id, 'allow_retry')}>Allow retry after verification</ShopButton></div></div>) : <div style={ui.panel}>No posting-payment exceptions.</div>}</div>
+        <div><h3 style={{ fontSize: 15 }}>Listings awaiting approval</h3>{adminListings.length ? adminListings.map(item => <div key={item.id} style={{ ...ui.panel, display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', marginBottom: 9 }}>{imageFor(item) && <img src={imageFor(item)!} alt="" style={{ width: 74, height: 74, borderRadius: 10, objectFit: 'cover' }} />}<div style={{ flex: 1, minWidth: 170 }}><strong>{item.title}</strong><div style={{ fontSize: 11, color: '#69748A', marginTop: 4 }}>{item.seller_name} · {money(item.price_kes)} · {item.location_area}</div><div style={{ fontSize: 11, marginTop: 5 }}>{item.description}</div></div><ShopButton onClick={() => moderate(item.id, 'approve')}>Approve</ShopButton><ShopButton secondary onClick={() => moderate(item.id, 'reject')}>Reject</ShopButton></div>) : <div style={ui.panel}>No listings awaiting review.</div>}</div>
+        <div><h3 style={{ fontSize: 15 }}>Reports</h3>{reports.length ? reports.map(report => <div key={report.id} style={{ ...ui.panel, marginBottom: 9 }}><strong>Listing #{report.listing_id} · {report.reason}</strong><p style={{ fontSize: 11 }}>{report.details || 'No extra details.'}</p><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><ShopButton secondary onClick={() => moderate(report.listing_id, 'remove')}>Remove listing</ShopButton><ShopButton secondary onClick={() => resolveReport(report.id)}>Resolve report</ShopButton></div></div>) : <div style={ui.panel}>No open reports.</div>}</div></section>}
     </main>
   </div>
 }
