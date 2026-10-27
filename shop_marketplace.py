@@ -110,6 +110,28 @@ def fulfill_shop_posting_payment(db, payment):
         return False
     listing.posting_fee_paid = True
     listing.posting_payment_reference = payment.reference
+    if listing.status == "pending_payment":
+        listing.status = "draft"
+        listing.checkout_url = None
+    listing.updated_at = datetime.utcnow()
+    db.session.commit()
+    return True
+
+
+def fail_shop_posting_payment(db, payment):
+    """Release a failed/mismatched checkout so the seller can retry safely."""
+    global _ShopListing
+    if _ShopListing is None or payment.payment_type != "shop_posting":
+        return False
+    try:
+        listing_id = int(payment.plan or "")
+    except (TypeError, ValueError):
+        return False
+    listing = _ShopListing.query.filter_by(id=listing_id, seller_id=payment.user_id).with_for_update().first()
+    if not listing or listing.status != "pending_payment":
+        return False
+    listing.status = "draft"
+    listing.checkout_url = None
     listing.updated_at = datetime.utcnow()
     db.session.commit()
     return True
@@ -219,7 +241,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             "seller_id": listing.seller_id,
             "seller_name": (seller.display_name or "Prepza seller") if seller else "Prepza seller",
             "seller_university_id": getattr(seller, "university_id", None) if seller else None,
-            "whatsapp_number": listing.whatsapp_number if detail and viewer_id != listing.seller_id else None,
+            "whatsapp_number": listing.whatsapp_number if detail and viewer_id == listing.seller_id else None,
             "whatsapp_url": ("https://wa.me/" + listing.whatsapp_number) if detail and listing.whatsapp_number and viewer_id != listing.seller_id else None,
             "saved": saved,
             "is_mine": viewer_id == listing.seller_id,
@@ -695,44 +717,6 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         report.reviewed_at = datetime.utcnow()
         db.session.commit()
         return jsonify({"ok": True})
-
-    @app.post("/api/shop/listings/<int:listing_id>/contact")
-    def shop_contact_seller(listing_id):
-        user, denied = require_user()
-        if denied:
-            return denied
-        if not csrf_valid():
-            return jsonify({"error": "Invalid CSRF token"}), 403
-        listing = ShopListing.query.filter_by(id=listing_id, status="active").first()
-        if not listing:
-            return jsonify({"error": "Listing not found"}), 404
-        if listing.seller_id == user.id:
-            return jsonify({"error": "You cannot contact yourself"}), 400
-        seller = db.session.get(User, listing.seller_id)
-        if not seller or getattr(seller, "is_suspended", False):
-            return jsonify({"error": "Seller is unavailable"}), 404
-        # Reuse the existing direct-chat authorization, request-state and E2EE
-        # bootstrap flow. The UI then opens the existing chat screen.
-        existing_membership = ConversationParticipant.query.filter_by(user_id=user.id, left_at=None).all()
-        for membership in existing_membership:
-            conversation = db.session.get(Conversation, membership.conversation_id)
-            if not conversation or conversation.is_group or conversation.status != "accepted":
-                continue
-            peer = ConversationParticipant.query.filter_by(conversation_id=conversation.id, user_id=seller.id, left_at=None).first()
-            if peer:
-                return jsonify({"conversation_id": conversation.id, "status": conversation.status, "reused": True})
-        status = "accepted"
-        if getattr(seller, "who_can_message", "everyone") == "followers":
-            # Let the core /chats endpoint enforce follow restrictions instead
-            # of reimplementing follower privacy with an incomplete model.
-            return jsonify({"error": "Use in-app chat to send a message request", "code": "SHOP_USE_CHAT_FLOW"}), 409
-        conversation = Conversation(is_group=False, name=None, created_by=user.id, status=status, e2ee_mode="legacy", key_epoch=0)
-        db.session.add(conversation)
-        db.session.flush()
-        db.session.add(ConversationParticipant(conversation_id=conversation.id, user_id=user.id, role="member"))
-        db.session.add(ConversationParticipant(conversation_id=conversation.id, user_id=seller.id, role="member"))
-        db.session.commit()
-        return jsonify({"conversation_id": conversation.id, "status": status, "reused": False}), 201
 
     app._prepza_shop_registered = True
     return {"Listing": ShopListing, "SavedListing": ShopSavedListing, "Report": ShopReport}
