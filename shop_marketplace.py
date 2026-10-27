@@ -112,7 +112,7 @@ def fulfill_shop_posting_payment(db, payment):
     except (TypeError, ValueError):
         return False
     listing = _ShopListing.query.filter_by(id=listing_id, seller_id=payment.user_id).with_for_update().first()
-    if not listing or int(payment.amount) != LISTING_POST_FEE_KES:
+    if not listing or int(payment.amount) != LISTING_POST_FEE_KES or listing.posting_payment_reference != payment.reference:
         return False
     now = datetime.utcnow()
     if listing.posting_period_payment_reference == payment.reference and listing.posting_fee_expires_at:
