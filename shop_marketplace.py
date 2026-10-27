@@ -1,9 +1,9 @@
 """Prepza Shop classifieds API.
 
 Shop never processes a buyer's purchase or holds buyer funds. Paystack is used
-only for the seller's KES 100 listing-posting fee after their one lifetime free
-listing. All listing ownership, moderation and payment fulfillment is enforced
-on the server.
+only for the seller's KES 100 listing-posting fee on every listing, including
+the first. There is no free-post allowance. Listing ownership, moderation,
+legacy-fee normalization and payment fulfillment are enforced on the server.
 """
 from __future__ import annotations
 
