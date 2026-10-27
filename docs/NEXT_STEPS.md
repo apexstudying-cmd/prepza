@@ -591,6 +591,7 @@ The `b2b_monetization_integrity` release gate is IN_PROGRESS. Overall release re
 - [x] Home entry approved: five quick actions; replace Podcasts with Shop, keep Explore and bottom navigation unchanged.
 - [x] First lifetime listing free; each later product post costs KES 100, verified server-side through the existing Paystack integration.
 - [~] Build and test browse/search/detail, draft creation, optimized image upload, seller edit/pause/sold/remove, saved listings, WhatsApp/in-app chat, reporting and admin moderation.
+- [~] Verify Paystack amount/currency mismatch quarantine, stale checkout retry, and audited admin payment reconciliation; a provider-successful mismatch must never be treated as paid automatically.
 - [~] Apply Alembic migration `20261027_shop_marketplace` in the disposable PostgreSQL browser workflow and prove the existing-database upgrade path.
 - [ ] Pass the full Shop browser journey: first free listing, second listing KES 100 fee, mocked Paystack success/failure/retry/idempotency, moderation, saved/report flows, ownership denial and direct chat.
 - [ ] Configure staging R2 test bucket/prefix and verify upload/read/delete with restricted credentials; do not use production objects for tests.
