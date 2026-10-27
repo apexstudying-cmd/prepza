@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-27",
-  "last_verified_commit": "e1d9ef42b533c9fb3fb14de2a4a3d66e30714015",
+  "last_verified_commit": "453557744e18af81443279bde95c6245a7b29e1f",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -103,7 +103,7 @@
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "Full-stack Shop UI/API, PostgreSQL migration and Paystack posting-fee integration are present. Approved contract is KES 100 for every listing including the first; server normalizes legacy zero-fee drafts and rejects unpaid publish/approval. Research-backed UX/UI standard is docs/ux/SHOP_UX_UI_STANDARD.md. Browse caching uses tab-memory snapshots with a five-minute freshness window, background API revalidation and stale fallback notice; snapshots are invalidated after listing edits, image changes, publish, save/unsave and seller status actions. Latest code commit 507bb61fea012d05abefc17d4140d13f7e350128; Frontend Build, Shop Marketplace Contract and Release Browser/Cross-System Regression runs are queued on that SHA, so these changes are not yet verified. Paystack/R2 provider-side checks remain NOT_TESTED."
+      "evidence": "Monthly-per-item fee implementation in progress: KES 100 buys 30 days per listing, manually renewed per item; paid listings receive a transition 30-day period in migration, expired items are excluded from public browse, and payment fulfillment sets expiry. Added migration 20261028_shop_listing_expiry and pure period-expiry test. Latest code/test changes are not yet verified by CI; release remains blocked. UX standard: docs/ux/SHOP_UX_UI_STANDARD.md. Provider-side Paystack/R2 checks remain NOT_TESTED."
     },
     {
       "id": "payment_recovery_idempotency",
