@@ -407,5 +407,8 @@ def register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf
         "issue": issue,
         "verify": verify,
         "ses_configured": ses_configured,
+        # Expose the boundary through the existing app extension so the
+        # SES request can be contract-tested with a fake boto3 client.
+        "send_email": send_email,
     }
     return AuthOtp
