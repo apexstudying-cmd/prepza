@@ -4,7 +4,7 @@
 **Last researched:** 27 October 2026  
 **Target branch:** `main`  
 **Scope:** Product placement, user experience, marketplace operations, monetization, risks, and phased implementation  
-**Non-goal:** This document does not authorize or implement code, schema, navigation, payment, or infrastructure changes.
+**Status note:** This document began as a proposal. Section 15 supersedes the historical proposal where they conflict and records the approved implementation contract and current release limits.
 
 ## 1. Executive recommendation
 
@@ -34,7 +34,7 @@ Repository inspected on `main` using the GitHub-connected repository tools. Rele
 
 ### Architecture implications
 
-1. **Do not add a new permanent bottom-navigation item in the first release.** There are already five high-value bottom-nav actions. Put Shop in Explore as a prominent first-class entry and open a dedicated Shop screen. This tests discovery without immediately making the global navigation more crowded.
+1. **Do not add a new permanent bottom-navigation item.** Keep the existing five-item bottom navigation and Explore behavior unchanged. Home's five quick actions are Upload, My Study, Ada, Practice and Shop; Podcasts remains available from My Study. Shop is a dedicated screen launched from Home Quick Actions.
 2. **Keep Shop separate from Library and Study Hub.** Those are learning-material workflows; physical goods listings need prices, condition, seller information, availability, and handover details.
 3. **Reuse established app boundaries only after contract inspection.** The frontend uses a central `api()` helper and screen-stack navigation. Existing chat and payment flows may be reusable, but their exact contracts must be inspected and tested before wiring Shop into them.
 4. **Do not assume a marketplace backend already exists.** The inspected files establish the existing app structure, billing modules, and storage helpers; they do not prove that listing, order, seller-settlement, or marketplace-moderation tables/routes already exist.
@@ -149,9 +149,9 @@ Require title, category, price (or explicit “free”), condition, description,
 
 ## 5. Business model recommendation
 
-### Earlier market-entry hypothesis (superseded by launch pricing decision)
+### Pricing research and final launch decision
 
-Earlier research considered free basic listings to reduce marketplace friction. The current launch decision supersedes that hypothesis: every listing costs KES 100 to discourage throwaway listings and establish a simple posting price. Validate conversion and abuse rates in a small pilot before reconsidering pricing.
+Earlier research considered free basic listings to reduce marketplace friction. That is a superseded hypothesis, not the launch contract. The approved launch decision is KES 100 for every listing, including the first. This may discourage throwaway listings but could also reduce legitimate supply; validate conversion, duplicate-account abuse, complaint rates and seller retention during a controlled pilot before reconsidering the price.
 
 Potential revenue experiments after there are active listings and repeat buyer traffic:
 - **Featured listing:** test KES 50–100 for a clearly labelled 7-day boost as a pricing hypothesis, not an established market price.
@@ -350,7 +350,7 @@ These are proposed concepts only; no existing schema is claimed and no migration
 
 ## 13. Acceptance criteria before any code implementation
 
-- [ ] Shop is reachable from Explore without changing existing bottom-nav semantics.
+- [x] Shop's approved entry is the fifth Home Quick Action; Podcasts remains in My Study, Explore is unchanged, and bottom navigation is unchanged.
 - [ ] Mobile and desktop layouts are responsive, keyboard accessible, and consistent with Prepza's existing design system.
 - [ ] Empty, loading, offline, error, no-results, and moderation-pending states are designed.
 - [ ] Listings are server-authoritative and ownership is enforced for every mutation.
@@ -361,22 +361,22 @@ These are proposed concepts only; no existing schema is claimed and no migration
 - [ ] All paid placement and eventual transaction fees are disclosed before commitment.
 - [ ] Existing student subscriptions, B2B plans, sponsored campaigns, Study Hub, Library, Ada, and navigation regression tests remain green.
 - [ ] The pilot has metrics, a moderation owner, and a rollback/disable plan.
-- [ ] No implementation begins until this proposal is reviewed and the user explicitly authorizes code changes.
+- [x] Implementation was explicitly authorized; source code and schema are present on `main`. This checkbox is retained as historical acceptance context, not a current blocker.
 
 ## 14. Research basis and limitations
 
-Research checked on 10 October 2026:
+Research sources checked on 27 October 2026 (recheck provider/legal terms before launch):
 - Paystack documents split settlements through subaccounts/split groups and describes marketplace use cases. This establishes that a technical product exists, not that the proposed Prepza account is eligible or that every Kenyan payment method supports the desired flow.
 - Paystack documents transfers as available in Kenya, but transfers are not the same as approval to hold buyer funds or run escrow.
 - ODPC guidance describes registration duties and exemptions for data controllers/processors; Prepza must assess its actual facts and processing purposes.
 - KRA's eTIMS guidance says persons engaged in business generally need to onboard and issue electronic tax invoices, with specific solutions and rules for small businesses and other circumstances.
 - Kenya Law's digital-marketplace tax regulations are relevant background, but their applicability and current consolidated legal position should be confirmed with a Kenyan tax professional.
 
-Market-pricing hypotheses in this document (KES 50–100 boosts, a 5% future seller-side transaction fee, and the 4–6 week pilot) are proposed experiments, not claimed competitor benchmarks or validated demand. The public web research found useful official payment, privacy, and tax guidance but did not establish reliable current marketplace fee benchmarks specific to Kenyan campus marketplaces. Conduct direct competitor checks and student/seller interviews before fixing prices.
+Market-pricing hypotheses in this document (KES 50–100 boosts, a 5% future seller-side transaction fee, and the 4–6 week pilot) are proposed experiments, not claimed competitor benchmarks or validated demand. The only approved launch charge is KES 100 per listing; boosts and transaction fees are out of scope for this MVP. The public web research found useful official payment, privacy, and tax guidance but did not establish reliable current marketplace fee benchmarks specific to Kenyan campus marketplaces. Conduct direct competitor checks and student/seller interviews before fixing prices.
 
 ---
 
-**Decision requested before implementation:** approve the initial positioning (campus classifieds with direct buyer-seller contact, no Prepza-held funds), the Shop placement under Explore, the pilot categories, and the safety/moderation owner. No code has been changed as part of this proposal.
+**Historical decision checkpoint (superseded):** the original proposal requested approval before implementation and described Shop placement under Explore. The user subsequently approved implementation on `main` with Shop as a Home Quick Action, a flat KES 100 fee on every listing, and direct buyer-seller contact without Prepza-held purchase funds. See Section 15 and `docs/NEXT_STEPS.md` for the live contract and remaining release gates.
 
 
 ## 15. Approved implementation and release contract (27 October 2026)
@@ -384,7 +384,7 @@ Market-pricing hypotheses in this document (KES 50–100 boosts, a 5% future sel
 The implementation direction is approved for direct work on `main`:
 
 - Home retains exactly five quick actions. Replace Podcasts with Shop; retain Upload, My Study, Library, and Ada. Podcasts remain available through My Study and the existing podcast library. Explore and the five-item bottom navigation are unchanged.
-- Every product listing costs **KES 100** to post, including the seller's first listing. There is no free-post allowance based on account age or listing count, so creating multiple accounts does not unlock a free listing. The browser never chooses the fee, and a listing cannot be published until the exact KES 100 payment has been verified server-side. A rejected/removed listing does not automatically refund the posting fee.
+- Every product listing costs **KES 100** to post, including the seller's first listing. There is no free-post allowance based on account age or listing count, so creating multiple accounts does not unlock a free listing. The browser never chooses the fee, and a listing cannot be published until the exact KES 100 payment has been verified server-side. The backend now normalizes legacy zero-fee drafts before checkout/publishing and prevents moderators from approving them unpaid. A rejected/removed listing does not automatically refund the posting fee.
 - Prepza does not handle product purchases. No buyer checkout, cart, wallet, escrow, order payment, seller settlement or delivery promise is part of this MVP. Contact is through a seller-provided WhatsApp link and Prepza's existing in-app chat flow.
 - A listing starts as a private draft, requires at least one photo, then enters moderation. Only approved listings are visible in public browse/search. The seller can edit, pause, mark sold or remove their own listing; authenticated users can save/report; admins can review listings and reports.
 - If Paystack reports a successful posting-fee transaction with an amount/currency mismatch, the listing enters `payment_review`, remains unpublished, and cannot be edited, removed or charged again until an admin records a manual reconciliation note. This avoids treating a provider-successful but incorrect charge as an ordinary failed payment.
