@@ -604,3 +604,11 @@ Cost notes: use the existing R2 helper/prefix, resize/re-encode images on upload
 
 
 Deployment note (27 October 2026): Render's `prepza` service has auto-deploy enabled for `main`. GitHub commits can enter the deployment queue without a manual deploy action; verify the Render deployment list before assuming a commit is only staged. External-provider and launch gates remain authoritative for release readiness.
+
+
+## Shop UX and caching follow-up (27 October 2026)
+- [x] Add researched screen-by-screen UX/UI and low-cost caching standard at `docs/ux/SHOP_UX_UI_STANDARD.md`.
+- [~] Implement tab-memory stale-while-revalidate browse snapshots (five-minute fresh display, background API refresh, stale fallback notice); do not persist account-specific browse fields or cache payment/admin/private responses.
+- [~] Invalidate browse snapshots after listing edits, save/unsave and seller status actions. Verify complete mutation coverage and add/run focused cache regressions on the latest `main` SHA before marking complete.
+- [ ] Verify object-storage image sizing/cache headers against R2 and confirm no additional paid cache service is required.
+- [ ] Re-run latest-commit frontend build, Shop Marketplace Contract, phone/tablet Shop browser regression and full release browser/cross-system regression. Keep release blocked until evidence is current.
