@@ -31,14 +31,14 @@ ALLOWED_LISTING_STATES = {"draft", "pending_payment", "payment_review", "pending
 
 
 def listing_fee_for_post_number(post_number: int) -> int:
-    """Every product listing costs KES 100, including the seller's first."""
+    """The first lifetime listing is free; every later listing costs KES 100."""
     try:
         number = int(post_number)
     except (TypeError, ValueError):
         raise ValueError("Post number must be a positive integer")
     if number < 1:
         raise ValueError("Post number must be a positive integer")
-    return LISTING_POST_FEE_KES
+    return 0 if number == 1 else LISTING_POST_FEE_KES
 
 
 def normalize_whatsapp_number(value: str | None) -> str | None:
