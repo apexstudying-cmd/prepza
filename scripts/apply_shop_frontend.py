@@ -30,17 +30,19 @@ def main() -> None:
     old_actions = """            {[
               { icon: Ic.upload('w-6 h-6'), label: 'Upload', action: () => setScreen('upload') },
               { icon: Ic.book('w-6 h-6'), label: 'My Study', action: () => setScreen('study-materials') },
+              { icon: Ic.explore('w-6 h-6'), label: 'Library', action: () => setScreen('library') },
               { icon: Ic.flash('w-6 h-6'), label: 'Ada', action: () => setScreen('ai-tutor') },
               { icon: Ic.podcast('w-6 h-6'), label: 'Podcasts', action: () => setScreen('podcast-library') },
             ].map((t, i) => ("""
     new_actions = """            {[
               { icon: Ic.upload('w-6 h-6'), label: 'Upload', action: () => setScreen('upload') },
               { icon: Ic.book('w-6 h-6'), label: 'My Study', action: () => setScreen('study-materials') },
+              { icon: Ic.explore('w-6 h-6'), label: 'Library', action: () => setScreen('library') },
               { icon: Ic.flash('w-6 h-6'), label: 'Ada', action: () => setScreen('ai-tutor') },
-              { icon: Ic.check('w-6 h-6'), label: 'Practice', action: () => setScreen('quiz') },
               { icon: Ic.image('w-6 h-6'), label: 'Shop', action: () => setScreen('shop') },
             ].map((t, i) => ("""
     text = replace_once(text, old_actions, new_actions, "five Home quick actions")
+
     text = replace_once(
         text,
         "'mind-map','document-reader'].includes(active)",
