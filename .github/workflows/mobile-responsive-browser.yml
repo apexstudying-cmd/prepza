@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/test_browser_mobile_responsive.py'
       - 'scripts/test_browser_study_hub_offline_content.py'
+      - 'scripts/test_browser_b2b_metering.py'
       - 'chat_event_queue.py'
       - 'chat_event_worker.py'
       - 'frontend/src/**'
@@ -121,6 +122,9 @@ jobs:
 
       - name: Run mobile and tablet responsive browser checks
         run: python scripts/test_browser_mobile_responsive.py
+
+      - name: Run B2B browser-to-ledger metering regression
+        run: python scripts/test_browser_b2b_metering.py
 
       - name: Run full disposable PostgreSQL QA suite
         run: |
