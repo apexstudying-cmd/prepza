@@ -2049,6 +2049,22 @@ def test_shop_every_listing_paid_posting_fee_and_direct_contact(world, monkeypat
     assert first_listing["posting_fee_kes"] == 100
     assert first_listing["status"] == "draft"
 
+    # Legacy/forged zero-fee drafts must not bypass the new per-listing fee.
+    legacy_draft = db.session.get(shop_marketplace._ShopListing, first_listing["id"])
+    legacy_draft.posting_fee_kes = 0
+    legacy_draft.is_free_post = True
+    legacy_draft.posting_fee_paid = True
+    db.session.commit()
+    legacy_publish = seller.post(
+        f"/api/shop/listings/{first_listing['id']}/publish",
+        headers=_csrf(seller_id),
+    )
+    assert legacy_publish.status_code == 402
+    normalized_legacy = db.session.get(shop_marketplace._ShopListing, first_listing["id"])
+    assert normalized_legacy.posting_fee_kes == 100
+    assert normalized_legacy.is_free_post is False
+    assert normalized_legacy.posting_fee_paid is False
+
     invalid_upload = seller.post(
         f"/api/shop/listings/{first_listing['id']}/images",
         data={"image": (BytesIO(b"not an image",), "fake.png")},
