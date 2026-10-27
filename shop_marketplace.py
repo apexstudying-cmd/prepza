@@ -216,8 +216,9 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             return None, (jsonify({"error": "Authentication required"}), 401)
         return user, None
 
-    def listing_json(listing, viewer_id=None, detail=False):
-        seller = db.session.get(User, listing.seller_id)
+    def listing_json(listing, viewer_id=None, detail=False, seller=None, saved_ids=None):
+        if seller is None:
+            seller = db.session.get(User, listing.seller_id)
         images = []
         for key in (listing.image_keys or []):
             try:
@@ -225,9 +226,10 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
                 images.append({"key": key, "url": r2_presigned_get("shop-listings", key, expires_in=900)})
             except Exception:
                 images.append({"key": key, "url": None})
-        saved = False
-        if viewer_id and _ShopSavedListing.query.filter_by(user_id=viewer_id, listing_id=listing.id).first():
-            saved = True
+        if saved_ids is not None:
+            saved = listing.id in saved_ids
+        else:
+            saved = bool(viewer_id and _ShopSavedListing.query.filter_by(user_id=viewer_id, listing_id=listing.id).first())
         seller_public = bool(seller and getattr(seller, "profile_visibility", "public") == "public")
         result = {
             "id": listing.id,
@@ -254,6 +256,29 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             "updated_at": listing.updated_at.isoformat() if listing.updated_at else None,
         }
         return result
+
+    def listing_json_batch(rows, viewer_id=None, detail=False):
+        rows = list(rows)
+        if not rows:
+            return []
+        seller_ids = {row.seller_id for row in rows}
+        sellers = {
+            seller.id: seller
+            for seller in User.query.filter(User.id.in_(seller_ids)).all()
+        }
+        listing_ids = {row.id for row in rows}
+        saved_ids = set()
+        if viewer_id:
+            saved_ids = {
+                row[0]
+                for row in db.session.query(_ShopSavedListing.listing_id)
+                .filter(_ShopSavedListing.user_id == viewer_id, _ShopSavedListing.listing_id.in_(listing_ids))
+                .all()
+            }
+        return [
+            listing_json(row, viewer_id, detail=detail, seller=sellers.get(row.seller_id), saved_ids=saved_ids)
+            for row in rows
+        ]
 
     def listing_for_owner(listing_id, user_id):
         listing = db.session.get(ShopListing, listing_id)
@@ -291,7 +316,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         page_size = 24
         total = query.count()
         rows = query.offset((page - 1) * page_size).limit(page_size).all()
-        return jsonify({"listings": [listing_json(row, user.id) for row in rows], "page": page, "page_size": page_size, "total": total, "categories": sorted(ALLOWED_CATEGORIES)})
+        return jsonify({"listings": listing_json_batch(rows, user.id), "page": page, "page_size": page_size, "total": total, "categories": sorted(ALLOWED_CATEGORIES)})
 
     @app.get("/api/shop/listings/<int:listing_id>")
     def shop_listing_detail(listing_id):
@@ -309,7 +334,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         if denied:
             return denied
         rows = ShopListing.query.filter_by(seller_id=user.id).order_by(ShopListing.updated_at.desc(), ShopListing.id.desc()).limit(100).all()
-        return jsonify({"listings": [listing_json(row, user.id, detail=True) for row in rows]})
+        return jsonify({"listings": listing_json_batch(rows, user.id, detail=True)})
 
     @app.post("/api/shop/listings")
     @limiter.limit("10 per hour")
@@ -717,7 +742,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         pending = ShopListing.query.filter_by(status="pending_review").order_by(ShopListing.created_at.asc()).limit(100).all()
         reports = ShopReport.query.filter_by(status="open").order_by(ShopReport.created_at.asc()).limit(100).all()
         return jsonify({
-            "listings": [listing_json(row, user.id, detail=True) for row in pending],
+            "listings": listing_json_batch(pending, user.id, detail=True),
             "reports": [{"id": r.id, "listing_id": r.listing_id, "reason": r.reason, "details": r.details, "reporter_id": r.reporter_id, "created_at": r.created_at.isoformat()} for r in reports],
         })
 
