@@ -520,10 +520,18 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         listing = listing_for_owner(listing_id, user.id)
         if not listing:
             return jsonify({"error": "Listing not found"}), 404
+        # Upgrade stale drafts to the current per-listing fee before checkout.
+        if listing.posting_fee_kes != LISTING_POST_FEE_KES:
+            listing.posting_fee_kes = LISTING_POST_FEE_KES
+            listing.is_free_post = False
+            listing.posting_fee_paid = False
+            listing.checkout_url = None
+            if listing.status == "pending_payment":
+                listing.status = "draft"
+            listing.updated_at = datetime.utcnow()
+            db.session.commit()
         if listing.posting_fee_paid:
             return jsonify({"error": "This listing's posting fee is already covered"}), 409
-        if listing.posting_fee_kes != LISTING_POST_FEE_KES:
-            return jsonify({"error": "No posting fee is due for this listing"}), 409
         if listing.status not in {"draft", "pending_payment"}:
             return jsonify({"error": "This listing cannot start a posting-fee checkout"}), 409
         if listing.checkout_url and listing.status == "pending_payment":
@@ -623,7 +631,19 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             return jsonify({"error": "Listing not found"}), 404
         if listing.status not in {"draft", "pending_payment", "pending_review", "paused"}:
             return jsonify({"error": "This listing cannot be published from its current state"}), 409
-        if listing.status == "pending_payment" or (listing.posting_fee_kes > 0 and not listing.posting_fee_paid):
+        # Older drafts may have been created under the retired free-first-post
+        # rule. Normalize them before any publish decision; browser-supplied
+        # flags and legacy database values must never grant a free post.
+        if listing.posting_fee_kes != LISTING_POST_FEE_KES:
+            listing.posting_fee_kes = LISTING_POST_FEE_KES
+            listing.is_free_post = False
+            listing.posting_fee_paid = False
+            listing.checkout_url = None
+            if listing.status == "pending_payment":
+                listing.status = "draft"
+            listing.updated_at = datetime.utcnow()
+            db.session.commit()
+        if listing.status == "pending_payment" or not listing.posting_fee_paid:
             return jsonify({"error": "A KES 100 posting fee must be paid before publishing this listing", "code": "SHOP_POSTING_FEE_REQUIRED", "fee_kes": LISTING_POST_FEE_KES}), 402
         if not listing.image_keys:
             return jsonify({"error": "Add at least one product photo before publishing"}), 400
@@ -799,7 +819,16 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         if action == "approve":
             if not listing.image_keys:
                 return jsonify({"error": "Listing must have at least one photo before approval"}), 409
-            if listing.posting_fee_kes and not listing.posting_fee_paid:
+            if listing.posting_fee_kes != LISTING_POST_FEE_KES:
+                listing.posting_fee_kes = LISTING_POST_FEE_KES
+                listing.is_free_post = False
+                listing.posting_fee_paid = False
+                listing.status = "draft"
+                listing.checkout_url = None
+                listing.updated_at = datetime.utcnow()
+                db.session.commit()
+                return jsonify({"error": "Legacy listing requires the KES 100 posting fee before approval"}), 409
+            if not listing.posting_fee_paid:
                 return jsonify({"error": "Posting fee is not verified"}), 409
             listing.status = "active"
         elif action == "reject":
