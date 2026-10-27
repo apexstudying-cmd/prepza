@@ -160,8 +160,16 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
 
         # Serialize events for the same student so rolling frequency caps
         # cannot be bypassed by two simultaneous requests.
+        campus_id = None
         if event_type in ("impression", "click", "push_delivery"):
             db.session.execute(text('SELECT id FROM "user" WHERE id=:uid FOR UPDATE'), {"uid": user_id})
+            # Attribute this event to the student's campus at the time of
+            # delivery, not their current profile when an advertiser later
+            # opens a report. Only the campus ID is stored, never student PII.
+            campus_id = db.session.execute(
+                text('SELECT university_id FROM "user" WHERE id=:uid'),
+                {"uid": user_id},
+            ).scalar_one_or_none()
             snapshot = campaign["pricing_snapshot"] if isinstance(campaign["pricing_snapshot"], dict) else {}
             if event_type == "impression":
                 cap_config = (snapshot.get("home_frequency_cap") or {}).get("value")
@@ -216,7 +224,12 @@ def record_billable_event(db, campaign_id, user_id, event_type, placement, event
             "cid": campaign_id, "uid": user_id, "key": event_key,
             "etype": event_type, "placement": placement,
             "amount": float(amount_kes),
-            "meta": json.dumps({"billable": True, "amount_minor": price, "meter_version": "g3-v2"})
+            "meta": json.dumps({
+                "billable": True,
+                "amount_minor": price,
+                "meter_version": "g3-v2",
+                "campus_id": int(campus_id) if campus_id is not None else None,
+            })
         })
         db.session.execute(text("""
             INSERT INTO b2b_campaign_ledger
