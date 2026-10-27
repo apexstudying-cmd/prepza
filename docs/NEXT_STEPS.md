@@ -590,17 +590,17 @@ The `b2b_monetization_integrity` release gate is IN_PROGRESS. Overall release re
 - [x] Product direction approved: campus classifieds, direct seller contact only, no buyer checkout or Prepza-held funds.
 - [x] Home entry approved: five quick actions; replace Podcasts with Shop, keep Explore and bottom navigation unchanged.
 - [x] Every product listing, including the first, costs KES 100; no free-post allowance. The fee is verified server-side through the existing Paystack integration.
-- [~] Build and test browse/search/detail, draft creation, optimized image upload, seller edit/pause/sold/remove, saved listings, WhatsApp/in-app chat, reporting and admin moderation.
+- [~] Frontend and backend are both implemented: browse/search/detail, draft creation, optimized image upload, seller edit/pause/sold/remove, saved listings, WhatsApp/in-app chat, reporting and admin moderation. Verify the full journey and mobile/tablet visuals before marking complete.
 - [~] Verify Paystack amount/currency mismatch quarantine, stale checkout retry, and audited admin payment reconciliation; a provider-successful mismatch must never be treated as paid automatically.
 - [x] Prove the populated-database upgrade path through `20261027_shop_marketplace` in [Existing Database Migration Rehearsal run 40514771584](https://github.com/apexstudying-cmd/prepza/actions/runs/40514771584); the full browser regression still separately needs to pass.
-- [ ] Pass the full Shop browser journey: first and subsequent listings each require KES 100, mocked Paystack success/failure/retry/idempotency, moderation, saved/report flows, ownership denial and direct chat.
+- [ ] Pass the full Shop browser journey against the latest main SHA: first and subsequent listings each require KES 100; legacy zero-fee drafts cannot publish; mocked Paystack success/failure/retry/idempotency, moderation, saved/report flows, ownership denial and direct chat.
 - [ ] Configure staging R2 test bucket/prefix and verify upload/read/delete with restricted credentials; do not use production objects for tests.
 - [ ] Configure Paystack test-mode checkout/webhook evidence for the posting fee; never test live buyer payments because Shop does not process product purchases.
 - [ ] Finish image lifecycle/retention rules, moderation support ownership, and product policy/privacy review.
-- [ ] Run mobile/tablet visual checks and add the Shop gate to the release record only with passing evidence.
+- [ ] Run mobile/tablet visual checks for Prepza brand consistency (navy/gold palette, typography, card radii, surfaces, spacing, responsive grid and accessible focus states) and add the Shop gate to the release record only with passing evidence.
 - [ ] Keep release blocked until the Shop gate is PASS or explicitly scoped out; source presence alone is not certification.
 
-Cost notes: use the existing R2 helper/prefix, resize/re-encode images on upload, cap at six photos per listing and 5 MB per image, avoid a new paid image service, and measure shared account storage/operations before enabling broader listing traffic. See `docs/architecture/shop.md`.
+Cost notes: use the existing R2 helper/prefix, resize/re-encode images on upload, cap at six photos per listing and 5 MB per image, avoid a new paid image service, and measure shared account storage/operations before enabling broader listing traffic. Research and pricing assumptions, the direct-contact-only scope, the KES 100 per-listing rule, legacy-draft safeguards and unresolved legal/provider checks are documented in `docs/architecture/shop.md`. R2's current published Standard free allowance is account-wide (10 GB-month, 1M Class A, 10M Class B); verify the current provider price page before launch.
 
 
 Deployment note (27 October 2026): Render's `prepza` service has auto-deploy enabled for `main`. GitHub commits can enter the deployment queue without a manual deploy action; verify the Render deployment list before assuming a commit is only staged. External-provider and launch gates remain authoritative for release readiness.
