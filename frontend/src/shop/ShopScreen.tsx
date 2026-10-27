@@ -198,6 +198,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
       let id = formId
       if (formId) id = (await shopApi<{ listing: Listing }>('/api/shop/listings/' + formId, { method: 'PATCH', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify(payload) })).listing.id
       else id = (await shopApi<{ listing: Listing }>('/api/shop/listings', { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify(payload) })).listing.id
+      invalidateBrowseSnapshots()
       if (!id) throw new Error('Draft saved but the listing ID was not returned.')
       setFormId(id)
       if (files.length) await uploadFiles(id, files)
@@ -212,6 +213,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     try {
       if (listing.saved) await shopApi('/api/shop/listings/' + listing.id + '/save', { method: 'DELETE', headers: { 'X-CSRF-Token': csrf } })
       else await shopApi('/api/shop/listings/' + listing.id + '/save', { method: 'POST', headers: { 'X-CSRF-Token': csrf } })
+      invalidateBrowseSnapshots()
       if (selected?.id === listing.id) setSelected({ ...selected, saved: !listing.saved })
       await loadBrowse()
       if (page === 'saved') await loadSaved()
