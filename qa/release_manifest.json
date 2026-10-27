@@ -130,7 +130,7 @@
       "required_test_commands": [
         "python -m pytest scripts/test_e2ee_identity_runtime.py -q"
       ],
-      "notes": "Backend identity contract now has runtime coverage; browser coverage is implemented for first registration, reload, persistent-profile restart and intentional fresh-device conflict, but it still must be executed locally before GREEN."
+      "notes": "Browser identity lifecycle coverage passed in the recorded E2EE identity run on dd5418a; the current runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 also passed E2EE Security Regression run 40502457061. Multi-device protocol beyond the tested fresh-device conflict remains outside the frozen launch scope."
     },
     {
       "id": "personal_streak",
@@ -172,12 +172,12 @@
       "required_test_commands": [
         "python -m pytest scripts/test_study_time_runtime.py -q"
       ],
-      "notes": "Core Study Hub reconciliation is covered; milestone, date-boundary and XP idempotency need deeper dedicated regression."
+      "notes": "Dedicated PostgreSQL regression recorded PASS on 2026-10-07, covering the 10-minute threshold, replay-safe same-day sync, gaps/longest streak, 7/14/21/30 milestone XP idempotency, Nairobi midnight, unrelated actions, calendar source-of-truth and concurrent sync locking; see qa/release_status.json."
     },
     {
       "id": "shared_streak",
       "name": "Shared 1:1 study streak",
-      "release_scope": "release",
+      "release_scope": "not_released",
       "layers": [
         {
           "kind": "backend_module",
@@ -206,7 +206,147 @@
         }
       ],
       "required_test_commands": [],
-      "notes": "Not release-certified: route registration, canonical schema ownership, frontend wiring, lifecycle tests and concurrency tests must be proven first."
+      "notes": "Intentionally NOT_RELEASED for the frozen launch scope. Route registration, canonical schema ownership, frontend wiring, lifecycle tests and concurrency tests are not complete; do not treat this as a required launch feature."
+    },
+    {
+      "id": "b2b_monetization",
+      "name": "B2B sponsored impressions, clicks and prepaid ledger",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "frontend",
+          "path": "frontend/src/App.tsx",
+          "anchors": [
+            "function SponsoredOpportunityCard",
+            "entry.intersectionRatio >= 0.5",
+            "}, 1500)"
+          ]
+        },
+        {
+          "kind": "backend_routes",
+          "path": "discovery_billing.py",
+          "anchors": [
+            "@app.post(\"/api/discovery/campaigns/<int:campaign_id>/impression\")",
+            "@app.post(\"/api/discovery/campaigns/<int:campaign_id>/click\")",
+            "@app.get(\"/api/organisations/<int:organisation_id>/discovery/report\")"
+          ]
+        },
+        {
+          "kind": "backend_logic",
+          "path": "b2b_campaign_metering.py",
+          "anchors": [
+            "def record_billable_event",
+            "delivery_impression",
+            "delivery_click"
+          ]
+        },
+        {
+          "kind": "test",
+          "path": "tests/test_b2b_billing_regression.py",
+          "anchors": [
+            "test_sponsored_impression_requires_1500ms_continuous_visibility_and_tab_reset",
+            "test_sponsored_click_telemetry_is_distinct_from_billable_clicks_and_debounced"
+          ]
+        },
+        {
+          "kind": "browser_test",
+          "path": "scripts/test_browser_b2b_metering.py",
+          "anchors": [
+            "PASS: server-side rapid-click debounce rejects distinct event IDs without extra billing"
+          ]
+        },
+        {
+          "kind": "ci",
+          "path": ".github/workflows/mobile-responsive-browser.yml",
+          "anchors": [
+            "Run B2B browser-to-ledger metering regression"
+          ]
+        }
+      ],
+      "required_test_commands": [
+        "python -m pytest tests/test_b2b_billing_regression.py -q"
+      ],
+      "notes": "Browser-to-ledger and server-side rapid-click debounce passed in run 40502457332 on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015. Gate remains IN_PROGRESS: the 50%-visible/1,500 ms dwell condition is client-side and the backend cannot independently prove viewport visibility. Do not claim tamper-proof viewability or CPA/conversion billing."
+    },
+    {
+      "id": "payment_recovery_idempotency",
+      "name": "Paystack webhook retry, entitlement and refund idempotency",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "backend_logic",
+          "path": "b2b_campaign_payments.py",
+          "anchors": [
+            "def handle_refund_event",
+            "processed_refund_events",
+            "ON CONFLICT (idempotency_key) DO NOTHING"
+          ]
+        },
+        {
+          "kind": "student_payment_tests",
+          "path": "tests/test_local_qa_real_world.py",
+          "anchors": [
+            "def test_paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement",
+            "def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaign_value",
+            "def test_b2b_campus_report_shows_aggregate_only_at_ten_reached_accounts"
+          ]
+        },
+        {
+          "kind": "browser_test",
+          "path": "scripts/test_browser_b2b_metering.py",
+          "anchors": [
+            "PASS: server-side rapid-click debounce rejects distinct event IDs without extra billing"
+          ]
+        },
+        {
+          "kind": "ci",
+          "path": ".github/workflows/mobile-responsive-browser.yml",
+          "anchors": [
+            "Run full disposable PostgreSQL QA suite"
+          ]
+        }
+      ],
+      "required_test_commands": [
+        "python -m pytest tests/test_local_qa_real_world.py -k \"paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement or b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaign_value\" -q"
+      ],
+      "notes": "PASS in release browser run 40502457332 on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015: full disposable PostgreSQL QA (92 passed) exercised invalid signatures, transient retry, duplicate student entitlement webhook, duplicate B2B refund replay and distinct same-amount refund events. This is mocked-provider application evidence, not live Paystack sandbox evidence."
+    },
+    {
+      "id": "external_provider_boundaries",
+      "name": "External provider boundary contracts",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "provider_tests",
+          "path": "tests/test_provider_boundary_mocks.py",
+          "anchors": [
+            "test_openai_generation_uses_configured_model_and_token_ceiling_without_network",
+            "test_r2_object_write_read_head_presign_and_delete_use_logical_prefix",
+            "test_ses_send_email_builds_a_message_but_uses_only_fake_client",
+            "test_paystack_b2b_webhook_rejects_invalid_signature_and_accepts_signed_ignored_event",
+            "test_kokoro_worker_synthesis_request_can_be_verified_without_gpu_or_audio_provider"
+          ]
+        },
+        {
+          "kind": "ci",
+          "path": ".github/workflows/b2b-contract-validation.yml",
+          "anchors": [
+            "tests/test_provider_boundary_mocks.py"
+          ]
+        },
+        {
+          "kind": "runbook",
+          "path": "docs/qa/EXTERNAL_PROVIDER_VERIFICATION_2026-10-27.md",
+          "anchors": [
+            "Current disposition:** NOT_TESTED",
+            "Never silently fall back to production credentials."
+          ]
+        }
+      ],
+      "required_test_commands": [
+        "python -m pytest tests/test_provider_boundary_mocks.py -q"
+      ],
+      "notes": "Mocked provider boundary tests pass, but live/sandbox Paystack checkout/webhook, controlled SES delivery, bounded OpenAI generation, real R2 operations and configured audio/GPU provider health are NOT_TESTED pending safe staging credentials and provider-side evidence. Never start billable GPU inference without explicit approval."
     }
   ]
 }
