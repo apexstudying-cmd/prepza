@@ -228,6 +228,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         saved = False
         if viewer_id and _ShopSavedListing.query.filter_by(user_id=viewer_id, listing_id=listing.id).first():
             saved = True
+        seller_public = bool(seller and getattr(seller, "profile_visibility", "public") == "public")
         result = {
             "id": listing.id,
             "title": listing.title,
@@ -239,8 +240,8 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             "images": images,
             "status": listing.status,
             "seller_id": listing.seller_id,
-            "seller_name": (seller.display_name or "Prepza seller") if seller else "Prepza seller",
-            "seller_university_id": getattr(seller, "university_id", None) if seller else None,
+            "seller_name": (seller.display_name or "Prepza seller") if seller_public else "Prepza seller",
+            "seller_university_id": getattr(seller, "university_id", None) if seller_public else None,
             "whatsapp_number": listing.whatsapp_number if detail and viewer_id == listing.seller_id else None,
             "whatsapp_url": ("https://wa.me/" + listing.whatsapp_number) if detail and listing.whatsapp_number and viewer_id != listing.seller_id else None,
             "saved": saved,
@@ -727,6 +728,15 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         elif action == "reject":
             listing.status = "rejected"
         else:
+            if listing.image_keys:
+                try:
+                    from object_storage import r2_delete
+                    for key in list(listing.image_keys):
+                        r2_delete("shop-listings", key)
+                except Exception:
+                    app.logger.exception("Shop moderation image cleanup failed")
+                    return jsonify({"error": "Could not remove the listing photos; retry the moderation action."}), 503
+                listing.image_keys = []
             listing.status = "removed"
         listing.moderation_note = note or None
         listing.moderated_by = user.id
