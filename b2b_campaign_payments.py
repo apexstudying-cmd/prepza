@@ -463,7 +463,11 @@ def register_b2b_campaign_payments(app, db):
             # the campaign ledger, so a duplicate cannot inflate the
             # cumulative refunded amount even when no prepaid balance remains.
             refund_identity = str(
-                data.get("refund_reference") or data.get("id") or f"{reference}:{amount}"
+                data.get("refund_reference")
+                or data.get("id")
+                or hashlib.sha256(
+                    json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                ).hexdigest()
             ).strip()
             idem = f"refund:{reference}:{refund_identity}"
             metadata = payment.get("metadata") or {}
