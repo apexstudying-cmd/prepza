@@ -14,6 +14,8 @@ from __future__ import annotations
 import os
 import re
 import json
+import hashlib
+import hmac
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
@@ -1054,6 +1056,142 @@ def test_paystack_checkout_uses_base_plan_price_and_provider_success_is_idempote
         {"pid": payment_id},
     ).scalars().all()
     assert orders == ["fulfilled"]
+
+
+def test_paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement(world, monkeypatch):
+    """Exercise signed webhook delivery, transient verification failure, retry and duplicate replay."""
+    import app as app_module
+    from ai_economics import get_plan, get_user_plan_code
+
+    user = User(
+        email="qa.paystack.webhook@test.invalid",
+        password_hash=generate_password_hash("Qa!WebhookPassword123"),
+        year=2,
+        semester=1,
+        display_name="qa.paystack.webhook",
+        email_verified=True,
+        is_suspended=False,
+        profile_visibility="public",
+        who_can_message="everyone",
+        who_can_follow="everyone",
+        read_receipts_enabled=True,
+        university_id=world["university_a"].id,
+        program_id=world["program_a"].id,
+        session_version=0,
+    )
+    db.session.add(user)
+    db.session.flush()
+
+    price = int(get_plan(db, "plus")["price_kes"])
+    reference = "qa-webhook-retry-entitlement"
+    payment = app_module.Payment(
+        user_id=user.id,
+        content_item_id=None,
+        amount=price,
+        provider="paystack",
+        reference=reference,
+        provider_reference="qa-provider-ref",
+        payment_type="subscription",
+        plan="plus",
+        status="pending",
+    )
+    db.session.add(payment)
+    db.session.flush()
+    app_module._student_order_helpers["create"](
+        payment,
+        item_title="Plus Plan",
+        requested_payload={"payment_type": "subscription", "plan": "plus", "quantity": 1},
+    )
+    db.session.commit()
+
+    secret = "ci-only-webhook-secret"
+    monkeypatch.setattr(app_module, "PAYSTACK_SECRET_KEY", secret)
+    calls = []
+    transient = {"fail_next": True}
+
+    def fake_paystack_request(method, path, **kwargs):
+        calls.append((method, path))
+        if method == "GET" and path == f"/transaction/verify/{reference}":
+            if transient["fail_next"]:
+                transient["fail_next"] = False
+                raise RuntimeError("simulated temporary verification timeout")
+            return {
+                "status": True,
+                "data": {
+                    "id": 99123,
+                    "status": "success",
+                    "amount": price * 100,
+                    "currency": "KES",
+                },
+            }
+        raise AssertionError((method, path, kwargs))
+
+    monkeypatch.setattr(app_module, "paystack_request", fake_paystack_request)
+    payload = {"event": "charge.success", "data": {"reference": reference}}
+    raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+    client = app_module.app.test_client()
+
+    invalid = client.post(
+        "/payment/paystack/webhook",
+        data=raw_body,
+        content_type="application/json",
+        headers={"X-Paystack-Signature": "not-a-valid-signature"},
+    )
+    assert invalid.status_code == 401
+    assert calls == [], "invalid signature must be rejected before provider verification"
+
+    first_delivery = client.post(
+        "/payment/paystack/webhook",
+        data=raw_body,
+        content_type="application/json",
+        headers={"X-Paystack-Signature": signature},
+    )
+    assert first_delivery.status_code == 500
+    db.session.expire_all()
+    pending = app_module.Payment.query.filter_by(reference=reference).one()
+    assert pending.status == "pending"
+    assert get_user_plan_code(db, user.id) == "free"
+    assert len(calls) == 1
+
+    retry = client.post(
+        "/payment/paystack/webhook",
+        data=raw_body,
+        content_type="application/json",
+        headers={"X-Paystack-Signature": signature},
+    )
+    assert retry.status_code == 200
+    db.session.expire_all()
+    paid = app_module.Payment.query.filter_by(reference=reference).one()
+    assert paid.status == "success"
+    assert paid.provider_reference == "99123"
+    assert paid.subscription_starts_at is not None
+    assert paid.subscription_expires_at is not None
+    assert get_user_plan_code(db, user.id) == "plus"
+    entitlement_start = paid.subscription_starts_at
+    entitlement_end = paid.subscription_expires_at
+    payment_id = paid.id
+    assert len(calls) == 2
+
+    duplicate = client.post(
+        "/payment/paystack/webhook",
+        data=raw_body,
+        content_type="application/json",
+        headers={"X-Paystack-Signature": signature},
+    )
+    assert duplicate.status_code == 200
+    db.session.expire_all()
+    replayed = app_module.Payment.query.filter_by(reference=reference).one()
+    assert replayed.id == payment_id
+    assert replayed.subscription_starts_at == entitlement_start
+    assert replayed.subscription_expires_at == entitlement_end
+    assert get_user_plan_code(db, user.id) == "plus"
+    assert len(calls) == 2, "duplicate successful webhook must not re-verify or extend entitlement again"
+    order_statuses = db.session.execute(
+        text("SELECT status FROM student_order WHERE payment_id=:pid"),
+        {"pid": payment_id},
+    ).scalars().all()
+    assert order_statuses == ["fulfilled"]
 
 def test_csrf_and_session_version_fail_closed(world):
     client = _client_for(world["student_a"].id)
