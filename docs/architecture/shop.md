@@ -387,6 +387,7 @@ The implementation direction is approved for direct work on `main`:
 - The first listing per account is free for the account lifetime. Every later product listing costs **KES 100** to post. The browser never chooses the fee, and a listing cannot be published until a paid fee has been verified server-side. Rejected/removed listings do not refund or reset the free-post allowance.
 - Prepza does not handle product purchases. No buyer checkout, cart, wallet, escrow, order payment, seller settlement or delivery promise is part of this MVP. Contact is through a seller-provided WhatsApp link and Prepza's existing in-app chat flow.
 - A listing starts as a private draft, requires at least one photo, then enters moderation. Only approved listings are visible in public browse/search. The seller can edit, pause, mark sold or remove their own listing; authenticated users can save/report; admins can review listings and reports.
+- If Paystack reports a successful posting-fee transaction with an amount/currency mismatch, the listing enters `payment_review`, remains unpublished, and cannot be edited, removed or charged again until an admin records a manual reconciliation note. This avoids treating a provider-successful but incorrect charge as an ordinary failed payment.
 - Product images use the existing provider-neutral R2 helper under the `shop-listings/` logical prefix. Uploads are authenticated and CSRF-protected; JPEG/PNG/WebP are decoded and re-encoded, GPS/EXIF metadata is stripped, dimensions are bounded, and each listing is limited to six images of at most 5 MB each. Product images are separate objects, not database blobs.
 - Shop is currently **IN_PROGRESS** in `qa/release_status.json`. It must not be treated as launch-ready until the disposable PostgreSQL browser journey, migration, fee verification/retry, moderation/ownership, upload validation, and staging provider checks pass.
 
@@ -397,6 +398,17 @@ Use the existing R2 integration rather than introducing a separate image SaaS or
 Cost controls for the first release:
 
 1. Keep product metadata in PostgreSQL and photos in R2; do not store image bytes in PostgreSQL or add another paid database/service.
+
+#### Illustrative R2 storage budget (not measured usage)
+
+Assuming four optimized photos per listing at an average of 300 KB each:
+
+| Active listings | Approx. product-image storage | Storage-only R2 estimate before shared usage |
+|---:|---:|---|
+| 1,000 | 1.2 GB | Within the 10 GB-month Standard free tier if other Prepza objects use less than the remaining allowance |
+| 10,000 | 12 GB | About 2 GB above the free tier, or roughly $0.03/month at $0.015/GB-month if there is no other account storage consuming the free allowance |
+
+These are planning scenarios, not a forecast. Actual average image size, retained sold/removed listings, podcast objects and other R2 prefixes all share the account quota. The first 10,000 listings would create about 40,000 image uploads (Class A operations), well below the 1 million free Class A monthly allowance before other app activity; image views add Class B reads and must be measured. The main near-term cost controls are therefore image-size limits, removing unneeded objects, avoiding duplicate uploads, and watching shared account usage—not buying an additional image CDN.
 2. Resize and re-encode images during upload (maximum 1600 px per dimension), strip metadata, and reject images over 20 megapixels or 5 MB after optimization.
 3. Use Standard R2 storage initially. Do not move new product photos to Infrequent Access without measured access patterns; it has retrieval fees and a 30-day minimum storage duration.
 4. Do not buy Cloudflare Images transformations/delivery or a separate CDN for the MVP. Revisit only if measured latency or image-processing load justifies the cost.
