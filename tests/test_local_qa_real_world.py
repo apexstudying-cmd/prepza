@@ -1994,7 +1994,7 @@ def test_b2b_campus_report_shows_aggregate_only_at_ten_reached_accounts(world):
     assert "203.5" in csv_body
 
 
-def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(world, monkeypatch):
+def test_shop_every_listing_paid_posting_fee_and_direct_contact(world, monkeypatch):
     """Exercise Shop through listing, mocked Paystack fee, moderation, browse and chat."""
     import base64
     from io import BytesIO
@@ -2045,8 +2045,8 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     first = seller.post("/api/shop/listings", json=listing_payload, headers=_csrf(seller_id))
     assert first.status_code == 201
     first_listing = first.get_json()["listing"]
-    assert first_listing["is_free_post"] is True
-    assert first_listing["posting_fee_kes"] == 0
+    assert first_listing["is_free_post"] is False
+    assert first_listing["posting_fee_kes"] == 100
     assert first_listing["status"] == "draft"
 
     invalid_upload = seller.post(
@@ -2064,20 +2064,12 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
         content_type="multipart/form-data",
     )
     assert upload.status_code == 201, upload.get_json()
-    published = seller.post(
+    unpaid_publish = seller.post(
         f"/api/shop/listings/{first_listing['id']}/publish",
         headers=_csrf(seller_id),
     )
-    assert published.status_code == 200
-    assert published.get_json()["listing"]["status"] == "pending_review"
-
-    first_approval = admin.post(
-        f"/api/shop/admin/listings/{first_listing['id']}/moderate",
-        json={"action": "approve"},
-        headers=_csrf(admin_id),
-    )
-    assert first_approval.status_code == 200, first_approval.get_json()
-    assert first_approval.get_json()["listing"]["status"] == "active"
+    assert unpaid_publish.status_code == 402
+    assert unpaid_publish.get_json()["code"] == "SHOP_POSTING_FEE_REQUIRED"
 
     second_payload = dict(listing_payload)
     second_payload.update({
@@ -2130,7 +2122,7 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
 
     monkeypatch.setattr(app_module, "paystack_request", fake_paystack_request)
     checkout = seller.post(
-        f"/api/shop/listings/{second_listing['id']}/checkout",
+        f"/api/shop/listings/{first_listing['id']}/checkout",
         headers=_csrf(seller_id),
     )
     assert checkout.status_code == 200, checkout.get_json()
@@ -2148,28 +2140,34 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     # Callback/webhook retries must not charge twice or move the listing twice.
     duplicate_verify = app_module.sync_paystack_payment_status(reference)
     assert duplicate_verify.status == "success"
-    assert db.session.get(shop_marketplace._ShopListing, second_listing["id"]).posting_fee_paid is True
+    assert db.session.get(shop_marketplace._ShopListing, first_listing["id"]).posting_fee_paid is True
+
+    first_publish = seller.post(
+        f"/api/shop/listings/{first_listing['id']}/publish",
+        headers=_csrf(seller_id),
+    )
+    assert first_publish.status_code == 200
+    assert first_publish.get_json()["listing"]["status"] == "pending_review"
+    first_approval = admin.post(
+        f"/api/shop/admin/listings/{first_listing['id']}/moderate",
+        json={"action": "approve"},
+        headers=_csrf(admin_id),
+    )
+    assert first_approval.status_code == 200
+    assert first_approval.get_json()["listing"]["status"] == "active"
 
     second_publish = seller.post(
         f"/api/shop/listings/{second_listing['id']}/publish",
         headers=_csrf(seller_id),
     )
-    assert second_publish.status_code == 200
-    assert second_publish.get_json()["listing"]["status"] == "pending_review"
-
-    second_approval = admin.post(
-        f"/api/shop/admin/listings/{second_listing['id']}/moderate",
-        json={"action": "approve"},
-        headers=_csrf(admin_id),
-    )
-    assert second_approval.status_code == 200
-    assert second_approval.get_json()["listing"]["status"] == "active"
+    assert second_publish.status_code == 402
+    assert second_publish.get_json()["code"] == "SHOP_POSTING_FEE_REQUIRED"
 
     browse = buyer.get("/api/shop/listings?q=QA")
     assert browse.status_code == 200
     visible_ids = {item["id"] for item in browse.get_json()["listings"]}
     assert first_listing["id"] in visible_ids
-    assert second_listing["id"] in visible_ids
+    assert second_listing["id"] not in visible_ids
 
     detail = buyer.get(f"/api/shop/listings/{first_listing['id']}")
     assert detail.status_code == 200
