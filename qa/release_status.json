@@ -101,6 +101,11 @@
       "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 passed on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 (2026-10-27). Browser-to-ledger checks verified offscreen/offline views do not bill, 1.5-second client visibility qualification, lost-response retry without double debit, server-side rapid-click debounce for distinct IDs, click attribution, and JSON/CSV reporting. Full disposable PostgreSQL QA passed. Gate remains IN_PROGRESS because backend does not independently observe viewport visibility or enforce the 1.5-second interval; do not claim tamper-proof viewability or CPA/conversion billing."
     },
     {
+      "id": "shop_marketplace",
+      "status": "IN_PROGRESS",
+      "evidence": "Shop implementation has been added on main but is not release-certified. Awaiting green production frontend build, disposable PostgreSQL/Alembic browser regression, fee-payment idempotency and retry checks, seller ownership/chat/moderation/image-upload security, and provider-side R2/Paystack test evidence. No live payment or production rollout is authorized by this gate."
+    },
+    {
       "id": "payment_recovery_idempotency",
       "status": "PASS",
       "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015: full disposable PostgreSQL QA suite passed, including invalid Paystack signature rejection, temporary verification failure/retry, duplicate student webhook without duplicate entitlement extension, duplicate B2B refund replay, and two distinct same-amount refund events with replay deduplicated. The B2B browser-to-ledger step also passed with server-side rapid-click debounce and no extra advertiser debit. The overall release-browser workflow is still running its online/offline generated-artifact journey; this gate only records the recovery cases already completed."
