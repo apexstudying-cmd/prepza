@@ -102,8 +102,8 @@
     },
     {
       "id": "payment_recovery_idempotency",
-      "status": "IN_PROGRESS",
-      "evidence": "Existing disposable-PostgreSQL student Paystack webhook regression covers invalid signature rejection, transient provider-verification failure, retry, and duplicate delivery without extending the entitlement twice. Added B2B duplicate refund replay and distinct same-amount refund regression (tests in 655e01b8f001ac54929d334950327ce2d759c3c9 and 712d858a459e17acc25c92b9780ee720b4d74ca6; handler fixes in 3e26d22bf9ceaeadbc98e5f82311b6af02691109 and cab2fde9d315035fa36461236c19d5f0fcade5e0). Current full disposable PostgreSQL/browser run 40502457332 is in progress; do not mark PASS until it completes green."
+      "status": "PASS",
+      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015: full disposable PostgreSQL QA suite passed, including invalid Paystack signature rejection, temporary verification failure/retry, duplicate student webhook without duplicate entitlement extension, duplicate B2B refund replay, and two distinct same-amount refund events with replay deduplicated. The B2B browser-to-ledger step also passed with server-side rapid-click debounce and no extra advertiser debit. The overall release-browser workflow is still running its online/offline generated-artifact journey; this gate only records the recovery cases already completed."
     },
     {
       "id": "external_provider_verification",
