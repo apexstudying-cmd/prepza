@@ -2309,8 +2309,8 @@ def sync_paystack_payment_status(reference):
             payment.status = "success"
             _student_order_helpers["mark_failed"](payment.id)
             if payment.payment_type == "shop_posting":
-                from shop_marketplace import fail_shop_posting_payment
-                fail_shop_posting_payment(db, payment)
+                from shop_marketplace import mark_shop_posting_payment_mismatch
+                mark_shop_posting_payment_mismatch(db, payment)
         else:
             payment.status = "success"
             # Student subscriptions are only activated after the durable order
