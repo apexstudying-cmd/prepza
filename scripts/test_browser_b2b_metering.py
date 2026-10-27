@@ -410,7 +410,7 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             csv_body = csv_response.text()
             assert "Unique clickers" in csv_body
             assert "CTR (%)" in csv_body
-            assert TITLE in csv_body
+            assert "Browser QA sponsored ledger" in csv_body
             assert "20.35" in csv_body
             print("PASS: advertiser JSON/CSV reports distinguish 2 raw clicks from 1 unique/billable click and reconcile KES 20.35")
             print("PASS: click reached the right campaign, and duplicate click replay did not debit twice")
