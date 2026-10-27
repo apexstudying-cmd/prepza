@@ -1554,3 +1554,126 @@ def test_b2b_prepaid_metering_protects_advertiser_balance_and_locks_campaign_pri
     assert int(campaign_balance["remaining_minor"]) == 0
 
     db.session.commit()
+
+
+
+def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaign_value(world, monkeypatch):
+    """Exercise the real B2B checkout route while replacing every Paystack HTTP call."""
+    import b2b_campaign_payments as b2b_payment_module
+
+    now = datetime.utcnow()
+    owner = world["student_a"]
+    organisation = Organisation(
+        name="QA Mock Paystack Advertiser",
+        description="Disposable provider contract fixture",
+        contact_email="qa.mock.paystack@test.invalid",
+        verification_status="verified",
+        is_active=True,
+        created_by=owner.id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(organisation)
+    db.session.flush()
+    db.session.add(OrganisationMember(
+        organisation_id=organisation.id,
+        user_id=owner.id,
+        role="owner",
+    ))
+    campaign_id = db.session.execute(text("""
+        INSERT INTO discovery_campaign
+            (organisation_id, opportunity_id, name, objective, placement, status,
+             budget_kes, bid_type, bid_kes, target_json, starts_at, ends_at, funding_status)
+        VALUES
+            (:oid, NULL, 'QA Mock Paystack Campaign', 'reach', 'home_carousel', 'draft',
+             5000, 'both', 350, CAST(:target AS jsonb), :starts, :ends, 'unfunded')
+        RETURNING id
+    """), {
+        "oid": organisation.id,
+        "target": json.dumps({"billing_modes": ["cpm", "cpc"]}),
+        "starts": now - timedelta(minutes=1),
+        "ends": now + timedelta(days=2),
+    }).scalar_one()
+    db.session.commit()
+
+    monkeypatch.setenv("PAYSTACK_SECRET_KEY", "sk_test_mock_only_not_a_real_secret")
+    monkeypatch.setenv("PAYSTACK_CUSTOMER_FEE_PASSING_ENABLED", "true")
+    monkeypatch.setenv("BASE_URL", "https://prepza.test.invalid")
+    calls = []
+
+    class FakePaystackResponse:
+        status_code = 200
+
+        def json(self):
+            return {
+                "status": True,
+                "message": "Authorization URL created",
+                "data": {
+                    "authorization_url": "https://checkout.example.invalid/test-only",
+                    "access_code": "mock-access-code",
+                    "reference": "mock-provider-reference",
+                },
+            }
+
+    def fake_request(method, url, *, headers, timeout, **kwargs):
+        calls.append({
+            "method": method,
+            "url": url,
+            "headers": headers,
+            "timeout": timeout,
+            **kwargs,
+        })
+        return FakePaystackResponse()
+
+    monkeypatch.setattr(b2b_payment_module.requests, "request", fake_request)
+    client = _client_for(owner.id)
+    response = client.post(
+        f"/api/organisations/{organisation.id}/discovery/campaigns/{campaign_id}/payment",
+        headers=_csrf(owner.id),
+    )
+
+    assert response.status_code == 200, response.get_json()
+    body = response.get_json()
+    assert body["ok"] is True
+    assert body["authorization_url"] == "https://checkout.example.invalid/test-only"
+    assert body["campaign_amount_minor"] == 500000
+    assert body["reference"].startswith(f"PZA-CAMP-{campaign_id}-")
+    assert body["customer_fee_mode"] == "paystack_pass_through"
+
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["method"] == "POST"
+    assert call["url"] == "https://api.paystack.co/transaction/initialize"
+    assert call["headers"]["Authorization"] == "Bearer sk_test_mock_only_not_a_real_secret"
+    checkout = call["json"]
+    assert checkout["amount"] == "500000"
+    assert checkout["currency"] == "KES"
+    assert checkout["reference"] == body["reference"]
+    assert checkout["callback_url"] == "https://prepza.test.invalid/organisation-payment-callback"
+    metadata = json.loads(checkout["metadata"])
+    assert metadata["purpose"] == "sponsored_campaign"
+    assert metadata["campaign_id"] == campaign_id
+    assert metadata["organisation_id"] == organisation.id
+    assert metadata["campaign_amount_minor"] == 500000
+    assert "bearer" not in checkout
+
+    payment = db.session.execute(text("""
+        SELECT status, customer_amount_minor, campaign_amount_minor, processing_fee_minor, purpose
+        FROM b2b_payment WHERE campaign_id=:cid
+    """), {"cid": campaign_id}).mappings().one()
+    assert payment["status"] == "pending"
+    assert int(payment["customer_amount_minor"]) == 500000
+    assert int(payment["campaign_amount_minor"]) == 500000
+    assert int(payment["processing_fee_minor"]) == 0
+    assert payment["purpose"] == "sponsored_campaign"
+
+    campaign = db.session.execute(text("""
+        SELECT status, funding_status, funded_amount_minor, pricing_snapshot
+        FROM discovery_campaign WHERE id=:cid
+    """), {"cid": campaign_id}).mappings().one()
+    assert campaign["status"] == "pending_payment"
+    assert campaign["funding_status"] == "payment_pending"
+    assert int(campaign["funded_amount_minor"] or 0) == 0
+    snapshot = campaign["pricing_snapshot"]
+    assert isinstance(snapshot, dict)
+    assert "home_impression_cpm" in snapshot and "click_cpc" in snapshot
