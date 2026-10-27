@@ -8,6 +8,11 @@ const CATEGORIES = ['Books & study', 'Electronics', 'Hostel & home', 'Fashion', 
 const CONDITIONS = [{ value: 'new', label: 'New' }, { value: 'good', label: 'Good' }, { value: 'fair', label: 'Fair' }, { value: 'for_parts', label: 'For parts / repair' }]
 const REASONS = [{ value: 'scam', label: 'Scam or suspicious' }, { value: 'prohibited_item', label: 'Prohibited item' }, { value: 'misleading', label: 'Misleading listing' }, { value: 'harassment', label: 'Harassment' }, { value: 'spam', label: 'Spam or duplicate' }, { value: 'other', label: 'Other' }]
 const money = (amount: number) => 'KSh ' + Math.round(amount).toLocaleString('en-KE')
+
+// Public browse snapshots live only in this tab's memory. Never persist account-specific
+// saved/is_mine flags or payment/admin responses in browser storage.
+const BROWSE_CACHE_TTL_MS = 5 * 60 * 1000
+const browseSnapshots = new Map<string, { listings: Listing[]; savedAt: number }>()
 const conditionLabel = (value: string) => CONDITIONS.find(item => item.value === value)?.label || value
 const ui: Record<string, CSSProperties> = {
   root: { flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--prepza-generation-page, #F8F9FC)', color: 'var(--prepza-generation-text, #0B1437)', fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif' },
@@ -76,7 +81,23 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     if (condition) params.set('condition', condition)
     if (location.trim()) params.set('location', location.trim())
     params.set('sort', sort)
-    setListings((await shopApi<{ listings: Listing[] }>('/api/shop/listings?' + params.toString())).listings || [])
+    const path = '/api/shop/listings?' + params.toString()
+    const cacheKey = params.toString()
+    const cached = browseSnapshots.get(cacheKey)
+    if (cached) {
+      setListings(cached.listings)
+      setLoading(false)
+    }
+    try {
+      const fresh = (await shopApi<{ listings: Listing[] }>(path)).listings || []
+      browseSnapshots.set(cacheKey, { listings: fresh, savedAt: Date.now() })
+      setListings(fresh)
+      setError('')
+    } catch (cause) {
+      if (!cached) throw cause
+      // Keep previously loaded public listings visible when offline or the API is unavailable.
+      setError('Showing recently viewed listings. Reconnect to refresh availability and status.')
+    }
   }
   const loadMine = async () => setMine((await shopApi<{ listings: Listing[] }>('/api/shop/my-listings')).listings || [])
   const loadSaved = async () => setSaved((await shopApi<{ listings: Listing[] }>('/api/shop/saved')).listings || [])
