@@ -101,6 +101,11 @@
       "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40498397254 passed on 2026-10-27 with the browser-to-ledger B2B metering journey, mobile/tablet responsive checks, full disposable PostgreSQL QA suite, and online/offline generated-artifact browser journeys. The run verified viewability timing/offscreen and offline behavior, lost-response retry without duplicate debit, click attribution, and JSON/CSV reporting; the campus-report regression expecting 10 raw clicks also passed after commit 74f0f0380d731223ea791054350e3ba4abbc9fb6 changed raw-click aggregation to count distinct interaction IDs across click_raw/click event variants. Gate remains IN_PROGRESS: review server-side abuse/debounce policy and independent viewability qualification, and close any remaining reporting/conversion-contract gaps before selling performance-based advertising as fully verified."
     },
     {
+      "id": "payment_recovery_idempotency",
+      "status": "IN_PROGRESS",
+      "evidence": "Existing disposable-PostgreSQL student Paystack webhook regression covers invalid signature rejection, transient provider-verification failure, retry, and duplicate delivery without extending the entitlement twice. Added B2B duplicate refund replay and distinct same-amount refund regression (tests in 655e01b8f001ac54929d334950327ce2d759c3c9 and 712d858a459e17acc25c92b9780ee720b4d74ca6; handler fixes in 3e26d22bf9ceaeadbc98e5f82311b6af02691109 and cab2fde9d315035fa36461236c19d5f0fcade5e0). Current full disposable PostgreSQL/browser run 40502457332 is in progress; do not mark PASS until it completes green."
+    },
+    {
       "id": "external_provider_verification",
       "status": "NOT_TESTED",
       "evidence": "Runbook docs/qa/EXTERNAL_PROVIDER_VERIFICATION_2026-10-27.md documents safe procedures and existing mocks. No verified staging credentials or provider-side evidence has been recorded for Paystack sandbox checkout/webhooks, SES delivery, bounded real OpenAI generation, R2 operations, or configured audio/GPU provider. Do not use live payments or start billable GPU workloads without explicit approval."
