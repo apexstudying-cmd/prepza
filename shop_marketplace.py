@@ -31,14 +31,14 @@ ALLOWED_LISTING_STATES = {"draft", "pending_payment", "payment_review", "pending
 
 
 def listing_fee_for_post_number(post_number: int) -> int:
-    """The first lifetime listing is free; every later listing costs KES 100."""
+    """Every listing, including the first, costs KES 100 to post."""
     try:
         number = int(post_number)
     except (TypeError, ValueError):
         raise ValueError("Post number must be a positive integer")
     if number < 1:
         raise ValueError("Post number must be a positive integer")
-    return 0 if number == 1 else LISTING_POST_FEE_KES
+    return LISTING_POST_FEE_KES
 
 
 def normalize_whatsapp_number(value: str | None) -> str | None:
@@ -377,17 +377,17 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             payload = validate_listing_payload(request.get_json(silent=True) or {})
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
-        # Lock the seller row so concurrent creates cannot claim two free posts.
+        # Lock the seller row to serialize listing creation and fee accounting.
         locked_user = User.query.filter_by(id=user.id).with_for_update().first()
         existing_count = ShopListing.query.filter_by(seller_id=user.id).count()
-        free_post = existing_count == 0
+        free_post = False
         listing = ShopListing(
             seller_id=locked_user.id,
             **payload,
             status="draft",
             is_free_post=free_post,
             posting_fee_kes=listing_fee_for_post_number(existing_count + 1),
-            posting_fee_paid=free_post,
+            posting_fee_paid=False,
         )
         db.session.add(listing)
         db.session.commit()
