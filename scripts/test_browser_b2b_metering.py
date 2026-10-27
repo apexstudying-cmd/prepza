@@ -414,6 +414,24 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             assert campaign_report["unique_billable_ctr_percent"] == 100.0
             assert campaign_report["net_spend_kes"] == 20.35, campaign_report
 
+            # Explicit campus filters must not reveal low-reach groups.
+            assert final["campus_ids"] and final["campus_ids"][0] is not None
+            campus_filter_response = page.request.get(
+                BASE_URL + f"/api/organisations/{campaign_fixture['organisation_id']}/discovery/report"
+                + f"?university_id={int(final['campus_ids'][0])}"
+            )
+            assert campus_filter_response.status == 200
+            assert campus_filter_response.json()["campaigns"] == [], (
+                "campus-filtered report must suppress a cohort smaller than ten"
+            )
+            campaign_filter_response = page.request.get(
+                BASE_URL + f"/api/organisations/{campaign_fixture['organisation_id']}/discovery/report"
+                + f"?campaign_id={campaign_id}"
+            )
+            assert campaign_filter_response.status == 200
+            assert len(campaign_filter_response.json()["campaigns"]) == 1
+            assert campaign_filter_response.json()["filters"]["campaign_id"] == campaign_id
+
             csv_response = page.request.get(
                 BASE_URL + f"/api/organisations/{campaign_fixture['organisation_id']}/discovery/report?format=csv"
             )
@@ -422,6 +440,9 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             )
             assert "text/csv" in csv_response.headers.get("content-type", "")
             csv_body = csv_response.text()
+            assert "Scope" in csv_body
+            assert "Campus ID" in csv_body
+            assert "Unique reach" in csv_body
             assert "Unique clickers" in csv_body
             assert "Billable CTR (%)" in csv_body
             assert "Raw CTR (%)" in csv_body
