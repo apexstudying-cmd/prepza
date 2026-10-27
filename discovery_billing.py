@@ -5,12 +5,15 @@ Advertisers receive aggregate campaign analytics, never the underlying student l
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 import secrets
 import uuid
-from datetime import datetime, timedelta, date
-from flask import jsonify, request, session
+from datetime import datetime, timedelta, date, time, timezone
+from zoneinfo import ZoneInfo
+from flask import Response, jsonify, request, session
 from sqlalchemy import text
 from pywebpush import webpush
 from b2b_campaign_metering import record_billable_event, reverse_billable_event
@@ -638,18 +641,239 @@ def register_discovery(app, db):
         supplied_key = _normalize_billable_event_id(data.get("event_id"))
         if not supplied_key:
             return jsonify({"error": "A stable event_id UUID is required"}), 400
+
         event_key = f"click:{campaign_id}:{uid}:{supplied_key}"
-        result = record_billable_event(db, campaign_id, uid, "click", row["placement"], event_key)
-        if result.get("ok"):
-            db.session.commit()
-            return jsonify({"eligible": True, "recorded": True, "amount_minor": result.get("amount_minor", 0),
-                            "remaining_minor": result.get("remaining_minor")}), 200
-        db.session.rollback()
-        if result.get("reason") in ("campaign_budget_exhausted", "campaign_not_funded"):
-            return jsonify({"eligible": False, "code": result["reason"], "remaining_minor": result.get("remaining_minor", 0)}), 200
-        if result.get("reason") == "campaign_inactive":
-            return jsonify({"error": "Campaign unavailable"}), 404
-        return jsonify({"eligible": False, "code": result.get("reason", "meter_rejected")}), 200
+        raw_event_key = f"rawclick:{campaign_id}:{uid}:{supplied_key}"
+
+        # Match the meter's campaign -> user lock order. This makes the
+        # 750ms anti-double-tap window race-safe for concurrent requests.
+        db.session.execute(
+            text("SELECT id FROM discovery_campaign WHERE id=:cid FOR UPDATE"),
+            {"cid": campaign_id},
+        ).first()
+        db.session.execute(
+            text('SELECT id FROM "user" WHERE id=:uid FOR UPDATE'),
+            {"uid": uid},
+        ).first()
+
+        previous_raw = db.session.execute(text("""
+            SELECT metadata FROM discovery_event WHERE event_key=:key
+        """), {"key": raw_event_key}).mappings().first()
+        if previous_raw:
+            metadata = previous_raw["metadata"] if isinstance(previous_raw["metadata"], dict) else {}
+            return jsonify({
+                "eligible": True,
+                "recorded": True,
+                "duplicate": True,
+                "billable": bool(metadata.get("billable")),
+                "amount_minor": int(metadata.get("amount_minor") or 0),
+                "billing_reason": metadata.get("billing_reason"),
+            }), 200
+
+        latest_raw = db.session.execute(text("""
+            SELECT created_at FROM discovery_event
+            WHERE campaign_id=:cid AND user_id=:uid AND event_type='click_raw'
+            ORDER BY created_at DESC LIMIT 1
+        """), {"cid": campaign_id, "uid": uid}).scalar_one_or_none()
+        if latest_raw:
+            if isinstance(latest_raw, str):
+                try:
+                    latest_raw = datetime.fromisoformat(latest_raw)
+                except ValueError:
+                    latest_raw = None
+            if latest_raw is not None:
+                if getattr(latest_raw, "tzinfo", None) is not None:
+                    latest_raw = latest_raw.astimezone(timezone.utc).replace(tzinfo=None)
+                if datetime.utcnow() - latest_raw < timedelta(milliseconds=750):
+                    return jsonify({
+                        "eligible": True, "recorded": False,
+                        "debounced": True, "billable": False,
+                    }), 200
+
+        result = record_billable_event(
+            db, campaign_id, uid, "click", row["placement"], event_key
+        )
+        reason = result.get("reason")
+        raw_click_is_valid = bool(result.get("ok")) or reason in (
+            "student_frequency_cap", "campaign_budget_exhausted", "campaign_not_funded"
+        )
+        if not raw_click_is_valid:
+            db.session.rollback()
+            if reason == "campaign_inactive":
+                return jsonify({"error": "Campaign unavailable"}), 404
+            if reason == "click_without_impression":
+                return jsonify({"eligible": False, "code": reason}), 200
+            return jsonify({
+                "eligible": False,
+                "code": reason or "meter_rejected",
+                "remaining_minor": result.get("remaining_minor", 0),
+            }), 200
+
+        # Raw interaction analytics is deliberately separate from billable
+        # click events. Rate-limited taps can appear in reporting without
+        # becoming ledger entries or changing delivered_clicks.
+        raw_metadata = {
+            "raw_click": True,
+            "billable": bool(result.get("ok")),
+            "billing_reason": None if result.get("ok") else reason,
+            "amount_minor": int(result.get("amount_minor") or 0),
+            "client_event_id": supplied_key,
+            "meter_version": "b2b-click-telemetry-v1",
+        }
+        db.session.execute(text("""
+            INSERT INTO discovery_event
+                (campaign_id,user_id,event_key,event_type,placement,amount_kes,metadata)
+            VALUES (:cid,:uid,:key,'click_raw',:placement,0,CAST(:metadata AS jsonb))
+            ON CONFLICT (event_key) DO NOTHING
+        """), {
+            "cid": campaign_id, "uid": uid, "key": raw_event_key,
+            "placement": row["placement"], "metadata": json.dumps(raw_metadata),
+        })
+        db.session.commit()
+        return jsonify({
+            "eligible": True,
+            "recorded": True,
+            "billable": bool(result.get("ok")),
+            "amount_minor": int(result.get("amount_minor") or 0),
+            "billing_reason": reason,
+            "remaining_minor": result.get("remaining_minor"),
+        }), 200
+
+
+    def _discovery_report_window():
+        """Convert Nairobi calendar dates to UTC-naive database timestamps."""
+        today = datetime.now(ZoneInfo("Africa/Nairobi")).date()
+        try:
+            end_day = date.fromisoformat(request.args.get("end_date") or today.isoformat())
+            start_day = date.fromisoformat(
+                request.args.get("start_date") or (end_day - timedelta(days=29)).isoformat()
+            )
+        except (TypeError, ValueError):
+            return None, None, "start_date and end_date must use YYYY-MM-DD"
+        if start_day > end_day:
+            return None, None, "start_date must be on or before end_date"
+        if (end_day - start_day).days > 365:
+            return None, None, "Report range cannot exceed 366 calendar days"
+        tz = ZoneInfo("Africa/Nairobi")
+        start_utc = datetime.combine(start_day, time.min, tzinfo=tz).astimezone(timezone.utc).replace(tzinfo=None)
+        end_utc = datetime.combine(end_day + timedelta(days=1), time.min, tzinfo=tz).astimezone(timezone.utc).replace(tzinfo=None)
+        return (start_day, end_day, start_utc, end_utc), None, None
+
+
+    @app.get("/api/organisations/<int:organisation_id>/discovery/report")
+    def discovery_advertiser_report(organisation_id):
+        uid = session.get("user_id")
+        if not uid or not org_access(organisation_id, uid):
+            return jsonify({"error": "Organisation membership required"}), 403
+        window, _unused, error = _discovery_report_window()
+        if error:
+            return jsonify({"error": error}), 400
+        start_day, end_day, start_utc, end_utc = window
+        rows = db.session.execute(text("""
+            WITH event_totals AS (
+                SELECT campaign_id,
+                    COUNT(*) FILTER (
+                        WHERE event_type='impression'
+                          AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+                    ) AS impressions,
+                    COUNT(*) FILTER (WHERE event_type='click_raw') AS raw_clicks,
+                    COUNT(DISTINCT user_id) FILTER (WHERE event_type='click_raw') AS unique_clicks,
+                    COUNT(*) FILTER (
+                        WHERE event_type='click'
+                          AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+                    ) AS billable_clicks,
+                    COUNT(DISTINCT user_id) FILTER (
+                        WHERE event_type='click'
+                          AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+                    ) AS unique_billable_clickers
+                FROM discovery_event
+                WHERE created_at >= :start_utc AND created_at < :end_utc
+                GROUP BY campaign_id
+            ),
+            ledger_totals AS (
+                SELECT campaign_id,
+                    GREATEST(0,
+                        -COALESCE(SUM(signed_amount_minor) FILTER (
+                            WHERE entry_type IN (
+                                'delivery_impression','delivery_click','delivery_push_delivery'
+                            ) OR entry_type='delivery_reversal'
+                        ),0)
+                    ) AS net_spend_minor
+                FROM b2b_campaign_ledger
+                WHERE created_at >= :start_utc AND created_at < :end_utc
+                GROUP BY campaign_id
+            )
+            SELECT c.id AS campaign_id, c.name AS campaign_name, c.placement,
+                   COALESCE(e.impressions,0) AS impressions,
+                   COALESCE(e.raw_clicks,0) AS raw_clicks,
+                   COALESCE(e.unique_clicks,0) AS unique_clicks,
+                   COALESCE(e.billable_clicks,0) AS billable_clicks,
+                   COALESCE(e.unique_billable_clickers,0) AS unique_billable_clickers,
+                   COALESCE(l.net_spend_minor,0) AS net_spend_minor
+            FROM discovery_campaign c
+            LEFT JOIN event_totals e ON e.campaign_id=c.id
+            LEFT JOIN ledger_totals l ON l.campaign_id=c.id
+            WHERE c.organisation_id=:oid
+            ORDER BY c.id DESC
+        """), {
+            "oid": organisation_id,
+            "start_utc": start_utc,
+            "end_utc": end_utc,
+        }).mappings().all()
+
+        campaigns = []
+        for row in rows:
+            impressions = int(row["impressions"] or 0)
+            raw_clicks = int(row["raw_clicks"] or 0)
+            unique_clicks = int(row["unique_clicks"] or 0)
+            billable_clicks = int(row["billable_clicks"] or 0)
+            campaigns.append({
+                "campaign_id": int(row["campaign_id"]),
+                "campaign_name": row["campaign_name"],
+                "placement": row["placement"],
+                "impressions": impressions,
+                "raw_clicks": raw_clicks,
+                "unique_clicks": unique_clicks,
+                "billable_clicks": billable_clicks,
+                "unique_billable_clickers": int(row["unique_billable_clickers"] or 0),
+                "ctr_percent": round(raw_clicks * 100 / impressions, 2) if impressions else 0.0,
+                "unique_ctr_percent": round(unique_clicks * 100 / impressions, 2) if impressions else 0.0,
+                "net_spend_kes": round(int(row["net_spend_minor"] or 0) / 100, 2),
+            })
+
+        if request.args.get("format", "").lower() == "csv":
+            output = io.StringIO(newline="")
+            writer = csv.writer(output)
+            writer.writerow([
+                "Campaign ID", "Campaign", "Placement", "Impressions", "Raw clicks",
+                "Unique clickers", "Billable clicks", "Unique billable clickers",
+                "CTR (%)", "Unique CTR (%)", "Net delivery spend (KES)",
+            ])
+            for item in campaigns:
+                writer.writerow([
+                    item["campaign_id"], item["campaign_name"], item["placement"],
+                    item["impressions"], item["raw_clicks"], item["unique_clicks"],
+                    item["billable_clicks"], item["unique_billable_clickers"],
+                    item["ctr_percent"], item["unique_ctr_percent"], item["net_spend_kes"],
+                ])
+            filename = f"prepza-discovery-report-{start_day:%Y%m%d}-{end_day:%Y%m%d}.csv"
+            return Response(
+                output.getvalue(),
+                mimetype="text/csv; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
+        return jsonify({
+            "organisation_id": int(organisation_id),
+            "period": {
+                "start_date": start_day.isoformat(),
+                "end_date": end_day.isoformat(),
+                "timezone": "Africa/Nairobi",
+            },
+            "currency": "KES",
+            "billing_basis": "prepaid campaign ledger",
+            "campaigns": campaigns,
+        })
 
 
     @app.post("/api/discovery/campaigns/<int:campaign_id>/application")
