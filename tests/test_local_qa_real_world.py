@@ -1780,3 +1780,124 @@ def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaig
         WHERE campaign_id=:cid AND entry_type='funding'
     """), {"cid": campaign_id}).scalar_one()
     assert int(funding_count) == 1 and int(ledger_count) == 1
+
+
+
+def test_b2b_campus_report_shows_aggregate_only_at_ten_reached_accounts(world):
+    """Verify campus aggregate appears at the threshold without student-level fields."""
+    from b2b_campaign_metering import record_billable_event
+
+    now = datetime.utcnow()
+    test_users = []
+    for index in range(10):
+        user = User(
+            email=f"qa.campus.report.{index}@test.invalid",
+            password_hash=generate_password_hash("Qa!Campus123"),
+            year=2,
+            semester=1,
+            display_name=f"QA Campus Student {index}",
+            email_verified=True,
+            is_admin=False,
+            is_suspended=False,
+            profile_visibility="public",
+            who_can_message="everyone",
+            who_can_follow="everyone",
+            read_receipts_enabled=True,
+            university_id=world["university_a"].id,
+            program_id=world["program_a"].id,
+            session_version=0,
+        )
+        db.session.add(user)
+        test_users.append(user)
+    db.session.flush()
+
+    campaign_id = db.session.execute(text("""
+        INSERT INTO discovery_campaign
+            (organisation_id, opportunity_id, name, objective, placement, status,
+             budget_kes, bid_type, bid_kes, target_json, starts_at, ends_at,
+             funding_status, funded_amount_minor, pricing_version, pricing_snapshot)
+        VALUES
+            (:oid, NULL, 'QA Campus Aggregate Report', 'reach', 'home_carousel', 'active',
+             5000, 'both', 350, CAST(:target AS jsonb), :starts, :ends,
+             'funded', 500000, 'qa-campus-v1', CAST(:snapshot AS jsonb))
+        RETURNING id
+    """), {
+        "oid": world["organisation"].id,
+        "target": json.dumps({"billing_modes": ["cpm", "cpc"]}),
+        "starts": now - timedelta(minutes=1),
+        "ends": now + timedelta(days=2),
+        "snapshot": json.dumps({
+            "home_impression_cpm": {"value": {"amount_kes": 350, "per": 1000}, "version": "qa-campus-v1"},
+            "click_cpc": {"value": {"amount_kes": 20}, "version": "qa-campus-v1"},
+            "home_frequency_cap": {"value": {"max_impressions": 100, "window_days": 7}, "version": "qa-campus-v1"},
+            "click_frequency_cap": {"value": {"max_clicks": 1, "window_days": 1}, "version": "qa-campus-v1"},
+        }),
+    }).scalar_one()
+    db.session.commit()
+
+    for user in test_users:
+        impression = record_billable_event(
+            db, campaign_id, user.id, "impression", "home_carousel",
+            f"qa-campus-impression-{user.id}",
+        )
+        assert impression["ok"] is True, impression
+        click = record_billable_event(
+            db, campaign_id, user.id, "click", "home_carousel",
+            f"qa-campus-click-{user.id}",
+        )
+        assert click["ok"] is True, click
+    db.session.commit()
+
+    client = _client_for(world["student_a"].id)
+    report_response = client.get(
+        f"/api/organisations/{world['organisation'].id}/discovery/report?campaign_id={campaign_id}"
+    )
+    assert report_response.status_code == 200, report_response.get_data(as_text=True)
+    report = report_response.get_json()
+    assert report["period"]["timezone"] == "Africa/Nairobi"
+    assert report["filters"]["campaign_id"] == campaign_id
+    assert report["filters"]["university_id"] is None
+    assert len(report["campaigns"]) == 1
+    campaign = report["campaigns"][0]
+    assert campaign["unique_reach"] == 10
+    assert campaign["impressions"] == 10
+    assert campaign["raw_clicks"] == 10
+    assert campaign["unique_clicks"] == 10
+    assert campaign["billable_clicks"] == 10
+    assert campaign["ctr_percent"] == 100.0
+    assert campaign["unique_ctr_percent"] == 100.0
+    assert campaign["net_spend_kes"] == 203.5
+    assert len(campaign["campus_breakdown"]) == 1
+    campus = campaign["campus_breakdown"][0]
+    assert campus["campus_id"] == world["university_a"].id
+    assert campus["campus_name"] == "QA University A"
+    assert campus["unique_reach"] == 10
+    assert campus["impressions"] == 10
+    assert campus["raw_clicks"] == 10
+    assert campus["billable_clicks"] == 10
+    assert campus["net_spend_kes"] == 203.5
+    assert all(not any(key in row for key in ("user_id", "student_id", "email"))
+               for row in report["campaigns"])
+    assert all(not any(key in row for key in ("user_id", "student_id", "email"))
+               for row in campaign["campus_breakdown"])
+
+    campus_filtered = client.get(
+        f"/api/organisations/{world['organisation'].id}/discovery/report"
+        f"?campaign_id={campaign_id}&university_id={world['university_a'].id}"
+    )
+    assert campus_filtered.status_code == 200
+    filtered_campaigns = campus_filtered.get_json()["campaigns"]
+    assert len(filtered_campaigns) == 1
+    assert filtered_campaigns[0]["unique_reach"] == 10
+    assert filtered_campaigns[0]["campus_breakdown"][0]["campus_id"] == world["university_a"].id
+
+    csv_response = client.get(
+        f"/api/organisations/{world['organisation'].id}/discovery/report"
+        f"?campaign_id={campaign_id}&format=csv"
+    )
+    assert csv_response.status_code == 200
+    assert "text/csv" in csv_response.headers.get("content-type", "")
+    csv_body = csv_response.get_data(as_text=True)
+    assert "campaign,,,10" in csv_body
+    assert f"campus,QA University A,{world['university_a'].id},10" in csv_body
+    assert "203.5" in csv_body
