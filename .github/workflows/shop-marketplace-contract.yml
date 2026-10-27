@@ -1,0 +1,36 @@
+name: Shop Marketplace Contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "shop_marketplace.py"
+      - "tests/test_shop_marketplace.py"
+      - "alembic/versions/20261027_shop_marketplace.py"
+      - "frontend/src/shop/**"
+      - "scripts/apply_shop_frontend.py"
+      - "frontend/src/App.tsx"
+      - "frontend/package.json"
+      - "requirements.txt"
+      - ".github/workflows/shop-marketplace-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shop-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install isolated contract-test dependencies
+        run: python -m pip install --upgrade pip pytest Flask SQLAlchemy
+      - name: Test Shop posting fee and seller contact contracts
+        run: python -m pytest tests/test_shop_marketplace.py -q
+      - name: Compile Shop backend and build-time wiring script
+        run: python -m py_compile shop_marketplace.py scripts/apply_shop_frontend.py alembic/versions/20261027_shop_marketplace.py
