@@ -2310,7 +2310,12 @@ def sync_paystack_payment_status(reference):
             _student_order_helpers["mark_failed"](payment.id)
             if payment.payment_type == "shop_posting":
                 from shop_marketplace import mark_shop_posting_payment_mismatch
-                mark_shop_posting_payment_mismatch(db, payment)
+                mismatch_reason = (
+                    "Provider-reported amount does not match the KES 100 posting fee."
+                    if not amount_matches
+                    else "Provider-reported currency does not match KES."
+                )
+                mark_shop_posting_payment_mismatch(db, payment, mismatch_reason)
         else:
             payment.status = "success"
             # Student subscriptions are only activated after the durable order
