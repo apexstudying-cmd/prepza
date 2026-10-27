@@ -187,7 +187,11 @@ def register_discovery(app, db):
             return "launch", "trial", None
         return str(row["plan_code"]), str(row["status"]), row["expires_at"]
 
-    ALLOWED_TARGET_KEYS = {"university_ids", "program_ids", "years", "active_days"}
+    # billing_modes lives alongside audience dimensions in target_json because
+    # the existing prepaid meter freezes both audience and billing eligibility
+    # with the campaign snapshot. Keep it through normalization instead of
+    # rejecting every campaign created by this same route.
+    ALLOWED_TARGET_KEYS = {"university_ids", "program_ids", "years", "active_days", "billing_modes"}
 
     def normalize_target(raw_target):
         if not isinstance(raw_target, dict):
@@ -210,6 +214,18 @@ def register_discovery(app, db):
             if not 1 <= days <= 90:
                 raise ValueError("active_days must be between 1 and 90")
             target["active_days"] = days
+        billing_modes = raw_target.get("billing_modes")
+        if billing_modes is not None:
+            if not isinstance(billing_modes, list) or not billing_modes:
+                raise ValueError("billing_modes must be a non-empty list")
+            normalized_modes = []
+            for mode in billing_modes:
+                value = str(mode).strip().lower()
+                if value not in ("cpm", "cpc"):
+                    raise ValueError("billing_modes may contain only cpm and cpc")
+                if value not in normalized_modes:
+                    normalized_modes.append(value)
+            target["billing_modes"] = normalized_modes
         return target
 
     def eligible_users(target):
