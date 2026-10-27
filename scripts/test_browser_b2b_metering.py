@@ -330,6 +330,36 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
                 "qualifying click must debit exactly KES 20 once: " + str(current)
             )
 
+            # The backend must also debounce rapid, distinct event IDs. This
+            # protects the ledger even if a modified client bypasses UI guards.
+            rapid_click_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
+            rapid_clicks = page.evaluate(
+                """async ({campaignId, eventIds}) => {
+                  const results = [];
+                  for (const eventId of eventIds) {
+                    const response = await fetch(
+                      "/api/discovery/campaigns/" + campaignId + "/click",
+                      { method: 'POST', credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ event_id: eventId }) }
+                    );
+                    results.push({ status: response.status, body: await response.json() });
+                  }
+                  return results;
+                }""",
+                {"campaignId": campaign_id, "eventIds": rapid_click_ids},
+            )
+            assert all(item["status"] == 200 for item in rapid_clicks), rapid_clicks
+            assert all(item["body"].get("debounced") is True for item in rapid_clicks), rapid_clicks
+            rapid_state = read_campaign_state(campaign_id)
+            assert rapid_state["delivered_clicks"] == 1, (
+                "rapid distinct clicks changed the billable click counter: " + str(rapid_state)
+            )
+            assert len([
+                row for row in rapid_state["ledger"] if row["entry_type"] == "delivery_click"
+            ]) == 1, "rapid distinct clicks created an extra advertiser debit: " + str(rapid_state)
+            print("PASS: server-side rapid-click debounce rejects distinct event IDs without extra billing")
+
             # A later, distinct click attempt by the same authenticated user
             # is still counted as a raw interaction, but the daily billable
             # click cap must protect prepaid advertiser money.
