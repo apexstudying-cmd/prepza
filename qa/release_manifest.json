@@ -235,9 +235,9 @@
           "kind": "backend_logic",
           "path": "b2b_campaign_metering.py",
           "anchors": [
+            "EVENT_TYPES",
             "def record_billable_event",
-            "delivery_impression",
-            "delivery_click"
+            "campaign_target_matches_student"
           ]
         },
         {
