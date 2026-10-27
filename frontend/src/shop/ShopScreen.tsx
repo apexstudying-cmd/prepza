@@ -14,6 +14,7 @@ const money = (amount: number) => 'KSh ' + Math.round(amount).toLocaleString('en
 const BROWSE_CACHE_TTL_MS = 5 * 60 * 1000
 const browseSnapshots = new Map<string, { listings: Listing[]; savedAt: number }>()
 const invalidateBrowseSnapshots = () => browseSnapshots.clear()
+const filterCurrentListings = (items: Listing[]) => items.filter(item => item.status === 'active' && Boolean(item.posting_fee_expires_at && Date.parse(item.posting_fee_expires_at) > Date.now()))
 const conditionLabel = (value: string) => CONDITIONS.find(item => item.value === value)?.label || value
 const ui: Record<string, CSSProperties> = {
   root: { flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--prepza-generation-page, #F8F9FC)', color: 'var(--prepza-generation-text, #0B1437)', fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif' },
@@ -86,13 +87,13 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     const cacheKey = params.toString()
     const cached = browseSnapshots.get(cacheKey)
     if (cached && Date.now() - cached.savedAt <= BROWSE_CACHE_TTL_MS) {
-      setListings(cached.listings)
+      setListings(filterCurrentListings(cached.listings))
       setLoading(false)
     }
     try {
       const fresh = (await shopApi<{ listings: Listing[] }>(path)).listings || []
       browseSnapshots.set(cacheKey, { listings: fresh, savedAt: Date.now() })
-      setListings(fresh)
+      setListings(filterCurrentListings(fresh))
       setError('')
     } catch (cause) {
       if (!cached) throw cause
