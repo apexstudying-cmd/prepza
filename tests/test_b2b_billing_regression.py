@@ -153,7 +153,9 @@ def test_sponsored_click_uses_stable_uuid_without_forcing_an_impression():
     end = source.index("const OPP_FILTERS", start)
     component = source[start:end]
     assert "clickEventId" in component
-    assert "body: JSON.stringify({ event_id: clickEventId.current })" in component
+    assert "body: JSON.stringify({ event_id: stableClickId })" in component
+    assert "pendingEventId(clickStorageKey, clickEventId)" in component
+    assert "Keep the UUID in sessionStorage" in component
     open_start = component.index("const open = async () =>")
     open_end = component.index("\n  return (", open_start)
     assert "await recordImpression()" not in component[open_start:open_end]
