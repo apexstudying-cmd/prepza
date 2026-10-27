@@ -1811,6 +1811,7 @@ def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaig
         headers={"x-paystack-signature": refund_signature},
     )
     assert duplicate_refund.status_code == 200, duplicate_refund.get_json()
+    assert duplicate_refund.get_json()["duplicate"] is True
 
     payment_after_refund = db.session.execute(text("""
         SELECT refunded_amount_minor, status, refund_status
