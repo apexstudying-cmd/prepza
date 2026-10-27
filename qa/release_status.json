@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-27",
-  "last_verified_commit": "a24c56d08cc8389bb164198323753e41eafa3ca6",
+  "last_verified_commit": "12fc05fca6cc61a1dc5db1dc9e51a6973a9baadc",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -87,8 +87,8 @@
     },
     {
       "id": "existing_database_migration",
-      "status": "PASS",
-      "evidence": "GitHub Actions Existing Database Migration Rehearsal run 40514771584 passed on commit c7247b299c7e653c491651b04d1b38c55e37640f (2026-10-27): upgraded a populated disposable database from prior revision 20261005_chat_attach_source_doc through current head 20261027_shop_marketplace; preserved legacy document/material rows and verified the nullable material_id relationship plus Shop listing/saved/report tables and posting-payment review audit fields. A sanitized production-like historical snapshot remains additional confidence, not claimed by this fixture."
+      "status": "IN_PROGRESS",
+      "evidence": "The prior migration rehearsal passed on the earlier Shop schema head, but the first rehearsal including the new expiry/period-payment revisions failed only because scripts/test_existing_database_migration.py still expected the old revision ID. The assertion has now been updated to 20261029_shop_period_payment; rerun is queued and this gate remains IN_PROGRESS until it passes."
     },
     {
       "id": "clean_full_regression",
@@ -103,7 +103,7 @@
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "KES 100 now buys a 30-day period per item, manually renewed. Migration adds expiry and gives already-paid legacy listings a transition 30-day period; public browse/saved/report/detail paths exclude expired listings; payment fulfillment sets expiry and records the fulfilled reference, while stale duplicate success/failure callbacks are guarded. Added pure 30-day expiry test. CI on the latest SHA is not yet green; keep release BLOCKED. UX/UI research is docs/ux/SHOP_UX_UI_STANDARD.md. Commercial seller pricing hypotheses are documented separately and are not live tiers. Paystack/R2 provider checks remain NOT_TESTED."
+      "evidence": "KES 100 now buys a 30-day period per item, manually renewed. Migration adds expiry and gives already-paid legacy listings a transition 30-day period; public browse/saved/report/detail paths exclude expired listings; payment fulfillment sets expiry and records the fulfilled reference, while stale duplicate success/failure callbacks are guarded. Added pure 30-day expiry test. CI on the latest SHA is not yet green; keep release BLOCKED. UX/UI research is docs/ux/SHOP_UX_UI_STANDARD.md. Commercial seller pricing hypotheses are documented separately and are not live tiers. Paystack/R2 provider checks remain NOT_TESTED. The real-world integration test now simulates expiry, public hiding, manual renewal and duplicate webhook idempotency. Latest migration rehearsal must pass on the current main SHA before Shop is certified."
     },
     {
       "id": "payment_recovery_idempotency",
