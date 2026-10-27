@@ -12,7 +12,7 @@ import sys
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "20261005_chat_attach_source_doc"
-EXPECTED_HEAD = "20261007_doc_material"
+EXPECTED_HEAD = "20261027_shop_marketplace"
 FIXTURE_ID = 987_654_321
 CONTENT_HASH = "existing-db-migration-rehearsal-v1"
 
@@ -157,6 +157,32 @@ def verify(engine) -> None:
                 "document_content.material_id foreign key is missing or incorrect"
             )
 
+        # This rehearsal now upgrades the populated database through the Shop
+        # migration as well, proving the new tables and payment-review audit
+        # fields can be added without disturbing legacy document/material rows.
+        tables = set(inspect(connection).get_table_names(schema="public"))
+        required_shop_tables = {"shop_listing", "shop_saved_listing", "shop_report"}
+        missing_shop_tables = required_shop_tables - tables
+        if missing_shop_tables:
+            raise AssertionError(
+                f"Shop migration tables missing after upgrade: {sorted(missing_shop_tables)}"
+            )
+        shop_columns = {
+            item["name"]
+            for item in inspect(connection).get_columns("shop_listing", schema="public")
+        }
+        required_shop_columns = {
+            "posting_payment_reviewed_by",
+            "posting_payment_reviewed_at",
+            "posting_payment_review_note",
+            "posting_fee_paid",
+            "posting_payment_reference",
+        }
+        if required_shop_columns - shop_columns:
+            raise AssertionError(
+                f"Shop listing columns missing: {sorted(required_shop_columns - shop_columns)}"
+            )
+
         # Prove the new relationship accepts a valid generated-material reference.
         connection.execute(
             text(
@@ -177,7 +203,8 @@ def verify(engine) -> None:
 
         print(
             f"PASS: upgrade preserved existing document/material rows; "
-            f"revision={revision}; nullable material_id and foreign key verified"
+            f"revision={revision}; nullable material_id and foreign key verified; "
+            "Shop tables and posting-payment review fields verified"
         )
 
 
