@@ -5,15 +5,12 @@ mobile-responsive-browser.yml. No external provider or real payment is used.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import time
-from pathlib import Path
 
-from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright
 
 from test_browser_study_hub_offline_content import (
-    BASE_URL,
     cleanup_fixture,
     create_fixture,
     login,
@@ -25,14 +22,14 @@ STYLE_ID = "prepza-b2b-offscreen-test-style"
 
 
 def create_campaign_fixture(user_id: int) -> dict:
-    code = f"""
+    code = """
 import json
 from datetime import datetime, timedelta
 from app import app, db, User, Organisation, Opportunity
 from sqlalchemy import text
 
 with app.app_context():
-    user = db.session.get(User, {int(user_id)})
+    user = db.session.get(User, __USER_ID__)
     assert user is not None
     now = datetime.utcnow()
 
@@ -52,7 +49,7 @@ with app.app_context():
     opportunity = Opportunity(
         organisation_id=organisation.id,
         created_by=user.id,
-        title={TITLE!r},
+        title="Prepza B2B browser ledger proof",
         description="Disposable sponsored-card browser regression.",
         opportunity_type="internship",
         location="Nairobi",
@@ -118,34 +115,36 @@ with app.app_context():
         "user_id": int(user.id),
     }))
 """
+    code = code.replace("__USER_ID__", str(int(user_id)))
     return json.loads(run_container_python(code).splitlines()[-1])
 
 
 def read_campaign_state(campaign_id: int) -> dict:
-    code = f"""
+    code = """
 import json
 from app import app, db
 from sqlalchemy import text
 with app.app_context():
+    params = {"cid": __CAMPAIGN_ID__}
     events = db.session.execute(text("""
         SELECT event_type, COUNT(*) AS count
         FROM discovery_event WHERE campaign_id=:cid
         GROUP BY event_type ORDER BY event_type
-    """), {"cid": {int(campaign_id)}}).mappings().all()
+    """), params).mappings().all()
     ledger = db.session.execute(text("""
         SELECT entry_type, signed_amount_minor, delivery_event_id, idempotency_key
         FROM b2b_campaign_ledger
         WHERE campaign_id=:cid AND entry_type IN ('delivery_impression','delivery_click')
         ORDER BY id
-    """), {"cid": {int(campaign_id)}}).mappings().all()
+    """), params).mappings().all()
     campaign = db.session.execute(text("""
         SELECT delivered_impressions, delivered_clicks, funded_amount_minor
         FROM discovery_campaign WHERE id=:cid
-    """), {"cid": {int(campaign_id)}}).mappings().one()
+    """), params).mappings().one()
     remaining = int(campaign["funded_amount_minor"]) + int(db.session.execute(text("""
         SELECT COALESCE(SUM(signed_amount_minor), 0)
         FROM b2b_campaign_ledger WHERE campaign_id=:cid
-    """), {"cid": {int(campaign_id)}}).scalar_one())
+    """), params).scalar_one())
     print(json.dumps({
         "events": [dict(row) for row in events],
         "ledger": [dict(row) for row in ledger],
@@ -154,37 +153,40 @@ with app.app_context():
         "remaining_minor": remaining,
     }))
 """
+    code = code.replace("__CAMPAIGN_ID__", str(int(campaign_id)))
     return json.loads(run_container_python(code).splitlines()[-1])
 
 
 def cleanup_campaign_fixture(ids: dict) -> None:
-    code = f"""
+    code = """
 from app import app, db
 from sqlalchemy import text
 with app.app_context():
-    db.session.execute(text("DELETE FROM b2b_campaign_ledger WHERE campaign_id=:cid"), {"cid": {int(ids["campaign_id"])}})
-    db.session.execute(text("DELETE FROM discovery_event WHERE campaign_id=:cid"), {"cid": {int(ids["campaign_id"])}})
-    db.session.execute(text("DELETE FROM discovery_campaign WHERE id=:cid"), {"cid": {int(ids["campaign_id"])}})
-    db.session.execute(text("DELETE FROM product_activity_day WHERE user_id=:uid"), {"uid": {int(ids["user_id"])}})
-    db.session.execute(text("DELETE FROM student_opportunity_discovery_audit WHERE user_id=:uid"), {"uid": {int(ids["user_id"])}})
-    db.session.execute(text("DELETE FROM student_opportunity_discovery WHERE user_id=:uid"), {"uid": {int(ids["user_id"])}})
-    db.session.execute(text("DELETE FROM opportunity WHERE id=:oid"), {"oid": {int(ids["opportunity_id"])}})
-    db.session.execute(text("DELETE FROM organisation WHERE id=:oid"), {"oid": {int(ids["organisation_id"])}})
+    db.session.execute(text("DELETE FROM b2b_campaign_ledger WHERE campaign_id=:cid"), {"cid": __CAMPAIGN_ID__})
+    db.session.execute(text("DELETE FROM discovery_event WHERE campaign_id=:cid"), {"cid": __CAMPAIGN_ID__})
+    db.session.execute(text("DELETE FROM discovery_campaign WHERE id=:cid"), {"cid": __CAMPAIGN_ID__})
+    db.session.execute(text("DELETE FROM product_activity_day WHERE user_id=:uid"), {"uid": __USER_ID__})
+    db.session.execute(text("DELETE FROM student_opportunity_discovery_audit WHERE user_id=:uid"), {"uid": __USER_ID__})
+    db.session.execute(text("DELETE FROM student_opportunity_discovery WHERE user_id=:uid"), {"uid": __USER_ID__})
+    db.session.execute(text("DELETE FROM opportunity WHERE id=:oid"), {"oid": __OPPORTUNITY_ID__})
+    db.session.execute(text("DELETE FROM organisation WHERE id=:oid"), {"oid": __ORGANISATION_ID__})
     db.session.commit()
 """
+    for name in ("campaign_id", "user_id", "opportunity_id", "organisation_id"):
+        code = code.replace(f"__{name.upper()}__", str(int(ids[name])))
     run_container_python(code)
 
 
-async def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
+def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
     campaign_id = campaign_fixture["campaign_id"]
     state = read_campaign_state(campaign_id)
     assert state["events"] == [], f"new campaign unexpectedly has events: {state}"
     assert state["ledger"] == [], f"new campaign unexpectedly has charges: {state}"
 
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
-        context = await browser.new_context(viewport={"width": 1280, "height": 900})
-        page = await context.new_page()
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        context = browser.new_context(viewport={"width": 1280, "height": 900})
+        page = context.new_page()
         requests: list[dict] = []
         impression_attempts = {"count": 0}
 
@@ -201,27 +203,26 @@ async def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
 
         page.on("request", remember_request)
 
-        async def drop_first_impression_response(route) -> None:
+        def drop_first_impression_response(route) -> None:
             impression_attempts["count"] += 1
             if impression_attempts["count"] == 1:
-                # Let the real backend commit, then simulate the response being
-                # lost on the network. The client must retry with the same key.
-                response = await route.fetch()
-                if not response.ok:
-                    await route.fulfill(response=response)
-                    return
-                await route.abort("failed")
+                # Let the real backend commit, then simulate a lost response.
+                response = route.fetch()
+                if response.ok:
+                    route.abort("failed")
+                else:
+                    route.fulfill(response=response)
             else:
-                await route.continue_()
+                route.continue_()
 
-        await page.route(
+        page.route(
             f"**/api/discovery/campaigns/{campaign_id}/impression",
             drop_first_impression_response,
         )
 
-        # Install a CSS rule before the app code mounts the campaign card.
-        # The actual IntersectionObserver must see a zero-intersection button.
-        await page.add_init_script(
+        # Install CSS before the app mounts the card, so IntersectionObserver
+        # sees a real zero-intersection element rather than a mocked observer.
+        page.add_init_script(
             """() => {
               const install = () => {
                 const style = document.createElement('style');
@@ -239,8 +240,8 @@ async def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
         try:
             login(page, fixture)
             card = page.get_by_role("button", name=f"View sponsored opportunity: {TITLE}")
-            await card.wait_for(state="attached", timeout=20000)
-            await page.wait_for_timeout(1900)
+            card.wait_for(state="attached", timeout=20000)
+            page.wait_for_timeout(1900)
 
             offscreen_state = read_campaign_state(campaign_id)
             assert offscreen_state["events"] == [], (
@@ -251,20 +252,20 @@ async def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             )
             print("PASS: offscreen ad created no event and no ledger debit")
 
-            await page.locator(f"style#{STYLE_ID}").evaluate("(style) => style.remove()")
-            await card.scroll_into_view_if_needed(timeout=5000)
-            box = await card.bounding_box()
+            page.locator(f"style#{STYLE_ID}").evaluate("(style) => style.remove()")
+            card.scroll_into_view_if_needed(timeout=5000)
+            box = card.bounding_box()
             assert box and box["width"] > 0 and box["height"] > 0, (
                 f"qualifying sponsored card has no layout box: {box}"
             )
 
-            deadline = time.monotonic() + 15
+            deadline = time.monotonic() + 25
             current = read_campaign_state(campaign_id)
             while time.monotonic() < deadline:
                 current = read_campaign_state(campaign_id)
                 if current["delivered_impressions"] == 1 and impression_attempts["count"] >= 2:
                     break
-                await page.wait_for_timeout(250)
+                page.wait_for_timeout(250)
 
             assert impression_attempts["count"] >= 2, (
                 "expected the simulated lost impression response to be retried; "
@@ -286,11 +287,11 @@ async def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             )
             print("PASS: visible ad charged one CPM unit after a lost response; retry reused the same UUID")
 
-            await card.click(timeout=8000)
-            deadline = time.monotonic() + 8
+            card.click(timeout=8000)
+            deadline = time.monotonic() + 10
             current = read_campaign_state(campaign_id)
             while time.monotonic() < deadline and current["delivered_clicks"] != 1:
-                await page.wait_for_timeout(200)
+                page.wait_for_timeout(200)
                 current = read_campaign_state(campaign_id)
 
             click_events = [event for event in requests if event["url"].endswith("/click")]
@@ -304,7 +305,7 @@ async def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
                 "qualifying click must debit exactly KES 20 once: " + str(current)
             )
 
-            replay = await page.evaluate(
+            replay = page.evaluate(
                 """async ({campaignId, eventId}) => {
                   const response = await fetch(
                     "/api/discovery/campaigns/" + campaignId + "/click",
@@ -330,8 +331,8 @@ async def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             )
             print("PASS: click reached the right campaign, and duplicate click replay did not debit twice")
         finally:
-            await context.close()
-            await browser.close()
+            context.close()
+            browser.close()
 
 
 def main() -> int:
@@ -339,7 +340,7 @@ def main() -> int:
     campaign_fixture = None
     try:
         campaign_fixture = create_campaign_fixture(fixture["user_id"])
-        asyncio.run(run_browser_regression(fixture, campaign_fixture))
+        run_browser_regression(fixture, campaign_fixture)
         return 0
     finally:
         if campaign_fixture is not None:
