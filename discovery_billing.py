@@ -843,6 +843,13 @@ def register_discovery(app, db):
             raw_clicks = int(row["raw_clicks"] or 0)
             unique_clicks = int(row["unique_clicks"] or 0)
             billable_clicks = int(row["billable_clicks"] or 0)
+            unique_billable_clickers = int(row["unique_billable_clickers"] or 0)
+            raw_ctr = round(raw_clicks * 100 / impressions, 2) if impressions else 0.0
+            billable_ctr = round(billable_clicks * 100 / impressions, 2) if impressions else 0.0
+            unique_ctr = round(unique_clicks * 100 / impressions, 2) if impressions else 0.0
+            unique_billable_ctr = (
+                round(unique_billable_clickers * 100 / impressions, 2) if impressions else 0.0
+            )
             campaigns.append({
                 "campaign_id": int(row["campaign_id"]),
                 "campaign_name": row["campaign_name"],
@@ -851,9 +858,15 @@ def register_discovery(app, db):
                 "raw_clicks": raw_clicks,
                 "unique_clicks": unique_clicks,
                 "billable_clicks": billable_clicks,
-                "unique_billable_clickers": int(row["unique_billable_clickers"] or 0),
-                "ctr_percent": round(raw_clicks * 100 / impressions, 2) if impressions else 0.0,
-                "unique_ctr_percent": round(unique_clicks * 100 / impressions, 2) if impressions else 0.0,
+                "unique_billable_clickers": unique_billable_clickers,
+                # The legacy short name is explicitly defined as billable CTR,
+                # so reporting and invoice reconciliation cannot accidentally
+                # treat capped/raw interactions as charges.
+                "ctr_percent": billable_ctr,
+                "billable_ctr_percent": billable_ctr,
+                "raw_ctr_percent": raw_ctr,
+                "unique_ctr_percent": unique_ctr,
+                "unique_billable_ctr_percent": unique_billable_ctr,
                 "net_spend_kes": round(int(row["net_spend_minor"] or 0) / 100, 2),
             })
 
@@ -863,14 +876,17 @@ def register_discovery(app, db):
             writer.writerow([
                 "Campaign ID", "Campaign", "Placement", "Impressions", "Raw clicks",
                 "Unique clickers", "Billable clicks", "Unique billable clickers",
-                "CTR (%)", "Unique CTR (%)", "Net delivery spend (KES)",
+                "Billable CTR (%)", "Raw CTR (%)", "Unique CTR (%)",
+                "Unique billable CTR (%)", "Net delivery spend (KES)",
             ])
             for item in campaigns:
                 writer.writerow([
                     item["campaign_id"], item["campaign_name"], item["placement"],
                     item["impressions"], item["raw_clicks"], item["unique_clicks"],
                     item["billable_clicks"], item["unique_billable_clickers"],
-                    item["ctr_percent"], item["unique_ctr_percent"], item["net_spend_kes"],
+                    item["billable_ctr_percent"], item["raw_ctr_percent"],
+                    item["unique_ctr_percent"], item["unique_billable_ctr_percent"],
+                    item["net_spend_kes"],
                 ])
             filename = f"prepza-discovery-report-{start_day:%Y%m%d}-{end_day:%Y%m%d}.csv"
             return Response(
@@ -890,7 +906,6 @@ def register_discovery(app, db):
             "billing_basis": "prepaid campaign ledger",
             "campaigns": campaigns,
         })
-
 
     @app.post("/api/discovery/campaigns/<int:campaign_id>/application")
     def discovery_application(campaign_id):
