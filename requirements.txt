@@ -7,6 +7,7 @@ Flask-SocketIO==5.6.1
 Jinja2==3.1.6
 MarkupSafe==3.0.3
 PyMuPDF==1.28.0
+Pillow>=11.3,<13
 SQLAlchemy==2.0.51
 Werkzeug==3.1.8
 blinker==1.9.0
