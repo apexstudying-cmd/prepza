@@ -612,3 +612,7 @@ Deployment note (27 October 2026): Render's `prepza` service has auto-deploy ena
 - [~] Invalidate browse snapshots after listing edits, save/unsave and seller status actions. Verify complete mutation coverage and add/run focused cache regressions on the latest `main` SHA before marking complete.
 - [ ] Verify object-storage image sizing/cache headers against R2 and confirm no additional paid cache service is required.
 - [ ] Re-run latest-commit frontend build, Shop Marketplace Contract, phone/tablet Shop browser regression and full release browser/cross-system regression. Keep release blocked until evidence is current.
+
+- [~] Monthly per-item Shop fee: KES 100 buys 30 days; renewals are manual (no automatic charge). Migration grants existing paid listings a 30-day transition period; expiry and payment-callback idempotency are implemented but await latest-SHA CI verification.
+- [ ] Add/verify integration tests for expiry visibility, renewal payment success/failure, and replayed or stale Paystack callbacks; confirm latest Alembic head upgrades populated databases.
+- [x] Research commercial seller pricing: retain KES 100/30 days for casual sellers initially; commercial shop subscription tiers are hypotheses only and must be validated before implementation. See `docs/architecture/shop.md`.
