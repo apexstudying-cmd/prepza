@@ -222,6 +222,40 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
                 f"qualifying sponsored card has no layout box: {box}"
             )
 
+            # An offline display must not become a billable impression. After
+            # reconnect, require a fresh visible interval rather than backdating
+            # the offline view.
+            context.set_offline(True)
+            page.wait_for_timeout(1900)
+            offline_state = read_campaign_state(campaign_id)
+            assert offline_state["events"] == [] and offline_state["ledger"] == [], (
+                "offline sponsored view created a billable event/debit: " + str(offline_state)
+            )
+            assert impression_attempts["count"] == 0, (
+                f"offline page attempted to submit an impression: {impression_attempts}"
+            )
+            print("PASS: offline sponsored card made no request and created no ledger debit")
+            context.set_offline(False)
+
+            # Reconnection starts a fresh qualification timer. Scroll away
+            # before its 1.5s window elapses; that partial view must not bill.
+            page.wait_for_timeout(400)
+            quick_scroll_style = page.add_style_tag(content=
+                'button[aria-label="View sponsored opportunity: Prepza B2B browser ledger proof"] '
+                '{ position: fixed !important; top: 4000px !important; left: 0 !important; }'
+            )
+            page.wait_for_timeout(1900)
+            quick_scroll_state = read_campaign_state(campaign_id)
+            assert quick_scroll_state["events"] == [] and quick_scroll_state["ledger"] == [], (
+                "quick scroll did not reset the continuous-visibility timer: " + str(quick_scroll_state)
+            )
+            assert impression_attempts["count"] == 0, (
+                f"quick-scroll view submitted an impression: {impression_attempts}"
+            )
+            quick_scroll_style.evaluate("(style) => style.remove()")
+            card.scroll_into_view_if_needed(timeout=5000)
+            print("PASS: quick scroll reset the timer; only a fresh continuous view can qualify")
+
             deadline = time.monotonic() + 25
             current = read_campaign_state(campaign_id)
             while time.monotonic() < deadline:
