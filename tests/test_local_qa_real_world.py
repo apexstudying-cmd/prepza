@@ -2100,6 +2100,8 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     )
     assert second_upload.status_code == 201, second_upload.get_json()
 
+    fake_provider_result = {"status": "success", "amount": 10000, "currency": "KES"}
+
     def fake_paystack_request(method, path, **kwargs):
         if method == "POST" and path == "/transaction/initialize":
             reference = kwargs["json"]["reference"]
@@ -2118,9 +2120,9 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
                 "status": True,
                 "data": {
                     "id": 900000000 + payment.id,
-                    "status": "success",
-                    "amount": 10000,
-                    "currency": "KES",
+                    "status": fake_provider_result["status"],
+                    "amount": fake_provider_result["amount"],
+                    "currency": fake_provider_result["currency"],
                     "reference": reference,
                 },
             }
@@ -2202,6 +2204,41 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     report_id = next(item["id"] for item in queue.get_json()["reports"] if item["listing_id"] == first_listing["id"])
     resolved = admin.post(f"/api/shop/admin/reports/{report_id}/resolve", headers=_csrf(admin_id))
     assert resolved.status_code == 200
+
+    # A provider-successful amount mismatch must be quarantined, not treated
+    # as a paid KES 100 posting fee or an ordinary retryable checkout.
+    third_payload = dict(listing_payload)
+    third_payload.update({"title": "QA mismatched fee listing", "price_kes": 100})
+    third = seller.post("/api/shop/listings", json=third_payload, headers=_csrf(seller_id))
+    assert third.status_code == 201
+    third_listing = third.get_json()["listing"]
+    assert third_listing["posting_fee_kes"] == 100
+    third_checkout = seller.post(
+        f"/api/shop/listings/{third_listing['id']}/checkout",
+        headers=_csrf(seller_id),
+    )
+    assert third_checkout.status_code == 200
+    mismatch_reference = third_checkout.get_json()["reference"]
+    fake_provider_result.update({"status": "success", "amount": 5000, "currency": "KES"})
+    mismatch_callback = seller.get(
+        "/shop/payment/callback?reference=" + mismatch_reference,
+        follow_redirects=False,
+    )
+    assert mismatch_callback.status_code == 302
+    mismatch_status = seller.get("/api/shop/payments/" + mismatch_reference)
+    assert mismatch_status.status_code == 200
+    assert mismatch_status.get_json()["status"] == "mismatched"
+    assert mismatch_status.get_json()["listing"]["posting_fee_paid"] is False
+    assert mismatch_status.get_json()["listing"]["status"] == "payment_review"
+    mismatch_publish = seller.post(
+        f"/api/shop/listings/{third_listing['id']}/publish",
+        headers=_csrf(seller_id),
+    )
+    assert mismatch_publish.status_code == 409
+    payment_review_queue = admin.get("/api/shop/admin/queue")
+    assert third_listing["id"] in {
+        item["id"] for item in payment_review_queue.get_json()["payment_reviews"]
+    }
 
     # A different account cannot mutate the seller's listing.
     forbidden_edit = buyer.patch(
