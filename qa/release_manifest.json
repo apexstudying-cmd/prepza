@@ -382,12 +382,15 @@
             "def shop_admin_queue",
             "def fulfill_shop_posting_payment",
             "def shop_admin_resolve_payment_issue",
-            "mark_shop_posting_payment_mismatch"
+            "mark_shop_posting_payment_mismatch",
+            "listing_period_expiry",
+            "posting_fee_expires_at",
+            "posting_period_payment_reference"
           ]
         },
         {
           "kind": "database_migration",
-          "path": "alembic/versions/20261027_shop_marketplace.py",
+          "path": "alembic/versions/20261028_shop_listing_expiry.py",
           "anchors": [
             "20261027_shop_marketplace",
             "shop_listing",
@@ -399,7 +402,8 @@
           "kind": "integration_test",
           "path": "tests/test_local_qa_real_world.py",
           "anchors": [
-            "test_shop_every_listing_paid_posting_fee_and_direct_contact"
+            "test_shop_every_listing_paid_posting_fee_and_direct_contact",
+            "A paid listing expires after 30 days"
           ]
         },
         {
@@ -407,7 +411,8 @@
           "path": "tests/test_shop_marketplace.py",
           "anchors": [
             "test_every_listing_including_first_costs_kes_100",
-            "test_invalid_listing_payload_is_rejected"
+            "test_invalid_listing_payload_is_rejected",
+            "test_each_kes_100_payment_covers_exactly_30_days"
           ]
         },
         {
@@ -420,6 +425,7 @@
       ],
       "required_test_commands": [
         "python -m pytest tests/test_shop_marketplace.py -q",
+        "python -m pytest tests/test_local_qa_real_world.py -k shop_every_listing_paid_posting_fee_and_direct_contact -q",
         "python -m pytest tests/test_local_qa_real_world.py -k shop_every_listing_paid_posting_fee_and_direct_contact -q"
       ],
       "notes": "Implementation in progress. User-approved contract: KES 100 per item per 30-day listing period, manual per-item renewal, expired listings hidden until renewal and re-publication; no free first listing or automatic recurring charges. Direct seller contact only; no buyer checkout or Prepza-held funds. Release certification requires disposable PostgreSQL browser journey, migration/expiry enforcement, idempotent renewal payment tests, image-storage verification, and staging Paystack/R2 checks."
