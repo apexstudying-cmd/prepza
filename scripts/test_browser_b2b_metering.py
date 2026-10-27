@@ -45,6 +45,11 @@ with app.app_context():
     )
     db.session.add(organisation)
     db.session.flush()
+    db.session.execute(text("""
+        INSERT INTO organisation_member (organisation_id, user_id, role, joined_at)
+        VALUES (:oid, :uid, 'owner', CURRENT_TIMESTAMP)
+        ON CONFLICT (organisation_id, user_id) DO UPDATE SET role='owner'
+    """), {"oid": organisation.id, "uid": user.id})
 
     opportunity = Opportunity(
         organisation_id=organisation.id,
@@ -165,6 +170,7 @@ with app.app_context():
     db.session.execute(text("DELETE FROM b2b_campaign_ledger WHERE campaign_id=:cid"), {"cid": __CAMPAIGN_ID__})
     db.session.execute(text("DELETE FROM discovery_event WHERE campaign_id=:cid"), {"cid": __CAMPAIGN_ID__})
     db.session.execute(text("DELETE FROM discovery_campaign WHERE id=:cid"), {"cid": __CAMPAIGN_ID__})
+    db.session.execute(text("DELETE FROM organisation_member WHERE organisation_id=:oid OR user_id=:uid"), {"oid": __ORGANISATION_ID__, "uid": __USER_ID__})
     db.session.execute(text("DELETE FROM product_activity_day WHERE user_id=:uid"), {"uid": __USER_ID__})
     db.session.execute(text("DELETE FROM student_opportunity_discovery_audit WHERE user_id=:uid"), {"uid": __USER_ID__})
     db.session.execute(text("DELETE FROM student_opportunity_discovery WHERE user_id=:uid"), {"uid": __USER_ID__})
@@ -329,6 +335,40 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             assert final["remaining_minor"] == 1000000 - 35 - 2000, (
                 "advertiser balance did not reconcile after one impression and one click: " + str(final)
             )
+
+            report_response = page.request.get(
+                BASE_URL + f"/api/organisations/{campaign_fixture['organisation_id']}/discovery/report"
+            )
+            assert report_response.status == 200, (
+                f"advertiser JSON report failed: {report_response.status} {report_response.text()}"
+            )
+            report = report_response.json()
+            campaign_report = next(
+                item for item in report["campaigns"]
+                if item["campaign_id"] == campaign_id
+            )
+            assert campaign_report["impressions"] == 1
+            assert campaign_report["raw_clicks"] == 1
+            assert campaign_report["unique_clicks"] == 1
+            assert campaign_report["billable_clicks"] == 1
+            assert campaign_report["unique_billable_clickers"] == 1
+            assert campaign_report["ctr_percent"] == 100.0
+            assert campaign_report["unique_ctr_percent"] == 100.0
+            assert campaign_report["net_spend_kes"] == 20.35, campaign_report
+
+            csv_response = page.request.get(
+                BASE_URL + f"/api/organisations/{campaign_fixture['organisation_id']}/discovery/report?format=csv"
+            )
+            assert csv_response.status == 200, (
+                f"advertiser CSV report failed: {csv_response.status} {csv_response.text()}"
+            )
+            assert "text/csv" in csv_response.headers.get("content-type", "")
+            csv_body = csv_response.text()
+            assert "Unique clickers" in csv_body
+            assert "CTR (%)" in csv_body
+            assert TITLE in csv_body
+            assert "20.35" in csv_body
+            print("PASS: advertiser JSON/CSV reports distinguish raw, unique, billable clicks and reconcile KES 20.35")
             print("PASS: click reached the right campaign, and duplicate click replay did not debit twice")
         finally:
             context.close()
