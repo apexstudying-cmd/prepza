@@ -176,7 +176,7 @@ def test_sponsored_click_telemetry_is_distinct_from_billable_clicks_and_debounce
 def test_advertiser_report_has_unique_click_ctr_csv_and_nairobi_dates():
     source = Path("discovery_billing.py").read_text(encoding="utf-8")
     start = source.index('@app.get("/api/organisations/<int:organisation_id>/discovery/report")')
-    end = source.index('@app.post("/api/discovery/campaigns/<int:campaign_id>/application")', start) if False else start + 12000
+    end = source.index('@app.post("/api/discovery/campaigns/<int:campaign_id>/application")', start)
     route = source[start:end]
     assert "org_access(organisation_id, uid)" in route
     assert "COUNT(DISTINCT user_id)" in route
