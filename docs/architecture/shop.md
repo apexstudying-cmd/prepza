@@ -151,14 +151,14 @@ Require title, category, price (or explicit “free”), condition, description,
 
 ### Pricing research and final launch decision
 
-Earlier research considered free basic listings to reduce marketplace friction. That is a superseded hypothesis, not the launch contract. The approved launch decision is KES 100 for every listing, including the first. This may discourage throwaway listings but could also reduce legitimate supply; validate conversion, duplicate-account abuse, complaint rates and seller retention during a controlled pilot before reconsidering the price.
+Earlier research considered free basic listings to reduce marketplace friction. That is a superseded hypothesis, not the launch contract. The approved launch decision is KES 100 per item for each 30-day listing period, including the first. This may discourage throwaway listings but could also reduce legitimate supply; validate conversion, duplicate-account abuse, complaint rates and seller retention during a controlled pilot before reconsidering the price.
 
 Potential revenue experiments after there are active listings and repeat buyer traffic:
 - **Featured listing:** test KES 50–100 for a clearly labelled 7-day boost as a pricing hypothesis, not an established market price.
 - **Category/campus sponsorship:** use the existing B2B sponsored-inventory capability only if Shop placements are explicitly added to the campaign contract, reporting, targeting, and billing rules. Do not silently sell a new placement under an existing campaign type.
 - **Verified business seller tools:** later offer local bookstores, repair shops, printing shops, and campus-adjacent merchants a paid storefront or listing bundle, with clear verification and renewal terms.
 
-The launch policy is a flat KES 100 per listing, with no product-sale commission and no in-app purchase handling. Do not add a seller subscription by default.
+The launch policy is KES 100 per item for each 30-day listing period, renewed manually per item. Expired listings are hidden until renewal and re-publication; there is no product-sale commission and no in-app purchase handling. Do not add automatic recurring charges.
 
 ### Phase 2: Checkout and transaction revenue
 
@@ -372,11 +372,11 @@ Research sources checked on 27 October 2026 (recheck provider/legal terms before
 - KRA's eTIMS guidance says persons engaged in business generally need to onboard and issue electronic tax invoices, with specific solutions and rules for small businesses and other circumstances.
 - Kenya Law's digital-marketplace tax regulations are relevant background, but their applicability and current consolidated legal position should be confirmed with a Kenyan tax professional.
 
-Market-pricing hypotheses in this document (KES 50–100 boosts, a 5% future seller-side transaction fee, and the 4–6 week pilot) are proposed experiments, not claimed competitor benchmarks or validated demand. The only approved launch charge is KES 100 per listing; boosts and transaction fees are out of scope for this MVP. The public web research found useful official payment, privacy, and tax guidance but did not establish reliable current marketplace fee benchmarks specific to Kenyan campus marketplaces. Conduct direct competitor checks and student/seller interviews before fixing prices.
+Market-pricing hypotheses in this document (KES 50–100 boosts, a 5% future seller-side transaction fee, and the 4–6 week pilot) are proposed experiments, not claimed competitor benchmarks or validated demand. The approved launch charge is KES 100 per item per 30-day period, renewed manually; boosts, automatic recurring charges and transaction fees are out of scope for this MVP. The public web research found useful official payment, privacy, and tax guidance but did not establish reliable current marketplace fee benchmarks specific to Kenyan campus marketplaces. Conduct direct competitor checks and student/seller interviews before fixing prices.
 
 ---
 
-**Historical decision checkpoint (superseded):** the original proposal requested approval before implementation and described Shop placement under Explore. The user subsequently approved implementation on `main` with Shop as a Home Quick Action, a flat KES 100 fee on every listing, and direct buyer-seller contact without Prepza-held purchase funds. See Section 15 and `docs/NEXT_STEPS.md` for the live contract and remaining release gates.
+**Historical decision checkpoint (superseded):** the original proposal requested approval before implementation and described Shop placement under Explore. The user subsequently approved implementation on `main` with Shop as a Home Quick Action, KES 100 per item for each 30-day listing period, and direct buyer-seller contact without Prepza-held purchase funds. See Section 15 and `docs/NEXT_STEPS.md` for the live contract and remaining release gates.
 
 
 ## 15. Approved implementation and release contract (27 October 2026)
@@ -384,7 +384,7 @@ Market-pricing hypotheses in this document (KES 50–100 boosts, a 5% future sel
 The implementation direction is approved for direct work on `main`:
 
 - Home retains exactly five quick actions. Replace Podcasts with Shop; retain Upload, My Study, Library, and Ada. Podcasts remain available through My Study and the existing podcast library. Explore and the five-item bottom navigation are unchanged.
-- Every product listing costs **KES 100** to post, including the seller's first listing. There is no free-post allowance based on account age or listing count, so creating multiple accounts does not unlock a free listing. The browser never chooses the fee, and a listing cannot be published until the exact KES 100 payment has been verified server-side. The backend now normalizes legacy zero-fee drafts before checkout/publishing and prevents moderators from approving them unpaid. A rejected/removed listing does not automatically refund the posting fee.
+- Every product listing costs **KES 100 per 30-day period**, including the seller's first listing. The seller manually renews each item for another 30 days; expired listings are hidden until renewal and re-publication. There is no free-post allowance based on account age or listing count, so creating multiple accounts does not unlock a free listing. The browser never chooses the fee, and a listing cannot be published or remain visible beyond its paid period without server-verified payment. The backend now normalizes legacy zero-fee drafts before checkout/publishing and prevents moderators from approving them unpaid. A rejected/removed listing does not automatically refund the posting fee.
 - Prepza does not handle product purchases. No buyer checkout, cart, wallet, escrow, order payment, seller settlement or delivery promise is part of this MVP. Contact is through a seller-provided WhatsApp link and Prepza's existing in-app chat flow.
 - A listing starts as a private draft, requires at least one photo, then enters moderation. Only approved listings are visible in public browse/search. The seller can edit, pause, mark sold or remove their own listing; authenticated users can save/report; admins can review listings and reports.
 - If Paystack reports a successful posting-fee transaction with an amount/currency mismatch, the listing enters `payment_review`, remains unpublished, and cannot be edited, removed or charged again until an admin records a manual reconciliation note. This avoids treating a provider-successful but incorrect charge as an ordinary failed payment.
