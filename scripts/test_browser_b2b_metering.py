@@ -396,8 +396,11 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             assert campaign_report["unique_clicks"] == 1
             assert campaign_report["billable_clicks"] == 1
             assert campaign_report["unique_billable_clickers"] == 1
-            assert campaign_report["ctr_percent"] == 200.0
+            assert campaign_report["ctr_percent"] == 100.0
+            assert campaign_report["billable_ctr_percent"] == 100.0
+            assert campaign_report["raw_ctr_percent"] == 200.0
             assert campaign_report["unique_ctr_percent"] == 100.0
+            assert campaign_report["unique_billable_ctr_percent"] == 100.0
             assert campaign_report["net_spend_kes"] == 20.35, campaign_report
 
             csv_response = page.request.get(
@@ -409,7 +412,9 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             assert "text/csv" in csv_response.headers.get("content-type", "")
             csv_body = csv_response.text()
             assert "Unique clickers" in csv_body
-            assert "CTR (%)" in csv_body
+            assert "Billable CTR (%)" in csv_body
+            assert "Raw CTR (%)" in csv_body
+            assert "Unique CTR (%)" in csv_body
             assert "Browser QA sponsored ledger" in csv_body
             assert "20.35" in csv_body
             print("PASS: advertiser JSON/CSV reports distinguish 2 raw clicks from 1 unique/billable click and reconcile KES 20.35")
