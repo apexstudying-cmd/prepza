@@ -381,14 +381,33 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         if not raw or len(raw) > MAX_IMAGE_BYTES:
             return jsonify({"error": "Images must be smaller than 5 MB"}), 413
         try:
-            from PIL import Image
+            from PIL import Image, UnidentifiedImageError
             import io
+            source = Image.open(io.BytesIO(raw))
+            source_format = source.format
+            source.verify()
             image = Image.open(io.BytesIO(raw))
-            image.verify()
-            mime = image.get_format_mimetype()
+            if image.width <= 0 or image.height <= 0 or image.width * image.height > 20_000_000:
+                raise ValueError("Images must be smaller than 20 megapixels")
+            mime_by_format = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+            mime = mime_by_format.get(source_format)
             extension = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}.get(mime)
             if not extension:
                 raise ValueError("Use a JPEG, PNG or WebP image")
+            # Re-encode to cap dimensions and strip EXIF/GPS metadata before storage.
+            image.thumbnail((1600, 1600))
+            cleaned = io.BytesIO()
+            if source_format == "JPEG":
+                if image.mode not in ("RGB", "L"):
+                    image = image.convert("RGB")
+                image.save(cleaned, format="JPEG", quality=84, optimize=True, progressive=True)
+            elif source_format == "PNG":
+                image.save(cleaned, format="PNG", optimize=True)
+            else:
+                image.save(cleaned, format="WEBP", quality=82, method=5)
+            raw = cleaned.getvalue()
+            if not raw or len(raw) > MAX_IMAGE_BYTES:
+                raise ValueError("Optimized photo must be smaller than 5 MB")
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         except Exception:
