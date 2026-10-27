@@ -188,3 +188,15 @@ def test_advertiser_report_has_unique_click_ctr_csv_and_nairobi_dates():
     assert '"text/csv; charset=utf-8"' in route
     assert 'ZoneInfo("Africa/Nairobi")' in source
     assert '"billing_basis": "prepaid campaign ledger"' in route
+
+
+def test_discovery_target_normalizer_preserves_and_validates_billing_modes():
+    source = Path("discovery_billing.py").read_text(encoding="utf-8")
+    allowed = source[source.index("ALLOWED_TARGET_KEYS"):source.index("def normalize_target")]
+    normalizer_start = source.index("def normalize_target")
+    normalizer_end = source.index("def eligible_users", normalizer_start)
+    normalizer = source[normalizer_start:normalizer_end]
+    assert '"billing_modes"' in allowed
+    assert 'raw_target.get("billing_modes")' in normalizer
+    assert 'target["billing_modes"]' in normalizer
+    assert 'not in ("cpm", "cpc")' in normalizer
