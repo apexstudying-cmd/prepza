@@ -146,7 +146,8 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const uploadFiles = async (listingId: number, chosen: File[]) => {
     for (const file of chosen) {
       const body = new FormData(); body.append('image', file)
-      await shopApi('/api/shop/listings/' + listingId + '/images', { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body })
+      const uploaded = await shopApi<{ images: ImageRef[] }>('/api/shop/listings/' + listingId + '/images', { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body })
+      setFormImages(uploaded.images || [])
       setFiles(current => {
         const uploadedIndex = current.indexOf(file)
         return uploadedIndex < 0 ? current : current.filter((_, index) => index !== uploadedIndex)
