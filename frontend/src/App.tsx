@@ -15537,6 +15537,128 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    // Click telemetry is not an offline queue for new actions: this only
+    // flushes a click UUID that SponsoredOpportunityCard already created
+    // after a confirmed qualifying impression. It lets a lost response be
+    // retried after navigation or reconnect without inventing a new click ID.
+    const clickStoragePrefix = 'prepza:b2b:click-pending:'
+    let flushInFlight = false
+    let retryTimer: number | null = null
+    let retryAttempt = 0
+
+    const clearRetryTimer = () => {
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer)
+        retryTimer = null
+      }
+    }
+
+    const pendingClickKeys = () => {
+      const keys: string[] = []
+      try {
+        for (let index = 0; index < sessionStorage.length; index += 1) {
+          const key = sessionStorage.key(index)
+          if (key?.startsWith(clickStoragePrefix)) keys.push(key)
+        }
+      } catch { /* session storage may be unavailable */ }
+      return keys
+    }
+
+    const removePendingClick = (key: string) => {
+      try { sessionStorage.removeItem(key) } catch { /* best effort */ }
+    }
+
+    const scheduleRetry = () => {
+      if (
+        retryTimer !== null ||
+        retryAttempt >= 5 ||
+        !navigator.onLine ||
+        document.visibilityState !== 'visible'
+      ) return
+      const delay = Math.min(30000, 1000 * (2 ** retryAttempt))
+      retryAttempt += 1
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null
+        void flushPendingClicks()
+      }, delay)
+    }
+
+    const flushPendingClicks = async () => {
+      if (flushInFlight || !navigator.onLine || document.visibilityState !== 'visible') return
+      const keys = pendingClickKeys()
+      if (!keys.length) return
+
+      flushInFlight = true
+      let transientFailure = false
+      try {
+        for (const key of keys) {
+          const campaignId = Number(key.slice(clickStoragePrefix.length))
+          let eventId = ''
+          try { eventId = sessionStorage.getItem(key) || '' } catch { /* checked below */ }
+          if (!Number.isInteger(campaignId) || campaignId <= 0 || !eventId) {
+            removePendingClick(key)
+            continue
+          }
+
+          try {
+            const result = await api<{ eligible?: boolean }>(
+              '/api/discovery/campaigns/' + campaignId + '/click',
+              {
+                method: 'POST',
+                body: JSON.stringify({ event_id: eventId }),
+              },
+            )
+            // The click route returns an explicit eligibility decision on all
+            // successful HTTP responses. Whether billable or capped, it is
+            // now settled and must not remain in the pending queue.
+            if (typeof result.eligible === 'boolean') removePendingClick(key)
+            else transientFailure = true
+          } catch (error) {
+            if (error instanceof ApiError && [400, 404, 410].includes(error.status)) {
+              removePendingClick(key)
+              continue
+            }
+            // Retain authorization failures for the next authenticated
+            // navigation, but do not poll a signed-out session repeatedly.
+            if (error instanceof ApiError && [401, 403].includes(error.status)) continue
+            transientFailure = true
+          }
+        }
+      } finally {
+        flushInFlight = false
+        if (transientFailure) scheduleRetry()
+        else {
+          retryAttempt = 0
+          clearRetryTimer()
+        }
+      }
+    }
+
+    const onOnline = () => {
+      retryAttempt = 0
+      clearRetryTimer()
+      void flushPendingClicks()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void flushPendingClicks()
+      else clearRetryTimer()
+    }
+    const onPageShow = () => { void flushPendingClicks() }
+
+    window.addEventListener('online', onOnline)
+    window.addEventListener('pageshow', onPageShow)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    void flushPendingClicks()
+
+    return () => {
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('pageshow', onPageShow)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      clearRetryTimer()
+    }
+  }, [screen])
+
+  useEffect(() => {
     const onExternalDocument = (event: Event) => {
       const documentId = Number((event as CustomEvent<{ documentId?: number }>).detail?.documentId || 0)
       if (!Number.isInteger(documentId) || documentId <= 0) return
