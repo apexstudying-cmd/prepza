@@ -790,6 +790,18 @@ def register_discovery(app, db):
         if error:
             return jsonify({"error": error}), 400
         start_day, end_day, start_utc, end_utc = window
+        raw_campaign_filter = request.args.get("campaign_id")
+        raw_university_filter = request.args.get("university_id")
+        campaign_id_filter = request.args.get("campaign_id", type=int)
+        university_id_filter = request.args.get("university_id", type=int)
+        if raw_campaign_filter not in (None, "") and (
+            campaign_id_filter is None or campaign_id_filter <= 0
+        ):
+            return jsonify({"error": "campaign_id must be a positive integer"}), 400
+        if raw_university_filter not in (None, "") and (
+            university_id_filter is None or university_id_filter <= 0
+        ):
+            return jsonify({"error": "university_id must be a positive integer"}), 400
         rows = db.session.execute(text("""
             WITH event_totals AS (
                 SELECT campaign_id,
@@ -813,6 +825,8 @@ def register_discovery(app, db):
                     ) AS unique_billable_clickers
                 FROM discovery_event
                 WHERE created_at >= :start_utc AND created_at < :end_utc
+                  AND (:university_id IS NULL OR
+                       COALESCE(NULLIF(metadata->>'campus_id','')::integer,0)=:university_id)
                 GROUP BY campaign_id
             ),
             ledger_totals AS (
@@ -824,9 +838,12 @@ def register_discovery(app, db):
                             ) OR entry_type='delivery_reversal'
                         ),0)
                     ) AS net_spend_minor
-                FROM b2b_campaign_ledger
-                WHERE created_at >= :start_utc AND created_at < :end_utc
-                GROUP BY campaign_id
+                FROM b2b_campaign_ledger l
+                LEFT JOIN discovery_event de ON de.id=l.delivery_event_id
+                WHERE l.created_at >= :start_utc AND l.created_at < :end_utc
+                  AND (:university_id IS NULL OR
+                       COALESCE(NULLIF(de.metadata->>'campus_id','')::integer,0)=:university_id)
+                GROUP BY l.campaign_id
             )
             SELECT c.id AS campaign_id, c.name AS campaign_name, c.placement,
                    COALESCE(e.impressions,0) AS impressions,
@@ -840,11 +857,14 @@ def register_discovery(app, db):
             LEFT JOIN event_totals e ON e.campaign_id=c.id
             LEFT JOIN ledger_totals l ON l.campaign_id=c.id
             WHERE c.organisation_id=:oid
+              AND (:campaign_id IS NULL OR c.id=:campaign_id)
             ORDER BY c.id DESC
         """), {
             "oid": organisation_id,
             "start_utc": start_utc,
             "end_utc": end_utc,
+            "campaign_id": campaign_id_filter,
+            "university_id": university_id_filter,
         }).mappings().all()
 
         # Campus reporting is aggregated at the campaign/campus level.
@@ -875,6 +895,8 @@ def register_discovery(app, db):
                     ) AS unique_billable_clickers
                 FROM discovery_event
                 WHERE created_at >= :start_utc AND created_at < :end_utc
+                  AND (:university_id IS NULL OR
+                       COALESCE(NULLIF(metadata->>'campus_id','')::integer,0)=:university_id)
                 GROUP BY campaign_id, COALESCE(NULLIF(metadata->>'campus_id','')::integer,0)
             ),
             campus_ledger AS (
@@ -905,11 +927,14 @@ def register_discovery(app, db):
             LEFT JOIN campus_ledger cl
               ON cl.campaign_id=ce.campaign_id AND cl.campus_id=ce.campus_id
             WHERE c.organisation_id=:oid
+              AND (:campaign_id IS NULL OR c.id=:campaign_id)
             ORDER BY ce.campaign_id, u.name
         """), {
             "oid": organisation_id,
             "start_utc": start_utc,
             "end_utc": end_utc,
+            "campaign_id": campaign_id_filter,
+            "university_id": university_id_filter,
         }).mappings().all()
 
         campus_by_campaign = {}
@@ -936,13 +961,17 @@ def register_discovery(app, db):
                 "unique_billable_clickers": unique_billable_clickers,
                 "billable_ctr_percent": round(billable_clicks * 100 / impressions, 2) if impressions else 0.0,
                 "raw_ctr_percent": round(raw_clicks * 100 / impressions, 2) if impressions else 0.0,
-                "unique_ctr_percent": round(unique_clicks * 100 / impressions, 2) if impressions else 0.0,
-                "unique_billable_ctr_percent": round(unique_billable_clickers * 100 / impressions, 2) if impressions else 0.0,
+                "unique_ctr_percent": round(unique_clicks * 100 / unique_reach, 2) if unique_reach else 0.0,
+                "unique_billable_ctr_percent": round(unique_billable_clickers * 100 / unique_reach, 2) if unique_reach else 0.0,
                 "net_spend_kes": round(int(campus["net_spend_minor"] or 0) / 100, 2),
             })
 
         campaigns = []
         for row in rows:
+            # An explicit campus-filtered report is suppressed below the
+            # minimum cohort size rather than leaking a small campus count.
+            if university_id_filter is not None and int(row["unique_reach"] or 0) < 10:
+                continue
             impressions = int(row["impressions"] or 0)
             raw_clicks = int(row["raw_clicks"] or 0)
             unique_clicks = int(row["unique_clicks"] or 0)
@@ -950,16 +979,17 @@ def register_discovery(app, db):
             unique_billable_clickers = int(row["unique_billable_clickers"] or 0)
             raw_ctr = round(raw_clicks * 100 / impressions, 2) if impressions else 0.0
             billable_ctr = round(billable_clicks * 100 / impressions, 2) if impressions else 0.0
-            unique_ctr = round(unique_clicks * 100 / impressions, 2) if impressions else 0.0
+            unique_reach = int(row["unique_reach"] or 0)
+            unique_ctr = round(unique_clicks * 100 / unique_reach, 2) if unique_reach else 0.0
             unique_billable_ctr = (
-                round(unique_billable_clickers * 100 / impressions, 2) if impressions else 0.0
+                round(unique_billable_clickers * 100 / unique_reach, 2) if unique_reach else 0.0
             )
             campaigns.append({
                 "campaign_id": int(row["campaign_id"]),
                 "campaign_name": row["campaign_name"],
                 "placement": row["placement"],
                 "impressions": impressions,
-                "unique_reach": int(row["unique_reach"] or 0),
+                "unique_reach": unique_reach,
                 "campus_breakdown": campus_by_campaign.get(int(row["campaign_id"]), []),
                 "raw_clicks": raw_clicks,
                 "unique_clicks": unique_clicks,
@@ -980,6 +1010,7 @@ def register_discovery(app, db):
             output = io.StringIO(newline="")
             writer = csv.writer(output)
             writer.writerow([
+                "Scope", "Campus", "Campus ID", "Unique reach",
                 "Campaign ID", "Campaign", "Placement", "Impressions", "Raw clicks",
                 "Unique clickers", "Billable clicks", "Unique billable clickers",
                 "Billable CTR (%)", "Raw CTR (%)", "Unique CTR (%)",
@@ -987,6 +1018,7 @@ def register_discovery(app, db):
             ])
             for item in campaigns:
                 writer.writerow([
+                    "campaign", "", "", item["unique_reach"],
                     item["campaign_id"], item["campaign_name"], item["placement"],
                     item["impressions"], item["raw_clicks"], item["unique_clicks"],
                     item["billable_clicks"], item["unique_billable_clickers"],
@@ -994,6 +1026,16 @@ def register_discovery(app, db):
                     item["unique_ctr_percent"], item["unique_billable_ctr_percent"],
                     item["net_spend_kes"],
                 ])
+                for campus in item["campus_breakdown"]:
+                    writer.writerow([
+                        "campus", campus["campus_name"], campus["campus_id"], campus["unique_reach"],
+                        item["campaign_id"], item["campaign_name"], item["placement"],
+                        campus["impressions"], campus["raw_clicks"], campus["unique_clicks"],
+                        campus["billable_clicks"], campus["unique_billable_clickers"],
+                        campus["billable_ctr_percent"], campus["raw_ctr_percent"],
+                        campus["unique_ctr_percent"], campus["unique_billable_ctr_percent"],
+                        campus["net_spend_kes"],
+                    ])
             filename = f"prepza-discovery-report-{start_day:%Y%m%d}-{end_day:%Y%m%d}.csv"
             return Response(
                 output.getvalue(),
@@ -1010,6 +1052,10 @@ def register_discovery(app, db):
             },
             "currency": "KES",
             "billing_basis": "prepaid campaign ledger",
+            "filters": {
+                "campaign_id": campaign_id_filter,
+                "university_id": university_id_filter,
+            },
             "campaigns": campaigns,
         })
 
