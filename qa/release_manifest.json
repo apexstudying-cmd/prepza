@@ -399,14 +399,14 @@
           "kind": "integration_test",
           "path": "tests/test_local_qa_real_world.py",
           "anchors": [
-            "test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact"
+            "test_shop_every_listing_paid_posting_fee_and_direct_contact"
           ]
         },
         {
           "kind": "contract_test",
           "path": "tests/test_shop_marketplace.py",
           "anchors": [
-            "test_first_listing_is_free_and_each_later_post_costs_kes_100",
+            "test_every_listing_including_first_costs_kes_100",
             "test_invalid_listing_payload_is_rejected"
           ]
         },
@@ -420,9 +420,9 @@
       ],
       "required_test_commands": [
         "python -m pytest tests/test_shop_marketplace.py -q",
-        "python -m pytest tests/test_local_qa_real_world.py -k shop_free_first_listing_paid_second_posting_fee_and_direct_contact -q"
+        "python -m pytest tests/test_local_qa_real_world.py -k shop_every_listing_paid_posting_fee_and_direct_contact -q"
       ],
-      "notes": "Implementation in progress. User-approved contract: one lifetime free listing, KES 100 for each subsequent product post, direct seller contact only, and no buyer checkout or Prepza-held funds. Release certification requires the new disposable PostgreSQL browser journey, migration and image-storage verification, and staging Paystack/R2 checks; source presence is not proof."
+      "notes": "Implementation in progress. User-approved launch contract: every listing including the first costs KES 100, direct seller contact only, and no buyer checkout or Prepza-held funds. No free-first-post allowance; creating additional accounts does not create a free listing. Release certification requires the disposable PostgreSQL browser journey, migration and image-storage verification, and staging Paystack/R2 checks; source presence is not proof."
     }
   ]
 }
