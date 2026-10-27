@@ -2018,7 +2018,7 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     )
 
     png_bytes = base64.b64decode(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pWQAAAAASUVORK5CYII="
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
     )
     invalid_price_payload = {
         "title": "QA invalid price item",
