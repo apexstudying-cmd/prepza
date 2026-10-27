@@ -1899,3 +1899,8 @@ The B2B gate remains IN_PROGRESS, not PASS: the exercised browser/ledger path is
 ## 2026-10-27 — refund webhook idempotency review (pending CI)
 
 Code review identified a duplicate `refund.processed` webhook risk: the ledger entry was deduplicated, but the payment's cumulative refunded amount could still be incremented on replay. Added a real-route regression to the disposable PostgreSQL checkout scenario (commit `655e01b8f001ac54929d334950327ce2d759c3c9`) and changed the handler to persist processed refund identities and acknowledge duplicate events without mutating totals (commit `3e26d22bf9ceaeadbc98e5f82311b6af02691109`). The CI run for this new test is not yet confirmed. Do not mark recovery/idempotency PASS until it passes; release stays BLOCKED, with no live payment activity.
+
+
+## 2026-10-27 — recovery gate evidence
+
+The completed recovery steps in [run 40502457332](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457332), runtime commit `e1d9ef42b533c9fb3fb14de2a4a3d66e30714015`, passed: full disposable PostgreSQL QA, the student Paystack invalid-signature/retry/duplicate-entitlement regression, B2B duplicate and distinct-refund idempotency cases, and the B2B browser-to-ledger debounce test. The initial browser attempt had exposed an outdated raw-click-count expectation; the test was corrected to count the additional raw-only interaction, and the rerun passed the B2B browser step. Overall browser workflow still awaited online/offline artifact verification; do not infer the whole run passed until its final conclusion is available. Provider-side checks and independent server-side viewability qualification remain open.
