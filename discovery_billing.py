@@ -728,12 +728,17 @@ def register_discovery(app, db):
         # Raw interaction analytics is deliberately separate from billable
         # click events. Rate-limited taps can appear in reporting without
         # becoming ledger entries or changing delivered_clicks.
+        campus_id = db.session.execute(
+            text('SELECT university_id FROM "user" WHERE id=:uid'),
+            {"uid": uid},
+        ).scalar_one_or_none()
         raw_metadata = {
             "raw_click": True,
             "billable": bool(result.get("ok")),
             "billing_reason": None if result.get("ok") else reason,
             "amount_minor": int(result.get("amount_minor") or 0),
             "client_event_id": supplied_key,
+            "campus_id": int(campus_id) if campus_id is not None else None,
             "meter_version": "b2b-click-telemetry-v1",
         }
         db.session.execute(text("""
