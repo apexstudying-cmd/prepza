@@ -153,6 +153,7 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
         page = context.new_page()
         requests: list[dict] = []
         impression_attempts = {"count": 0}
+        click_attempts = {"count": 0}
 
         def remember_request(request) -> None:
             if f"/api/discovery/campaigns/{campaign_id}/" not in request.url:
@@ -182,6 +183,23 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
         page.route(
             f"**/api/discovery/campaigns/{campaign_id}/impression",
             drop_first_impression_response,
+        )
+
+        def drop_first_click_response(route) -> None:
+            click_attempts["count"] += 1
+            if click_attempts["count"] == 1:
+                # Commit the click at the real server, then lose the response.
+                response = route.fetch()
+                if response.ok:
+                    route.abort("failed")
+                else:
+                    route.fulfill(response=response)
+            else:
+                route.continue_()
+
+        page.route(
+            f"**/api/discovery/campaigns/{campaign_id}/click",
+            drop_first_click_response,
         )
 
         # Install CSS before the app mounts the card, so IntersectionObserver
@@ -286,17 +304,24 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             print("PASS: visible ad charged one CPM unit after a lost response; retry reused the same UUID")
 
             card.click(timeout=8000)
-            deadline = time.monotonic() + 10
+            deadline = time.monotonic() + 12
             current = read_campaign_state(campaign_id)
-            while time.monotonic() < deadline and current["delivered_clicks"] != 1:
-                page.wait_for_timeout(200)
+            while time.monotonic() < deadline:
                 current = read_campaign_state(campaign_id)
+                if current["delivered_clicks"] == 1 and click_attempts["count"] >= 2:
+                    break
+                page.wait_for_timeout(200)
 
-            click_events = [event for event in requests if event["url"].endswith("/click")]
-            assert len(click_events) == 1 and click_events[0]["event_id"], (
-                f"click was not attributed with a stable event ID: {click_events}"
+            assert click_attempts["count"] >= 2, (
+                "click response was lost after commit but pending click was not retried: "
+                f"attempts={click_attempts}, requests={requests}"
             )
-            click_id = click_events[0]["event_id"]
+            click_events = [event for event in requests if event["url"].endswith("/click")]
+            click_ids = [event["event_id"] for event in click_events]
+            assert len(click_ids) >= 2 and click_ids[0] and len(set(click_ids[:2])) == 1, (
+                f"click retry did not reuse one stable event ID: {click_events}"
+            )
+            click_id = click_ids[0]
             assert current["delivered_clicks"] == 1, "click did not reach campaign counter: " + str(current)
             click_charges = [row for row in current["ledger"] if row["entry_type"] == "delivery_click"]
             assert len(click_charges) == 1 and int(click_charges[0]["signed_amount_minor"]) == -2000, (
