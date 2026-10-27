@@ -2308,6 +2308,9 @@ def sync_paystack_payment_status(reference):
             # and the order is marked failed for reconciliation.
             payment.status = "success"
             _student_order_helpers["mark_failed"](payment.id)
+            if payment.payment_type == "shop_posting":
+                from shop_marketplace import fail_shop_posting_payment
+                fail_shop_posting_payment(db, payment)
         else:
             payment.status = "success"
             # Student subscriptions are only activated after the durable order
@@ -2349,6 +2352,9 @@ def sync_paystack_payment_status(reference):
         # A payment that definitively failed cannot fulfill the order.
         _student_order_helpers["mark_failed"](payment.id)
         payment.status = "failed"
+        if payment.payment_type == "shop_posting":
+            from shop_marketplace import fail_shop_posting_payment
+            fail_shop_posting_payment(db, payment)
     # else: still processing on Paystack's side, leave as pending
 
     db.session.commit()
