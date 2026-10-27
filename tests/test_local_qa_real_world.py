@@ -2219,6 +2219,37 @@ def test_shop_every_listing_paid_posting_fee_and_direct_contact(world, monkeypat
     resolved = admin.post(f"/api/shop/admin/reports/{report_id}/resolve", headers=_csrf(admin_id))
     assert resolved.status_code == 200
 
+    # A paid listing expires after 30 days, disappears from public views, and
+    # can be manually renewed. Replayed success callbacks must not extend it.
+    from datetime import datetime, timedelta
+    first_model = db.session.get(shop_marketplace._ShopListing, first_listing["id"])
+    original_expiry = first_model.posting_fee_expires_at
+    assert original_expiry is not None
+    first_model.posting_fee_expires_at = datetime.utcnow() - timedelta(seconds=1)
+    db.session.commit()
+    expired_browse = buyer.get("/api/shop/listings?q=QA")
+    assert first_listing["id"] not in {item["id"] for item in expired_browse.get_json()["listings"]}
+    assert buyer.get("/api/shop/listings/" + str(first_listing["id"])).status_code == 404
+
+    renewal_checkout = seller.post("/api/shop/listings/" + str(first_listing["id"]) + "/checkout", headers=_csrf(seller_id))
+    assert renewal_checkout.status_code == 200, renewal_checkout.get_json()
+    renewal_reference = renewal_checkout.get_json()["reference"]
+    fake_provider_result.update({"status": "success", "amount": 10000, "currency": "KES"})
+    renewal_callback = seller.get("/shop/payment/callback?reference=" + renewal_reference, follow_redirects=False)
+    assert renewal_callback.status_code == 302
+    renewed_model = db.session.get(shop_marketplace._ShopListing, first_listing["id"])
+    renewed_expiry = renewed_model.posting_fee_expires_at
+    assert renewed_expiry is not None and renewed_expiry > datetime.utcnow()
+    duplicate_renewal = app_module.sync_paystack_payment_status(renewal_reference)
+    assert duplicate_renewal.status == "success"
+    db.session.refresh(renewed_model)
+    assert renewed_model.posting_fee_expires_at == renewed_expiry
+
+    renewal_publish = seller.post("/api/shop/listings/" + str(first_listing["id"]) + "/publish", headers=_csrf(seller_id))
+    assert renewal_publish.status_code == 200
+    renewal_approval = admin.post("/api/shop/admin/listings/" + str(first_listing["id"]) + "/moderate", json={"action": "approve"}, headers=_csrf(admin_id))
+    assert renewal_approval.status_code == 200
+
     # A provider-successful amount mismatch must be quarantined, not treated
     # as a paid KES 100 posting fee or an ordinary retryable checkout.
     third_payload = dict(listing_payload)
