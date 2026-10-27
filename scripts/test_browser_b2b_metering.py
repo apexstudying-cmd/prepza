@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 
 from playwright.sync_api import sync_playwright
 
@@ -302,6 +303,33 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
                 "qualifying click must debit exactly KES 20 once: " + str(current)
             )
 
+            # A later, distinct click attempt by the same authenticated user
+            # is still counted as a raw interaction, but the daily billable
+            # click cap must protect prepaid advertiser money.
+            page.wait_for_timeout(850)
+            second_click_id = str(uuid.uuid4())
+            second_click = page.evaluate(
+                """async ({campaignId, eventId}) => {
+                  const response = await fetch(
+                    "/api/discovery/campaigns/" + campaignId + "/click",
+                    { method: 'POST', credentials: 'same-origin',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ event_id: eventId }) }
+                  );
+                  return { status: response.status, body: await response.json() };
+                }""",
+                {"campaignId": campaign_id, "eventId": second_click_id},
+            )
+            assert second_click["status"] == 200
+            assert second_click["body"].get("eligible") is True
+            assert second_click["body"].get("billable") is False
+            assert second_click["body"].get("billing_reason") == "student_frequency_cap", second_click
+            capped_state = read_campaign_state(campaign_id)
+            assert capped_state["delivered_clicks"] == 1
+            assert len([row for row in capped_state["ledger"] if row["entry_type"] == "delivery_click"]) == 1
+            assert capped_state["remaining_minor"] == 1000000 - 35 - 2000
+            print("PASS: repeated user click is counted without a second billable click/debit")
+
             replay = page.evaluate(
                 """async ({campaignId, eventId}) => {
                   const response = await fetch(
@@ -339,11 +367,11 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
                 if item["campaign_id"] == campaign_id
             )
             assert campaign_report["impressions"] == 1
-            assert campaign_report["raw_clicks"] == 1
+            assert campaign_report["raw_clicks"] == 2
             assert campaign_report["unique_clicks"] == 1
             assert campaign_report["billable_clicks"] == 1
             assert campaign_report["unique_billable_clickers"] == 1
-            assert campaign_report["ctr_percent"] == 100.0
+            assert campaign_report["ctr_percent"] == 200.0
             assert campaign_report["unique_ctr_percent"] == 100.0
             assert campaign_report["net_spend_kes"] == 20.35, campaign_report
 
@@ -359,7 +387,7 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
             assert "CTR (%)" in csv_body
             assert TITLE in csv_body
             assert "20.35" in csv_body
-            print("PASS: advertiser JSON/CSV reports distinguish raw, unique, billable clicks and reconcile KES 20.35")
+            print("PASS: advertiser JSON/CSV reports distinguish 2 raw clicks from 1 unique/billable click and reconcile KES 20.35")
             print("PASS: click reached the right campaign, and duplicate click replay did not debit twice")
         finally:
             context.close()
