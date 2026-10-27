@@ -139,7 +139,7 @@ def fail_shop_posting_payment(db, payment):
     except (TypeError, ValueError):
         return False
     listing = _ShopListing.query.filter_by(id=listing_id, seller_id=payment.user_id).with_for_update().first()
-    if not listing or listing.status != "pending_payment":
+    if not listing or listing.status != "pending_payment" or listing.posting_payment_reference != payment.reference:
         return False
     listing.status = "draft"
     listing.checkout_url = None
@@ -158,7 +158,7 @@ def mark_shop_posting_payment_mismatch(db, payment, reason=None):
     except (TypeError, ValueError):
         return False
     listing = _ShopListing.query.filter_by(id=listing_id, seller_id=payment.user_id).with_for_update().first()
-    if not listing or listing.posting_fee_paid:
+    if not listing or listing.posting_fee_paid or listing.posting_payment_reference != payment.reference:
         return False
     listing.status = "payment_review"
     listing.checkout_url = None
@@ -195,7 +195,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         posting_fee_kes = db.Column(db.Integer, nullable=False, default=0)
         posting_fee_paid = db.Column(db.Boolean, nullable=False, default=False)
         posting_fee_expires_at = db.Column(db.DateTime, nullable=True, index=True)
-        posting_period_payment_reference = db.Column(db.String(50), nullable=True, unique=True)
+        posting_period_payment_reference = db.Column(db.String(50), nullable=True)
         posting_payment_reference = db.Column(db.String(50), nullable=True, unique=True)
         checkout_url = db.Column(db.String(500), nullable=True)
         moderation_note = db.Column(db.String(500), nullable=True)
@@ -210,6 +210,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         __table_args__ = (
             db.CheckConstraint("price_kes >= 0", name="ck_shop_listing_price_nonnegative"),
             db.CheckConstraint("posting_fee_kes IN (0, 100)", name="ck_shop_listing_posting_fee"),
+            db.UniqueConstraint("posting_period_payment_reference", name="uq_shop_listing_period_payment_reference"),
             db.Index("ix_shop_listing_active_created", "status", "created_at"),
         )
 
