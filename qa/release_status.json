@@ -88,7 +88,7 @@
     {
       "id": "existing_database_migration",
       "status": "PASS",
-      "evidence": "GitHub Actions Existing Database Migration Rehearsal run 1 passed on main commit 4584de061162a5dc010b03847d4d09a7aea81e1c (2026-10-26): built the production app image; migrated a disposable database to prior revision 20261005_chat_attach_source_doc; seeded an existing document-content row and generated-material row; upgraded to 20261007_doc_material; verified Alembic head, original content/payload preservation, nullable material_id for legacy rows, and the new material_id foreign-key relationship. Isolated database was removed after the run."
+      "evidence": "GitHub Actions Existing Database Migration Rehearsal run 40514771584 passed on commit c7247b299c7e653c491651b04d1b38c55e37640f (2026-10-27): upgraded a populated disposable database from prior revision 20261005_chat_attach_source_doc through current head 20261027_shop_marketplace; preserved legacy document/material rows and verified the nullable material_id relationship plus Shop listing/saved/report tables and posting-payment review audit fields. A sanitized production-like historical snapshot remains additional confidence, not claimed by this fixture."
     },
     {
       "id": "clean_full_regression",
@@ -103,7 +103,7 @@
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "Shop implementation has been added on main but is not release-certified. Awaiting green production frontend build, disposable PostgreSQL/Alembic browser regression, fee-payment idempotency and retry checks, seller ownership/chat/moderation/image-upload security, and provider-side R2/Paystack test evidence. No live payment or production rollout is authorized by this gate."
+      "evidence": "Frontend build and Shop contract tests are green; mobile/tablet responsive checks exercise the Shop route; populated-database migration rehearsal run 40514771584 is green. The full disposable PostgreSQL/browser regression is still running and must verify first/later listing fee behavior, posting-payment success/failure/mismatch, image upload, moderation, saved/report flows, ownership and chat. A conflicting latest-main pricing change is under clarification (first listing free versus KES 100 for every listing). External Paystack/R2 provider checks are NOT_TESTED. Render auto-deploy is enabled for main; commits can deploy automatically, although no manual deploy was triggered."
     },
     {
       "id": "payment_recovery_idempotency",
