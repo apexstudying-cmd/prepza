@@ -16,7 +16,7 @@ from datetime import datetime
 from urllib.parse import quote
 
 from flask import jsonify, redirect, request, session
-from sqlalchemy import func
+from sqlalchemy import or_
 
 
 LISTING_POST_FEE_KES = 100
@@ -272,7 +272,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         location = (request.args.get("location") or "").strip()[:100]
         if term:
             pattern = f"%{term}%"
-            query = query.filter(db.or_(ShopListing.title.ilike(pattern), ShopListing.description.ilike(pattern)))
+            query = query.filter(or_(ShopListing.title.ilike(pattern), ShopListing.description.ilike(pattern)))
         if category in ALLOWED_CATEGORIES:
             query = query.filter_by(category=category)
         if condition in ALLOWED_CONDITIONS:
@@ -311,6 +311,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         return jsonify({"listings": [listing_json(row, user.id, detail=True) for row in rows]})
 
     @app.post("/api/shop/listings")
+    @limiter.limit("10 per hour")
     def shop_create_listing():
         user, denied = require_user()
         if denied:
@@ -363,6 +364,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         return jsonify({"listing": listing_json(listing, user.id, detail=True)})
 
     @app.post("/api/shop/listings/<int:listing_id>/images")
+    @limiter.limit("30 per hour")
     def shop_upload_listing_image(listing_id):
         user, denied = require_user()
         if denied:
@@ -450,6 +452,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         return jsonify({"images": listing_json(listing, user.id, detail=True)["images"]})
 
     @app.post("/api/shop/listings/<int:listing_id>/checkout")
+    @limiter.limit("5 per hour")
     def shop_checkout_posting_fee(listing_id):
         user, denied = require_user()
         if denied:
@@ -600,6 +603,18 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             return jsonify({"error": "Listing not found"}), 404
         if listing.status == "pending_payment":
             return jsonify({"error": "Finish or cancel the posting-fee checkout before removing this listing"}), 409
+        # Delete product images on explicit removal to stop charging storage for
+        # objects the seller no longer wants published. S3 DeleteObject is
+        # idempotent, so a retry safely handles partial provider failures.
+        if listing.image_keys:
+            try:
+                from object_storage import r2_delete
+                for key in list(listing.image_keys):
+                    r2_delete("shop-listings", key)
+            except Exception:
+                app.logger.exception("Shop listing image cleanup failed")
+                return jsonify({"error": "The listing could not be fully removed because photo cleanup failed. Please retry."}), 503
+            listing.image_keys = []
         listing.status = "removed"
         listing.updated_at = datetime.utcnow()
         db.session.commit()
@@ -646,6 +661,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         return jsonify({"listings": [listing_json(row, user.id, detail=True) for row in rows]})
 
     @app.post("/api/shop/listings/<int:listing_id>/report")
+    @limiter.limit("10 per day")
     def shop_report_listing(listing_id):
         user, denied = require_user()
         if denied:
