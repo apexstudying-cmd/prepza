@@ -59,8 +59,8 @@ Rule: require evidence before marking production work complete.
 - [x] Document existing database verification/stamping rules
 - [x] Prove fresh local bootstrap
 - [~] Reconcile/document historical migrations versus the current Alembic deployment procedure
-- [ ] Test a representative future Alembic migration (existing-database upgrade rehearsal already passed; keep separate)
-- [x] Upgrade a populated prior-Alembic-revision database to current head and verify schema/data invariants in GitHub Actions run [Existing Database Migration Rehearsal](https://github.com/apexstudying-cmd/prepza/actions/runs/40327691259) (passed 2026-10-26); a sanitized production-like historical snapshot is still useful additional confidence, not claimed by this CI fixture
+- [x] Test a representative future Alembic migration: Shop schema upgrade passed in [Existing Database Migration Rehearsal run 40514771584](https://github.com/apexstudying-cmd/prepza/actions/runs/40514771584); production-like restored snapshot remains a separate optional confidence check
+- [x] Upgrade a populated prior-Alembic-revision database to current head and verify schema/data invariants in [Existing Database Migration Rehearsal run 40514771584](https://github.com/apexstudying-cmd/prepza/actions/runs/40514771584) (passed 2026-10-27); this includes the Shop tables and posting-payment review fields. A sanitized production-like historical snapshot is still useful additional confidence, not claimed by this CI fixture
 - [ ] Establish production migration checklist
 - [ ] Test migration procedure against a disposable restored database
 - [ ] Never stamp production/self-hosted DB without independent schema verification
@@ -592,7 +592,7 @@ The `b2b_monetization_integrity` release gate is IN_PROGRESS. Overall release re
 - [x] First lifetime listing free; each later product post costs KES 100, verified server-side through the existing Paystack integration.
 - [~] Build and test browse/search/detail, draft creation, optimized image upload, seller edit/pause/sold/remove, saved listings, WhatsApp/in-app chat, reporting and admin moderation.
 - [~] Verify Paystack amount/currency mismatch quarantine, stale checkout retry, and audited admin payment reconciliation; a provider-successful mismatch must never be treated as paid automatically.
-- [~] Apply Alembic migration `20261027_shop_marketplace` in the disposable PostgreSQL browser workflow and prove the existing-database upgrade path.
+- [x] Prove the populated-database upgrade path through `20261027_shop_marketplace` in [Existing Database Migration Rehearsal run 40514771584](https://github.com/apexstudying-cmd/prepza/actions/runs/40514771584); the full browser regression still separately needs to pass.
 - [ ] Pass the full Shop browser journey: first free listing, second listing KES 100 fee, mocked Paystack success/failure/retry/idempotency, moderation, saved/report flows, ownership denial and direct chat.
 - [ ] Configure staging R2 test bucket/prefix and verify upload/read/delete with restricted credentials; do not use production objects for tests.
 - [ ] Configure Paystack test-mode checkout/webhook evidence for the posting fee; never test live buyer payments because Shop does not process product purchases.
@@ -601,3 +601,6 @@ The `b2b_monetization_integrity` release gate is IN_PROGRESS. Overall release re
 - [ ] Keep release blocked until the Shop gate is PASS or explicitly scoped out; source presence alone is not certification.
 
 Cost notes: use the existing R2 helper/prefix, resize/re-encode images on upload, cap at six photos per listing and 5 MB per image, avoid a new paid image service, and measure shared account storage/operations before enabling broader listing traffic. See `docs/architecture/shop.md`.
+
+
+Deployment note (27 October 2026): Render's `prepza` service has auto-deploy enabled for `main`. GitHub commits can enter the deployment queue without a manual deploy action; verify the Render deployment list before assuming a commit is only staged. External-provider and launch gates remain authoritative for release readiness.
