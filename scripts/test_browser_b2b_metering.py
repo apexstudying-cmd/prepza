@@ -186,7 +186,7 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
         # Install CSS before the app mounts the card, so IntersectionObserver
         # sees a real zero-intersection element rather than a mocked observer.
         page.add_init_script(
-            """() => {
+            """(() => {
               const install = () => {
                 const style = document.createElement('style');
                 style.id = 'prepza-b2b-offscreen-test-style';
@@ -197,7 +197,7 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
               };
               if (document.documentElement) install();
               else document.addEventListener('DOMContentLoaded', install, { once: true });
-            }"""
+            })()"""
         )
 
         try:
