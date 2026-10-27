@@ -6,7 +6,7 @@
 
 ## Goals
 
-Make Shop feel like a polished, trustworthy campus marketplace without introducing infrastructure that is expensive to operate. The product is classifieds: Prepza charges sellers KES 100 for every listing, including their first listing. Prepza does not process buyer purchases, hold buyer funds, provide a cart, or offer seller payouts. Buyers contact sellers directly through WhatsApp or Prepza chat.
+Make Shop feel like a polished, trustworthy campus marketplace without introducing infrastructure that is expensive to operate. The product is classifieds: Prepza charges sellers KES 100 per item for each 30-day listing period, including the first; renewal is manual, not an automatic recurring charge. Prepza does not process buyer purchases, hold buyer funds, provide a cart, or offer seller payouts. Buyers contact sellers directly through WhatsApp or Prepza chat.
 
 ## Research basis
 
@@ -41,7 +41,7 @@ These are design principles, not a claim that a particular layout will improve c
 
 ### 3. Create and edit listing
 
-- State the price policy before the form: **KES 100 per listing, including your first**. Explain that this is a posting fee, not a buyer transaction or guarantee of sale.
+- State the price policy before the form: **KES 100 per item for each 30-day period, including your first**. Explain that this is a posting fee, not a buyer transaction or guarantee of sale.
 - Keep the form in a clear order: title, category, condition, price, location, description, optional WhatsApp contact, photos, fee payment and final submission/review.
 - Validate required fields inline, preserve user-entered data after recoverable errors, and prevent double-submit while uploads/payment initialization are in progress.
 - Explain image types and limits before selection. Show thumbnails, upload progress, remove/retry controls, and an accurate selected-photo count. Preserve successfully uploaded image references if a later image fails, so retry does not duplicate prior uploads.
@@ -58,7 +58,7 @@ These are design principles, not a claim that a particular layout will improve c
 
 ### 5. Payment and moderation
 
-- Treat the KES 100 fee as a listing-posting fee only. There is no buyer checkout, basket, escrow, buyer-to-Prepza purchase payment, or seller payout flow.
+- Treat the KES 100 fee as a 30-day listing-period fee only. There is no buyer checkout, basket, escrow, buyer-to-Prepza purchase payment, or seller payout flow.
 - Verify provider callbacks/signatures and payment status on the server, make webhook handling idempotent, and ensure legacy zero-fee drafts cannot bypass payment.
 - Keep moderation decisions and payment review notes separate. Only authorized admins may access moderation/payment queues.
 - Provide clear report reasons, submission confirmation and a non-blocking route back to browsing. Avoid disclosing reporter information to the reported seller.
@@ -105,7 +105,7 @@ These are design principles, not a claim that a particular layout will improve c
 - [ ] Create/edit/pause/sold/save mutations invalidate or refresh affected browse snapshots.
 - [ ] Account-specific flags, private responses and payment/admin data are not stored in persistent public caches.
 - [ ] Product images are size-limited, lazy-loaded, correctly sized and served from existing object storage.
-- [ ] Posting fee copy consistently states KES 100 for every listing including the first; no free-first-listing path exists.
+- [ ] Posting fee copy consistently states KES 100 per item per 30-day period including the first; no free-first-listing path exists; expired items are hidden until manual renewal.
 - [ ] No cart, buyer checkout, escrow, or seller payout is shown or implemented.
 - [ ] Browser regression covers browse, detail/contact, create form/photo selection, fee/payment status, moderation/reporting, offline cache fallback and mobile screenshots.
 - [ ] Release tracker records the exact tested commit and remains BLOCKED until all required gates have evidence.
