@@ -1781,6 +1781,50 @@ def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaig
     """), {"cid": campaign_id}).scalar_one()
     assert int(funding_count) == 1 and int(ledger_count) == 1
 
+    # Refund webhooks can also be delivered more than once. The ledger key
+    # prevents a second campaign debit; the payment's cumulative refunded
+    # amount must be idempotent too.
+    refund_payload = {
+        "event": "refund.processed",
+        "data": {
+            "transaction_reference": body["reference"],
+            "amount": 10000,
+            "refund_reference": "qa-refund-duplicate-1",
+        },
+    }
+    refund_raw = json.dumps(refund_payload, separators=(",", ":")).encode("utf-8")
+    refund_signature = hmac.new(
+        b"sk_test_mock_only_not_a_real_secret", refund_raw, hashlib.sha512
+    ).hexdigest()
+    first_refund = client.post(
+        "/payment/paystack/b2b-webhook",
+        data=refund_raw,
+        content_type="application/json",
+        headers={"x-paystack-signature": refund_signature},
+    )
+    assert first_refund.status_code == 200, first_refund.get_json()
+
+    duplicate_refund = client.post(
+        "/payment/paystack/b2b-webhook",
+        data=refund_raw,
+        content_type="application/json",
+        headers={"x-paystack-signature": refund_signature},
+    )
+    assert duplicate_refund.status_code == 200, duplicate_refund.get_json()
+
+    payment_after_refund = db.session.execute(text("""
+        SELECT refunded_amount_minor, status, refund_status
+        FROM b2b_payment WHERE campaign_id=:cid
+    """), {"cid": campaign_id}).mappings().one()
+    assert int(payment_after_refund["refunded_amount_minor"]) == 10000
+    assert payment_after_refund["status"] == "refunded"
+    assert payment_after_refund["refund_status"] == "processed"
+    refund_rows = db.session.execute(text("""
+        SELECT COUNT(*) FROM b2b_campaign_ledger
+        WHERE campaign_id=:cid AND entry_type='refund'
+    """), {"cid": campaign_id}).scalar_one()
+    assert int(refund_rows) == 1
+
 
 
 def test_b2b_campus_report_shows_aggregate_only_at_ten_reached_accounts(world):
