@@ -813,8 +813,18 @@ def register_discovery(app, db):
                         WHERE event_type='impression'
                           AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
                     ) AS unique_reach,
-                    COUNT(*) FILTER (WHERE event_type='click_raw') AS raw_clicks,
-                    COUNT(DISTINCT user_id) FILTER (WHERE event_type='click_raw') AS unique_clicks,
+                    COUNT(DISTINCT CASE
+                        WHEN event_type IN ('click_raw','click') THEN
+                            COALESCE(
+                                NULLIF(metadata->>'client_event_id',''),
+                                regexp_replace(
+                                    event_key,
+                                    '^(rawclick|click):[0-9]+:[0-9]+:',
+                                    ''
+                                )
+                            )
+                    END) FILTER (WHERE event_type IN ('click_raw','click')) AS raw_clicks,
+                    COUNT(DISTINCT user_id) FILTER (WHERE event_type IN ('click_raw','click')) AS unique_clicks,
                     COUNT(*) FILTER (
                         WHERE event_type='click'
                           AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
@@ -883,8 +893,18 @@ def register_discovery(app, db):
                         WHERE event_type='impression'
                           AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
                     ) AS unique_reach,
-                    COUNT(*) FILTER (WHERE event_type='click_raw') AS raw_clicks,
-                    COUNT(DISTINCT user_id) FILTER (WHERE event_type='click_raw') AS unique_clicks,
+                    COUNT(DISTINCT CASE
+                        WHEN event_type IN ('click_raw','click') THEN
+                            COALESCE(
+                                NULLIF(metadata->>'client_event_id',''),
+                                regexp_replace(
+                                    event_key,
+                                    '^(rawclick|click):[0-9]+:[0-9]+:',
+                                    ''
+                                )
+                            )
+                    END) FILTER (WHERE event_type IN ('click_raw','click')) AS raw_clicks,
+                    COUNT(DISTINCT user_id) FILTER (WHERE event_type IN ('click_raw','click')) AS unique_clicks,
                     COUNT(*) FILTER (
                         WHERE event_type='click'
                           AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
