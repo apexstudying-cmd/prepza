@@ -103,7 +103,7 @@
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "Every listing, including the first, is intended to cost KES 100. Source was aligned on commit b5dfa18736113b66867be086482bb424c1dce149, but focused Shop contracts and the full disposable PostgreSQL/browser journey have not yet been rerun against this SHA. Existing migration rehearsal is green; external Paystack/R2 provider checks remain NOT_TESTED. Render auto-deploy is enabled for main, so inspect deployment state before assuming changes are only staged."
+      "evidence": "Every listing, including the first, costs KES 100. Source commit b6697100625ba1c38118a6fce66572a2bd60d247 also normalizes legacy/zero-fee drafts before publish/checkout and blocks approval of stale free listings. Regression coverage was added on 609cede7bee8900340170928e16410547d72349b; Shop Marketplace Contract, Frontend Build and Release Browser regression are queued/running for the updated code. Existing-database migration rehearsal passed earlier; external Paystack/R2 provider checks remain NOT_TESTED. Render auto-deploy is enabled for main; verify deployment state before assuming changes are only staged."
     },
     {
       "id": "payment_recovery_idempotency",
@@ -155,5 +155,5 @@
     "Keep the 400-user performance test DEFERRED until functional, browser, recovery, provider and CI gates are green. Do not deploy or freeze release while any required gate remains NOT_TESTED or IN_PROGRESS."
   ],
   "current_main_commit": "e1d9ef42b533c9fb3fb14de2a4a3d66e30714015",
-  "verification_note": "Updated 2026-10-27 after correcting the Shop source-of-truth fee rule so every listing, including the first, costs KES 100. The new runtime commit has not yet been reverified by CI; keep Shop IN_PROGRESS and release BLOCKED until focused contracts and the full integration/browser journey pass on the new SHA. External provider verification remains NOT_TESTED; no live payments or billable GPU workloads without explicit approval. Shared streak remains NOT_RELEASED; 400-user performance remains DEFERRED. No release freeze is authorized."
+  "verification_note": "Updated 2026-10-27 after aligning Shop to the approved rule that every listing costs KES 100 and adding a regression for legacy/zero-fee drafts. Runtime code commit b6697100625ba1c38118a6fce66572a2bd60d247 has not yet completed its required CI/browser verification. Keep Shop IN_PROGRESS and release BLOCKED until those checks pass on the release candidate SHA. External provider verification remains NOT_TESTED; no live payments or billable GPU workloads without explicit approval. Shared streak remains NOT_RELEASED; 400-user performance remains DEFERRED. No release freeze is authorized."
 }
