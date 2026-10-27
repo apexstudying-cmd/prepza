@@ -797,6 +797,10 @@ def register_discovery(app, db):
                         WHERE event_type='impression'
                           AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
                     ) AS impressions,
+                    COUNT(DISTINCT user_id) FILTER (
+                        WHERE event_type='impression'
+                          AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+                    ) AS unique_reach,
                     COUNT(*) FILTER (WHERE event_type='click_raw') AS raw_clicks,
                     COUNT(DISTINCT user_id) FILTER (WHERE event_type='click_raw') AS unique_clicks,
                     COUNT(*) FILTER (
@@ -826,6 +830,7 @@ def register_discovery(app, db):
             )
             SELECT c.id AS campaign_id, c.name AS campaign_name, c.placement,
                    COALESCE(e.impressions,0) AS impressions,
+                   COALESCE(e.unique_reach,0) AS unique_reach,
                    COALESCE(e.raw_clicks,0) AS raw_clicks,
                    COALESCE(e.unique_clicks,0) AS unique_clicks,
                    COALESCE(e.billable_clicks,0) AS billable_clicks,
@@ -841,6 +846,100 @@ def register_discovery(app, db):
             "start_utc": start_utc,
             "end_utc": end_utc,
         }).mappings().all()
+
+        # Campus reporting is aggregated at the campaign/campus level.
+        # A campus row is suppressed unless at least ten distinct accounts
+        # saw the campaign in the selected period. Student ids/emails are
+        # never serialized to advertiser reports.
+        campus_rows = db.session.execute(text("""
+            WITH campus_events AS (
+                SELECT campaign_id,
+                    COALESCE(NULLIF(metadata->>'campus_id','')::integer,0) AS campus_id,
+                    COUNT(*) FILTER (
+                        WHERE event_type='impression'
+                          AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+                    ) AS impressions,
+                    COUNT(DISTINCT user_id) FILTER (
+                        WHERE event_type='impression'
+                          AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+                    ) AS unique_reach,
+                    COUNT(*) FILTER (WHERE event_type='click_raw') AS raw_clicks,
+                    COUNT(DISTINCT user_id) FILTER (WHERE event_type='click_raw') AS unique_clicks,
+                    COUNT(*) FILTER (
+                        WHERE event_type='click'
+                          AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+                    ) AS billable_clicks,
+                    COUNT(DISTINCT user_id) FILTER (
+                        WHERE event_type='click'
+                          AND COALESCE((metadata->>'reversed')::boolean,FALSE)=FALSE
+                    ) AS unique_billable_clickers
+                FROM discovery_event
+                WHERE created_at >= :start_utc AND created_at < :end_utc
+                GROUP BY campaign_id, COALESCE(NULLIF(metadata->>'campus_id','')::integer,0)
+            ),
+            campus_ledger AS (
+                SELECT e.campaign_id,
+                    COALESCE(NULLIF(e.metadata->>'campus_id','')::integer,0) AS campus_id,
+                    GREATEST(0, -COALESCE(SUM(l.signed_amount_minor) FILTER (
+                        WHERE l.entry_type IN (
+                            'delivery_impression','delivery_click','delivery_push_delivery','delivery_reversal'
+                        )
+                    ),0)) AS net_spend_minor
+                FROM b2b_campaign_ledger l
+                JOIN discovery_event e ON e.id=l.delivery_event_id
+                WHERE l.created_at >= :start_utc AND l.created_at < :end_utc
+                GROUP BY e.campaign_id,
+                    COALESCE(NULLIF(e.metadata->>'campus_id','')::integer,0)
+            )
+            SELECT ce.campaign_id, ce.campus_id, u.name AS campus_name,
+                   COALESCE(ce.impressions,0) AS impressions,
+                   COALESCE(ce.unique_reach,0) AS unique_reach,
+                   COALESCE(ce.raw_clicks,0) AS raw_clicks,
+                   COALESCE(ce.unique_clicks,0) AS unique_clicks,
+                   COALESCE(ce.billable_clicks,0) AS billable_clicks,
+                   COALESCE(ce.unique_billable_clickers,0) AS unique_billable_clickers,
+                   COALESCE(cl.net_spend_minor,0) AS net_spend_minor
+            FROM campus_events ce
+            JOIN discovery_campaign c ON c.id=ce.campaign_id
+            LEFT JOIN university u ON u.id=NULLIF(ce.campus_id,0)
+            LEFT JOIN campus_ledger cl
+              ON cl.campaign_id=ce.campaign_id AND cl.campus_id=ce.campus_id
+            WHERE c.organisation_id=:oid
+            ORDER BY ce.campaign_id, u.name
+        """), {
+            "oid": organisation_id,
+            "start_utc": start_utc,
+            "end_utc": end_utc,
+        }).mappings().all()
+
+        campus_by_campaign = {}
+        for campus in campus_rows:
+            campus_id = int(campus["campus_id"] or 0)
+            unique_reach = int(campus["unique_reach"] or 0)
+            # No campus id/name is exposed when the cohort is too small or
+            # historical events lack campus attribution.
+            if campus_id <= 0 or unique_reach < 10:
+                continue
+            impressions = int(campus["impressions"] or 0)
+            raw_clicks = int(campus["raw_clicks"] or 0)
+            unique_clicks = int(campus["unique_clicks"] or 0)
+            billable_clicks = int(campus["billable_clicks"] or 0)
+            unique_billable_clickers = int(campus["unique_billable_clickers"] or 0)
+            campus_by_campaign.setdefault(int(campus["campaign_id"]), []).append({
+                "campus_id": campus_id,
+                "campus_name": campus["campus_name"] or "University",
+                "unique_reach": unique_reach,
+                "impressions": impressions,
+                "raw_clicks": raw_clicks,
+                "unique_clicks": unique_clicks,
+                "billable_clicks": billable_clicks,
+                "unique_billable_clickers": unique_billable_clickers,
+                "billable_ctr_percent": round(billable_clicks * 100 / impressions, 2) if impressions else 0.0,
+                "raw_ctr_percent": round(raw_clicks * 100 / impressions, 2) if impressions else 0.0,
+                "unique_ctr_percent": round(unique_clicks * 100 / impressions, 2) if impressions else 0.0,
+                "unique_billable_ctr_percent": round(unique_billable_clickers * 100 / impressions, 2) if impressions else 0.0,
+                "net_spend_kes": round(int(campus["net_spend_minor"] or 0) / 100, 2),
+            })
 
         campaigns = []
         for row in rows:
@@ -860,6 +959,8 @@ def register_discovery(app, db):
                 "campaign_name": row["campaign_name"],
                 "placement": row["placement"],
                 "impressions": impressions,
+                "unique_reach": int(row["unique_reach"] or 0),
+                "campus_breakdown": campus_by_campaign.get(int(row["campaign_id"]), []),
                 "raw_clicks": raw_clicks,
                 "unique_clicks": unique_clicks,
                 "billable_clicks": billable_clicks,
