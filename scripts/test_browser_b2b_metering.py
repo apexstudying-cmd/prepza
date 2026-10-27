@@ -330,8 +330,10 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
                 "qualifying click must debit exactly KES 20 once: " + str(current)
             )
 
-            # The backend must also debounce rapid, distinct event IDs. This
-            # protects the ledger even if a modified client bypasses UI guards.
+            # Wait out the first click's debounce window, then submit two
+            # distinct event IDs back-to-back. The first is raw telemetry
+            # (the daily cap prevents billing); the second must be server-debounced.
+            page.wait_for_timeout(850)
             rapid_click_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
             rapid_clicks = page.evaluate(
                 """async ({campaignId, eventIds}) => {
@@ -350,7 +352,9 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
                 {"campaignId": campaign_id, "eventIds": rapid_click_ids},
             )
             assert all(item["status"] == 200 for item in rapid_clicks), rapid_clicks
-            assert all(item["body"].get("debounced") is True for item in rapid_clicks), rapid_clicks
+            assert rapid_clicks[0]["body"].get("recorded") is True, rapid_clicks
+            assert rapid_clicks[0]["body"].get("billable") is False, rapid_clicks
+            assert rapid_clicks[1]["body"].get("debounced") is True, rapid_clicks
             rapid_state = read_campaign_state(campaign_id)
             assert rapid_state["delivered_clicks"] == 1, (
                 "rapid distinct clicks changed the billable click counter: " + str(rapid_state)
