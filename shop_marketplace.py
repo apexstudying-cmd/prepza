@@ -161,7 +161,7 @@ def mark_shop_posting_payment_mismatch(db, payment, reason=None):
     return True
 
 
-def register_shop_routes(app, db, User, Payment, Conversation, ConversationParticipant, limiter, create_paystack_transaction):
+def register_shop_routes(app, db, User, Payment, Conversation, ConversationParticipant, limiter, create_paystack_transaction, sync_paystack_payment_status):
     """Register Shop tables and endpoints after Prepza's core models are defined."""
     global _ShopListing, _ShopSavedListing, _ShopReport
     if getattr(app, "_prepza_shop_registered", False):
@@ -591,7 +591,6 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             payment = Payment.query.filter_by(reference=reference, payment_type="shop_posting").first()
             if payment:
                 try:
-                    from app import sync_paystack_payment_status
                     sync_paystack_payment_status(reference)
                 except Exception:
                     app.logger.exception("Shop posting fee callback verification failed")
