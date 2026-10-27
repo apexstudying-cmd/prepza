@@ -159,3 +159,32 @@ def test_sponsored_click_uses_stable_uuid_without_forcing_an_impression():
     open_start = component.index("const open = async () =>")
     open_end = component.index("\n  return (", open_start)
     assert "await recordImpression()" not in component[open_start:open_end]
+
+
+def test_sponsored_click_telemetry_is_distinct_from_billable_clicks_and_debounced():
+    source = Path("discovery_billing.py").read_text(encoding="utf-8")
+    start = source.index('@app.post("/api/discovery/campaigns/<int:campaign_id>/click")')
+    end = source.index('@app.post("/api/discovery/campaigns/<int:campaign_id>/application")', start)
+    route = source[start:end]
+    assert "rawclick:{campaign_id}:{uid}:{supplied_key}" in route
+    assert "'click_raw'" in route
+    assert "timedelta(milliseconds=750)" in route
+    assert '"billable": bool(result.get("ok"))' in route
+    assert "record_billable_event(" in route
+
+
+def test_advertiser_report_has_unique_click_ctr_csv_and_nairobi_dates():
+    source = Path("discovery_billing.py").read_text(encoding="utf-8")
+    start = source.index('@app.get("/api/organisations/<int:organisation_id>/discovery/report")')
+    end = source.index('@app.post("/api/discovery/campaigns/<int:campaign_id>/application")', start) if False else start + 12000
+    route = source[start:end]
+    assert "org_access(organisation_id, uid)" in route
+    assert "COUNT(DISTINCT user_id)" in route
+    assert "raw_clicks" in route
+    assert "unique_clicks" in route
+    assert "billable_clicks" in route
+    assert "unique_ctr_percent" in route
+    assert 'request.args.get("format", "").lower() == "csv"' in route
+    assert '"text/csv; charset=utf-8"' in route
+    assert 'ZoneInfo("Africa/Nairobi")' in source
+    assert '"billing_basis": "prepaid campaign ledger"' in route
