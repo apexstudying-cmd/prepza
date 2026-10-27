@@ -8,6 +8,7 @@ import pytest
 from shop_marketplace import (
     LISTING_POST_FEE_KES,
     listing_fee_for_post_number,
+    listing_period_expiry,
     normalize_whatsapp_number,
     validate_listing_payload,
 )
@@ -63,3 +64,10 @@ def test_listing_payload_trims_text_and_accepts_expected_fields():
 def test_invalid_listing_payload_is_rejected(payload):
     with pytest.raises(ValueError):
         validate_listing_payload(payload)
+
+
+def test_each_kes_100_payment_covers_exactly_30_days():
+    from datetime import datetime
+
+    start = datetime(2026, 10, 27, 12, 0, 0)
+    assert listing_period_expiry(start) == datetime(2026, 11, 26, 12, 0, 0)
