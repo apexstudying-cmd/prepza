@@ -1604,16 +1604,11 @@ def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaig
     class FakePaystackResponse:
         status_code = 200
 
+        def __init__(self, payload):
+            self.payload = payload
+
         def json(self):
-            return {
-                "status": True,
-                "message": "Authorization URL created",
-                "data": {
-                    "authorization_url": "https://checkout.example.invalid/test-only",
-                    "access_code": "mock-access-code",
-                    "reference": "mock-provider-reference",
-                },
-            }
+            return self.payload
 
     def fake_request(method, url, *, headers, timeout, **kwargs):
         calls.append({
@@ -1623,7 +1618,29 @@ def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaig
             "timeout": timeout,
             **kwargs,
         })
-        return FakePaystackResponse()
+        if method == "POST" and url == "https://api.paystack.co/transaction/initialize":
+            return FakePaystackResponse({
+                "status": True,
+                "message": "Authorization URL created",
+                "data": {
+                    "authorization_url": "https://checkout.example.invalid/test-only",
+                    "access_code": "mock-access-code",
+                    "reference": "mock-provider-reference",
+                },
+            })
+        if method == "GET" and url.endswith(f"/transaction/verify/{body_reference[0]}"):
+            return FakePaystackResponse({
+                "status": True,
+                "message": "Verification successful",
+                "data": {
+                    "status": "success",
+                    "currency": "KES",
+                    "requested_amount": 500000,
+                    "amount": 500000,
+                    "fees": 15000,
+                },
+            })
+        raise AssertionError(f"Unexpected Paystack boundary call: {method} {url}")
 
     monkeypatch.setattr(b2b_payment_module.requests, "request", fake_request)
     client = _client_for(owner.id)
@@ -1641,6 +1658,7 @@ def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaig
     assert body["customer_fee_mode"] == "paystack_pass_through"
 
     assert len(calls) == 1
+    body_reference = [body["reference"]]
     call = calls[0]
     assert call["method"] == "POST"
     assert call["url"] == "https://api.paystack.co/transaction/initialize"
@@ -1677,3 +1695,88 @@ def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaig
     snapshot = campaign["pricing_snapshot"]
     assert isinstance(snapshot, dict)
     assert "home_impression_cpm" in snapshot and "click_cpc" in snapshot
+
+    # A webhook with a bad signature must not contact the provider verifier.
+    import hashlib
+    import hmac
+    payload = {
+        "event": "charge.success",
+        "data": {
+            "reference": body["reference"],
+            "metadata": {
+                "purpose": "sponsored_campaign",
+                "campaign_id": campaign_id,
+                "organisation_id": organisation.id,
+                "campaign_amount_minor": 500000,
+            },
+        },
+    }
+    raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    invalid = client.post(
+        "/payment/paystack/b2b-webhook",
+        data=raw_body,
+        content_type="application/json",
+        headers={"x-paystack-signature": "invalid"},
+    )
+    assert invalid.status_code == 401
+    assert len(calls) == 1, "invalid signature must be rejected before provider verification"
+
+    signature = hmac.new(
+        b"sk_test_mock_only_not_a_real_secret",
+        raw_body,
+        hashlib.sha512,
+    ).hexdigest()
+    success = client.post(
+        "/payment/paystack/b2b-webhook",
+        data=raw_body,
+        content_type="application/json",
+        headers={"x-paystack-signature": signature},
+    )
+    assert success.status_code == 200, success.get_json()
+    assert success.get_json()["ok"] is True
+    assert success.get_json()["funded_amount_minor"] == 500000
+    assert len(calls) == 2
+    assert calls[1]["method"] == "GET"
+    assert calls[1]["url"].endswith(f"/transaction/verify/{body['reference']}")
+
+    funding = db.session.execute(text("""
+        SELECT COUNT(*) AS count, COALESCE(SUM(amount_minor),0) AS amount_minor
+        FROM b2b_campaign_funding WHERE campaign_id=:cid
+    """), {"cid": campaign_id}).mappings().one()
+    assert int(funding["count"]) == 1
+    assert int(funding["amount_minor"]) == 500000
+    funding_ledger = db.session.execute(text("""
+        SELECT COUNT(*) AS count, COALESCE(SUM(signed_amount_minor),0) AS amount_minor
+        FROM b2b_campaign_ledger WHERE campaign_id=:cid AND entry_type='funding'
+    """), {"cid": campaign_id}).mappings().one()
+    assert int(funding_ledger["count"]) == 1
+    assert int(funding_ledger["amount_minor"]) == 500000
+    db.session.expire_all()
+    campaign_after_success = db.session.execute(text("""
+        SELECT status, funding_status, funded_amount_minor
+        FROM discovery_campaign WHERE id=:cid
+    """), {"cid": campaign_id}).mappings().one()
+    assert campaign_after_success["status"] == "active"
+    assert campaign_after_success["funding_status"] == "funded"
+    assert int(campaign_after_success["funded_amount_minor"]) == 500000
+
+    # Paystack can deliver the exact event more than once. The signed duplicate
+    # must be acknowledged without re-verifying, funding again, or adding a
+    # second ledger row.
+    duplicate = client.post(
+        "/payment/paystack/b2b-webhook",
+        data=raw_body,
+        content_type="application/json",
+        headers={"x-paystack-signature": signature},
+    )
+    assert duplicate.status_code == 200
+    assert duplicate.get_json()["duplicate"] is True
+    assert len(calls) == 2
+    funding_count = db.session.execute(text("""
+        SELECT COUNT(*) FROM b2b_campaign_funding WHERE campaign_id=:cid
+    """), {"cid": campaign_id}).scalar_one()
+    ledger_count = db.session.execute(text("""
+        SELECT COUNT(*) FROM b2b_campaign_ledger
+        WHERE campaign_id=:cid AND entry_type='funding'
+    """), {"cid": campaign_id}).scalar_one()
+    assert int(funding_count) == 1 and int(ledger_count) == 1
