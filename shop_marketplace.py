@@ -137,7 +137,7 @@ def fail_shop_posting_payment(db, payment):
     return True
 
 
-def mark_shop_posting_payment_mismatch(db, payment):
+def mark_shop_posting_payment_mismatch(db, payment, reason=None):
     """Quarantine a provider-successful charge whose amount/currency is wrong."""
     global _ShopListing
     if _ShopListing is None or payment.payment_type != "shop_posting":
@@ -151,7 +151,11 @@ def mark_shop_posting_payment_mismatch(db, payment):
         return False
     listing.status = "payment_review"
     listing.checkout_url = None
-    listing.moderation_note = "Posting payment requires manual verification. Do not retry this charge yet."
+    message = (str(reason or "").strip()[:500] or "Posting payment requires manual verification. Do not retry this charge yet.")
+    listing.moderation_note = message
+    listing.posting_payment_review_note = message
+    listing.posting_payment_reviewed_by = None
+    listing.posting_payment_reviewed_at = None
     listing.updated_at = datetime.utcnow()
     db.session.commit()
     return True
@@ -184,6 +188,9 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         moderation_note = db.Column(db.String(500), nullable=True)
         moderated_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
         moderated_at = db.Column(db.DateTime, nullable=True)
+        posting_payment_reviewed_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+        posting_payment_reviewed_at = db.Column(db.DateTime, nullable=True)
+        posting_payment_review_note = db.Column(db.String(500), nullable=True)
         created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
         updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
         sold_at = db.Column(db.DateTime, nullable=True)
@@ -271,6 +278,8 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             "is_free_post": listing.is_free_post,
             "posting_fee_kes": listing.posting_fee_kes,
             "posting_fee_paid": listing.posting_fee_paid,
+            "posting_payment_reference": listing.posting_payment_reference if detail and (viewer_id == listing.seller_id or bool(getattr(db.session.get(User, viewer_id), "is_admin", False))) else None,
+            "posting_payment_review_note": listing.posting_payment_review_note if detail and (viewer_id == listing.seller_id or bool(getattr(db.session.get(User, viewer_id), "is_admin", False))) else None,
             "moderation_note": listing.moderation_note if viewer_id == listing.seller_id else None,
             "created_at": listing.created_at.isoformat() if listing.created_at else None,
             "updated_at": listing.updated_at.isoformat() if listing.updated_at else None,
@@ -810,6 +819,51 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         listing.moderation_note = note or None
         listing.moderated_by = user.id
         listing.moderated_at = datetime.utcnow()
+        listing.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({"listing": listing_json(listing, user.id, detail=True)})
+
+    @app.post("/api/shop/admin/listings/<int:listing_id>/resolve-payment")
+    def shop_admin_resolve_payment_issue(listing_id):
+        user, denied = require_user()
+        if denied:
+            return denied
+        if not csrf_valid():
+            return jsonify({"error": "Invalid CSRF token"}), 403
+        if not getattr(user, "is_admin", False):
+            return jsonify({"error": "Admin access required"}), 403
+        listing = db.session.get(ShopListing, listing_id)
+        if not listing or listing.status != "payment_review":
+            return jsonify({"error": "Shop payment review item not found"}), 404
+        data = request.get_json(silent=True) or {}
+        action = data.get("action")
+        note = str(data.get("note") or "").strip()[:500]
+        if action not in {"confirm_paid", "allow_retry"}:
+            return jsonify({"error": "Choose confirm_paid or allow_retry"}), 400
+        if len(note) < 10:
+            return jsonify({"error": "Record at least 10 characters of provider verification evidence"}), 400
+        payment = Payment.query.filter_by(
+            reference=listing.posting_payment_reference,
+            user_id=listing.seller_id,
+            payment_type="shop_posting",
+            status="success",
+        ).first()
+        if action == "confirm_paid":
+            if not payment or int(payment.amount) != LISTING_POST_FEE_KES:
+                return jsonify({"error": "No successful KES 100 Shop posting payment is recorded. Verify provider evidence before confirming."}), 409
+            # This is a privileged manual reconciliation after checking the
+            # provider dashboard for the exact reference, KES amount and currency.
+            listing.posting_fee_paid = True
+        else:
+            # Only choose this after confirming no fee was captured, or the
+            # incorrect charge has been handled outside Prepza.
+            listing.posting_fee_paid = False
+        listing.status = "draft"
+        listing.checkout_url = None
+        listing.posting_payment_reviewed_by = user.id
+        listing.posting_payment_reviewed_at = datetime.utcnow()
+        listing.posting_payment_review_note = note
+        listing.moderation_note = None
         listing.updated_at = datetime.utcnow()
         db.session.commit()
         return jsonify({"listing": listing_json(listing, user.id, detail=True)})
