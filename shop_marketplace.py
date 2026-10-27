@@ -632,7 +632,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         listing_id = int(payment.plan) if (payment.plan or "").isdigit() else None
         listing = listing_for_owner(listing_id, user.id) if listing_id else None
         status = payment.status
-        if payment.status == "success" and listing and not listing.posting_fee_paid:
+        if payment.status == "success" and listing and listing.posting_period_payment_reference != reference:
             status = "mismatched"
         return jsonify({"status": status, "listing": listing_json(listing, user.id, detail=True) if listing else None})
 
