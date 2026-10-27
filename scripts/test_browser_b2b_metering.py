@@ -45,11 +45,7 @@ with app.app_context():
     )
     db.session.add(organisation)
     db.session.flush()
-    db.session.execute(text("""
-        INSERT INTO organisation_member (organisation_id, user_id, role, joined_at)
-        VALUES (:oid, :uid, 'owner', CURRENT_TIMESTAMP)
-        ON CONFLICT (organisation_id, user_id) DO UPDATE SET role='owner'
-    """), {"oid": organisation.id, "uid": user.id})
+    db.session.execute(text("INSERT INTO organisation_member (organisation_id, user_id, role, joined_at) VALUES (:oid, :uid, 'owner', CURRENT_TIMESTAMP) ON CONFLICT (organisation_id, user_id) DO UPDATE SET role='owner'"), {"oid": organisation.id, "uid": user.id})
 
     opportunity = Opportunity(
         organisation_id=organisation.id,
@@ -70,23 +66,8 @@ with app.app_context():
     db.session.add(opportunity)
     db.session.flush()
 
-    db.session.execute(text("""
-        INSERT INTO student_opportunity_discovery
-            (user_id, discoverable, consent_version, updated_at)
-        VALUES (:uid, TRUE, 'g5-browser-test', CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id) DO UPDATE
-        SET discoverable=TRUE, consent_version='g5-browser-test',
-            updated_at=CURRENT_TIMESTAMP
-    """), {"uid": user.id})
-    db.session.execute(text("""
-        INSERT INTO product_activity_day
-            (user_id, activity_date, sessions, engaged_seconds, core_actions, last_seen_at)
-        VALUES (:uid, CURRENT_DATE, 1, 180, 2, CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id, activity_date) DO UPDATE
-        SET engaged_seconds=GREATEST(product_activity_day.engaged_seconds, 180),
-            core_actions=GREATEST(product_activity_day.core_actions, 2),
-            last_seen_at=CURRENT_TIMESTAMP
-    """), {"uid": user.id})
+    db.session.execute(text("INSERT INTO student_opportunity_discovery (user_id, discoverable, consent_version, updated_at) VALUES (:uid, TRUE, 'g5-browser-test', CURRENT_TIMESTAMP) ON CONFLICT (user_id) DO UPDATE SET discoverable=TRUE, consent_version='g5-browser-test', updated_at=CURRENT_TIMESTAMP"), {"uid": user.id})
+    db.session.execute(text("INSERT INTO product_activity_day (user_id, activity_date, sessions, engaged_seconds, core_actions, last_seen_at) VALUES (:uid, CURRENT_DATE, 1, 180, 2, CURRENT_TIMESTAMP) ON CONFLICT (user_id, activity_date) DO UPDATE SET engaged_seconds=GREATEST(product_activity_day.engaged_seconds, 180), core_actions=GREATEST(product_activity_day.core_actions, 2), last_seen_at=CURRENT_TIMESTAMP"), {"uid": user.id})
 
     snapshot = {
         "home_impression_cpm": {"value": {"amount_kes": 350, "per": 1000}, "version": "browser-qa-v1"},
@@ -94,17 +75,7 @@ with app.app_context():
         "home_frequency_cap": {"value": {"max_impressions": 1000, "window_days": 7}, "version": "browser-qa-v1"},
         "click_frequency_cap": {"value": {"max_clicks": 1, "window_days": 1}, "version": "browser-qa-v1"}
     }
-    campaign_id = db.session.execute(text("""
-        INSERT INTO discovery_campaign
-            (organisation_id, opportunity_id, name, objective, placement, status,
-             budget_kes, bid_type, bid_kes, target_json, starts_at, ends_at,
-             funding_status, funded_amount_minor, pricing_version, pricing_snapshot)
-        VALUES
-            (:oid, :opid, 'Browser QA sponsored ledger', 'reach', 'home_carousel', 'active',
-             5000, 'both', 350, CAST(:target AS jsonb), :starts, :ends,
-             'funded', 1000000, 'browser-qa-v1', CAST(:snapshot AS jsonb))
-        RETURNING id
-    """), {
+    campaign_id = db.session.execute(text("INSERT INTO discovery_campaign (organisation_id, opportunity_id, name, objective, placement, status, budget_kes, bid_type, bid_kes, target_json, starts_at, ends_at, funding_status, funded_amount_minor, pricing_version, pricing_snapshot) VALUES (:oid, :opid, 'Browser QA sponsored ledger', 'reach', 'home_carousel', 'active', 5000, 'both', 350, CAST(:target AS jsonb), :starts, :ends, 'funded', 1000000, 'browser-qa-v1', CAST(:snapshot AS jsonb)) RETURNING id"), {
         "oid": organisation.id,
         "opid": opportunity.id,
         "target": json.dumps({"billing_modes": ["cpm", "cpc"]}),
@@ -131,25 +102,10 @@ from app import app, db
 from sqlalchemy import text
 with app.app_context():
     params = {"cid": __CAMPAIGN_ID__}
-    events = db.session.execute(text("""
-        SELECT event_type, COUNT(*) AS count
-        FROM discovery_event WHERE campaign_id=:cid
-        GROUP BY event_type ORDER BY event_type
-    """), params).mappings().all()
-    ledger = db.session.execute(text("""
-        SELECT entry_type, signed_amount_minor, delivery_event_id, idempotency_key
-        FROM b2b_campaign_ledger
-        WHERE campaign_id=:cid AND entry_type IN ('delivery_impression','delivery_click')
-        ORDER BY id
-    """), params).mappings().all()
-    campaign = db.session.execute(text("""
-        SELECT delivered_impressions, delivered_clicks, funded_amount_minor
-        FROM discovery_campaign WHERE id=:cid
-    """), params).mappings().one()
-    remaining = int(campaign["funded_amount_minor"]) + int(db.session.execute(text("""
-        SELECT COALESCE(SUM(signed_amount_minor), 0)
-        FROM b2b_campaign_ledger WHERE campaign_id=:cid
-    """), params).scalar_one())
+    events = db.session.execute(text("SELECT event_type, COUNT(*) AS count FROM discovery_event WHERE campaign_id=:cid GROUP BY event_type ORDER BY event_type"), params).mappings().all()
+    ledger = db.session.execute(text("SELECT entry_type, signed_amount_minor, delivery_event_id, idempotency_key FROM b2b_campaign_ledger WHERE campaign_id=:cid AND entry_type IN ('delivery_impression','delivery_click') ORDER BY id"), params).mappings().all()
+    campaign = db.session.execute(text("SELECT delivered_impressions, delivered_clicks, funded_amount_minor FROM discovery_campaign WHERE id=:cid"), params).mappings().one()
+    remaining = int(campaign["funded_amount_minor"]) + int(db.session.execute(text("SELECT COALESCE(SUM(signed_amount_minor), 0) FROM b2b_campaign_ledger WHERE campaign_id=:cid"), params).scalar_one())
     print(json.dumps({
         "events": [dict(row) for row in events],
         "ledger": [dict(row) for row in ledger],
