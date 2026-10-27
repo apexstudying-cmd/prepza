@@ -2346,7 +2346,7 @@ def sync_paystack_payment_status(reference):
                         "fulfillment needs reconciliation"
                     )
 
-            if payment.status == "success":
+            if payment.status == "success" and payment.payment_type in ("subscription", "content"):
                 _maybe_award_referral_commission(payment)
     elif tx_status in ("failed", "abandoned", "reversed"):
         # A payment that definitively failed cannot fulfill the order.
