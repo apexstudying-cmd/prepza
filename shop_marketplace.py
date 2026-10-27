@@ -349,7 +349,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         listing = listing_for_owner(listing_id, user.id)
         if not listing:
             return jsonify({"error": "Listing not found"}), 404
-        if listing.status in {"sold", "removed", "rejected"}:
+        if listing.status in {"sold", "removed"}:
             return jsonify({"error": "This listing can no longer be edited"}), 409
         try:
             payload = validate_listing_payload(request.get_json(silent=True) or {})
@@ -357,7 +357,10 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             return jsonify({"error": str(exc)}), 400
         for key, value in payload.items():
             setattr(listing, key, value)
-        if listing.status == "active":
+        if listing.status == "rejected":
+            listing.status = "draft"
+            listing.moderation_note = None
+        elif listing.status == "active":
             listing.status = "pending_review"
             listing.moderation_note = None
         listing.updated_at = datetime.utcnow()
@@ -470,7 +473,23 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         if listing.status not in {"draft", "pending_payment"}:
             return jsonify({"error": "This listing cannot start a posting-fee checkout"}), 409
         if listing.checkout_url and listing.status == "pending_payment":
-            return jsonify({"redirect_url": listing.checkout_url, "reference": listing.posting_payment_reference, "recovered": True})
+            existing_payment = Payment.query.filter_by(
+                reference=listing.posting_payment_reference,
+                user_id=user.id,
+                payment_type="shop_posting",
+            ).first()
+            if existing_payment and existing_payment.status == "pending":
+                return jsonify({"redirect_url": listing.checkout_url, "reference": listing.posting_payment_reference, "recovered": True})
+            if existing_payment and existing_payment.status == "success":
+                from shop_marketplace import fulfill_shop_posting_payment
+                fulfill_shop_posting_payment(db, existing_payment)
+                listing = listing_for_owner(listing_id, user.id)
+                if listing and listing.posting_fee_paid:
+                    return jsonify({"error": "This listing's posting fee is already covered"}), 409
+            if listing:
+                listing.status = "draft"
+                listing.checkout_url = None
+                db.session.commit()
         reference = f"PZA-shop-post-{listing.id}-{secrets.token_hex(6)}"
         payment = Payment(
             user_id=user.id,
