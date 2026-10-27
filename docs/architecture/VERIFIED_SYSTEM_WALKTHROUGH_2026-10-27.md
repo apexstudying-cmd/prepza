@@ -227,3 +227,10 @@ The source now contains retry-safe ad behavior, raw-vs-billable click analytics,
 - podcast_audio.py, kokoro_control.py, kokoro_worker/worker.py — audio jobs and worker.
 - frontend/public/sw.js, frontend/src/offline/** — PWA shell/offline implementation.
 - scripts/test_browser_b2b_metering.py, tests/test_provider_boundary_mocks.py, tests/test_local_qa_real_world.py, tools/run_local_qa.py — key verification entry points.
+
+
+### 2026-10-27 verification update
+
+[Release Browser and Cross-System Regression run 40502457332](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457332) completed successfully against runtime commit `e1d9ef42b533c9fb3fb14de2a4a3d66e30714015`. It built the production app image, migrated disposable PostgreSQL, ran mobile/tablet responsive checks, the B2B browser-to-ledger test, full disposable PostgreSQL QA, and online/offline generated-artifact browser journeys. The full suite passed the student Paystack signature/retry/duplicate-entitlement regression and B2B refund replay/distinct-refund idempotency tests. The B2B browser test passed offscreen/offline no-billing, 1.5-second client-side visibility timing, lost-response retry, server-side rapid-click debounce, and aggregate reporting assertions. Responsive screenshots were uploaded; disposable services/volumes were removed.
+
+This result closes the specific tested browser/disposable-PostgreSQL scenarios only. It does not verify live provider credentials/delivery, and it does not make viewability tamper-proof: the backend still does not independently observe viewport visibility or enforce the client-side dwell interval. External-provider verification remains NOT_TESTED; B2B monetization and the overall documentation audit remain open; release remains BLOCKED.
