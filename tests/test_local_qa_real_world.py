@@ -2239,6 +2239,20 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     assert third_listing["id"] in {
         item["id"] for item in payment_review_queue.get_json()["payment_reviews"]
     }
+    retry_resolution = admin.post(
+        f"/api/shop/admin/listings/{third_listing['id']}/resolve-payment",
+        json={"action": "allow_retry", "note": "Mock provider dashboard confirms the incorrect test charge was reversed."},
+        headers=_csrf(admin_id),
+    )
+    assert retry_resolution.status_code == 200, retry_resolution.get_json()
+    assert retry_resolution.get_json()["listing"]["status"] == "draft"
+    assert retry_resolution.get_json()["listing"]["posting_fee_paid"] is False
+    retry_checkout = seller.post(
+        f"/api/shop/listings/{third_listing['id']}/checkout",
+        headers=_csrf(seller_id),
+    )
+    assert retry_checkout.status_code == 200
+    assert retry_checkout.get_json()["reference"] != mismatch_reference
 
     # A different account cannot mutate the seller's listing.
     forbidden_edit = buyer.patch(
