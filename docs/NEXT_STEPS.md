@@ -1,6 +1,6 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-10-26
+Last updated: 2026-10-27
 Branch: main
 
 Status:
@@ -20,7 +20,7 @@ Rule: require evidence before marking production work complete.
 - [x] Day 8 runtime/storage/database/migration/jobs/backups/self-hosting audit
 - [x] Day 9 freeze/regression and launch-contract CI work
 - [x] Day 10 initial repository-grounded technical reference (historical snapshot; not the final deep application walkthrough)
-- The final deep technical app study and complete source-grounded frontend/backend architecture diagram is separately tracked as an unfinished item in Section 20.
+- [x] Final deep technical app study and source-grounded frontend/backend architecture map added at `docs/architecture/VERIFIED_SYSTEM_WALKTHROUGH_2026-10-27.md`; reconcile all QA records against the latest browser evidence before final freeze.
 - [x] OpenAI-only provider/dependency cleanup
 - [x] Direct-to-main workflow retained
 - [x] Re-run full launch-contract CI after latest Alembic/Docker/Study Hub changes — GitHub Actions passed on code commit `6c88a908c5088d23f869d6a564b9ff1c90b8caed`
@@ -46,7 +46,7 @@ Rule: require evidence before marking production work complete.
 - [x] Test Redis-backed realtime/chat, including worker and cross-process client delivery
 - [x] Test representative student flows through the 74-case local QA suite
 - [ ] Test representative AI flow with controlled credentials
-- [ ] Test local PostgreSQL backup/restore
+- [x] PostgreSQL backup/restore rehearsal with restored-database application smoke tests passed in GitHub Actions run [8](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949883)
 
 ## 3. Database migrations
 - [x] Add Alembic dependency/configuration
@@ -59,7 +59,7 @@ Rule: require evidence before marking production work complete.
 - [x] Document existing database verification/stamping rules
 - [x] Prove fresh local bootstrap
 - [~] Reconcile/document historical migrations versus the current Alembic deployment procedure
-- [ ] Test a representative future Alembic migration
+- [ ] Test a representative future Alembic migration (existing-database upgrade rehearsal already passed; keep separate)
 - [x] Upgrade a populated prior-Alembic-revision database to current head and verify schema/data invariants in GitHub Actions run [Existing Database Migration Rehearsal](https://github.com/apexstudying-cmd/prepza/actions/runs/40327691259) (passed 2026-10-26); a sanitized production-like historical snapshot is still useful additional confidence, not claimed by this CI fixture
 - [ ] Establish production migration checklist
 - [ ] Test migration procedure against a disposable restored database
@@ -254,9 +254,9 @@ Rule: require evidence before marking production work complete.
 - [ ] Email verification
 - [ ] Login/logout/session invalidation
 - [ ] Onboarding persistence
-- [~] Study Hub — PostgreSQL runtime and browser/offline activity lifecycle are green; multi-document/content/artifact offline gate is pending
+- [x] Study Hub — PostgreSQL runtime, multi-document/content/generated-artifact offline journeys and browser replay passed in release browser run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254)
 - [ ] Document upload/read
-- [~] Offline behavior — Study Hub activity lifecycle is green; real multi-document/document-byte/generated-artifact persistence gate is pending
+- [x] Offline behavior — release browser run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254) passed online/offline generated-artifact journeys; do not infer every browser/device combination
 - [ ] AI summary/flashcards/quiz/mind map
 - [ ] Podcast script/audio
 - [~] Chat/realtime/E2EE — local distributed realtime + browser WebRTC/media gate green; E2EE identity lifecycle still pending
@@ -291,9 +291,9 @@ Rule: require evidence before marking production work complete.
 5. [~] Verify the new Study Hub runtime CI workflow
 6. [x] Complete browser-to-browser WebRTC media gate
 7. [x] Complete browser/offline Study Hub activity lifecycle coverage
-8. [ ] Complete multi-document/document-byte/generated-artifact offline persistence gate
-9. [ ] Complete storage/data-integrity backup and restore gate
-10. [ ] Complete remaining cross-system integration journeys
+8. [x] Complete multi-document/document-byte/generated-artifact offline persistence gate — release browser run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254) passed
+9. [x] Complete storage/data-integrity backup and restore gate — PostgreSQL backup/restore run [40329949883](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949883) passed
+10. [~] Complete remaining cross-system integration journeys — browser/offline and B2B browser-to-ledger journeys passed in run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254); provider-side and recovery journeys remain
 11. [ ] Run full clean-environment regression/freeze suite
 12. [ ] Perform controlled external-provider verification
 13. [ ] Run measured staging/load tests after functional/browser gates are green
@@ -314,12 +314,12 @@ Rule: require evidence before marking production work complete.
 - [~] E2EE identity lifecycle — source traced; dedicated first-device/reload/restart/second-device/restore tests remain.
 - [~] Personal streak — core path exercised through Study Hub; milestone/date-boundary/XP idempotency regression remains.
 - [ ] Shared Streak — determine launch scope, registration, canonical schema ownership, frontend wiring, then test if in scope.
-- [ ] Browser/offline Study Hub lifecycle — reload, visibility, inactivity, offline/reconnect, cross-screen clock continuity.
-- [ ] Storage/backup/restore — backup and actual restore rehearsal.
+- [x] Browser/offline Study Hub lifecycle — reload, visibility, inactivity, offline/reconnect and cross-screen activity coverage passed; see `qa/release_status.json`.
+- [x] Storage/backup/restore — PostgreSQL backup restore and application smoke test passed in run [40329949883](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949883).
 - [ ] Cross-system journeys — payment→entitlement→usage, upload→processing→artifact, offline→reconcile, realtime failure/reconnect.
-- [ ] CI — verify current workflows actually execute and pass on the release commit.
+- [x] CI — current release browser workflow passed on B2B fix commit `74f0f0380d731223ea791054350e3ba4abbc9fb6` in run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254); external-provider gates are separate.
 - [ ] Clean full regression — rerun after all remaining gates are green.
-- [ ] Deep technical app study + complete source-grounded frontend/backend architecture diagram — intentionally deferred until the remaining functional, browser and recovery gates are green; finish and verify against current `main` before the final freeze.
+- [x] Deep technical app study + source-grounded frontend/backend architecture map — added in `docs/architecture/VERIFIED_SYSTEM_WALKTHROUGH_2026-10-27.md`; final cross-document consistency review remains before freeze.
 - [ ] Final freeze — exact commit, CI, browser, docs, migration and recovery evidence.
 
 ## 21. Maintenance rules
@@ -556,3 +556,9 @@ Audit: `docs/qa/B2B_MONETIZATION_AUDIT_2026-10-26.md`. Existing prepaid ledger, 
 - [ ] End-to-end browser-to-ledger tests; rerun B2B workflow and disposable PostgreSQL regression on the resulting SHA.
 
 The `b2b_monetization_integrity` release gate is IN_PROGRESS. Overall release remains BLOCKED until the evidence supports PASS.
+
+## 2026-10-27 — B2B browser-to-ledger regression
+- [x] Browser-to-ledger metering journey: run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254) passed on code commit `74f0f0380d731223ea791054350e3ba4abbc9fb6`, including the campus raw-click regression, retry without duplicate debit, viewability timer/offscreen behavior, attribution and JSON/CSV reports.
+- [~] B2B monetization integrity remains open for independent viewability qualification and server-side abuse/debounce review; do not imply CPA/fixed-placement billing.
+- [ ] External-provider verification remains untested until safe provider-side Paystack sandbox, SES, bounded OpenAI, R2 and audio/GPU evidence is recorded. No live payments or paid GPU jobs without explicit approval.
+- [ ] Clean full regression after provider/recovery gates; 400-user performance remains deferred and release remains blocked.
