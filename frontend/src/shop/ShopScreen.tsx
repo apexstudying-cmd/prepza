@@ -84,7 +84,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     const path = '/api/shop/listings?' + params.toString()
     const cacheKey = params.toString()
     const cached = browseSnapshots.get(cacheKey)
-    if (cached) {
+    if (cached && Date.now() - cached.savedAt <= BROWSE_CACHE_TTL_MS) {
       setListings(cached.listings)
       setLoading(false)
     }
