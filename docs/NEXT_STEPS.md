@@ -254,9 +254,9 @@ Rule: require evidence before marking production work complete.
 - [ ] Email verification
 - [ ] Login/logout/session invalidation
 - [ ] Onboarding persistence
-- [x] Study Hub — PostgreSQL runtime, multi-document/content/generated-artifact offline journeys and browser replay passed in release browser run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254)
+- [x] Study Hub — PostgreSQL runtime, multi-document/content/generated-artifact offline journeys and browser replay passed in release browser run [40502457332](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457332) on runtime commit `e1d9ef42b533c9fb3fb14de2a4a3d66e30714015`
 - [ ] Document upload/read
-- [x] Offline behavior — release browser run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254) passed online/offline generated-artifact journeys; do not infer every browser/device combination
+- [x] Offline behavior — release browser run [40502457332](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457332) passed online/offline generated-artifact journeys; do not infer every browser/device combination
 - [ ] AI summary/flashcards/quiz/mind map
 - [ ] Podcast script/audio
 - [~] Chat/realtime/E2EE — local distributed realtime + browser WebRTC/media gate green; E2EE identity lifecycle still pending
@@ -288,12 +288,12 @@ Rule: require evidence before marking production work complete.
 2. [x] Start local app/realtime/Redis/PostgreSQL stack
 3. [x] Verify actual local HTTP endpoints through full QA/runtime tests
 4. [x] Verify local realtime behavior, including Redis worker and cross-process client delivery
-5. [~] Verify the new Study Hub runtime CI workflow
+5. [x] Verify the new Study Hub runtime CI workflow — [release browser run 40502457332](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457332) passed
 6. [x] Complete browser-to-browser WebRTC media gate
 7. [x] Complete browser/offline Study Hub activity lifecycle coverage
-8. [x] Complete multi-document/document-byte/generated-artifact offline persistence gate — release browser run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254) passed
+8. [x] Complete multi-document/document-byte/generated-artifact offline persistence gate — release browser run [40502457332](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457332) passed
 9. [x] Complete storage/data-integrity backup and restore gate — PostgreSQL backup/restore run [40329949883](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949883) passed
-10. [~] Complete remaining cross-system integration journeys — browser/offline and B2B browser-to-ledger journeys passed in run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254); provider-side and recovery journeys remain
+10. [x] Browser/offline, B2B browser-to-ledger and recovery/idempotency scenarios passed in run [40502457332](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457332); external provider-side verification remains separate and NOT_TESTED
 11. [ ] Run full clean-environment regression/freeze suite
 12. [ ] Perform controlled external-provider verification
 13. [ ] Run measured staging/load tests after functional/browser gates are green
@@ -310,14 +310,14 @@ Rule: require evidence before marking production work complete.
 7. New gaps discovered during tracing are added here before unrelated work continues.
 
 ### Current release-gate queue
-- [~] Repeatable QA registry — structural trace implemented; runtime release gate still being expanded.
-- [~] E2EE identity lifecycle — source traced; dedicated first-device/reload/restart/second-device/restore tests remain.
-- [~] Personal streak — core path exercised through Study Hub; milestone/date-boundary/XP idempotency regression remains.
+- [~] Repeatable QA registry — structural trace implemented; final cross-document reconciliation and clean full regression remain open.
+- [x] E2EE security regression — current runtime commit `e1d9ef42b533c9fb3fb14de2a4a3d66e30714015` passed [E2EE Security Regression](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457061); broader multi-device protocol remains outside launch scope.
+- [x] Personal streak — dedicated PostgreSQL regression is recorded PASS in `qa/release_status.json`; broader shared streak remains intentionally NOT_RELEASED.
 - [ ] Shared Streak — determine launch scope, registration, canonical schema ownership, frontend wiring, then test if in scope.
 - [x] Browser/offline Study Hub lifecycle — reload, visibility, inactivity, offline/reconnect and cross-screen activity coverage passed; see `qa/release_status.json`.
 - [x] Storage/backup/restore — PostgreSQL backup restore and application smoke test passed in run [40329949883](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949883).
-- [ ] Cross-system journeys — payment→entitlement→usage, upload→processing→artifact, offline→reconcile, realtime failure/reconnect.
-- [x] CI — current release browser workflow passed on B2B fix commit `74f0f0380d731223ea791054350e3ba4abbc9fb6` in run [40498397254](https://github.com/apexstudying-cmd/prepza/actions/runs/40498397254); external-provider gates are separate.
+- [~] Cross-system journeys — browser/offline, payment webhook recovery/idempotency, B2B ledger and realtime reconnect evidence are green; external provider-side execution and final consolidated clean regression remain.
+- [x] CI — current release browser workflow passed on runtime commit `e1d9ef42b533c9fb3fb14de2a4a3d66e30714015` in run [40502457332](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457332); external-provider gates are separate.
 - [ ] Clean full regression — rerun after all remaining gates are green.
 - [x] Deep technical app study + source-grounded frontend/backend architecture map — added in `docs/architecture/VERIFIED_SYSTEM_WALKTHROUGH_2026-10-27.md`; final cross-document consistency review remains before freeze.
 - [ ] Final freeze — exact commit, CI, browser, docs, migration and recovery evidence.
