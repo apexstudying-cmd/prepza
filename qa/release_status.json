@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-27",
-  "last_verified_commit": "453557744e18af81443279bde95c6245a7b29e1f",
+  "last_verified_commit": "a24c56d08cc8389bb164198323753e41eafa3ca6",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -103,7 +103,7 @@
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "Monthly-per-item fee implementation in progress: KES 100 buys 30 days per listing, manually renewed per item; paid listings receive a transition 30-day period in migration, expired items are excluded from public browse, and payment fulfillment sets expiry. Added migration 20261028_shop_listing_expiry and pure period-expiry test. Latest code/test changes are not yet verified by CI; release remains blocked. UX standard: docs/ux/SHOP_UX_UI_STANDARD.md. Provider-side Paystack/R2 checks remain NOT_TESTED."
+      "evidence": "KES 100 now buys a 30-day period per item, manually renewed. Migration adds expiry and gives already-paid legacy listings a transition 30-day period; public browse/saved/report/detail paths exclude expired listings; payment fulfillment sets expiry and records the fulfilled reference, while stale duplicate success/failure callbacks are guarded. Added pure 30-day expiry test. CI on the latest SHA is not yet green; keep release BLOCKED. UX/UI research is docs/ux/SHOP_UX_UI_STANDARD.md. Commercial seller pricing hypotheses are documented separately and are not live tiers. Paystack/R2 provider checks remain NOT_TESTED."
     },
     {
       "id": "payment_recovery_idempotency",
