@@ -11,6 +11,7 @@ import time
 from playwright.sync_api import sync_playwright
 
 from test_browser_study_hub_offline_content import (
+    BASE_URL,
     cleanup_fixture,
     create_fixture,
     login,
