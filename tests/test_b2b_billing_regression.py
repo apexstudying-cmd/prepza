@@ -205,7 +205,7 @@ def test_discovery_target_normalizer_preserves_and_validates_billing_modes():
 def test_sponsored_events_capture_campus_id_for_aggregate_reporting():
     source = Path("b2b_campaign_metering.py").read_text(encoding="utf-8")
     assert 'SELECT university_id FROM "user" WHERE id=:uid' in source
-    assert '"campus_id": campus_id' in source
+    assert '"campus_id": int(campus_id) if campus_id is not None else None' in source
 
     discovery = Path("discovery_billing.py").read_text(encoding="utf-8")
     click_start = discovery.index('@app.post("/api/discovery/campaigns/<int:campaign_id>/click")')
@@ -213,7 +213,7 @@ def test_sponsored_events_capture_campus_id_for_aggregate_reporting():
     report_end = discovery.index('@app.post("/api/discovery/campaigns/<int:campaign_id>/application")', report_start)
     click_route = discovery[click_start:report_start]
     report_route = discovery[report_start:report_end]
-    assert '"campus_id": campus_id' in click_route
+    assert '"campus_id": int(campus_id) if campus_id is not None else None' in click_route
     assert '"campus_breakdown"' in report_route
-    assert "unique_reach >= 10" in report_route
+    assert "unique_reach < 10" in report_route
     assert "COUNT(DISTINCT user_id)" in report_route
