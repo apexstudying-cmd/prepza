@@ -108,9 +108,11 @@ with app.app_context():
     ledger = db.session.execute(text("SELECT entry_type, signed_amount_minor, delivery_event_id, idempotency_key FROM b2b_campaign_ledger WHERE campaign_id=:cid AND entry_type IN ('delivery_impression','delivery_click') ORDER BY id"), params).mappings().all()
     campaign = db.session.execute(text("SELECT delivered_impressions, delivered_clicks, funded_amount_minor FROM discovery_campaign WHERE id=:cid"), params).mappings().one()
     remaining = int(campaign["funded_amount_minor"]) + int(db.session.execute(text("SELECT COALESCE(SUM(signed_amount_minor), 0) FROM b2b_campaign_ledger WHERE campaign_id=:cid"), params).scalar_one())
+    campus_ids = db.session.execute(text("SELECT DISTINCT metadata->>'campus_id' FROM discovery_event WHERE campaign_id=:cid AND metadata ? 'campus_id'"), params).scalars().all()
     print(json.dumps({
         "events": [dict(row) for row in events],
         "ledger": [dict(row) for row in ledger],
+        "campus_ids": campus_ids,
         "delivered_impressions": int(campaign["delivered_impressions"]),
         "delivered_clicks": int(campaign["delivered_clicks"]),
         "remaining_minor": remaining,
@@ -392,6 +394,15 @@ def run_browser_regression(fixture: dict, campaign_fixture: dict) -> None:
                 if item["campaign_id"] == campaign_id
             )
             assert campaign_report["impressions"] == 1
+            assert campaign_report["unique_reach"] == 1
+            assert campaign_report["campus_breakdown"] == [], (
+                "small campus cohort must be suppressed from advertiser report: " + str(campaign_report)
+            )
+            assert all(not any(key in item for key in ("user_id", "student_id", "email"))
+                       for item in report["campaigns"])
+            assert len(final["campus_ids"]) == 1, (
+                "billable delivery events did not capture campus attribution: " + str(final)
+            )
             assert campaign_report["raw_clicks"] == 2
             assert campaign_report["unique_clicks"] == 1
             assert campaign_report["billable_clicks"] == 1
