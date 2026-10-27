@@ -2019,6 +2019,18 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     png_bytes = base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pWQAAAAASUVORK5CYII="
     )
+    invalid_price_payload = {
+        "title": "QA invalid price item",
+        "description": "This payload must never create a valid listing.",
+        "category": "Electronics",
+        "condition": "good",
+        "price_kes": -1,
+        "location_area": "Near campus",
+        "whatsapp_number": "",
+    }
+    invalid_price = seller.post("/api/shop/listings", json=invalid_price_payload, headers=_csrf(seller_id))
+    assert invalid_price.status_code == 400
+
     listing_payload = {
         "title": "QA scientific calculator",
         "description": "A useful calculator in good condition for testing.",
@@ -2035,6 +2047,14 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     assert first_listing["is_free_post"] is True
     assert first_listing["posting_fee_kes"] == 0
     assert first_listing["status"] == "draft"
+
+    invalid_upload = seller.post(
+        f"/api/shop/listings/{first_listing['id']}/images",
+        data={"image": (BytesIO(b"not an image",), "fake.png")},
+        headers=_csrf(seller_id),
+        content_type="multipart/form-data",
+    )
+    assert invalid_upload.status_code == 400
 
     upload = seller.post(
         f"/api/shop/listings/{first_listing['id']}/images",
@@ -2122,6 +2142,10 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     assert payment_status.get_json()["status"] == "success"
     assert payment_status.get_json()["listing"]["posting_fee_paid"] is True
     assert payment_status.get_json()["listing"]["status"] == "draft"
+    # Callback/webhook retries must not charge twice or move the listing twice.
+    duplicate_verify = app_module.sync_paystack_payment_status(reference)
+    assert duplicate_verify.status == "success"
+    assert db.session.get(app_module.ShopListing, second_listing["id"]).posting_fee_paid is True
 
     second_publish = seller.post(
         f"/api/shop/listings/{second_listing['id']}/publish",
@@ -2156,6 +2180,27 @@ def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(worl
     )
     assert chat.status_code in (200, 201)
     assert chat.get_json()["id"] > 0
+
+    # Saving and reporting use server-owned listing identity and admin resolution.
+    saved_response = buyer.post(
+        f"/api/shop/listings/{first_listing['id']}/save",
+        headers=_csrf(buyer_id),
+    )
+    assert saved_response.status_code == 200
+    saved_list = buyer.get("/api/shop/saved")
+    assert first_listing["id"] in {item["id"] for item in saved_list.get_json()["listings"]}
+
+    report_response = buyer.post(
+        f"/api/shop/listings/{first_listing['id']}/report",
+        json={"reason": "misleading", "details": "QA moderation report."},
+        headers=_csrf(buyer_id),
+    )
+    assert report_response.status_code == 201
+    queue = admin.get("/api/shop/admin/queue")
+    assert queue.status_code == 200
+    report_id = next(item["id"] for item in queue.get_json()["reports"] if item["listing_id"] == first_listing["id"])
+    resolved = admin.post(f"/api/shop/admin/reports/{report_id}/resolve", headers=_csrf(admin_id))
+    assert resolved.status_code == 200
 
     # A different account cannot mutate the seller's listing.
     forbidden_edit = buyer.patch(
