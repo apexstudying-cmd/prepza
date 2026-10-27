@@ -1,7 +1,7 @@
 # Prepza Shop — Product, UX, and Business Model Proposal
 
-**Status:** Proposal only — not implemented  
-**Last researched:** 10 October 2026  
+**Status:** Implementation in progress on `main`; not yet release-certified  
+**Last researched:** 27 October 2026  
 **Target branch:** `main`  
 **Scope:** Product placement, user experience, marketplace operations, monetization, risks, and phased implementation  
 **Non-goal:** This document does not authorize or implement code, schema, navigation, payment, or infrastructure changes.
@@ -377,3 +377,30 @@ Market-pricing hypotheses in this document (KES 50–100 boosts, a 5% future sel
 ---
 
 **Decision requested before implementation:** approve the initial positioning (campus classifieds with direct buyer-seller contact, no Prepza-held funds), the Shop placement under Explore, the pilot categories, and the safety/moderation owner. No code has been changed as part of this proposal.
+
+
+## 15. Approved implementation and release contract (27 October 2026)
+
+The implementation direction is approved for direct work on `main`:
+
+- Home retains exactly five quick actions. Replace Podcasts with Shop; retain Upload, My Study, Library, and Ada. Podcasts remain available through My Study and the existing podcast library. Explore and the five-item bottom navigation are unchanged.
+- The first listing per account is free for the account lifetime. Every later product listing costs **KES 100** to post. The browser never chooses the fee, and a listing cannot be published until a paid fee has been verified server-side. Rejected/removed listings do not refund or reset the free-post allowance.
+- Prepza does not handle product purchases. No buyer checkout, cart, wallet, escrow, order payment, seller settlement or delivery promise is part of this MVP. Contact is through a seller-provided WhatsApp link and Prepza's existing in-app chat flow.
+- A listing starts as a private draft, requires at least one photo, then enters moderation. Only approved listings are visible in public browse/search. The seller can edit, pause, mark sold or remove their own listing; authenticated users can save/report; admins can review listings and reports.
+- Product images use the existing provider-neutral R2 helper under the `shop-listings/` logical prefix. Uploads are authenticated and CSRF-protected; JPEG/PNG/WebP are decoded and re-encoded, GPS/EXIF metadata is stripped, dimensions are bounded, and each listing is limited to six images of at most 5 MB each. Product images are separate objects, not database blobs.
+- Shop is currently **IN_PROGRESS** in `qa/release_status.json`. It must not be treated as launch-ready until the disposable PostgreSQL browser journey, migration, fee verification/retry, moderation/ownership, upload validation, and staging provider checks pass.
+
+### Infrastructure cost decision
+
+Use the existing R2 integration rather than introducing a separate image SaaS or database for Shop. Cloudflare's official R2 pricing page (checked 27 October 2026) lists a monthly Standard-storage free tier of 10 GB-month, 1 million Class A operations and 10 million Class B operations; Internet egress is free. Beyond the free tier, Standard storage is listed at $0.015/GB-month, Class A at $4.50/million, and Class B at $0.36/million. These quotas are account-wide and may be shared with podcast audio and other Prepza assets. See [Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing/).
+
+Cost controls for the first release:
+
+1. Keep product metadata in PostgreSQL and photos in R2; do not store image bytes in PostgreSQL or add another paid database/service.
+2. Resize and re-encode images during upload (maximum 1600 px per dimension), strip metadata, and reject images over 20 megapixels or 5 MB after optimization.
+3. Use Standard R2 storage initially. Do not move new product photos to Infrequent Access without measured access patterns; it has retrieval fees and a 30-day minimum storage duration.
+4. Do not buy Cloudflare Images transformations/delivery or a separate CDN for the MVP. Revisit only if measured latency or image-processing load justifies the cost.
+5. Enforce per-listing image count and request rate limits. Remove photo objects when a seller removes a listing; keep an explicit retention policy for sold listings, reports, and moderation evidence before broad launch.
+6. Add provider-side R2 storage/operation monitoring and a monthly budget alert before launch. Keep the staging bucket/prefix separate from production objects for external-provider tests.
+
+Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [R2 object lifecycle rules](https://developers.cloudflare.com/r2/buckets/object-lifecycles/), and [OWASP File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet/). The security controls above are engineering safeguards, not a substitute for moderation, abuse monitoring or provider verification.
