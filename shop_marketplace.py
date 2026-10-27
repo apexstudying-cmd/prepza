@@ -119,7 +119,7 @@ def fulfill_shop_posting_payment(db, payment):
 
 
 def fail_shop_posting_payment(db, payment):
-    """Release a failed/mismatched checkout so the seller can retry safely."""
+    """Release an abandoned/failed checkout so the seller can retry safely."""
     global _ShopListing
     if _ShopListing is None or payment.payment_type != "shop_posting":
         return False
@@ -132,6 +132,26 @@ def fail_shop_posting_payment(db, payment):
         return False
     listing.status = "draft"
     listing.checkout_url = None
+    listing.updated_at = datetime.utcnow()
+    db.session.commit()
+    return True
+
+
+def mark_shop_posting_payment_mismatch(db, payment):
+    """Quarantine a provider-successful charge whose amount/currency is wrong."""
+    global _ShopListing
+    if _ShopListing is None or payment.payment_type != "shop_posting":
+        return False
+    try:
+        listing_id = int(payment.plan or "")
+    except (TypeError, ValueError):
+        return False
+    listing = _ShopListing.query.filter_by(id=listing_id, seller_id=payment.user_id).with_for_update().first()
+    if not listing or listing.posting_fee_paid:
+        return False
+    listing.status = "payment_review"
+    listing.checkout_url = None
+    listing.moderation_note = "Posting payment requires manual verification. Do not retry this charge yet."
     listing.updated_at = datetime.utcnow()
     db.session.commit()
     return True
@@ -578,7 +598,10 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             return jsonify({"error": "Payment not found"}), 404
         listing_id = int(payment.plan) if (payment.plan or "").isdigit() else None
         listing = listing_for_owner(listing_id, user.id) if listing_id else None
-        return jsonify({"status": payment.status, "listing": listing_json(listing, user.id, detail=True) if listing else None})
+        status = payment.status
+        if payment.status == "success" and listing and not listing.posting_fee_paid:
+            status = "mismatched"
+        return jsonify({"status": status, "listing": listing_json(listing, user.id, detail=True) if listing else None})
 
     @app.post("/api/shop/listings/<int:listing_id>/publish")
     def shop_publish_listing(listing_id):
@@ -740,9 +763,11 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         if not getattr(user, "is_admin", False):
             return jsonify({"error": "Admin access required"}), 403
         pending = ShopListing.query.filter_by(status="pending_review").order_by(ShopListing.created_at.asc()).limit(100).all()
+        payment_reviews = ShopListing.query.filter_by(status="payment_review").order_by(ShopListing.updated_at.asc()).limit(100).all()
         reports = ShopReport.query.filter_by(status="open").order_by(ShopReport.created_at.asc()).limit(100).all()
         return jsonify({
             "listings": listing_json_batch(pending, user.id, detail=True),
+            "payment_reviews": listing_json_batch(payment_reviews, user.id, detail=True),
             "reports": [{"id": r.id, "listing_id": r.listing_id, "reason": r.reason, "details": r.details, "reporter_id": r.reporter_id, "created_at": r.created_at.isoformat()} for r in reports],
         })
 
