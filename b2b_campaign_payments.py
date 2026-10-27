@@ -490,7 +490,7 @@ def register_b2b_campaign_payments(app, db):
                     ON CONFLICT (idempotency_key) DO NOTHING
                 """), {"cid": int(payment["campaign_id"]), "amount": -campaign_refund, "key": idem,
                        "pid": int(payment["id"]), "meta": json.dumps({"refund_amount_minor": amount, "reversed_campaign_value_minor": campaign_refund, "refund_reference": refund_identity})})
-            metadata["processed_refund_events"] = [*processed_refunds, refund_identity][-100:]
+            metadata["processed_refund_events"] = [*processed_refunds, refund_identity]
             db.session.execute(text("""
                 UPDATE b2b_payment
                 SET status='refunded', refund_status='processed',
