@@ -162,6 +162,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     try {
       const result = await shopApi<{ images: ImageRef[] }>('/api/shop/listings/' + formId + '/images/' + index, { method: 'DELETE', headers: { 'X-CSRF-Token': csrf } })
       setFormImages(result.images || [])
+      invalidateBrowseSnapshots()
       setNotice('Photo removed.')
     } catch (e: any) { setError(e?.message || 'Could not remove photo.') }
   }
@@ -170,6 +171,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
       const body = new FormData(); body.append('image', file)
       const uploaded = await shopApi<{ images: ImageRef[] }>('/api/shop/listings/' + listingId + '/images', { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body })
       setFormImages(uploaded.images || [])
+      invalidateBrowseSnapshots()
       setFiles(current => {
         const uploadedIndex = current.indexOf(file)
         return uploadedIndex < 0 ? current : current.filter((_, index) => index !== uploadedIndex)
@@ -179,6 +181,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const publish = async (listingId: number) => {
     try {
       const result = await shopApi<{ listing: Listing }>('/api/shop/listings/' + listingId + '/publish', { method: 'POST', headers: { 'X-CSRF-Token': csrf } })
+      invalidateBrowseSnapshots()
       setNotice('Submitted for review. Your product appears in Shop after approval.')
       setPage('mine'); await loadMine()
       return result
