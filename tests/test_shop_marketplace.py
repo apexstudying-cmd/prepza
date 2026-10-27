@@ -28,7 +28,11 @@ def test_whatsapp_number_is_normalized_to_international_digits(value, expected):
     assert normalize_whatsapp_number(value) == expected
 
 
-@pytest.mark.parametrize("value", ["", "07123", "1234567890", "https://wa.me/254712345678", "+1 2025550100"])
+def test_whatsapp_contact_can_be_omitted():
+    assert normalize_whatsapp_number("") is None
+
+
+@pytest.mark.parametrize("value", ["07123", "1234567890", "https://wa.me/254712345678", "+1 2025550100"])
 def test_invalid_or_non_kenyan_whatsapp_contact_is_rejected(value):
     with pytest.raises(ValueError):
         normalize_whatsapp_number(value)
