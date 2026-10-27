@@ -583,3 +583,20 @@ The `b2b_monetization_integrity` release gate is IN_PROGRESS. Overall release re
 - [ ] B2B monetization is still IN_PROGRESS: backend does not independently verify the browser's 50%-visible/1,500 ms condition. Decide on stronger anti-abuse controls and document the client-trust limitation before claiming verified viewability.
 - [ ] External-provider verification remains NOT_TESTED until test-only Paystack/SES/OpenAI/R2 configuration and safe provider-side evidence are available. Do not paste credentials into chat/repository; no live payments or billable GPU work without explicit approval.
 - [ ] Run the final consolidated clean regression and finish the source-grounded documentation audit after external-provider verification is completed or explicitly dispositioned. Keep release BLOCKED and 400-user load test DEFERRED.
+
+
+## Shop marketplace — implementation in progress (27 October 2026)
+
+- [x] Product direction approved: campus classifieds, direct seller contact only, no buyer checkout or Prepza-held funds.
+- [x] Home entry approved: five quick actions; replace Podcasts with Shop, keep Explore and bottom navigation unchanged.
+- [x] First lifetime listing free; each later product post costs KES 100, verified server-side through the existing Paystack integration.
+- [~] Build and test browse/search/detail, draft creation, optimized image upload, seller edit/pause/sold/remove, saved listings, WhatsApp/in-app chat, reporting and admin moderation.
+- [~] Apply Alembic migration `20261027_shop_marketplace` in the disposable PostgreSQL browser workflow and prove the existing-database upgrade path.
+- [ ] Pass the full Shop browser journey: first free listing, second listing KES 100 fee, mocked Paystack success/failure/retry/idempotency, moderation, saved/report flows, ownership denial and direct chat.
+- [ ] Configure staging R2 test bucket/prefix and verify upload/read/delete with restricted credentials; do not use production objects for tests.
+- [ ] Configure Paystack test-mode checkout/webhook evidence for the posting fee; never test live buyer payments because Shop does not process product purchases.
+- [ ] Finish image lifecycle/retention rules, moderation support ownership, and product policy/privacy review.
+- [ ] Run mobile/tablet visual checks and add the Shop gate to the release record only with passing evidence.
+- [ ] Keep release blocked until the Shop gate is PASS or explicitly scoped out; source presence alone is not certification.
+
+Cost notes: use the existing R2 helper/prefix, resize/re-encode images on upload, cap at six photos per listing and 5 MB per image, avoid a new paid image service, and measure shared account storage/operations before enabling broader listing traffic. See `docs/architecture/shop.md`.
