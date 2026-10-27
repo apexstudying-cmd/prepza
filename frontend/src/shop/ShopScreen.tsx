@@ -1,7 +1,7 @@
 import { useEffect, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
 
 type ImageRef = { key: string; url: string | null }
-type Listing = { id: number; title: string; description: string | null; category: string; condition: string; price_kes: number; location_area: string; images: ImageRef[]; status: string; seller_id: number; seller_name: string; whatsapp_url?: string | null; saved: boolean; is_mine: boolean; is_free_post: boolean; posting_fee_kes: number; posting_fee_paid: boolean; moderation_note?: string | null }
+type Listing = { id: number; title: string; description: string | null; category: string; condition: string; price_kes: number; location_area: string; images: ImageRef[]; status: string; seller_id: number; seller_name: string; whatsapp_url?: string | null; whatsapp_number?: string | null; saved: boolean; is_mine: boolean; is_free_post: boolean; posting_fee_kes: number; posting_fee_paid: boolean; moderation_note?: string | null }
 type Page = 'browse' | 'detail' | 'create' | 'mine' | 'saved' | 'admin'
 type Props = { setScreen: (screen: any) => void; setActiveConversationId: (id: number) => void }
 const CATEGORIES = ['Books & study', 'Electronics', 'Hostel & home', 'Fashion', 'Accessories', 'Sports & fitness', 'Other']
@@ -153,18 +153,21 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const saveForm = async () => {
     if (saving) return
     setSaving(true); feedback()
+    let savedId: number | null = formId
     try {
       const payload = { title: form.title.trim(), description: form.description.trim(), category: form.category, condition: form.condition, price_kes: Number(form.price_kes), location_area: form.location_area.trim(), whatsapp_number: form.whatsapp_number.trim() }
       let id = formId
       if (formId) id = (await shopApi<{ listing: Listing }>('/api/shop/listings/' + formId, { method: 'PATCH', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify(payload) })).listing.id
       else id = (await shopApi<{ listing: Listing }>('/api/shop/listings', { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify(payload) })).listing.id
       if (!id) throw new Error('Draft saved but the listing ID was not returned.')
+      savedId = id
+      setFormId(id)
       if (files.length) await uploadFiles(id, files)
       setFiles([])
       await publish(id)
     } catch (e: any) {
       setError(e?.message || 'Could not save listing. Your draft may be available under My Listings.')
-      if (formId) setPage('mine')
+      if (savedId) setPage('mine')
     } finally { setSaving(false) }
   }
   const saveToggle = async (listing: Listing) => {
