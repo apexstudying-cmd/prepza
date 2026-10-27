@@ -11,12 +11,12 @@ const money = (amount: number) => 'KSh ' + Math.round(amount).toLocaleString('en
 const conditionLabel = (value: string) => CONDITIONS.find(item => item.value === value)?.label || value
 const ui: Record<string, CSSProperties> = {
   root: { flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--prepza-page-bg, #F7F8FC)', color: 'var(--prepza-text, #17233E)', fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif' },
-  header: { background: 'linear-gradient(130deg, #101B35, #24365B)', color: '#fff', padding: '20px 18px 18px' },
+  header: { background: 'linear-gradient(130deg, var(--prepza-brand-navy, #101B35), #24365B)', color: '#fff', padding: '20px 18px 18px' },
   wrap: { width: '100%', maxWidth: 1080, margin: '0 auto', padding: 18, boxSizing: 'border-box' },
   button: { border: 0, borderRadius: 12, padding: '11px 14px', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 },
-  primary: { background: '#C9A84C', color: '#101B35' },
-  secondary: { background: '#fff', color: '#17233E', border: '1px solid #E1E5ED' },
-  input: { width: '100%', boxSizing: 'border-box', border: '1px solid #D9DFEA', borderRadius: 12, padding: '12px 13px', fontSize: 13, color: '#17233E', background: '#fff', fontFamily: 'inherit' },
+  primary: { background: 'var(--prepza-brand-gold, #C9A84C)', color: 'var(--prepza-brand-navy, #101B35)' },
+  secondary: { background: 'var(--prepza-surface, #fff)', color: 'var(--prepza-text, #17233E)', border: '1px solid var(--prepza-border, #E1E5ED)' },
+  input: { width: '100%', boxSizing: 'border-box', border: '1px solid var(--prepza-border, #D9DFEA)', borderRadius: 12, padding: '12px 13px', fontSize: 13, color: '#17233E', background: '#fff', fontFamily: 'inherit' },
   panel: { background: '#fff', border: '1px solid #E4E8F0', borderRadius: 17, padding: 16 },
 }
 async function shopApi<T = any>(path: string, options: RequestInit = {}): Promise<T> {
