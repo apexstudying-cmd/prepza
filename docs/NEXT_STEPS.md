@@ -562,3 +562,9 @@ The `b2b_monetization_integrity` release gate is IN_PROGRESS. Overall release re
 - [~] B2B monetization integrity remains open for independent viewability qualification and server-side abuse/debounce review; do not imply CPA/fixed-placement billing.
 - [ ] External-provider verification remains untested until safe provider-side Paystack sandbox, SES, bounded OpenAI, R2 and audio/GPU evidence is recorded. No live payments or paid GPU jobs without explicit approval.
 - [ ] Clean full regression after provider/recovery gates; 400-user performance remains deferred and release remains blocked.
+
+
+## 2026-10-27 — payment recovery follow-up
+- [~] Added a disposable-PostgreSQL regression for duplicate `refund.processed` Paystack webhook delivery and hardened the handler to persist processed refund identities. Test commit: `655e01b8f001ac54929d334950327ce2d759c3c9`; implementation: `3e26d22bf9ceaeadbc98e5f82311b6af02691109`.
+- [ ] Confirm the current-main CI run passes the duplicate-refund regression and surrounding full disposable-PostgreSQL suite before treating webhook recovery/idempotency as verified.
+- [ ] Keep Paystack sandbox, SES, OpenAI, R2 and audio/GPU provider checks separate; no live payment or billable GPU workload without explicit approval.
