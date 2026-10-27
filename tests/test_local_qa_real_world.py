@@ -1992,3 +1992,176 @@ def test_b2b_campus_report_shows_aggregate_only_at_ten_reached_accounts(world):
     assert "campaign,,,10" in csv_body
     assert f"campus,QA University A,{world['university_a'].id},10" in csv_body
     assert "203.5" in csv_body
+
+
+def test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact(world, monkeypatch):
+    """Exercise Shop through listing, mocked Paystack fee, moderation, browse and chat."""
+    import base64
+    from io import BytesIO
+    import app as app_module
+    import object_storage
+
+    seller_id = world["student_a"].id
+    buyer_id = world["student_b"].id
+    admin_id = world["admin"].id
+    seller = _client_for(seller_id)
+    buyer = _client_for(buyer_id)
+    admin = _client_for(admin_id)
+
+    # Isolated object storage: no live R2 bucket or credentials are used.
+    monkeypatch.setattr(object_storage, "r2_put_bytes", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        object_storage,
+        "r2_presigned_get",
+        lambda logical_bucket, key, expires_in=60: "https://images.example.invalid/" + key,
+    )
+
+    png_bytes = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pWQAAAAASUVORK5CYII="
+    )
+    listing_payload = {
+        "title": "QA scientific calculator",
+        "description": "A useful calculator in good condition for testing.",
+        "category": "Electronics",
+        "condition": "good",
+        "price_kes": 1200,
+        "location_area": "Near campus",
+        "whatsapp_number": "0712345678",
+    }
+
+    first = seller.post("/api/shop/listings", json=listing_payload, headers=_csrf(seller_id))
+    assert first.status_code == 201
+    first_listing = first.get_json()["listing"]
+    assert first_listing["is_free_post"] is True
+    assert first_listing["posting_fee_kes"] == 0
+    assert first_listing["status"] == "draft"
+
+    upload = seller.post(
+        f"/api/shop/listings/{first_listing['id']}/images",
+        data={"image": (BytesIO(png_bytes), "calculator.png")},
+        headers=_csrf(seller_id),
+        content_type="multipart/form-data",
+    )
+    assert upload.status_code == 201, upload.get_json()
+    published = seller.post(
+        f"/api/shop/listings/{first_listing['id']}/publish",
+        headers=_csrf(seller_id),
+    )
+    assert published.status_code == 200
+    assert published.get_json()["listing"]["status"] == "pending_review"
+
+    first_approval = admin.post(
+        f"/api/shop/admin/listings/{first_listing['id']}/moderate",
+        json={"action": "approve"},
+        headers=_csrf(admin_id),
+    )
+    assert first_approval.status_code == 200, first_approval.get_json()
+    assert first_approval.get_json()["listing"]["status"] == "active"
+
+    second_payload = dict(listing_payload)
+    second_payload.update({
+        "title": "QA used course textbook",
+        "category": "Books & study",
+        "price_kes": 450,
+    })
+    second = seller.post("/api/shop/listings", json=second_payload, headers=_csrf(seller_id))
+    assert second.status_code == 201
+    second_listing = second.get_json()["listing"]
+    assert second_listing["is_free_post"] is False
+    assert second_listing["posting_fee_kes"] == 100
+    assert second_listing["posting_fee_paid"] is False
+
+    second_upload = seller.post(
+        f"/api/shop/listings/{second_listing['id']}/images",
+        data={"image": (BytesIO(png_bytes), "textbook.png")},
+        headers=_csrf(seller_id),
+        content_type="multipart/form-data",
+    )
+    assert second_upload.status_code == 201, second_upload.get_json()
+
+    def fake_paystack_request(method, path, **kwargs):
+        if method == "POST" and path == "/transaction/initialize":
+            reference = kwargs["json"]["reference"]
+            return {
+                "status": True,
+                "data": {
+                    "authorization_url": "https://checkout.example.invalid/" + reference,
+                    "reference": reference,
+                },
+            }
+        if method == "GET" and path.startswith("/transaction/verify/"):
+            reference = path.rsplit("/", 1)[1]
+            payment = app_module.Payment.query.filter_by(reference=reference).first()
+            assert payment is not None
+            return {
+                "status": True,
+                "data": {
+                    "id": 900000000 + payment.id,
+                    "status": "success",
+                    "amount": 10000,
+                    "currency": "KES",
+                    "reference": reference,
+                },
+            }
+        raise AssertionError(f"Unexpected mocked Paystack call: {method} {path}")
+
+    monkeypatch.setattr(app_module, "paystack_request", fake_paystack_request)
+    checkout = seller.post(
+        f"/api/shop/listings/{second_listing['id']}/checkout",
+        headers=_csrf(seller_id),
+    )
+    assert checkout.status_code == 200, checkout.get_json()
+    checkout_data = checkout.get_json()
+    assert checkout_data["redirect_url"].startswith("https://checkout.example.invalid/")
+    reference = checkout_data["reference"]
+
+    callback = seller.get("/shop/payment/callback?reference=" + reference, follow_redirects=False)
+    assert callback.status_code == 302
+    payment_status = seller.get("/api/shop/payments/" + reference)
+    assert payment_status.status_code == 200
+    assert payment_status.get_json()["status"] == "success"
+    assert payment_status.get_json()["listing"]["posting_fee_paid"] is True
+    assert payment_status.get_json()["listing"]["status"] == "draft"
+
+    second_publish = seller.post(
+        f"/api/shop/listings/{second_listing['id']}/publish",
+        headers=_csrf(seller_id),
+    )
+    assert second_publish.status_code == 200
+    assert second_publish.get_json()["listing"]["status"] == "pending_review"
+
+    second_approval = admin.post(
+        f"/api/shop/admin/listings/{second_listing['id']}/moderate",
+        json={"action": "approve"},
+        headers=_csrf(admin_id),
+    )
+    assert second_approval.status_code == 200
+    assert second_approval.get_json()["listing"]["status"] == "active"
+
+    browse = buyer.get("/api/shop/listings?q=QA")
+    assert browse.status_code == 200
+    visible_ids = {item["id"] for item in browse.get_json()["listings"]}
+    assert first_listing["id"] in visible_ids
+    assert second_listing["id"] in visible_ids
+
+    detail = buyer.get(f"/api/shop/listings/{first_listing['id']}")
+    assert detail.status_code == 200
+    assert detail.get_json()["listing"]["whatsapp_url"] == "https://wa.me/254712345678"
+
+    # In-app seller contact uses the existing chat route and CSRF/privacy checks.
+    chat = buyer.post(
+        "/chats",
+        json={"is_group": False, "participant_ids": [seller_id]},
+        headers=_csrf(buyer_id),
+    )
+    assert chat.status_code in (200, 201)
+    assert chat.get_json()["id"] > 0
+
+    # A different account cannot mutate the seller's listing.
+    forbidden_edit = buyer.patch(
+        f"/api/shop/listings/{first_listing['id']}",
+        json=listing_payload,
+        headers=_csrf(buyer_id),
+    )
+    assert forbidden_edit.status_code == 404
+
