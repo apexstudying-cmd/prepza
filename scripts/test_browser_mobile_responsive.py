@@ -6,6 +6,7 @@ only from a numeric assertion.
 """
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -149,6 +150,31 @@ def main() -> int:
                             full_page=True,
                             animations="disabled",
                         )
+
+                        # Capture the real listing form and a selected-photo state.
+                        page.get_by_role("button", name="Sell an item").click(timeout=5000)
+                        page.get_by_role("heading", name="List a product").wait_for(timeout=10000)
+                        page.get_by_text(
+                            "Posting fee: KES 100 per listing, including your first.",
+                            exact=False,
+                        ).wait_for(timeout=5000)
+                        upload_input = page.locator('input[type="file"]')
+                        if upload_input.get_attribute("accept") != "image/jpeg,image/png,image/webp":
+                            failures.append(f"{name}: listing photo input does not restrict accepted image formats")
+                        upload_input.set_input_files({
+                            "name": "calculator.png",
+                            "mimeType": "image/png",
+                            "buffer": base64.b64decode(
+                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/jP8AAAAASUVORK5CYII="
+                            ),
+                        })
+                        page.get_by_text("1 photo(s) selected: calculator.png", exact=True).wait_for(timeout=5000)
+                        page.screenshot(
+                            path=str(ARTIFACTS / f"shop-listing-form-{name}.png"),
+                            full_page=True,
+                            animations="disabled",
+                        )
+                        page.get_by_role("button", name="‹ Back").click(timeout=5000)
                         page.get_by_role("button", name="‹ Home").click(timeout=5000)
                         page.get_by_role("navigation", name="Primary navigation").wait_for(state="visible", timeout=5000)
 
