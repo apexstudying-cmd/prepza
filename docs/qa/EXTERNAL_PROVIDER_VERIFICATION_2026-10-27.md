@@ -23,6 +23,24 @@ Relevant tests:
 
 Mocks prove behavior at the application boundary. They do not prove that a real provider account, region, domain, key, callback URL or GPU worker is correctly configured.
 
+## Where to set test environment variables
+
+**Use a staging service, not the production `prepza` service.** In Render, open the dedicated staging web service, then **Environment** → add/update variables → save changes/redeploy. The staging service must use a disposable/staging PostgreSQL database and Redis, a staging `BASE_URL`, Paystack test-mode keys, a controlled SES sender/mailbox, a capped OpenAI test project, and a dedicated R2 QA bucket. Do not temporarily replace production credentials on the live service just to run this test.
+
+If a manually dispatched GitHub Actions workflow is later used for provider calls, store secrets under **GitHub repository → Settings → Environments → `staging-qa` → Environment secrets**, not in source files or logs. A secret being stored there does not itself run a provider test; only an explicitly approved workflow that names that environment should consume it. The current contract workflows use mocks and do not need real provider secrets.
+
+Set only the variables required for the provider being tested:
+
+| Provider | Staging variables | Notes |
+|---|---|---|
+| Paystack | `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `BASE_URL` | Use matching **test-mode** keys; `BASE_URL` must be the HTTPS staging origin. Never put live keys in staging. |
+| SES | `AWS_SES_REGION`, `SES_FROM_EMAIL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Use a least-privilege IAM identity and a verified sender; send only to the controlled mailbox. |
+| OpenAI | `OPENAI_API_KEY` | Separate test project/key, strict practical spend cap, one synthetic request with at most 128 output tokens. Treat project budgets as alerts unless hard enforcement is verified. |
+| R2 app helper | `PREPZA_R2_ENDPOINT`, `PREPZA_R2_ACCESS_KEY_ID`, `PREPZA_R2_SECRET_ACCESS_KEY`, `PREPZA_R2_BUCKET` | Prefer a dedicated QA bucket and credentials restricted to that bucket. The app stores Shop images under the logical `shop-listings/` prefix. |
+| Audio worker health only | `PREPZA_INTERNAL_BASE_URL`, `KOKORO_WORKER_TOKEN` or `PREPZA_INTERNAL_TOKEN`, plus worker R2 vars | Inspect health/config only. Do not create a GPU instance or queue an inference job without explicit approval. |
+
+For Render, variable names are case-sensitive. After saving a variable, verify that the staging deployment is healthy before exercising it. Do not copy secret values into `.env.example.vps`, documentation, chat messages, screenshots or logs. Keep a redacted record of which variable names are configured and which are missing.
+
 ## Safety rules
 
 1. Use a staging deployment and dedicated provider test credentials. Never paste credentials into source files, issues, logs or this runbook.
@@ -57,6 +75,21 @@ The primary application webhook is **/payment/paystack/webhook**; the B2B campai
 8. Record the test reference, environment, exact application SHA and results. Do not include keys or full sensitive payloads.
 
 Student-subscription verification is separate: it must confirm a successful/fulfilled student order before granting Plus/Pro entitlement and prove retries do not create another payment or extend the same period twice.
+
+### Shop listing-posting fee (not a product purchase)
+
+Shop uses the same primary Paystack webhook at `/payment/paystack/webhook`; the browser return URL is `/shop/payment/callback`. In staging, create a second listing for the test student and verify it requires exactly **KES 100**. Complete a Paystack **test-mode** checkout only.
+
+Expected state transitions:
+1. First lifetime listing: KES 0 posting fee.
+2. Each later listing: KES 100 fee, listing stays a draft/pending-payment and is not publicly visible.
+3. Provider verification must match the saved reference, KES amount (10000 minor units) and KES currency before `posting_fee_paid` becomes true.
+4. Successful callback/webhook returns the paid listing to draft; publishing then moves it to pending review; an admin approval makes it visible.
+5. Replay the same successful callback/webhook. It must not create another fee, grant subscription entitlements, or award a referral commission for a Shop posting fee.
+6. Test failed/abandoned and mismatched-amount verification. The listing must remain unpublished and the seller must be able to retry without reusing a stale checkout URL.
+7. Verify no buyer-order, seller-payout, wallet or escrow record is created: Prepza does not handle the product purchase.
+
+Record the test reference and redacted ledger/listing states only. No live charge is authorized by this runbook.
 
 ## 2. SES email delivery
 
