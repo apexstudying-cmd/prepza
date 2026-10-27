@@ -102,7 +102,7 @@ def main() -> int:
 
                         tool_icons = page.evaluate(
                             """() => {
-                              const labels = ['Upload', 'My Study', 'Library', 'Ada', 'Podcasts'];
+                              const labels = ['Upload', 'My Study', 'Library', 'Ada', 'Shop'];
                               return labels.map(label => {
                                 const button = Array.from(document.querySelectorAll('button')).find(
                                   candidate => Array.from(candidate.querySelectorAll('span')).some(
@@ -124,6 +124,33 @@ def main() -> int:
                                 failures.append(
                                     f"{name}: {item['label']} quick-action must use a non-text SVG icon: {item}"
                                 )
+
+                        # Exercise the actual Shop route at each responsive viewport,
+                        # not just the Home shortcut's presence.
+                        shop_button = page.get_by_role("button", name="Shop").first
+                        shop_button.click(timeout=5000)
+                        page.get_by_text(
+                            "Find useful things near campus. Connect directly with sellers.",
+                            exact=True,
+                        ).wait_for(timeout=10000)
+                        shop_dimensions = page.evaluate(
+                            """() => ({
+                              viewportWidth: window.innerWidth,
+                              documentWidth: document.documentElement.scrollWidth,
+                              bodyWidth: document.body.scrollWidth
+                            })"""
+                        )
+                        if shop_dimensions["documentWidth"] > shop_dimensions["viewportWidth"] + 1:
+                            failures.append(f"{name}: Shop horizontal overflow: {shop_dimensions}")
+                        if shop_dimensions["bodyWidth"] > shop_dimensions["viewportWidth"] + 1:
+                            failures.append(f"{name}: Shop body overflow: {shop_dimensions}")
+                        page.screenshot(
+                            path=str(ARTIFACTS / f"shop-{name}.png"),
+                            full_page=True,
+                            animations="disabled",
+                        )
+                        page.get_by_role("button", name="‹ Home").click(timeout=5000)
+                        page.get_by_role("navigation", name="Primary navigation").wait_for(state="visible", timeout=5000)
 
                         if page_errors:
                             failures.append(
