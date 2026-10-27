@@ -12,7 +12,7 @@ import os
 import re
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote
 
 from flask import jsonify, redirect, request, session
@@ -20,6 +20,12 @@ from sqlalchemy import or_
 
 
 LISTING_POST_FEE_KES = 100
+LISTING_BILLING_PERIOD_DAYS = 30
+
+
+def listing_period_expiry(started_at: datetime) -> datetime:
+    """Return the end of the paid 30-day listing period (manual renewal)."""
+    return started_at + timedelta(days=LISTING_BILLING_PERIOD_DAYS)
 MAX_LISTING_IMAGES = 6
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 ALLOWED_CATEGORIES = {
@@ -108,7 +114,9 @@ def fulfill_shop_posting_payment(db, payment):
     listing = _ShopListing.query.filter_by(id=listing_id, seller_id=payment.user_id).with_for_update().first()
     if not listing or int(payment.amount) != LISTING_POST_FEE_KES:
         return False
+    now = datetime.utcnow()
     listing.posting_fee_paid = True
+    listing.posting_fee_expires_at = listing_period_expiry(now)
     listing.posting_payment_reference = payment.reference
     if listing.status == "pending_payment":
         listing.status = "draft"
@@ -183,6 +191,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         is_free_post = db.Column(db.Boolean, nullable=False, default=False)
         posting_fee_kes = db.Column(db.Integer, nullable=False, default=0)
         posting_fee_paid = db.Column(db.Boolean, nullable=False, default=False)
+        posting_fee_expires_at = db.Column(db.DateTime, nullable=True, index=True)
         posting_payment_reference = db.Column(db.String(50), nullable=True, unique=True)
         checkout_url = db.Column(db.String(500), nullable=True)
         moderation_note = db.Column(db.String(500), nullable=True)
@@ -278,6 +287,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
             "is_free_post": listing.is_free_post,
             "posting_fee_kes": listing.posting_fee_kes,
             "posting_fee_paid": listing.posting_fee_paid,
+            "posting_fee_expires_at": listing.posting_fee_expires_at.isoformat() if listing.posting_fee_expires_at else None,
             "posting_payment_reference": listing.posting_payment_reference if detail and (viewer_id == listing.seller_id or bool(getattr(db.session.get(User, viewer_id), "is_admin", False))) else None,
             "posting_payment_review_note": listing.posting_payment_review_note if detail and (viewer_id == listing.seller_id or bool(getattr(db.session.get(User, viewer_id), "is_admin", False))) else None,
             "moderation_note": listing.moderation_note if viewer_id == listing.seller_id else None,
@@ -320,7 +330,8 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         user, denied = require_user()
         if denied:
             return denied
-        query = ShopListing.query.filter_by(status="active")
+        now = datetime.utcnow()
+        query = ShopListing.query.filter_by(status="active").filter(ShopListing.posting_fee_expires_at > now)
         term = (request.args.get("q") or "").strip()[:100]
         category = (request.args.get("category") or "").strip()
         condition = (request.args.get("condition") or "").strip().lower()
@@ -530,9 +541,10 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
                 listing.status = "draft"
             listing.updated_at = datetime.utcnow()
             db.session.commit()
-        if listing.posting_fee_paid:
-            return jsonify({"error": "This listing's posting fee is already covered"}), 409
-        if listing.status not in {"draft", "pending_payment"}:
+        period_current = bool(listing.posting_fee_paid and listing.posting_fee_expires_at and listing.posting_fee_expires_at > datetime.utcnow())
+        if period_current:
+            return jsonify({"error": "This listing's 30-day posting period is already covered"}), 409
+        if listing.status not in {"draft", "pending_payment", "active", "paused"}:
             return jsonify({"error": "This listing cannot start a posting-fee checkout"}), 409
         if listing.checkout_url and listing.status == "pending_payment":
             existing_payment = Payment.query.filter_by(
@@ -629,7 +641,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         listing = listing_for_owner(listing_id, user.id)
         if not listing:
             return jsonify({"error": "Listing not found"}), 404
-        if listing.status not in {"draft", "pending_payment", "pending_review", "paused"}:
+        if listing.status not in {"draft", "pending_payment", "pending_review", "paused", "active"}:
             return jsonify({"error": "This listing cannot be published from its current state"}), 409
         # Older drafts may have been created under the retired free-first-post
         # rule. Normalize them before any publish decision; browser-supplied
@@ -643,8 +655,9 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
                 listing.status = "draft"
             listing.updated_at = datetime.utcnow()
             db.session.commit()
-        if listing.status == "pending_payment" or not listing.posting_fee_paid:
-            return jsonify({"error": "A KES 100 posting fee must be paid before publishing this listing", "code": "SHOP_POSTING_FEE_REQUIRED", "fee_kes": LISTING_POST_FEE_KES}), 402
+        period_current = bool(listing.posting_fee_paid and listing.posting_fee_expires_at and listing.posting_fee_expires_at > datetime.utcnow())
+        if listing.status == "pending_payment" or not period_current:
+            return jsonify({"error": "A KES 100 fee must be paid for the current 30-day listing period before publishing", "code": "SHOP_POSTING_FEE_REQUIRED", "fee_kes": LISTING_POST_FEE_KES}), 402
         if not listing.image_keys:
             return jsonify({"error": "Add at least one product photo before publishing"}), 400
         if listing.status == "paused":
