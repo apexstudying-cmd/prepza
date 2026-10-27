@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-27",
-  "last_verified_commit": "74f0f0380d731223ea791054350e3ba4abbc9fb6",
+  "last_verified_commit": "e1d9ef42b533c9fb3fb14de2a4a3d66e30714015",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -68,7 +68,7 @@
     {
       "id": "mobile_responsive_visual",
       "status": "PASS",
-      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 41 passed on main at 6c88a908c5088d23f869d6a564b9ff1c90b8caed (2026-10-26). Job 121576628770 completed the mobile/tablet responsive browser checks and uploaded responsive screenshots."
+      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 passed on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 (2026-10-27). Mobile/tablet checks passed at phone-small 360x800, phone-standard 390x844, and tablet portrait 768x1024 with no horizontal overflow or page errors; responsive screenshots were uploaded."
     },
     {
       "id": "storage_backup_restore",
@@ -78,12 +78,12 @@
     {
       "id": "cross_system_journeys",
       "status": "PASS",
-      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 41 passed on main at 6c88a908c5088d23f869d6a564b9ff1c90b8caed (2026-10-26): full disposable PostgreSQL QA suite and online/offline/generated-artifact browser journeys passed. This verifies the journeys covered by this workflow; external live-provider verification remains a separate gate."
+      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 passed on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 (2026-10-27): B2B browser-to-ledger journey, full disposable PostgreSQL QA suite, and online/offline generated-artifact browser journeys all passed. This remains separate from live external-provider verification."
     },
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "Current-main GitHub Actions run set on 4584de061162a5dc010b03847d4d09a7aea81e1c completed successfully on 2026-10-26: Existing Database Migration Rehearsal, Frontend Build, Screen Loading Audit, Realtime Runtime Regression, E2EE Security Regression, Personal Streak Runtime Regression, Release QA Trace, student/chat/admin/B2B/AI/Kokoro contract checks. The responsive/offline release browser workflow also passed at 6c88a908c5088d23f869d6a564b9ff1c90b8caed. Runtime code was unchanged by the later migration-rehearsal script/workflow commits. No deployment performed."
+      "evidence": "Current-main runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 passed GitHub Actions Release Browser and Cross-System Regression run 40502457332, including responsive mobile/tablet checks, B2B browser-to-ledger metering, full disposable PostgreSQL QA, and online/offline generated-artifact browser journeys. B2B, student, admin, frontend, AI economics, realtime, E2EE, Kokoro and screen-loading checks also passed on this code SHA. No production deployment performed."
     },
     {
       "id": "existing_database_migration",
@@ -93,12 +93,12 @@
     {
       "id": "clean_full_regression",
       "status": "NOT_TESTED",
-      "evidence": "NOT YET RUN against the latest main commit after the restored-database smoke-test change and provider/recovery follow-ups; schedule only after those gates are resolved."
+      "evidence": "The full disposable PostgreSQL QA and online/offline browser journeys passed in run 40502457332, and focused runtime/security/build gates are green. The dedicated final clean full regression is intentionally deferred until external-provider verification is completed or explicitly dispositioned; it must still consolidate focused realtime, E2EE, calling, migration, backup/restore and browser regressions against the release candidate SHA."
     },
     {
       "id": "b2b_monetization_integrity",
       "status": "IN_PROGRESS",
-      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40498397254 passed on 2026-10-27 with the browser-to-ledger B2B metering journey, mobile/tablet responsive checks, full disposable PostgreSQL QA suite, and online/offline generated-artifact browser journeys. The run verified viewability timing/offscreen and offline behavior, lost-response retry without duplicate debit, click attribution, and JSON/CSV reporting; the campus-report regression expecting 10 raw clicks also passed after commit 74f0f0380d731223ea791054350e3ba4abbc9fb6 changed raw-click aggregation to count distinct interaction IDs across click_raw/click event variants. Gate remains IN_PROGRESS: review server-side abuse/debounce policy and independent viewability qualification, and close any remaining reporting/conversion-contract gaps before selling performance-based advertising as fully verified."
+      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 passed on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 (2026-10-27). Browser-to-ledger checks verified offscreen/offline views do not bill, 1.5-second client visibility qualification, lost-response retry without double debit, server-side rapid-click debounce for distinct IDs, click attribution, and JSON/CSV reporting. Full disposable PostgreSQL QA passed. Gate remains IN_PROGRESS because backend does not independently observe viewport visibility or enforce the 1.5-second interval; do not claim tamper-proof viewability or CPA/conversion billing."
     },
     {
       "id": "payment_recovery_idempotency",
@@ -128,7 +128,7 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "PASS",
-      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 41 passed on main at 6c88a908c5088d23f869d6a564b9ff1c90b8caed (2026-10-26). Production app image built; disposable PostgreSQL/Redis started; Alembic applied; online/offline and generated-artifact browser journeys passed; responsive screenshots uploaded."
+      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 passed on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 (2026-10-27). Production app image built; disposable PostgreSQL/Redis started; Alembic migrations applied; online/offline and generated-artifact browser journeys passed; responsive screenshots uploaded; disposable services and volumes removed."
     },
     {
       "id": "admin_study_time_visibility",
@@ -149,6 +149,6 @@
     "Reconcile NEXT_STEPS, actualtest, notes, the B2B audit and release_status.json to the verified runtime code revision and exact run evidence; finish the source-grounded architecture/documentation audit.",
     "Keep the 400-user performance test DEFERRED until functional, browser, recovery and CI gates are green. Do not deploy or freeze release while any required gate remains NOT_TESTED or IN_PROGRESS."
   ],
-  "current_main_commit": "74f0f0380d731223ea791054350e3ba4abbc9fb6",
-  "verification_note": "Updated 2026-10-27 against main commit 74f0f0380d731223ea791054350e3ba4abbc9fb6. GitHub Actions Release Browser and Cross-System Regression run 40498397254 passed: responsive mobile/tablet browser checks, B2B browser-to-ledger metering regression, full disposable PostgreSQL QA, and online/offline/generated-artifact browser journeys. The campus raw-click regression passed after the distinct raw-click aggregation fix in this SHA. B2B monetization remains IN_PROGRESS pending review of server-side abuse/debounce and independent viewability qualification plus any remaining contract gaps. External provider verification remains NOT_TESTED because actual safe staging/provider evidence is not recorded. Clean full regression after provider/recovery gates, documentation reconciliation, and final source-grounded architecture audit remain outstanding. Shared streak remains intentionally NOT_RELEASED; 400-user performance remains DEFERRED. Release remains BLOCKED; no release freeze or production deployment is authorized."
+  "current_main_commit": "e1d9ef42b533c9fb3fb14de2a4a3d66e30714015",
+  "verification_note": "Updated 2026-10-27 against runtime code commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015. GitHub Actions Release Browser and Cross-System Regression run 40502457332 completed successfully: mobile/tablet responsive checks, B2B browser-to-ledger metering (including server-side rapid-click debounce), full disposable PostgreSQL QA (including payment/refund idempotency), and online/offline generated-artifact browser journeys all passed; screenshots were uploaded and disposable services removed. Payment recovery/idempotency gate PASS. B2B monetization remains IN_PROGRESS because the 1.5-second viewport visibility condition is still a client-side signal, not independently server-verified. External provider verification remains NOT_TESTED pending safe staging/test credentials and provider-side evidence. Dedicated final clean full regression and documentation audit remain open. Shared streak remains intentionally NOT_RELEASED; 400-user performance remains DEFERRED. Release remains BLOCKED; no release freeze or production deployment is authorized."
 }
