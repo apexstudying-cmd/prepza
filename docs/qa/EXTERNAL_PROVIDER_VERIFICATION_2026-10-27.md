@@ -86,7 +86,7 @@ Expected state transitions:
 3. Provider verification must match the saved reference, KES amount (10000 minor units) and KES currency before `posting_fee_paid` becomes true.
 4. Successful callback/webhook returns the paid listing to draft; publishing then moves it to pending review; an admin approval makes it visible.
 5. Replay the same successful callback/webhook. It must not create another fee, grant subscription entitlements, or award a referral commission for a Shop posting fee.
-6. Test failed/abandoned and mismatched-amount verification. The listing must remain unpublished and the seller must be able to retry without reusing a stale checkout URL.
+6. Test failed/abandoned verification and stale-checkout retry. A verified failed/abandoned transaction returns the draft to retryable state. A provider-successful amount/currency mismatch instead enters `payment_review`; it must remain unpublished and cannot be retried until an admin records a manual provider reconciliation note.
 7. Verify no buyer-order, seller-payout, wallet or escrow record is created: Prepza does not handle the product purchase.
 
 Record the test reference and redacted ledger/listing states only. No live charge is authorized by this runbook.
