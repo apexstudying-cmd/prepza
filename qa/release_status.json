@@ -103,7 +103,7 @@
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "Full-stack Shop UI/API, PostgreSQL migration and Paystack posting-fee integration are present. Approved contract is KES 100 for every listing; server normalizes legacy zero-fee drafts and rejects unpaid publish/approval. Documentation reconciled across docs/architecture/shop.md, docs/NEXT_STEPS.md and shop_marketplace.py; frontend copy and Prepza design-token fallbacks updated in a5f4af067e74a664131af05e05c81af03c267f15. The latest Frontend Build run 40517807414 and prior Shop/Release Browser runs are queued; no passing result is claimed for this SHA. Paystack/R2 provider-side checks remain NOT_TESTED."
+      "evidence": "Full-stack Shop UI/API, PostgreSQL migration and Paystack posting-fee integration are present. Approved contract is KES 100 for every listing including the first; server normalizes legacy zero-fee drafts and rejects unpaid publish/approval. Research-backed UX/UI standard is docs/ux/SHOP_UX_UI_STANDARD.md. Browse caching uses tab-memory snapshots with a five-minute freshness window, background API revalidation and stale fallback notice; snapshots are invalidated after listing edits, image changes, publish, save/unsave and seller status actions. Latest code commit 507bb61fea012d05abefc17d4140d13f7e350128; Frontend Build, Shop Marketplace Contract and Release Browser/Cross-System Regression runs are queued on that SHA, so these changes are not yet verified. Paystack/R2 provider-side checks remain NOT_TESTED."
     },
     {
       "id": "payment_recovery_idempotency",
