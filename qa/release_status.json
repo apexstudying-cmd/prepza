@@ -103,7 +103,7 @@
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "Frontend build and Shop contract tests are green; mobile/tablet responsive checks exercise the Shop route; populated-database migration rehearsal run 40514771584 is green. The full disposable PostgreSQL/browser regression is still running and must verify first/later listing fee behavior, posting-payment success/failure/mismatch, image upload, moderation, saved/report flows, ownership and chat. A conflicting latest-main pricing change is under clarification (first listing free versus KES 100 for every listing). External Paystack/R2 provider checks are NOT_TESTED. Render auto-deploy is enabled for main; commits can deploy automatically, although no manual deploy was triggered."
+      "evidence": "Every listing, including the first, is intended to cost KES 100. Source was aligned on commit b5dfa18736113b66867be086482bb424c1dce149, but focused Shop contracts and the full disposable PostgreSQL/browser journey have not yet been rerun against this SHA. Existing migration rehearsal is green; external Paystack/R2 provider checks remain NOT_TESTED. Render auto-deploy is enabled for main, so inspect deployment state before assuming changes are only staged."
     },
     {
       "id": "payment_recovery_idempotency",
@@ -147,6 +147,7 @@
     }
   ],
   "next_actions": [
+    "Run Shop contract tests and the disposable PostgreSQL integration/browser journey on the current main SHA; verify the first and subsequent listing fee are both KES 100, with no free-post bypass.",
     "Complete controlled external-provider verification using test-only Paystack, SES, bounded OpenAI, dedicated R2 QA and configured audio-worker health checks. Do not trigger live payments or billable GPU inference without explicit approval; if access is unavailable, leave external_provider_verification NOT_TESTED and record the blocker.",
     "Resolve B2B viewability scope: current browser timer/offscreen behavior and server-side rapid-click debounce pass, but backend cannot independently prove viewport visibility. Keep b2b_monetization_integrity IN_PROGRESS; do not claim tamper-proof viewability or CPA/conversion billing.",
     "After provider verification is complete or explicitly dispositioned, run the dedicated clean full regression against the release-candidate runtime SHA, consolidating disposable PostgreSQL, frontend build, realtime, E2EE, calling, migration, backup/restore, and browser evidence.",
@@ -154,5 +155,5 @@
     "Keep the 400-user performance test DEFERRED until functional, browser, recovery, provider and CI gates are green. Do not deploy or freeze release while any required gate remains NOT_TESTED or IN_PROGRESS."
   ],
   "current_main_commit": "e1d9ef42b533c9fb3fb14de2a4a3d66e30714015",
-  "verification_note": "Updated 2026-10-27 against runtime code commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015. Release Browser and Cross-System Regression run 40502457332 completed successfully: mobile/tablet responsive checks, B2B browser-to-ledger metering (including server-side rapid-click debounce), full disposable PostgreSQL QA (92 passed, including payment/refund idempotency), and online/offline generated-artifact browser journeys all passed; screenshots were uploaded and disposable services removed. Payment recovery/idempotency gate PASS. B2B monetization remains IN_PROGRESS because viewport visibility is a client-side signal, not independently server-verified. External provider verification remains NOT_TESTED pending safe staging/test credentials and provider-side evidence. Dedicated final clean full regression and documentation audit remain open. Shared streak remains intentionally NOT_RELEASED; 400-user performance remains DEFERRED. Release remains BLOCKED; no release freeze or production deployment is authorized."
+  "verification_note": "Updated 2026-10-27 after correcting the Shop source-of-truth fee rule so every listing, including the first, costs KES 100. The new runtime commit has not yet been reverified by CI; keep Shop IN_PROGRESS and release BLOCKED until focused contracts and the full integration/browser journey pass on the new SHA. External provider verification remains NOT_TESTED; no live payments or billable GPU workloads without explicit approval. Shared streak remains NOT_RELEASED; 400-user performance remains DEFERRED. No release freeze is authorized."
 }
