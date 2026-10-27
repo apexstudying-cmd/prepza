@@ -347,6 +347,80 @@
         "python -m pytest tests/test_provider_boundary_mocks.py -q"
       ],
       "notes": "Mocked provider boundary tests pass, but live/sandbox Paystack checkout/webhook, controlled SES delivery, bounded OpenAI generation, real R2 operations and configured audio/GPU provider health are NOT_TESTED pending safe staging credentials and provider-side evidence. Never start billable GPU inference without explicit approval."
+    },
+    {
+      "id": "shop_marketplace",
+      "name": "Prepza Shop classifieds, posting fee, seller contact and moderation",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "frontend",
+          "path": "frontend/src/shop/ShopScreen.tsx",
+          "anchors": [
+            "export default function ShopScreen",
+            "Save & publish",
+            "Message in Prepza"
+          ]
+        },
+        {
+          "kind": "frontend_wiring",
+          "path": "scripts/apply_shop_frontend.py",
+          "anchors": [
+            "five Home quick actions",
+            "Shop screen renderer",
+            "Shop Home-tab selection"
+          ]
+        },
+        {
+          "kind": "backend_routes_and_rules",
+          "path": "shop_marketplace.py",
+          "anchors": [
+            "def listing_fee_for_post_number",
+            "def validate_listing_payload",
+            "def shop_create_listing",
+            "def shop_checkout_posting_fee",
+            "def shop_admin_queue",
+            "def fulfill_shop_posting_payment"
+          ]
+        },
+        {
+          "kind": "database_migration",
+          "path": "alembic/versions/20261027_shop_marketplace.py",
+          "anchors": [
+            "20261027_shop_marketplace",
+            "shop_listing",
+            "shop_saved_listing",
+            "shop_report"
+          ]
+        },
+        {
+          "kind": "integration_test",
+          "path": "tests/test_local_qa_real_world.py",
+          "anchors": [
+            "test_shop_free_first_listing_paid_second_posting_fee_and_direct_contact"
+          ]
+        },
+        {
+          "kind": "contract_test",
+          "path": "tests/test_shop_marketplace.py",
+          "anchors": [
+            "test_first_listing_is_free_and_each_later_post_costs_kes_100",
+            "test_invalid_listing_payload_is_rejected"
+          ]
+        },
+        {
+          "kind": "ci",
+          "path": ".github/workflows/shop-marketplace-contract.yml",
+          "anchors": [
+            "Test Shop posting fee and seller contact contracts"
+          ]
+        }
+      ],
+      "required_test_commands": [
+        "python -m pytest tests/test_shop_marketplace.py -q",
+        "python -m pytest tests/test_local_qa_real_world.py -k shop_free_first_listing_paid_second_posting_fee_and_direct_contact -q"
+      ],
+      "notes": "Implementation in progress. User-approved contract: one lifetime free listing, KES 100 for each subsequent product post, direct seller contact only, and no buyer checkout or Prepza-held funds. Release certification requires the new disposable PostgreSQL browser journey, migration and image-storage verification, and staging Paystack/R2 checks; source presence is not proof."
     }
   ]
 }
