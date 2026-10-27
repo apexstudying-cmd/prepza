@@ -422,7 +422,7 @@
         "python -m pytest tests/test_shop_marketplace.py -q",
         "python -m pytest tests/test_local_qa_real_world.py -k shop_every_listing_paid_posting_fee_and_direct_contact -q"
       ],
-      "notes": "Implementation in progress. User-approved launch contract: KES 100 per item per 30-day listing period, manually renewed per item; expired listings are hidden until renewal and re-publication. Direct seller contact only; no buyer checkout or Prepza-held funds. No free-first-post allowance or automatic recurring charges. Release certification requires disposable PostgreSQL browser journey, expiry migration and enforcement, image-storage verification, and staging Paystack/R2 checks; source presence is not proof."
+      "notes": "Implementation in progress. User-approved contract: KES 100 per item per 30-day listing period, manual per-item renewal, expired listings hidden until renewal and re-publication; no free first listing or automatic recurring charges. Direct seller contact only; no buyer checkout or Prepza-held funds. Release certification requires disposable PostgreSQL browser journey, migration/expiry enforcement, idempotent renewal payment tests, image-storage verification, and staging Paystack/R2 checks."
     }
   ]
 }
