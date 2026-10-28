@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 type Streak = {
   id: number
+  invited_by: number
   status: 'pending' | 'active'
   peer_name: string
   current_streak: number
@@ -10,7 +11,7 @@ type Streak = {
   today: { you_studied: boolean; friend_studied: boolean; both_studied: boolean }
 }
 type Payload = { supported: boolean; streak: Streak | null }
-type Props = { conversationId: number; isGroup: boolean; csrfToken: string }
+type Props = { conversationId: number; isGroup: boolean; csrfToken: string; userId: number | null }
 
 async function request<T>(path: string, csrfToken: string, method = 'GET'): Promise<T> {
   const response = await fetch(path, {
@@ -23,7 +24,7 @@ async function request<T>(path: string, csrfToken: string, method = 'GET'): Prom
   return body as T
 }
 
-export default function SharedStudyStreak({ conversationId, isGroup, csrfToken }: Props) {
+export default function SharedStudyStreak({ conversationId, isGroup, csrfToken, userId }: Props) {
   const [open, setOpen] = useState(false)
   const [payload, setPayload] = useState<Payload | null>(null)
   const [busy, setBusy] = useState(false)
@@ -76,11 +77,11 @@ export default function SharedStudyStreak({ conversationId, isGroup, csrfToken }
         </div>
         <div style={{ marginTop: 10, fontSize: 11, color: '#4b5563' }}>Today: You {streak.today.you_studied ? '✓' : 'not yet'} · {streak.peer_name} {streak.today.friend_studied ? '✓' : 'not yet'}</div>
       </>}
-      {streak?.status === 'pending' && <div style={{ marginTop: 12, padding: 10, borderRadius: 10, background: '#f4f6fa', fontSize: 12 }}>{streak.peer_name} {payload ? 'has a shared streak invitation waiting.' : 'invitation pending.'}
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+      {streak?.status === 'pending' && <div style={{ marginTop: 12, padding: 10, borderRadius: 10, background: '#f4f6fa', fontSize: 12 }}>{streak.invited_by === userId ? 'Waiting for ' + streak.peer_name + ' to accept your invitation.' : streak.peer_name + ' invited you to start a shared streak.'}
+        {streak.invited_by !== userId && <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
           <button type="button" disabled={busy} onClick={() => void act('accept')} style={{ flex: 1, border: 0, borderRadius: 9, padding: 9, background: '#c9a84c', color: '#101b35', fontWeight: 800 }}>Accept</button>
           <button type="button" disabled={busy} onClick={() => void act('decline')} style={{ flex: 1, border: '1px solid #d9dee7', borderRadius: 9, padding: 9, background: '#fff', color: '#101b35', fontWeight: 800 }}>Decline</button>
-        </div>
+        </div>}
       </div>}
       {!streak && payload?.supported && <button type="button" disabled={busy} onClick={() => void act('invite')} style={{ width: '100%', marginTop: 13, border: 0, borderRadius: 10, padding: 11, background: '#c9a84c', color: '#101b35', fontWeight: 900, cursor: busy ? 'wait' : 'pointer' }}>{busy ? 'Sending…' : 'Invite to shared streak'}</button>}
       {payload && !payload.supported && <div style={{ marginTop: 12, fontSize: 11, color: '#606b7d' }}>Shared streaks are available in one-to-one chats only.</div>}
