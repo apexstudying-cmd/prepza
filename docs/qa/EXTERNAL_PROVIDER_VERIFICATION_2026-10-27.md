@@ -81,8 +81,8 @@ Student-subscription verification is separate: it must confirm a successful/fulf
 Shop uses the same primary Paystack webhook at `/payment/paystack/webhook`; the browser return URL is `/shop/payment/callback`. In staging, create a second listing for the test student and verify it requires exactly **KES 100**. Complete a Paystack **test-mode** checkout only.
 
 Expected state transitions:
-1. First lifetime listing: KES 0 posting fee.
-2. Each later listing: KES 100 fee, listing stays a draft/pending-payment and is not publicly visible.
+1. Every listing, including the seller's first lifetime listing: KES 100 posting fee.
+2. Each listing stays a draft/pending-payment and is not publicly visible until the verified KES 100 payment is recorded. There is no first-listing exemption or free-post bypass.
 3. Provider verification must match the saved reference, KES amount (10000 minor units) and KES currency before `posting_fee_paid` becomes true.
 4. Successful callback/webhook returns the paid listing to draft; publishing then moves it to pending review; an admin approval makes it visible.
 5. Replay the same successful callback/webhook. It must not create another fee, grant subscription entitlements, or award a referral commission for a Shop posting fee.
