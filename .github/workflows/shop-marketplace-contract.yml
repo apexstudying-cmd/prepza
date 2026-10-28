@@ -6,7 +6,9 @@ on:
     paths:
       - "shop_marketplace.py"
       - "tests/test_shop_marketplace.py"
-      - "alembic/versions/20261027_shop_marketplace.py"
+      - "alembic/versions/**"
+      - "tests/test_local_qa_real_world.py"
+      - "scripts/test_existing_database_migration.py"
       - "frontend/src/shop/**"
       - "scripts/apply_shop_frontend.py"
       - "frontend/src/App.tsx"
