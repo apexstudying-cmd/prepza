@@ -491,7 +491,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         try:
             from object_storage import r2_put_bytes
             key = f"{user.id}/{listing.id}/{uuid.uuid4().hex}.{extension}"
-            r2_put_bytes("shop-listings", key, raw, mime)
+            r2_put_bytes("shop-listings", key, raw, mime, cache_control="private, max-age=86400, immutable")
         except Exception:
             app.logger.exception("Shop image storage unavailable")
             return jsonify({"error": "Photo storage is not configured or temporarily unavailable. Please try again later."}), 503
