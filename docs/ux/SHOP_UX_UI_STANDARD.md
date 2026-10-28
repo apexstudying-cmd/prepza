@@ -112,7 +112,7 @@ These are design principles, not a claim that a particular layout will improve c
 
 ## Implementation status note (27 October 2026)
 
-The Shop browse screen now has a tab-memory browse snapshot with a five-minute freshness window, background revalidation and a stale-result warning when the API fails. It is not a persistent service-worker or image-object cache. Mutation invalidation, focused automated coverage, image cache-header verification and full latest-commit browser regression must be confirmed before calling the caching work complete.
+The Shop browse screen has a tab-memory browse snapshot with a five-minute freshness window, background revalidation, same-query stale fallback, a clear warning when the API fails, and latest-request protection. Snapshots exclude account-specific viewer flags and payment/moderation details and are invalidated after key mutations. Shop image uploads now request `Cache-Control: private, max-age=86400, immutable` object metadata through the existing R2 helper; the private directive avoids shared-cache reuse and unique image keys make the immutable lifetime appropriate. This is browser HTTP caching, not a guarantee that every image remains available offline after browser-cache eviction. Verify the actual R2 response headers and behavior with the configured provider before marking image caching complete.
 
 ## Related documents
 
