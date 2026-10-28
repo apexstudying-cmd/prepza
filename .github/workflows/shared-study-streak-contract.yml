@@ -1,0 +1,31 @@
+name: Shared Study Streak Contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "study_friend_streak_routes.py"
+      - "chat_interactions.py"
+      - "tests/test_shared_study_streak_contract.py"
+      - ".github/workflows/shared-study-streak-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shared-streak-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install focused test dependencies
+        run: python -m pip install --upgrade pip pytest Flask SQLAlchemy
+      - name: Test shared streak continuity and route wiring
+        run: python -m pytest tests/test_shared_study_streak_contract.py -q
+      - name: Compile shared streak route modules
+        run: python -m py_compile study_friend_streak_routes.py chat_interactions.py
