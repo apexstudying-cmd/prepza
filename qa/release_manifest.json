@@ -445,7 +445,7 @@
           "path": "scripts/test_browser_mobile_responsive.py",
           "anchors": [
             "Exercise the actual Shop route at each responsive viewport",
-            "Prove an older same-query snapshot is shown while revalidation",
+            "Prove an older same-query snapshot is shown while revalidating",
             "Showing recently viewed listings. Reconnect to refresh availability and status."
           ]
         }
