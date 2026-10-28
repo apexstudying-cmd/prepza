@@ -264,7 +264,7 @@ def register_shop_routes(app, db, User, Payment, Conversation, ConversationParti
         for key in (listing.image_keys or []):
             try:
                 from object_storage import r2_presigned_get
-                images.append({"key": key, "url": r2_presigned_get("shop-listings", key, expires_in=900)})
+                images.append({"key": key, "url": r2_presigned_get("shop-listings", key, expires_in=86400)})
             except Exception:
                 images.append({"key": key, "url": None})
         if saved_ids is not None:
