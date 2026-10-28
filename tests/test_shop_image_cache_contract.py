@@ -61,3 +61,5 @@ def test_shop_listing_upload_opts_into_private_one_day_image_caching():
     source = (root / "shop_marketplace.py").read_text(encoding="utf-8")
 
     assert 'r2_put_bytes("shop-listings", key, raw, mime, cache_control="private, max-age=86400, immutable")' in source
+    # Presigned image URLs must remain usable for the same private one-day cache window.
+    assert 'r2_presigned_get("shop-listings", key, expires_in=86400)' in source
