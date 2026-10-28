@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - "study_friend_streak_routes.py"
+      - "alembic/versions/20261030_shared_study_streak.py"
+      - "scripts/test_existing_database_migration.py"
+      - ".github/workflows/postgres-backup-restore.yml"
       - "chat_interactions.py"
       - "frontend/src/crypto/SharedStudyStreak.tsx"
       - "frontend/src/crypto/WhatsAppChatExperience.tsx"
@@ -36,4 +39,4 @@ jobs:
           python tools/apply_shared_study_streak.py
           python tools/apply_shared_study_streak.py
       - name: Compile shared streak route modules
-        run: python -m py_compile study_friend_streak_routes.py chat_interactions.py tools/apply_shared_study_streak.py
+        run: python -m py_compile study_friend_streak_routes.py chat_interactions.py tools/apply_shared_study_streak.py alembic/versions/20261030_shared_study_streak.py scripts/test_existing_database_migration.py
