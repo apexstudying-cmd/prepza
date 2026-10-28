@@ -6,6 +6,10 @@ on:
     paths:
       - "study_friend_streak_routes.py"
       - "chat_interactions.py"
+      - "frontend/src/crypto/SharedStudyStreak.tsx"
+      - "frontend/src/crypto/WhatsAppChatExperience.tsx"
+      - "frontend/package.json"
+      - "tools/apply_shared_study_streak.py"
       - "tests/test_shared_study_streak_contract.py"
       - ".github/workflows/shared-study-streak-contract.yml"
   workflow_dispatch:
@@ -27,5 +31,9 @@ jobs:
         run: python -m pip install --upgrade pip pytest Flask SQLAlchemy
       - name: Test shared streak continuity and route wiring
         run: python -m pytest tests/test_shared_study_streak_contract.py -q
+      - name: Verify frontend patch is idempotent
+        run: |
+          python tools/apply_shared_study_streak.py
+          python tools/apply_shared_study_streak.py
       - name: Compile shared streak route modules
-        run: python -m py_compile study_friend_streak_routes.py chat_interactions.py
+        run: python -m py_compile study_friend_streak_routes.py chat_interactions.py tools/apply_shared_study_streak.py
