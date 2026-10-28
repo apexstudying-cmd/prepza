@@ -7,6 +7,20 @@ from sqlalchemy import text
 MIN_SHARED_STUDY_MINUTES = 10
 MAX_ACTIVE_SHARED_STREAKS = 5
 
+
+def consecutive_shared_days(today, qualifying_days):
+    """Count consecutive shared study days, allowing today to remain in progress."""
+    days = set(qualifying_days)
+    start = today if today in days else today - timedelta(days=1)
+    if start not in days:
+        return 0
+    count = 0
+    day = start
+    while day in days:
+        count += 1
+        day -= timedelta(days=1)
+    return count
+
 def register_study_friend_streak_routes(app, db):
     from app import Conversation, ConversationParticipant, StudyTimeLog, User, require_csrf
     if getattr(app, "_prepza_study_friend_streak_registered", False):
@@ -79,17 +93,23 @@ def register_study_friend_streak_routes(app, db):
 
     def refresh(row):
         today = local_today()
-        streak = 0
-        last_shared = None
-        for offset in range(366 * 2):
-            day = today - timedelta(days=offset)
-            qualifies = studied(row["user_a_id"], day) and studied(row["user_b_id"], day)
-            if qualifies:
-                streak += 1
-                if last_shared is None:
-                    last_shared = day
-            elif streak:
-                break
+        since = today - timedelta(days=366 * 2)
+        rows = db.session.query(
+            StudyTimeLog.user_id,
+            StudyTimeLog.activity_date,
+            db.func.sum(StudyTimeLog.study_time_seconds),
+        ).filter(
+            StudyTimeLog.user_id.in_([row["user_a_id"], row["user_b_id"]]),
+            StudyTimeLog.activity_date >= since,
+            StudyTimeLog.activity_date <= today,
+        ).group_by(StudyTimeLog.user_id, StudyTimeLog.activity_date).all()
+        qualifying_by_user = {row["user_a_id"]: set(), row["user_b_id"]: set()}
+        for user_id, activity_date, seconds in rows:
+            if int(seconds or 0) >= MIN_SHARED_STUDY_MINUTES * 60:
+                qualifying_by_user[int(user_id)].add(activity_date)
+        shared_days = qualifying_by_user[row["user_a_id"]] & qualifying_by_user[row["user_b_id"]]
+        streak = consecutive_shared_days(today, shared_days)
+        last_shared = max(shared_days) if shared_days else None
         if row["status"] == "active":
             db.session.execute(text("""
                 UPDATE study_friend_streak
@@ -157,7 +177,7 @@ def register_study_friend_streak_routes(app, db):
             return jsonify({"error": "A shared streak already exists for this chat"}), 409
         count = db.session.execute(text("""
             SELECT COUNT(*) FROM study_friend_streak
-            WHERE status='active' AND (user_a_id=:u OR user_b_id=:u)
+            WHERE status IN ('active','pending') AND (user_a_id=:u OR user_b_id=:u)
         """), {"u": user_id}).scalar() or 0
         if int(count) >= MAX_ACTIVE_SHARED_STREAKS:
             return jsonify({"error": "You already have the maximum number of active shared streaks"}), 409
@@ -186,5 +206,22 @@ def register_study_friend_streak_routes(app, db):
         """), {"id": row["id"]})
         db.session.commit()
         return jsonify({"status": "active", "minimum_minutes": MIN_SHARED_STUDY_MINUTES})
+
+    @app.post("/chats/<int:conversation_id>/study-streak/decline")
+    @require_csrf
+    def decline_study_streak(conversation_id):
+        user_id = session.get("user_id")
+        if not user_id or not member(conversation_id, user_id):
+            return jsonify({"error": "Conversation not found"}), 404
+        ensure_schema()
+        _, row = load_for_conversation(conversation_id, user_id)
+        if not row or row["status"] != "pending" or row["invited_by"] == user_id:
+            return jsonify({"error": "No pending shared streak invitation"}), 404
+        db.session.execute(text("""
+            DELETE FROM study_friend_streak
+            WHERE id=:id AND status='pending'
+        """), {"id": row["id"]})
+        db.session.commit()
+        return jsonify({"status": "declined"})
 
     app._prepza_study_friend_streak_registered = True
