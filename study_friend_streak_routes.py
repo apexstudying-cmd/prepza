@@ -126,7 +126,7 @@ def register_study_friend_streak_routes(app, db):
             "peer_id": pid,
             "peer_name": getattr(peer, "display_name", None) or "Study partner",
             "current_streak": current,
-            "longest_streak": int(row["longest_streak"] or 0),
+            "longest_streak": max(int(row["longest_streak"] or 0), current),
             "today": {"you_studied": you, "friend_studied": friend, "both_studied": you and friend},
             "minimum_minutes": MIN_SHARED_STUDY_MINUTES,
         }
