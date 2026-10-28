@@ -621,7 +621,7 @@ Deployment note (27 October 2026): Render's `prepza` service has auto-deploy ena
 ## Shop UX and caching follow-up (27 October 2026)
 - [x] Add researched screen-by-screen UX/UI and low-cost caching standard at `docs/ux/SHOP_UX_UI_STANDARD.md`.
 - [~] Harden tab-memory Shop browse snapshots: public fields only (no viewer saved/is_mine flags or payment/moderation details), immediate same-query snapshot display while revalidating, stale warning/fallback on network failure, and latest-request protection. Code is on main; new contract tests and CI wiring are added, but latest-SHA CI/build/browser results are not yet verified.
-- [~] Invalidate browse snapshots after listing edits, save/unsave, seller status actions, and admin moderation. Focused regression lives in `tests/test_shop_browse_cache_contract.py` and is traced in `qa/release_manifest.json`; await CI before marking complete.
+- [~] Invalidate browse snapshots after listing edits, save/unsave, seller status actions, and admin moderation. Focused regression lives in `tests/test_shop_browse_cache_contract.py`; `scripts/test_browser_mobile_responsive.py` now exercises stale (>5 minute) cache fallback after a failed revalidation at phone/tablet viewports. Both are traced in `qa/release_manifest.json`; await CI before marking complete.
 - [ ] Verify object-storage image sizing/cache headers against R2 and confirm no additional paid cache service is required.
 - [ ] Re-run latest-commit frontend build, Shop Marketplace Contract, phone/tablet Shop browser regression and full release browser/cross-system regression. Keep release blocked until evidence is current.
 
