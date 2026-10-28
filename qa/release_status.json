@@ -47,8 +47,8 @@
     },
     {
       "id": "shared_streak",
-      "status": "NOT_RELEASED",
-      "evidence": "Scope audit: study_friend_streak_routes.py is not registered by app.py, no frontend shared-streak surface exists, and its schema appears only in legacy migrations/20260925_study_friend_streak.sql plus runtime CREATE TABLE DDL. It is therefore not part of the frozen launch contract."
+      "status": "IN_PROGRESS",
+      "evidence": "User requested Shared Streak be brought into launch work on 2026-10-28. On main, added runtime route registration through chat_interactions.py, GET/invite/accept/decline endpoints, one-to-one conversation membership checks and CSRF on mutations, pending-invitation cap protection, a continuity helper that preserves yesterday's streak while today's study is still in progress, and a chat-header control for invite/accept/decline and streak display. Contract CI run and Frontend Build/Release Browser regressions are queued or running; no runtime PASS is claimed. Remaining: canonical Alembic/schema ownership (current route still has legacy runtime DDL), concurrency and lifecycle integration tests, two-user browser journey, and final release-candidate regression."
     },
     {
       "id": "realtime_chat",
@@ -155,6 +155,6 @@
     "Finish source-grounded documentation consistency audit across NEXT_STEPS, actualtest, notes, B2B audit, architecture walkthrough, QA trace manifest, and release_status.json.",
     "Keep the 400-user performance test DEFERRED until functional, browser, recovery, provider and CI gates are green. Do not deploy or freeze release while any required gate remains NOT_TESTED or IN_PROGRESS."
   ],
-  "current_main_commit": "ef5a3d820cf6c689b519bff5b0ae7e97680cfb92",
-  "verification_note": "Updated 2026-10-28: Shop Marketplace Contract and Release Browser/Cross-System Regression passed on code SHA 3e77f70. PostgreSQL Backup Restore Rehearsal run 40712703724 passed on 959d4ed, including populated-database upgrade through 20261029_shop_period_payment, Shop tables/payment columns, and backup/restore. Render auto-deploy attempts for recent main commits are failing before build because the Render pipeline build minutes are exhausted; no new deployment succeeded. Shop remains IN_PROGRESS pending real Paystack/R2 staging evidence; external_provider_verification remains NOT_TESTED; B2B viewability and documentation audit remain IN_PROGRESS; 400-user load DEFERRED; shared streak NOT_RELEASED. Release remains BLOCKED. No live payments or billable GPU workloads without explicit approval."
+  "current_main_commit": "6e07481ea006efbf6b4309f8fdda06f3659d1565",
+  "verification_note": "Updated 2026-10-28: Shared Study Streak moved into release scope by user request; backend routes are wired, chat-header UI and continuity contract tests are on main, with focused CI/frontend/browser verification pending. Release remains BLOCKED. Shop contract/browser tests pass on code 3e77f70, and populated-database migration plus backup/restore passed in run 40712703724; real Paystack/R2 provider evidence is still missing. B2B viewability and documentation audit remain IN_PROGRESS; external providers NOT_TESTED; 400-user load DEFERRED. Render auto-deploy is failing before build because pipeline minutes are exhausted. No live payments or billable GPU workloads without explicit approval."
 }
