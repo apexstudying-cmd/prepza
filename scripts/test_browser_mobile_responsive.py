@@ -208,9 +208,8 @@ def main() -> int:
                         )
                         page.get_by_role("button", name="Shop").first.click(timeout=5000)
                         page.get_by_text("QA cached listing", exact=True).wait_for(timeout=5000)
-                        page.get_by_text(
-                            "Showing recently viewed listings. Reconnect to refresh availability and status.",
-                            exact=True,
+                        page.get_by_role("alert").filter(
+                            has_text="Showing recently viewed listings. Reconnect to refresh availability and status."
                         ).wait_for(timeout=5000)
                         page.evaluate(
                             """() => {
